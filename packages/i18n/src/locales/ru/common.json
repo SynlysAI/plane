@@ -322,10 +322,9 @@
   "deleting": "Удаление...",
   "make_a_copy": "Создать копию",
   "move_to_project": "Переместить в проект",
-  "good": "Доброго",
-  "morning": "утра",
-  "afternoon": "дня",
-  "evening": "вечера",
+  "good_morning": "Доброе утро, {name}",
+  "good_afternoon": "Добрый день, {name}",
+  "good_evening": "Добрый вечер, {name}",
   "show_all": "Показать все",
   "show_less": "Свернуть",
   "no_data_yet": "Нет данных",
@@ -816,7 +815,7 @@
     "edited_by": "Отредактировано"
   },
   "self_hosted_maintenance_message": {
-    "plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start": "AI4MS не запустился. Это может быть из-за того, что один или несколько сервисов AI4MS не смогли запуститься.",
+    "plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start": "PiLab не запустился. Это может быть из-за того, что один или несколько сервисов PiLab не смогли запуститься.",
     "choose_view_logs_from_setup_sh_and_docker_logs_to_be_sure": "Выберите View Logs из setup.sh и логов Docker, чтобы убедиться."
   },
   "customize_navigation": "Настроить навигацию",

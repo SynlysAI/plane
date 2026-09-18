@@ -4,9 +4,11 @@
 
 """Workspace level research configuration.
 
-Before ``WorkspaceResearchSetting`` exists (introduced with the platform
-configuration stage) the workspace switch falls back to the deployment level
+A workspace without a ``WorkspaceResearchSetting`` row renders the research
+module by default: the workspace switch falls back to the deployment level
 switch, so a partially rolled out installation still behaves predictably.
+The row becomes authoritative as soon as it exists, which is how an
+administrator opts a single workspace back out.
 """
 
 from plane.research.utils.config import (
@@ -15,12 +17,16 @@ from plane.research.utils.config import (
     research_module_enabled,
     research_submodule_defaults,
 )
+from plane.utils.constants import DEFAULT_TIMEZONE
 
 
 def default_workspace_research_settings():
     limits = research_file_limits()
     return {
         "module_enabled": research_module_enabled(),
+        "purpose": "GENERAL",
+        "main_pi": None,
+        "required_reporter_categories": ["STUDENT", "POSTDOC"],
         "org_enabled": True,
         "report_enabled": True,
         "approval_enabled": True,
@@ -28,7 +34,7 @@ def default_workspace_research_settings():
         "default_report_visibility": "DIRECT_ADVISOR",
         "weekly_default_visibility": None,
         "monthly_default_visibility": None,
-        "timezone": None,
+        "timezone": DEFAULT_TIMEZONE,
         "audit_retention_days": 0,
         **research_submodule_defaults(),
         **research_gate_defaults(),
@@ -46,11 +52,13 @@ def get_workspace_research_settings(workspace):
 
     setting = WorkspaceResearchSetting.objects.filter(workspace=workspace).first()
     if setting is None:
-        defaults["module_enabled"] = False
         return defaults
 
     return {
         "module_enabled": bool(setting.module_enabled),
+        "purpose": setting.purpose,
+        "main_pi": setting.main_pi_id,
+        "required_reporter_categories": setting.required_reporter_categories,
         "org_enabled": bool(setting.org_enabled),
         "report_enabled": bool(setting.report_enabled),
         "approval_enabled": bool(setting.approval_enabled),

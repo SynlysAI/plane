@@ -12,9 +12,10 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 # Module imports
-from .base import BaseModel
-from plane.utils.constants import RESTRICTED_WORKSPACE_SLUGS
 from plane.utils.color import get_random_color
+from plane.utils.constants import DEFAULT_TIMEZONE, RESTRICTED_WORKSPACE_SLUGS
+
+from .base import BaseModel
 
 ROLE_CHOICES = ((20, "Admin"), (15, "Member"), (5, "Guest"))
 
@@ -135,7 +136,7 @@ class Workspace(BaseModel):
     )
     slug = models.SlugField(max_length=48, db_index=True, unique=True, validators=[slug_validator])
     organization_size = models.CharField(max_length=20, blank=True, null=True)
-    timezone = models.CharField(max_length=255, default="UTC", choices=TIMEZONE_CHOICES)
+    timezone = models.CharField(max_length=255, default=DEFAULT_TIMEZONE, choices=TIMEZONE_CHOICES)
     background_color = models.CharField(max_length=255, default=get_random_color)
 
     def __str__(self):
@@ -378,7 +379,7 @@ class WorkspaceHomePreference(BaseModel):
         QUICK_LINKS = "quick_links", "Quick Links"
         RECENTS = "recents", "Recents"
         MY_STICKIES = "my_stickies", "My Stickies"
-        NEW_AT_PLANE = "new_at_plane", "New at Plane"
+        NEW_AT_PLANE = "new_at_plane", "New at PiLab"
         QUICK_TUTORIAL = "quick_tutorial", "Quick Tutorial"
 
     workspace = models.ForeignKey(

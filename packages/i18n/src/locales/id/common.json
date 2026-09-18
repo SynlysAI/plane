@@ -322,10 +322,9 @@
   "deleting": "Menghapus",
   "make_a_copy": "Buat salinan",
   "move_to_project": "Pindahkan ke proyek",
-  "good": "Bagus",
-  "morning": "pagi",
-  "afternoon": "siang",
-  "evening": "malam",
+  "good_morning": "Selamat pagi, {name}",
+  "good_afternoon": "Selamat siang, {name}",
+  "good_evening": "Selamat malam, {name}",
   "show_all": "Tampilkan semua",
   "show_less": "Tampilkan lebih sedikit",
   "no_data_yet": "Belum ada data",
@@ -816,7 +815,7 @@
     "edited_by": "Disunting oleh"
   },
   "self_hosted_maintenance_message": {
-    "plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start": "AI4MS tidak berhasil dimulai. Ini bisa karena satu atau lebih layanan AI4MS gagal untuk dimulai.",
+    "plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start": "PiLab tidak berhasil dimulai. Ini bisa karena satu atau lebih layanan PiLab gagal untuk dimulai.",
     "choose_view_logs_from_setup_sh_and_docker_logs_to_be_sure": "Pilih View Logs dari setup.sh dan log Docker untuk memastikan."
   },
   "customize_navigation": "Sesuaikan navigasi",

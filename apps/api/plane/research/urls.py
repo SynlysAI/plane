@@ -12,6 +12,7 @@ upstream route (P0-COMPAT-02).
 from django.urls import path
 
 from plane.research.views import (
+    ResearchAccountProvisioningOptionsEndpoint,
     ResearchApprovalFlowDetailEndpoint,
     ResearchApprovalFlowListCreateEndpoint,
     ResearchApprovalRequestActionEndpoint,
@@ -19,6 +20,8 @@ from plane.research.views import (
     ResearchApprovalRequestHistoryEndpoint,
     ResearchApprovalRequestListCreateEndpoint,
     ResearchAuditEventListEndpoint,
+    ResearchContextEndpoint,
+    ResearchContextResourceEndpoint,
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
@@ -29,6 +32,7 @@ from plane.research.views import (
     ResearchIdentityMeEndpoint,
     ResearchMentorBindingDetailEndpoint,
     ResearchMentorBindingListCreateEndpoint,
+    ResearchOrgIncompleteEndpoint,
     ResearchOrgUnitDetailEndpoint,
     ResearchOrgUnitListCreateEndpoint,
     ResearchOrgUnitMemberDetailEndpoint,
@@ -120,14 +124,42 @@ from plane.research.views import (
     ResearchLabRunSearchEndpoint,
     ResearchRdAnalysisSearchEndpoint,
     ResearchRdProjectSearchEndpoint,
+    ResearchInviteCodeDetailEndpoint,
+    ResearchInviteCodeListCreateEndpoint,
+    ResearchInviteCodeToggleEndpoint,
+    ResearchPiAggregateEndpoint,
+    ResearchUserImportDetailEndpoint,
+    ResearchUserImportListCreateEndpoint,
+    ResearchUserImportReportEndpoint,
+    ResearchUserProfileListEndpoint,
 )
 
 urlpatterns = [
     # availability probe (works even when the module switch is off)
     path("research/health/", ResearchHealthEndpoint.as_view(), name="research-health"),
+    path(
+        "research/workspaces/<str:slug>/org/incomplete/",
+        ResearchOrgIncompleteEndpoint.as_view(),
+        name="research-org-incomplete",
+    ),
+    path(
+        "research/workspaces/<str:slug>/context/",
+        ResearchContextEndpoint.as_view(),
+        name="research-context",
+    ),
+    path(
+        "research/workspaces/<str:slug>/context/resources/<str:kind>/<str:resource_id>/",
+        ResearchContextResourceEndpoint.as_view(),
+        name="research-context-resource",
+    ),
     # ------------------------------------------------------------------
     # P1 stage workflow (§5.2) - additive, nothing below is renumbered
     # ------------------------------------------------------------------
+    path(
+        "research/workspaces/<str:slug>/account-provisioning/options/",
+        ResearchAccountProvisioningOptionsEndpoint.as_view(),
+        name="research-account-provisioning-options",
+    ),
     path(
         "research/workspaces/<str:slug>/projects/<uuid:project_id>/stages/",
         ResearchProjectStageListCreateEndpoint.as_view(),
@@ -694,5 +726,49 @@ urlpatterns = [
         "research/workspaces/<str:slug>/mentors/<uuid:pk>/",
         ResearchMentorBindingDetailEndpoint.as_view(),
         name="research-mentor",
+    ),
+    # ------------------------------------------------------------------
+    # Account lifecycle: invite codes, roster import, research profiles
+    # and the main PI workspace aggregate (v2.4.0)
+    # ------------------------------------------------------------------
+    path(
+        "research/workspaces/<str:slug>/invite-codes/",
+        ResearchInviteCodeListCreateEndpoint.as_view(),
+        name="research-invite-codes",
+    ),
+    path(
+        "research/workspaces/<str:slug>/invite-codes/<uuid:pk>/",
+        ResearchInviteCodeDetailEndpoint.as_view(),
+        name="research-invite-code",
+    ),
+    path(
+        "research/workspaces/<str:slug>/invite-codes/<uuid:pk>/<str:action>/",
+        ResearchInviteCodeToggleEndpoint.as_view(),
+        name="research-invite-code-toggle",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/",
+        ResearchUserImportListCreateEndpoint.as_view(),
+        name="research-user-imports",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/",
+        ResearchUserImportDetailEndpoint.as_view(),
+        name="research-user-import",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/report/",
+        ResearchUserImportReportEndpoint.as_view(),
+        name="research-user-import-report",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-profiles/",
+        ResearchUserProfileListEndpoint.as_view(),
+        name="research-user-profiles",
+    ),
+    path(
+        "research/workspaces/<str:slug>/aggregate/",
+        ResearchPiAggregateEndpoint.as_view(),
+        name="research-pi-aggregate",
     ),
 ]

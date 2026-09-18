@@ -145,6 +145,24 @@ class ResearchErrorCode:
     EXTERNAL_REFERENCE_INVALID = "external_reference_invalid"
     EXTERNAL_REFERENCE_LINK_NOT_FOUND = "external_reference_link_not_found"
     CHAIN_INVALID = "research_chain_invalid"
+    CONTEXT_RESOURCE_INVALID = "context_resource_invalid"
+    CONTEXT_RESOURCE_NOT_FOUND = "context_resource_not_found"
+    CONTEXT_VERSION_INVALID = "context_version_invalid"
+
+    # Account lifecycle: invite codes, imports and research profiles.
+    INVITE_CODE_REQUIRED = "invite_code_required"
+    INVITE_CODE_INVALID = "invite_code_invalid"
+    INVITE_CODE_DISABLED = "invite_code_disabled"
+    INVITE_CODE_EXPIRED = "invite_code_expired"
+    INVITE_CODE_EXHAUSTED = "invite_code_exhausted"
+    INVITE_CODE_NOT_FOUND = "invite_code_not_found"
+    INVITE_CODE_ORG_ROLE_INVALID = "invite_code_org_role_invalid"
+    PUBLIC_WORKSPACE_MISSING = "public_workspace_missing"
+    IMPORT_FILE_REQUIRED = "user_import_file_required"
+    IMPORT_FILE_INVALID = "user_import_file_invalid"
+    IMPORT_BATCH_NOT_FOUND = "user_import_batch_not_found"
+    IMPORT_ROW_INVALID = "user_import_row_invalid"
+    USER_PROFILE_NOT_FOUND = "research_user_profile_not_found"
 
 
 def research_error(error_code, message, http_status=status.HTTP_400_BAD_REQUEST):

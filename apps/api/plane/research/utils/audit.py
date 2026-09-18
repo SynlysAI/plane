@@ -22,6 +22,7 @@ class ResearchAuditAction:
     ORG_MEMBER_REMOVE = "org.member.remove"
     ORG_PI_TRANSFER = "org.pi.transfer"
     MENTOR_BINDING_CREATE = "org.mentor.bind"
+    MENTOR_BINDING_UPDATE = "org.mentor.update"
     MENTOR_BINDING_DELETE = "org.mentor.unbind"
     IDENTITY_LOGIN = "identity.login"
     IDENTITY_BIND = "identity.bind"
@@ -105,6 +106,13 @@ class ResearchAuditAction:
     INTEGRATION_REFERENCE_DELETE = "integration.reference.delete"
     INTEGRATION_REFERENCE_LINK = "integration.reference.link"
     INTEGRATION_REFERENCE_UNLINK = "integration.reference.unlink"
+    INVITE_CODE_CREATE = "account.invite.create"
+    INVITE_CODE_UPDATE = "account.invite.update"
+    INVITE_CODE_DELETE = "account.invite.delete"
+    INVITE_CODE_REDEEM = "account.invite.redeem"
+    USER_IMPORT = "account.import.run"
+    USER_PROFILE_UPDATE = "account.profile.update"
+    CONTEXT_READ = "context.read"
 
 
 class ResearchResourceType:
@@ -134,6 +142,10 @@ class ResearchResourceType:
     OUTCOME = "research_outcome"
     INTEGRATION = "integration"
     EXTERNAL_REFERENCE = "external_reference"
+    INVITE_CODE = "invite_code"
+    IMPORT_BATCH = "user_import_batch"
+    USER_PROFILE = "research_user_profile"
+    CONTEXT = "research_context"
 
 
 def _client_metadata(request):

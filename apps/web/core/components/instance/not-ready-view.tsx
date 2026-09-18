@@ -4,12 +4,11 @@
  * See the LICENSE file for details.
  */
 
-import { BRAND_NAME, GOD_MODE_URL } from "@plane/constants";
-// assets
-import GradientBgLogo from "@/app/assets/auth/gradient-bg-logo.webp?url";
+import { BRAND_NAME } from "@plane/constants";
 import DefaultLayout from "@/layouts/default-layout";
 import { BrandMark } from "@/components/common/brand-mark";
 import { Button } from "@plane/propel/button";
+import { getGodModeUrl } from "@/helpers/admin-url.helper";
 
 export function InstanceNotReady() {
   return (
@@ -17,13 +16,13 @@ export function InstanceNotReady() {
       <div className="relative z-10 flex h-screen w-screen overflow-hidden">
         {/* Background decorations */}
         <img
-          src={GradientBgLogo}
+          src="/pilogo.svg"
           className="pointer-events-none absolute -top-24 -left-32 h-56 w-96 opacity-15"
           alt=""
           aria-hidden="true"
         />
         <img
-          src={GradientBgLogo}
+          src="/pilogo.svg"
           className="pointer-events-none absolute -right-20 -bottom-16 h-56 w-96 opacity-15"
           alt=""
           aria-hidden="true"
@@ -43,7 +42,7 @@ export function InstanceNotReady() {
                 </p>
               </div>
             </div>
-            <a href={GOD_MODE_URL} className="w-72">
+            <a href={getGodModeUrl()} className="w-72">
               <Button variant="primary" className="w-full" size="xl">
                 Get started
               </Button>

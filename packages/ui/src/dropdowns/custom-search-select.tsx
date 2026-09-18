@@ -19,11 +19,14 @@ import type { ICustomSearchSelectProps } from "./helper";
 
 export function CustomSearchSelect(props: ICustomSearchSelectProps) {
   const {
+    ariaLabel,
     customButtonClassName = "",
     buttonClassName = "",
     className = "",
     chevronClassName = "",
     customButton,
+    customButtonPrefix,
+    customButtonRef,
     placement,
     disabled = false,
     footerOption,
@@ -45,7 +48,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
   const [query, setQuery] = useState("");
 
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+  const [popperElement, setPopperElement] = useState<HTMLElement | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -73,7 +76,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
 
   const closeDropdown = () => {
     setIsOpen(false);
-    onClose && onClose();
+    onClose?.();
   };
 
   const handleKeyDown = useDropdownKeyDown(openDropdown, closeDropdown, isOpen);
@@ -85,11 +88,12 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
   };
 
   return (
+    // oxlint-disable-next-line jsx_a11y/no-static-element-interactions
     <Combobox
       as="div"
       ref={dropdownRef}
       tabIndex={tabIndex}
-      className={cn("relative flex-shrink-0 text-left", className)}
+      className={cn("relative flex-shrink-0 text-left", { flex: customButtonPrefix }, className)}
       onKeyDown={handleKeyDown}
       {...comboboxProps}
     >
@@ -99,23 +103,31 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
         return (
           <>
             {customButton ? (
-              <Combobox.Button as={React.Fragment}>
-                <button
-                  ref={setReferenceElement}
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center justify-between gap-1 text-11",
-                    {
-                      "cursor-not-allowed text-secondary": disabled,
-                      "cursor-pointer hover:bg-layer-transparent-hover": !disabled,
-                    },
-                    customButtonClassName
-                  )}
-                  onClick={toggleDropdown}
-                >
-                  {customButton}
-                </button>
-              </Combobox.Button>
+              <>
+                {customButtonPrefix}
+                <Combobox.Button as={React.Fragment}>
+                  <button
+                    ref={(element) => {
+                      setReferenceElement(element);
+                      if (typeof customButtonRef === "function") customButtonRef(element);
+                      else if (customButtonRef) customButtonRef.current = element;
+                    }}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-between gap-1 text-11",
+                      {
+                        "cursor-not-allowed text-secondary": disabled,
+                        "cursor-pointer hover:bg-layer-transparent-hover": !disabled,
+                      },
+                      customButtonClassName
+                    )}
+                    onClick={toggleDropdown}
+                    aria-label={ariaLabel}
+                  >
+                    {customButton}
+                  </button>
+                </Combobox.Button>
+              </>
             ) : (
               <Combobox.Button as={React.Fragment}>
                 <button
@@ -132,6 +144,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                     buttonClassName
                   )}
                   onClick={toggleDropdown}
+                  aria-label={ariaLabel}
                 >
                   {label}
                   {!noChevron && !disabled && (
@@ -142,15 +155,20 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
             )}
             {isOpen &&
               createPortal(
-                <Combobox.Options as="ul" data-prevent-outside-click static>
+                <Combobox.Options
+                  as="ul"
+                  data-prevent-outside-click
+                  static
+                  className="z-30"
+                  ref={setPopperElement}
+                  style={styles.popper}
+                  {...attributes.popper}
+                >
                   <div
                     className={cn(
-                      "z-30 my-1 min-w-48 overflow-y-scroll rounded-md border-[0.5px] border-subtle-1 bg-surface-1 py-2.5 text-11 whitespace-nowrap focus:outline-none",
+                      "my-1 min-w-48 overflow-y-scroll rounded-md border-[0.5px] border-subtle-1 bg-surface-1 py-2.5 text-11 whitespace-nowrap focus:outline-none",
                       optionsClassName
                     )}
-                    ref={setPopperElement}
-                    style={styles.popper}
-                    {...attributes.popper}
                   >
                     <div className="mx-2 flex items-center gap-1.5 rounded-sm border border-subtle px-2">
                       <SearchOutline className="h-3.5 w-3.5 text-placeholder" />
@@ -175,6 +193,8 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                       {filteredOptions ? (
                         filteredOptions.length > 0 ? (
                           filteredOptions.map((option) => (
+                            // Headless UI supplies the option's keyboard semantics.
+                            // oxlint-disable-next-line jsx_a11y/click-events-have-key-events
                             <Combobox.Option
                               as="li"
                               key={option.value}

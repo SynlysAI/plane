@@ -18,8 +18,10 @@ from django.utils import timezone
 
 # Module imports
 from plane.db.models import FileAsset
-from ..mixins import TimeAuditModel
 from plane.utils.color import get_random_color
+from plane.utils.constants import DEFAULT_TIMEZONE
+
+from ..mixins import TimeAuditModel
 
 
 def get_default_onboarding():
@@ -117,7 +119,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     # timezone
     USER_TIMEZONE_CHOICES = tuple(zip(pytz.common_timezones, pytz.common_timezones))
-    user_timezone = models.CharField(max_length=255, default="UTC", choices=USER_TIMEZONE_CHOICES)
+    user_timezone = models.CharField(max_length=255, default=DEFAULT_TIMEZONE, choices=USER_TIMEZONE_CHOICES)
 
     # email validation
     is_email_valid = models.BooleanField(default=False)
@@ -248,7 +250,7 @@ class Profile(TimeAuditModel):
     mobile_onboarding_step = models.JSONField(default=get_mobile_default_onboarding)
     mobile_timezone_auto_set = models.BooleanField(default=False)
     # language
-    language = models.CharField(max_length=255, default="en")
+    language = models.CharField(max_length=255, default="zh-CN")
     start_of_the_week = models.PositiveSmallIntegerField(choices=START_OF_THE_WEEK_CHOICES, default=SUNDAY)
     goals = models.JSONField(default=dict)
     background_color = models.CharField(max_length=255, default=get_random_color)

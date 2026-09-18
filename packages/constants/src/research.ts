@@ -5,13 +5,26 @@
  */
 
 import type {
+  TAmendmentStatus,
+  TAdminRole,
   TApprovalRequestStatus,
   TApprovalType,
+  TCodeProvider,
+  TCodeRefType,
+  TCodeRepositoryStatus,
+  TExperimentSource,
+  TExperimentStatus,
+  TIntegrationSystem,
+  TLiteratureStatus,
   TOrgRole,
   TOrgUnitType,
+  TOutcomeStatus,
+  TOutcomeType,
   TReportStatus,
   TReportType,
   TReportVisibility,
+  TReviewRecommendation,
+  TReviewerRole,
   TResearchProjectStatus,
   TResearchProjectType,
   TStageGateResult,
@@ -24,15 +37,26 @@ import type {
 } from "@plane/types";
 
 export type {
+  TAdminRole,
   TApprovalRequestStatus,
   TApprovalType,
+  TInviteCode,
+  TInviteCodeStatus,
   TOrgRole,
   TOrgUnitType,
+  TPiAggregate,
   TReportStatus,
   TReportType,
   TReportVisibility,
+  TResearchLevel,
+  TResearchProfileCategory,
+  TResearchUserProfile,
   TResearchProjectStatus,
   TResearchProjectType,
+  TUserImportBatch,
+  TUserImportBatchSummary,
+  TUserImportRow,
+  TUserImportRowStatus,
   TStageGate,
   TStageGateItem,
   TStageGatePhase,
@@ -577,6 +601,7 @@ export const ASSIGNMENT_KIND_LABELS: Record<string, string> = {
 
 export const RESEARCH_SETTINGS_NAVIGATION_ITEMS = [
   { key: "org", labelKey: "research.nav.org_settings", path: "settings/org", section: "org" },
+  { key: "system", labelKey: "research.nav.system", path: "settings/system", section: "org" },
   { key: "templates", labelKey: "research.nav.templates", path: "settings/templates", section: "reports" },
   { key: "identity", labelKey: "research.nav.identity", path: "settings/identity", section: "org" },
   { key: "platform", labelKey: "research.nav.platform", path: "settings/platform", section: "org" },
@@ -584,15 +609,46 @@ export const RESEARCH_SETTINGS_NAVIGATION_ITEMS = [
   { key: "integrations", labelKey: "research.nav.integrations", path: "integrations", section: "integrations" },
 ] as const;
 
+// ---------------------------------------------------------------------------
+// System management (v2.4.0)
+// ---------------------------------------------------------------------------
+
+export const ADMIN_ROLES = ["DEV_ADMIN", "OPS_ADMIN", "MAIN_PI"] as const satisfies readonly TAdminRole[];
+
+export const ADMIN_ROLE_LABELS: Record<TAdminRole, string> = {
+  DEV_ADMIN: "research.admin_roles.dev_admin",
+  OPS_ADMIN: "research.admin_roles.ops_admin",
+  MAIN_PI: "research.admin_roles.main_pi",
+};
+
+export const INVITE_CODE_STATUSES = ["ACTIVE", "DISABLED", "EXPIRED", "EXHAUSTED"] as const;
+
+export const INVITE_CODE_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "research.invite_codes.status.active",
+  DISABLED: "research.invite_codes.status.disabled",
+  EXPIRED: "research.invite_codes.status.expired",
+  EXHAUSTED: "research.invite_codes.status.exhausted",
+};
+
+export const USER_IMPORT_ROW_STATUS_LABELS: Record<string, string> = {
+  OK: "research.user_import.status.ok",
+  PENDING: "research.user_import.status.pending",
+  ERROR: "research.user_import.status.error",
+};
+
 const RESEARCH_API_ROOT = "/api/research/workspaces";
 
 export const researchEndpoints = {
   health: () => "/api/research/health/",
+  context: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/context/`,
+  contextResource: (slug: string, kind: string, id: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/context/resources/${kind}/${id}/`,
   settings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/settings/`,
   identityMe: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/me/`,
   identityMappings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/`,
   identityMapping: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/${id}/`,
   orgUnits: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/`,
+  orgIncomplete: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/org/incomplete/`,
   orgUnit: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/${id}/`,
   orgUnitMembers: (slug: string, unitId: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/${unitId}/members/`,
   orgUnitMember: (slug: string, unitId: string, memberId: string) =>
@@ -630,6 +686,17 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/approval-requests/${id}/withdraw/`,
   approvalRequestHistory: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/approval-requests/${id}/history/`,
   auditEvents: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/audit-events/`,
+  // ---- account lifecycle (v2.4.0) ----
+  inviteCodes: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/invite-codes/`,
+  accountProvisioningOptions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/account-provisioning/options/`,
+  inviteCode: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/invite-codes/${id}/`,
+  inviteCodeAction: (slug: string, id: string, action: "enable" | "disable") =>
+    `${RESEARCH_API_ROOT}/${slug}/invite-codes/${id}/${action}/`,
+  userImports: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/`,
+  userImport: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${id}/`,
+  userImportReport: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${id}/report/`,
+  userProfiles: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/user-profiles/`,
+  piAggregate: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/aggregate/`,
   // ---- P1 stage workflow (§5.2) ----
   projectStages: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/stages/`,
   stage: (slug: string, stageId: string) => `${RESEARCH_API_ROOT}/${slug}/stages/${stageId}/`,

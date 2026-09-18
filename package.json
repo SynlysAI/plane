@@ -1,8 +1,8 @@
 {
   "name": "plane-for-ai4ms",
-  "version": "2.3.0",
+  "version": "4.0.2",
   "private": true,
-  "description": "AI4MS research and office management workspace, a SynlysAI fork of Plane",
+  "description": "PiLab research and office management workspace, a SynlysAI fork of Plane",
   "license": "AGPL-3.0",
   "repository": "https://github.com/SynlysAI/plane.git",
   "scripts": {

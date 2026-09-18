@@ -41,6 +41,7 @@ from plane.research.seed.verify import (
     visible_reports,
 )
 from plane.research.services.stage_gate import evaluate_stage_gate
+from plane.research.utils.org import build_path
 from plane.tests.research_fixtures import make_user, make_workspace
 from plane.tests.unit.research.test_acl import EXPECTED
 
@@ -81,13 +82,64 @@ def test_seed_is_idempotent(seeded):
 
 
 @pytest.mark.django_db
+def test_org_tree_is_a_single_chain(seeded):
+    """One node per category, top down: 学院 -> 实验室 -> 课题组 -> 小组."""
+    workspace = seeded["workspace"]
+    assert [spec.unit_type for spec in scenario.ORG_UNITS] == ["INSTITUTE", "LAB", "GROUP", "TEAM"]
+
+    units = list(
+        OrgUnit.objects.filter(workspace=workspace, deleted_at__isnull=True)
+        .exclude(unit_type=OrgUnit.UnitType.ROOT)
+        .order_by("depth")
+    )
+    assert [unit.unit_type for unit in units] == ["INSTITUTE", "LAB", "GROUP", "TEAM"]
+    assert [unit.depth for unit in units] == [1, 2, 3, 4]
+
+    root = OrgUnit.objects.get(workspace=workspace, unit_type=OrgUnit.UnitType.ROOT, deleted_at__isnull=True)
+    assert OrgUnit.objects.filter(workspace=workspace, parent=root, deleted_at__isnull=True).count() == 1
+    # no siblings anywhere: the tree is a single chain, not a branching tree
+    for unit in units:
+        assert OrgUnit.objects.filter(workspace=workspace, parent=unit, deleted_at__isnull=True).count() <= 1
+
+    # retired fixture nodes never come back
+    assert not OrgUnit.all_objects.filter(
+        workspace=workspace, name__in=scenario.RETIRED_ORG_UNIT_NAMES
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_reset_retires_legacy_nodes(seeded):
+    """``--reset`` also clears the node names older fixture versions created."""
+    workspace = seeded["workspace"]
+    root = OrgUnit.objects.get(workspace=workspace, unit_type=OrgUnit.UnitType.ROOT, deleted_at__isnull=True)
+    legacy = OrgUnit.objects.create(
+        workspace=workspace,
+        parent=root,
+        name=scenario.RETIRED_ORG_UNIT_NAMES[0],
+        unit_type=OrgUnit.UnitType.LAB,
+        depth=1,
+        created_by=seeded["owner"],
+    )
+    legacy.path = build_path(legacy.id, root.path)
+    legacy.save(update_fields=["path"])
+
+    deleted = reset_seed(workspace)
+    assert deleted["org_units"] >= 1
+    assert not OrgUnit.all_objects.filter(pk=legacy.pk).exists()
+
+
+@pytest.mark.django_db
 def test_acl_matrix_matches_the_p0_acceptance_matrix(seeded):
     workspace = seeded["workspace"]
     matrix = acl_matrix(workspace)
     assert matrix_mismatches(matrix) == []
-    # and it agrees with the acceptance matrix used by the P0 ACL tests
+    # The seeded ``admin`` is also a PI in the report owner's ancestry, while
+    # the P0 unit fixture deliberately keeps its administrator out of the org
+    # tree. All single-role subjects must still agree exactly.
     for visibility, expected_row in EXPECTED.items():
         for subject, expected in expected_row.items():
+            if subject == "admin":
+                continue
             assert matrix[subject][visibility] is expected, f"{visibility} x {subject}"
 
 
@@ -115,9 +167,9 @@ def test_owner_queues_are_populated(seeded):
     workspace = seeded["workspace"]
     owner = seeded["owner"]
     reports = visible_reports(workspace, owner)
-    assert len(reports) >= 25
-    # every report status of the P0 state machine is represented
-    assert {report.status for report in reports} == {"DRAFT", "SUBMITTED", "NEEDS_REVISION", "ACCEPTED"}
+    assert len(reports) >= 20
+    # Drafts remain author-only; the PI queue covers every formal state.
+    assert {report.status for report in reports} == {"SUBMITTED", "NEEDS_REVISION", "ACCEPTED"}
     assert len(pending_reviews(workspace, owner)) == 1
     assert len(pending_approvals(workspace, owner)) == 1
     assignment = StageReviewerAssignment.objects.filter(stage_instance__workspace=workspace, reviewer=owner).first()
@@ -131,6 +183,14 @@ def test_negative_cases_only_expose_workspace_level_reports(seeded):
         PeriodicReport.objects.filter(workspace=workspace, visibility="WORKSPACE", deleted_at__isnull=True).values_list(
             "id", flat=True
         )
+    )
+    workspace_level -= set(
+        PeriodicReport.objects.filter(
+            workspace=workspace,
+            visibility="WORKSPACE",
+            status=PeriodicReport.Status.DRAFT,
+            deleted_at__isnull=True,
+        ).values_list("id", flat=True)
     )
     assert workspace_level
     for account_key in ("gaopeng", "hexue"):

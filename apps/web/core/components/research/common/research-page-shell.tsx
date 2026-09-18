@@ -6,19 +6,28 @@
 
 import { type ReactNode, useEffect } from "react";
 import { observer } from "mobx-react";
-import { Navigate, useParams } from "react-router";
+import { useParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Spinner } from "@plane/ui";
 // components
 import { PageHead } from "@/components/core/page-title";
+import { ResearchStatusPanel, type TResearchStatus } from "@/components/research/common/research-status-panel";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 
 type Props = {
   titleKey: string;
   descriptionKey?: string;
   section?: "org" | "reports" | "approvals" | "stages" | "experiments" | "code" | "integrations";
+  /**
+   * Navigation key this page belongs to (v2.5.0). The backend publishes the
+   * keys the caller may reach, so the page guard and the sidebar entry can
+   * never disagree. Project scoped pages omit it: they stay on the project ACL.
+   */
+  navKey?: string;
+  /** Restricts the page to research configuration rights. */
   adminOnly?: boolean;
   /** Platform settings must stay reachable while the workspace switch is off. */
   allowDisabled?: boolean;
@@ -34,6 +43,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   titleKey,
   descriptionKey,
   section = "reports",
+  navKey,
   adminOnly = false,
   allowDisabled = false,
   actions,
@@ -42,22 +52,42 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   const { t } = useTranslation();
   const { workspaceSlug } = useParams();
   const research = useResearch();
+  const { getWorkspaceBySlug } = useWorkspace();
   const { identity, identityLoader, identityErrorCode } = research;
 
   useEffect(() => {
-    if (workspaceSlug && !identity)
+    if (workspaceSlug && (research.identityWorkspaceSlug !== workspaceSlug || !identity))
       void research.fetchIdentity(workspaceSlug).catch(() => {
         /* handled through identityErrorCode */
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug]);
 
-  // module off / not a member: fall back to the workspace home (P0-UI-07)
-  if (identityErrorCode) return <Navigate to={`/${workspaceSlug}/`} replace />;
+  const isCurrentWorkspaceIdentity = Boolean(workspaceSlug && research.identityWorkspaceSlug === workspaceSlug);
+  const workspaceName = workspaceSlug ? getWorkspaceBySlug(workspaceSlug)?.name : undefined;
+  const retryIdentity = () => {
+    if (workspaceSlug) void research.fetchIdentity(workspaceSlug).catch(() => undefined);
+  };
 
-  const sectionEnabled = identity?.sections?.[section] ?? identity?.sections?.reports;
+  if (workspaceSlug && isCurrentWorkspaceIdentity && identityErrorCode) {
+    const status: TResearchStatus =
+      identityErrorCode === "research_permission_denied" || identityErrorCode === "research_workspace_not_found"
+        ? "permission_denied"
+        : identityErrorCode === "research_module_disabled" || identityErrorCode === "research_module_not_enabled"
+          ? "module_disabled"
+          : "load_failed";
+    return (
+      <ResearchStatusPanel
+        status={status}
+        workspaceSlug={workspaceSlug}
+        workspaceName={workspaceName}
+        onRetry={status === "load_failed" ? retryIdentity : undefined}
+        isRetrying={identityLoader}
+      />
+    );
+  }
 
-  if (identityLoader || !identity) {
+  if (identityLoader || !isCurrentWorkspaceIdentity || !identity) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner />
@@ -65,9 +95,27 @@ export const ResearchPageShell = observer(function ResearchPageShell({
     );
   }
 
-  // switch off or no permission: fall back to the workspace home (P0-UI-07)
-  if ((!allowDisabled && (!research.isEnabled || !sectionEnabled)) || (adminOnly && !research.isWorkspaceAdmin))
-    return <Navigate to={`/${workspaceSlug}/`} replace />;
+  if (!workspaceSlug) return null;
+
+  const sectionEnabled = identity.sections?.[section] ?? identity.sections?.reports;
+
+  // Switch off, disabled section or a level that does not open this surface:
+  // fall back to the workspace home (P0-UI-07). Pages that stay reachable while
+  // the module is off keep their own administrator gate, so the capability list
+  // is only enforced while the module is on.
+  const surfaceMissing = !allowDisabled && (!research.isEnabled || !sectionEnabled);
+  const levelDenied = research.isEnabled && navKey !== undefined && !research.canSee(navKey);
+
+  if (surfaceMissing || levelDenied || (adminOnly && !research.isResearchAdmin)) {
+    const status: TResearchStatus = surfaceMissing
+      ? !identity.module_enabled
+        ? "module_disabled"
+        : !identity.workspace_enabled
+          ? "workspace_disabled"
+          : "section_disabled"
+      : "permission_denied";
+    return <ResearchStatusPanel status={status} workspaceSlug={workspaceSlug} workspaceName={workspaceName} />;
+  }
 
   return (
     <>

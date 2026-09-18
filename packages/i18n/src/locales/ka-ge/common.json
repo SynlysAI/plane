@@ -322,10 +322,9 @@
   "deleting": "წაშლა",
   "make_a_copy": "ასლის გაკეთება",
   "move_to_project": "პროექტში გადატანა",
-  "good": "კარგი",
-  "morning": "დილა",
-  "afternoon": "შუადღე",
-  "evening": "საღამო",
+  "good_morning": "დილა მშვიდობისა, {name}",
+  "good_afternoon": "შუადღე მშვიდობისა, {name}",
+  "good_evening": "საღამო მშვიდობისა, {name}",
   "show_all": "ყველას ჩვენება",
   "show_less": "ნაკლების ჩვენება",
   "no_data_yet": "ჯერ მონაცემები არ არის",
@@ -816,7 +815,7 @@
     "edited_by": "დარედაქტირებულია"
   },
   "self_hosted_maintenance_message": {
-    "plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start": "AI4MS არ გაუშვია. ეს შეიძლება იყოს იმის გამო, რომ ერთი ან მეტი AI4MS სერვისი ვერ გაუშვეს.",
+    "plane_didnt_start_up_this_could_be_because_one_or_more_plane_services_failed_to_start": "PiLab არ გაუშვია. ეს შეიძლება იყოს იმის გამო, რომ ერთი ან მეტი PiLab სერვისი ვერ გაუშვეს.",
     "choose_view_logs_from_setup_sh_and_docker_logs_to_be_sure": "აირჩიეთ ლოგების ნახვა setup.sh-დან და Docker ლოგებიდან დასარწმუნებლად."
   },
   "customize_navigation": "Customize navigation",
@@ -828,7 +827,7 @@
   "pin": "Pin",
   "unpin": "Unpin",
   "workspace_dashboards": "Dashboards",
-  "pi_chat": "AI4MS AI",
+  "pi_chat": "PiLab AI",
   "in_app": "In-app",
   "forms": "Forms",
   "milestones": "Milestones",
