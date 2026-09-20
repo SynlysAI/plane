@@ -93,19 +93,35 @@ class UserImportRowSerializer(serializers.ModelSerializer):
             "display_name",
             "email",
             "student_no",
+            "phone",
+            "grade",
+            "category",
+            "degree",
+            "business_category",
             "group_label",
             "advisor_name",
+            "primary_advisor_email",
+            "co_advisor_1_name",
+            "co_advisor_1_email",
+            "co_advisor_2_name",
+            "co_advisor_2_email",
+            "review_decision",
+            "review_note",
+            "edited_at",
             "user",
             "user_detail",
             "org_unit",
             "raw",
             "created_at",
+            "updated_at",
         ]
         read_only_fields = fields
 
 
 class UserImportBatchSerializer(serializers.ModelSerializer):
+    review_counts = serializers.SerializerMethodField()
     created_by_detail = ResearchUserSerializer(source="created_by", read_only=True)
+    reviewed_by_detail = ResearchUserSerializer(source="reviewed_by", read_only=True)
     rows = serializers.SerializerMethodField()
 
     class Meta:
@@ -121,9 +137,14 @@ class UserImportBatchSerializer(serializers.ModelSerializer):
             "rows_error",
             "options",
             "summary",
+            "reviewed_by",
+            "reviewed_by_detail",
+            "reviewed_at",
+            "rejection_reason",
             "created_by_detail",
             "created_at",
             "rows",
+            "review_counts",
         ]
         read_only_fields = fields
 
@@ -133,8 +154,17 @@ class UserImportBatchSerializer(serializers.ModelSerializer):
             rows = obj.rows.all()
         return UserImportRowSerializer(rows, many=True).data
 
+    def get_review_counts(self, obj):
+        rows = list(getattr(obj, "prefetched_rows", obj.rows.all()))
+        return {
+            decision.lower(): sum(row.review_decision == decision for row in rows)
+            for decision in ("PENDING", "INCLUDED", "EXCLUDED")
+        }
+
 
 class UserImportBatchSummarySerializer(serializers.ModelSerializer):
+    review_counts = serializers.SerializerMethodField()
+
     class Meta:
         model = UserImportBatch
         fields = [
@@ -147,6 +177,16 @@ class UserImportBatchSummarySerializer(serializers.ModelSerializer):
             "rows_pending",
             "rows_error",
             "summary",
+            "reviewed_by",
+            "reviewed_at",
+            "rejection_reason",
             "created_at",
+            "review_counts",
         ]
         read_only_fields = fields
+
+    def get_review_counts(self, obj):
+        return {
+            decision.lower(): getattr(obj, f"review_{decision.lower()}_count", 0)
+            for decision in ("PENDING", "INCLUDED", "EXCLUDED")
+        }

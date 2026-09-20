@@ -11,7 +11,8 @@ export type TAdminRole = "DEV_ADMIN" | "OPS_ADMIN" | "MAIN_PI";
 export type TWorkspaceResearchPurpose = "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
 export type TInviteCodeStatus = "ACTIVE" | "DISABLED" | "EXPIRED" | "EXHAUSTED";
 export type TUserImportRowStatus = "OK" | "PENDING" | "ERROR";
-export type TUserImportBatchStatus = "PENDING" | "IMPORTED" | "FAILED";
+export type TUserImportReviewDecision = "PENDING" | "INCLUDED" | "EXCLUDED";
+export type TUserImportBatchStatus = "PENDING_REVIEW" | "PENDING" | "IMPORTED" | "REJECTED" | "FAILED";
 export type TResearchProfileCategory = "STUDENT" | "POSTDOC" | "ADVISOR" | "PI" | "STAFF" | "OTHER";
 export type TResearchProfileDegree = "MS" | "PHD" | "";
 /**
@@ -76,6 +77,7 @@ export type TOrgUnitMember = {
   org_unit: string;
   user: string;
   member_detail?: TResearchUserLite;
+  profile_category?: TResearchProfileCategory | null;
   org_role: TOrgRole;
   is_primary: boolean;
   effective_from: string;
@@ -990,6 +992,7 @@ export type TAccountProvisioningOptions = {
     name: string;
     display_path: string;
     business_category: TOrgBusinessCategory | null;
+    unit_type?: TOrgUnitType;
   }[];
   advisors: TResearchUserLite[];
 };
@@ -1020,8 +1023,21 @@ export type TUserImportRow = {
   display_name: string;
   email: string;
   student_no: string;
+  phone: string;
+  grade: string;
+  category: string;
+  degree: string;
+  business_category: string;
   group_label: string;
   advisor_name: string;
+  primary_advisor_email: string;
+  co_advisor_1_name: string;
+  co_advisor_1_email: string;
+  co_advisor_2_name: string;
+  co_advisor_2_email: string;
+  review_decision: TUserImportReviewDecision;
+  review_note: string;
+  edited_at: string | null;
   user: string | null;
   user_detail?: TResearchUserLite | null;
   org_unit: string | null;
@@ -1040,6 +1056,10 @@ export type TUserImportBatch = {
   rows_error: number;
   options: Record<string, unknown>;
   summary: { dry_run?: boolean; groups?: string[]; credentials_issued?: number };
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  rejection_reason?: string;
+  review_counts?: { pending: number; included: number; excluded: number };
   created_by_detail?: TResearchUserLite | null;
   created_at: string | null;
   rows?: TUserImportRow[];

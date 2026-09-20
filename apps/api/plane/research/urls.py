@@ -129,12 +129,35 @@ from plane.research.views import (
     ResearchInviteCodeToggleEndpoint,
     ResearchPiAggregateEndpoint,
     ResearchUserImportDetailEndpoint,
+    ResearchUserImportApproveEndpoint,
+    ResearchUserImportBulkExcludeEndpoint,
+    ResearchUserImportBulkReviewEndpoint,
     ResearchUserImportListCreateEndpoint,
+    ResearchUserImportRejectEndpoint,
+    ResearchUserImportRelationsEndpoint,
     ResearchUserImportReportEndpoint,
+    ResearchUserImportRowEndpoint,
+    ResearchUserImportSingleEndpoint,
+    ResearchUserImportPreviewEndpoint,
     ResearchUserProfileListEndpoint,
 )
 
 urlpatterns = [
+    path(
+        "research/workspaces/<str:slug>/user-imports/single/",
+        ResearchUserImportSingleEndpoint.as_view(),
+        name="research-user-import-single",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/approval-preview/",
+        ResearchUserImportPreviewEndpoint.as_view(),
+        name="research-user-import-preview",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/relations/",
+        ResearchUserImportRelationsEndpoint.as_view(),
+        name="research-user-import-relations",
+    ),
     # availability probe (works even when the module switch is off)
     path("research/health/", ResearchHealthEndpoint.as_view(), name="research-health"),
     path(
@@ -755,6 +778,31 @@ urlpatterns = [
         "research/workspaces/<str:slug>/user-imports/<uuid:pk>/",
         ResearchUserImportDetailEndpoint.as_view(),
         name="research-user-import",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/rows/<uuid:row_id>/",
+        ResearchUserImportRowEndpoint.as_view(),
+        name="research-user-import-row",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/approve/",
+        ResearchUserImportApproveEndpoint.as_view(),
+        name="research-user-import-approve",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/rows/bulk-exclude/",
+        ResearchUserImportBulkExcludeEndpoint.as_view(),
+        name="research-user-import-rows-bulk-exclude",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/rows/bulk-review/",
+        ResearchUserImportBulkReviewEndpoint.as_view(),
+        name="research-user-import-rows-bulk-review",
+    ),
+    path(
+        "research/workspaces/<str:slug>/user-imports/<uuid:pk>/reject/",
+        ResearchUserImportRejectEndpoint.as_view(),
+        name="research-user-import-reject",
     ),
     path(
         "research/workspaces/<str:slug>/user-imports/<uuid:pk>/report/",
