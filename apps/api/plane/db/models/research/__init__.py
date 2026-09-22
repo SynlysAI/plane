@@ -19,6 +19,7 @@ from .identity import IdentityMapping
 from .account_link import AccountLink
 from .chain import ResearchChain, ResearchChainEvent, ResearchChainNode, ResearchChainSnapshot, ResearchReflectionLog
 from .context import ResearchContextGrant
+from .agent import ResearchAgentRunEvent, ResearchAgentSession
 from .integration import (
     ExternalReferenceLink,
     ExternalSystemConnection,
@@ -78,6 +79,8 @@ __all__ = [
     "ResearchChainSnapshot",
     "ResearchReflectionLog",
     "ResearchContextGrant",
+    "ResearchAgentSession",
+    "ResearchAgentRunEvent",
     "CodeArtifact",
     "ProjectCodeRepository",
     "LiteratureEntry",

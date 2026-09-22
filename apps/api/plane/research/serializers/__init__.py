@@ -11,6 +11,7 @@ from .account import (
     UserImportRowSerializer,
 )
 from .account_link import AccountLinkSerializer
+from .agent import ResearchAgentRunEventSerializer, ResearchAgentSessionSerializer
 from .org import (
     IdentityMappingSerializer,
     MentorBindingSerializer,
@@ -107,4 +108,6 @@ __all__ = [
     "UserImportBatchSummarySerializer",
     "UserImportRowSerializer",
     "AccountLinkSerializer",
+    "ResearchAgentSessionSerializer",
+    "ResearchAgentRunEventSerializer",
 ]

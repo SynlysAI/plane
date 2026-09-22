@@ -121,6 +121,11 @@ export type TWorkspaceResearchSetting = {
   org_enabled: boolean;
   report_enabled: boolean;
   approval_enabled: boolean;
+  research_chain_enabled?: boolean;
+  research_agent_enabled?: boolean;
+  research_trace_enabled?: boolean;
+  research_account_link_enabled?: boolean;
+  research_external_rag_enabled?: boolean;
   allow_multiple_projects: boolean;
   default_report_visibility: TReportVisibility;
   weekly_default_visibility?: TReportVisibility | null;
@@ -144,6 +149,64 @@ export type TResearchProjectProfile = {
   expected_end_at: string | null;
   completed_at: string | null;
   is_active: boolean;
+  chain_kind?: "LEGACY_TRAINING" | "RESEARCH_CHAIN";
+  chain_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+};
+
+export type TResearchChain = {
+  schema_version: "research-chain.v1";
+  id: string;
+  project: string;
+  workspace: string;
+  owner: string;
+  status: "ACTIVE" | "ARCHIVED" | "COMPLETED";
+  visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchChainNode = {
+  schema_version: "research-node.v1";
+  id: string;
+  chain: string;
+  node_type: string;
+  title: string;
+  parent_node: string | null;
+  loop_iteration: number;
+  status: "PENDING" | "IN_PROGRESS" | "BLOCKED" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+  assignee: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TAgentPluginManifest = {
+  schema_version: "agent-plugin.v1";
+  plugin_id: string;
+  manifest_version: "agent-plugin.v1";
+  entrypoints: string[];
+  required_scopes: string[];
+  capabilities: string[];
+  ui: { desktop: string; mobile: string };
+  feature_flag: string;
+  ui_states: string[];
+  transport: { events: string; streaming: string; iframe: string };
+  enabled?: boolean;
+};
+
+export type TResearchAgentSession = {
+  schema_version: "agent-plugin.v1";
+  session_id: string;
+  run_id: string;
+  workspace: string;
+  user: string;
+  project: string;
+  chain_node: string;
+  context_id: string;
+  context_hash: string;
+  status: "INITIALIZING" | "READY" | "STREAMING" | "WAITING_APPROVAL" | "SAVING" | "DEGRADED" | "ERROR" | "CLOSED";
+  last_error: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type TReportOfficialContent = {
@@ -277,6 +340,8 @@ export type TResearchIdentity = {
     experiments?: boolean;
     code?: boolean;
     integrations?: boolean;
+    research_chain?: boolean;
+    research_agent?: boolean;
   };
   /**
    * Which surfaces this caller may reach (v2.5.0). `nav` is already

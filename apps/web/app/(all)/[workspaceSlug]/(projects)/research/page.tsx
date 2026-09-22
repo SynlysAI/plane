@@ -24,6 +24,7 @@ const BUSINESS_CARDS = [
   { key: "reports", path: "reports", titleKey: "research.nav.reports", section: "reports" },
   { key: "summary", path: "reports/summary", titleKey: "research.nav.summary", section: "reports" },
   { key: "projects", path: "projects", titleKey: "research.nav.projects", section: "reports" },
+  { key: "research_chain", path: "chains", titleKey: "research.nav.research_chain", section: "research_chain" },
   { key: "approvals", path: "approvals", titleKey: "research.nav.approvals", section: "approvals" },
 ] as const;
 

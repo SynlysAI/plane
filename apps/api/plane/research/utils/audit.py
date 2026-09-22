@@ -120,6 +120,12 @@ class ResearchAuditAction:
     ACCOUNT_LINK_CONFIRM = "account.link.confirm"
     ACCOUNT_LINK_UNLINK = "account.link.unlink"
     ACCOUNT_LINK_REVOKE = "account.link.revoke"
+    AGENT_SESSION_CREATE = "agent.session.create"
+    AGENT_SESSION_READ = "agent.session.read"
+    AGENT_SESSION_CLOSE = "agent.session.close"
+    AGENT_MESSAGE = "agent.message"
+    AGENT_APPROVAL = "agent.approval"
+    AGENT_ARTIFACT_SAVE = "agent.artifact.save"
 
 
 class ResearchResourceType:
@@ -154,6 +160,7 @@ class ResearchResourceType:
     USER_PROFILE = "research_user_profile"
     CONTEXT = "research_context"
     ACCOUNT_LINK = "research_account_link"
+    AGENT_SESSION = "research_agent_session"
 
 
 def _client_metadata(request):

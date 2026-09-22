@@ -244,6 +244,7 @@ export const RESEARCH_NAVIGATION_ITEMS = [
   { key: "reports", labelKey: "research.nav.reports", path: "reports", section: "reports" },
   { key: "summary", labelKey: "research.nav.summary", path: "reports/summary", section: "reports" },
   { key: "projects", labelKey: "research.nav.projects", path: "projects", section: "reports" },
+  { key: "research_chain", labelKey: "research.nav.research_chain", path: "chains", section: "research_chain" },
   { key: "reviews", labelKey: "research.nav.reviews", path: "reviews", section: "stages" },
   { key: "approvals", labelKey: "research.nav.approvals", path: "approvals", section: "approvals" },
 ] as const;
@@ -645,6 +646,17 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/context/resources/${kind}/${id}/`,
   settings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/settings/`,
   identityMe: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/me/`,
+  chains: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/chains/`,
+  chain: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/`,
+  chainNodes: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/`,
+  agentManifest: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/manifest/`,
+  agentSessions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/`,
+  agentSession: (slug: string, sessionId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/`,
+  agentSessionClose: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/close/`,
+  agentMessages: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/messages/`,
+  agentRunEvents: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/events/`,
   identityMappings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/`,
   identityMapping: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/${id}/`,
   orgUnits: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/`,

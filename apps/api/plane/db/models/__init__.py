@@ -105,6 +105,8 @@ from .research import (
     ResearchChainSnapshot,
     ResearchReflectionLog,
     ResearchContextGrant,
+    ResearchAgentRunEvent,
+    ResearchAgentSession,
     CodeArtifact,
     ProjectCodeRepository,
     LiteratureEntry,
