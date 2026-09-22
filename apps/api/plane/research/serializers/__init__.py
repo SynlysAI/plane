@@ -10,6 +10,7 @@ from .account import (
     UserImportBatchSummarySerializer,
     UserImportRowSerializer,
 )
+from .account_link import AccountLinkSerializer
 from .org import (
     IdentityMappingSerializer,
     MentorBindingSerializer,
@@ -105,4 +106,5 @@ __all__ = [
     "UserImportBatchSerializer",
     "UserImportBatchSummarySerializer",
     "UserImportRowSerializer",
+    "AccountLinkSerializer",
 ]

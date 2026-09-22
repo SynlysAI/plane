@@ -116,6 +116,10 @@ class ResearchAuditAction:
     CONTEXT_READ = "context.read"
     CONTEXT_TOKEN_ISSUE = "context.token.issue"
     CONTEXT_TOKEN_REVOKE = "context.token.revoke"
+    ACCOUNT_LINK_CREATE = "account.link.create"
+    ACCOUNT_LINK_CONFIRM = "account.link.confirm"
+    ACCOUNT_LINK_UNLINK = "account.link.unlink"
+    ACCOUNT_LINK_REVOKE = "account.link.revoke"
 
 
 class ResearchResourceType:
@@ -149,6 +153,7 @@ class ResearchResourceType:
     IMPORT_BATCH = "user_import_batch"
     USER_PROFILE = "research_user_profile"
     CONTEXT = "research_context"
+    ACCOUNT_LINK = "research_account_link"
 
 
 def _client_metadata(request):
