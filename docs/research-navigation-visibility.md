@@ -45,6 +45,8 @@
 | `audit`        | 审计记录 | ✅    | ❌        | ❌     | ❌         |
 | `integrations` | 系统集成 | ✅    | ❌        | ❌     | ❌         |
 
+> **Research Chain 规划说明（平台 PRD v1.4）**：后续实现时新增 `research_chain` 导航 key，作为科研分组一级入口。该 key 对具备科研准入的 ADMIN / PRINCIPAL / MENTOR / RESEARCHER 开放，并叠加 Workspace 的 `research_chain_enabled` 子开关。它不替换 `overview`、`reports` 或 `projects`，也不改变普通 Plane 的首页、草稿、我的工作、便签、项目、More 和添加项目入口。当前表记录已实现 v2.5/v3 基线，`research_chain` 只有在对应阶段代码交付后才纳入已实现矩阵。
+
 两条补充规则：
 
 - `reviews` 按人判定：被指派为阶段评审人（或本身是导师）时出现，因此学生被指派后也能看到待办。

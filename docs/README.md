@@ -21,7 +21,7 @@
 | [`research-navigation-visibility.md`](./research-navigation-visibility.md)                         | 科研目录分级可见：四档级别、菜单矩阵、强制点与验收方式                   | v1.0，已交付（v2.5.0）                   |
 | [`research-workspace-v3.md`](./research-workspace-v3.md)                                           | v3 权威实现契约：组织、权限、工作空间、项目、报告与 Agent 上下文         | v1.3，对应 `3.0.3`                       |
 | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md)                   | 跨仓库科研智能体平台总 PRD：Research Chain、Agent 分工、MVP 与建设路线   | v1.4，待评审                             |
-| [`research-intelligent-platform-ux-prototype.md`](./research-intelligent-platform-ux-prototype.md) | 科研智能体平台 UX 交互原型：欢迎页、Research Chain、Agent 插件和入库流程 | v1.0，待确认                             |
+| [`research-intelligent-platform-ux-prototype.md`](./research-intelligent-platform-ux-prototype.md) | 科研智能体平台 UX 交互原型：欢迎页、Research Chain、Agent 插件和入库流程 | v1.1，待确认                             |
 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) | Phase 0 实施计划：契约、基础设施、身份、Context、适配器、安全与测试基线  | v1.3，待评审                             |
 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) | Phase 1 实施计划：Research Chain、RAGPortal、Synlora MVP 与科研闭环      | v1.3，待评审                             |
 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md) | Phase 2 实施计划：SpecLabOS、PolyAgent、SpecAgent、Job 与实验运行        | v1.3，待评审                             |
