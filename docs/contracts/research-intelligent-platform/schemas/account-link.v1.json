@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/account-link.v1.json",
+  "title": "Account link v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "canonical_identity", "provider", "external_subject", "local_user_id", "status"],
+  "properties": {
+    "schema_version": { "const": "account-link.v1" },
+    "canonical_identity": { "type": "string", "minLength": 1 },
+    "provider": { "type": "string", "minLength": 1 },
+    "external_subject": { "type": "string", "minLength": 1 },
+    "local_user_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["PENDING", "ACTIVE", "REVOKED", "UNLINKED"] },
+    "verified_at": { "type": ["string", "null"], "format": "date-time" },
+    "bound_by": { "type": ["string", "null"] },
+    "audit_event_id": { "type": ["string", "null"] }
+  }
+}

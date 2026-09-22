@@ -1,0 +1,48 @@
+{
+  "schema_version": "error-codes.v1",
+  "codes": [
+    {
+      "code": "RESEARCH_DISABLED",
+      "http_status": 404,
+      "retryable": false,
+      "description": "Research capability is disabled."
+    },
+    {
+      "code": "CHAIN_NOT_FOUND",
+      "http_status": 404,
+      "retryable": false,
+      "description": "Research chain does not exist or is not visible."
+    },
+    {
+      "code": "CHAIN_ACCESS_DENIED",
+      "http_status": 403,
+      "retryable": false,
+      "description": "Caller cannot access the chain scope."
+    },
+    {
+      "code": "INVALID_TRANSITION",
+      "http_status": 409,
+      "retryable": false,
+      "description": "Requested state transition is not allowed."
+    },
+    {
+      "code": "IDEMPOTENCY_CONFLICT",
+      "http_status": 409,
+      "retryable": false,
+      "description": "Request id was already used with a different payload."
+    },
+    {
+      "code": "ACCOUNT_LINK_CONFLICT",
+      "http_status": 409,
+      "retryable": false,
+      "description": "External identity is already bound to another identity."
+    },
+    { "code": "UPSTREAM_TIMEOUT", "http_status": 504, "retryable": true, "description": "Upstream service timed out." },
+    {
+      "code": "UPSTREAM_DEGRADED",
+      "http_status": 503,
+      "retryable": true,
+      "description": "Upstream service is degraded."
+    }
+  ]
+}
