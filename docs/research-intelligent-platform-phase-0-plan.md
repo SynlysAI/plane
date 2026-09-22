@@ -155,6 +155,8 @@ BFF 强制注入 `workspace_id`、`research_project_id`、`chain_node_id`、`con
 
 安全约束：同源路由或反向代理优先；CSP 禁止未知 iframe；短期 token 不进入 URL、localStorage 或前端日志；工具审批必须由后端确认后才允许执行。
 
+导航基础约束：新增 `research_chain` capability 和 Workspace 子开关，ResearchSidebarItems、科研总览卡片和页面守卫读取同一能力结果；不得删除、移动或改变现有 `overview`、`reports`、`projects`、`approvals`、`system`、`platform`、`audit`、`integrations` 入口。普通 Plane 的首页、草稿、我的工作、便签、项目、More 和添加项目流程继续使用原有路由。
+
 ### 2.8 研究事件、快照和待办 taxonomy
 
 Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPortal 和专业系统为同一事实产生不同名称：
@@ -219,6 +221,7 @@ Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPorta
 - 完成反向代理、CORS/CSP、短期 token 传递和禁止跨站 iframe 的安全配置。
 - 输出 `agent-plugin.v1` manifest、入口路由、BFF API、UI 状态和事件映射契约。
 - 建立 Agent 插件壳组件、课题/节点 scope provider、session 生命周期和 SSE 取消接口。
+- 增加 `research_chain` 导航 key、Workspace 子开关、侧栏入口、页面守卫和科研总览跳转卡；为所有既有 Plane/科研入口补回归测试。
 
 依赖：0.2、0.4。完成标志：开关关闭时原 Plane 无变化，打开时只对授权测试账号显示入口。
 

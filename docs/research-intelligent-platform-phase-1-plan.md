@@ -52,6 +52,16 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 - Agent 分析入口：带当前课题、节点和 Context ID。
 - 科研组件入口：RAGPortal、Synlora，以及后续专业系统占位。
 
+现有导航和功能必须全部保留：Plane 的首页、草稿、我的工作、便签、工作区项目、More、添加项目，以及科研总览、报告、科研项目、办公审批、系统管理、平台配置、审计记录和系统集成。Research Chain 作为科研分组新增一级入口，不替换科研总览或科研项目。
+
+职责区分：
+
+- 科研总览：跨课题聚合、待办、统计和最近活动。
+- Research Chain：课题过程节点、快照、事件、Agent 和回放。
+- 科研项目：科研项目创建、列表、成员和项目级资源。
+- 报告：周报/月报、提交、退回和正式版本。
+- 管理入口：保持管理员能力和现有 URL，不因 Research Chain 开放而扩大权限。
+
 入口通过 ResearchGuard、Workspace 开关和课题 ACL 过滤。外部页面首期使用同源反向代理/BFF 跳转；页面回到 Plane 后，通过 `chain_id` 和 `node_id` 恢复上下文。
 
 欢迎页科研区域采用固定信息顺序：当前 Research Chain → 需要本人处理的待办 → 最近研究快照 → Agent 分析入口 → 科研组件入口。待办默认按阻断级别、截止时间、更新时间排序；同一来源对象只显示一条当前待办，历史状态进入时间线。用户完成 Plane 本地待办时直接更新状态；外部待办先调用来源系统，回调未确认前显示“同步中”，不得提前标记完成。
@@ -185,6 +195,8 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 - 通过同源代理/BFF 打开 RAGPortal 和 Synlora。
 - 实现通用 Agent 插件壳、课题/节点 scope provider、消息流、工具卡、产物抽屉和 Trace 面板。
 - 实现 loading/empty/forbidden/degraded/streaming/saving/error 状态和课题切换清理。
+- 在科研侧栏新增 Research Chain 一级入口，同时保留所有现有 Plane/科研入口和“添加项目”流程。
+- 更新科研总览：增加 Research Chain 摘要卡和跳转，不在总览复制完整 Chain 时间线。
 
 依赖：1.1、Phase 0 任务 0.6。验收：不同角色看到不同入口；关闭开关不影响原首页。
 
@@ -244,6 +256,7 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 - `COMMUNICATION`、`APPROVAL`、`DATA_CHANGE` 和 `DEGRADED` 事件可以在时间线中区分显示。
 - 插件入口、侧边工作台、上下文摘要、消息流、工具卡、审批、产物抽屉和 Trace 时间线在桌面/窄屏布局均可用。
 - 课题切换、Session 关闭、SSE 断线重连、停止生成和保存失败恢复符合状态字典。
+- 首页、草稿、我的工作、便签、工作区项目、More、添加项目及全部现有科研入口继续可见且功能不回归；Research Chain 按 capability 单独显隐。
 
 ### 4.3 端到端场景
 
