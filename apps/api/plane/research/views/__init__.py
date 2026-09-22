@@ -35,6 +35,17 @@ from .account_links import (
     ResearchAccountLinkRevokeEndpoint,
     ResearchAccountLinkUnlinkEndpoint,
 )
+from .agent import (
+    ResearchAgentApprovalEndpoint,
+    ResearchAgentArtifactEndpoint,
+    ResearchAgentChainEventEndpoint,
+    ResearchAgentManifestEndpoint,
+    ResearchAgentMessageEndpoint,
+    ResearchAgentRunEventEndpoint,
+    ResearchAgentSessionCloseEndpoint,
+    ResearchAgentSessionCreateEndpoint,
+    ResearchAgentSessionDetailEndpoint,
+)
 from .attachments import (
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
@@ -317,5 +328,14 @@ __all__ = [
     "ResearchAccountLinkUnlinkEndpoint",
     "ResearchAccountLinkRevokeEndpoint",
     "ResearchAccountLinkConflictEndpoint",
+    "ResearchAgentManifestEndpoint",
+    "ResearchAgentSessionCreateEndpoint",
+    "ResearchAgentSessionDetailEndpoint",
+    "ResearchAgentSessionCloseEndpoint",
+    "ResearchAgentMessageEndpoint",
+    "ResearchAgentRunEventEndpoint",
+    "ResearchAgentApprovalEndpoint",
+    "ResearchAgentArtifactEndpoint",
+    "ResearchAgentChainEventEndpoint",
     "ResearchContextResourceEndpoint",
 ]

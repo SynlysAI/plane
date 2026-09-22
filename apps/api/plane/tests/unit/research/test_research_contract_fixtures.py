@@ -58,6 +58,7 @@ def _validate_minimal_schema(schema, example):
         "account-link",
         "integration-result",
         "job-status",
+        "agent-plugin",
     ],
 )
 def test_all_v1_schema_examples_are_valid(name):

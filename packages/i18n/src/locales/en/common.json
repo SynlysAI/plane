@@ -870,6 +870,7 @@
       "reports": "Reports",
       "summary": "Submission summary",
       "projects": "Research projects",
+      "research_chain": "Research Chain",
       "approvals": "Office approvals",
       "org_settings": "Organisation",
       "templates": "Report templates",
@@ -1061,6 +1062,7 @@
       "system_hint": "Invite codes, roster import and research profiles.",
       "summary_hint": "Submission status grouped by organisation node and period.",
       "projects_hint": "One personal research project per research owner.",
+      "research_chain_hint": "Versioned research chains, nodes, events and snapshots.",
       "approvals_hint": "Task and purchase approvals built on work items.",
       "org_hint": "Maintain the organisation tree, members, principal investigators and advisors.",
       "templates_hint": "Templates used when a report is created.",
@@ -1076,6 +1078,40 @@
       "open_revisions": "Open reports to revise",
       "open_projects": "Open research projects",
       "open_reports": "Open periodic reports"
+    },
+    "chains": {
+      "description": "Research Chain projections with node, event and snapshot metadata.",
+      "empty": "No research chain has been created in your visible projects yet.",
+      "refresh": "Refresh",
+      "project": "Project",
+      "status": "Status",
+      "visibility": "Visibility",
+      "open": "Open chain",
+      "nodes_empty": "This chain has no nodes yet.",
+      "node": "Node",
+      "open_agent": "Open agent"
+    },
+    "agent": {
+      "description": "Same-origin agent workbench with server-side context authorization.",
+      "launch": "Start session",
+      "close": "Close session",
+      "input_label": "Message",
+      "input_placeholder": "Ask a research question",
+      "send": "Send",
+      "degraded": "Agent runtime is not configured. The research chain remains available.",
+      "no_session": "No active session.",
+      "state_prefix": "State",
+      "scope": "Scope",
+      "status": {
+        "INITIALIZING": "Initialising",
+        "READY": "Ready",
+        "STREAMING": "Streaming",
+        "WAITING_APPROVAL": "Waiting approval",
+        "SAVING": "Saving",
+        "DEGRADED": "Degraded",
+        "ERROR": "Error",
+        "CLOSED": "Closed"
+      }
     },
     "status": {
       "workspace": "Current workspace: {workspace}",

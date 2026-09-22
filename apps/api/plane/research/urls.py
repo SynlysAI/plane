@@ -29,6 +29,15 @@ from plane.research.views import (
     ResearchAccountLinkUnlinkEndpoint,
     ResearchAccountLinkRevokeEndpoint,
     ResearchAccountLinkConflictEndpoint,
+    ResearchAgentManifestEndpoint,
+    ResearchAgentSessionCreateEndpoint,
+    ResearchAgentSessionDetailEndpoint,
+    ResearchAgentSessionCloseEndpoint,
+    ResearchAgentMessageEndpoint,
+    ResearchAgentRunEventEndpoint,
+    ResearchAgentApprovalEndpoint,
+    ResearchAgentArtifactEndpoint,
+    ResearchAgentChainEventEndpoint,
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
@@ -246,6 +255,51 @@ urlpatterns = [
         "research/workspaces/<str:slug>/context/resources/<str:kind>/<str:resource_id>/",
         ResearchContextResourceEndpoint.as_view(),
         name="research-context-resource",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/manifest/",
+        ResearchAgentManifestEndpoint.as_view(),
+        name="research-agent-manifest",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/sessions/",
+        ResearchAgentSessionCreateEndpoint.as_view(),
+        name="research-agent-sessions",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/",
+        ResearchAgentSessionDetailEndpoint.as_view(),
+        name="research-agent-session",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/close/",
+        ResearchAgentSessionCloseEndpoint.as_view(),
+        name="research-agent-session-close",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/messages/",
+        ResearchAgentMessageEndpoint.as_view(),
+        name="research-agent-message",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/runs/<uuid:run_id>/events/",
+        ResearchAgentRunEventEndpoint.as_view(),
+        name="research-agent-run-events",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/runs/<uuid:run_id>/approvals/",
+        ResearchAgentApprovalEndpoint.as_view(),
+        name="research-agent-approval",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/artifacts/",
+        ResearchAgentArtifactEndpoint.as_view(),
+        name="research-agent-artifact",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/chain-events/",
+        ResearchAgentChainEventEndpoint.as_view(),
+        name="research-agent-chain-event",
     ),
     # ------------------------------------------------------------------
     # P1 stage workflow (§5.2) - additive, nothing below is renumbered

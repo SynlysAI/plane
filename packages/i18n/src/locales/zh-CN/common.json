@@ -870,6 +870,7 @@
       "reports": "报告",
       "summary": "提交汇总",
       "projects": "科研项目",
+      "research_chain": "科研链",
       "approvals": "办公审批",
       "org_settings": "组织架构",
       "templates": "报告模板",
@@ -1061,6 +1062,7 @@
       "system_hint": "邀请码、批量导入与科研档案。",
       "summary_hint": "按组织节点与周期查看提交情况。",
       "projects_hint": "每个科研责任人一个个人科研项目。",
+      "research_chain_hint": "版本化科研链、节点、事件与快照。",
       "approvals_hint": "基于工作项的任务审批与采购审批。",
       "org_hint": "维护组织树、成员角色、课题组主 PI 与直接导师。",
       "templates_hint": "创建报告时可套用的正文模板。",
@@ -1076,6 +1078,40 @@
       "open_revisions": "查看需修改报告",
       "open_projects": "进入科研项目",
       "open_reports": "进入周期报告"
+    },
+    "chains": {
+      "description": "科研链投影，包含节点、事件与快照元数据。",
+      "empty": "当前可见课题还没有科研链。",
+      "refresh": "刷新",
+      "project": "课题",
+      "status": "状态",
+      "visibility": "可见范围",
+      "open": "打开科研链",
+      "nodes_empty": "该科研链还没有节点。",
+      "node": "节点",
+      "open_agent": "打开智能体"
+    },
+    "agent": {
+      "description": "同源智能体工作台，上下文授权全部由服务端完成。",
+      "launch": "启动会话",
+      "close": "关闭会话",
+      "input_label": "消息",
+      "input_placeholder": "提出一个研究问题",
+      "send": "发送",
+      "degraded": "智能体运行时尚未配置，科研链功能仍可继续使用。",
+      "no_session": "暂无活动会话。",
+      "state_prefix": "状态",
+      "scope": "范围",
+      "status": {
+        "INITIALIZING": "初始化中",
+        "READY": "可用",
+        "STREAMING": "流式返回中",
+        "WAITING_APPROVAL": "等待审批",
+        "SAVING": "保存中",
+        "DEGRADED": "已降级",
+        "ERROR": "错误",
+        "CLOSED": "已关闭"
+      }
     },
     "status": {
       "workspace": "当前工作区：{workspace}",

@@ -20,7 +20,16 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 type Props = {
   titleKey: string;
   descriptionKey?: string;
-  section?: "org" | "reports" | "approvals" | "stages" | "experiments" | "code" | "integrations";
+  section?:
+    | "org"
+    | "reports"
+    | "approvals"
+    | "stages"
+    | "experiments"
+    | "code"
+    | "integrations"
+    | "research_chain"
+    | "research_agent";
   /**
    * Navigation key this page belongs to (v2.5.0). The backend publishes the
    * keys the caller may reach, so the page guard and the sidebar entry can
