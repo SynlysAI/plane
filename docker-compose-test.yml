@@ -121,6 +121,7 @@ services:
       EMAIL_HOST: test-smtp.invalid
     volumes:
       - ./apps/api:/code
+      - ./docs:/code/docs:ro
     working_dir: /code
     depends_on:
       test-db:
