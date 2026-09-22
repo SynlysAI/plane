@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 计划版本 | v1.2                                                                                                                                                                                                   |
+| 计划版本 | v1.3                                                                                                                                                                                                   |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §6–§10                                                                                                                |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)、[`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) |
 | 计划状态 | 待评审                                                                                                                                                                                                 |
@@ -102,27 +102,16 @@ Phase 2 的 Plane Agent 插件和欢迎页统一显示专业组件入口：
 
 入口卡片显示来源系统、健康状态、所需权限、最近运行和深链；不可用时显示 `DEGRADED`，不隐藏已存在的历史结果。专业系统产生的待办通过统一 `source_system/source_id/assignee/deep_link/status` 结构聚合到 Plane，完成动作后回写来源系统或追加本地确认事件。
 
-### 2.7 知识图谱 ingestion 与自动 ELN 沉淀
+### 2.7 WeKnora 服务状态与自动 ELN 沉淀
 
-图谱写入以前置的 WeKnora 正式契约为条件。Plane/RAGPortal 只发送经过 ACL 过滤的 metadata，不直接写 WeKnora 底层库：
+WeKnora 已部署在内网 `http://10.26.15.93:8000/`，不在本项目中开发。RAGPortal 是唯一入库入口：Plane 只调用 RAGPortal 的上传、状态和引用接口，RAGPortal 负责调用 WeKnora、解析资料并返回知识库/条目/任务状态。
 
-```json
-{
-  "schema_version": "research-graph-ingestion.v1",
-  "workspace_id": "...",
-  "research_project_id": "...",
-  "chain_node_id": "...",
-  "source_type": "literature|experiment|analysis|outcome",
-  "source_id": "...",
-  "source_version": 1,
-  "content_hash": "sha256:...",
-  "entities": [{ "type": "material", "name": "..." }],
-  "relations": [{ "type": "evaluates", "target_ref": "..." }],
-  "visibility": "..."
-}
-```
+Phase 2 只做平台侧能力：
 
-WeKnora 返回 ingestion ID、状态、拒绝原因和版本；Plane 将其写为外部引用和 `DATA_CHANGE` 事件。图谱服务不可用时，保留待同步 outbox，不阻断 ELN/实验主流程。
+- 将 RAGPortal 返回的 `knowledge_id`、`kb_id`、解析状态、版本和 hash 关联到 Research Chain。
+- 在 Plane/Agent UI 显示 RAGPortal/WeKnora 健康状态、解析中、完成、失败和重试入口。
+- 不新增 WeKnora 数据库写入、图谱 ingestion adapter 或底层索引管理。
+- 如果 RAGPortal 扩展图谱/关系配置，Plane 只透传受控参数并保存外部任务状态。
 
 自动 ELN 规则：SpecLabOS/PolyAgent 运行回执必须映射为 Experiment Record 的只读外部段，包括运行 ID、设备/算法、输入摘要、参数版本、DataAsset、结果 hash、状态和时间。用户可以补充科研解释、结论和失败原因，但不能覆盖权威运行字段；修订通过 amendment 产生新版本。
 
@@ -186,14 +175,14 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 - 增加用户、课题、Workspace 级并发/额度限制。
 - 建立资源使用统计和超额拒绝事件。
 
-### 任务 2.5a：知识图谱和自动 ELN 适配
+### 任务 2.5a：RAGPortal/WeKnora 状态和自动 ELN 适配
 
-- 与 WeKnora 维护方冻结 `research-graph-ingestion.v1`、权限、租户、删除和重试契约。
-- 实现课题/节点 metadata outbox、ingestion 回调、状态投影和降级待同步。
+- 与 RAGPortal 维护方冻结上传、知识库、解析状态、引用和错误回执契约。
+- 配置 WeKnora 内网健康检查和 RAGPortal 侧重试/降级状态展示。
 - 将 SpecLabOS/PolyAgent 回执映射为 Experiment Record 外部段、DataAsset 引用和 `DATA_CHANGE` 事件。
 - 复用 ExperimentAmendment 处理人工解释修订，禁止覆盖原始运行字段。
 
-依赖：2.1–2.3、WeKnora 正式接口。验收：图谱不可用时 ELN 仍可保存；重复 ingestion 不产生重复实体引用；无权课题 metadata 不会出站。
+依赖：2.1–2.3、RAGPortal 正式接口。验收：RAGPortal/WeKnora 不可用时 ELN 仍可保存；重复上传/引用不产生重复外部关系；无权课题 metadata 不会出站。
 
 依赖：2.2–2.4。验收：无权限、超额、未确认和沙箱失败均 fail-closed。
 
@@ -231,7 +220,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 - Guest/未绑定账号无法调用、查看结果或下载 DataAsset。
 - token、API Key、原始数据和敏感参数不进入前端日志或 Chain Event。
 - 工具输入、文件和外部 URL 经过大小、类型、白名单和沙箱限制。
-- 图谱 ingestion、ELN 自动回执和 DataAsset 引用均执行课题 ACL；出站 metadata 不含未授权正文或其他课题实体。
+- RAGPortal 入库状态、ELN 自动回执和 DataAsset 引用均执行课题 ACL；出站 metadata 不含未授权正文或其他课题内容。
 
 ### 4.3 端到端场景
 
@@ -243,7 +232,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 6. 重复 callback、SSE 断线和任务取消不会重复扣除配额或生成重复事实。
 7. 从 Agent 插件发起高风险实验，确认前不创建上游 run；确认后重复点击只生成一个 job；取消请求和最终运行状态分别展示。
 8. SpecLabOS/PolyAgent/SpecAgent 任一服务不可用时，入口和历史快照可见，新的高风险操作被阻断并进入 degraded 待办。
-9. SpecLabOS 运行完成后自动生成 ELN 外部段和数据快照；用户补充结论后生成 amendment，不覆盖设备运行字段；WeKnora ingestion 延迟时主流程不中断。
+9. SpecLabOS 运行完成后自动生成 ELN 外部段和数据快照；用户补充结论后生成 amendment，不覆盖设备运行字段；RAGPortal/WeKnora 解析延迟时主流程不中断。
 
 ### 4.4 性能与容量
 
