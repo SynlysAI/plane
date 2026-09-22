@@ -4,6 +4,7 @@
 
 """Versioned, permission-scoped research context for downstream AI clients."""
 
+from hmac import compare_digest
 from uuid import UUID
 
 from django.core.paginator import Paginator
@@ -20,6 +21,8 @@ from plane.db.models import (
     ExternalReferenceLink,
     LiteratureEntry,
     PeriodicReport,
+    ResearchChainNode,
+    ResearchContextGrant,
     ResearchOutcome,
     ResearchStageInstance,
     StageMaterial,
@@ -35,10 +38,17 @@ from plane.research.utils.literature import literature_resource
 from plane.research.utils.reports import report_resource
 from plane.research.utils.resource_projections import experiment_resource, outcome_resource, repository_resource
 from plane.research.utils.stages import default_stage_visibility, material_resource, stage_resource
+from plane.research.services.context_tokens import (
+    CONTEXT_TOKEN_HEADER,
+    ResearchContextTokenAuthentication,
+    issue_context_token,
+    revoke_context_grant,
+)
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import visible_profile_queryset
 
 SCHEMA_VERSION = "2026-09-18"
+AGENT_CONTEXT_SCHEMA_VERSION = "agent-context.v1"
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 100
 FORMAL_MATERIAL_STATUSES = frozenset(
@@ -387,9 +397,165 @@ def _resource_response(kind, resource_id, version, resource_status, updated_at, 
     )
 
 
+def _agent_context_enabled(workspace):
+    setting = getattr(workspace, "research_setting", None)
+    return bool(setting and setting.research_agent_enabled)
+
+
+def _request_id(request):
+    return str(request.headers.get("X-Request-Id") or request.data.get("request_id") or "").strip()
+
+
+def _parse_project_id(raw_value):
+    """Parse and validate the project scope for token issuance."""
+    try:
+        return UUID(str(raw_value)), None
+    except (TypeError, ValueError):
+        return None, research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "research_project_id must be a valid UUID.")
+
+
+def _context_payload(grant):
+    """Return token scope metadata without returning the bearer token."""
+    if grant is None:
+        return None
+    return {
+        "context_id": str(grant.context_id),
+        "context_hash": grant.context_hash,
+        "visibility_scope": grant.visibility_scope,
+        "expires_at": grant.expires_at.isoformat(),
+    }
+
+
+def _validate_context_grant(request, workspace):
+    """Confirm the authenticated token belongs to this workspace and scope."""
+    grant = request.auth
+    if not isinstance(grant, ResearchContextGrant):
+        return None
+    if grant.workspace_id != workspace.id:
+        return research_error(ResearchErrorCode.CONTEXT_ACCESS_DENIED, "Context token belongs to another workspace.", status.HTTP_403_FORBIDDEN)
+    if grant.revoked_at is not None or grant.expires_at <= timezone.now():
+        return research_error(ResearchErrorCode.CONTEXT_TOKEN_INVALID, "Context token is expired or revoked.", status.HTTP_401_UNAUTHORIZED)
+    supplied_hash = request.headers.get("X-Research-Context-Hash") or request.GET.get("context_hash")
+    if not supplied_hash:
+        return research_error(ResearchErrorCode.CONTEXT_VERSION_INVALID, "context_hash is required with a context token.")
+    if not compare_digest(str(supplied_hash), grant.context_hash):
+        return research_error(
+            ResearchErrorCode.CONTEXT_ACCESS_DENIED,
+            "context_hash does not match the context token.",
+            status.HTTP_403_FORBIDDEN,
+        )
+    return grant
+
+
 class ContextAuthenticationMixin:
+    authentication_classes = [ResearchContextTokenAuthentication, BaseSessionAuthentication, APIKeyAuthentication]
+    nav_capability = NAV_PROJECTS
+
+
+class ContextOwnerAuthenticationMixin:
     authentication_classes = [BaseSessionAuthentication, APIKeyAuthentication]
     nav_capability = NAV_PROJECTS
+
+
+class ResearchContextTokenEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIView):
+    """Issue a short-lived, project-scoped Agent Context exchange token."""
+
+    def post(self, request, slug):
+        workspace, error = self.get_workspace()
+        if error:
+            return error
+        if not _agent_context_enabled(workspace):
+            return research_error(
+                ResearchErrorCode.SUBMODULE_DISABLED,
+                "The research agent switch is disabled for this workspace.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        request_id = _request_id(request)
+        if not request_id:
+            return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "request_id is required.")
+        project_id, error = _parse_project_id(request.data.get("research_project_id") or request.data.get("project_id"))
+        if error:
+            return error
+        profile = visible_profile_queryset(workspace, request.user).filter(project_id=project_id).first()
+        if profile is None:
+            return _context_not_found()
+        chain_node = None
+        raw_node_id = request.data.get("chain_node_id")
+        if raw_node_id:
+            try:
+                chain_node = ResearchChainNode.objects.select_related("chain__project").get(pk=raw_node_id)
+            except (ResearchChainNode.DoesNotExist, TypeError, ValueError):
+                return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "chain_node_id is invalid.")
+            if chain_node.chain.workspace_id != workspace.id or chain_node.chain.project_id != profile.project_id:
+                return research_error(ResearchErrorCode.CONTEXT_ACCESS_DENIED, "chain_node_id belongs to another scope.", status.HTTP_403_FORBIDDEN)
+        grant, raw_token = issue_context_token(
+            workspace=workspace,
+            user=request.user,
+            profile=profile,
+            chain_node=chain_node,
+            request_id=request_id,
+        )
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.CONTEXT_TOKEN_ISSUE,
+            resource_type=ResearchResourceType.CONTEXT,
+            resource_id=grant.context_id,
+            actor=request.user,
+            metadata={"project_id": str(profile.project_id), "chain_node_id": str(chain_node.id) if chain_node else None, "expires_at": grant.expires_at.isoformat()},
+            request=request,
+        )
+        return Response(
+            {
+                "schema_version": AGENT_CONTEXT_SCHEMA_VERSION,
+                "context_id": str(grant.context_id),
+                "exchange_token": raw_token,
+                "token_type": "opaque",
+                "expires_at": grant.expires_at.isoformat(),
+                "context_hash": grant.context_hash,
+                "scope": {
+                    "workspace_id": str(workspace.id),
+                    "research_project_id": str(profile.project_id),
+                    "chain_node_id": str(chain_node.id) if chain_node else None,
+                    "visibility_scope": grant.visibility_scope,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ResearchContextTokenRevokeEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIView):
+    """Revoke a previously issued context token by its context id."""
+
+    def post(self, request, slug):
+        workspace, error = self.get_workspace()
+        if error:
+            return error
+        if not _agent_context_enabled(workspace):
+            return research_error(
+                ResearchErrorCode.SUBMODULE_DISABLED,
+                "The research agent switch is disabled for this workspace.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        raw_context_id = request.data.get("context_id")
+        try:
+            context_id = UUID(str(raw_context_id))
+        except (TypeError, ValueError):
+            return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "context_id must be a valid UUID.")
+        grant = revoke_context_grant(workspace=workspace, context_id=context_id, actor=request.user)
+        if grant is False:
+            return research_permission_denied()
+        if grant is None:
+            return _context_not_found()
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.CONTEXT_TOKEN_REVOKE,
+            resource_type=ResearchResourceType.CONTEXT,
+            resource_id=context_id,
+            actor=request.user,
+            metadata={"project_id": str(grant.project_id)},
+            request=request,
+        )
+        return Response({"revoked": True, "context_id": str(context_id)}, status=status.HTTP_200_OK)
 
 
 class ResearchContextEndpoint(ContextAuthenticationMixin, ResearchAPIView):
@@ -399,13 +565,24 @@ class ResearchContextEndpoint(ContextAuthenticationMixin, ResearchAPIView):
         workspace, error = self.get_workspace()
         if error:
             return error
+        context_grant = _validate_context_grant(request, workspace)
+        if isinstance(context_grant, Response):
+            return context_grant
 
         project_id = request.GET.get("project_id")
+        if context_grant and not project_id:
+            project_id = str(context_grant.project_id)
         if project_id:
             try:
                 project_id = UUID(str(project_id))
             except (TypeError, ValueError):
                 return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "project_id must be a valid UUID.")
+            if context_grant and project_id != context_grant.project_id:
+                return research_error(
+                    ResearchErrorCode.CONTEXT_ACCESS_DENIED,
+                    "Context token cannot request another project.",
+                    status.HTTP_403_FORBIDDEN,
+                )
         profiles = visible_profile_queryset(workspace, request.user).filter(deleted_at__isnull=True)
         if project_id:
             profiles = profiles.filter(project_id=project_id)
@@ -425,6 +602,9 @@ class ResearchContextEndpoint(ContextAuthenticationMixin, ResearchAPIView):
         paginator = Paginator(profiles, page_size)
         profile_page = paginator.get_page(page)
         resources = build_context_resources(workspace, profile_page.object_list, request.user)
+        if context_grant:
+            context_grant.last_used_at = timezone.now()
+            context_grant.save(update_fields=["last_used_at", "updated_at"])
         payload = {
             "schema_version": SCHEMA_VERSION,
             "generated_at": timezone.now().isoformat(),
@@ -434,6 +614,7 @@ class ResearchContextEndpoint(ContextAuthenticationMixin, ResearchAPIView):
                 "project_id": str(project_id) if project_id else None,
                 "business_records_mutated": False,
             },
+            "context": _context_payload(context_grant),
             "pagination": {
                 "page": page,
                 "page_size": page_size,
@@ -461,6 +642,9 @@ class ResearchContextResourceEndpoint(ContextAuthenticationMixin, ResearchAPIVie
         workspace, error = self.get_workspace()
         if error:
             return error
+        context_grant = _validate_context_grant(request, workspace)
+        if isinstance(context_grant, Response):
+            return context_grant
         try:
             resource_id = UUID(str(resource_id))
         except (TypeError, ValueError):
@@ -468,6 +652,8 @@ class ResearchContextResourceEndpoint(ContextAuthenticationMixin, ResearchAPIVie
         requested_version, error = _parse_resource_version(request.GET.get("version"))
         if error:
             return error
+        if context_grant and not self._grant_allows_resource(workspace, request.user, context_grant, kind, resource_id):
+            return _context_not_found()
 
         context = build_actor_context(request.user, workspace.id)
         response = self._resolve(workspace, request.user, context, kind, resource_id, requested_version)
@@ -485,7 +671,16 @@ class ResearchContextResourceEndpoint(ContextAuthenticationMixin, ResearchAPIVie
             metadata={"kind": kind, "version": response.data["version"], "mode": "resource"},
             request=request,
         )
+        if context_grant:
+            context_grant.last_used_at = timezone.now()
+            context_grant.save(update_fields=["last_used_at", "updated_at"])
+            response.data["context"] = _context_payload(context_grant)
         return response
+
+    def _grant_allows_resource(self, workspace, actor, grant, kind, resource_id):
+        profiles = visible_profile_queryset(workspace, actor).filter(project_id=grant.project_id)
+        resources = build_context_resources(workspace, profiles, actor)
+        return any(item["kind"] == kind and str(item["id"] or "") == str(resource_id) for item in resources)
 
     def _resolve(self, workspace, actor, context, kind, resource_id, version):
         if kind == "external_reference" or version == "draft":

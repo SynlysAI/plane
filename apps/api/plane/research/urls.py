@@ -22,6 +22,8 @@ from plane.research.views import (
     ResearchAuditEventListEndpoint,
     ResearchContextEndpoint,
     ResearchContextResourceEndpoint,
+    ResearchContextTokenEndpoint,
+    ResearchContextTokenRevokeEndpoint,
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
@@ -199,6 +201,16 @@ urlpatterns = [
         "research/workspaces/<str:slug>/context/",
         ResearchContextEndpoint.as_view(),
         name="research-context",
+    ),
+    path(
+        "research/workspaces/<str:slug>/context/exchange-token/",
+        ResearchContextTokenEndpoint.as_view(),
+        name="research-context-exchange-token",
+    ),
+    path(
+        "research/workspaces/<str:slug>/context/revoke-token/",
+        ResearchContextTokenRevokeEndpoint.as_view(),
+        name="research-context-revoke-token",
     ),
     path(
         "research/workspaces/<str:slug>/context/resources/<str:kind>/<str:resource_id>/",

@@ -114,6 +114,8 @@ class ResearchAuditAction:
     USER_IMPORT_REJECT = "account.import.reject"
     USER_PROFILE_UPDATE = "account.profile.update"
     CONTEXT_READ = "context.read"
+    CONTEXT_TOKEN_ISSUE = "context.token.issue"
+    CONTEXT_TOKEN_REVOKE = "context.token.revoke"
 
 
 class ResearchResourceType:

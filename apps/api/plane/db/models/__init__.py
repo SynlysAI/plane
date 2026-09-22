@@ -104,6 +104,7 @@ from .research import (
     ResearchChainNode,
     ResearchChainSnapshot,
     ResearchReflectionLog,
+    ResearchContextGrant,
     CodeArtifact,
     ProjectCodeRepository,
     LiteratureEntry,

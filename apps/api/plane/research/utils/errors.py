@@ -148,6 +148,8 @@ class ResearchErrorCode:
     CONTEXT_RESOURCE_INVALID = "context_resource_invalid"
     CONTEXT_RESOURCE_NOT_FOUND = "context_resource_not_found"
     CONTEXT_VERSION_INVALID = "context_version_invalid"
+    CONTEXT_ACCESS_DENIED = "context_access_denied"
+    CONTEXT_TOKEN_INVALID = "context_token_invalid"
     RESEARCH_DISABLED = "RESEARCH_DISABLED"
     CHAIN_NOT_FOUND = "CHAIN_NOT_FOUND"
     CHAIN_ACCESS_DENIED = "CHAIN_ACCESS_DENIED"
