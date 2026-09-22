@@ -148,6 +148,14 @@ class ResearchErrorCode:
     CONTEXT_RESOURCE_INVALID = "context_resource_invalid"
     CONTEXT_RESOURCE_NOT_FOUND = "context_resource_not_found"
     CONTEXT_VERSION_INVALID = "context_version_invalid"
+    RESEARCH_DISABLED = "RESEARCH_DISABLED"
+    CHAIN_NOT_FOUND = "CHAIN_NOT_FOUND"
+    CHAIN_ACCESS_DENIED = "CHAIN_ACCESS_DENIED"
+    INVALID_TRANSITION = "INVALID_TRANSITION"
+    IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+    ACCOUNT_LINK_CONFLICT = "ACCOUNT_LINK_CONFLICT"
+    UPSTREAM_TIMEOUT = "UPSTREAM_TIMEOUT"
+    UPSTREAM_DEGRADED = "UPSTREAM_DEGRADED"
 
     # Account lifecycle: invite codes, imports and research profiles.
     INVITE_CODE_REQUIRED = "invite_code_required"

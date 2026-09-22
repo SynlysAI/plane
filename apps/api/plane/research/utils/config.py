@@ -84,6 +84,17 @@ def research_integration_defaults():
     }
 
 
+def research_phase_zero_defaults():
+    """Return Phase 0 safety switches, all disabled by default."""
+    return {
+        "research_chain_enabled": _env_bool("RESEARCH_CHAIN_ENABLED", False),
+        "research_agent_enabled": _env_bool("RESEARCH_AGENT_ENABLED", False),
+        "research_trace_enabled": _env_bool("RESEARCH_TRACE_ENABLED", False),
+        "research_account_link_enabled": _env_bool("RESEARCH_ACCOUNT_LINK_ENABLED", False),
+        "research_external_rag_enabled": _env_bool("RESEARCH_EXTERNAL_RAG_ENABLED", False),
+    }
+
+
 def oidc_settings():
     """OIDC configuration snapshot. Values are backend-only."""
     return {

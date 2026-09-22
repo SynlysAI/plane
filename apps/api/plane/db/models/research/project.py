@@ -24,6 +24,16 @@ class ResearchProjectProfile(BaseModel):
         ARCHIVED = "ARCHIVED", "Archived"
         COMPLETED = "COMPLETED", "Completed"
 
+    class ChainKind(models.TextChoices):
+        LEGACY_TRAINING = "LEGACY_TRAINING", "Legacy training"
+        RESEARCH_CHAIN = "RESEARCH_CHAIN", "Research chain"
+
+    class ChainVisibility(models.TextChoices):
+        PRIVATE = "PRIVATE", "Private"
+        MEMBERS = "MEMBERS", "Members"
+        ORG = "ORG", "Organisation"
+        WORKSPACE = "WORKSPACE", "Workspace"
+
     project = models.OneToOneField(
         "db.Project",
         on_delete=models.CASCADE,
@@ -63,6 +73,16 @@ class ResearchProjectProfile(BaseModel):
     # Redundant current stage for list filtering and summaries; maintained by
     # the stage service only (D-14), never written directly by clients.
     current_stage = models.CharField(max_length=16, null=True, blank=True)
+    chain_kind = models.CharField(
+        max_length=24,
+        choices=ChainKind.choices,
+        default=ChainKind.LEGACY_TRAINING,
+    )
+    chain_visibility = models.CharField(
+        max_length=16,
+        choices=ChainVisibility.choices,
+        default=ChainVisibility.PRIVATE,
+    )
 
     class Meta:
         verbose_name = "Research Project Profile"
@@ -73,6 +93,7 @@ class ResearchProjectProfile(BaseModel):
             models.Index(fields=["workspace", "workflow_status"], name="rsch_project_ws_status_idx"),
             models.Index(fields=["org_unit"], name="rsch_project_org_unit_idx"),
             models.Index(fields=["workspace", "owner"], name="rsch_project_ws_owner_idx"),
+            models.Index(fields=["workspace", "chain_kind"], name="rsch_project_ws_chain_idx"),
         ]
 
     def __str__(self):

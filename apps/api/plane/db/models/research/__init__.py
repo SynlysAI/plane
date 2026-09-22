@@ -16,6 +16,8 @@ from .experiment import (
     ExperimentRecordVersion,
 )
 from .identity import IdentityMapping
+from .account_link import AccountLink
+from .chain import ResearchChain, ResearchChainEvent, ResearchChainNode, ResearchChainSnapshot, ResearchReflectionLog
 from .integration import (
     ExternalReferenceLink,
     ExternalSystemConnection,
@@ -68,6 +70,12 @@ from .template import ReportTemplate
 
 __all__ = [
     "IdentityMapping",
+    "AccountLink",
+    "ResearchChain",
+    "ResearchChainNode",
+    "ResearchChainEvent",
+    "ResearchChainSnapshot",
+    "ResearchReflectionLog",
     "CodeArtifact",
     "ProjectCodeRepository",
     "LiteratureEntry",

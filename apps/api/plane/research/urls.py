@@ -140,9 +140,39 @@ from plane.research.views import (
     ResearchUserImportSingleEndpoint,
     ResearchUserImportPreviewEndpoint,
     ResearchUserProfileListEndpoint,
+    ResearchChainListCreateEndpoint,
+    ResearchChainDetailEndpoint,
+    ResearchChainNodeListCreateEndpoint,
+    ResearchChainEventListCreateEndpoint,
+    ResearchChainSnapshotCreateEndpoint,
 )
 
 urlpatterns = [
+    path(
+        "research/workspaces/<str:slug>/chains/",
+        ResearchChainListCreateEndpoint.as_view(),
+        name="research-chains",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/",
+        ResearchChainDetailEndpoint.as_view(),
+        name="research-chain-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/",
+        ResearchChainNodeListCreateEndpoint.as_view(),
+        name="research-chain-nodes",
+    ),
+    path(
+        "research/workspaces/<str:slug>/nodes/<uuid:node_id>/events/",
+        ResearchChainEventListCreateEndpoint.as_view(),
+        name="research-chain-events",
+    ),
+    path(
+        "research/workspaces/<str:slug>/nodes/<uuid:node_id>/snapshots/",
+        ResearchChainSnapshotCreateEndpoint.as_view(),
+        name="research-chain-snapshots",
+    ),
     path(
         "research/workspaces/<str:slug>/user-imports/single/",
         ResearchUserImportSingleEndpoint.as_view(),

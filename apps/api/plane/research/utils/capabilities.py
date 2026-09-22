@@ -105,6 +105,7 @@ NAV_IDENTITY = "identity"
 NAV_PLATFORM = "platform"
 NAV_AUDIT = "audit"
 NAV_INTEGRATIONS = "integrations"
+NAV_RESEARCH_CHAIN = "research_chain"
 
 NAV_BUSINESS_KEYS = (
     NAV_DASHBOARD,
@@ -123,6 +124,7 @@ NAV_SETTINGS_KEYS = (
     NAV_PLATFORM,
     NAV_AUDIT,
     NAV_INTEGRATIONS,
+    NAV_RESEARCH_CHAIN,
 )
 
 # Canonical render order; the frontend keeps its own order and only filters by
@@ -146,6 +148,7 @@ NAV_SECTION_KEYS = {
     NAV_PLATFORM: "org",
     NAV_AUDIT: "org",
     NAV_INTEGRATIONS: "integrations",
+    NAV_RESEARCH_CHAIN: "research_chain",
 }
 
 # Keys each level opens. ``overview`` is implicit for every registered account.
@@ -161,6 +164,7 @@ LEVEL_NAV_KEYS = {
             NAV_REVIEWS,
             NAV_APPROVALS,
             NAV_ORG,
+            NAV_RESEARCH_CHAIN,
         )
     ),
     ResearchLevel.MENTOR: frozenset(
@@ -172,6 +176,7 @@ LEVEL_NAV_KEYS = {
             NAV_PROJECTS,
             NAV_REVIEWS,
             NAV_APPROVALS,
+            NAV_RESEARCH_CHAIN,
         )
     ),
     ResearchLevel.RESEARCHER: frozenset(
@@ -180,6 +185,7 @@ LEVEL_NAV_KEYS = {
             NAV_REPORTS,
             NAV_PROJECTS,
             NAV_APPROVALS,
+            NAV_RESEARCH_CHAIN,
         )
     ),
     ResearchLevel.NONE: frozenset(),
