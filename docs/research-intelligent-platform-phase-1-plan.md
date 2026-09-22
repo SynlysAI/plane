@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                               |
 | -------- | -------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.2                                                                                               |
+| 计划版本 | v1.3                                                                                               |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10            |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) |
 | 计划状态 | 待评审                                                                                             |
@@ -93,11 +93,11 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 
 1. Plane 后端生成带课题/节点范围的上传授权。
 2. RAGPortal 校验用户 token、课题 metadata 和上传权限。
-3. RAGPortal 调用 WeKnora 上传，返回 `knowledge_id`、`kb_id`、状态和 task ID。
+3. RAGPortal 调用内网已部署的 WeKnora 服务上传，返回 `knowledge_id`、`kb_id`、状态和 task ID。
 4. Plane 写入 `ExternalReference` 和 Chain Event，不保存文件正文。
 5. 前端轮询或刷新上传状态，显示解析中、完成、失败或降级。
 
-检索流程由 Synlora `knowledge.search` 执行，知识库范围只能来自 Plane 授权的课题 KB 集合。引用结果写入 Literature/ExternalReference 和 Snapshot；检索失败时保留查询摘要、错误码和人工记录入口。
+检索流程由 Synlora `knowledge.search` 执行，知识库范围只能来自 Plane 授权的课题 KB 集合；WeKnora 的服务调用和索引维护由 RAGPortal/既有 Agent 能力负责。引用结果写入 Literature/ExternalReference 和 Snapshot；检索失败时保留查询摘要、错误码和人工记录入口。
 
 ### 2.5 Synlora 课题 Agent
 
@@ -152,6 +152,8 @@ AI 接入应用逻辑：
 | 其他过程快照 | 研究笔记/交流/审批确认          | 事件范围、摘要、操作者和决策                 |
 
 阶段节点与快照不要求首期强制线性推进：预实验、实验、分析和迭代允许重复；开题、论文写作、结题和转化先作为可见的后续节点占位，避免后续扩展时重新迁移 Chain 图结构。
+
+WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图谱 ingestion adapter，只记录 RAGPortal 返回的知识库/条目/解析状态和引用关系。
 
 导师 Human-in-the-Loop 流程：AI 草稿 → 学生提交 → 导师/课题组主 PI 收到待办 → 预览输入/引用/修改 diff → 接受、退回或要求补充 → 追加 `HUMAN_DECISION` 和 `APPROVAL` 事件。导师审批不直接覆盖 AI 输出，退回必须填写原因。
 

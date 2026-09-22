@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                            |
 | -------- | ----------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.2                                                                                            |
+| 计划版本 | v1.3                                                                                            |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §2、§6–§9、§11 |
 | 计划状态 | 待评审                                                                                          |
 | 目标     | 冻结跨仓契约，建立可灰度、可回滚、可观测的开发基础                                              |
@@ -15,7 +15,7 @@ Phase 0 不向普通用户开放完整功能，只交付后续开发必须依赖
 出口条件：
 
 - Research Chain、Trace、ExternalReference、AccountLink 和 Job 的 schema 均有版本号、示例和错误码。
-- Plane 现有 RAGPortal 适配器与实际 `/api/kb/list`、`/api/uploads`、上传详情接口通过 contract fixture。
+- Plane 现有 RAGPortal 适配器与实际 `/api/kb/list`、`/api/uploads`、上传详情接口通过 contract fixture，并能检查内网 WeKnora 服务健康状态。
 - 未绑定账号、跨课题访问和撤权后的短期 token 均无法读取受保护资源。
 - Chain/Agent/Trace 开关默认关闭，迁移可回滚，普通 Plane P0/P1 回归通过。
 - 基础监控可以区分请求、Agent run、外部调用、降级和安全拒绝。
@@ -67,7 +67,7 @@ Phase 0 不向普通用户开放完整功能，只交付后续开发必须依赖
 4. 权限过滤和降级状态。
 5. 写入 `IntegrationCallLog`，不保存敏感请求/响应正文。
 
-RAGPortal 首期适配路径固定为：
+WeKnora 已部署在内网 `http://10.26.15.93:8000/`，不在本项目中开发。RAGPortal 是唯一入库入口，负责调用 WeKnora。RAGPortal 首期适配路径固定为：
 
 ```text
 GET  /api/kb/list
@@ -75,7 +75,7 @@ POST /api/uploads
 GET  /api/uploads/{id}
 ```
 
-Plane 不直连 WeKnora API Key；WeKnora 的检索由 Synlora 或 RAGPortal 后端代理完成。
+Plane 不直连 WeKnora API Key；资料入库由 RAGPortal 后端调用 WeKnora，Agent 检索使用 Synlora/RAGPortal 已有受控能力。Phase 0 只做 RAGPortal 入库、WeKnora 健康状态和检索错误的契约确认，不做 WeKnora 开发。
 
 ### 2.4 Agent Context 与短期授权
 
@@ -259,7 +259,7 @@ Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPorta
 - 先在测试 Workspace 执行迁移和契约测试，再灰度一个内部 Workspace。
 - 任何迁移失败先停止发布，不自动删除历史科研数据。
 - 通过开关关闭新功能；数据库只回滚新增结构，不回滚既有 P0/P1 数据。
-- 风险：RAGPortal 实际契约仍可能变化。处理：固定 OpenAPI fixture 和契约版本，联调未通过不得进入 Phase 1。
+- 风险：RAGPortal 或内网 WeKnora 服务可用性波动。处理：固定 RAGPortal OpenAPI fixture、健康检查和 LINK_ONLY/HIDDEN 降级，联调未通过不得进入 Phase 1。
 - 风险：Synlora 当前单用户模型不足以支持共享课题。处理：先完成 Context Adapter 和 tenant mapping，禁止仅透传 project_id。
 
 ## 6. 详细数据设计

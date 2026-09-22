@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                                                                                                                                                                       |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.2                                                                                                                                                                                                                                                                                                       |
+| 计划版本 | v1.3                                                                                                                                                                                                                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §6、§8–§12                                                                                                                                                                                                                |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)、[`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)、[`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md) |
 | 计划状态 | 待评审                                                                                                                                                                                                                                                                                                     |
@@ -318,15 +318,15 @@ Worker 执行约束：
 
 Phase 3 必须通过压测建立而不是猜测以下指标：
 
-| 指标               | 初始目标                        |
-| ------------------ | ------------------------------- |
-| Plane 核心 API p95 | < 2 秒（不含外部长任务）        |
-| 同时在线成员       | 100                             |
-| Agent SSE 并发     | 由压测确定，至少覆盖 100 个连接 |
-| RAG 查询并发       | 由 WeKnora/Synlora 联调基线确定 |
-| 事件写入成功率     | ≥ 99.9%                         |
-| RPO                | 先定义内部目标，灾备演练验证    |
-| RTO                | 先定义内部目标，故障演练验证    |
+| 指标               | 初始目标                                             |
+| ------------------ | ---------------------------------------------------- |
+| Plane 核心 API p95 | < 2 秒（不含外部长任务）                             |
+| 同时在线成员       | 100                                                  |
+| Agent SSE 并发     | 由压测确定，至少覆盖 100 个连接                      |
+| RAG 查询并发       | 由 RAGPortal/Synlora 与内网 WeKnora 服务联调基线确定 |
+| 事件写入成功率     | ≥ 99.9%                                              |
+| RPO                | 先定义内部目标，灾备演练验证                         |
+| RTO                | 先定义内部目标，故障演练验证                         |
 
 备份对象包括 PostgreSQL、MongoDB、MinIO、Redis/队列、事件 store 和密钥引用元数据；恢复时先恢复权限和事件，再恢复异步投影，避免出现“显示已完成但事实未恢复”。
 
