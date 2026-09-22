@@ -419,6 +419,9 @@ def _context_payload(grant):
     if grant is None:
         return None
     return {
+        "workspace_id": str(grant.workspace_id),
+        "research_project_id": str(grant.project_id),
+        "chain_node_id": str(grant.chain_node_id) if grant.chain_node_id else None,
         "context_id": str(grant.context_id),
         "context_hash": grant.context_hash,
         "visibility_scope": grant.visibility_scope,
