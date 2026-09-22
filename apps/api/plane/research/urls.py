@@ -24,6 +24,11 @@ from plane.research.views import (
     ResearchContextResourceEndpoint,
     ResearchContextTokenEndpoint,
     ResearchContextTokenRevokeEndpoint,
+    ResearchAccountLinkListCreateEndpoint,
+    ResearchAccountLinkConfirmEndpoint,
+    ResearchAccountLinkUnlinkEndpoint,
+    ResearchAccountLinkRevokeEndpoint,
+    ResearchAccountLinkConflictEndpoint,
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
@@ -211,6 +216,31 @@ urlpatterns = [
         "research/workspaces/<str:slug>/context/revoke-token/",
         ResearchContextTokenRevokeEndpoint.as_view(),
         name="research-context-revoke-token",
+    ),
+    path(
+        "research/workspaces/<str:slug>/account-links/",
+        ResearchAccountLinkListCreateEndpoint.as_view(),
+        name="research-account-links",
+    ),
+    path(
+        "research/workspaces/<str:slug>/account-links/conflicts/",
+        ResearchAccountLinkConflictEndpoint.as_view(),
+        name="research-account-link-conflicts",
+    ),
+    path(
+        "research/workspaces/<str:slug>/account-links/<uuid:link_id>/confirm/",
+        ResearchAccountLinkConfirmEndpoint.as_view(),
+        name="research-account-link-confirm",
+    ),
+    path(
+        "research/workspaces/<str:slug>/account-links/<uuid:link_id>/unlink/",
+        ResearchAccountLinkUnlinkEndpoint.as_view(),
+        name="research-account-link-unlink",
+    ),
+    path(
+        "research/workspaces/<str:slug>/account-links/<uuid:link_id>/revoke/",
+        ResearchAccountLinkRevokeEndpoint.as_view(),
+        name="research-account-link-revoke",
     ),
     path(
         "research/workspaces/<str:slug>/context/resources/<str:kind>/<str:resource_id>/",

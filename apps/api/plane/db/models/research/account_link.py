@@ -25,11 +25,15 @@ class AccountLink(BaseModel):
     audit_event_id = models.UUIDField(null=True, blank=True)
     request_id = models.CharField(max_length=128, unique=True)
     payload_hash = models.CharField(max_length=64)
+    verification_hash = models.CharField(max_length=64, blank=True, default="")
+    verification_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "research_account_links"
         constraints = [
             models.UniqueConstraint(fields=["provider", "external_subject"], condition=models.Q(deleted_at__isnull=True), name="rsch_account_link_uq_subject"),
-            models.UniqueConstraint(fields=["canonical_identity", "provider"], condition=models.Q(deleted_at__isnull=True), name="rsch_account_link_uq_identity"),
         ]
-        indexes = [models.Index(fields=["local_user", "status"], name="rsch_account_link_user_idx")]
+        indexes = [
+            models.Index(fields=["local_user", "status"], name="rsch_account_link_user_idx"),
+            models.Index(fields=["provider", "canonical_identity"], name="rsch_account_link_identity_idx"),
+        ]
