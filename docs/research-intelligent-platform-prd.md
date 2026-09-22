@@ -2,9 +2,9 @@
 
 | 项目     | 内容                                                                                                                                                                                                         |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 文档版本 | v1.4                                                                                                                                                                                                         |
-| 文档状态 | 平台级建设规划，待评审                                                                                                                                                                                       |
-| 日期     | 2026-09-21                                                                                                                                                                                                   |
+| 文档版本 | v1.5                                                                                                                                                                                                         |
+| 文档状态 | 平台级建设规划；Phase 0 已按自动化验证完成实施                                                                                                                                                               |
+| 日期     | 2026-09-22                                                                                                                                                                                                   |
 | 适用范围 | Plane、Research Chain、RAGPortal、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 及 SpecAgent 的跨仓库协作                                                                                                  |
 | 目标规模 | 内部约 500 名成员，预留后续社会用户开放能力                                                                                                                                                                  |
 | 上游文档 | [`research-management-prd-roadmap.md`](./research-management-prd-roadmap.md)、[`research-workspace-v3.md`](./research-workspace-v3.md)、[`research-p0-p1-architecture.md`](./research-p0-p1-architecture.md) |
@@ -452,6 +452,8 @@ Plane 用户体系为平台主身份。既有 AI4MS、RAGPortal、Synlora 等账
 
 Phase 0 解决跨仓库开发可以并行推进的共同边界，不向用户开放完整功能。
 
+**实施状态（2026-09-22）**：Plane、RAGPortal 与 Synlora 的 Phase 0 边界已落地。Plane 冻结契约并交付 Chain 基础模型/API、短期 Context 授权、AccountLink、同源 Agent BFF、开关、观测与回滚基线；RAGPortal 上传入口接收并校验课题 metadata；Synlora 增加 Plane Context Adapter、会话 scope metadata、事件回写 client 与只读 ToolContext scope。完整证据见 [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) 与 [`research-intelligent-platform-phase-0-runbook.md`](./research-intelligent-platform-phase-0-runbook.md)。
+
 **产品与架构交付**
 
 - 冻结 `ResearchChain`、`ResearchChainNode`、`ResearchChainSnapshot`、`ResearchChainEvent`、`ResearchReflectionLog`、`AccountLink` 和 Agent Trace 的字段、状态、版本和权限语义。
@@ -706,10 +708,11 @@ flowchart LR
 
 实现与文档不一致时，先以代码和发布 manifest 为事实来源，再回写相应文档。本文档不覆盖既有实现契约。
 
-| 文档版本 | 日期       | 变更摘要                                                                                                             |
-| -------- | ---------- | -------------------------------------------------------------------------------------------------------------------- |
-| v1.4     | 2026-09-22 | 确认 WeKnora 已部署内网服务并由 RAGPortal 作为唯一入库入口；新增 UX 交互原型确认稿。                                 |
-| v1.3     | 2026-09-22 | 按原始需求交叉核对，补充知识/数据层、Agent 角色、快照、HITL、交流/待办、组件入口、图谱/ELN、写作评审及项目治理分期。 |
-| v1.2     | 2026-09-21 | 细化四阶段技术实施边界，并补充 Plane 通用 Agent 插件的 UI、生命周期、AI 接入、治理和分阶段交付要求。                 |
-| v1.1     | 2026-09-21 | 将门户、通用 Agent、跨仓库接口、账号权限、治理、测试和运维全部纳入阶段路线；新增 Phase 0–3 实施计划索引。            |
-| v1.0     | 2026-09-21 | 建立跨仓库科研智能体平台总 PRD，明确 Research Chain、MVP、Agent 分工、账号绑定和验收边界。                           |
+| 文档版本 | 日期       | 变更摘要                                                                                                                            |
+| -------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| v1.5     | 2026-09-22 | 回写 Phase 0 实施状态：契约、Plane 基础与安全边界、RAGPortal 课题 metadata、Synlora Context Adapter、观测与回滚基线完成自动化验证。 |
+| v1.4     | 2026-09-22 | 确认 WeKnora 已部署内网服务并由 RAGPortal 作为唯一入库入口；新增 UX 交互原型确认稿。                                                |
+| v1.3     | 2026-09-22 | 按原始需求交叉核对，补充知识/数据层、Agent 角色、快照、HITL、交流/待办、组件入口、图谱/ELN、写作评审及项目治理分期。                |
+| v1.2     | 2026-09-21 | 细化四阶段技术实施边界，并补充 Plane 通用 Agent 插件的 UI、生命周期、AI 接入、治理和分阶段交付要求。                                |
+| v1.1     | 2026-09-21 | 将门户、通用 Agent、跨仓库接口、账号权限、治理、测试和运维全部纳入阶段路线；新增 Phase 0–3 实施计划索引。                           |
+| v1.0     | 2026-09-21 | 建立跨仓库科研智能体平台总 PRD，明确 Research Chain、MVP、Agent 分工、账号绑定和验收边界。                                          |

@@ -2,9 +2,9 @@
 
 | 项目     | 内容                                                                                            |
 | -------- | ----------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.3                                                                                            |
+| 计划版本 | v1.4                                                                                            |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §2、§6–§9、§11 |
-| 计划状态 | 已实施（自动化验证通过）                                                                        |
+| 计划状态 | 已实施（Plane / RAGPortal / Synlora 自动化验证通过）                                            |
 | 目标     | 冻结跨仓契约，建立可灰度、可回滚、可观测的开发基础                                              |
 | 不在范围 | 用户可用的完整 Research Chain、自动实验、社会用户开放                                           |
 
@@ -395,3 +395,28 @@ Phase 0 不允许进入 Phase 1 的条件：契约尚未冻结、RAGPortal fixtu
 - [x] 插件入口在 Workspace 首页、Research Chain 和 Node 详情的路由方案确定。
 - [x] session 创建、恢复、关闭、SSE 取消和课题切换行为有自动化测试。
 - [x] CSP、token 存储、工具审批和日志脱敏通过安全检查。
+
+## 11. 实施记录
+
+### 11.1 仓库与分支
+
+| 仓库      | 分支        | 交付                                                                                   |
+| --------- | ----------- | -------------------------------------------------------------------------------------- |
+| Plane     | `develop`   | 契约包、Chain 模型/API、短期 Context、AccountLink、Agent BFF、门户开关、观测与 runbook |
+| RAGPortal | `develop`   | `/api/uploads` 课题 metadata 校验、持久化、历史库补列与 contract fixture               |
+| Synlora   | `bff_plane` | Plane Context Adapter、科研会话 metadata、事件回写 client、ToolContext 只读 scope      |
+
+### 11.2 验证证据
+
+- Plane：`python manage.py makemigrations db --check --dry-run` 无漂移；科研 unit + contract 套件 749 passed / 0 failed。
+- Plane 迁移：独立数据库完成 0145 → 0151 → 0145 → 0151 前滚 / 回滚 / 再前滚演练。
+- Plane 前端：类型检查、lint（仅存量 warning）、7 个组件测试文件 30 个用例、生产构建通过。
+- RAGPortal：后端 30 passed / 0 failed；前端 lint 与生产构建通过。
+- Synlora：harness 139 passed / 7 skipped；web backend 457 passed / 118 skipped（未配置 Mongo 的参数化用例按项目 fixture 跳过）；前端 lint 与生产构建通过。
+
+### 11.3 运行边界
+
+- 所有 Phase 0 Workspace 子开关默认关闭；部署级 `RESEARCH_MODULE_ENABLED` 仍是最外层 kill switch。
+- Agent 消息在 Synlora runtime 未配置时 fail closed，返回 `AGENT_UPSTREAM_NOT_CONFIGURED`，不阻塞人工研究记录。
+- 短期 Context token 只在 Plane 后端签发/撤销，Synlora 仅在服务端请求头中转，不写数据库、URL、前端存储或日志。
+- RAGPortal 仍是不向浏览器暴露 WeKnora API Key 的唯一入库入口；Plane 只保存引用与状态。
