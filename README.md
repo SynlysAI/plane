@@ -25,13 +25,13 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 ## 当前状态
 
-| 项目             | 内容                                                                                                                                                             |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 当前版本         | `4.0.0`（根 / `apps/web` / `apps/api` / `packages/ui` / `apps/api/pyproject.toml` 同步）                                                                         |
-| 上游基线         | Plane `1.4.x`                                                                                                                                                    |
-| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研测试夹具（`2.3.0`）、系统管理改进（`2.4.0`）、科研目录分级可见（`2.5.0`）、演示组织树单链化（`2.5.1`） |
-| 未交付           | P2 扩展与治理、P3 与 AI 结合的能力（AI 评分、辅助写作、智能体调用、记忆共享）                                                                                    |
-| 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                             |
+| 项目             | 内容                                                                                                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 当前版本         | `4.5.0`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步）                                                                                                                  |
+| 上游基线         | Plane `1.4.x`                                                                                                                                                                          |
+| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研测试夹具（`2.3.0`）、系统管理改进（`2.4.0`）、科研目录分级可见（`2.5.0`）、演示组织树单链化（`2.5.1`）、科研智能平台 Phase 0 |
+| 未交付           | P2 扩展与治理、P3 与 AI 结合的能力（AI 评分、辅助写作、智能体调用、记忆共享）                                                                                                          |
+| 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                                                   |
 
 本仓库以 Plane `1.4.x` 为基线完成第一轮私有化改造：替换为 AI4MS 品牌、移除付费套餐与云注册遥测、改用私有 OpenAI 兼容网关，并在此基础上叠加「科研管理模块」。**科研模块是纯增量实现**：开关关闭时不渲染科研导航，Workspace / Project / Work Item / Page / Cycle / Module 仍按上游 Plane 行为工作。
 
@@ -71,6 +71,22 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 | 已有系统对接     | RAGPortal / WeKnora 知识条目、SpecLabOS 运行记录与数据资产、SmartAccess 设备执行、Poly_Agent 研发项目、Spec_Agent 分析结果 |
 | 思维链 / 研发链  | 全流程时间线（文献、阶段流转、评审、报告、实验、代码、成果、外部引用）、筛选与引用清单导出                                 |
 
+### 已交付：科研智能平台 Phase 0
+
+Phase 0 是跨仓库并行开发的基础层，不向普通用户开放完整 Research Chain。详细范围见 [科研智能平台 PRD](docs/research-intelligent-platform-prd.md)、[Phase 0 实施计划](docs/research-intelligent-platform-phase-0-plan.md) 与 [运维手册](docs/research-intelligent-platform-phase-0-runbook.md)。
+
+| 能力域              | 说明                                                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 跨仓契约            | Research Chain、Node、Event、Snapshot、Agent Context/Trace、AccountLink、Integration、Job 与 Agent Plugin v1 schema  |
+| 数据与 API 基础     | Chain / Node / append-only Event / Snapshot / Reflection 模型，幂等写接口、错误 envelope、Workspace 子开关与页面守卫 |
+| 短期授权            | 服务端 opaque context token 只存哈希，校验 Workspace / 课题 / 节点 / hash / 过期，撤销后立即失效                     |
+| AccountLink         | pending → 二次验证激活 → 解绑 / 撤销，支持多 subject 与邮箱冲突检查，撤销传播到 Context token                        |
+| 同源 Agent BFF      | manifest、session、run event、审批、artifact、Chain Event 回写与 run 级取消；token 不进入浏览器                      |
+| RAGPortal / Synlora | RAGPortal 上传关联课题 metadata；Synlora 校验 Plane Context scope 并注入只读 ToolContext                             |
+| 观测与回滚          | 安全拒绝、Agent、外部调用、降级、上下文读取指标，主动健康探测，CSP / iframe 禁止，迁移前滚-回滚-再前滚演练记录       |
+
+Phase 0 验证：Plane 科研套件 749 passed / 0 failed；RAGPortal 30 passed / 0 failed；Synlora backend 457 passed / 118 skipped、harness 139 passed / 7 skipped。
+
 ### 尚未交付
 
 - **P2**：课题组进度与风险看板、更多审批类型与流程配置、响应式移动网页、权限渗透与大数据量优化、审计导出、管理员与使用文档。
@@ -88,6 +104,7 @@ P2 / P3 的范围与启动前置条件见 [科研管理 PRD 与路线图](docs/r
 | 周报 / 月报  | `/{workspace}/research/reports`            | 报告列表、编辑、Markdown 导入、附件     |
 | 提交汇总     | `/{workspace}/research/reports/summary`    | 按组织架构查看提交情况（管理员）        |
 | 科研 Project | `/{workspace}/research/projects`           | 一人一项目，可进入项目级科研工作台      |
+| 科研链       | `/{workspace}/research/chains`             | Phase 0 Research Chain 投影与节点入口   |
 | 阶段流程     | `.../projects/{projectId}/stages`          | 四阶段材料、gate 结果与流转记录         |
 | 文献调研     | `.../projects/{projectId}/literature`      | 文献登记、纳入门槛与批量导入            |
 | 实验记录     | `.../projects/{projectId}/experiments`     | 实验条目、修订审批与版本历史            |
