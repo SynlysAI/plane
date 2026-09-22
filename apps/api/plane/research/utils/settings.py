@@ -16,6 +16,7 @@ from plane.research.utils.config import (
     research_gate_defaults,
     research_module_enabled,
     research_submodule_defaults,
+    research_phase_zero_defaults,
 )
 from plane.utils.constants import DEFAULT_TIMEZONE
 
@@ -37,6 +38,7 @@ def default_workspace_research_settings():
         "timezone": DEFAULT_TIMEZONE,
         "audit_retention_days": 0,
         **research_submodule_defaults(),
+        **research_phase_zero_defaults(),
         **research_gate_defaults(),
         **limits,
     }
@@ -75,6 +77,11 @@ def get_workspace_research_settings(workspace):
         "experiment_enabled": bool(setting.experiment_enabled),
         "code_enabled": bool(setting.code_enabled),
         "integration_enabled": bool(setting.integration_enabled),
+        "research_chain_enabled": bool(setting.research_chain_enabled),
+        "research_agent_enabled": bool(setting.research_agent_enabled),
+        "research_trace_enabled": bool(setting.research_trace_enabled),
+        "research_account_link_enabled": bool(setting.research_account_link_enabled),
+        "research_external_rag_enabled": bool(setting.research_external_rag_enabled),
         "literature_min_included": setting.literature_min_included,
         "literature_max_entries": setting.literature_max_entries,
         "stage_min_reviewers": setting.stage_min_reviewers,
@@ -101,6 +108,7 @@ def workspace_research_sections(workspace):
         "experiments": bool(enabled and settings["experiment_enabled"]),
         "code": bool(enabled and settings["code_enabled"]),
         "integrations": bool(enabled and settings["integration_enabled"]),
+        "research_chain": bool(enabled and settings["research_chain_enabled"]),
     }
 
 

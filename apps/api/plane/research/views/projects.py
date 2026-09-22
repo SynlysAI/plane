@@ -242,6 +242,8 @@ def serialize_profile(profile):
             },
             "org_unit": str(profile.org_unit_id) if profile.org_unit_id else None,
             "research_type": profile.research_type,
+            "chain_kind": profile.chain_kind,
+            "chain_visibility": profile.chain_visibility,
             "workflow_status": profile.workflow_status,
             "started_at": profile.started_at,
             "expected_end_at": profile.expected_end_at,
@@ -344,6 +346,14 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
         research_type = str(request.data.get("research_type") or "RESEARCH_PROJECT").strip().upper()
         if research_type not in ResearchProjectProfile.ResearchType.values:
             return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown research type.")
+        chain_kind = str(request.data.get("chain_kind") or ResearchProjectProfile.ChainKind.LEGACY_TRAINING).upper()
+        if chain_kind not in ResearchProjectProfile.ChainKind.values:
+            return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown chain kind.")
+        chain_visibility = str(
+            request.data.get("chain_visibility") or ResearchProjectProfile.ChainVisibility.PRIVATE
+        ).upper()
+        if chain_visibility not in ResearchProjectProfile.ChainVisibility.values:
+            return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown chain visibility.")
         raw_collaborators = request.data.get("collaborator_ids") or []
         if not isinstance(raw_collaborators, list):
             return research_error(
@@ -462,6 +472,8 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
                     owner=owner,
                     org_unit=org_unit,
                     research_type=research_type,
+                    chain_kind=chain_kind,
+                    chain_visibility=chain_visibility,
                     started_at=started_at or timezone.localdate(),
                     expected_end_at=expected_end_at,
                     created_by=request.user,
