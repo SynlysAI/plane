@@ -6,7 +6,16 @@ from pathlib import Path
 import pytest
 
 
-CONTRACT_ROOT = Path(__file__).resolve().parents[6] / "docs" / "contracts" / "research-intelligent-platform"
+def _contract_root():
+    """Locate the repository contract directory in host and container runs."""
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "docs" / "contracts" / "research-intelligent-platform"
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError("research-intelligent-platform contract directory not found")
+
+
+CONTRACT_ROOT = _contract_root()
 SCHEMA_ROOT = CONTRACT_ROOT / "schemas"
 EXAMPLE_ROOT = CONTRACT_ROOT / "examples"
 
