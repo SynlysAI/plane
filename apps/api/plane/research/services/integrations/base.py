@@ -34,6 +34,9 @@ class IntegrationErrorCode:
     HTTP_ERROR = "http_error"
     INVALID_PAYLOAD = "invalid_payload"
     TRANSPORT_ERROR = "transport_error"
+    UNAUTHORIZED = "unauthorized"
+    NOT_FOUND = "not_found"
+    RATE_LIMITED = "rate_limited"
 
 
 @dataclass
@@ -51,6 +54,8 @@ class IntegrationResult:
     source_url: str = ""
     synced_at: str | None = None
     request_id: str = ""
+    schema_version: str = "integration-result.v1"
+    degraded_mode: str = "LINK_ONLY"
 
     @property
     def ok(self):
@@ -65,6 +70,8 @@ class IntegrationResult:
             "source_url": self.source_url,
             "synced_at": self.synced_at,
             "request_id": self.request_id,
+            "schema_version": self.schema_version,
+            "degraded_mode": self.degraded_mode,
         }
         if self.degraded:
             payload["degraded_reason"] = self.degraded_reason
@@ -143,6 +150,19 @@ class BaseIntegrationClient:
             }
         return {"Authorization": f"Bearer {secret}"}
 
+    def request_headers(self, *, path, query="", request=None):
+        """Build auth headers and propagate the caller request identifier."""
+        headers = self.headers(path=path, query=query)
+        incoming_id = getattr(request, "headers", None) and (
+            request.headers.get("X-Research-Request-Id")
+            or request.headers.get("X-Request-Id")
+            or request.headers.get("Idempotency-Key")
+        )
+        if incoming_id:
+            headers["X-Research-Request-Id"] = str(incoming_id)
+            headers["Idempotency-Key"] = str(incoming_id)
+        return headers
+
     # ------------------------------------------------------------------
     # transport
     # ------------------------------------------------------------------
@@ -187,6 +207,7 @@ class BaseIntegrationClient:
         reason="",
         status_code=None,
         latency_ms=None,
+        degraded_mode=None,
     ):
         return IntegrationResult(
             system=self.system,
@@ -200,13 +221,18 @@ class BaseIntegrationClient:
             source_url=self.connection.base_url if self.connection else "",
             synced_at=timezone.now().isoformat() if not degraded else None,
             request_id=request_id,
+            degraded_mode=(degraded_mode or getattr(self.connection, "degraded_mode", "LINK_ONLY")),
         )
 
-    def request(self, *, path, params=None, operation=None, request=None):
+    def request(self, *, path, params=None, operation=None, request=None, method="GET", data=None, files=None):
         """Perform one external call and always answer with a result envelope."""
         operation = operation or self.operation
         request_id = uuid.uuid4().hex
-        incoming_id = getattr(request, "headers", None) and request.headers.get("X-Research-Request-Id")
+        incoming_id = getattr(request, "headers", None) and (
+            request.headers.get("X-Research-Request-Id")
+            or request.headers.get("X-Request-Id")
+            or request.headers.get("Idempotency-Key")
+        )
         if incoming_id:
             request_id = incoming_id
 
@@ -243,33 +269,69 @@ class BaseIntegrationClient:
         try:
             import httpx
 
-            response = httpx.get(
-                url,
-                params=params or {},
-                headers=self.headers(path=path, query=query),
-                timeout=self.timeout_seconds,
-                follow_redirects=True,
-            )
+            request_kwargs = {
+                "params": params or {},
+                "headers": self.request_headers(path=path, query=query, request=request),
+                "timeout": self.timeout_seconds,
+                "follow_redirects": True,
+            }
+            if data is not None:
+                request_kwargs["data"] = data
+            if files is not None:
+                request_kwargs["files"] = files
+            request_fn = httpx.post if method.upper() == "POST" else httpx.get
+            response = None
+            max_attempts = int(getattr(settings, "RESEARCH_INTEGRATION_MAX_RETRIES", 2)) + 1
+            for attempt in range(max_attempts):
+                response = request_fn(url, **request_kwargs)
+                if response.status_code not in (429, 500, 502, 503, 504) or attempt == max_attempts - 1:
+                    break
+                time.sleep(min(0.05 * (attempt + 1), 0.2))
             latency_ms = int((time.monotonic() - started) * 1000)
             if response.status_code >= 400:
+                error_code = {
+                    401: IntegrationErrorCode.UNAUTHORIZED,
+                    403: IntegrationErrorCode.UNAUTHORIZED,
+                    404: IntegrationErrorCode.NOT_FOUND,
+                    429: IntegrationErrorCode.RATE_LIMITED,
+                }.get(response.status_code, IntegrationErrorCode.HTTP_ERROR)
                 self._log(
                     operation=operation,
                     outcome="FAILED",
                     request_id=request_id,
                     status_code=response.status_code,
                     latency_ms=latency_ms,
-                    error_code=IntegrationErrorCode.HTTP_ERROR,
+                    error_code=error_code,
                 )
                 self._mark_health(ok=False, error=IntegrationErrorCode.HTTP_ERROR)
                 return self._result(
                     operation=operation,
                     request_id=request_id,
                     degraded=True,
-                    reason=IntegrationErrorCode.HTTP_ERROR,
+                    reason=error_code,
                     status_code=response.status_code,
                     latency_ms=latency_ms,
                 )
-            payload = response.json() if response.content else {}
+            try:
+                payload = response.json() if response.content else {}
+            except (TypeError, ValueError):
+                self._log(
+                    operation=operation,
+                    outcome="DEGRADED",
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    latency_ms=latency_ms,
+                    error_code=IntegrationErrorCode.INVALID_PAYLOAD,
+                )
+                self._mark_health(ok=False, error=IntegrationErrorCode.INVALID_PAYLOAD)
+                return self._result(
+                    operation=operation,
+                    request_id=request_id,
+                    degraded=True,
+                    reason=IntegrationErrorCode.INVALID_PAYLOAD,
+                    status_code=response.status_code,
+                    latency_ms=latency_ms,
+                )
             items = self.normalise(payload)
             self._log(
                 operation=operation,
