@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/research-chain.v1.json",
+  "title": "Research Chain v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "chain_id", "project_id", "chain_kind", "visibility", "owner_id", "status"],
+  "properties": {
+    "schema_version": { "const": "research-chain.v1" },
+    "chain_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "chain_kind": { "enum": ["LEGACY_TRAINING", "RESEARCH_CHAIN"] },
+    "visibility": { "enum": ["PRIVATE", "MEMBERS", "ORG", "WORKSPACE"] },
+    "owner_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["ACTIVE", "ARCHIVED", "COMPLETED"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

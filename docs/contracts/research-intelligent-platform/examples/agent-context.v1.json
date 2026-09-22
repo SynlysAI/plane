@@ -1,0 +1,14 @@
+{
+  "schema_version": "agent-context.v1",
+  "context_id": "ctx-01",
+  "scope": {
+    "workspace_id": "workspace-01",
+    "research_project_id": "project-01",
+    "chain_node_id": "node-01",
+    "visibility_scope": "PRIVATE"
+  },
+  "resources": [{ "kind": "project", "id": "project-01", "title": "示例课题" }],
+  "generated_at": "2026-09-22T08:15:00Z",
+  "context_hash": "sha256:example",
+  "expires_at": "2026-09-22T08:30:00Z"
+}

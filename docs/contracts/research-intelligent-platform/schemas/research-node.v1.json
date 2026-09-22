@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/research-node.v1.json",
+  "title": "Research Chain node v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "node_id", "chain_id", "node_type", "status"],
+  "properties": {
+    "schema_version": { "const": "research-node.v1" },
+    "node_id": { "type": "string", "minLength": 1 },
+    "chain_id": { "type": "string", "minLength": 1 },
+    "node_type": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "parent_node_id": { "type": ["string", "null"] },
+    "loop_iteration": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["PENDING", "IN_PROGRESS", "BLOCKED", "SUCCEEDED", "FAILED", "CANCELLED"] },
+    "assignee_id": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": "research-event.v1",
+  "event_id": "event-01",
+  "node_id": "node-01",
+  "actor": { "type": "USER", "id": "user-01" },
+  "source_system": "PLANE",
+  "request_id": "req-01",
+  "trace_id": null,
+  "event_type": "RESEARCH_NOTE",
+  "occurred_at": "2026-09-22T08:10:00Z",
+  "refs": [],
+  "summary": "记录初步研究假设",
+  "content_hash": "sha256:example"
+}

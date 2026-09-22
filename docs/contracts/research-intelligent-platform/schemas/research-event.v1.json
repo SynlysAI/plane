@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/research-event.v1.json",
+  "title": "Research Chain event v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "event_id",
+    "node_id",
+    "actor",
+    "source_system",
+    "request_id",
+    "event_type",
+    "occurred_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "research-event.v1" },
+    "event_id": { "type": "string", "minLength": 1 },
+    "node_id": { "type": "string", "minLength": 1 },
+    "actor": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "id"],
+      "properties": { "type": { "type": "string" }, "id": { "type": "string" } }
+    },
+    "source_system": { "enum": ["PLANE", "RAGPORTAL", "SYNLORA", "SPECLABOS", "POLY_AGENT", "SPEC_AGENT"] },
+    "request_id": { "type": "string", "minLength": 1 },
+    "trace_id": { "type": ["string", "null"] },
+    "event_type": { "type": "string", "minLength": 1 },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "refs": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "summary": { "type": "string" },
+    "content_hash": { "type": ["string", "null"] }
+  }
+}

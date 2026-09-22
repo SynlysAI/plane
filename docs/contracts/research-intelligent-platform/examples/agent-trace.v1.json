@@ -1,0 +1,9 @@
+{
+  "schema_version": "agent-trace.v1",
+  "run_id": "run-01",
+  "session_id": "session-01",
+  "node_id": "node-01",
+  "events": [],
+  "tool_calls": [],
+  "decisions": []
+}
