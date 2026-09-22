@@ -58,6 +58,14 @@ export class ResearchAgentService extends APIService {
       });
   }
 
+  async cancelRun(workspaceSlug: string, runId: string) {
+    return this.post(researchEndpoints.agentRunCancel(workspaceSlug, runId), {})
+      .then((res) => res?.data as TResearchAgentSession)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
   async sendMessage(workspaceSlug: string, sessionId: string, content: string) {
     return this.post(researchEndpoints.agentMessages(workspaceSlug, sessionId), {
       request_id: request_id(),

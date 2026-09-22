@@ -126,6 +126,7 @@ class ResearchAuditAction:
     AGENT_MESSAGE = "agent.message"
     AGENT_APPROVAL = "agent.approval"
     AGENT_ARTIFACT_SAVE = "agent.artifact.save"
+    SECURITY_DENIED = "security.denied"
 
 
 class ResearchResourceType:
@@ -161,6 +162,7 @@ class ResearchResourceType:
     CONTEXT = "research_context"
     ACCOUNT_LINK = "research_account_link"
     AGENT_SESSION = "research_agent_session"
+    RESEARCH_WORKSPACE = "research_workspace"
 
 
 def _client_metadata(request):

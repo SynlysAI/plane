@@ -253,6 +253,7 @@ def test_account_provisioning_options_are_workspace_scoped(env):
             "name": "Root",
             "display_path": "Root",
             "business_category": None,
+            "unit_type": "ROOT",
         }
     ]
     assert any(item["email"] == advisor.email for item in response.data["advisors"])

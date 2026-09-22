@@ -345,6 +345,48 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
         )
 
 
+class ResearchAgentRunCancelEndpoint(AgentPluginMixin):
+    """Cancel one run, close its session and revoke the context grant."""
+
+    def post(self, request, slug, run_id):
+        workspace, error = self.workspace_or_error(request, slug)
+        if error:
+            return error
+        session = ResearchAgentSession.objects.filter(
+            run_id=run_id,
+            workspace=workspace,
+            deleted_at__isnull=True,
+        ).first()
+        if session is None or not _session_visible(workspace, request.user, session):
+            return research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent run not found.")
+        if session.status != ResearchAgentSession.Status.CLOSED:
+            session.status = ResearchAgentSession.Status.CLOSED
+            session.last_error = ""
+            session.updated_by = request.user
+            session.save(update_fields=["status", "last_error", "updated_by", "updated_at"])
+            grant = session.context_grant
+            if grant.revoked_at is None:
+                grant.revoked_at = timezone.now()
+                grant.updated_by = request.user
+                grant.save(update_fields=["revoked_at", "updated_by", "updated_at"])
+            _append_event(
+                session,
+                "HUMAN_DECISION",
+                {"action": "run.cancel"},
+                request_id_from(request) or f"cancel:{run_id}",
+            )
+            record_audit_event(
+                workspace=workspace,
+                action=ResearchAuditAction.AGENT_SESSION_CLOSE,
+                resource_type=ResearchResourceType.AGENT_SESSION,
+                resource_id=session.session_id,
+                actor=request.user,
+                metadata={"run_id": str(run_id), "mode": "run_cancel"},
+                request=request,
+            )
+        return Response(ResearchAgentSessionSerializer(session).data)
+
+
 class ResearchAgentApprovalEndpoint(AgentPluginMixin):
     """Record a human decision; execution remains fail-closed in Phase 0."""
 
@@ -392,6 +434,12 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
         session, error = _load_session(request, workspace, request.data.get("session_id"))
         if error:
             return error
+        if session.status not in (ResearchAgentSession.Status.READY, ResearchAgentSession.Status.WAITING_APPROVAL):
+            return research_error(
+                ResearchErrorCode.AGENT_SCOPE_INVALID,
+                "Agent session is not approved for artifact writes.",
+                status.HTTP_403_FORBIDDEN,
+            )
         request_id = request_id_from(request)
         if not request_id:
             return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id is required.")

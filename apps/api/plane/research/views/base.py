@@ -189,6 +189,7 @@ class ResearchAPIView(BaseAPIView):
             and setting.purpose == setting.Purpose.PI_PRIVATE
             and not user_can_access_private_workspace(self.request.user, setting)
         ):
+            self._record_security_denial(workspace, "private_workspace")
             return None, research_not_found(
                 ResearchErrorCode.WORKSPACE_NOT_FOUND,
                 "Workspace not found.",
@@ -199,6 +200,7 @@ class ResearchAPIView(BaseAPIView):
             is_active=True,
         ).first()
         if membership is None:
+            self._record_security_denial(workspace, "workspace_membership_missing")
             return None, research_not_found(
                 ResearchErrorCode.WORKSPACE_NOT_FOUND,
                 "Workspace not found.",
@@ -211,11 +213,13 @@ class ResearchAPIView(BaseAPIView):
                 APIToken.objects.filter(token=auth, is_active=True).values_list("workspace_id", flat=True).first()
             )
             if token_workspace_id is not None and token_workspace_id != workspace.id:
+                self._record_security_denial(workspace, "api_token_workspace_mismatch")
                 return None, research_not_found(
                     ResearchErrorCode.WORKSPACE_NOT_FOUND,
                     "Workspace not found.",
                 )
         if roles is not None and membership.role not in roles:
+            self._record_security_denial(workspace, "workspace_role_denied")
             return None, research_permission_denied()
         required_nav = self.nav_capability if nav is _NAV_FROM_CLASS else nav
         if required_nav is not None and not nav_allowed(
@@ -224,6 +228,7 @@ class ResearchAPIView(BaseAPIView):
             required_nav,
             signals=self.research_signals(workspace),
         ):
+            self._record_security_denial(workspace, "research_capability_denied")
             return None, research_permission_denied()
         if require_enabled:
             if not workspace_research_enabled(workspace):
@@ -239,6 +244,24 @@ class ResearchAPIView(BaseAPIView):
                     status.HTTP_403_FORBIDDEN,
                 )
         return workspace, None
+
+    def _record_security_denial(self, workspace, reason):
+        """Persist a sanitized denial fact for metrics and alerting."""
+        from plane.research.utils.audit import (
+            ResearchAuditAction,
+            ResearchResourceType,
+            record_audit_event,
+        )
+
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.SECURITY_DENIED,
+            resource_type=ResearchResourceType.RESEARCH_WORKSPACE,
+            resource_id=workspace.id,
+            actor=self.request.user if getattr(self.request.user, "is_authenticated", False) else None,
+            metadata={"reason": reason, "path": self.request.path[:255]},
+            request=self.request,
+        )
 
     def research_signals(self, workspace):
         """Caller relations behind the level, memoised for the request."""

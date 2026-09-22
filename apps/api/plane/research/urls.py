@@ -35,9 +35,12 @@ from plane.research.views import (
     ResearchAgentSessionCloseEndpoint,
     ResearchAgentMessageEndpoint,
     ResearchAgentRunEventEndpoint,
+    ResearchAgentRunCancelEndpoint,
     ResearchAgentApprovalEndpoint,
     ResearchAgentArtifactEndpoint,
     ResearchAgentChainEventEndpoint,
+    ResearchExternalHealthProbeEndpoint,
+    ResearchObservabilityEndpoint,
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
@@ -287,6 +290,11 @@ urlpatterns = [
         name="research-agent-run-events",
     ),
     path(
+        "research/workspaces/<str:slug>/agent/runs/<uuid:run_id>/cancel/",
+        ResearchAgentRunCancelEndpoint.as_view(),
+        name="research-agent-run-cancel",
+    ),
+    path(
         "research/workspaces/<str:slug>/agent/runs/<uuid:run_id>/approvals/",
         ResearchAgentApprovalEndpoint.as_view(),
         name="research-agent-approval",
@@ -300,6 +308,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/agent/chain-events/",
         ResearchAgentChainEventEndpoint.as_view(),
         name="research-agent-chain-event",
+    ),
+    path(
+        "research/workspaces/<str:slug>/observability/",
+        ResearchObservabilityEndpoint.as_view(),
+        name="research-observability",
     ),
     # ------------------------------------------------------------------
     # P1 stage workflow (§5.2) - additive, nothing below is renumbered
@@ -525,6 +538,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/integrations/health/",
         ResearchIntegrationHealthEndpoint.as_view(),
         name="research-integration-health",
+    ),
+    path(
+        "research/workspaces/<str:slug>/integrations/health/probe/",
+        ResearchExternalHealthProbeEndpoint.as_view(),
+        name="research-integration-health-probe",
     ),
     path(
         "research/workspaces/<str:slug>/integrations/call-logs/",
