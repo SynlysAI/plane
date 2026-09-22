@@ -94,6 +94,9 @@ def test_context_token_reads_only_its_project_and_rejects_cross_project(env):
     payload = scoped.json()
     assert payload["context"]["context_id"] == issued["context_id"]
     assert payload["context"]["context_hash"] == issued["context_hash"]
+    assert payload["context"]["workspace_id"] == issued["scope"]["workspace_id"]
+    assert payload["context"]["research_project_id"] == issued["scope"]["research_project_id"]
+    assert payload["context"]["chain_node_id"] == issued["scope"]["chain_node_id"]
     assert {item["project"] for item in payload["resources"]} == {str(env["project_a"].id)}
 
     cross_project = client.get(
