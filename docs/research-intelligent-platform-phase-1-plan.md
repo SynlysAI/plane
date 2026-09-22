@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                               |
 | -------- | -------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.1                                                                                               |
+| 计划版本 | v1.2                                                                                               |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10            |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) |
 | 计划状态 | 待评审                                                                                             |
@@ -37,7 +37,7 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 
 ### 2.2 节点、快照和循环
 
-首期提供节点类型：`RESEARCH`、`LITERATURE_REVIEW`、`TOPIC_EVALUATION`、`PLAN`、`EXPERIMENT`、`ANALYSIS`、`ITERATION`、`SUMMARY`。节点状态：`DRAFT`、`ACTIVE`、`WAITING_HUMAN`、`NEEDS_REVISION`、`COMPLETED`、`FAILED`、`ARCHIVED`。
+首期提供节点类型：`RESEARCH`、`LITERATURE_REVIEW`、`TOPIC_EVALUATION`、`PRE_EXPERIMENT`、`PLAN`、`OPENING`、`EXPERIMENT`、`ANALYSIS`、`ITERATION`、`SUMMARY`。同时预留 `PAPER_WRITING`、`COMPLETION`、`TRANSFER` 节点类型；预留类型在首期可创建和查看，但写作、结题和转化动作由后续阶段开关控制。节点状态：`DRAFT`、`ACTIVE`、`WAITING_HUMAN`、`NEEDS_REVISION`、`COMPLETED`、`FAILED`、`ARCHIVED`。
 
 节点通过 `parent_node_id` 和 `loop_iteration` 表示回溯与循环；不要求首期实现任意图编辑。正式 Snapshot 保存引用对象的 ID、版本、标题、摘要、hash 和来源链接，正文和原始数据仍由权威系统保存。
 
@@ -53,6 +53,10 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 - 科研组件入口：RAGPortal、Synlora，以及后续专业系统占位。
 
 入口通过 ResearchGuard、Workspace 开关和课题 ACL 过滤。外部页面首期使用同源反向代理/BFF 跳转；页面回到 Plane 后，通过 `chain_id` 和 `node_id` 恢复上下文。
+
+欢迎页科研区域采用固定信息顺序：当前 Research Chain → 需要本人处理的待办 → 最近研究快照 → Agent 分析入口 → 科研组件入口。待办默认按阻断级别、截止时间、更新时间排序；同一来源对象只显示一条当前待办，历史状态进入时间线。用户完成 Plane 本地待办时直接更新状态；外部待办先调用来源系统，回调未确认前显示“同步中”，不得提前标记完成。
+
+组件入口卡最少显示名称、能力摘要、可用/降级状态、当前课题是否已授权、最近一次运行/同步时间和进入动作。入口没有权限时展示申请/联系路径，不展示无权限对象的标题、计数或运行结果。
 
 ### 2.3.1 Plane 通用 Agent 插件 MVP UI
 
@@ -134,6 +138,25 @@ AI 接入应用逻辑：
 - 分析结果可保存 Markdown/结构化摘要、指标、引用和结论。
 - 失败实验保留 `FAILED` 状态，并要求填写失败原因或后续行动。
 
+### 2.7 研究快照、导师 HITL 和跨组件待办
+
+首期快照卡片固定为：
+
+| 快照         | 触发条件                        | 保存内容                                     |
+| ------------ | ------------------------------- | -------------------------------------------- |
+| 文献调研快照 | 文献/检索结果确认               | query 摘要、来源、知识库、引用版本和人工备注 |
+| 实验执行快照 | 手动实验提交或 Phase 2 外部回执 | 目标、参数、状态、责任人和运行引用           |
+| 实验数据快照 | 资产/文件关联完成               | asset ID、文件 hash、来源、版本和权限        |
+| 分析结果快照 | 分析结果人工确认                | 方法、输入引用、指标、结论和工具版本         |
+| 论文调研快照 | 论文资料整理完成                | 文献引用、主题、版本和后续写作任务           |
+| 其他过程快照 | 研究笔记/交流/审批确认          | 事件范围、摘要、操作者和决策                 |
+
+阶段节点与快照不要求首期强制线性推进：预实验、实验、分析和迭代允许重复；开题、论文写作、结题和转化先作为可见的后续节点占位，避免后续扩展时重新迁移 Chain 图结构。
+
+导师 Human-in-the-Loop 流程：AI 草稿 → 学生提交 → 导师/课题组主 PI 收到待办 → 预览输入/引用/修改 diff → 接受、退回或要求补充 → 追加 `HUMAN_DECISION` 和 `APPROVAL` 事件。导师审批不直接覆盖 AI 输出，退回必须填写原因。
+
+跨组件待办由 Plane 聚合 adapter 返回的待办引用；每条待办包含 `source_system`、`source_id`、`chain_id`、`node_id`、`assignee_id`、`due_at`、`status`、`deep_link` 和 `degraded`。待办完成必须回写来源系统或记录明确的本地完成依据。
+
 ## 3. 开发任务
 
 ### 任务 1.1：平行课题和课题 ACL
@@ -187,6 +210,7 @@ AI 接入应用逻辑：
 - 手动实验记录、失败记录、附件/外部资产引用和提交锁定。
 - 分析结果保存、指标、结论和 Chain Snapshot。
 - 在插件产物抽屉提供“预览 → 编辑 → 选择保存类型 → 人工确认 → 写入版本/快照”的完整流程。
+- 实现六类研究快照卡片、导师/PI 待办、修改 diff、退回原因和跨组件待办聚合。
 
 依赖：1.2、1.5。验收：AI 草稿不能直接成为正式计划；实验修改生成新版本；失败实验可检索和回放。
 
@@ -214,6 +238,8 @@ AI 接入应用逻辑：
 - 课题切换后所有卡片、对话和入口刷新到正确 scope。
 - 节点循环、回溯、重新提交和快照详情可操作。
 - AI 草稿、人工修改、导师确认和审计信息可见。
+- 六类快照可以创建、筛选、查看引用和回放，导师退回会生成可见原因和待办状态。
+- `COMMUNICATION`、`APPROVAL`、`DATA_CHANGE` 和 `DEGRADED` 事件可以在时间线中区分显示。
 - 插件入口、侧边工作台、上下文摘要、消息流、工具卡、审批、产物抽屉和 Trace 时间线在桌面/窄屏布局均可用。
 - 课题切换、Session 关闭、SSE 断线重连、停止生成和保存失败恢复符合状态字典。
 
@@ -226,6 +252,7 @@ AI 接入应用逻辑：
 5. 停止 RAGPortal 或 Synlora，仍能新增人工实验记录并看到 degraded 状态。
 6. 导出 Chain Markdown，核对引用、版本、hash 和事件顺序。
 7. 从课题 A 切换到课题 B，验证旧 session、SSE、工具结果和缓存不会进入 B；关闭插件 flag 后入口和 BFF 写操作均被拒绝。
+8. AI 生成计划后由导师退回并再次确认，验证 diff、退回原因、待办和 Chain Event 顺序完整。
 
 ## 5. 发布、回滚与风险
 
@@ -234,15 +261,6 @@ AI 接入应用逻辑：
 - RAGPortal 或 Synlora 出现持续错误时，切换 LINK_ONLY/HIDDEN 并保留人工记录。
 - 数据迁移只新增结构；回滚代码前先关闭写入开关，确保历史事件和快照可读取。
 - 风险：Agent 事件量快速增长。处理：事件摘要、分页回放、冷热存储和保留策略在上线前确定。
-
-## 10. 插件 MVP 完成清单
-
-- [ ] Plane 首页、Chain 页面和 Node 详情具备一致的 Agent 入口。
-- [ ] 桌面侧边工作台和窄屏上下布局通过视觉验收。
-- [ ] 当前课题/节点/Context 摘要可见且不可手工扩大 scope。
-- [ ] 对话流、停止、重连、工具卡、审批、产物保存和 Trace 回放可用。
-- [ ] 研究计划/文献引用/分析摘要保存均经过人工确认并生成 Chain Event。
-- [ ] 外部降级、无权限、Context 过期和保存失败都有替代路径。
 
 ## 6. 详细数据与接口设计
 
@@ -443,3 +461,12 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 | E2E 灰度        | 全部          | 测试夹具、runbook           | P0/P1 回归和闭环通过 |
 
 任一门禁失败时，只允许保留人工记录模式，不开放对应 Agent/RAG 写操作。
+
+## 10. 插件 MVP 完成清单
+
+- [ ] Plane 首页、Chain 页面和 Node 详情具备一致的 Agent 入口。
+- [ ] 桌面侧边工作台和窄屏上下布局通过视觉验收。
+- [ ] 当前课题/节点/Context 摘要可见且不可手工扩大 scope。
+- [ ] 对话流、停止、重连、工具卡、审批、产物保存和 Trace 回放可用。
+- [ ] 研究计划/文献引用/分析摘要保存均经过人工确认并生成 Chain Event。
+- [ ] 外部降级、无权限、Context 过期和保存失败都有替代路径。
