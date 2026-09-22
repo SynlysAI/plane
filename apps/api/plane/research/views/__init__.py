@@ -22,7 +22,12 @@ from .accounts import (
     ResearchUserProfileListEndpoint,
 )
 from .pi_workspace import ResearchPiAggregateEndpoint
-from .context import ResearchContextEndpoint, ResearchContextResourceEndpoint
+from .context import (
+    ResearchContextEndpoint,
+    ResearchContextResourceEndpoint,
+    ResearchContextTokenEndpoint,
+    ResearchContextTokenRevokeEndpoint,
+)
 from .attachments import (
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
@@ -298,5 +303,7 @@ __all__ = [
     "ResearchUserProfileListEndpoint",
     "ResearchPiAggregateEndpoint",
     "ResearchContextEndpoint",
+    "ResearchContextTokenEndpoint",
+    "ResearchContextTokenRevokeEndpoint",
     "ResearchContextResourceEndpoint",
 ]
