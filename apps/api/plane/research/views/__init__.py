@@ -42,6 +42,7 @@ from .agent import (
     ResearchAgentManifestEndpoint,
     ResearchAgentMessageEndpoint,
     ResearchAgentRunEventEndpoint,
+    ResearchAgentRunCancelEndpoint,
     ResearchAgentSessionCloseEndpoint,
     ResearchAgentSessionCreateEndpoint,
     ResearchAgentSessionDetailEndpoint,
@@ -62,6 +63,7 @@ from .approvals import (
 )
 from .health import ResearchHealthEndpoint
 from .settings import ResearchSettingsEndpoint
+from .observability import ResearchExternalHealthProbeEndpoint, ResearchObservabilityEndpoint
 from .summary import ResearchReportSummaryEndpoint
 from .templates import (
     ResearchReportTemplateDetailEndpoint,
@@ -268,6 +270,8 @@ __all__ = [
     "ResearchRdAnalysisSearchEndpoint",
     "ResearchRdProjectSearchEndpoint",
     "ResearchSettingsEndpoint",
+    "ResearchObservabilityEndpoint",
+    "ResearchExternalHealthProbeEndpoint",
     "ResearchReportSummaryEndpoint",
     "ResearchAuditEventListEndpoint",
     "ResearchApprovalFlowDetailEndpoint",
@@ -334,6 +338,7 @@ __all__ = [
     "ResearchAgentSessionCloseEndpoint",
     "ResearchAgentMessageEndpoint",
     "ResearchAgentRunEventEndpoint",
+    "ResearchAgentRunCancelEndpoint",
     "ResearchAgentApprovalEndpoint",
     "ResearchAgentArtifactEndpoint",
     "ResearchAgentChainEventEndpoint",

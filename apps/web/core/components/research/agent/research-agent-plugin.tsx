@@ -37,7 +37,7 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
     const closeQuietly = async (value: TResearchAgentSession | null) => {
       if (!value || value.status === "CLOSED") return;
       try {
-        await agentService.closeSession(workspaceSlug, value.session_id);
+        await agentService.cancelRun(workspaceSlug, value.run_id);
       } catch {
         // Closing is best-effort when the browser leaves or switches scope.
       }

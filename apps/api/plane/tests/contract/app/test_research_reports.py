@@ -3,12 +3,14 @@
 # See the LICENSE file for details.
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from threading import Barrier
 from time import sleep
 from unittest.mock import patch
 
 import pytest
 from django.db import close_old_connections
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -123,14 +125,16 @@ def create_report(env, **payload):
 @pytest.mark.django_db
 class TestReportCreation:
     def test_create_weekly_report_with_period_metadata(self, env):
-        response = create_report(env)
+        iso = timezone.localdate().isocalendar()
+        period_key = f"{iso.year}-W{iso.week:02d}"
+        response = create_report(env, period_key=period_key)
         assert response.status_code == 201
         payload = response.json()
-        assert payload["period_start"] == "2026-09-14"
-        assert payload["period_end"] == "2026-09-20"
+        assert payload["period_start"] == str(timezone.localdate() - timedelta(days=timezone.localdate().weekday()))
+        assert payload["period_end"] == str(timezone.localdate() + timedelta(days=6 - timezone.localdate().weekday()))
         assert payload["status"] == "DRAFT"
         assert payload["visibility"] == "DIRECT_ADVISOR"
-        assert payload["is_backfill"] is False  # 2026-W38 is the current ISO week
+        assert payload["is_backfill"] is False
         assert Page.objects.filter(pk=payload["page"]).exists()
 
     def test_historical_period_is_marked_as_backfill(self, env):

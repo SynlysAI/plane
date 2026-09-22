@@ -75,6 +75,8 @@ class TestResearchIdentityMe:
             "experiments": True,
             "code": True,
             "integrations": True,
+            "research_chain": False,
+            "research_agent": False,
         }
         assert payload["user"]["is_workspace_admin"] is False
         assert payload["user"]["is_research_owner"] is False

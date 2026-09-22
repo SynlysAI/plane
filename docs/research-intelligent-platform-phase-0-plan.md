@@ -4,7 +4,7 @@
 | -------- | ----------------------------------------------------------------------------------------------- |
 | 计划版本 | v1.3                                                                                            |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §2、§6–§9、§11 |
-| 计划状态 | 待评审                                                                                          |
+| 计划状态 | 已实施（自动化验证通过）                                                                        |
 | 目标     | 冻结跨仓契约，建立可灰度、可回滚、可观测的开发基础                                              |
 | 不在范围 | 用户可用的完整 Research Chain、自动实验、社会用户开放                                           |
 
@@ -390,8 +390,8 @@ Phase 0 不允许进入 Phase 1 的条件：契约尚未冻结、RAGPortal fixtu
 
 ## 10. Phase 0 插件交付清单
 
-- [ ] `agent-plugin.v1` manifest、scope 和状态字典评审通过。
-- [ ] Plane Agent BFF 的请求/响应、错误码、幂等和审计契约通过 contract test。
-- [ ] 插件入口在 Workspace 首页、Research Chain 和 Node 详情的路由方案确定。
-- [ ] session 创建、恢复、关闭、SSE 取消和课题切换行为有自动化测试。
-- [ ] CSP、token 存储、工具审批和日志脱敏通过安全检查。
+- [x] `agent-plugin.v1` manifest、scope 和状态字典评审通过。
+- [x] Plane Agent BFF 的请求/响应、错误码、幂等和审计契约通过 contract test。
+- [x] 插件入口在 Workspace 首页、Research Chain 和 Node 详情的路由方案确定。
+- [x] session 创建、恢复、关闭、SSE 取消和课题切换行为有自动化测试。
+- [x] CSP、token 存储、工具审批和日志脱敏通过安全检查。

@@ -177,6 +177,70 @@ def test_agent_close_revokes_context_and_expires_session(env):
     assert env["client"].get(agent_url(env, f"sessions/{session['session_id']}/")).status_code == 403
 
 
+def test_agent_run_cancel_revokes_streaming_scope(env):
+    session = env["client"].post(
+        agent_url(env, "sessions/"),
+        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+        format="json",
+    ).json()
+    cancelled = env["client"].post(
+        agent_url(env, f"runs/{session['run_id']}/cancel/"),
+        {"request_id": f"cancel-{uuid4().hex}"},
+        format="json",
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "CLOSED"
+    assert not ResearchContextGrant.objects.filter(context_id=session["context_id"], revoked_at__isnull=True).exists()
+
+
+def test_agent_events_are_isolated_between_old_and_new_sessions(env):
+    first = env["client"].post(
+        agent_url(env, "sessions/"),
+        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+        format="json",
+    ).json()
+    env["client"].post(
+        agent_url(env, f"sessions/{first['session_id']}/messages/"),
+        {"request_id": f"message-{uuid4().hex}", "content": "old session message"},
+        format="json",
+    )
+    second = env["client"].post(
+        agent_url(env, "sessions/"),
+        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+        format="json",
+    ).json()
+
+    second_events = env["client"].get(agent_url(env, f"runs/{second['run_id']}/events/"))
+    assert second_events.status_code == 200
+    assert all(event["run_id"] == str(second["run_id"]) for event in second_events.json()["results"])
+    assert all("old session message" not in str(event) for event in second_events.json()["results"])
+
+
+def test_rejected_agent_approval_fails_closed(env):
+    session = env["client"].post(
+        agent_url(env, "sessions/"),
+        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+        format="json",
+    ).json()
+    rejected = env["client"].post(
+        agent_url(env, f"runs/{session['run_id']}/approvals/"),
+        {"request_id": f"approval-{uuid4().hex}", "decision": "REJECTED", "tool_call_id": "tool-1"},
+        format="json",
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["session"]["status"] == "ERROR"
+    artifact = env["client"].post(
+        agent_url(env, "artifacts/"),
+        {
+            "request_id": f"artifact-{uuid4().hex}",
+            "session_id": session["session_id"],
+            "summary": "must not save",
+        },
+        format="json",
+    )
+    assert artifact.status_code == 403
+
+
 def test_agent_manifest_and_session_fail_when_switch_is_off(env):
     WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(research_agent_enabled=False)
     assert env["client"].post(
