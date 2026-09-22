@@ -168,7 +168,7 @@ GET /api/research/workspaces/{slug}/observability/
 - AccountLink：多 subject、邮箱冲突、验证过期、撤销传播通过。
 - Agent：manifest、session、事件隔离、审批拒绝、token 不泄露通过。
 - 迁移：独立库前滚/回滚/再前滚通过。
-- 后端：`plane/tests/unit/research` + `plane/tests/contract/app/test_research*.py`，745 passed / 0 failed（2026-09-22）。
+- 后端：`plane/tests/unit/research` + `plane/tests/contract/app/test_research*.py`，749 passed / 0 failed（2026-09-22）。
 - 前端组件：7 个文件、30 个用例全部通过（2026-09-22）。
 - 前端：导航开关回归、类型检查、lint、生产构建通过。
 - 迁移漂移：`makemigrations db --check --dry-run` 显示无未生成迁移。
