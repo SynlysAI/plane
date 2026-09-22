@@ -95,3 +95,71 @@ def test_ragportal_health_path_is_available(client):
     with patch("httpx.get", return_value=FakeResponse(payload={"status": "ok"})) as get:
         client.health()
     assert get.call_args.args[0].endswith("/api/health")
+
+
+def test_rate_limited_request_is_retried_before_success(client):
+    """A transient 429 is retried and can recover within the attempt ceiling."""
+    responses = [
+        FakeResponse(status_code=429),
+        FakeResponse(payload={"items": [{"id": "kb-1", "name": "Materials"}]}),
+    ]
+    with patch("httpx.get", side_effect=responses) as get, patch("plane.research.services.integrations.base.time.sleep"):
+        result = client.knowledge_bases()
+    assert result.degraded is False
+    assert get.call_count == 2
+
+
+def test_link_only_degraded_mode_is_preserved(client):
+    """LINK_ONLY keeps manual research usable while external search is down."""
+    client.connection.degraded_mode = "LINK_ONLY"
+    client.connection.save(update_fields=["degraded_mode"])
+    with patch("httpx.get", return_value=FakeResponse(status_code=503)):
+        result = client.knowledge_bases()
+    assert result.degraded is True
+    assert result.degraded_mode == "LINK_ONLY"
+
+
+def test_duplicate_upload_reuses_the_same_idempotency_key(client):
+    """RAGPortal can safely deduplicate a retried upload by request ID."""
+    request = type("Request", (), {"headers": {"X-Request-Id": "req-upload-fixed"}})()
+    response = FakeResponse(payload={"id": 7, "parse_status": "pending"})
+    with patch("httpx.post", return_value=response) as post:
+        first = client.upload(
+            file_name="paper.pdf",
+            file_content=b"pdf",
+            kb_id="kb-1",
+            metadata={"workspace_slug": "ws", "research_project_id": "project-1"},
+            request=request,
+        )
+        second = client.upload(
+            file_name="paper.pdf",
+            file_content=b"pdf",
+            kb_id="kb-1",
+            metadata={"workspace_slug": "ws", "research_project_id": "project-1"},
+            request=request,
+        )
+    assert first.request_id == second.request_id == "req-upload-fixed"
+    assert [call.kwargs["headers"]["Idempotency-Key"] for call in post.call_args_list] == [
+        "req-upload-fixed",
+        "req-upload-fixed",
+    ]
+
+
+def test_weknora_health_uses_the_shared_health_contract(db):
+    """WeKnora inherits the same health endpoint contract as RAGPortal."""
+    user = make_user(first_name="WeKnora owner")
+    workspace = make_workspace(user)
+    enable_research(workspace)
+    connection = ExternalSystemConnection.objects.create(
+        workspace=workspace,
+        system="WEKNORA",
+        display_name="WeKnora",
+        base_url="http://weknora.test",
+        auth_mode="NONE",
+        is_enabled=True,
+    )
+    weknora = client_for("WEKNORA", connection)
+    with patch("httpx.get", return_value=FakeResponse(payload={"status": "ok"})) as get:
+        result = weknora.health()
+    assert result.degraded is False
+    assert get.call_args.args[0].endswith("/api/health")
