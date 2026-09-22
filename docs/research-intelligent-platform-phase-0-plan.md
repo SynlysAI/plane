@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                            |
 | -------- | ----------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.1                                                                                            |
+| 计划版本 | v1.2                                                                                            |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §2、§6–§9、§11 |
 | 计划状态 | 待评审                                                                                          |
 | 目标     | 冻结跨仓契约，建立可灰度、可回滚、可观测的开发基础                                              |
@@ -155,6 +155,19 @@ BFF 强制注入 `workspace_id`、`research_project_id`、`chain_node_id`、`con
 
 安全约束：同源路由或反向代理优先；CSP 禁止未知 iframe；短期 token 不进入 URL、localStorage 或前端日志；工具审批必须由后端确认后才允许执行。
 
+### 2.8 研究事件、快照和待办 taxonomy
+
+Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPortal 和专业系统为同一事实产生不同名称：
+
+| 类别     | 首批类型                                                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 过程事件 | `RESEARCH_NOTE`、`COMMUNICATION`、`AI_ACTION`、`TOOL_CALL`、`VALIDATION`、`HUMAN_DECISION`、`APPROVAL`、`DATA_CHANGE`、`DEGRADED` |
+| 快照类型 | `LITERATURE_REVIEW`、`EXPERIMENT_EXECUTION`、`EXPERIMENT_DATA`、`ANALYSIS_RESULT`、`PAPER_REVIEW`、`GENERAL_RESEARCH`             |
+| 待办来源 | `RAGPORTAL`、`SYNLORA`、`PLANE`、`SPECLABOS`、`POLY_AGENT`、`SPEC_AGENT`                                                          |
+| 待办状态 | `OPEN`、`IN_PROGRESS`、`BLOCKED`、`DONE`、`CANCELLED`、`DEGRADED`                                                                 |
+
+事件必须区分“发生事实”和“当前投影状态”；待办可以重建，事件和快照不能由前端覆盖。`COMMUNICATION` 只保存参与者、时间、主题摘要和消息引用，不默认复制聊天正文。
+
 ## 3. 开发任务
 
 ### 任务 0.1：契约和状态字典
@@ -215,6 +228,7 @@ BFF 强制注入 `workspace_id`、`research_project_id`、`chain_node_id`、`con
 - 建立日志脱敏、指标、告警和外部健康检查。
 - 定义备份、恢复、迁移失败和开关回滚 runbook。
 - 增加插件 manifest、scope 切换、旧 SSE 隔离、BFF ACL、审批 fail-closed 和 token 泄露检查。
+- 固定事件、快照、待办 taxonomy 和来源系统枚举，增加未知类型兼容测试和重复投影测试。
 
 依赖：0.2–0.6。完成标志：测试门禁可在 CI/本地复现，回滚演练有记录。
 
@@ -247,14 +261,6 @@ BFF 强制注入 `workspace_id`、`research_project_id`、`chain_node_id`、`con
 - 通过开关关闭新功能；数据库只回滚新增结构，不回滚既有 P0/P1 数据。
 - 风险：RAGPortal 实际契约仍可能变化。处理：固定 OpenAPI fixture 和契约版本，联调未通过不得进入 Phase 1。
 - 风险：Synlora 当前单用户模型不足以支持共享课题。处理：先完成 Context Adapter 和 tenant mapping，禁止仅透传 project_id。
-
-## 10. Phase 0 插件交付清单
-
-- [ ] `agent-plugin.v1` manifest、scope 和状态字典评审通过。
-- [ ] Plane Agent BFF 的请求/响应、错误码、幂等和审计契约通过 contract test。
-- [ ] 插件入口在 Workspace 首页、Research Chain 和 Node 详情的路由方案确定。
-- [ ] session 创建、恢复、关闭、SSE 取消和课题切换行为有自动化测试。
-- [ ] CSP、token 存储、工具审批和日志脱敏通过安全检查。
 
 ## 6. 详细数据设计
 
@@ -378,3 +384,11 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest -q \
 | 观测与回滚              | 是     | 全部接口确定                            | metrics、alerts、runbook         |
 
 Phase 0 不允许进入 Phase 1 的条件：契约尚未冻结、RAGPortal fixture 未通过、Context scope 可被绕过、迁移不可回滚或普通科研回归失败。
+
+## 10. Phase 0 插件交付清单
+
+- [ ] `agent-plugin.v1` manifest、scope 和状态字典评审通过。
+- [ ] Plane Agent BFF 的请求/响应、错误码、幂等和审计契约通过 contract test。
+- [ ] 插件入口在 Workspace 首页、Research Chain 和 Node 详情的路由方案确定。
+- [ ] session 创建、恢复、关闭、SSE 取消和课题切换行为有自动化测试。
+- [ ] CSP、token 存储、工具审批和日志脱敏通过安全检查。

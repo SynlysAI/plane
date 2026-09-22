@@ -20,11 +20,11 @@
 | [`research-system-management-testing.md`](./research-system-management-testing.md)                 | 系统管理改进测试手册：一键冒烟、自动化测试与界面走查                    | v1.0，已交付（v2.4.0）                   |
 | [`research-navigation-visibility.md`](./research-navigation-visibility.md)                         | 科研目录分级可见：四档级别、菜单矩阵、强制点与验收方式                  | v1.0，已交付（v2.5.0）                   |
 | [`research-workspace-v3.md`](./research-workspace-v3.md)                                           | v3 权威实现契约：组织、权限、工作空间、项目、报告与 Agent 上下文        | v1.3，对应 `3.0.3`                       |
-| [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md)                   | 跨仓库科研智能体平台总 PRD：Research Chain、Agent 分工、MVP 与建设路线  | v1.2，待评审                             |
-| [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) | Phase 0 实施计划：契约、基础设施、身份、Context、适配器、安全与测试基线 | v1.1，待评审                             |
-| [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) | Phase 1 实施计划：Research Chain、RAGPortal、Synlora MVP 与科研闭环     | v1.1，待评审                             |
-| [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md) | Phase 2 实施计划：SpecLabOS、PolyAgent、SpecAgent、Job 与实验运行       | v1.1，待评审                             |
-| [`research-intelligent-platform-phase-3-plan.md`](./research-intelligent-platform-phase-3-plan.md) | Phase 3 实施计划：科研治理、ScienceDiscovery Worker、规模化与开放       | v1.1，待评审                             |
+| [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md)                   | 跨仓库科研智能体平台总 PRD：Research Chain、Agent 分工、MVP 与建设路线  | v1.3，待评审                             |
+| [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) | Phase 0 实施计划：契约、基础设施、身份、Context、适配器、安全与测试基线 | v1.2，待评审                             |
+| [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) | Phase 1 实施计划：Research Chain、RAGPortal、Synlora MVP 与科研闭环     | v1.2，待评审                             |
+| [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md) | Phase 2 实施计划：SpecLabOS、PolyAgent、SpecAgent、Job 与实验运行       | v1.2，待评审                             |
+| [`research-intelligent-platform-phase-3-plan.md`](./research-intelligent-platform-phase-3-plan.md) | Phase 3 实施计划：科研治理、ScienceDiscovery Worker、规模化与开放       | v1.2，待评审                             |
 | [`wechat-mini-program-prd.md`](./wechat-mini-program-prd.md)                                       | 微信小程序移动工作台：范围、认证、API、消息、发布与验收                 | v1.0，待评审；规划 `3.1.0`               |
 | [`research-test-fixtures.md`](./research-test-fixtures.md)                                         | 科研测试夹具：多身份账号、P0/P1 数据清单与手工验证流程                  | 持续维护（`seed_research_demo`）         |
 | [`research-test-accounts.md`](./research-test-accounts.md)                                         | 测试账号与身份速查：登录入口、各身份账号、可见范围与登录排错            | 持续维护（v2.5.1 实测复核）              |
