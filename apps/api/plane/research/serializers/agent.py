@@ -26,6 +26,10 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
             "context_hash",
             "status",
             "last_error",
+            "synlora_session_id",
+            "synlora_run_id",
+            "delegated_subject",
+            "assembly",
             "created_at",
             "updated_at",
         ]

@@ -48,7 +48,7 @@ from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import visible_profile_queryset
 
 SCHEMA_VERSION = "2026-09-18"
-AGENT_CONTEXT_SCHEMA_VERSION = "agent-context.v1"
+AGENT_CONTEXT_SCHEMA_VERSION = "agent-context.v2"
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 100
 FORMAL_MATERIAL_STATUSES = frozenset(
@@ -426,6 +426,12 @@ def _context_payload(grant):
         "context_hash": grant.context_hash,
         "visibility_scope": grant.visibility_scope,
         "expires_at": grant.expires_at.isoformat(),
+        "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
+        "allowed_file_ids": grant.allowed_file_ids,
+        "allowed_plugins": grant.allowed_plugins,
+        "allowed_tools": grant.allowed_tools,
+        "policy_id": grant.policy_id,
+        "policy_hash": grant.policy_hash,
     }
 
 
@@ -520,6 +526,12 @@ class ResearchContextTokenEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIV
                     "research_project_id": str(profile.project_id),
                     "chain_node_id": str(chain_node.id) if chain_node else None,
                     "visibility_scope": grant.visibility_scope,
+                    "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
+                    "allowed_file_ids": grant.allowed_file_ids,
+                    "allowed_plugins": grant.allowed_plugins,
+                    "allowed_tools": grant.allowed_tools,
+                    "policy_id": grant.policy_id,
+                    "policy_hash": grant.policy_hash,
                 },
             },
             status=status.HTTP_201_CREATED,

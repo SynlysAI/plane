@@ -32,6 +32,13 @@ def context_hash_for(*, workspace_id, user_id, project_id, chain_node_id, visibi
     return hashlib.sha256(encoded).hexdigest()
 
 
+def context_policy_hash(payload):
+    """Hash a v2 capability policy without embedding secrets or tokens."""
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
+
+
 def issue_context_token(
     *,
     workspace,
@@ -39,18 +46,48 @@ def issue_context_token(
     profile,
     chain_node=None,
     request_id,
+    allowed_knowledge_base_ids=None,
+    allowed_file_ids=None,
+    allowed_plugins=None,
+    allowed_tools=None,
+    policy_id="",
 ):
     """Create a one-time displayed token and its revocable database grant."""
     if not request_id:
         raise ValueError("request_id is required")
     raw_token = secrets.token_urlsafe(48)
     visibility_scope = profile.chain_visibility
-    context_hash = context_hash_for(
+    allowed_knowledge_base_ids = list(allowed_knowledge_base_ids or [])
+    allowed_file_ids = list(allowed_file_ids or [])
+    allowed_plugins = list(allowed_plugins or [])
+    allowed_tools = list(allowed_tools or [])
+    policy_hash = context_policy_hash(
+        {
+            "allowed_knowledge_base_ids": allowed_knowledge_base_ids,
+            "allowed_file_ids": allowed_file_ids,
+            "allowed_plugins": allowed_plugins,
+            "allowed_tools": allowed_tools,
+        }
+    )
+    base_hash = context_hash_for(
         workspace_id=workspace.id,
         user_id=user.id,
         project_id=profile.project_id,
         chain_node_id=chain_node.id if chain_node else None,
         visibility_scope=visibility_scope,
+    )
+    context_hash = (
+        context_policy_hash(
+            {
+                "base_hash": base_hash,
+                "allowed_knowledge_base_ids": allowed_knowledge_base_ids,
+                "allowed_file_ids": allowed_file_ids,
+                "allowed_plugins": allowed_plugins,
+                "allowed_tools": allowed_tools,
+            }
+        )
+        if any((allowed_knowledge_base_ids, allowed_file_ids, allowed_plugins, allowed_tools))
+        else base_hash
     )
     ttl_seconds = max(60, int(getattr(settings, "RESEARCH_CONTEXT_TOKEN_TTL_SECONDS", 600)))
     grant = ResearchContextGrant.objects.create(
@@ -60,6 +97,12 @@ def issue_context_token(
         chain_node=chain_node,
         visibility_scope=visibility_scope,
         context_hash=context_hash,
+        allowed_knowledge_base_ids=allowed_knowledge_base_ids,
+        allowed_file_ids=allowed_file_ids,
+        allowed_plugins=allowed_plugins,
+        allowed_tools=allowed_tools,
+        policy_id=policy_id,
+        policy_hash=policy_hash,
         token_hash=hash_context_token(raw_token),
         expires_at=timezone.now() + timedelta(seconds=ttl_seconds),
         request_id=request_id,

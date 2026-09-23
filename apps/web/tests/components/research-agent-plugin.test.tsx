@@ -47,6 +47,18 @@ const session = {
   context_hash: "1234567890abcdef",
   status: "READY",
   last_error: "",
+  synlora_session_id: "synlora-session-1",
+  synlora_run_id: "",
+  delegated_subject: "u_synlora",
+  assembly: {
+    persona: "research-general",
+    enabled_plugins: [],
+    allowed_tools: ["knowledge.search"],
+    allowed_knowledge_base_ids: ["kb-1"],
+    allowed_file_ids: [],
+    unavailable_reasons: [],
+    policy_id: "policy-1",
+  },
   created_at: "2026-09-23T01:00:00Z",
   updated_at: "2026-09-23T01:00:00Z",
 };
@@ -95,6 +107,8 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
   await act(async () => undefined);
 
   expect(container.textContent).toContain("最后事件 #1");
+  expect(container.textContent).toContain("research-general");
+  expect(container.textContent).toContain("knowledge.search");
   expect(mocks.getEvents).toHaveBeenCalledWith("lab", "run-1");
   expect(container.querySelectorAll("article").length).toBe(1);
 

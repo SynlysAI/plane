@@ -198,6 +198,23 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
           <div className="border-b border-subtle px-5 py-3">
             <p className="text-11 font-medium text-secondary">{t("research.agent.context_summary")}</p>
             <p className="mt-1 text-11 text-tertiary">{t("research.agent.context_hint")}</p>
+            {session?.assembly && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded bg-surface-2 px-2 py-1 text-11 text-secondary">
+                  {session.assembly.persona}
+                </span>
+                {session.assembly.allowed_tools.map((tool) => (
+                  <span key={tool} className="rounded bg-surface-2 px-2 py-1 text-11 text-secondary">
+                    {tool}
+                  </span>
+                ))}
+                {session.assembly.unavailable_reasons.map((reason) => (
+                  <span key={reason} className="rounded bg-warning-subtle px-2 py-1 text-11 text-warning-primary">
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex-1 space-y-2 p-5" role="log" aria-live="polite">
             {state === "loading_context" && <p className="text-12 text-tertiary">{t("research.agent.description")}</p>}
