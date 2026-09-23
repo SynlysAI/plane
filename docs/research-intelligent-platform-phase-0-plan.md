@@ -157,6 +157,17 @@ BFF 强制注入 `workspace_id`、`research_project_id`、`chain_node_id`、`con
 
 导航基础约束：新增 `research_chain` capability 和 Workspace 子开关，ResearchSidebarItems、科研总览卡片和页面守卫读取同一能力结果；不得删除、移动或改变现有 `overview`、`reports`、`projects`、`approvals`、`system`、`platform`、`audit`、`integrations` 入口。普通 Plane 的首页、草稿、我的工作、便签、项目、More 和添加项目流程继续使用原有路由。
 
+### 2.7.1 Phase 1 Agent 编排契约增量
+
+本节只补充后续契约边界，不重写 Phase 0 已完成实施记录：
+
+- `agent-plugin.v1` 继续作为 Plane BFF/UI 的 manifest、入口、状态字典和幂等基线。
+- Phase 1 新增 `agent-context.v2`，在原 Context metadata 上加入授权知识库、文件、插件、工具、capability policy 和有效期；raw token 仍只在服务端请求头中流转。
+- Phase 1 新增 `plane-delegated-auth.v1`，Plane BFF 以服务身份换取绑定用户的短效 Synlora token；token 不返回浏览器，也不使用共享用户账号。
+- Phase 1 新增 `capability-manifest.v1`，Plane 只同步 Synlora 插件、专家、工具、配置健康、风险和 schema digest 的只读投影，不复制运行时注册表。
+- Phase 1 新增 `research-correlation.v1`，垂类系统仅保存用于审计和回执的 Plane/Synlora 关联 ID，不以此替代自身鉴权。
+- Phase 0 的 fail-closed Agent message BFF 是过渡实现；目标态为 Plane BFF 换取 delegated identity、自动装配 Synlora session、每轮复验 Context，并消费 Synlora event cursor 完成 Chain projection。
+
 ### 2.8 研究事件、快照和待办 taxonomy
 
 Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPortal 和专业系统为同一事实产生不同名称：

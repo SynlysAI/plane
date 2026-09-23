@@ -6,18 +6,19 @@
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §6–§10                                                                                                                |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)、[`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) |
 | 计划状态 | 待评审                                                                                                                                                                                                 |
-| 目标     | 将 SpecLabOS、PolyAgent 和 SpecAgent 作为受控实验/分析能力接入 Research Chain                                                                                                                          |
+| 目标     | 通过 Synlora 插件将 SpecLabOS、PolyAgent 和 SpecAgent 作为受控实验/分析能力接入 Research Chain                                                                                                         |
 | 不在范围 | 未经契约确认的谱种、HPC 全量接入、ScienceDiscovery 公网多租户化                                                                                                                                        |
 
 ## 1. 阶段目标与出口
 
-Phase 2 不改变 Plane 是科研主数据和权限权威的原则。专业系统负责执行、算法和原始数据；Plane 保存任务引用、状态、回执、版本和审计。
+Phase 2 不改变 Plane 是科研主数据和权限权威的原则。用户侧工具执行统一走 `Plane Node → Plane BFF → Synlora plugin/tool → 垂类系统`；Synlora 负责会话、插件、审批、沙箱和 Job Registry，专业系统负责执行、算法和原始数据；Plane 保存任务引用、状态、回执、版本和审计。
 
 出口条件：
 
 - 至少一种 SpecLabOS 实验能力可以从课题节点受控发起、跟踪、取消和回执。
 - 至少一种 PolyAgent 或 SpecAgent 分析能力可以受控调用并写回结果快照。
 - `job_id`、`run_id`、`trace_id`、`artifact_id` 在跨系统链路中可关联。
+- 垂类调用携带并返回 `research-correlation.v1` 关联字段。
 - 设备/算法失败、超时、重试、取消和重复回调不会破坏 Research Chain。
 - 工具白名单、人工确认、资源配额和调用审计生效。
 
@@ -25,7 +26,7 @@ Phase 2 不改变 Plane 是科研主数据和权限权威的原则。专业系�
 
 ### 2.1 统一运行任务模型
 
-Plane 侧增加外部任务引用或扩展现有外部引用，不复制专业系统内部 Job 表。统一状态：
+Plane 侧增加外部任务引用或扩展现有外部引用，不复制专业系统内部 Job 表，也不重建执行队列。统一状态：
 
 ```text
 QUEUED → RUNNING → COMPLETED
@@ -48,16 +49,16 @@ QUEUED → RUNNING → COMPLETED
 
 ### 2.2 SpecLabOS Experiment Runtime
 
-Plane/PolyAgent 通过 SpecLabOS `ExternalExperimentDispatch` 发起实验：
+Plane BFF 经 Synlora `spec_lab_os` 插件或连接器调用 SpecLabOS `ExternalExperimentDispatch` 发起实验：
 
 1. 课题节点提交实验目标、参数、条件和设备/模板引用。
-2. PolyAgent 或 Plane 生成版本化 dispatch manifest 和 preview digest。
+2. Synlora 插件生成版本化 dispatch manifest 和 preview digest，并注入 `research-correlation.v1`。
 3. 人工确认后调用 SpecLabOS dispatch API。
 4. 读取 SmartAccess run 状态和不可变 RunEvent。
 5. SpecLabOS 将 DataAsset、文件 hash、设备和运行日志作为资产引用。
 6. Plane 写入 Chain Event/Snapshot，原始文件继续留在 MinIO/Mongo 权威系统。
 
-权限边界：Plane 校验课题、节点、工具和设备权限；SpecLabOS 再校验用户/service token 和设备权限；两侧任一拒绝都不能创建运行。
+权限边界：Plane 校验课题、节点和 capability 权限；Synlora 校验插件、工具白名单、审批和沙箱；SpecLabOS 再校验用户/service token 和设备权限；任一拒绝都不能创建运行。
 
 ### 2.3 PolyAgent ResearchEngine
 
@@ -68,6 +69,7 @@ Plane/PolyAgent 通过 SpecLabOS `ExternalExperimentDispatch` 发起实验：
 - GateDecision 映射到 Plane Validator/Human Decision。
 - Experiment Dispatch manifest 保存参数映射、preview digest、selection/provenance、external receipt 或 dispatch error。
 - PolyAgent 原始 Trace 是执行事实源，Plane 保存引用和 ACL 过滤后的投影。
+- 默认调用链为 Plane BFF → Synlora `poly_agent` 插件 → PolyAgent ResearchEngine；Plane 只做策略、状态投影、审批待办和外部引用。
 
 不得在 Plane 重建算法运行时、垂类工具注册表或高分子数据目录。
 
@@ -79,16 +81,16 @@ Plane/PolyAgent 通过 SpecLabOS `ExternalExperimentDispatch` 发起实验：
 - `spec.nmr.reverse`
 - `spec.nmr.search`
 
-插件配置由 Synlora 加密保存，优先使用按用户代签的 AI4MS token。工具调用需要 scope、输入校验、超时、错误归一化和用户确认；Plane 写入工具输入摘要、输出摘要、候选引用、用户确认和结果快照。
+插件配置由 Synlora 加密保存，优先使用按用户代签的 AI4MS token。工具调用需要 scope、输入校验、超时、错误归一化、`research-correlation.v1` 和用户确认；同步工具直接返回结果引用，异步任务进入 Synlora Job Registry。Plane 写入工具输入摘要、输出摘要、候选引用、用户确认和结果快照。
 
 IR/Raman/GPC/LCMS 以及异步 Job Registry 需要独立服务契约、版本和容量验证，不能因 NMR 插件可用而默认纳入。
 
 ### 2.5 工具治理与资源控制
 
-- Plane 提供课题/节点/角色级 capability scope。
-- Synlora/PolyAgent 提供工具白名单、审批和执行沙箱。
-- SpecLabOS 提供设备锁、节点心跳、运行超时和设备级权限。
-- 每个任务记录调用者、审批者、服务身份、工具版本、输入摘要、输出引用和耗时。
+- Plane 提供课题/节点/角色级 capability scope、风险分级、配额和策略版本。
+- Synlora 提供插件注册、工具白名单、审批、执行沙箱和 Job Registry。
+- PolyAgent/SpecAgent/SpecLabOS 提供原生执行权限、设备锁和运行审计。
+- 每个任务记录调用者、审批者、服务身份、工具版本、capability policy 版本、输入摘要、输出引用和耗时。
 - 失败重试使用指数退避和最大次数；不可重试的权限/参数错误直接失败。
 - 实验和分析任务加入每用户、每课题和 Workspace 配额，防止单个课题耗尽资源。
 
@@ -100,7 +102,7 @@ Phase 2 的 Plane Agent 插件和欢迎页统一显示专业组件入口：
 - PolyAgent ResearchEngine、算法运行和 Gate。
 - SpecAgent NMR 工具和后续垂类能力。
 
-入口卡片显示来源系统、健康状态、所需权限、最近运行和深链；不可用时显示 `DEGRADED`，不隐藏已存在的历史结果。专业系统产生的待办通过统一 `source_system/source_id/assignee/deep_link/status` 结构聚合到 Plane，完成动作后回写来源系统或追加本地确认事件。
+入口卡片显示来源系统、健康状态、所需权限、最近运行和深链；不可用时显示 `DEGRADED`，不隐藏已存在的历史结果。专业系统产生的待办通过统一 `source_system/source_id/assignee/deep_link/status` 结构聚合到 Plane；完成动作默认回写 Synlora connector 或追加 Plane 本地确认事件，再投影到 Chain。
 
 ### 2.7 WeKnora 服务状态与自动 ELN 沉淀
 
@@ -115,7 +117,7 @@ Phase 2 只做平台侧能力：
 
 自动 ELN 规则：SpecLabOS/PolyAgent 运行回执必须映射为 Experiment Record 的只读外部段，包括运行 ID、设备/算法、输入摘要、参数版本、DataAsset、结果 hash、状态和时间。用户可以补充科研解释、结论和失败原因，但不能覆盖权威运行字段；修订通过 amendment 产生新版本。
 
-### 2.6 Plane 通用 Agent 插件的工具协作面板
+### 2.8 Plane 通用 Agent 插件的工具协作面板
 
 Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 
@@ -146,8 +148,9 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 ### 任务 2.2：SpecLabOS Dispatch 适配
 
 - 实现模板/参数预览、preview digest 校验和人工确认。
-- 调用 External Experiment Dispatch。
-- 订阅/轮询 SmartAccess Run 和 RunEvent。
+- 新增 Synlora `spec_lab_os` 插件或连接器，调用 External Experiment Dispatch。
+- 注入并回传 `research-correlation.v1`。
+- 由 Synlora connector 订阅/轮询 SmartAccess Run 和 RunEvent，Plane 消费状态投影。
 - 关联 DataAsset、MinIO 文件 hash、设备和实验日志。
 
 依赖：2.1、SpecLabOS API contract。验收：模拟设备和真实受控设备均能完成创建、运行、失败、取消和回执。
@@ -155,7 +158,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 ### 任务 2.3：PolyAgent ResearchEngine 适配
 
 - 建立 ProblemSpec/ResearchRun/StageRun/Gate 与 Chain Node 的映射。
-- 接入 Tool Catalog、审批和 traceability。
+- 扩展 Synlora `poly_agent` 插件，接入 Tool Catalog、审批、Job Registry 和 traceability。
 - 保存 experiment-dispatch manifest、参数绑定和 external receipt。
 
 依赖：2.1、PolyAgent contract。验收：算法或阶段 Gate 通过/拒绝/重试可在 Plane 节点回放。
@@ -164,6 +167,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 
 - 固化插件 manifest、版本、base_url、token reference 和健康检查。
 - 实现 forward/reverse/search 输入校验、超时和错误分类。
+- 注入 `research-correlation.v1`，异步谱图任务进入 Synlora Job Registry。
 - 将输出候选和人工选择写入 Chain Snapshot。
 
 依赖：2.1、独立 SpecAgent 上游契约。验收：正常、参数错误、上游 401、超时和服务不可用均有可解释结果。
@@ -171,9 +175,12 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 ### 任务 2.5：工具治理、配额和审批
 
 - 增加课题/角色 capability scope 和工具白名单。
+- 记录 `policy_id/policy_version`、风险等级和撤权时间。
 - 实现高风险实验/计算的强制确认。
 - 增加用户、课题、Workspace 级并发/额度限制。
 - 建立资源使用统计和超额拒绝事件。
+
+依赖：2.2–2.4。验收：无权限、超额、未确认和沙箱失败均 fail-closed。
 
 ### 任务 2.5a：RAGPortal/WeKnora 状态和自动 ELN 适配
 
@@ -183,8 +190,6 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 - 复用 ExperimentAmendment 处理人工解释修订，禁止覆盖原始运行字段。
 
 依赖：2.1–2.3、RAGPortal 正式接口。验收：RAGPortal/WeKnora 不可用时 ELN 仍可保存；重复上传/引用不产生重复外部关系；无权课题 metadata 不会出站。
-
-依赖：2.2–2.4。验收：无权限、超额、未确认和沙箱失败均 fail-closed。
 
 ### 任务 2.6：前端运行面板和数据快照
 
@@ -210,7 +215,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 
 - SpecLabOS Dispatch、Run、RunEvent、DataAsset。
 - PolyAgent ProblemSpec、ResearchRun、Stage/Gate、Trace。
-- SpecAgent NMR 输入输出和错误分类。
+- SpecAgent NMR 输入输出、错误分类和 `research-correlation.v1` 回传。
 - job 状态合法迁移、幂等、乱序、迟到和取消。
 
 ### 4.2 权限与安全
@@ -219,6 +224,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 - 导师/PI 可审批但不能绕过设备权限。
 - Guest/未绑定账号无法调用、查看结果或下载 DataAsset。
 - token、API Key、原始数据和敏感参数不进入前端日志或 Chain Event。
+- Plane 不直接发起用户侧垂类工具调用；健康检查、管理配置和状态投影除外。
 - 工具输入、文件和外部 URL 经过大小、类型、白名单和沙箱限制。
 - RAGPortal 入库状态、ELN 自动回执和 DataAsset 引用均执行课题 ACL；出站 metadata 不含未授权正文或其他课题内容。
 
@@ -233,6 +239,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 7. 从 Agent 插件发起高风险实验，确认前不创建上游 run；确认后重复点击只生成一个 job；取消请求和最终运行状态分别展示。
 8. SpecLabOS/PolyAgent/SpecAgent 任一服务不可用时，入口和历史快照可见，新的高风险操作被阻断并进入 degraded 待办。
 9. SpecLabOS 运行完成后自动生成 ELN 外部段和数据快照；用户补充结论后生成 amendment，不覆盖设备运行字段；RAGPortal/WeKnora 解析延迟时主流程不中断。
+10. PolyAgent/SpecAgent 回执返回 `plane_workspace_id`、`research_project_id`、`chain_node_id`、`context_id`、`synlora_run_id` 和 `trace_id`，Chain 回放可跳转原始 run/artifact。
 
 ### 4.4 性能与容量
 
@@ -258,10 +265,14 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 | ------------------------------------------- | ----------------------------------------- |
 | `job_id`                                    | Plane 生成的全局任务 ID                   |
 | `chain_id` / `node_id`                      | Research Chain 归属                       |
+| `context_id` / `trace_id`                   | Research Context 与 Synlora Trace 关联    |
+| `synlora_session_id` / `synlora_run_id`     | Synlora 会话与运行关联                    |
+| `synlora_job_id`                            | Synlora Job Registry 任务 ID              |
 | `source_system`                             | `SPECLABOS` / `POLY_AGENT` / `SPEC_AGENT` |
 | `operation`                                 | 能力或 API 操作名                         |
 | `run_id` / `external_id`                    | 上游运行和任务 ID                         |
 | `manifest_version` / `input_digest`         | 输入契约与摘要                            |
+| `policy_id` / `policy_version`              | capability policy 命中版本                |
 | `status`                                    | 统一 Job 状态                             |
 | `attempt` / `max_attempts`                  | 重试控制                                  |
 | `artifact_refs`                             | DataAsset、文件、报告或结果引用           |
@@ -269,11 +280,11 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 | `error_code` / `error_summary`              | 脱敏错误信息                              |
 | `created_at` / `started_at` / `finished_at` | 时间字段                                  |
 
-唯一约束建议为 `source_system + external_id` 和 `job_id + event_id`；上游 ID 不存在时使用 Plane request id 和 manifest digest 防止重复提交。
+唯一约束建议为 `source_system + external_id`、`synlora_job_id` 和 `job_id + event_id`；上游 ID 不存在时使用 Plane request id 和 manifest digest 防止重复提交。
 
 ### 6.2 SpecLabOS 调用契约
 
-Plane/PolyAgent 发起前先生成：
+Synlora 插件正式调用前先生成：
 
 ```json
 {
@@ -284,8 +295,12 @@ Plane/PolyAgent 发起前先生成：
   "conditions": { "parameters": {}, "metadata": {} },
   "optimization_context": {},
   "extra_metadata": {
+    "plane_workspace_id": "...",
     "research_project_id": "...",
     "chain_node_id": "...",
+    "context_id": "...",
+    "synlora_run_id": "run_...",
+    "trace_id": "...",
     "manifest_version": "experiment-dispatch.v1",
     "preview_digest": "sha256:..."
   }
@@ -306,7 +321,7 @@ Plane/PolyAgent 发起前先生成：
 | Artifact                 | algorithm artifact/Data Catalog object | 只引用外部资产和 hash               |
 | Agent Trace              | assistant traceability                 | 保存 trace ID 和事件游标            |
 
-PolyAgent 的原始运行和审计是执行事实源；Plane 只能保存投影和权限过滤后的可见信息。
+PolyAgent 的原始运行和审计是执行事实源；Synlora 保存插件调用与 Job 关联，Plane 只能保存投影和权限过滤后的可见信息。
 
 ### 6.4 SpecAgent NMR 契约
 
@@ -318,9 +333,11 @@ POST {base_url}/api/v1/nmrserver/reverse
 POST {base_url}/api/v1/nmrserver/search
 ```
 
-统一结果为 `code/message/data.items`，Plane 不保存完整敏感输入，保存输入摘要、输出候选摘要、工具版本、用户确认和结果 hash。错误分类：`timeout`、`connection_error`、`unauthorized`、`http_error`、`upstream_error`。
+统一结果为 `code/message/data.items`，并回传 `research-correlation.v1`。Plane 不保存完整敏感输入，保存输入摘要、输出候选摘要、工具版本、用户确认和结果 hash。错误分类：`timeout`、`connection_error`、`unauthorized`、`http_error`、`upstream_error`。
 
 ### 6.5 状态和回调处理
+
+默认回调链路为垂类系统 → Synlora connector → Synlora Job Registry/event → Plane projection。确需直达 Plane 的管理型回调，必须携带 scoped service token 和 correlation ID，且不能绕过 Synlora 的执行审批记录。
 
 回调处理顺序：验签/鉴权 → 校验 schema version → 校验 job scope → 去重 → 校验状态迁移 → 写 Job 状态 → 写 Chain Event → 更新 Snapshot projection → 返回 ack。
 
@@ -341,6 +358,7 @@ apps/api/plane/db/migrations/01xx_research_external_jobs.py
 apps/api/plane/research/services/job_state_machine.py
 apps/api/plane/research/services/speclabos.py
 apps/api/plane/research/services/polyagent.py
+apps/api/plane/research/services/synlora_jobs.py
 apps/api/plane/research/services/job_callbacks.py
 apps/api/plane/research/views/jobs.py
 apps/api/plane/research/serializers/jobs.py
@@ -350,9 +368,9 @@ apps/api/plane/tests/unit/research/test_job_state_machine.py
 
 ### 7.2 Synlora 与专业服务
 
-- Synlora：`apps/web/backend/catalog/plugins/spec_agent/`、插件工具测试、能力策略和 trace hook。
-- PolyAgent：新增 Plane adapter/client 和 contract fixture，不复制其 ResearchEngine 实现。
-- SpecLabOS：新增 external dispatch/run/data asset contract fixture；真实设备测试使用 `runtime.sim_mode` 或隔离节点。
+- Synlora：扩展 `apps/web/backend/catalog/plugins/poly_agent/`、`spec_agent/`，新增 `spec_lab_os/` 连接器、插件工具测试、能力策略和 trace hook。
+- PolyAgent：新增 Plane correlation layer 和 contract fixture，不复制其 ResearchEngine 实现；用户侧调用经 Synlora 插件。
+- SpecLabOS：新增 external dispatch/run/data asset contract fixture；真实设备测试使用 `runtime.sim_mode` 或隔离节点；用户侧调用经 Synlora 连接器。
 
 ### 7.3 前端
 
@@ -386,23 +404,25 @@ pnpm build
 
 ## 9. 任务拆分与联调顺序
 
-| 顺序 | 任务              | 依赖                 | 通过条件                              |
-| ---- | ----------------- | -------------------- | ------------------------------------- |
-| 1    | Job schema/状态机 | Phase 0 契约         | 状态迁移和幂等测试通过                |
-| 2    | SpecLabOS adapter | 1、SpecLabOS fixture | dispatch/run/event/data contract 通过 |
-| 3    | PolyAgent adapter | 1、PolyAgent fixture | ResearchRun/Gate/Trace 可回放         |
-| 4    | SpecAgent 插件    | 1、上游 NMR contract | 三个接口正常和错误场景通过            |
-| 5    | Tool scope/配额   | 2–4                  | 未授权/超额 fail-closed               |
-| 6    | Job 前端和通知    | 1–5                  | 状态刷新、取消、重试和降级可用        |
-| 7    | 故障演练/灰度     | 全部                 | runbook 和补偿流程通过                |
+| 顺序 | 任务                        | 依赖                 | 通过条件                                          |
+| ---- | --------------------------- | -------------------- | ------------------------------------------------- |
+| 1    | Job schema/状态机           | Phase 0 契约         | 状态迁移和幂等测试通过                            |
+| 2    | Synlora SpecLabOS connector | 1、SpecLabOS fixture | dispatch/run/event/data/correlation contract 通过 |
+| 3    | Synlora PolyAgent 插件      | 1、PolyAgent fixture | ResearchRun/Gate/Trace/correlation 可回放         |
+| 4    | SpecAgent 插件              | 1、上游 NMR contract | 三个接口正常和错误场景通过                        |
+| 5    | Tool scope/配额             | 2–4                  | 未授权/超额 fail-closed                           |
+| 6    | Job 前端和通知              | 1–5                  | 状态刷新、取消、重试和降级可用                    |
+| 7    | 故障演练/灰度               | 全部                 | runbook 和补偿流程通过                            |
 
 未完成真实服务契约或安全评审时，只能使用模拟运行，不得开放真实设备或高成本算法。
 
 ## 10. 通用 Agent 插件 Phase 2 完成清单
 
 - [ ] 工具目录按研究课题和角色过滤，并显示 capability scope。
+- [ ] 专业工具统一由 Synlora 插件执行，Plane 仅展示策略、状态和投影。
 - [ ] 实验/分析工具卡展示参数、版本、风险、审批和来源。
 - [ ] preview digest 与正式 dispatch 一致，重复确认不重复创建 job。
 - [ ] Job 面板支持状态、RunEvent、重试、取消、失败原因和权威系统链接。
 - [ ] 结果确认可保存为分析结果、实验关联、Artifact 引用或退回修改。
 - [ ] 插件 Trace 与 `job_id`、`run_id`、`artifact_id`、Chain Snapshot 完整关联。
+- [ ] PolyAgent/SpecAgent/SpecLabOS 回执保留 correlation ID，并可在 Chain 回放中跳转原始 run/artifact。

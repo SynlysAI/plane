@@ -35,6 +35,8 @@ Phase 3 的重点是把前两期的过程记录和专业能力变成可治理、
 
 治理规则由 Workspace Admin 配置，课题组主 PI/导师执行审批；规则命中时 Agent 工具和外部导出必须进入 `BLOCKED_APPROVAL`。
 
+治理策略统一作用于 Plane capability broker。每次自动装配、工具放行、阻断和审批都必须记录 `policy_id`、`policy_version`、命中规则、输入摘要和决策时间；策略发布、回滚和撤回本身进入审计。
+
 ### 2.2 审计、证据和可复现链
 
 统一审计包含：
@@ -74,6 +76,7 @@ ScienceDiscovery 当前为单用户/可信本地产品，Phase 3 只通过受治
 - 配置用户、课题、Workspace 级并发、token、工具调用、RAG 查询和存储配额。
 - 外部调用设置超时、熔断、重试、限流和死信队列。
 - Trace/事件冷热分层，保留可配置的原始事件期和长期摘要。
+- 多实例、队列和缓存必须保留 delegated identity、`agent-context.v2`、capability scope、session 归属和 event cursor；节点迁移或重启后不能丢失、重放或串用授权。
 
 ### 2.5 社会用户和租户开放前置
 
@@ -91,6 +94,7 @@ Phase 3 将治理能力直接呈现在 Plane 插件中，避免用户在 Agent�
 
 - 顶部 scope banner：当前 Workspace、课题、节点、数据等级、伦理状态和 Context 有效期。
 - 工具授权提示：当前用户可用工具、需要导师/PI 审批的工具、剩余额度和阻断原因。
+- 策略提示：显示当前 capability policy 版本、命中规则和最近生效时间。
 - 风险确认抽屉：显示数据外发、实验执行、外部发布或高成本计算的影响、审批人和有效期。
 - 审计入口：从消息、工具卡、Job 和产物直接打开对应 Trace Event、Approval、IntegrationCallLog 和 Chain Snapshot。
 - 用量面板：按用户/课题/Workspace 显示 Agent run、RAG 查询、工具调用、实验任务、存储和配额。
@@ -115,7 +119,8 @@ Phase 3 才开放写作 Agent、评审 Agent 和项目层治理能力：
 
 - 增加伦理、数据分级、IP、可复现和 retention 字段/关联表。
 - 实现规则配置、命中、审批、过期和撤回。
-- 将治理 gate 接入 Agent 工具、外部导出、实验和社会用户操作。
+- 将治理 gate 接入 Plane capability broker、Agent 自动装配、Synlora 工具执行、外部导出、实验和社会用户操作。
+- 为策略命中、阻断、豁免和回滚保存 `policy_id/policy_version` 和审计引用。
 - 增加里程碑、预算、风险、协作、结题和转化对象的策略字段与审批关联。
 
 依赖：Phase 2 任务 2.5。验收：受限课题的高风险工具和导出在未审批时 fail-closed。
@@ -159,6 +164,7 @@ Phase 3 才开放写作 Agent、评审 Agent 和项目层治理能力：
 - 迁移 run/session/event 到持久队列和可恢复状态。
 - 实现 SSE 游标、多实例粘性/无粘性兼容、死信和补偿。
 - 增加用户/课题/Workspace 配额、熔断、限流和缓存隔离。
+- 保留 delegated identity、capability scope 和 Synlora event cursor 的跨实例语义。
 - 同步扩展 Plane 通用 Agent 插件的 scope banner、工具授权、风险确认、配额、审计跳转和策略阻断提示。
 
 依赖：Phase 2 任务 2.1、3.1。验收：实例重启、网络抖动和队列峰值下事件不丢失、不串租户。
@@ -187,10 +193,12 @@ Phase 3 才开放写作 Agent、评审 Agent 和项目层治理能力：
 - 敏感数据只能在授权课题、工具和 Worker 中流转。
 - IP 限制阻止未经批准的外部导出。
 - 解绑、禁用和删除后，Context、Trace、文件、Worker 和缓存立即失效。
+- 禁用插件、撤回工具授权、更新 capability policy 或撤销 Context 后，下一轮 Agent run 立即 fail closed。
 
 ### 4.2 可复现与审计
 
 - 任意正式快照可以追溯到输入、Prompt/模型、工具、代码、环境、seed、artifact、验证和人工决策。
+- 审计导出可同时关联 Plane Chain Event、Synlora Trace、垂类 run/artifact、AccountLink、capability policy 版本和审批记录。
 - 审计导出按权限脱敏，能验证 hash，不能恢复 secrets。
 - retention 执行有预览、批准、执行和不可变审计记录。
 - 写作/评审 Agent 的输入快照、建议、引用、人工修改和采纳状态完整可回放；正式评审决定只由授权人写入。
@@ -224,6 +232,7 @@ Phase 3 才开放写作 Agent、评审 Agent 和项目层治理能力：
 - 工具、模型、RAG、实验和存储用量与后端配额一致，刷新和多标签页不会重复计量。
 - 从插件消息、工具卡、Job 和产物可以跳转到最小权限的审计详情。
 - 管理员关闭工具或插件后，已有页面立即进入只读/阻断状态，不能继续提交新 run。
+- 解绑 Synlora AccountLink、撤销 Context、禁用插件或撤回 capability 后，delegated token 和已有 session 均不能继续发起下一轮 run。
 
 项目治理验收还必须确认：里程碑、预算、风险和协作待办按课题 ACL 隔离；结题/转化节点只有在成果、可复现、IP 和伦理 gate 都满足或经审批豁免时才能完成。
 
@@ -402,6 +411,8 @@ pnpm build
 
 - [ ] scope banner、数据等级、伦理状态和 Context 有效期可见。
 - [ ] 工具授权、审批、配额、阻断原因和策略版本可解释。
+- [ ] 策略命中记录包含 `policy_id/policy_version`，并能回放发布、变更和撤回链路。
 - [ ] 高风险操作确认抽屉和管理员策略配置完成。
 - [ ] 消息/工具/Job/产物到 Trace、Approval、IntegrationCallLog 和 Snapshot 的审计跳转可用。
 - [ ] 禁用工具、撤权、解绑和租户隔离在插件中即时生效。
+- [ ] Synlora 多实例恢复后，delegated identity、capability scope 和 event cursor 不丢失、不重放、不串用。
