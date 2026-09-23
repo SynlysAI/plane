@@ -76,7 +76,7 @@ AUTH_SECRET=test-secret .venv/bin/pytest -q \
   tests/test_session_runtime.py
 ```
 
-完整 Synlora 后端套件在本环境执行结果为 605 passed / 185 skipped / 1 failed；唯一失败项依赖 Docker SDK 与 `synlora-sandbox` 镜像，属于宿主沙箱环境不可用，Phase 1 合同测试全部通过。
+完整 Synlora 后端套件在本环境执行结果为 605 passed / 186 skipped；Docker 专属沙箱提示词断言在 SDK/daemon 不可用时跳过，环境可用时仍执行。
 
 ## 3. 灰度步骤
 
