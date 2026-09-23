@@ -179,6 +179,47 @@ export type TResearchChainNode = {
   updated_at: string;
 };
 
+export type TResearchChainNodeAction = "START" | "SUBMIT_REVIEW" | "APPROVE" | "RETURN" | "FAIL" | "ARCHIVE";
+
+export type TResearchChainEvent = {
+  schema_version: "research-event.v1";
+  id?: string;
+  event_id: string;
+  node: string;
+  actor: string | null;
+  actor_type: string;
+  source_system: string;
+  request_id: string;
+  trace_id: string;
+  event_type: string;
+  occurred_at: string;
+  refs: Array<Record<string, unknown>>;
+  summary: string;
+  content_hash: string;
+};
+
+export type TResearchChainSnapshot = {
+  schema_version: "research-snapshot.v1";
+  snapshot_id: string;
+  node: string;
+  version: number;
+  source_versions: Array<Record<string, unknown>>;
+  resources: Array<Record<string, unknown>>;
+  event_range: { first: string; last: string };
+  summary: string;
+  created_by: string | null;
+  content_hash: string;
+  immutable: boolean;
+  created_at: string;
+};
+
+export type TResearchChainMember = {
+  user_id: string;
+  display_name: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  is_owner: boolean;
+};
+
 export type TAgentPluginManifest = {
   schema_version: "agent-plugin.v1";
   plugin_id: string;
