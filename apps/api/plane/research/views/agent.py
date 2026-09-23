@@ -19,7 +19,12 @@ from plane.research.services.context_tokens import issue_context_token
 from plane.research.services.idempotency import payload_hash, request_id_from
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_PROJECTS
-from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
+from plane.research.utils.errors import (
+    ResearchErrorCode,
+    research_conflict,
+    research_error,
+    research_not_found,
+)
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import can_read_project_research_metadata
 
@@ -48,6 +53,20 @@ AGENT_MANIFEST = {
     ],
     "transport": {"events": "json_poll", "streaming": "reserved", "iframe": "forbidden"},
 }
+
+AGENT_CHAIN_EVENT_TYPES = frozenset({
+    "RESEARCH_NOTE",
+    "COMMUNICATION",
+    "AI_ACTION",
+    "TOOL_CALL",
+    "VALIDATION",
+    "HUMAN_DECISION",
+    "APPROVAL",
+    "DATA_CHANGE",
+    "DEGRADED",
+})
+AGENT_CHAIN_EVENT_WRITE_ACTION = "agent.chain_event.write"
+AGENT_CHAIN_EVENT_RESOURCE_TYPE = "research_chain_event"
 
 
 def _agent_enabled(workspace):
@@ -87,7 +106,33 @@ def _session_visible(workspace, user, session):
     )
 
 
-def _load_session(request, workspace, session_id):
+def _guard_session_context(session, *, allow_inactive_context=False):
+    """Validate the Context grant attached to an already loaded session.
+
+    Args:
+        session: The visible Agent session.
+        allow_inactive_context: Whether this is a lifecycle operation that may
+            close a session after its Context has expired or been revoked.
+
+    Returns:
+        ``(session, None)`` when allowed; otherwise ``(None, error_response)``.
+    """
+    grant = session.context_grant
+    inactive = grant.revoked_at is not None or grant.expires_at <= timezone.now()
+    if inactive and not allow_inactive_context:
+        if session.status != ResearchAgentSession.Status.CLOSED:
+            session.status = ResearchAgentSession.Status.DEGRADED
+            session.last_error = "context_expired"
+            session.save(update_fields=["status", "last_error", "updated_at"])
+        return None, research_error(
+            ResearchErrorCode.CONTEXT_TOKEN_INVALID,
+            "Agent session context is expired or revoked.",
+            status.HTTP_403_FORBIDDEN,
+        )
+    return session, None
+
+
+def _load_session(request, workspace, session_id, *, allow_inactive_context=False):
     try:
         session_id = UUID(str(session_id))
     except (TypeError, ValueError):
@@ -105,18 +150,29 @@ def _load_session(request, workspace, session_id):
     )
     if session is None or not _session_visible(workspace, request.user, session):
         return None, research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent session not found.")
-    grant = session.context_grant
-    if grant.revoked_at is not None or grant.expires_at <= timezone.now():
-        if session.status != ResearchAgentSession.Status.CLOSED:
-            session.status = ResearchAgentSession.Status.DEGRADED
-            session.last_error = "context_expired"
-            session.save(update_fields=["status", "last_error", "updated_at"])
-        return None, research_error(
-            ResearchErrorCode.CONTEXT_TOKEN_INVALID,
-            "Agent session context is expired or revoked.",
-            status.HTTP_403_FORBIDDEN,
+    return _guard_session_context(session, allow_inactive_context=allow_inactive_context)
+
+
+def _load_session_by_run(request, workspace, run_id, *, allow_inactive_context=False):
+    """Load a visible Agent session by its stable run ID."""
+    try:
+        run_id = UUID(str(run_id))
+    except (TypeError, ValueError):
+        return None, research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent run not found.")
+    session = (
+        ResearchAgentSession.objects.select_related(
+            "workspace",
+            "user",
+            "project__research_profile",
+            "chain_node__chain",
+            "context_grant",
         )
-    return session, None
+        .filter(run_id=run_id, workspace=workspace, deleted_at__isnull=True)
+        .first()
+    )
+    if session is None or not _session_visible(workspace, request.user, session):
+        return None, research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent run not found.")
+    return _guard_session_context(session, allow_inactive_context=allow_inactive_context)
 
 
 def _append_event(session, event_type, payload, request_id):
@@ -244,9 +300,16 @@ class ResearchAgentSessionCloseEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        session, error = _load_session(request, workspace, session_id)
+        session, error = _load_session(
+            request,
+            workspace,
+            session_id,
+            allow_inactive_context=True,
+        )
         if error:
             return error
+        if session.status == ResearchAgentSession.Status.CLOSED:
+            return Response(ResearchAgentSessionSerializer(session).data)
         session.status = ResearchAgentSession.Status.CLOSED
         session.last_error = ""
         session.updated_by = request.user
@@ -286,7 +349,37 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
         if not request_id or not content:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "request_id and content are required.")
         content_hash = payload_hash({"content": content})
-        _append_event(session, "COMMUNICATION", {"direction": "user", "content_hash": content_hash, "length": len(content)}, request_id)
+
+        existing = ResearchAgentRunEvent.objects.select_related("session").filter(request_id=request_id).first()
+        if existing is not None:
+            payload_matches = (
+                existing.session_id == session.pk
+                and existing.event_type == "COMMUNICATION"
+                and existing.payload.get("content_hash") == content_hash
+                and existing.payload.get("length") == len(content)
+            )
+            if not payload_matches:
+                return research_conflict(
+                    ResearchErrorCode.IDEMPOTENCY_CONFLICT,
+                    "request_id was already used with another payload.",
+                )
+            degraded = ResearchAgentRunEvent.objects.filter(request_id=f"degraded:{request_id}").first()
+            if degraded is not None:
+                return Response(
+                    {
+                        "session": ResearchAgentSessionSerializer(session).data,
+                        "events": ResearchAgentRunEventSerializer([degraded], many=True).data,
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+        else:
+            _append_event(
+                session,
+                "COMMUNICATION",
+                {"direction": "user", "content_hash": content_hash, "length": len(content)},
+                request_id,
+            )
+
         session.status = ResearchAgentSession.Status.DEGRADED
         session.last_error = ResearchErrorCode.AGENT_UPSTREAM_NOT_CONFIGURED
         session.updated_by = request.user
@@ -322,13 +415,9 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        session = ResearchAgentSession.objects.filter(
-            run_id=run_id,
-            workspace=workspace,
-            deleted_at__isnull=True,
-        ).first()
-        if session is None or not _session_visible(workspace, request.user, session):
-            return research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent run not found.")
+        session, error = _load_session_by_run(request, workspace, run_id)
+        if error:
+            return error
         try:
             after_seq = int(request.GET.get("after_seq", 0))
         except (TypeError, ValueError):
@@ -352,13 +441,14 @@ class ResearchAgentRunCancelEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        session = ResearchAgentSession.objects.filter(
-            run_id=run_id,
-            workspace=workspace,
-            deleted_at__isnull=True,
-        ).first()
-        if session is None or not _session_visible(workspace, request.user, session):
-            return research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent run not found.")
+        session, error = _load_session_by_run(
+            request,
+            workspace,
+            run_id,
+            allow_inactive_context=True,
+        )
+        if error:
+            return error
         if session.status != ResearchAgentSession.Status.CLOSED:
             session.status = ResearchAgentSession.Status.CLOSED
             session.last_error = ""
@@ -394,19 +484,41 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        session = ResearchAgentSession.objects.filter(run_id=run_id, workspace=workspace).first()
-        if session is None or not _session_visible(workspace, request.user, session):
-            return research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent run not found.")
+        session, error = _load_session_by_run(request, workspace, run_id)
+        if error:
+            return error
         decision = str(request.data.get("decision") or "").upper()
         if decision not in ("APPROVED", "REJECTED"):
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "decision must be APPROVED or REJECTED.")
         request_id = request_id_from(request)
         if not request_id:
             return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id is required.")
+
+        tool_call_id = str(request.data.get("tool_call_id") or "")
+        existing = ResearchAgentRunEvent.objects.select_related("session").filter(request_id=request_id).first()
+        if existing is not None:
+            payload_matches = (
+                existing.session_id == session.pk
+                and existing.event_type == "HUMAN_DECISION"
+                and existing.payload.get("decision") == decision
+                and existing.payload.get("tool_call_id") == tool_call_id
+            )
+            if not payload_matches:
+                return research_conflict(
+                    ResearchErrorCode.IDEMPOTENCY_CONFLICT,
+                    "request_id was already used with another payload.",
+                )
+            return Response(
+                {
+                    "session": ResearchAgentSessionSerializer(session).data,
+                    "event": ResearchAgentRunEventSerializer(existing).data,
+                }
+            )
+
         event = _append_event(
             session,
             "HUMAN_DECISION",
-            {"decision": decision, "tool_call_id": str(request.data.get("tool_call_id") or "")},
+            {"decision": decision, "tool_call_id": tool_call_id},
             request_id,
         )
         session.status = ResearchAgentSession.Status.READY if decision == "APPROVED" else ResearchAgentSession.Status.ERROR
@@ -479,8 +591,14 @@ class ResearchAgentChainEventEndpoint(AgentPluginMixin):
             return error
         request_id = request_id_from(request)
         event_id = str(request.data.get("event_id") or "").strip()
+        event_type = str(request.data.get("event_type") or "AI_ACTION").strip().upper()
         if not request_id or not event_id:
             return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "event_id and request_id are required.")
+        if event_type not in AGENT_CHAIN_EVENT_TYPES:
+            return research_error(
+                ResearchErrorCode.AGENT_SCOPE_INVALID,
+                "event_type is not a Phase 0 research event type.",
+            )
         node = _visible_node(workspace, request.user, request.data.get("chain_node_id"))
         if node is None:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "chain_node_id is invalid or not accessible.", status.HTTP_403_FORBIDDEN)
@@ -494,10 +612,24 @@ class ResearchAgentChainEventEndpoint(AgentPluginMixin):
             actor=request.user,
             actor_type="USER",
             source_system="SYNLORA",
-            event_type=str(request.data.get("event_type") or "AI_ACTION").upper(),
+            event_type=event_type,
             occurred_at=timezone.now(),
             refs=request.data.get("refs") or [],
             summary=str(request.data.get("summary") or ""),
             content_hash=payload_hash(request.data),
+        )
+        record_audit_event(
+            workspace=workspace,
+            action=AGENT_CHAIN_EVENT_WRITE_ACTION,
+            resource_type=AGENT_CHAIN_EVENT_RESOURCE_TYPE,
+            resource_id=event.id,
+            actor=request.user,
+            metadata={
+                "event_id": event.event_id,
+                "node_id": str(node.id),
+                "event_type": event_type,
+                "request_id": request_id,
+            },
+            request=request,
         )
         return Response({"event_id": event.event_id, "schema_version": "research-event.v1"}, status=status.HTTP_201_CREATED)

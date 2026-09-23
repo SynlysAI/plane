@@ -4,17 +4,20 @@ from hashlib import sha256
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
     Project,
+    ResearchAgentRunEvent,
+    ResearchAuditEvent,
     ResearchChain,
+    ResearchChainEvent,
     ResearchChainNode,
     ResearchContextGrant,
     ResearchProjectProfile,
     WorkspaceResearchSetting,
 )
-from plane.research.services.idempotency import payload_hash
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
 pytestmark = pytest.mark.contract
@@ -78,6 +81,15 @@ def env(db, settings):
 
 def agent_url(env, suffix=""):
     return f"/api/research/workspaces/{env['workspace'].slug}/agent/{suffix}"
+
+
+def _create_agent_session(env):
+    """Create one scoped Agent session for lifecycle and replay tests."""
+    return env["client"].post(
+        agent_url(env, "sessions/"),
+        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+        format="json",
+    ).json()
 
 
 def test_agent_manifest_is_versioned_and_forbids_iframes(env):
@@ -158,7 +170,7 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
         "summary": "Agent action",
     }
     event = env["client"].post(agent_url(env, "chain-events/"), event_request, format="json")
-    assert event.status_code == 201
+    assert event.status_code == 201, event.json()
     replay_event = env["client"].post(agent_url(env, "chain-events/"), event_request, format="json")
     assert replay_event.status_code == 200
 
@@ -191,6 +203,65 @@ def test_agent_run_cancel_revokes_streaming_scope(env):
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "CLOSED"
     assert not ResearchContextGrant.objects.filter(context_id=session["context_id"], revoked_at__isnull=True).exists()
+
+
+def test_revoked_context_blocks_reads_and_allows_safe_close(env):
+    """Revoked Context blocks Trace/approval writes but keeps close idempotent."""
+    session = _create_agent_session(env)
+    ResearchContextGrant.objects.filter(context_id=session["context_id"]).update(revoked_at=timezone.now())
+
+    assert env["client"].get(agent_url(env, f"runs/{session['run_id']}/events/")).status_code == 403
+    approval = env["client"].post(
+        agent_url(env, f"runs/{session['run_id']}/approvals/"),
+        {"request_id": f"approval-{uuid4().hex}", "decision": "APPROVED"},
+        format="json",
+    )
+    assert approval.status_code == 403
+
+    closed = env["client"].post(agent_url(env, f"sessions/{session['session_id']}/close/"), format="json")
+    assert closed.status_code == 200
+    assert closed.json()["status"] == "CLOSED"
+    replay = env["client"].post(agent_url(env, f"sessions/{session['session_id']}/close/"), format="json")
+    assert replay.status_code == 200
+    assert replay.json()["status"] == "CLOSED"
+
+
+def test_agent_message_replay_is_idempotent_and_rejects_payload_change(env):
+    """A retried fail-closed message does not duplicate events or accept a new payload."""
+    session = _create_agent_session(env)
+    payload = {"request_id": f"message-{uuid4().hex}", "content": "research question"}
+    first = env["client"].post(agent_url(env, f"sessions/{session['session_id']}/messages/"), payload, format="json")
+    first_event_count = ResearchAgentRunEvent.objects.filter(run_id=session["run_id"]).count()
+    replay = env["client"].post(agent_url(env, f"sessions/{session['session_id']}/messages/"), payload, format="json")
+
+    assert first.status_code == 503
+    assert replay.status_code == 503
+    assert replay.json()["session"]["session_id"] == session["session_id"]
+    event_count = ResearchAgentRunEvent.objects.filter(run_id=session["run_id"]).count()
+    assert event_count == first_event_count
+
+    changed = dict(payload, content="different research question")
+    conflict = env["client"].post(agent_url(env, f"sessions/{session['session_id']}/messages/"), changed, format="json")
+    assert conflict.status_code == 409
+    assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"]).count() == event_count
+
+
+def test_agent_approval_replay_is_idempotent_and_rejects_payload_change(env):
+    """A retried approval returns the same decision and rejects a changed payload."""
+    session = _create_agent_session(env)
+    payload = {"request_id": f"approval-{uuid4().hex}", "decision": "APPROVED", "tool_call_id": "tool-1"}
+    first = env["client"].post(agent_url(env, f"runs/{session['run_id']}/approvals/"), payload, format="json")
+    replay = env["client"].post(agent_url(env, f"runs/{session['run_id']}/approvals/"), payload, format="json")
+
+    assert first.status_code == 200
+    assert replay.status_code == 200
+    assert replay.json()["event"]["request_id"] == payload["request_id"]
+    assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"], event_type="HUMAN_DECISION").count() == 1
+
+    changed = dict(payload, decision="REJECTED")
+    conflict = env["client"].post(agent_url(env, f"runs/{session['run_id']}/approvals/"), changed, format="json")
+    assert conflict.status_code == 409
+    assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"], event_type="HUMAN_DECISION").count() == 1
 
 
 def test_agent_events_are_isolated_between_old_and_new_sessions(env):
@@ -248,3 +319,40 @@ def test_agent_manifest_and_session_fail_when_switch_is_off(env):
         {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
         format="json",
     ).status_code == 403
+
+
+def test_agent_chain_event_taxonomy_and_audit_are_enforced(env):
+    """Only Phase 0 taxonomy events enter Chain and every write is audited."""
+    invalid = env["client"].post(
+        agent_url(env, "chain-events/"),
+        {
+            "request_id": f"event-{uuid4().hex}",
+            "event_id": f"event-{uuid4().hex}",
+            "chain_node_id": str(env["node"].id),
+            "event_type": "NOT_A_PHASE_ZERO_EVENT",
+            "summary": "invalid",
+        },
+        format="json",
+    )
+    assert invalid.status_code == 400
+    assert not ResearchChainEvent.objects.filter(event_id=invalid.json().get("event_id", "")).exists()
+
+    event_id = f"event-{uuid4().hex}"
+    valid = env["client"].post(
+        agent_url(env, "chain-events/"),
+        {
+            "request_id": f"event-{uuid4().hex}",
+            "event_id": event_id,
+            "chain_node_id": str(env["node"].id),
+            "event_type": "TOOL_CALL",
+            "summary": "valid",
+        },
+        format="json",
+    )
+    assert valid.status_code == 201, valid.json()
+    chain_event = ResearchChainEvent.objects.get(event_id=event_id)
+    assert ResearchAuditEvent.objects.filter(
+        workspace=env["workspace"],
+        action="agent.chain_event.write",
+        resource_id=chain_event.id,
+    ).exists()
