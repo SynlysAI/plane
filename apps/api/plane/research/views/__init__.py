@@ -184,7 +184,9 @@ from .chain_foundation import (
     ResearchChainListCreateEndpoint,
     ResearchChainMemberDetailEndpoint,
     ResearchChainMemberListCreateEndpoint,
+    ResearchChainNodeDetailEndpoint,
     ResearchChainNodeListCreateEndpoint,
+    ResearchChainNodeTransitionEndpoint,
     ResearchChainRestoreEndpoint,
     ResearchChainSnapshotCreateEndpoint,
 )
@@ -261,6 +263,8 @@ __all__ = [
     "ResearchChainMemberListCreateEndpoint",
     "ResearchChainMemberDetailEndpoint",
     "ResearchChainNodeListCreateEndpoint",
+    "ResearchChainNodeDetailEndpoint",
+    "ResearchChainNodeTransitionEndpoint",
     "ResearchChainEventListCreateEndpoint",
     "ResearchChainSnapshotCreateEndpoint",
     "ResearchDeviceExecutionSearchEndpoint",

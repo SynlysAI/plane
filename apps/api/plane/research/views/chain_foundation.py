@@ -3,7 +3,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import Max, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -24,6 +25,7 @@ from plane.research.serializers import (
     ResearchChainSnapshotSerializer,
 )
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
+from plane.research.services.chain_state import normalize_action, resolve_transition
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
@@ -139,6 +141,36 @@ def _chain_members(chain):
             for member in collaborators
         ],
     ]
+
+
+def _node_operator(workspace, user, node):
+    """Return whether the caller can run a node lifecycle action."""
+    if _chain_manager(workspace, user, node.chain) or node.assignee_id == user.id:
+        return True
+    return ProjectMember.objects.filter(
+        project_id=node.chain.project_id,
+        member=user,
+        role__gte=15,
+        is_active=True,
+        deleted_at__isnull=True,
+    ).exists()
+
+
+def _event_id_for_request(request_id, kind):
+    """Build a deterministic event id from a bounded request id."""
+    return payload_hash({"request_id": request_id, "kind": kind})
+
+
+def _event_replay(request_id, event_id, digest, node_id=None):
+    """Return an existing immutable event or a conflict response."""
+    existing = ResearchChainEvent.objects.filter(Q(request_id=request_id) | Q(event_id=event_id)).first()
+    if existing is None:
+        return None
+    if node_id is not None and str(existing.node_id) != str(node_id):
+        return conflict_response()
+    if existing.content_hash != digest:
+        return conflict_response()
+    return existing
 
 
 class ResearchChainListCreateEndpoint(ResearchAPIView):
@@ -510,22 +542,166 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
         if lifecycle_error:
             return lifecycle_error
         parent = None
+        try:
+            loop_iteration = max(0, int(request.data.get("loop_iteration") or 0))
+        except (TypeError, ValueError):
+            return research_error(ResearchErrorCode.CHAIN_INVALID, "loop_iteration must be an integer.")
         if request.data.get("parent_node_id"):
             parent = chain.nodes.filter(pk=request.data["parent_node_id"]).first()
             if parent is None:
                 return research_error(ResearchErrorCode.CHAIN_NOT_FOUND, "parent_node_id is not in this chain.", status.HTTP_422_UNPROCESSABLE_ENTITY)
-        node = ResearchChainNode.objects.create(
-            chain=chain,
-            node_type=str(request.data.get("node_type") or "GENERAL_RESEARCH"),
-            title=str(request.data.get("title") or "Untitled research node"),
-            parent_node=parent,
-            loop_iteration=max(0, int(request.data.get("loop_iteration") or 0)),
-            assignee_id=request.data.get("assignee_id") or request.user.id,
-            request_id=request_id,
-            payload_hash=digest,
-            created_by=request.user,
-        )
+        if (parent is None and loop_iteration != 0) or (parent is not None and loop_iteration < 1):
+            return research_error(
+                ResearchErrorCode.CHAIN_INVALID,
+                "Root nodes use loop_iteration 0; child nodes require loop_iteration >= 1.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        try:
+            with transaction.atomic():
+                node = ResearchChainNode.objects.create(
+                    chain=chain,
+                    node_type=str(request.data.get("node_type") or "GENERAL_RESEARCH"),
+                    title=str(request.data.get("title") or "Untitled research node"),
+                    parent_node=parent,
+                    loop_iteration=loop_iteration,
+                    assignee_id=request.data.get("assignee_id") or request.user.id,
+                    request_id=request_id,
+                    payload_hash=digest,
+                    created_by=request.user,
+                )
+                created_event_id = _event_id_for_request(request_id, "NODE_CREATED")
+                ResearchChainEvent.objects.create(
+                    chain=chain,
+                    node=node,
+                    event_id=created_event_id,
+                    request_id=f"node-created-{created_event_id[:48]}",
+                    actor=request.user,
+                    actor_type="USER",
+                    source_system="PLANE",
+                    event_type="NODE_CREATED",
+                    occurred_at=timezone.now(),
+                    summary=f"Created node: {node.title}",
+                    content_hash=payload_hash({"request_id": request_id, "kind": "NODE_CREATED"}),
+                )
+        except IntegrityError:
+            return conflict_response()
         return Response(_envelope(data=ResearchChainNodeSerializer(node).data, request_id=request_id, schema_version="research-node.v1"), status=status.HTTP_201_CREATED)
+
+
+class ResearchChainNodeDetailEndpoint(ResearchAPIView):
+    """Return one visible node with its append-only evidence."""
+
+    nav_capability = NAV_RESEARCH_CHAIN
+
+    def get(self, request, slug, node_id):
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        if not _flag_enabled(workspace):
+            return _disabled()
+        node = _visible_node(workspace, request.user, node_id)
+        if node is None:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research node not found.")
+        return Response(
+            _envelope(
+                data={
+                    "node": ResearchChainNodeSerializer(node).data,
+                    "events": ResearchChainEventSerializer(
+                        node.events.order_by("occurred_at", "event_id"), many=True
+                    ).data,
+                    "snapshots": ResearchChainSnapshotSerializer(node.snapshots.order_by("version"), many=True).data,
+                },
+                request_id=request_id_from(request),
+                schema_version="research-node-detail.v1",
+            )
+        )
+
+
+class ResearchChainNodeTransitionEndpoint(ResearchAPIView):
+    """Run a validated node transition and append its lifecycle event."""
+
+    nav_capability = NAV_RESEARCH_CHAIN
+
+    def post(self, request, slug, node_id):
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        if not _flag_enabled(workspace):
+            return _disabled()
+        node = _visible_node(workspace, request.user, node_id)
+        if node is None:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research node not found.")
+        request_id = request_id_from(request)
+        if not request_id:
+            return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id is required.")
+        action = normalize_action(request.data.get("action"))
+        if not action:
+            return research_error(ResearchErrorCode.CHAIN_INVALID, "action is required.")
+        reason = str(request.data.get("reason") or "").strip()
+        if action in {"FAIL", "RETURN"} and not reason:
+            return research_error(ResearchErrorCode.CHAIN_INVALID, "reason is required for FAIL and RETURN.")
+        digest = payload_hash(request.data)
+        event_id = _event_id_for_request(request_id, action)
+        existing = _event_replay(request_id, event_id, digest, node.id)
+        if isinstance(existing, Response):
+            return existing
+        if existing is not None:
+            return Response(
+                _envelope(
+                    data={
+                        "node": ResearchChainNodeSerializer(node).data,
+                        "event": ResearchChainEventSerializer(existing).data,
+                    },
+                    request_id=request_id,
+                    schema_version="research-node-transition.v1",
+                )
+            )
+        if not _node_operator(workspace, request.user, node):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only node operators can transition a node.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        readonly_error = _chain_readonly_error(node.chain)
+        if readonly_error:
+            return readonly_error
+        with transaction.atomic():
+            locked_node = ResearchChainNode.objects.select_for_update().get(pk=node.pk)
+            transition = resolve_transition(locked_node.status, action)
+            if transition is None:
+                return research_error(
+                    ResearchErrorCode.INVALID_TRANSITION,
+                    f"{action} is not allowed from {locked_node.status}.",
+                    status.HTTP_409_CONFLICT,
+                )
+            new_status, event_type = transition
+            locked_node.status = new_status
+            locked_node.save(update_fields=["status", "updated_at"])
+            event = ResearchChainEvent.objects.create(
+                chain=locked_node.chain,
+                node=locked_node,
+                event_id=event_id,
+                request_id=request_id,
+                actor=request.user,
+                actor_type="USER",
+                source_system="PLANE",
+                event_type=event_type,
+                occurred_at=timezone.now(),
+                refs=[{"kind": "node", "id": str(locked_node.id), "version": new_status}],
+                summary=reason or f"{action}: {locked_node.title}",
+                content_hash=digest,
+            )
+        return Response(
+            _envelope(
+                data={
+                    "node": ResearchChainNodeSerializer(locked_node).data,
+                    "event": ResearchChainEventSerializer(event).data,
+                },
+                request_id=request_id,
+                schema_version="research-node-transition.v1",
+            ),
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ResearchChainEventListCreateEndpoint(ResearchAPIView):
@@ -560,10 +736,14 @@ class ResearchChainEventListCreateEndpoint(ResearchAPIView):
         if not request_id or not event_id:
             return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "event_id and request_id are required.")
         digest = payload_hash(request.data)
-        existing = ResearchChainEvent.objects.filter(request_id=request_id).first()
-        if existing:
-            if existing.content_hash != digest:
-                return conflict_response()
+        event_type = str(request.data.get("event_type") or "RESEARCH_NOTE").upper()
+        refs = request.data.get("refs") or []
+        if not isinstance(refs, list):
+            return research_error(ResearchErrorCode.CHAIN_INVALID, "refs must be a list.")
+        existing = _event_replay(request_id, event_id, digest, node.id)
+        if isinstance(existing, Response):
+            return existing
+        if existing is not None:
             return Response(_envelope(data=ResearchChainEventSerializer(existing).data, request_id=request_id, schema_version="research-event.v1"))
         lifecycle_error = _chain_readonly_error(node.chain)
         if lifecycle_error:
@@ -583,10 +763,10 @@ class ResearchChainEventListCreateEndpoint(ResearchAPIView):
             actor=request.user,
             actor_type=str(request.data.get("actor_type") or "USER"),
             source_system=str(request.data.get("source_system") or "PLANE").upper(),
-            event_type=str(request.data.get("event_type") or "RESEARCH_NOTE").upper(),
+            event_type=event_type,
             occurred_at=parsed_time,
             trace_id=str(request.data.get("trace_id") or ""),
-            refs=request.data.get("refs") or [],
+            refs=refs,
             summary=str(request.data.get("summary") or ""),
             content_hash=digest,
         )
@@ -619,16 +799,40 @@ class ResearchChainSnapshotCreateEndpoint(ResearchAPIView):
         lifecycle_error = _chain_readonly_error(node.chain)
         if lifecycle_error:
             return lifecycle_error
-        version = node.snapshots.count() + 1
-        snapshot = ResearchChainSnapshot.objects.create(
-            chain=node.chain,
-            node=node,
-            version=version,
-            source_versions=request.data.get("source_versions") or [],
-            summary=str(request.data.get("summary") or ""),
-            created_by=request.user,
-            content_hash=digest,
-            immutable=True,
-            request_id=request_id,
-        )
+        if not _node_operator(workspace, request.user, node):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only node operators can create snapshots.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        source_versions = request.data.get("source_versions") or []
+        resources = request.data.get("resources") or []
+        event_range = request.data.get("event_range") or {}
+        if not isinstance(source_versions, list) or not isinstance(resources, list):
+            return research_error(ResearchErrorCode.CHAIN_INVALID, "source_versions and resources must be lists.")
+        if not isinstance(event_range, dict):
+            return research_error(ResearchErrorCode.CHAIN_INVALID, "event_range requires first and last event ids.")
+        if not event_range:
+            event_ids = list(
+                node.events.order_by("occurred_at", "event_id").values_list("event_id", flat=True)
+            )
+            event_range = {"first": event_ids[0] if event_ids else "", "last": event_ids[-1] if event_ids else ""}
+        elif not all(isinstance(event_range.get(key), str) for key in ("first", "last")):
+            return research_error(ResearchErrorCode.CHAIN_INVALID, "event_range requires first and last event ids.")
+        with transaction.atomic():
+            ResearchChain.objects.select_for_update().get(pk=node.chain_id)
+            version = node.snapshots.aggregate(Max("version"))["version__max"] or 0
+            snapshot = ResearchChainSnapshot.objects.create(
+                chain=node.chain,
+                node=node,
+                version=version + 1,
+                source_versions=source_versions,
+                resources=resources,
+                event_range=event_range,
+                summary=str(request.data.get("summary") or ""),
+                created_by=request.user,
+                content_hash=digest,
+                immutable=True,
+                request_id=request_id,
+            )
         return Response(_envelope(data=ResearchChainSnapshotSerializer(snapshot).data, request_id=request_id, schema_version="research-snapshot.v1"), status=status.HTTP_201_CREATED)

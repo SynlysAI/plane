@@ -19,6 +19,9 @@ from plane.db.models import (
     ExperimentRecord,
     LiteratureEntry,
     PeriodicReport,
+    ResearchChainEvent,
+    ResearchChainNode,
+    ResearchChainSnapshot,
     ResearchExternalReference,
     ResearchOutcome,
     ResearchStageInstance,
@@ -36,7 +39,9 @@ CHAINS = (THINKING_CHAIN, DEVELOPMENT_CHAIN)
 
 # the reading order of §3.13: cognition first, then production
 CHAIN_ORDER = {
+    "chain_node": (THINKING_CHAIN, 5),
     "literature": (THINKING_CHAIN, 10),
+    "chain_event": (THINKING_CHAIN, 15),
     "stage_transition": (THINKING_CHAIN, 20),
     "stage_review": (THINKING_CHAIN, 30),
     "report": (THINKING_CHAIN, 40),
@@ -44,7 +49,10 @@ CHAIN_ORDER = {
     "code_artifact": (DEVELOPMENT_CHAIN, 60),
     "outcome": (DEVELOPMENT_CHAIN, 70),
     "external_reference": (None, 80),
+    "chain_snapshot": (None, 90),
 }
+
+DEVELOPMENT_NODE_TYPES = frozenset({"EXPERIMENT", "DATA_ANALYSIS", "ANALYSIS", "RESULT"})
 
 
 @dataclass
@@ -61,6 +69,13 @@ class TimelineItem:
 
 def _iso(value):
     return value.isoformat() if value else None
+
+
+def _chains_for_node_type(node_type):
+    """Classify a Chain node into the user-facing dual-chain view."""
+    if str(node_type or "").upper() in DEVELOPMENT_NODE_TYPES:
+        return [DEVELOPMENT_CHAIN]
+    return [THINKING_CHAIN]
 
 
 def build_timeline(
@@ -235,6 +250,92 @@ def build_timeline(
                 title=outcome.title,
                 chains=[DEVELOPMENT_CHAIN],
                 payload={"output_type": outcome.output_type, "status": outcome.status, "target_id": str(outcome.id)},
+            )
+        )
+
+    chain_nodes = ResearchChainNode.objects.filter(
+        chain__workspace=workspace,
+        chain__project_id=project_id,
+    ).select_related("parent_node")
+    for node in chain_nodes:
+        if not within(node.created_at):
+            continue
+        node_chains = _chains_for_node_type(node.node_type)
+        if chain and chain not in node_chains:
+            continue
+        items.append(
+            TimelineItem(
+                kind="chain_node",
+                at=_iso(node.created_at),
+                title=node.title,
+                chains=node_chains,
+                payload={
+                    "node_type": node.node_type,
+                    "status": node.status,
+                    "parent_node": str(node.parent_node_id) if node.parent_node_id else None,
+                    "loop_iteration": node.loop_iteration,
+                    "target_id": str(node.id),
+                },
+            )
+        )
+
+    chain_events = ResearchChainEvent.objects.filter(
+        chain__workspace=workspace,
+        chain__project_id=project_id,
+    ).select_related("node")
+    for event in chain_events:
+        if source_system and event.source_system != source_system:
+            continue
+        if not within(event.occurred_at):
+            continue
+        event_chains = _chains_for_node_type(event.node.node_type)
+        if chain and chain not in event_chains:
+            continue
+        if event.event_type == "DEGRADED":
+            degraded_sources.add(event.source_system)
+        items.append(
+            TimelineItem(
+                kind="chain_event",
+                at=_iso(event.occurred_at),
+                title=event.summary or event.event_type,
+                chains=event_chains,
+                payload={
+                    "event_id": event.event_id,
+                    "event_type": event.event_type,
+                    "source_system": event.source_system,
+                    "content_hash": event.content_hash,
+                    "node_id": str(event.node_id),
+                    "target_id": str(event.id),
+                },
+            )
+        )
+
+    chain_snapshots = ResearchChainSnapshot.objects.filter(
+        chain__workspace=workspace,
+        chain__project_id=project_id,
+    ).select_related("node")
+    for snapshot in chain_snapshots:
+        if not within(snapshot.created_at):
+            continue
+        snapshot_chains = _chains_for_node_type(snapshot.node.node_type)
+        if chain and chain not in snapshot_chains:
+            continue
+        items.append(
+            TimelineItem(
+                kind="chain_snapshot",
+                at=_iso(snapshot.created_at),
+                title=snapshot.summary or f"Snapshot v{snapshot.version}",
+                chains=snapshot_chains,
+                payload={
+                    "snapshot_id": str(snapshot.snapshot_id),
+                    "version": snapshot.version,
+                    "resources": snapshot.resources,
+                    "event_range": snapshot.event_range,
+                    "content_hash": snapshot.content_hash,
+                    "immutable": snapshot.immutable,
+                    "node_id": str(snapshot.node_id),
+                    "target_id": str(snapshot.id),
+                },
             )
         )
 

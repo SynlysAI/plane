@@ -166,6 +166,8 @@ from plane.research.views import (
     ResearchChainMemberListCreateEndpoint,
     ResearchChainMemberDetailEndpoint,
     ResearchChainNodeListCreateEndpoint,
+    ResearchChainNodeDetailEndpoint,
+    ResearchChainNodeTransitionEndpoint,
     ResearchChainEventListCreateEndpoint,
     ResearchChainSnapshotCreateEndpoint,
 )
@@ -210,6 +212,16 @@ urlpatterns = [
         "research/workspaces/<str:slug>/nodes/<uuid:node_id>/events/",
         ResearchChainEventListCreateEndpoint.as_view(),
         name="research-chain-events",
+    ),
+    path(
+        "research/workspaces/<str:slug>/nodes/<uuid:node_id>/",
+        ResearchChainNodeDetailEndpoint.as_view(),
+        name="research-chain-node-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/nodes/<uuid:node_id>/transitions/",
+        ResearchChainNodeTransitionEndpoint.as_view(),
+        name="research-chain-node-transitions",
     ),
     path(
         "research/workspaces/<str:slug>/nodes/<uuid:node_id>/snapshots/",

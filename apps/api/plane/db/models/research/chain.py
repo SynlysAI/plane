@@ -36,19 +36,20 @@ class ResearchChainNode(BaseModel):
     """Mutable node projection; evidence is stored in append-only children."""
 
     class Status(models.TextChoices):
-        PENDING = "PENDING", "Pending"
-        IN_PROGRESS = "IN_PROGRESS", "In progress"
-        BLOCKED = "BLOCKED", "Blocked"
-        SUCCEEDED = "SUCCEEDED", "Succeeded"
+        DRAFT = "DRAFT", "Draft"
+        ACTIVE = "ACTIVE", "Active"
+        WAITING_HUMAN = "WAITING_HUMAN", "Waiting human"
+        NEEDS_REVISION = "NEEDS_REVISION", "Needs revision"
+        COMPLETED = "COMPLETED", "Completed"
         FAILED = "FAILED", "Failed"
-        CANCELLED = "CANCELLED", "Cancelled"
+        ARCHIVED = "ARCHIVED", "Archived"
 
     chain = models.ForeignKey(ResearchChain, on_delete=models.PROTECT, related_name="nodes")
     node_type = models.CharField(max_length=64)
     title = models.CharField(max_length=500)
     parent_node = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True, related_name="children")
     loop_iteration = models.PositiveIntegerField(default=0)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     assignee = models.ForeignKey("db.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="research_chain_nodes")
     request_id = models.CharField(max_length=128, unique=True)
     payload_hash = models.CharField(max_length=64)
@@ -89,6 +90,8 @@ class ResearchChainSnapshot(AppendOnlyModel):
     snapshot_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     version = models.PositiveIntegerField(default=1)
     source_versions = models.JSONField(default=list)
+    resources = models.JSONField(default=list, blank=True)
+    event_range = models.JSONField(default=dict, blank=True)
     summary = models.TextField(blank=True, default="")
     created_by = models.ForeignKey("db.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="research_chain_snapshots")
     content_hash = models.CharField(max_length=64, blank=True, default="")
