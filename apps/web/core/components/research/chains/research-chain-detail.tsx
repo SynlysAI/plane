@@ -43,6 +43,22 @@ const ACTIONS_BY_STATUS: Record<TResearchChainNode["status"], TResearchChainNode
   ARCHIVED: [],
 };
 
+const NODE_TYPE_OPTIONS = [
+  "RESEARCH",
+  "LITERATURE_REVIEW",
+  "TOPIC_EVALUATION",
+  "PRE_EXPERIMENT",
+  "PLAN",
+  "OPENING",
+  "EXPERIMENT",
+  "ANALYSIS",
+  "ITERATION",
+  "SUMMARY",
+  "PAPER_WRITING",
+  "COMPLETION",
+  "TRANSFER",
+] as const;
+
 /** Chain detail page: node lifecycle, append-only timeline and Agent entry. */
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
   const { t } = useTranslation();
@@ -56,6 +72,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [nodeType, setNodeType] = useState("LITERATURE_REVIEW");
   const [nodeTitle, setNodeTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [reasonByNode, setReasonByNode] = useState<Record<string, string>>({});
   const [snapshotFilter, setSnapshotFilter] = useState("");
@@ -100,6 +117,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const createNode = async () => {
     if (!nodeTitle.trim() || creating) return;
     setCreating(true);
+    setActionError("");
     try {
       await chainService.createChainNode(workspaceSlug, chainId, {
         node_type: nodeType,
@@ -108,7 +126,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       setNodeTitle("");
       await load();
     } catch {
-      setFailed(true);
+      setActionError(t("research.chains.action_failed"));
     } finally {
       setCreating(false);
     }
@@ -118,12 +136,13 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     const reason = reasonByNode[node.id]?.trim();
     if ((action === "FAIL" || action === "RETURN") && !reason) return;
     setTransitioning(node.id);
+    setActionError("");
     try {
       await chainService.transitionChainNode(workspaceSlug, node.id, action, reason);
       await load();
       await loadNodeDetail(node.id);
     } catch {
-      setFailed(true);
+      setActionError(t("research.chains.action_failed"));
     } finally {
       setTransitioning(null);
     }
@@ -180,14 +199,26 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             </span>
           )}
         </div>
+        {actionError && (
+          <p className="mt-3 text-11 text-danger-primary" role="alert">
+            {actionError}
+          </p>
+        )}
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto]">
           <label className="flex flex-col gap-1 text-12 text-secondary">
             <span>{t("research.chains.node_type")}</span>
-            <input
+            <select
               value={nodeType}
               onChange={(event) => setNodeType(event.target.value)}
+              aria-label={t("research.chains.node_type")}
               className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary outline-none"
-            />
+            >
+              {NODE_TYPE_OPTIONS.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 text-12 text-secondary">
             <span>{t("research.chains.node_title")}</span>

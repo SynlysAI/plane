@@ -1117,6 +1117,7 @@
       "node_title": "标题",
       "node_title_placeholder": "文献调研、实验或分析",
       "create_node": "创建节点",
+      "action_failed": "操作未完成，请根据提示修改后重试；当前页面内容已保留。",
       "open_timeline": "打开时间线",
       "timeline_title": "节点时间线",
       "timeline_empty": "选择节点后可回放事件和快照。",
@@ -1147,7 +1148,8 @@
       "upload": "通过 BFF 上传",
       "uploading": "上传中…",
       "refresh_status": "刷新状态",
-      "confirm_reference": "确认引用"
+      "confirm_reference": "确认引用",
+      "action_failed": "操作未完成，当前记录已保留。"
     },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",

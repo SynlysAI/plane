@@ -235,6 +235,14 @@ export class ResearchChainService extends APIService {
       });
   }
 
+  async getKnowledgeUploads(workspaceSlug: string, chainId: string, nodeId: string) {
+    return this.get(researchEndpoints.chainUploads(workspaceSlug, chainId), { params: { node_id: nodeId } })
+      .then((res) => res?.data as { data: TResearchChainUpload[] })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
   async confirmKnowledgeReference(
     workspaceSlug: string,
     chainId: string,

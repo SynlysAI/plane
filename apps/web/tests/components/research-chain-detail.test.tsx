@@ -143,3 +143,31 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   });
   expect(mocks.transitionChainNode).toHaveBeenCalledWith("lab", "node-1", "START", undefined);
 });
+
+it("uses bounded node types and preserves the page when creation fails", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.createChainNode.mockRejectedValueOnce(new Error("invalid type"));
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+
+  const typeSelect = container.querySelector('select[aria-label="节点类型"]');
+  expect(typeSelect).not.toBeNull();
+  const typeOptions = [...((typeSelect as HTMLSelectElement | null)?.options ?? [])];
+  expect(typeOptions.map((option) => option.value)).not.toContain("not-a-research-node");
+
+  const titleInput = container.querySelector('input[placeholder="文献调研、实验或分析"]');
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    if (titleInput instanceof HTMLInputElement) {
+      valueSetter?.call(titleInput, "新节点");
+      titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "创建节点")?.click();
+  });
+
+  expect(mocks.createChainNode).toHaveBeenCalled();
+  expect(container.textContent).toContain("文献调研");
+  expect(container.textContent).toContain("操作未完成，请根据提示修改后重试；当前页面内容已保留。");
+  expect(container.textContent).not.toContain("无法加载");
+});

@@ -1117,6 +1117,7 @@
       "node_title": "Title",
       "node_title_placeholder": "Literature review, experiment or analysis",
       "create_node": "Create node",
+      "action_failed": "The action was not completed. Adjust it and retry; this page has been preserved.",
       "open_timeline": "Open timeline",
       "timeline_title": "Node timeline",
       "timeline_empty": "Select a node to replay its events and snapshots.",
@@ -1147,7 +1148,8 @@
       "upload": "Upload through BFF",
       "uploading": "Uploading…",
       "refresh_status": "Refresh status",
-      "confirm_reference": "Confirm reference"
+      "confirm_reference": "Confirm reference",
+      "action_failed": "The action was not completed. Your records have been preserved."
     },
     "agent": {
       "description": "Same-origin agent workbench with server-side context authorization.",
