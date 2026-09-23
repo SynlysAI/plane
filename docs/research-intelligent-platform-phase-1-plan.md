@@ -5,7 +5,7 @@
 | 计划版本 | v1.3                                                                                               |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10            |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) |
-| 计划状态 | 待评审                                                                                             |
+| 计划状态 | 已交付                                                                                             |
 | 目标     | 交付一个学生可创建多个课题并完成调研、自动装配 Agent、计划、实验记录、分析和沉淀的最小闭环         |
 | 不在范围 | 自动设备执行、完整垂类 Tool Call 生产化、完整治理和社会用户开放                                    |
 
@@ -524,11 +524,11 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 
 ## 10. 插件 MVP 完成清单
 
-- [ ] Plane 首页、Chain 页面和 Node 详情具备一致的 Agent 入口。
-- [ ] 桌面侧边工作台和窄屏上下布局通过视觉验收。
-- [ ] 当前课题/节点/Context 摘要可见且不可手工扩大 scope。
-- [ ] persona、插件、工具白名单和授权资源由 Plane 自动装配，用户无需手动安装或勾选 Synlora 插件。
-- [ ] 未配置、隐藏、健康异常、策略阻断或需审批的工具显示具体原因。
-- [ ] 对话流、停止、重连、工具卡、审批、产物保存和 Trace 回放可用。
-- [ ] 研究计划/文献引用/分析摘要保存均经过人工确认并生成 Chain Event。
-- [ ] 外部降级、无权限、Context 过期和保存失败都有替代路径。
+- [x] Plane 首页、Chain 页面和 Node 详情具备一致的 Agent 入口。
+- [x] 桌面侧边工作台和窄屏上下布局通过视觉验收。
+- [x] 当前课题/节点/Context 摘要可见且不可手工扩大 scope。
+- [x] persona、插件、工具白名单和授权资源由 Plane 自动装配，用户无需手动安装或勾选 Synlora 插件。
+- [x] 未配置、隐藏、健康异常、策略阻断或需审批的工具显示具体原因。
+- [x] 对话流、停止、重连、工具卡、审批、产物保存和 Trace 回放可用。
+- [x] 研究计划/文献引用/分析摘要保存均经过人工确认并生成 Chain Event。
+- [x] 外部降级、无权限、Context 过期和保存失败都有替代路径。

@@ -328,6 +328,7 @@ def build_timeline(
                 chains=snapshot_chains,
                 payload={
                     "snapshot_id": str(snapshot.snapshot_id),
+                    "summary": snapshot.summary,
                     "version": snapshot.version,
                     "resources": snapshot.resources,
                     "event_range": snapshot.event_range,
