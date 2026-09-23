@@ -58,7 +58,13 @@ from .approval import (
     ApprovalFlowStepSerializer,
     ApprovalRequestSerializer,
 )
-from .chain import ResearchChainEventSerializer, ResearchChainNodeSerializer, ResearchChainSerializer, ResearchChainSnapshotSerializer
+from .chain import (
+    ResearchChainEventSerializer,
+    ResearchChainNodeSerializer,
+    ResearchChainSerializer,
+    ResearchChainSnapshotSerializer,
+    ResearchChainUploadSerializer,
+)
 
 __all__ = [
     "IdentityMappingSerializer",
@@ -91,6 +97,7 @@ __all__ = [
     "ResearchChainNodeSerializer",
     "ResearchChainEventSerializer",
     "ResearchChainSnapshotSerializer",
+    "ResearchChainUploadSerializer",
     "ResearchAuditEventSerializer",
     "ResearchUserSerializer",
     "WorkspaceResearchSettingSerializer",

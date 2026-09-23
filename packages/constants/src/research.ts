@@ -658,6 +658,12 @@ export const researchEndpoints = {
   chainNodeTransitions: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/transitions/`,
   chainNodeEvents: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/events/`,
   chainNodeSnapshots: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/snapshots/`,
+  chainKnowledgeBases: (slug: string, chainId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/knowledge-bases/`,
+  chainUploads: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/uploads/`,
+  chainUploadDetail: (slug: string, chainId: string, uploadId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/uploads/${uploadId}/`,
+  chainReferences: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/references/`,
   agentManifest: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/manifest/`,
   agentSessions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/`,
   agentSession: (slug: string, sessionId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/`,

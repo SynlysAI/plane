@@ -28,6 +28,35 @@ class RagPortalClient(BaseIntegrationClient):
             payload = {"items": [payload]}
         return super().normalise(payload)
 
+    def normalise_item(self, raw):
+        """Normalise both KB entries and scoped upload receipts."""
+        if not isinstance(raw, dict):
+            return None
+        if not (raw.get("knowledge_id") or raw.get("parse_status")):
+            return super().normalise_item(raw)
+        external_id = str(raw.get("knowledge_id") or raw.get("id") or "")
+        if not external_id:
+            return None
+        upload_id = str(raw.get("id") or "")
+        return {
+            "external_id": external_id,
+            "external_type": self.external_type,
+            "external_parent_id": str(raw.get("kb_id") or raw.get("knowledge_base_id") or ""),
+            "title": str(raw.get("file_name") or f"RAGPortal upload {upload_id or external_id}")[:500],
+            "summary": str(raw.get("summary") or raw.get("parse_status") or "")[:2000],
+            "source_url": str(raw.get("source_url") or (f"/api/uploads/{upload_id}" if upload_id else "")),
+            "acl_hint": raw.get("acl") or raw.get("acl_hint") or {},
+            "metadata": {
+                "upload_id": upload_id,
+                "task_id": raw.get("task_id") or raw.get("weknora_task_id") or "",
+                "parse_status": raw.get("parse_status") or "",
+                "file_hash": raw.get("file_hash") or "",
+                "workspace_slug": raw.get("workspace_slug") or "",
+                "research_project_id": raw.get("research_project_id") or "",
+                "chain_node_id": raw.get("chain_node_id") or "",
+            },
+        }
+
     def knowledge_bases(self, *, refresh=False, request=None):
         """List KBs visible to the backend credential."""
         return self.request(path="/api/kb/list", params={"refresh": str(bool(refresh)).lower()}, operation="list_knowledge_bases", request=request)

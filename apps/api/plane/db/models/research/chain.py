@@ -74,6 +74,7 @@ class ResearchChainEvent(AppendOnlyModel):
     occurred_at = models.DateTimeField()
     trace_id = models.CharField(max_length=128, blank=True, default="")
     refs = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
     summary = models.TextField(blank=True, default="")
     content_hash = models.CharField(max_length=64, blank=True, default="")
 
@@ -101,6 +102,56 @@ class ResearchChainSnapshot(AppendOnlyModel):
     class Meta:
         db_table = "research_chain_snapshots"
         constraints = [models.UniqueConstraint(fields=["node", "version"], name="rsch_snapshot_uq_node_version")]
+
+
+class ResearchChainUpload(BaseModel):
+    """A scoped RAGPortal upload projection; file bodies stay external."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PROCESSING = "PROCESSING", "Processing"
+        SUCCESS = "SUCCESS", "Success"
+        FAILED = "FAILED", "Failed"
+        DEGRADED = "DEGRADED", "Degraded"
+
+    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="research_chain_uploads")
+    chain = models.ForeignKey(ResearchChain, on_delete=models.PROTECT, related_name="uploads")
+    node = models.ForeignKey(ResearchChainNode, on_delete=models.PROTECT, related_name="uploads")
+    reference = models.ForeignKey(
+        "db.ResearchExternalReference",
+        on_delete=models.PROTECT,
+        related_name="chain_uploads",
+        null=True,
+        blank=True,
+    )
+    request_id = models.CharField(max_length=128, unique=True)
+    payload_hash = models.CharField(max_length=64)
+    external_upload_id = models.CharField(max_length=128, blank=True, default="")
+    knowledge_id = models.CharField(max_length=128, blank=True, default="")
+    knowledge_base_id = models.CharField(max_length=128, blank=True, default="")
+    task_id = models.CharField(max_length=128, blank=True, default="")
+    file_name = models.CharField(max_length=500)
+    file_type = models.CharField(max_length=16)
+    file_size = models.PositiveBigIntegerField(default=0)
+    file_hash = models.CharField(max_length=64)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    error_code = models.CharField(max_length=128, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        "db.User",
+        on_delete=models.SET_NULL,
+        related_name="research_chain_uploads",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "research_chain_uploads"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["chain", "node", "file_hash"], name="rsch_upload_scope_hash_idx"),
+            models.Index(fields=["workspace", "status"], name="rsch_upload_ws_status_idx"),
+        ]
 
 
 class ResearchReflectionLog(AppendOnlyModel):

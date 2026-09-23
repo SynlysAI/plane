@@ -17,7 +17,14 @@ from .experiment import (
 )
 from .identity import IdentityMapping
 from .account_link import AccountLink
-from .chain import ResearchChain, ResearchChainEvent, ResearchChainNode, ResearchChainSnapshot, ResearchReflectionLog
+from .chain import (
+    ResearchChain,
+    ResearchChainEvent,
+    ResearchChainNode,
+    ResearchChainSnapshot,
+    ResearchChainUpload,
+    ResearchReflectionLog,
+)
 from .context import ResearchContextGrant
 from .agent import ResearchAgentRunEvent, ResearchAgentSession
 from .integration import (
@@ -77,6 +84,7 @@ __all__ = [
     "ResearchChainNode",
     "ResearchChainEvent",
     "ResearchChainSnapshot",
+    "ResearchChainUpload",
     "ResearchReflectionLog",
     "ResearchContextGrant",
     "ResearchAgentSession",

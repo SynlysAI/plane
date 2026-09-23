@@ -1130,6 +1130,17 @@
       "action_fail": "标记失败",
       "action_archive": "归档"
     },
+    "knowledge": {
+      "panel_title": "RAGPortal 知识库",
+      "loading": "正在加载知识库…",
+      "degraded": "RAGPortal 当前降级（{reason}），人工记录可继续。",
+      "kb_label": "知识库",
+      "file_label": "研究文件",
+      "upload": "通过 BFF 上传",
+      "uploading": "上传中…",
+      "refresh_status": "刷新状态",
+      "confirm_reference": "确认引用"
+    },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",
       "launch": "启动会话",
