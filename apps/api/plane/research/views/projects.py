@@ -37,7 +37,7 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.org import active_membership_q, is_workspace_admin
+from plane.research.utils.org import active_membership_q, is_workspace_admin, is_workspace_member
 from plane.research.utils.roles import configured_main_pi_id
 from plane.research.services.stage_service import ensure_stage_instances
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user
@@ -136,6 +136,19 @@ def visible_profile_queryset(workspace, user):
         | Q(owner_id__in=advised_owner_ids)
         | Q(org_unit_id__in=managed_unit_ids)
     )
+    if is_workspace_member(user, workspace.id):
+        visibility |= Q(chain_visibility=ResearchProjectProfile.ChainVisibility.WORKSPACE)
+        visibility |= Q(
+            chain_visibility=ResearchProjectProfile.ChainVisibility.ORG,
+            org_unit__is_active=True,
+            org_unit__deleted_at__isnull=True,
+            org_unit__members__user=user,
+            org_unit__members__deleted_at__isnull=True,
+            org_unit__members__effective_from__lte=today,
+        ) & (
+            Q(org_unit__members__effective_to__isnull=True)
+            | Q(org_unit__members__effective_to__gte=today)
+        )
     if is_main_pi:
         return profile_queryset(workspace)
     return profile_queryset(workspace).filter(visibility).distinct()
@@ -168,6 +181,16 @@ def can_read_project_research_metadata(workspace, user, profile):
         return True
     if profile.org_unit_id in managing_org_units_for(user, workspace.id, today):
         return True
+    if profile.chain_visibility == ResearchProjectProfile.ChainVisibility.WORKSPACE:
+        return is_workspace_member(user, workspace.id)
+    if profile.chain_visibility == ResearchProjectProfile.ChainVisibility.ORG and profile.org_unit_id:
+        return OrgUnitMember.objects.filter(
+            active_membership_q(today),
+            org_unit_id=profile.org_unit_id,
+            workspace=workspace,
+            user=user,
+            deleted_at__isnull=True,
+        ).exists()
     return configured_main_pi_id(workspace) == user.id
 
 
