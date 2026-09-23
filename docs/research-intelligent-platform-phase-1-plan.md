@@ -6,8 +6,8 @@
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10            |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) |
 | 计划状态 | 待评审                                                                                             |
-| 目标     | 交付一个学生可创建多个课题并完成调研、AI 讨论、计划、实验记录、分析和沉淀的最小闭环                |
-| 不在范围 | 自动设备执行、专业 Tool Call 生产化、完整治理和社会用户开放                                        |
+| 目标     | 交付一个学生可创建多个课题并完成调研、自动装配 Agent、计划、实验记录、分析和沉淀的最小闭环         |
+| 不在范围 | 自动设备执行、完整垂类 Tool Call 生产化、完整治理和社会用户开放                                    |
 
 ## 1. 阶段目标与出口
 
@@ -19,6 +19,7 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 - 课题 ACL 在页面、API、Context、RAG、文件、Trace 和导出路径一致。
 - 用户完成“调研 → AI 讨论/选题 → 研究计划 → 实验记录 → 分析 → 快照/导出”。
 - RAGPortal 上传和 Synlora 检索可用；任一外部服务不可用时人工记录仍可继续。
+- Plane 自动注入 `agent-context.v2`，并装配 persona、插件、工具白名单和授权资源；用户无需手动安装或勾选 Synlora 插件。
 - 事件可按顺序回放，循环重试不会覆盖或复制正式快照。
 
 ## 2. 技术方案
@@ -111,22 +112,49 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 
 ### 2.5 Synlora 课题 Agent
 
-Plane 创建 Agent session 时提交：
+Plane Research Agent Orchestrator 根据 Workspace、课题、节点、用户角色、node type、capability policy 和 Synlora capability manifest 自动解析会话装配，再创建 Agent session：
 
 ```json
 {
-  "workspace_id": "...",
-  "research_project_id": "...",
-  "chain_node_id": "...",
-  "context_schema_version": "agent-context.v1",
-  "context_id": "...",
-  "visibility_scope": "PRIVATE"
+  "assistant_id": "research-general",
+  "title": "课题 A · 选题评估",
+  "enabled_plugins": [],
+  "research_context": {
+    "schema_version": "agent-context.v2",
+    "workspace_id": "...",
+    "workspace_slug": "...",
+    "research_project_id": "...",
+    "chain_node_id": "...",
+    "context_id": "...",
+    "context_hash": "...",
+    "visibility_scope": "PRIVATE",
+    "expires_at": "...",
+    "allowed_knowledge_base_ids": ["kb_..."],
+    "allowed_file_ids": ["file_..."],
+    "allowed_plugins": [],
+    "allowed_tools": ["knowledge.search", "file.read", "file.list"],
+    "policy_id": "policy_...",
+    "policy_hash": "sha256:..."
+  }
 }
 ```
 
-Synlora 每次运行前重新读取 Context；工具调用不得超出 session scope。Plane 消费运行事件，映射为 `AI_ACTION`、`TOOL_CALL`、`INTERMEDIATE_ARTIFACT`、`VALIDATION`、`HUMAN_DECISION` 和 `OUTPUT` 事件。
+Synlora 每次运行前重新校验 `X-Research-Context-Token`；工具调用不得超出 session scope。Plane 消费运行事件，映射为 `AI_ACTION`、`TOOL_CALL`、`INTERMEDIATE_ARTIFACT`、`VALIDATION`、`HUMAN_DECISION` 和 `OUTPUT` 事件。
 
-首期工具范围：知识检索、文件引用、文本分析、研究计划草稿和结构化结果保存。工具审批由 Synlora 提供，Plane 记录审批结果和人工决策引用。
+首期工具范围：知识检索、文件 read/list/write、文本分析、研究计划草稿和结构化结果保存。已配置且被策略允许的只读查询类插件可作为试点。Poly_Agent、Spec_Agent 等完整专业执行不在 Phase 1 强制开放，但自动装配机制和契约 fixture 必须兼容其 capability manifest。工具审批由 Synlora 提供，Plane 记录审批结果和人工决策引用。
+
+自动装配流程：
+
+1. Plane BFF 校验课题/节点 ACL 和 ACTIVE 的 Synlora AccountLink。
+2. Plane BFF 使用 `plane-delegated-auth.v1` 换取短效 Synlora 用户 token，token 不返回浏览器。
+3. Plane 拉取或复用 `capability-manifest.v1`，按 node type、角色、风险和健康状态解析 persona、插件和工具。
+4. Plane 创建 Synlora session 时注入 `enabled_plugins`、`agent-context.v2` 和资源范围；raw Context token 只在请求头中。
+5. Synlora runtime 计算 `final_tools = registry ∩ persona whitelist ∩ enabled_plugins ∩ Plane allowed_tools ∩ admin plane-enabled policy`。
+6. 每轮消息或 run 启动前，Plane 重新携带或刷新 Context token，Synlora 复验 scope、过期和撤权；失败时本轮 fail closed。
+7. Plane 消费 Synlora event cursor 并投影为 Agent run event、Chain Event 和 Snapshot。
+
+Plane 授权不能放大 Synlora 中隐藏、未安装或未配置的插件；插件不可用时必须在 UI 中显示未配置、无权限、健康异常、策略阻断或需要审批的具体原因。
+管理员仍需一次性完成 Synlora 插件配置和 Plane integration policy 配置；自动装配只消除用户侧手动安装、勾选和注册。
 
 AI 接入应用逻辑：
 
@@ -208,15 +236,18 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 
 依赖：Phase 0 任务 0.3、1.1。验收：PDF/Markdown 等允许文件可上传，上传状态可追踪，跨课题不能引用。
 
-### 任务 1.5：Synlora session 和 Trace
+### 任务 1.5：Synlora 课题 Agent 自动装配和 Trace
 
-- 创建带课题 metadata 的 session。
-- 注入 Context ID 和授权 KB 集合。
-- 消费 SSE/事件并映射为 Chain Event。
-- 展示工具调用、摘要、中间产物、验证和人工决策。
+- 实现 Synlora delegated token 交换和 ACTIVE AccountLink 校验。
+- 实现 `agent-context.v2` 签发、刷新、metadata 持久化和每轮复验。
+- 同步 `capability-manifest.v1`，按节点/角色/策略自动生成 persona、`enabled_plugins`、allowed tools 和资源范围。
+- 自动创建带课题 metadata 的 Synlora session，不要求用户手动安装或勾选插件。
+- Synlora runtime 按 `final_tools` 防御性交集过滤工具。
+- 消费 SSE/event cursor 并映射为 Agent run event、Chain Event 和 Snapshot。
+- 展示自动装配摘要、工具调用、摘要、中间产物、验证、人工决策和不可用原因。
 - 支持插件中的停止生成、断线重连、事件游标、审批弹窗和结果保存回 Chain。
 
-依赖：Phase 0 任务 0.4、1.2。验收：跨课题 Context 不串；断线重连和重复事件不会产生重复事实。
+依赖：Phase 0 任务 0.4、1.2。验收：跨课题 persona、插件、工具和 Context 不串；Context 过期和 AccountLink 解绑后下一轮 fail closed；断线重连和重复事件不会产生重复事实。
 
 ### 任务 1.6：研究计划、实验和分析
 
@@ -243,7 +274,8 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 - 课题创建、可见性、成员、归档、恢复和 ACL。
 - Chain 节点状态、循环、事件顺序、快照不可变和幂等。
 - RAGPortal 上传、状态、引用、撤权、超时和降级。
-- Synlora session metadata、Context scope、tool approval、SSE 断线和事件重复。
+- Synlora delegated identity、`agent-context.v2`、capability manifest、自动装配交集、tool approval、SSE 断线和事件重复。
+- Plane 授权未配置、隐藏或未开放插件时 fail closed，且不泄露插件凭证。
 - Page/报告/实验/文件与 Chain 引用的版本一致性。
 
 ### 4.2 前端验收
@@ -255,6 +287,7 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 - 六类快照可以创建、筛选、查看引用和回放，导师退回会生成可见原因和待办状态。
 - `COMMUNICATION`、`APPROVAL`、`DATA_CHANGE` 和 `DEGRADED` 事件可以在时间线中区分显示。
 - 插件入口、侧边工作台、上下文摘要、消息流、工具卡、审批、产物抽屉和 Trace 时间线在桌面/窄屏布局均可用。
+- 自动装配摘要显示 persona、可用工具、风险等级和不可用原因，且不提供手动扩大范围控件。
 - 课题切换、Session 关闭、SSE 断线重连、停止生成和保存失败恢复符合状态字典。
 - 首页、草稿、我的工作、便签、工作区项目、More、添加项目及全部现有科研入口继续可见且功能不回归；Research Chain 按 capability 单独显隐。
 
@@ -268,6 +301,9 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 6. 导出 Chain Markdown，核对引用、版本、hash 和事件顺序。
 7. 从课题 A 切换到课题 B，验证旧 session、SSE、工具结果和缓存不会进入 B；关闭插件 flag 后入口和 BFF 写操作均被拒绝。
 8. AI 生成计划后由导师退回并再次确认，验证 diff、退回原因、待办和 Chain Event 顺序完整。
+9. 使课题 A 的 Context 在两轮对话之间过期，验证第二轮 fail closed，刷新授权后可继续。
+10. 解绑 Synlora AccountLink，验证 delegated token 拒绝签发且既有 session 不能继续运行。
+11. 让 Plane 授权一个 Synlora 未配置或隐藏插件，验证 UI 显示不可用原因且工具不可见。
 
 ## 5. 发布、回滚与风险
 
@@ -377,24 +413,31 @@ POST /api/research/workspaces/{slug}/chains/{chain_id}/references
 
 ### 6.5 Synlora Session/Trace 接口
 
-Plane 到 Synlora 的创建请求扩展为：
+Plane 到 Synlora 的创建请求使用 `agent-context.v2`：
 
 ```json
 {
   "assistant_id": "research-general",
   "title": "课题 A 调研",
+  "enabled_plugins": [],
   "research_context": {
+    "schema_version": "agent-context.v2",
     "workspace_id": "...",
     "research_project_id": "...",
     "chain_node_id": "...",
     "context_id": "ctx_...",
     "allowed_knowledge_base_ids": ["kb_..."],
-    "context_hash": "sha256:..."
+    "allowed_file_ids": ["file_..."],
+    "allowed_plugins": [],
+    "allowed_tools": ["knowledge.search", "file.read", "file.list"],
+    "context_hash": "sha256:...",
+    "policy_id": "policy_...",
+    "policy_hash": "sha256:..."
   }
 }
 ```
 
-事件消费采用 `after_seq` 游标；每个事件先按 `run_id + seq` 去重，再投影成 Plane Chain Event。reasoning 只保存可解释摘要或模型明确返回的说明，不保存隐藏思维链。工具结果大对象存原系统或文件工作区，Plane 保存引用和 hash。
+创建和每轮消息均携带 `X-Research-Context-Token`；Synlora 只持久化 metadata，不持久化 token。事件消费采用 `after_seq` 游标；每个事件先按 `run_id + seq` 去重，再由 Plane 投影成 Agent run event 和 Chain Event。reasoning 只保存可解释摘要或模型明确返回的说明，不保存隐藏思维链。工具结果大对象存原系统或文件工作区，Plane 保存引用和 hash。
 
 ### 6.6 研究计划、实验记录和分析结果
 
@@ -417,6 +460,8 @@ apps/api/plane/research/views/chain_events.py
 apps/api/plane/research/views/knowledge.py
 apps/api/plane/research/views/agent.py
 apps/api/plane/research/serializers/chain.py
+apps/api/plane/research/services/agent_orchestrator.py
+apps/api/plane/research/services/synlora_capabilities.py
 apps/api/plane/research/services/chain_projection.py
 apps/api/plane/research/services/ragportal.py
 apps/api/plane/research/services/synlora.py
@@ -424,7 +469,7 @@ apps/api/plane/tests/contract/app/test_research_chain_mvp.py
 apps/api/plane/tests/contract/app/test_research_chain_permissions.py
 ```
 
-实现顺序：课题/ACL → 节点/状态机 → Event/Snapshot → RAGPortal BFF → Synlora Trace → 计划/实验/分析 → 导出。
+实现顺序：课题/ACL → 节点/状态机 → Event/Snapshot → RAGPortal BFF → delegated identity/capability assembly → Synlora Trace → 计划/实验/分析 → 导出。
 
 ### 7.2 Plane 前端
 
@@ -444,8 +489,8 @@ apps/web/app/(all)/[workspaceSlug]/(projects)/research/chains/
 
 1. Plane 先发布课题和 Context contract。
 2. RAGPortal 接入课题 metadata 和 upload fixture。
-3. Synlora 接入 research_context 和 event cursor。
-4. Plane 消费事件并实现 Chain projection。
+3. Synlora 实现 delegated token、capability manifest、每轮 Context 复验和 event cursor。
+4. Plane 实现自动装配并消费事件完成 Chain projection。
 5. 最后开放首页入口和 Workspace 灰度开关。
 
 ## 8. 测试命令与验收证据
@@ -465,15 +510,15 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 
 ## 9. 任务拆分与完成门禁
 
-| 任务            | 前置          | 交付                        | 门禁                 |
-| --------------- | ------------- | --------------------------- | -------------------- |
-| 平行课题/ACL    | Phase 0 0.2   | API、迁移、权限测试         | 双课题和撤权通过     |
-| Chain 状态/事件 | 平行课题      | service、snapshot、timeline | 状态机和幂等通过     |
-| 门户骨架        | Phase 0 0.6   | 首页卡片、路由、空态        | 原功能无回归         |
-| RAGPortal BFF   | Phase 0 0.3   | 上传/状态/引用              | fixture 和降级通过   |
-| Synlora Trace   | Phase 0 0.4   | session、SSE、projection    | 跨课题和断线重连通过 |
-| 计划/实验/分析  | Chain + Agent | Page、Experiment、analysis  | 版本/失败记录通过    |
-| E2E 灰度        | 全部          | 测试夹具、runbook           | P0/P1 回归和闭环通过 |
+| 任务             | 前置          | 交付                                                              | 门禁                       |
+| ---------------- | ------------- | ----------------------------------------------------------------- | -------------------------- |
+| 平行课题/ACL     | Phase 0 0.2   | API、迁移、权限测试                                               | 双课题和撤权通过           |
+| Chain 状态/事件  | 平行课题      | service、snapshot、timeline                                       | 状态机和幂等通过           |
+| 门户骨架         | Phase 0 0.6   | 首页卡片、路由、空态                                              | 原功能无回归               |
+| RAGPortal BFF    | Phase 0 0.3   | 上传/状态/引用                                                    | fixture 和降级通过         |
+| Synlora 自动装配 | Phase 0 0.4   | delegated identity、Context、capability、session、SSE、projection | 跨课题、撤权、断线重连通过 |
+| 计划/实验/分析   | Chain + Agent | Page、Experiment、analysis                                        | 版本/失败记录通过          |
+| E2E 灰度         | 全部          | 测试夹具、runbook                                                 | P0/P1 回归和闭环通过       |
 
 任一门禁失败时，只允许保留人工记录模式，不开放对应 Agent/RAG 写操作。
 
@@ -482,6 +527,8 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 - [ ] Plane 首页、Chain 页面和 Node 详情具备一致的 Agent 入口。
 - [ ] 桌面侧边工作台和窄屏上下布局通过视觉验收。
 - [ ] 当前课题/节点/Context 摘要可见且不可手工扩大 scope。
+- [ ] persona、插件、工具白名单和授权资源由 Plane 自动装配，用户无需手动安装或勾选 Synlora 插件。
+- [ ] 未配置、隐藏、健康异常、策略阻断或需审批的工具显示具体原因。
 - [ ] 对话流、停止、重连、工具卡、审批、产物保存和 Trace 回放可用。
 - [ ] 研究计划/文献引用/分析摘要保存均经过人工确认并生成 Chain Event。
 - [ ] 外部降级、无权限、Context 过期和保存失败都有替代路径。
