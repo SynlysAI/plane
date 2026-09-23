@@ -67,6 +67,7 @@ def build_chain_markdown(progress, project_name, *, generated_by="", chain=None,
             event_range = item.get("event_range") or {}
             lines.append(
                 f"- v{item.get('version')} `{item.get('snapshot_id')}` "
+                f"{item.get('title') or item.get('summary') or ''} "
                 f"resources={len(item.get('resources') or [])} "
                 f"events={event_range.get('first', '')}..{event_range.get('last', '')} "
                 f"`{item.get('content_hash')}`"
