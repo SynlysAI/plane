@@ -12,7 +12,7 @@ from plane.research.services.idempotency import conflict_response, payload_hash,
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.views.base import ResearchAPIView
-from plane.research.views.chain_foundation import _chain_readonly_error, _visible_chain
+from plane.research.views.chain_foundation import _chain_readonly_error, _visible_chain, _node_operator
 
 
 class ResearchChainAnalysisListCreateEndpoint(ResearchAPIView):
@@ -52,6 +52,12 @@ class ResearchChainAnalysisListCreateEndpoint(ResearchAPIView):
                 "node_id must identify a node in this chain.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+        if not _node_operator(workspace, request.user, node):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can submit analyses.",
+                status.HTTP_403_FORBIDDEN,
+            )
         request_id = request_id_from(request)
         method = str(request.data.get("method") or "").strip()
         summary = str(request.data.get("summary") or "").strip()
@@ -64,7 +70,7 @@ class ResearchChainAnalysisListCreateEndpoint(ResearchAPIView):
         digest = payload_hash(request.data)
         existing = ResearchAnalysisResult.objects.filter(request_id=request_id).first()
         if existing is not None:
-            if existing.payload_hash != digest:
+            if existing.node_id != node.id or existing.payload_hash != digest:
                 return conflict_response()
             return Response(ResearchAnalysisResultSerializer(existing).data, status=status.HTTP_200_OK)
         result = ResearchAnalysisResult.objects.create(

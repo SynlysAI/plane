@@ -1,5 +1,7 @@
 """Phase 1 Research Chain node state machine and event taxonomy."""
 
+import re
+
 NODE_EVENT_TYPES = frozenset(
     {
         "NODE_CREATED",
@@ -31,6 +33,8 @@ PHASE_ZERO_EVENT_TYPES = frozenset(
 )
 
 CHAIN_EVENT_TYPES = NODE_EVENT_TYPES | PHASE_ZERO_EVENT_TYPES
+
+NODE_TYPE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 
 TRANSITIONS = {
     "START": {

@@ -17,6 +17,7 @@ from plane.db.models import (
     ResearchExternalReference,
     ResearchProjectProfile,
     ResearchUserProfile,
+    WorkspaceResearchSetting,
 )
 from plane.research.services.integrations.base import IntegrationResult
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
@@ -87,7 +88,12 @@ def env(db, settings):
     workspace = make_workspace(owner)
     add_workspace_member(workspace, collaborator)
     ResearchUserProfile.objects.create(user=collaborator, student_no=f"knowledge-{uuid4().hex[:12]}")
-    enable_research(workspace, research_chain_enabled=True, research_agent_enabled=True)
+    enable_research(
+        workspace,
+        research_chain_enabled=True,
+        research_agent_enabled=True,
+        research_external_rag_enabled=True,
+    )
     ExternalSystemConnection.objects.create(
         workspace=workspace,
         system="RAGPORTAL",
@@ -211,6 +217,47 @@ def test_upload_status_refresh_updates_projection_and_appends_fact(env):
     assert response.json()["data"]["status"] == "SUCCESS"
     assert ResearchChainEvent.objects.filter(event_type="DATA_CHANGE", summary="Upload status: SUCCESS").exists()
 
+    listed = env["owner_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+        {"node_id": str(env["node"].id)},
+    )
+    denied = env["collaborator_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+        {"node_id": str(env["node"].id)},
+    )
+    assert listed.status_code == 200, listed.json()
+    assert [item["id"] for item in listed.json()["data"]] == [str(upload.id)]
+    assert denied.status_code == 404
+
+
+def test_archived_chain_upload_status_refresh_is_readonly(env):
+    """Archived Chains return the local projection without upstream refresh."""
+    upload = ResearchChainUpload.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=env["node"],
+        request_id=f"upload-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        external_upload_id="9",
+        knowledge_base_id="kb-1",
+        file_name="paper.md",
+        file_type="md",
+        file_size=7,
+        file_hash=uuid4().hex,
+        status=ResearchChainUpload.Status.PENDING,
+        created_by=env["owner"],
+    )
+    ResearchChain.objects.filter(pk=env["chain"].pk).update(status=ResearchChain.Status.ARCHIVED)
+    with patch("plane.research.services.integrations.adapters.RagPortalClient.upload_detail") as detail_mock:
+        response = env["owner_client"].get(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/{upload.id}/"
+        )
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["status"] == "PENDING"
+    assert detail_mock.call_count == 0
+    assert not ResearchChainEvent.objects.filter(event_type="DATA_CHANGE", summary="Upload status: SUCCESS").exists()
+
 
 def test_upload_degradation_preserves_manual_path(env):
     """A RAGPortal failure returns an explicit degraded and manual record state."""
@@ -234,6 +281,28 @@ def test_upload_degradation_preserves_manual_path(env):
     assert response.json()["manual_record"] is True
     assert ResearchChainUpload.objects.filter(request_id="req-degraded", status="DEGRADED").exists()
     assert ResearchChainEvent.objects.filter(request_id="req-degraded", event_type="DEGRADED").exists()
+
+
+def test_external_rag_switch_stops_upstream_upload_but_preserves_manual_path(env):
+    """The Workspace switch, not only the connection, gates external calls."""
+    WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(research_external_rag_enabled=False)
+    with patch("httpx.Client.request") as upstream_request:
+        response = env["owner_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+            {
+                "node_id": str(env["node"].id),
+                "kb_id": "kb-1",
+                "file": SimpleUploadedFile("manual.md", b"manual", content_type="text/markdown"),
+            },
+            format="multipart",
+            HTTP_X_REQUEST_ID="req-switch-off",
+        )
+
+    assert upstream_request.call_count == 0
+    assert response.status_code == 503
+    assert response.json()["manual_record"] is True
+    assert ResearchChainUpload.objects.filter(request_id="req-switch-off", status="DEGRADED").exists()
+    assert ResearchChainEvent.objects.filter(request_id="req-switch-off", event_type="DEGRADED").exists()
 
 
 def test_reference_is_scoped_and_rejects_cross_chain_reuse(env):
@@ -263,3 +332,46 @@ def test_reference_is_scoped_and_rejects_cross_chain_reuse(env):
     )
     assert response.status_code == 403
     assert not ResearchChainEvent.objects.filter(event_type="ARTIFACT_CREATED", node=env["node"]).exists()
+
+
+def test_upload_receipt_cannot_rebind_a_cross_chain_reference(env):
+    """RAGPortal receipts carrying an existing knowledge id stay chain-scoped."""
+    reference = ResearchExternalReference.objects.create(
+        workspace=env["workspace"],
+        system="RAGPORTAL",
+        external_type=ResearchExternalReference.ExternalType.KNOWLEDGE_ENTRY,
+        external_id="knowledge-owned",
+        external_parent_id="kb-other",
+        title="Owned paper",
+        source_url="https://ragportal.example.com/api/kb/knowledge-owned",
+        metadata={"chain_id": str(uuid4())},
+        created_by=env["owner"],
+    )
+    receipt = {
+        "external_id": reference.external_id,
+        "external_type": "KNOWLEDGE_ENTRY",
+        "external_parent_id": "kb-1",
+        "title": "paper.md",
+        "summary": "pending",
+        "source_url": "/api/uploads/8",
+        "metadata": {"upload_id": "8", "parse_status": "pending"},
+    }
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.upload",
+        return_value=_result(items=[receipt], request_id="req-cross-chain"),
+    ):
+        response = env["owner_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+            {
+                "node_id": str(env["node"].id),
+                "kb_id": "kb-1",
+                "file": SimpleUploadedFile("paper.md", b"paper", content_type="text/markdown"),
+            },
+            format="multipart",
+            HTTP_X_REQUEST_ID="req-cross-chain",
+        )
+
+    assert response.status_code == 403, response.json()
+    reference.refresh_from_db()
+    assert reference.metadata["chain_id"] != str(env["chain"].id)
+    assert ResearchChainUpload.objects.filter(request_id="req-cross-chain", error_code="cross_chain_reference").exists()

@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 from plane.db.models import (
     AccountLink,
     ExternalSystemConnection,
+    MentorBinding,
     Project,
     ResearchAgentSession,
     ResearchChainEvent,
@@ -64,6 +65,7 @@ def env(db, settings, monkeypatch):
     add_workspace_member(workspace, guest)
     ResearchUserProfile.objects.create(user=student, student_no=f"e2e-{uuid4().hex[:12]}")
     ResearchUserProfile.objects.create(user=mentor, category=ResearchUserProfile.Category.ADVISOR)
+    MentorBinding.objects.create(workspace=workspace, mentee=student, mentor=mentor, is_primary_advisor=True)
     enable_research(
         workspace,
         research_chain_enabled=True,

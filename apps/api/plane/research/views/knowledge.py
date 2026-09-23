@@ -24,7 +24,12 @@ from plane.research.services.integrations import client_for
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.views.base import ResearchAPIView
-from plane.research.views.chain_foundation import _chain_readonly_error, _visible_chain
+from plane.research.views.chain_foundation import (
+    _chain_readonly_error,
+    _chain_writer,
+    _node_operator,
+    _visible_chain,
+)
 
 ALLOWED_UPLOAD_EXTENSIONS = frozenset({"pdf", "md", "markdown", "txt", "doc", "docx"})
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -38,6 +43,8 @@ UPLOAD_STATUS_MAP = {
 
 def _rag_client(workspace):
     """Return the enabled RAGPortal client and its connection."""
+    setting = getattr(workspace, "research_setting", None)
+    external_rag_enabled = bool(setting and setting.research_external_rag_enabled)
     connection = (
         ExternalSystemConnection.objects.filter(
             workspace=workspace,
@@ -45,6 +52,8 @@ def _rag_client(workspace):
             deleted_at__isnull=True,
         ).first()
     )
+    if not external_rag_enabled:
+        connection = None
     return client_for("RAGPORTAL", connection), connection
 
 
@@ -95,10 +104,26 @@ class ResearchChainKnowledgeBaseListEndpoint(ResearchAPIView):
 
 
 class ResearchChainUploadEndpoint(ResearchAPIView):
-    """``POST /chains/<chain_id>/uploads/`` with node-scoped metadata."""
+    """List node uploads or create one through the scoped BFF."""
 
     nav_capability = NAV_RESEARCH_CHAIN
     parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request, slug, chain_id):
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        chain = _visible_chain(workspace, request.user, chain_id)
+        if chain is None:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
+        uploads = chain.uploads.order_by("-created_at")
+        node_id = str(request.query_params.get("node_id") or "").strip()
+        if node_id:
+            uploads = uploads.filter(node_id=node_id)
+        return Response(
+            {"data": ResearchChainUploadSerializer(uploads[:50], many=True).data},
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request, slug, chain_id):
         workspace, error = self.get_workspace(section="research_chain")
@@ -110,6 +135,12 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         readonly_error = _chain_readonly_error(chain)
         if readonly_error:
             return readonly_error
+        if not _chain_writer(workspace, request.user, chain):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can upload research files.",
+                status.HTTP_403_FORBIDDEN,
+            )
         node = chain.nodes.filter(pk=request.data.get("node_id")).first()
         if node is None:
             return research_error(
@@ -260,6 +291,22 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         upload.knowledge_base_id = str(item.get("external_parent_id") or knowledge_base_id)
         upload.task_id = str(item.get("metadata", {}).get("task_id") or "")
         source_path = item.get("source_url") or f"/api/uploads/{upload.external_upload_id}"
+        existing_reference = ResearchExternalReference.objects.filter(
+            workspace=workspace,
+            system="RAGPORTAL",
+            external_type=ResearchExternalReference.ExternalType.KNOWLEDGE_ENTRY,
+            external_id=upload.knowledge_id,
+        ).first()
+        existing_chain = str((existing_reference.metadata or {}).get("chain_id") or "") if existing_reference else ""
+        if existing_chain and existing_chain != str(chain.id):
+            upload.status = ResearchChainUpload.Status.FAILED
+            upload.error_code = "cross_chain_reference"
+            upload.save(update_fields=["status", "error_code", "updated_at"])
+            return research_error(
+                ResearchErrorCode.CHAIN_ACCESS_DENIED,
+                "The knowledge entry belongs to another research chain.",
+                status.HTTP_403_FORBIDDEN,
+            )
         reference, _ = ResearchExternalReference.objects.update_or_create(
             workspace=workspace,
             system="RAGPORTAL",
@@ -270,9 +317,7 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                 "title": item.get("title") or file_name,
                 "summary": item.get("summary") or "",
                 "source_url": (
-                    f"{connection.base_url.rstrip('/')}{source_path}"
-                    if source_path.startswith("/")
-                    else source_path
+                    f"{connection.base_url.rstrip('/')}{source_path}" if source_path.startswith("/") else source_path
                 ),
                 "acl_hint": {
                     "workspace": workspace.slug,
@@ -328,6 +373,11 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
             upload = chain.uploads.get(pk=UUID(str(upload_id)))
         except (ResearchChainUpload.DoesNotExist, TypeError, ValueError):
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research upload not found.")
+        if _chain_readonly_error(chain) is not None or not _chain_writer(workspace, request.user, chain):
+            return Response(
+                {"data": ResearchChainUploadSerializer(upload).data, "degraded": False},
+                status=status.HTTP_200_OK,
+            )
         client, _connection = _rag_client(workspace)
         result = client.upload_detail(upload.external_upload_id, request=request)
         degraded = bool(result.degraded)
@@ -388,6 +438,12 @@ class ResearchChainReferenceEndpoint(ResearchAPIView):
                 ResearchErrorCode.CHAIN_INVALID,
                 "node_id must identify a node in this chain.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not _node_operator(workspace, request.user, node):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can confirm references.",
+                status.HTTP_403_FORBIDDEN,
             )
         request_id = request_id_from(request)
         knowledge_id = str(request.data.get("knowledge_id") or "").strip()
