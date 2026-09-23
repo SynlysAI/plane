@@ -2,6 +2,7 @@
 
 from django.db import transaction
 from django.db import IntegrityError
+from django.db.models import Max
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -10,7 +11,9 @@ from uuid import UUID
 from plane.db.models import (
     ResearchAgentRunEvent,
     ResearchAgentSession,
+    ResearchAnalysisResult,
     ResearchChainEvent,
+    ResearchChain,
     ResearchChainNode,
     ResearchChainSnapshot,
 )
@@ -671,7 +674,16 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
 
 
 class ResearchAgentArtifactEndpoint(AgentPluginMixin):
-    """Save immutable artifact metadata through the Chain snapshot projection."""
+    """Save a human-confirmed artifact as a typed immutable Chain snapshot."""
+
+    ARTIFACT_SNAPSHOT_TYPES = {
+        "RESEARCH_PLAN_DRAFT": ResearchChainSnapshot.SnapshotType.PAPER_RESEARCH,
+        "LITERATURE_REFERENCE": ResearchChainSnapshot.SnapshotType.LITERATURE_REVIEW,
+        "EXPERIMENT_RECORD": ResearchChainSnapshot.SnapshotType.EXPERIMENT_EXECUTION,
+        "EXPERIMENT_DATA": ResearchChainSnapshot.SnapshotType.EXPERIMENT_DATA,
+        "ANALYSIS_SUMMARY": ResearchChainSnapshot.SnapshotType.ANALYSIS_RESULT,
+        "PROCESS_NOTE": ResearchChainSnapshot.SnapshotType.PROCESS,
+    }
 
     def post(self, request, slug):
         workspace, error = self.workspace_or_error(request, slug)
@@ -687,33 +699,111 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
                 status.HTTP_403_FORBIDDEN,
             )
         request_id = request_id_from(request)
-        if not request_id:
-            return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id is required.")
+        artifact_type = str(request.data.get("artifact_type") or "").upper()
+        summary = str(request.data.get("summary") or "").strip()
+        confirmed = str(request.data.get("confirmed", "")).lower() in ("1", "true", "yes")
+        if not request_id or artifact_type not in self.ARTIFACT_SNAPSHOT_TYPES or not summary:
+            return research_error(
+                ResearchErrorCode.AGENT_SCOPE_INVALID,
+                "request_id, supported artifact_type and summary are required.",
+            )
         if ResearchChainSnapshot.objects.filter(request_id=request_id).exists():
             return Response({"idempotent": True}, status=status.HTTP_200_OK)
-        version = session.chain_node.snapshots.count() + 1
-        snapshot = ResearchChainSnapshot.objects.create(
-            chain=session.chain_node.chain,
-            node=session.chain_node,
-            version=version,
-            source_versions=request.data.get("source_versions") or [],
-            summary=str(request.data.get("summary") or "Agent artifact"),
-            created_by=request.user,
-            content_hash=str(request.data.get("content_hash") or ""),
-            immutable=True,
-            request_id=request_id,
+        if ResearchAnalysisResult.objects.filter(request_id=request_id).exists():
+            return Response({"idempotent": True, "draft": True}, status=status.HTTP_200_OK)
+        if not confirmed:
+            analysis = ResearchAnalysisResult.objects.create(
+                workspace=workspace,
+                chain=session.chain_node.chain,
+                node=session.chain_node,
+                method=str(request.data.get("method") or "AI draft"),
+                input_refs=request.data.get("input_refs") or [],
+                summary=summary,
+                metrics=request.data.get("metrics") or {},
+                quality=request.data.get("quality") or {},
+                conclusion=str(request.data.get("conclusion") or ""),
+                operator=request.user,
+                tool_version=str(request.data.get("tool_version") or ""),
+                status=ResearchAnalysisResult.Status.DRAFT,
+                request_id=request_id,
+                payload_hash=payload_hash(request.data),
+                created_by=request.user,
+            )
+            return Response(
+                {"analysis_id": str(analysis.id), "status": "DRAFT", "confirmed": False},
+                status=status.HTTP_201_CREATED,
+            )
+
+        with transaction.atomic():
+            ResearchChain.objects.select_for_update().get(pk=session.chain_node.chain_id)
+            version = (
+                session.chain_node.snapshots.aggregate(Max("version"))["version__max"] or 0
+            ) + 1
+            snapshot = ResearchChainSnapshot.objects.create(
+                chain=session.chain_node.chain,
+                node=session.chain_node,
+                snapshot_type=self.ARTIFACT_SNAPSHOT_TYPES[artifact_type],
+                version=version,
+                source_versions=request.data.get("source_versions") or [],
+                resources=request.data.get("resources") or [],
+                event_range=request.data.get("event_range") or {},
+                summary=summary,
+                created_by=request.user,
+                content_hash=str(request.data.get("content_hash") or payload_hash(request.data)),
+                immutable=True,
+                request_id=request_id,
+            )
+            if artifact_type == "ANALYSIS_SUMMARY":
+                ResearchAnalysisResult.objects.create(
+                    workspace=workspace,
+                    chain=session.chain_node.chain,
+                    node=session.chain_node,
+                    method=str(request.data.get("method") or "AI assisted analysis"),
+                    input_refs=request.data.get("input_refs") or [],
+                    summary=summary,
+                    metrics=request.data.get("metrics") or {},
+                    quality=request.data.get("quality") or {},
+                    conclusion=str(request.data.get("conclusion") or ""),
+                    operator=request.user,
+                    tool_version=str(request.data.get("tool_version") or ""),
+                    status=ResearchAnalysisResult.Status.ACCEPTED,
+                    request_id=request_id,
+                    payload_hash=payload_hash(request.data),
+                    created_by=request.user,
+                )
+        event = _append_event(
+            session,
+            "DATA_CHANGE",
+            {
+                "artifact_type": artifact_type,
+                "artifact_id": str(snapshot.snapshot_id),
+                "snapshot_version": version,
+            },
+            f"artifact:{request_id}",
         )
-        _append_event(session, "DATA_CHANGE", {"artifact_id": str(snapshot.snapshot_id), "snapshot_version": version}, f"artifact:{request_id}")
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.AGENT_ARTIFACT_SAVE,
             resource_type=ResearchResourceType.AGENT_SESSION,
             resource_id=session.session_id,
             actor=request.user,
-            metadata={"snapshot_id": str(snapshot.snapshot_id), "node_id": str(session.chain_node_id)},
+            metadata={
+                "snapshot_id": str(snapshot.snapshot_id),
+                "snapshot_type": snapshot.snapshot_type,
+                "node_id": str(session.chain_node_id),
+            },
             request=request,
         )
-        return Response({"snapshot_id": str(snapshot.snapshot_id), "version": version, "immutable": True}, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "snapshot_id": str(snapshot.snapshot_id),
+                "snapshot_type": snapshot.snapshot_type,
+                "version": version,
+                "immutable": True,
+                "event": ResearchAgentRunEventSerializer(event).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ResearchAgentChainEventEndpoint(AgentPluginMixin):

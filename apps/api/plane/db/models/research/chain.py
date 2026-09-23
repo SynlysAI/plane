@@ -86,9 +86,22 @@ class ResearchChainEvent(AppendOnlyModel):
 class ResearchChainSnapshot(AppendOnlyModel):
     """Immutable point-in-time references for a node."""
 
+    class SnapshotType(models.TextChoices):
+        LITERATURE_REVIEW = "LITERATURE_REVIEW", "Literature review"
+        EXPERIMENT_EXECUTION = "EXPERIMENT_EXECUTION", "Experiment execution"
+        EXPERIMENT_DATA = "EXPERIMENT_DATA", "Experiment data"
+        ANALYSIS_RESULT = "ANALYSIS_RESULT", "Analysis result"
+        PAPER_RESEARCH = "PAPER_RESEARCH", "Paper research"
+        PROCESS = "PROCESS", "Process"
+
     chain = models.ForeignKey(ResearchChain, on_delete=models.PROTECT, related_name="snapshots")
     node = models.ForeignKey(ResearchChainNode, on_delete=models.PROTECT, related_name="snapshots")
     snapshot_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    snapshot_type = models.CharField(
+        max_length=32,
+        choices=SnapshotType.choices,
+        default=SnapshotType.PROCESS,
+    )
     version = models.PositiveIntegerField(default=1)
     source_versions = models.JSONField(default=list)
     resources = models.JSONField(default=list, blank=True)
@@ -152,6 +165,40 @@ class ResearchChainUpload(BaseModel):
             models.Index(fields=["chain", "node", "file_hash"], name="rsch_upload_scope_hash_idx"),
             models.Index(fields=["workspace", "status"], name="rsch_upload_ws_status_idx"),
         ]
+
+
+class ResearchAnalysisResult(BaseModel):
+    """A human-confirmed structured analysis projection for one node."""
+
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        ACCEPTED = "ACCEPTED", "Accepted"
+
+    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="research_analysis_results")
+    chain = models.ForeignKey(ResearchChain, on_delete=models.PROTECT, related_name="analysis_results")
+    node = models.ForeignKey(ResearchChainNode, on_delete=models.PROTECT, related_name="analysis_results")
+    method = models.CharField(max_length=255)
+    input_refs = models.JSONField(default=list, blank=True)
+    summary = models.TextField()
+    metrics = models.JSONField(default=dict, blank=True)
+    quality = models.JSONField(default=dict, blank=True)
+    conclusion = models.TextField(blank=True, default="")
+    operator = models.ForeignKey(
+        "db.User",
+        on_delete=models.SET_NULL,
+        related_name="research_analysis_results",
+        null=True,
+        blank=True,
+    )
+    tool_version = models.CharField(max_length=128, blank=True, default="")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    request_id = models.CharField(max_length=128, unique=True)
+    payload_hash = models.CharField(max_length=64)
+
+    class Meta:
+        db_table = "research_analysis_results"
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=["chain", "node", "status"], name="rsch_analysis_node_idx")]
 
 
 class ResearchReflectionLog(AppendOnlyModel):

@@ -196,6 +196,7 @@ from .knowledge import (
     ResearchChainUploadDetailEndpoint,
     ResearchChainUploadEndpoint,
 )
+from .analysis import ResearchChainAnalysisListCreateEndpoint
 from .outcomes import (
     ResearchChainExportEndpoint,
     ResearchOutcomeDetailEndpoint,
@@ -277,6 +278,7 @@ __all__ = [
     "ResearchChainUploadEndpoint",
     "ResearchChainUploadDetailEndpoint",
     "ResearchChainReferenceEndpoint",
+    "ResearchChainAnalysisListCreateEndpoint",
     "ResearchDeviceExecutionSearchEndpoint",
     "ResearchExternalReferenceDetailEndpoint",
     "ResearchExternalReferenceLinkEndpoint",

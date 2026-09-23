@@ -64,6 +64,7 @@ from .chain import (
     ResearchChainSerializer,
     ResearchChainSnapshotSerializer,
     ResearchChainUploadSerializer,
+    ResearchAnalysisResultSerializer,
 )
 
 __all__ = [
@@ -98,6 +99,7 @@ __all__ = [
     "ResearchChainEventSerializer",
     "ResearchChainSnapshotSerializer",
     "ResearchChainUploadSerializer",
+    "ResearchAnalysisResultSerializer",
     "ResearchAuditEventSerializer",
     "ResearchUserSerializer",
     "WorkspaceResearchSettingSerializer",

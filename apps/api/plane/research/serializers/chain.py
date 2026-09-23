@@ -2,7 +2,14 @@
 
 from rest_framework import serializers
 
-from plane.db.models import ResearchChain, ResearchChainEvent, ResearchChainNode, ResearchChainSnapshot, ResearchChainUpload
+from plane.db.models import (
+    ResearchAnalysisResult,
+    ResearchChain,
+    ResearchChainEvent,
+    ResearchChainNode,
+    ResearchChainSnapshot,
+    ResearchChainUpload,
+)
 
 
 class ResearchChainSerializer(serializers.ModelSerializer):
@@ -54,6 +61,7 @@ class ResearchChainSnapshotSerializer(serializers.ModelSerializer):
         fields = [
             "schema_version",
             "snapshot_id",
+            "snapshot_type",
             "node",
             "version",
             "source_versions",
@@ -102,3 +110,33 @@ class ResearchChainUploadSerializer(serializers.ModelSerializer):
 
     def get_schema_version(self, _obj):
         return "research-chain-upload.v1"
+
+
+class ResearchAnalysisResultSerializer(serializers.ModelSerializer):
+    """Serialize an analysis result without source business bodies."""
+
+    schema_version = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ResearchAnalysisResult
+        fields = [
+            "schema_version",
+            "id",
+            "chain",
+            "node",
+            "method",
+            "input_refs",
+            "summary",
+            "metrics",
+            "quality",
+            "conclusion",
+            "operator",
+            "tool_version",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_schema_version(self, _obj):
+        return "research-analysis.v1"

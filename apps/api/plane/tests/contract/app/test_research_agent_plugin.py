@@ -12,9 +12,11 @@ from plane.db.models import (
     Project,
     ResearchAgentRunEvent,
     ResearchAuditEvent,
+    ResearchAnalysisResult,
     ResearchChain,
     ResearchChainEvent,
     ResearchChainNode,
+    ResearchChainSnapshot,
     ResearchContextGrant,
     ResearchProjectProfile,
     WorkspaceResearchSetting,
@@ -236,12 +238,23 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
         format="json",
     )
     session = created.json()
-    artifact_request = {"request_id": f"artifact-{uuid4().hex}", "session_id": session["session_id"], "summary": "Agent summary", "content_hash": _hash("artifact")}
+    artifact_request = {
+        "request_id": f"artifact-{uuid4().hex}",
+        "session_id": session["session_id"],
+        "artifact_type": "ANALYSIS_SUMMARY",
+        "summary": "Agent summary",
+        "confirmed": True,
+        "content_hash": _hash("artifact"),
+    }
     artifact = env["client"].post(agent_url(env, "artifacts/"), artifact_request, format="json")
     assert artifact.status_code == 201
+    assert artifact.json()["snapshot_type"] == "ANALYSIS_RESULT"
+    assert ResearchChainSnapshot.objects.filter(snapshot_type="ANALYSIS_RESULT").exists()
+    assert ResearchAnalysisResult.objects.filter(request_id=artifact_request["request_id"], status="ACCEPTED").exists()
     replay = env["client"].post(agent_url(env, "artifacts/"), artifact_request, format="json")
     assert replay.status_code == 200
     assert replay.json()["idempotent"] is True
+    assert replay.json().get("snapshot_type") is None
 
     event_request = {
         "request_id": f"event-{uuid4().hex}",
@@ -254,6 +267,44 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
     assert event.status_code == 201, event.json()
     replay_event = env["client"].post(agent_url(env, "chain-events/"), event_request, format="json")
     assert replay_event.status_code == 200
+
+
+def test_ai_artifact_draft_requires_human_confirmation(env):
+    """AI output stays draft until the explicit human confirmation flag."""
+    session = _create_agent_session(env)
+    draft = env["client"].post(
+        agent_url(env, "artifacts/"),
+        {
+            "request_id": f"artifact-{uuid4().hex}",
+            "session_id": session["session_id"],
+            "artifact_type": "ANALYSIS_SUMMARY",
+            "summary": "AI analysis draft",
+            "confirmed": False,
+        },
+        format="json",
+    )
+    assert draft.status_code == 201, draft.json()
+    analysis_id = draft.json()["analysis_id"]
+    assert draft.json()["status"] == "DRAFT"
+    assert ResearchAnalysisResult.objects.filter(id=analysis_id, status="DRAFT").exists()
+    assert not ResearchChainSnapshot.objects.exists()
+
+    accepted = env["client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/analyses/",
+        {
+            "request_id": f"analysis-{uuid4().hex}",
+            "node_id": str(env["node"].id),
+            "method": "regression",
+            "summary": "conversion improved",
+            "metrics": {"r2": 0.91},
+            "confirmed": True,
+        },
+        format="json",
+    )
+    assert accepted.status_code == 201, accepted.json()
+    assert accepted.json()["status"] == "ACCEPTED"
+    assert ResearchChainSnapshot.objects.filter(snapshot_id=accepted.json()["snapshot_id"]).exists()
+    assert ResearchChainEvent.objects.filter(event_type="HUMAN_DECISION", node=env["node"]).exists()
 
 
 def test_agent_close_revokes_context_and_expires_session(env):

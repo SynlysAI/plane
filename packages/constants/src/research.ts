@@ -673,6 +673,7 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/messages/`,
   agentRunEvents: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/events/`,
   agentRunCancel: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/cancel/`,
+  agentArtifacts: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/artifacts/`,
   identityMappings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/`,
   identityMapping: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/${id}/`,
   orgUnits: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/`,
