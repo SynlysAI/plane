@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.db.models import (
+    MentorBinding,
     ProjectMember,
     ResearchChain,
     ResearchChainEvent,
@@ -25,7 +26,7 @@ from plane.research.serializers import (
     ResearchChainSnapshotSerializer,
 )
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
-from plane.research.services.chain_state import normalize_action, resolve_transition
+from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
@@ -145,10 +146,27 @@ def _chain_members(chain):
 
 def _node_operator(workspace, user, node):
     """Return whether the caller can run a node lifecycle action."""
-    if _chain_manager(workspace, user, node.chain) or node.assignee_id == user.id:
+    return _chain_writer(workspace, user, node.chain) or node.assignee_id == user.id
+
+
+def _chain_writer(workspace, user, chain):
+    """Return whether a caller may append mutable Chain data."""
+    if _chain_manager(workspace, user, chain):
         return True
+    profile = getattr(chain.project, "research_profile", None)
+    if profile is not None:
+        today = timezone.localdate()
+        mentor = MentorBinding.objects.filter(
+            workspace=workspace,
+            mentor=user,
+            mentee_id=profile.owner_id,
+            deleted_at__isnull=True,
+            effective_from__lte=today,
+        ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+        if mentor.exists():
+            return True
     return ProjectMember.objects.filter(
-        project_id=node.chain.project_id,
+        project_id=chain.project_id,
         member=user,
         role__gte=15,
         is_active=True,
@@ -184,7 +202,9 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
             return error
         if not _flag_enabled(workspace):
             return _disabled()
-        rows = ResearchChain.objects.filter(workspace=workspace, project__research_profile__isnull=False)
+        rows = ResearchChain.objects.filter(workspace=workspace, project__research_profile__isnull=False).order_by(
+            "-updated_at"
+        )
         rows = [row for row in rows if can_read_project_research_metadata(workspace, request.user, row.project.research_profile)]
         return Response(_envelope(data=ResearchChainSerializer(rows, many=True).data, request_id=request_id_from(request), schema_version="research-chain.v1"))
 
@@ -535,12 +555,25 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
         digest = payload_hash(request.data)
         existing = ResearchChainNode.objects.filter(request_id=request_id).first()
         if existing:
-            if existing.payload_hash != digest:
+            if existing.chain_id != chain.id or existing.payload_hash != digest:
                 return conflict_response()
             return Response(_envelope(data=ResearchChainNodeSerializer(existing).data, request_id=request_id, schema_version="research-node.v1"))
         lifecycle_error = _chain_readonly_error(chain)
         if lifecycle_error:
             return lifecycle_error
+        if not _chain_writer(chain.workspace, request.user, chain):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can create nodes.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        node_type = str(request.data.get("node_type") or "GENERAL_RESEARCH").strip().upper()
+        if len(node_type) > 64 or NODE_TYPE_PATTERN.fullmatch(node_type) is None:
+            return research_error(
+                ResearchErrorCode.CHAIN_INVALID,
+                "node_type is not a supported Research Chain node type.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
         parent = None
         try:
             loop_iteration = max(0, int(request.data.get("loop_iteration") or 0))
@@ -560,7 +593,7 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
             with transaction.atomic():
                 node = ResearchChainNode.objects.create(
                     chain=chain,
-                    node_type=str(request.data.get("node_type") or "GENERAL_RESEARCH"),
+                    node_type=node_type,
                     title=str(request.data.get("title") or "Untitled research node"),
                     parent_node=parent,
                     loop_iteration=loop_iteration,
@@ -656,7 +689,7 @@ class ResearchChainNodeTransitionEndpoint(ResearchAPIView):
                     schema_version="research-node-transition.v1",
                 )
             )
-        if not _node_operator(workspace, request.user, node):
+        if not _node_operator(node.chain.workspace, request.user, node):
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
                 "Only node operators can transition a node.",
@@ -748,6 +781,12 @@ class ResearchChainEventListCreateEndpoint(ResearchAPIView):
         lifecycle_error = _chain_readonly_error(node.chain)
         if lifecycle_error:
             return lifecycle_error
+        if not _node_operator(node.chain.workspace, request.user, node):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can append events.",
+                status.HTTP_403_FORBIDDEN,
+            )
         occurred_at = request.data.get("occurred_at")
         parsed_time = timezone.now()
         if occurred_at:
@@ -793,7 +832,7 @@ class ResearchChainSnapshotCreateEndpoint(ResearchAPIView):
         digest = payload_hash(request.data)
         existing = ResearchChainSnapshot.objects.filter(request_id=request_id).first()
         if existing:
-            if existing.content_hash != digest:
+            if existing.node_id != node.id or existing.content_hash != digest:
                 return conflict_response()
             return Response(_envelope(data=ResearchChainSnapshotSerializer(existing).data, request_id=request_id, schema_version="research-snapshot.v1"))
         lifecycle_error = _chain_readonly_error(node.chain)

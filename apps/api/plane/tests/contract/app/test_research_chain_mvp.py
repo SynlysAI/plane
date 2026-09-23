@@ -5,12 +5,15 @@ from uuid import uuid4
 
 import pytest
 from rest_framework.test import APIClient
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from plane.db.models import (
     Project,
+    ResearchAnalysisResult,
     ResearchAuditEvent,
     ResearchChain,
     ResearchChainEvent,
+    ResearchChainUpload,
     ResearchProjectProfile,
     ResearchUserProfile,
 )
@@ -208,6 +211,7 @@ def test_node_state_machine_is_service_driven_and_idempotent(env):
     assert retried.json()["data"]["node"]["status"] == "ACTIVE"
     assert ResearchChainEvent.objects.filter(node_id=node["id"], event_type="NODE_RETRIED").exists()
 
+
     submitted = env["owner_client"].post(
         transition_url,
         {"request_id": f"transition-{uuid4().hex}", "action": "SUBMIT_REVIEW"},
@@ -239,6 +243,95 @@ def test_node_state_machine_is_service_driven_and_idempotent(env):
     assert resubmitted.json()["data"]["node"]["status"] == "WAITING_HUMAN"
     assert approved.status_code == 201
     assert approved.json()["data"]["node"]["status"] == "COMPLETED"
+
+
+def test_visible_workspace_member_cannot_write_chain_lifecycle_resources(env):
+    """Visibility grants reads only; all Phase 1 writes require chain membership."""
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
+    chain_id = created.json()["data"]["id"]
+    nodes_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/nodes/"
+    node_payload = {
+        "request_id": f"node-member-{uuid4().hex}",
+        "node_type": "LITERATURE_REVIEW",
+        "title": "未经授权的节点",
+    }
+
+    denied = env["collaborator_client"].post(nodes_url, node_payload, format="json")
+
+    assert denied.status_code == 403, denied.json()
+
+    invalid_type = env["owner_client"].post(
+        nodes_url,
+        {
+            "request_id": f"node-invalid-{uuid4().hex}",
+            "node_type": "not-a-research-node",
+            "title": "非法节点类型",
+        },
+        format="json",
+    )
+    assert invalid_type.status_code == 422, invalid_type.json()
+
+    node = env["owner_client"].post(
+        nodes_url,
+        {
+            "request_id": f"node-owner-{uuid4().hex}",
+            "node_type": "LITERATURE_REVIEW",
+            "title": "授权节点",
+        },
+        format="json",
+    ).json()["data"]
+    events_url = f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node['id']}/events/"
+    event = env["collaborator_client"].post(
+        events_url,
+        {
+            "request_id": f"event-member-{uuid4().hex}",
+            "event_id": f"event-{uuid4().hex}",
+            "event_type": "RESEARCH_NOTE",
+            "summary": "未经授权的事件",
+        },
+        format="json",
+    )
+
+    assert event.status_code == 403, event.json()
+
+    upload = env["collaborator_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/uploads/",
+        {
+            "node_id": node["id"],
+            "kb_id": "kb-unauthorized",
+            "file": SimpleUploadedFile("unauthorized.md", b"denied", content_type="text/markdown"),
+        },
+        format="multipart",
+        HTTP_X_REQUEST_ID=f"upload-member-{uuid4().hex}",
+    )
+    assert upload.status_code == 403, upload.json()
+
+    analysis = env["collaborator_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/analyses/",
+        {
+            "request_id": f"analysis-member-{uuid4().hex}",
+            "node_id": node["id"],
+            "method": "unauthorized analysis",
+            "summary": "不应写入",
+        },
+        format="json",
+    )
+    assert analysis.status_code == 403, analysis.json()
+
+    reference = env["collaborator_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/references/",
+        {
+            "request_id": f"reference-member-{uuid4().hex}",
+            "node_id": node["id"],
+            "knowledge_id": "knowledge-unauthorized",
+            "kb_id": "kb-unauthorized",
+        },
+        format="json",
+    )
+    assert reference.status_code == 403, reference.json()
+
+    assert not ResearchChainUpload.objects.filter(request_id__startswith="upload-member-").exists()
+    assert not ResearchAnalysisResult.objects.filter(request_id__startswith="analysis-member-").exists()
 
 
 def test_loop_children_and_snapshots_are_versioned(env):

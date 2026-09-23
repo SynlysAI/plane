@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from plane.db.models import (
     AccountLink,
     Project,
+    ResearchAgentSession,
     ResearchAgentRunEvent,
     ResearchAuditEvent,
     ResearchAnalysisResult,
@@ -19,9 +20,11 @@ from plane.db.models import (
     ResearchChainSnapshot,
     ResearchContextGrant,
     ResearchProjectProfile,
+    ResearchUserProfile,
     WorkspaceResearchSetting,
 )
 from plane.research.services.agent_orchestrator import AgentAssembly, context_metadata, issue_agent_context
+from plane.research.services.chain_projection import project_synlora_events
 from plane.research.views import agent as agent_view
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
@@ -204,6 +207,89 @@ def test_agent_session_is_project_scoped(env):
     assert env["other_client"].get(agent_url(env, f"sessions/{session_id}/")).status_code in (403, 404)
 
 
+def test_visible_workspace_member_cannot_operate_agent_sessions(env):
+    """Workspace visibility permits trace reads but not Agent session writes."""
+    ResearchProjectProfile.objects.filter(pk=env["profile"].pk).update(chain_visibility="WORKSPACE")
+    ResearchUserProfile.objects.create(
+        user=env["other"],
+        category=ResearchUserProfile.Category.STUDENT,
+        student_no=f"agent-viewer-{uuid4().hex[:12]}",
+    )
+    denied = env["other_client"].post(
+        agent_url(env, "sessions/"),
+        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+        format="json",
+    )
+    assert denied.status_code == 403, denied.json()
+
+    session = _create_agent_session(env)
+    assert env["other_client"].get(agent_url(env, f"sessions/{session['session_id']}/")).status_code == 200
+    message = env["other_client"].post(
+        agent_url(env, f"sessions/{session['session_id']}/messages/"),
+        {"request_id": f"message-{uuid4().hex}", "content": "unauthorized"},
+        format="json",
+    )
+    artifact = env["other_client"].post(
+        agent_url(env, "artifacts/"),
+        {
+            "request_id": f"artifact-{uuid4().hex}",
+            "session_id": session["session_id"],
+            "artifact_type": "PROCESS_NOTE",
+            "summary": "unauthorized",
+            "confirmed": True,
+        },
+        format="json",
+    )
+    closed = env["other_client"].post(agent_url(env, f"sessions/{session['session_id']}/close/"), {}, format="json")
+
+    assert message.status_code == 403, message.json()
+    assert artifact.status_code == 403, artifact.json()
+    assert closed.status_code == 403, closed.json()
+    assert ResearchAgentSession.objects.get(session_id=session["session_id"]).status == "READY"
+    assert ResearchContextGrant.objects.get(context_id=session["context_id"]).revoked_at is None
+
+
+def test_archived_chain_blocks_agent_writes_but_allows_safe_close(env):
+    """Archiving a Chain immediately makes all Agent projections read-only."""
+    session = _create_agent_session(env)
+    ResearchChain.objects.filter(pk=env["chain"].pk).update(status=ResearchChain.Status.ARCHIVED)
+
+    message = env["client"].post(
+        agent_url(env, f"sessions/{session['session_id']}/messages/"),
+        {"request_id": f"message-{uuid4().hex}", "content": "continue"},
+        format="json",
+    )
+    artifact = env["client"].post(
+        agent_url(env, "artifacts/"),
+        {
+            "request_id": f"artifact-{uuid4().hex}",
+            "session_id": session["session_id"],
+            "artifact_type": "PROCESS_NOTE",
+            "summary": "archived",
+            "confirmed": True,
+        },
+        format="json",
+    )
+    event = env["client"].post(
+        agent_url(env, "chain-events/"),
+        {
+            "request_id": f"event-{uuid4().hex}",
+            "event_id": f"event-{uuid4().hex}",
+            "chain_node_id": str(env["node"].id),
+            "event_type": "AI_ACTION",
+            "summary": "archived",
+        },
+        format="json",
+    )
+    closed = env["client"].post(agent_url(env, f"sessions/{session['session_id']}/close/"), {}, format="json")
+
+    assert message.status_code == 409, message.json()
+    assert artifact.status_code == 409, artifact.json()
+    assert event.status_code == 409, event.json()
+    assert closed.status_code == 200, closed.json()
+    assert ResearchContextGrant.objects.get(context_id=session["context_id"]).revoked_at is not None
+
+
 def test_agent_message_projects_events_and_does_not_store_content(env):
     created = env["client"].post(
         agent_url(env, "sessions/"),
@@ -255,6 +341,25 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
     assert replay.status_code == 200
     assert replay.json()["idempotent"] is True
     assert replay.json().get("snapshot_type") is None
+    changed_artifact = {**artifact_request, "summary": "Changed Agent summary"}
+    artifact_conflict = env["client"].post(agent_url(env, "artifacts/"), changed_artifact, format="json")
+    assert artifact_conflict.status_code == 409
+
+    remote_event = {
+        "seq": 10,
+        "type": "tool/call",
+        "payload": {"name": "knowledge.search", "remote_seq": 999},
+    }
+    session_record = ResearchAgentSession.objects.select_related("chain_node").get(session_id=session["session_id"])
+    projected = project_synlora_events(session_record, [remote_event])
+    replayed = project_synlora_events(session_record, [remote_event])
+
+    assert projected[0].pk == replayed[0].pk
+    assert projected[0].payload["remote_seq"] == 10
+    assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"], payload__remote_seq=10).count() == 1
+    assert ResearchChainEvent.objects.filter(
+        request_id=f"chain:synlora:{session_record.synlora_session_id}:10"
+    ).count() == 1
 
     event_request = {
         "request_id": f"event-{uuid4().hex}",
@@ -499,6 +604,16 @@ def test_agent_chain_event_taxonomy_and_audit_are_enforced(env):
         format="json",
     )
     assert valid.status_code == 201, valid.json()
+    event_request = {
+        "request_id": f"event-{uuid4().hex}",
+        "event_id": event_id,
+        "chain_node_id": str(env["node"].id),
+        "event_type": "TOOL_CALL",
+        "summary": "valid",
+    }
+    changed_event = {**event_request, "summary": "changed"}
+    event_conflict = env["client"].post(agent_url(env, "chain-events/"), changed_event, format="json")
+    assert event_conflict.status_code == 409
     chain_event = ResearchChainEvent.objects.get(event_id=event_id)
     assert ResearchAuditEvent.objects.filter(
         workspace=env["workspace"],

@@ -2,7 +2,7 @@
 
 from django.db import transaction
 from django.db import IntegrityError
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -27,7 +27,7 @@ from plane.research.services.agent_orchestrator import (
 )
 from plane.research.services.chain_projection import project_synlora_events
 from plane.research.services.synlora import SynloraClient, SynloraError
-from plane.research.services.idempotency import payload_hash, request_id_from
+from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_PROJECTS
 from plane.research.utils.errors import (
@@ -37,6 +37,7 @@ from plane.research.utils.errors import (
     research_not_found,
 )
 from plane.research.views.base import ResearchAPIView
+from plane.research.views.chain_foundation import _chain_readonly_error, _chain_writer, _node_operator
 from plane.research.views.projects import can_read_project_research_metadata
 
 
@@ -121,6 +122,11 @@ def _session_visible(workspace, user, session):
     )
 
 
+def _session_operator(workspace, user, session):
+    """Return whether the caller may operate or write through an Agent session."""
+    return _chain_writer(workspace, user, session.chain_node.chain)
+
+
 def _guard_session_context(session, *, allow_inactive_context=False):
     """Validate the Context grant attached to an already loaded session.
 
@@ -147,7 +153,15 @@ def _guard_session_context(session, *, allow_inactive_context=False):
     return session, None
 
 
-def _load_session(request, workspace, session_id, *, allow_inactive_context=False):
+def _load_session(
+    request,
+    workspace,
+    session_id,
+    *,
+    allow_inactive_context=False,
+    require_operator=False,
+    require_active_chain=False,
+):
     try:
         session_id = UUID(str(session_id))
     except (TypeError, ValueError):
@@ -165,10 +179,28 @@ def _load_session(request, workspace, session_id, *, allow_inactive_context=Fals
     )
     if session is None or not _session_visible(workspace, request.user, session):
         return None, research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent session not found.")
+    if require_operator and not _session_operator(workspace, request.user, session):
+        return None, research_error(
+            ResearchErrorCode.PERMISSION_DENIED,
+            "Only chain members can operate this Agent session.",
+            status.HTTP_403_FORBIDDEN,
+        )
+    if require_active_chain:
+        readonly_error = _chain_readonly_error(session.chain_node.chain)
+        if readonly_error:
+            return None, readonly_error
     return _guard_session_context(session, allow_inactive_context=allow_inactive_context)
 
 
-def _load_session_by_run(request, workspace, run_id, *, allow_inactive_context=False):
+def _load_session_by_run(
+    request,
+    workspace,
+    run_id,
+    *,
+    allow_inactive_context=False,
+    require_operator=False,
+    require_active_chain=False,
+):
     """Load a visible Agent session by its stable run ID."""
     try:
         run_id = UUID(str(run_id))
@@ -187,6 +219,16 @@ def _load_session_by_run(request, workspace, run_id, *, allow_inactive_context=F
     )
     if session is None or not _session_visible(workspace, request.user, session):
         return None, research_not_found(ResearchErrorCode.AGENT_SESSION_NOT_FOUND, "Agent run not found.")
+    if require_operator and not _session_operator(workspace, request.user, session):
+        return None, research_error(
+            ResearchErrorCode.PERMISSION_DENIED,
+            "Only chain members can operate this Agent run.",
+            status.HTTP_403_FORBIDDEN,
+        )
+    if require_active_chain:
+        readonly_error = _chain_readonly_error(session.chain_node.chain)
+        if readonly_error:
+            return None, readonly_error
     return _guard_session_context(session, allow_inactive_context=allow_inactive_context)
 
 
@@ -248,6 +290,15 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
         node = _visible_node(workspace, request.user, request.data.get("chain_node_id"))
         if node is None:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "chain_node_id is invalid or not accessible.", status.HTTP_403_FORBIDDEN)
+        readonly_error = _chain_readonly_error(node.chain)
+        if readonly_error:
+            return readonly_error
+        if not _node_operator(workspace, request.user, node):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can create Agent sessions.",
+                status.HTTP_403_FORBIDDEN,
+            )
         try:
             orchestrated = create_synlora_session(
                 workspace=workspace,
@@ -330,6 +381,7 @@ class ResearchAgentSessionCloseEndpoint(AgentPluginMixin):
             workspace,
             session_id,
             allow_inactive_context=True,
+            require_operator=True,
         )
         if error:
             return error
@@ -379,7 +431,13 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        session, error = _load_session(request, workspace, session_id)
+        session, error = _load_session(
+            request,
+            workspace,
+            session_id,
+            require_operator=True,
+            require_active_chain=True,
+        )
         if error:
             return error
         if session.status == ResearchAgentSession.Status.CLOSED:
@@ -568,6 +626,7 @@ class ResearchAgentRunCancelEndpoint(AgentPluginMixin):
             workspace,
             run_id,
             allow_inactive_context=True,
+            require_operator=True,
         )
         if error:
             return error
@@ -621,7 +680,13 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        session, error = _load_session_by_run(request, workspace, run_id)
+        session, error = _load_session_by_run(
+            request,
+            workspace,
+            run_id,
+            require_operator=True,
+            require_active_chain=True,
+        )
         if error:
             return error
         decision = str(request.data.get("decision") or "").upper()
@@ -689,7 +754,13 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        session, error = _load_session(request, workspace, request.data.get("session_id"))
+        session, error = _load_session(
+            request,
+            workspace,
+            request.data.get("session_id"),
+            require_operator=True,
+            require_active_chain=True,
+        )
         if error:
             return error
         if session.status not in (ResearchAgentSession.Status.READY, ResearchAgentSession.Status.WAITING_APPROVAL):
@@ -707,9 +778,16 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
                 ResearchErrorCode.AGENT_SCOPE_INVALID,
                 "request_id, supported artifact_type and summary are required.",
             )
-        if ResearchChainSnapshot.objects.filter(request_id=request_id).exists():
+        digest = payload_hash(request.data)
+        existing_snapshot = ResearchChainSnapshot.objects.filter(request_id=request_id).first()
+        if existing_snapshot is not None:
+            if existing_snapshot.node_id != session.chain_node_id or existing_snapshot.content_hash != digest:
+                return conflict_response()
             return Response({"idempotent": True}, status=status.HTTP_200_OK)
-        if ResearchAnalysisResult.objects.filter(request_id=request_id).exists():
+        existing_analysis = ResearchAnalysisResult.objects.filter(request_id=request_id).first()
+        if existing_analysis is not None:
+            if existing_analysis.node_id != session.chain_node_id or existing_analysis.payload_hash != digest:
+                return conflict_response()
             return Response({"idempotent": True, "draft": True}, status=status.HTTP_200_OK)
         if not confirmed:
             analysis = ResearchAnalysisResult.objects.create(
@@ -726,7 +804,7 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
                 tool_version=str(request.data.get("tool_version") or ""),
                 status=ResearchAnalysisResult.Status.DRAFT,
                 request_id=request_id,
-                payload_hash=payload_hash(request.data),
+                payload_hash=digest,
                 created_by=request.user,
             )
             return Response(
@@ -749,7 +827,7 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
                 event_range=request.data.get("event_range") or {},
                 summary=summary,
                 created_by=request.user,
-                content_hash=str(request.data.get("content_hash") or payload_hash(request.data)),
+                content_hash=digest,
                 immutable=True,
                 request_id=request_id,
             )
@@ -768,7 +846,7 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
                     tool_version=str(request.data.get("tool_version") or ""),
                     status=ResearchAnalysisResult.Status.ACCEPTED,
                     request_id=request_id,
-                    payload_hash=payload_hash(request.data),
+                    payload_hash=digest,
                     created_by=request.user,
                 )
         event = _append_event(
@@ -826,7 +904,20 @@ class ResearchAgentChainEventEndpoint(AgentPluginMixin):
         node = _visible_node(workspace, request.user, request.data.get("chain_node_id"))
         if node is None:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "chain_node_id is invalid or not accessible.", status.HTTP_403_FORBIDDEN)
-        if ResearchChainEvent.objects.filter(request_id=request_id).exists():
+        readonly_error = _chain_readonly_error(node.chain)
+        if readonly_error:
+            return readonly_error
+        if not _node_operator(workspace, request.user, node):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain members can append Agent events.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        digest = payload_hash(request.data)
+        existing_event = ResearchChainEvent.objects.filter(Q(request_id=request_id) | Q(event_id=event_id)).first()
+        if existing_event is not None:
+            if existing_event.node_id != node.id or existing_event.content_hash != digest:
+                return conflict_response()
             return Response({"idempotent": True}, status=status.HTTP_200_OK)
         event = ResearchChainEvent.objects.create(
             chain=node.chain,
@@ -840,7 +931,7 @@ class ResearchAgentChainEventEndpoint(AgentPluginMixin):
             occurred_at=timezone.now(),
             refs=request.data.get("refs") or [],
             summary=str(request.data.get("summary") or ""),
-            content_hash=payload_hash(request.data),
+            content_hash=digest,
         )
         record_audit_event(
             workspace=workspace,
