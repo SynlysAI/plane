@@ -23,6 +23,7 @@ from .chain import (
     ResearchChainNode,
     ResearchChainSnapshot,
     ResearchChainUpload,
+    ResearchAnalysisResult,
     ResearchReflectionLog,
 )
 from .context import ResearchContextGrant
@@ -85,6 +86,7 @@ __all__ = [
     "ResearchChainEvent",
     "ResearchChainSnapshot",
     "ResearchChainUpload",
+    "ResearchAnalysisResult",
     "ResearchReflectionLog",
     "ResearchContextGrant",
     "ResearchAgentSession",

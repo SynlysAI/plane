@@ -58,6 +58,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [creating, setCreating] = useState(false);
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [reasonByNode, setReasonByNode] = useState<Record<string, string>>({});
+  const [snapshotFilter, setSnapshotFilter] = useState("");
   const agentEnabled = Boolean(research.identity?.sections?.research_agent);
 
   const load = useCallback(async () => {
@@ -300,13 +301,38 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 </section>
                 <section>
                   <h4 className="text-11 font-medium text-secondary">{t("research.chains.snapshots_title")}</h4>
-                  <ul className="mt-2 space-y-2" role="list">
-                    {selected.snapshots.map((snapshot) => (
-                      <li key={snapshot.snapshot_id} className="rounded-md border border-subtle bg-surface-1 p-3">
-                        <p className="text-11 font-medium text-primary">v{snapshot.version}</p>
-                        <p className="mt-1 text-11 text-tertiary">{snapshot.summary}</p>
-                      </li>
+                  <select
+                    value={snapshotFilter}
+                    onChange={(event) => setSnapshotFilter(event.target.value)}
+                    aria-label={t("research.chains.snapshot_filter")}
+                    className="mt-2 w-full rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-11 text-primary"
+                  >
+                    <option value="">{t("research.chains.snapshot_filter_all")}</option>
+                    {[
+                      "LITERATURE_REVIEW",
+                      "EXPERIMENT_EXECUTION",
+                      "EXPERIMENT_DATA",
+                      "ANALYSIS_RESULT",
+                      "PAPER_RESEARCH",
+                      "PROCESS",
+                    ].map((type) => (
+                      <option key={type} value={type}>
+                        {t(`research.chains.snapshot_type_${type.toLowerCase()}`)}
+                      </option>
                     ))}
+                  </select>
+                  <ul className="mt-2 space-y-2" role="list">
+                    {selected.snapshots
+                      .filter((snapshot) => !snapshotFilter || snapshot.snapshot_type === snapshotFilter)
+                      .map((snapshot) => (
+                        <li key={snapshot.snapshot_id} className="rounded-md border border-subtle bg-surface-1 p-3">
+                          <p className="text-11 font-medium text-primary">
+                            {t(`research.chains.snapshot_type_${snapshot.snapshot_type.toLowerCase()}`)} · v
+                            {snapshot.version}
+                          </p>
+                          <p className="mt-1 text-11 text-tertiary">{snapshot.summary}</p>
+                        </li>
+                      ))}
                   </ul>
                 </section>
               </div>

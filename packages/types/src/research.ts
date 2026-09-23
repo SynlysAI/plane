@@ -201,6 +201,13 @@ export type TResearchChainEvent = {
 export type TResearchChainSnapshot = {
   schema_version: "research-snapshot.v1";
   snapshot_id: string;
+  snapshot_type:
+    | "LITERATURE_REVIEW"
+    | "EXPERIMENT_EXECUTION"
+    | "EXPERIMENT_DATA"
+    | "ANALYSIS_RESULT"
+    | "PAPER_RESEARCH"
+    | "PROCESS";
   node: string;
   version: number;
   source_versions: Array<Record<string, unknown>>;
@@ -218,6 +225,24 @@ export type TResearchChainMember = {
   display_name: string;
   role: "OWNER" | "ADMIN" | "MEMBER";
   is_owner: boolean;
+};
+
+export type TResearchAnalysisResult = {
+  schema_version: "research-analysis.v1";
+  id: string;
+  chain: string;
+  node: string;
+  method: string;
+  input_refs: Array<Record<string, unknown>>;
+  summary: string;
+  metrics: Record<string, unknown>;
+  quality: Record<string, unknown>;
+  conclusion: string;
+  operator: string | null;
+  tool_version: string;
+  status: "DRAFT" | "ACCEPTED";
+  created_at: string;
+  updated_at: string;
 };
 
 export type TAgentPluginManifest = {

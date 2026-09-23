@@ -86,4 +86,29 @@ export class ResearchAgentService extends APIService {
         throw err?.response?.data;
       });
   }
+
+  async saveArtifact(
+    workspaceSlug: string,
+    sessionId: string,
+    payload: {
+      artifact_type: string;
+      summary: string;
+      confirmed: boolean;
+      method?: string;
+      metrics?: Record<string, unknown>;
+      conclusion?: string;
+      input_refs?: Array<Record<string, unknown>>;
+      content_hash?: string;
+    }
+  ) {
+    return this.post(researchEndpoints.agentArtifacts(workspaceSlug), {
+      ...payload,
+      session_id: sessionId,
+      request_id: request_id(),
+    })
+      .then((res) => res?.data)
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
 }

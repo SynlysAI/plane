@@ -174,6 +174,7 @@ from plane.research.views import (
     ResearchChainUploadEndpoint,
     ResearchChainUploadDetailEndpoint,
     ResearchChainReferenceEndpoint,
+    ResearchChainAnalysisListCreateEndpoint,
 )
 
 urlpatterns = [
@@ -251,6 +252,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/references/",
         ResearchChainReferenceEndpoint.as_view(),
         name="research-chain-references",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/analyses/",
+        ResearchChainAnalysisListCreateEndpoint.as_view(),
+        name="research-chain-analyses",
     ),
     path(
         "research/workspaces/<str:slug>/user-imports/single/",

@@ -40,6 +40,11 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  const [artifactDraft, setArtifactDraft] = useState("");
+  const [artifactType, setArtifactType] = useState("ANALYSIS_SUMMARY");
+  const [artifactConfirmed, setArtifactConfirmed] = useState(false);
+  const [savingArtifact, setSavingArtifact] = useState(false);
+  const [savedArtifact, setSavedArtifact] = useState<string | null>(null);
   const sessionRef = useRef<TResearchAgentSession | null>(null);
 
   useEffect(() => {
@@ -47,6 +52,9 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
     setState("loading_context");
     setEvents([]);
     setMessage("");
+    setArtifactDraft("");
+    setArtifactConfirmed(false);
+    setSavedArtifact(null);
 
     const closeQuietly = async (value: TResearchAgentSession | null) => {
       if (!value || value.status === "CLOSED") return;
@@ -144,6 +152,31 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
       setState("error");
     } finally {
       setSending(false);
+    }
+  };
+
+  const saveArtifact = async () => {
+    if (!session || !artifactDraft.trim() || !artifactConfirmed || savingArtifact) return;
+    setSavingArtifact(true);
+    try {
+      const result = await agentService.saveArtifact(workspaceSlug, session.session_id, {
+        artifact_type: artifactType,
+        summary: artifactDraft.trim(),
+        confirmed: artifactConfirmed,
+        method: "AI assisted analysis",
+      });
+      setSavedArtifact(
+        result?.snapshot_id ? `${result.snapshot_type} v${result.version}` : `DRAFT ${result?.analysis_id ?? ""}`
+      );
+      if (result?.event) {
+        setEvents((current) => mergeEvents(current, [result.event]));
+      }
+      setArtifactDraft("");
+      setArtifactConfirmed(false);
+    } catch {
+      setState("error");
+    } finally {
+      setSavingArtifact(false);
     }
   };
 
@@ -282,6 +315,52 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
           </section>
           <section className="border-b border-subtle p-4">
             <h3 className="text-12 font-medium text-primary">{t("research.agent.artifacts_title")}</h3>
+            <div className="mt-2 space-y-2">
+              <textarea
+                value={artifactDraft}
+                onChange={(event) => setArtifactDraft(event.target.value)}
+                placeholder={t("research.agent.artifact_placeholder")}
+                rows={3}
+                className="w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={artifactType}
+                  onChange={(event) => setArtifactType(event.target.value)}
+                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-11 text-primary"
+                >
+                  {[
+                    "RESEARCH_PLAN_DRAFT",
+                    "LITERATURE_REFERENCE",
+                    "EXPERIMENT_RECORD",
+                    "EXPERIMENT_DATA",
+                    "ANALYSIS_SUMMARY",
+                    "PROCESS_NOTE",
+                  ].map((type) => (
+                    <option key={type} value={type}>
+                      {t(`research.agent.artifact_type_${type.toLowerCase()}`)}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-1 text-11 text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={artifactConfirmed}
+                    onChange={(event) => setArtifactConfirmed(event.target.checked)}
+                  />
+                  {t("research.agent.artifact_confirm")}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void saveArtifact()}
+                  disabled={!session || !artifactDraft.trim() || !artifactConfirmed || savingArtifact}
+                  className="rounded-md bg-accent-primary px-3 py-1.5 text-11 text-on-color disabled:opacity-50"
+                >
+                  {savingArtifact ? t("research.agent.status.SAVING") : t("research.agent.save_artifact")}
+                </button>
+              </div>
+              {savedArtifact && <p className="text-11 text-tertiary">{savedArtifact}</p>}
+            </div>
             {artifactEvents.length ? (
               <ul className="mt-2 space-y-2" role="list">
                 {artifactEvents.map((event) => (

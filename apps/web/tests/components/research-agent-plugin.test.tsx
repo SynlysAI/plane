@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
   closeSession: vi.fn(),
   sendMessage: vi.fn(),
+  saveArtifact: vi.fn(),
 }));
 
 vi.mock("@plane/i18n", () => ({
@@ -32,6 +33,7 @@ vi.mock("@/services/research/agent.service", () => ({
     cancelRun = mocks.cancelRun;
     closeSession = mocks.closeSession;
     sendMessage = mocks.sendMessage;
+    saveArtifact = mocks.saveArtifact;
   },
 }));
 
@@ -91,6 +93,12 @@ beforeEach(() => {
     latest_seq: afterSeq === 0 ? 1 : 2,
   }));
   mocks.cancelRun.mockResolvedValue({ ...session, status: "CLOSED" });
+  mocks.saveArtifact.mockResolvedValue({
+    snapshot_id: "snap-1",
+    snapshot_type: "ANALYSIS_RESULT",
+    version: 2,
+    event: event(3, "DATA_CHANGE"),
+  });
 });
 
 afterEach(() => {
@@ -125,4 +133,35 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
   });
   expect(mocks.cancelRun).toHaveBeenCalledWith("lab", "run-1");
   expect(container.textContent).toContain("已关闭");
+
+  await act(async () => {
+    root.render(null);
+  });
+  root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
+  await act(async () => undefined);
+  await act(async () => undefined);
+  const textarea = [...container.querySelectorAll("textarea")].at(-1);
+  expect(textarea).not.toBeNull();
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    valueSetter?.call(textarea, "confirmed analysis");
+    textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const checkbox = container.querySelector('input[type="checkbox"]');
+  await act(async () => {
+    (checkbox as HTMLInputElement | null)?.click();
+  });
+  await act(async () => {
+    const saveButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "保存到科研链"
+    );
+    expect(saveButton?.disabled).toBe(false);
+    saveButton?.click();
+  });
+  expect(mocks.saveArtifact).toHaveBeenCalledWith(
+    "lab",
+    "session-1",
+    expect.objectContaining({ artifact_type: "ANALYSIS_SUMMARY", confirmed: true })
+  );
+  expect(container.textContent).toContain("ANALYSIS_RESULT v2");
 });

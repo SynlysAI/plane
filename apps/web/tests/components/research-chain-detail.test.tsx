@@ -102,6 +102,7 @@ beforeEach(() => {
       {
         schema_version: "research-snapshot.v1",
         snapshot_id: "snapshot-1",
+        snapshot_type: "PROCESS",
         node: "node-1",
         version: 1,
         source_versions: [],
