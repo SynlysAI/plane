@@ -74,7 +74,7 @@ def test_context_token_is_short_lived_and_stored_only_as_hash(env):
     issued = _issue(env)
     grant = ResearchContextGrant.objects.get(context_id=issued["context_id"])
 
-    assert issued["schema_version"] == "agent-context.v1"
+    assert issued["schema_version"] == "agent-context.v2"
     assert issued["scope"]["research_project_id"] == str(env["project_a"].id)
     assert grant.token_hash != issued["exchange_token"]
     assert grant.expires_at > timezone.now()

@@ -35,6 +35,10 @@ class ResearchAgentSession(BaseModel):
     )
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.INITIALIZING)
     last_error = models.CharField(max_length=255, blank=True, default="")
+    synlora_session_id = models.CharField(max_length=128, blank=True, default="")
+    synlora_run_id = models.CharField(max_length=128, blank=True, default="")
+    delegated_subject = models.CharField(max_length=255, blank=True, default="")
+    assembly = models.JSONField(default=dict, blank=True)
     request_id = models.CharField(max_length=128, unique=True)
     payload_hash = models.CharField(max_length=64)
 

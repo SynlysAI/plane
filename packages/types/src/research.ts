@@ -246,6 +246,18 @@ export type TResearchAgentSession = {
   context_hash: string;
   status: "INITIALIZING" | "READY" | "STREAMING" | "WAITING_APPROVAL" | "SAVING" | "DEGRADED" | "ERROR" | "CLOSED";
   last_error: string;
+  synlora_session_id: string;
+  synlora_run_id: string;
+  delegated_subject: string;
+  assembly: {
+    persona: string;
+    enabled_plugins: string[];
+    allowed_tools: string[];
+    allowed_knowledge_base_ids: string[];
+    allowed_file_ids: string[];
+    unavailable_reasons: string[];
+    policy_id: string;
+  };
   created_at: string;
   updated_at: string;
 };
