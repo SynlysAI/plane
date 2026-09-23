@@ -22,13 +22,18 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
   const [chains, setChains] = useState<TResearchChain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setForbidden(false);
     try {
       setChains(await chainService.getChains(workspaceSlug));
-    } catch {
+    } catch (caught) {
+      if ((caught as { error_code?: string })?.error_code === "research_permission_denied") {
+        setForbidden(true);
+      }
       setError("load_failed");
     } finally {
       setLoading(false);
@@ -45,6 +50,16 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
         {[0, 1, 2].map((row) => (
           <div key={row} className="h-12 animate-pulse rounded-md bg-surface-2" />
         ))}
+      </div>
+    );
+  }
+
+  if (forbidden) {
+    return (
+      <div className="p-5">
+        <p className="rounded-lg border border-subtle bg-surface-1 p-6 text-13 text-primary" role="alert">
+          {t("research.common.permission_denied")}
+        </p>
       </div>
     );
   }

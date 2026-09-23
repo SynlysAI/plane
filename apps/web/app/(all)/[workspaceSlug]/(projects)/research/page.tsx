@@ -11,6 +11,7 @@ import { useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 // components
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchChainPortal } from "@/components/research/chains/research-chain-portal";
 import { ResearchPiAggregateBoard } from "@/components/research/pi/pi-aggregate-board";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -24,7 +25,6 @@ const BUSINESS_CARDS = [
   { key: "reports", path: "reports", titleKey: "research.nav.reports", section: "reports" },
   { key: "summary", path: "reports/summary", titleKey: "research.nav.summary", section: "reports" },
   { key: "projects", path: "projects", titleKey: "research.nav.projects", section: "reports" },
-  { key: "research_chain", path: "chains", titleKey: "research.nav.research_chain", section: "research_chain" },
   { key: "approvals", path: "approvals", titleKey: "research.nav.approvals", section: "approvals" },
 ] as const;
 
@@ -60,6 +60,9 @@ function WorkspaceResearchOverviewPage() {
           <div className="mb-6 overflow-hidden rounded-lg border border-subtle bg-surface-1">
             <ResearchPiAggregateBoard workspaceSlug={workspaceSlug} />
           </div>
+        )}
+        {workspaceSlug && isCardVisible({ key: "research_chain", section: "research_chain" }) && (
+          <ResearchChainPortal workspaceSlug={workspaceSlug} />
         )}
         <section className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-lg border border-subtle bg-surface-1 p-4">
