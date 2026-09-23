@@ -52,6 +52,9 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
   const ragportal = connections.find((connection) => connection.system === "RAGPORTAL");
   const ragStatus = ragportal?.is_enabled ? (ragportal.health_status ?? "UNKNOWN") : ("UNKNOWN" as const);
   const agentAvailable = Boolean(research.identity?.sections?.research_agent);
+  const updatedTime = currentChain ? new Date(currentChain.updated_at) : null;
+  const updatedLabel =
+    updatedTime instanceof Date && !Number.isNaN(updatedTime.getTime()) ? updatedTime.toLocaleString() : "";
 
   return (
     <section className="mb-6 space-y-3" aria-label={t("research.portal.title")}>
@@ -70,7 +73,7 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
                     active: activeCount,
                     total: chains.length,
                   })}
-                  <span className="ml-2">{new Date(currentChain.updated_at).toLocaleString()}</span>
+                  {updatedLabel && <span className="ml-2">{updatedLabel}</span>}
                 </>
               )}
             </p>

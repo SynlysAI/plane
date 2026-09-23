@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // services
@@ -37,19 +37,27 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const [state, setState] = useState<TPanelState>("loading");
   const [uploading, setUploading] = useState(false);
   const [degradedReason, setDegradedReason] = useState("");
+  const [actionError, setActionError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     try {
-      const payload = await chainService.getKnowledgeBases(workspaceSlug, chainId);
+      const [payload, uploadPayload] = await Promise.all([
+        chainService.getKnowledgeBases(workspaceSlug, chainId),
+        chainService.getKnowledgeUploads(workspaceSlug, chainId, nodeId),
+      ]);
       setKnowledgeBases(payload.items);
       setKnowledgeBaseId((current) => current || payload.items[0]?.external_id || "");
+      setUploads(uploadPayload.data);
       setState(payload.degraded ? "degraded" : "ready");
     } catch (error) {
       const errorCode = (error as { error_code?: string })?.error_code;
       setState(errorCode === "research_permission_denied" ? "forbidden" : "error");
     }
-  }, [chainId, workspaceSlug]);
+  }, [chainId, nodeId, workspaceSlug]);
 
   useEffect(() => {
     void load();
@@ -59,11 +67,13 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
     if (!file || !knowledgeBaseId || uploading) return;
     setUploading(true);
     setDegradedReason("");
+    setActionError("");
     try {
       const payload = await chainService.uploadKnowledgeFile(workspaceSlug, chainId, nodeId, knowledgeBaseId, file);
       setUploads((current) => [payload.data, ...current.filter((item) => item.id !== payload.data.id)]);
       setState(payload.degraded ? "degraded" : "ready");
       setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       const payload = error as { degraded_reason?: string; error_code?: string };
       setDegradedReason(payload.degraded_reason ?? payload.error_code ?? "error");
@@ -84,13 +94,14 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   };
 
   const confirm = async (uploadRecord: TResearchChainUpload) => {
+    setActionError("");
     try {
       await chainService.confirmKnowledgeReference(workspaceSlug, chainId, nodeId, uploadRecord);
       setUploads((current) =>
         current.map((item) => (item.id === uploadRecord.id ? { ...item, status: "SUCCESS" } : item))
       );
     } catch {
-      setState("error");
+      setActionError(t("research.knowledge.action_failed"));
     }
   };
 
@@ -107,6 +118,11 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       {state === "degraded" && (
         <p className="mt-2 text-11 text-warning-primary">
           {t("research.knowledge.degraded", { reason: degradedReason || "unknown" })}
+        </p>
+      )}
+      {actionError && (
+        <p className="mt-2 text-11 text-danger-primary" role="alert">
+          {actionError}
         </p>
       )}
       {state !== "loading" && state !== "forbidden" && (
@@ -131,6 +147,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
               <input
                 type="file"
                 accept=".pdf,.md,.markdown,.txt,.doc,.docx"
+                ref={fileInputRef}
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                 className="text-11 text-secondary"
               />
