@@ -4,6 +4,8 @@
 
 """Outcome endpoints (§5.8) and the frozen reference list export (P1-CHAIN-07)."""
 
+import hashlib
+
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -20,6 +22,7 @@ from plane.db.models import (
     StageMaterial,
 )
 from plane.research.serializers import ResearchOutcomeSerializer
+from plane.research.services.chain import build_timeline
 from plane.research.services.progress import build_progress
 from plane.research.utils.acl import build_actor_context, check_access
 from plane.research.utils.audit import (
@@ -340,13 +343,17 @@ class ResearchChainExportEndpoint(ResearchAPIView):
                 "chain must be thinking or development.",
             )
         progress = build_progress(workspace, project_id, request.user)
+        timeline = build_timeline(workspace, project_id, request.user, chain=chain)
         markdown = build_chain_markdown(
             progress,
             profile.project.name,
             generated_by=getattr(request.user, "display_name", ""),
             chain=chain,
+            timeline=timeline,
         )
         response = HttpResponse(markdown, content_type="text/markdown")
+        content_hash = hashlib.sha256(response.content).hexdigest()
+        response["X-Research-Chain-SHA256"] = content_hash
         suffix = f"-{chain}" if chain else ""
         identifier = profile.project.identifier or project_id
         file_name = f"research-chain{suffix}-{identifier}-{timezone.localdate():%Y%m%d}.md"
@@ -357,7 +364,7 @@ class ResearchChainExportEndpoint(ResearchAPIView):
             resource_type=ResearchResourceType.PROJECT_PROFILE,
             resource_id=project_id,
             actor=request.user,
-            metadata={"file_name": file_name},
+            metadata={"file_name": file_name, "content_hash": content_hash},
             request=request,
         )
         return response

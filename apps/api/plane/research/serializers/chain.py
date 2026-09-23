@@ -51,7 +51,20 @@ class ResearchChainSnapshotSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ResearchChainSnapshot
-        fields = ["schema_version", "snapshot_id", "node", "version", "source_versions", "summary", "created_by", "content_hash", "immutable", "created_at"]
+        fields = [
+            "schema_version",
+            "snapshot_id",
+            "node",
+            "version",
+            "source_versions",
+            "resources",
+            "event_range",
+            "summary",
+            "created_by",
+            "content_hash",
+            "immutable",
+            "created_at",
+        ]
 
     def get_schema_version(self, _obj):
         return "research-snapshot.v1"

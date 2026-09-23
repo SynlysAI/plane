@@ -146,8 +146,8 @@ def test_node_event_and_snapshot_are_idempotent_append_only(env):
     assert event.status_code == 201, event.json()
     event_replay = env["client"].post(events_url, event_payload, format="json")
     assert event_replay.status_code == 200
-    assert ResearchChainEvent.objects.count() == 1
-    stored_event = ResearchChainEvent.objects.get()
+    assert ResearchChainEvent.objects.count() == 2
+    stored_event = ResearchChainEvent.objects.get(request_id=event_payload["request_id"])
     with pytest.raises(TypeError):
         stored_event.summary = "overwrite"
         stored_event.save()

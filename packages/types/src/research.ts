@@ -173,7 +173,7 @@ export type TResearchChainNode = {
   title: string;
   parent_node: string | null;
   loop_iteration: number;
-  status: "PENDING" | "IN_PROGRESS" | "BLOCKED" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+  status: "DRAFT" | "ACTIVE" | "WAITING_HUMAN" | "NEEDS_REVISION" | "COMPLETED" | "FAILED" | "ARCHIVED";
   assignee: string | null;
   created_at: string;
   updated_at: string;

@@ -12,7 +12,7 @@ uses, so the file matches what the caller may already read.
 from django.utils import timezone
 
 
-def build_chain_markdown(progress, project_name, *, generated_by="", chain=None):
+def build_chain_markdown(progress, project_name, *, generated_by="", chain=None, timeline=None):
     """Render the reference list as Markdown, optionally for one chain."""
     if chain == "thinking":
         progress = {
@@ -28,11 +28,52 @@ def build_chain_markdown(progress, project_name, *, generated_by="", chain=None)
             "reports": {"items": [], "count": 0},
         }
     today = timezone.localdate().isoformat()
+    timeline_items = (timeline or {}).get("items", [])
+    if chain:
+        timeline_items = [item for item in timeline_items if chain in item.get("chains", [])]
+    chain_events = sorted(
+        (item for item in timeline_items if item.get("kind") == "chain_event"),
+        key=lambda item: (item.get("at") or "", item.get("event_id") or ""),
+    )
+    chain_snapshots = sorted(
+        (item for item in timeline_items if item.get("kind") == "chain_snapshot"),
+        key=lambda item: (item.get("at") or "", item.get("version") or 0),
+    )
     lines = [
         f"# Research chain — {project_name}",
         "",
         f"Generated: {today}" + (f" by {generated_by}" if generated_by else ""),
+        f"Degraded sources: {', '.join((timeline or {}).get('degraded_sources', [])) or 'none'}",
         "",
+        "## Research Chain events",
+        "",
+    ]
+    if chain_events:
+        for item in chain_events:
+            summary = str(item.get("title") or "").replace("\n", " ")
+            lines.append(
+                f"- `{item.get('event_id')}` {item.get('event_type')} "
+                f"({item.get('source_system')}, `{item.get('content_hash')}`) — {summary}"
+            )
+    else:
+        lines.append("- (none)")
+    lines += [
+        "",
+        "## Research Chain snapshots",
+        "",
+    ]
+    if chain_snapshots:
+        for item in chain_snapshots:
+            event_range = item.get("event_range") or {}
+            lines.append(
+                f"- v{item.get('version')} `{item.get('snapshot_id')}` "
+                f"resources={len(item.get('resources') or [])} "
+                f"events={event_range.get('first', '')}..{event_range.get('last', '')} "
+                f"`{item.get('content_hash')}`"
+            )
+    else:
+        lines.append("- (none)")
+    lines += [
         "## Experiments",
         "",
     ]
