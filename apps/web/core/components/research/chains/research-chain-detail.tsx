@@ -18,6 +18,7 @@ import type {
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
+import { ResearchChainKnowledgePanel } from "@/components/research/chains/research-chain-knowledge-panel";
 
 const chainService = new ResearchChainService();
 
@@ -272,6 +273,15 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           </ul>
 
           <aside className="rounded-lg border border-subtle bg-surface-1 p-4">
+            {selected && (
+              <div className="mb-4">
+                <ResearchChainKnowledgePanel
+                  workspaceSlug={workspaceSlug}
+                  chainId={chainId}
+                  nodeId={selected.node.id}
+                />
+              </div>
+            )}
             <h3 className="text-13 font-medium text-primary">{t("research.chains.timeline_title")}</h3>
             {!selected ? (
               <p className="mt-2 text-12 text-tertiary">{t("research.chains.timeline_empty")}</p>

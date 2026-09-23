@@ -32,6 +32,21 @@ function request_id() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+export type TResearchKnowledgeBase = {
+  external_id: string;
+  title: string;
+  summary?: string;
+};
+
+export type TResearchChainUpload = {
+  id: string;
+  status: "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "DEGRADED";
+  knowledge_id: string;
+  knowledge_base_id: string;
+  file_name: string;
+  error_code: string;
+};
+
 export class ResearchChainService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -176,6 +191,68 @@ export class ResearchChainService extends APIService {
         if (!payload?.data) throw payload ?? {};
         return payload.data;
       })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async getKnowledgeBases(workspaceSlug: string, chainId: string) {
+    return this.get(researchEndpoints.chainKnowledgeBases(workspaceSlug, chainId))
+      .then((res) => {
+        const payload = res?.data as { items?: TResearchKnowledgeBase[]; degraded?: boolean } | undefined;
+        return { items: payload?.items ?? [], degraded: Boolean(payload?.degraded) };
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async uploadKnowledgeFile(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    knowledgeBaseId: string,
+    file: File
+  ) {
+    const form = new FormData();
+    form.append("node_id", nodeId);
+    form.append("kb_id", knowledgeBaseId);
+    form.append("file", file);
+    return this.post(researchEndpoints.chainUploads(workspaceSlug, chainId), form, {
+      headers: { "X-Request-Id": request_id() },
+    })
+      .then((res) => res?.data as { data: TResearchChainUpload; degraded?: boolean })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async getKnowledgeUpload(workspaceSlug: string, chainId: string, uploadId: string) {
+    return this.get(researchEndpoints.chainUploadDetail(workspaceSlug, chainId, uploadId))
+      .then((res) => res?.data as { data: TResearchChainUpload; degraded?: boolean })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async confirmKnowledgeReference(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    upload: TResearchChainUpload
+  ) {
+    return this.post(
+      researchEndpoints.chainReferences(workspaceSlug, chainId),
+      {
+        request_id: request_id(),
+        node_id: nodeId,
+        knowledge_id: upload.knowledge_id,
+        kb_id: upload.knowledge_base_id,
+        title: upload.file_name,
+      },
+      { headers: { "X-Request-Id": request_id() } }
+    )
+      .then((res) => res?.data)
       .catch((err) => {
         throw err?.response?.data ?? err;
       });

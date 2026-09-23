@@ -1130,6 +1130,17 @@
       "action_fail": "Mark failed",
       "action_archive": "Archive"
     },
+    "knowledge": {
+      "panel_title": "RAGPortal knowledge",
+      "loading": "Loading knowledge bases…",
+      "degraded": "RAGPortal is degraded ({reason}); you can continue with manual records.",
+      "kb_label": "Knowledge base",
+      "file_label": "Research file",
+      "upload": "Upload through BFF",
+      "uploading": "Uploading…",
+      "refresh_status": "Refresh status",
+      "confirm_reference": "Confirm reference"
+    },
     "agent": {
       "description": "Same-origin agent workbench with server-side context authorization.",
       "launch": "Start session",

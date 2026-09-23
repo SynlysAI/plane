@@ -103,6 +103,7 @@ from .research import (
     ResearchChainEvent,
     ResearchChainNode,
     ResearchChainSnapshot,
+    ResearchChainUpload,
     ResearchReflectionLog,
     ResearchContextGrant,
     ResearchAgentRunEvent,

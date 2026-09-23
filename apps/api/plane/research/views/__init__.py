@@ -190,6 +190,12 @@ from .chain_foundation import (
     ResearchChainRestoreEndpoint,
     ResearchChainSnapshotCreateEndpoint,
 )
+from .knowledge import (
+    ResearchChainKnowledgeBaseListEndpoint,
+    ResearchChainReferenceEndpoint,
+    ResearchChainUploadDetailEndpoint,
+    ResearchChainUploadEndpoint,
+)
 from .outcomes import (
     ResearchChainExportEndpoint,
     ResearchOutcomeDetailEndpoint,
@@ -267,6 +273,10 @@ __all__ = [
     "ResearchChainNodeTransitionEndpoint",
     "ResearchChainEventListCreateEndpoint",
     "ResearchChainSnapshotCreateEndpoint",
+    "ResearchChainKnowledgeBaseListEndpoint",
+    "ResearchChainUploadEndpoint",
+    "ResearchChainUploadDetailEndpoint",
+    "ResearchChainReferenceEndpoint",
     "ResearchDeviceExecutionSearchEndpoint",
     "ResearchExternalReferenceDetailEndpoint",
     "ResearchExternalReferenceLinkEndpoint",

@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from plane.db.models import ResearchChain, ResearchChainEvent, ResearchChainNode, ResearchChainSnapshot
+from plane.db.models import ResearchChain, ResearchChainEvent, ResearchChainNode, ResearchChainSnapshot, ResearchChainUpload
 
 
 class ResearchChainSerializer(serializers.ModelSerializer):
@@ -68,3 +68,37 @@ class ResearchChainSnapshotSerializer(serializers.ModelSerializer):
 
     def get_schema_version(self, _obj):
         return "research-snapshot.v1"
+
+
+class ResearchChainUploadSerializer(serializers.ModelSerializer):
+    """Serialize scoped upload metadata without echoing file content."""
+
+    schema_version = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ResearchChainUpload
+        fields = [
+            "schema_version",
+            "id",
+            "chain",
+            "node",
+            "reference",
+            "request_id",
+            "external_upload_id",
+            "knowledge_id",
+            "knowledge_base_id",
+            "task_id",
+            "file_name",
+            "file_type",
+            "file_size",
+            "file_hash",
+            "status",
+            "error_code",
+            "metadata",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_schema_version(self, _obj):
+        return "research-chain-upload.v1"

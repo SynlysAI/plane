@@ -31,6 +31,9 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
+vi.mock("@/components/research/chains/research-chain-knowledge-panel", () => ({
+  ResearchChainKnowledgePanel: () => <div>knowledge-panel</div>,
+}));
 vi.mock("@/services/research/chain.service", () => ({
   ResearchChainService: class {
     getChain = mocks.getChain;
