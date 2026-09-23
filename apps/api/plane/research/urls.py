@@ -161,6 +161,10 @@ from plane.research.views import (
     ResearchUserProfileListEndpoint,
     ResearchChainListCreateEndpoint,
     ResearchChainDetailEndpoint,
+    ResearchChainArchiveEndpoint,
+    ResearchChainRestoreEndpoint,
+    ResearchChainMemberListCreateEndpoint,
+    ResearchChainMemberDetailEndpoint,
     ResearchChainNodeListCreateEndpoint,
     ResearchChainEventListCreateEndpoint,
     ResearchChainSnapshotCreateEndpoint,
@@ -176,6 +180,26 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/",
         ResearchChainDetailEndpoint.as_view(),
         name="research-chain-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/archive/",
+        ResearchChainArchiveEndpoint.as_view(),
+        name="research-chain-archive",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/restore/",
+        ResearchChainRestoreEndpoint.as_view(),
+        name="research-chain-restore",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/members/",
+        ResearchChainMemberListCreateEndpoint.as_view(),
+        name="research-chain-members",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/members/<uuid:user_id>/",
+        ResearchChainMemberDetailEndpoint.as_view(),
+        name="research-chain-member-detail",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/",
