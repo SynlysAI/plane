@@ -7,6 +7,7 @@
 | 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                     |
 | 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                     |
 | 执行手册 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)       |
+| 人工测试 | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md) |
 | 计划状态 | 已完成（单人模式，2026-09-25 验收通过）                                                                                                |
 | 执行模式 | 单人执行；A / B 保留为职责自查分区标签（见 §8）                                                                                        |
 | 修订记录 | v1.1（2026-09-24）：改为单人 5 天模式；新增 L3.5 功能开关矩阵与 L3.6 角色矩阵；降级演练补 WeKnora 失效模拟；缺陷清单落位执行手册附录 A |
