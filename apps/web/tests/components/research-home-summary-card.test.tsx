@@ -38,6 +38,31 @@ vi.mock("@/services/research/chain.service", () => ({
     getChainNodeDetail = mocks.getChainNodeDetail;
   },
 }));
+vi.mock("@/services/research/report.service", () => ({
+  ResearchReportService: class {
+    getReports = vi.fn().mockResolvedValue({ results: [], count: 0 });
+  },
+}));
+vi.mock("@/services/research/review.service", () => ({
+  ResearchReviewService: class {
+    getReviews = vi.fn().mockResolvedValue({ results: [] });
+  },
+}));
+vi.mock("@/services/research/approval.service", () => ({
+  ResearchApprovalService: class {
+    getApprovalRequests = vi.fn().mockResolvedValue({ results: [], count: 0 });
+  },
+}));
+vi.mock("@/services/research/agent.service", () => ({
+  ResearchAgentService: class {
+    getApprovals = vi.fn().mockResolvedValue({ results: [], count: 0 });
+  },
+}));
+vi.mock("@/services/research/integration.service", () => ({
+  ResearchIntegrationService: class {
+    getConnections = vi.fn().mockResolvedValue({ results: [] });
+  },
+}));
 
 const { ResearchHomeSummaryCard } = await import("@/components/research/common/research-home-summary-card");
 
@@ -93,7 +118,8 @@ it("shows the latest visible chain, current node and snapshot", async () => {
 
   expect(container.textContent).toContain("数据分析");
   expect(container.textContent).toContain("模型误差分析已冻结");
-  expect(container.querySelector('a[href="/lab/research/chains/chain-1"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research/chains/chain-1?node=node-1"]')).not.toBeNull();
+  expect(container.textContent).toContain("处理当前节点");
   expect(container.querySelector('a[href="/lab/research"]')).toBeNull();
 });
 
