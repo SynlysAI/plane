@@ -5,34 +5,17 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Badge } from "@plane/propel/badge";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
 import type { TResearchChain, TResearchChainNode, TResearchChainSnapshot } from "@plane/types";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
-
-/** Low-saturation Badge variant for the research status dictionary (Phase 5 extracts this). */
-const CHAIN_STATUS_VARIANTS = {
-  ACTIVE: "brand",
-  COMPLETED: "success",
-  ARCHIVED: "neutral",
-} as const;
-
-/** Node statuses that require a human decision map to warning/danger semantics. */
-const NODE_STATUS_VARIANTS = {
-  DRAFT: "neutral",
-  ACTIVE: "brand",
-  WAITING_HUMAN: "warning",
-  NEEDS_REVISION: "danger",
-  COMPLETED: "success",
-  FAILED: "danger",
-  ARCHIVED: "neutral",
-} as const;
 
 type Props = {
   workspaceSlug: string;
@@ -149,15 +132,15 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
                 >
                   {currentChain.project_name ?? currentChain.project}
                 </Link>
-                <Badge variant={CHAIN_STATUS_VARIANTS[currentChain.status] ?? "neutral"}>
+                <ResearchStatusBadge status={currentChain.status}>
                   {t(`research.chains.chain_status.${currentChain.status.toLowerCase()}`)}
-                </Badge>
+                </ResearchStatusBadge>
               </div>
               {currentNode && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 text-12 text-secondary">
-                  <Badge variant={NODE_STATUS_VARIANTS[currentNode.status] ?? "neutral"}>
+                  <ResearchStatusBadge status={currentNode.status}>
                     {t(`research.chains.node_status.${currentNode.status.toLowerCase()}`)}
-                  </Badge>
+                  </ResearchStatusBadge>
                   <span className="truncate">{currentNode.title}</span>
                 </div>
               )}

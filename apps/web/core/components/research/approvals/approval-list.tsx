@@ -16,12 +16,12 @@ import {
 import type { TApprovalRequestStatus, TApprovalType, TOrgRole } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Badge } from "@plane/propel/badge";
 import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -35,15 +35,6 @@ const SCOPES = [
   { key: "mine", labelKey: "research.approvals.mine" },
   { key: "completed", labelKey: "research.approvals.completed" },
 ] as const;
-
-/** Low-saturation Badge variants for approval status (Phase 5 extracts the shared dictionary). */
-const APPROVAL_STATUS_VARIANTS = {
-  PENDING: "warning",
-  APPROVED: "success",
-  REJECTED: "danger",
-  WITHDRAWN: "neutral",
-  CANCELLED: "neutral",
-} as const;
 
 /** Human readable waiting time from the request creation timestamp. */
 function waitingTime(createdAt: string) {
@@ -167,9 +158,9 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
               </TableCell>
               <TableCell className="text-tertiary">{request.current_step_order}</TableCell>
               <TableCell>
-                <Badge variant={APPROVAL_STATUS_VARIANTS[request.status as keyof typeof APPROVAL_STATUS_VARIANTS]}>
+                <ResearchStatusBadge status={request.status}>
                   {t(APPROVAL_REQUEST_STATUS_LABELS[request.status as TApprovalRequestStatus])}
-                </Badge>
+                </ResearchStatusBadge>
               </TableCell>
               <TableCell className="text-right">
                 {request.can_act && (

@@ -10,7 +10,6 @@ import { useParams, useSearchParams } from "react-router";
 // plane imports
 import { ChevronRightOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
-import { Badge } from "@plane/propel/badge";
 import { getButtonStyling } from "@plane/propel/button";
 import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import type { TResearchChain } from "@plane/types";
@@ -21,6 +20,7 @@ import { ResearchPageShell } from "@/components/research/common/research-page-sh
 import { ResearchChainPortal } from "@/components/research/chains/research-chain-portal";
 import { ResearchReportSummaryBoard } from "@/components/research/reports/report-summary-board";
 import { ResearchPiAggregateBoard } from "@/components/research/pi/pi-aggregate-board";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 // services
@@ -49,13 +49,6 @@ const PERIOD_OPTIONS = [
   { value: "90", labelKey: "research.overview.period_90" },
   { value: "all", labelKey: "research.overview.period_all" },
 ] as const;
-
-/** Low-saturation Badge variants for chain status (Phase 5 extracts the shared dictionary). */
-const CHAIN_STATUS_VARIANTS = {
-  ACTIVE: "brand",
-  COMPLETED: "success",
-  ARCHIVED: "neutral",
-} as const;
 
 type TPeriod = "30" | "90" | "all";
 
@@ -195,9 +188,9 @@ function WorkspaceResearchOverviewPage() {
                       >
                         {chain.project_name ?? chain.project}
                       </Link>
-                      <Badge variant={CHAIN_STATUS_VARIANTS[chain.status] ?? "neutral"} size="sm">
+                      <ResearchStatusBadge status={chain.status} size="sm">
                         {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
-                      </Badge>
+                      </ResearchStatusBadge>
                       <span className="w-24 shrink-0 text-right text-11 text-tertiary tabular-nums">
                         {new Date(chain.updated_at).toLocaleDateString()}
                       </span>

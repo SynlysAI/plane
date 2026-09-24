@@ -5,11 +5,11 @@
  */
 
 import { observer } from "mobx-react";
-import Link from "next/link";
 // plane imports
 import { RESEARCH_SETTINGS_NAVIGATION_ITEMS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
+import { TabNavigationList } from "@plane/propel/tab-navigation";
+import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -42,11 +42,9 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
     return (
       <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle px-5">
         <TabNavigationList className="py-2">
-          <TabNavigationItem isActive>
-            <span aria-current="page" className="whitespace-nowrap">
-              {t("research.nav.platform")}
-            </span>
-          </TabNavigationItem>
+          <span aria-current="page" className="text-13 font-medium whitespace-nowrap text-primary">
+            {t("research.nav.platform")}
+          </span>
         </TabNavigationList>
       </nav>
     );
@@ -58,14 +56,13 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
         {visibleTabs.map((item) => {
           const path = TAB_PATHS[item.key] ?? `settings/${item.key}`;
           return (
-            <Link
+            <ResearchTabLink
               key={item.key}
               href={`/${workspaceSlug}/research/${path}`}
-              aria-current={item.key === currentKey ? "page" : undefined}
-              className="whitespace-nowrap"
+              isActive={item.key === currentKey}
             >
-              <TabNavigationItem isActive={item.key === currentKey}>{t(item.labelKey)}</TabNavigationItem>
-            </Link>
+              {t(item.labelKey)}
+            </ResearchTabLink>
           );
         })}
       </TabNavigationList>

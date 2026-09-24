@@ -4,21 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Badge } from "@plane/propel/badge";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
 import type { TResearchAgentApproval } from "@plane/types";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // services
 import { ResearchAgentService, type TAgentApprovalDecision } from "@/services/research/agent.service";
 
 const agentService = new ResearchAgentService();
-
-/** Risk level mapped to low-saturation Badge variants (Phase 5 extracts the shared dictionary). */
-const RISK_VARIANTS = {
-  LOW: "success",
-  MEDIUM: "warning",
-  HIGH: "danger",
-} as const;
 
 type Props = {
   workspaceSlug: string;
@@ -136,10 +130,12 @@ export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="brand">{t("research.approvals.source_agent")}</Badge>
-                    <Badge variant={RISK_VARIANTS[item.risk_level as keyof typeof RISK_VARIANTS] ?? "neutral"}>
+                    <ResearchStatusBadge status="agent_source">
+                      {t("research.approvals.source_agent")}
+                    </ResearchStatusBadge>
+                    <ResearchStatusBadge status={item.risk_level}>
                       {t(riskLabelKey(item.risk_level))}
-                    </Badge>
+                    </ResearchStatusBadge>
                     <p className="text-12 font-medium text-primary">{item.summary}</p>
                   </div>
                   <p className="mt-1 text-11 text-secondary">

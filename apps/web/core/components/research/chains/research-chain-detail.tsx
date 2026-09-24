@@ -6,10 +6,9 @@ import { useSearchParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Badge } from "@plane/propel/badge";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
-import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
+import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import type {
   TExternalReference,
@@ -23,6 +22,8 @@ import type {
 } from "@plane/types";
 // components
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainGraph } from "@/components/research/chains/research-chain-graph";
 import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
 import { ExperimentList } from "@/components/research/experiments/experiment-list";
@@ -109,23 +110,6 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
   ADMIN: "research.chains.members.role_admin",
   MEMBER: "research.chains.members.role_member",
 };
-
-/** Low-saturation Badge variants for chain and node status (Phase 5 extracts the shared dictionary). */
-const CHAIN_STATUS_VARIANTS = {
-  ACTIVE: "brand",
-  COMPLETED: "success",
-  ARCHIVED: "neutral",
-} as const;
-
-const NODE_STATUS_VARIANTS = {
-  DRAFT: "neutral",
-  ACTIVE: "brand",
-  WAITING_HUMAN: "warning",
-  NEEDS_REVISION: "danger",
-  COMPLETED: "success",
-  FAILED: "danger",
-  ARCHIVED: "neutral",
-} as const;
 
 /** Pick the node that should stay visible in the fixed context bar. */
 function currentNode(nodes: TResearchChainNode[]) {
@@ -379,10 +363,12 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="truncate text-16 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
-              <Badge variant={CHAIN_STATUS_VARIANTS[chain?.status ?? "ARCHIVED"] ?? "neutral"}>
+              <ResearchStatusBadge status={chain?.status}>
                 {t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}
-              </Badge>
-              <Badge variant="neutral">{t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}</Badge>
+              </ResearchStatusBadge>
+              <ResearchStatusBadge status="visibility">
+                {t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}
+              </ResearchStatusBadge>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
               <span>
@@ -393,9 +379,9 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             {current && (
               <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
                 <span className="text-12 text-tertiary">{t("research.chains.current_node")}:</span>
-                <Badge variant={NODE_STATUS_VARIANTS[current.status] ?? "neutral"}>
+                <ResearchStatusBadge status={current.status}>
                   {t(`research.chains.node_status.${current.status.toLowerCase()}`)}
-                </Badge>
+                </ResearchStatusBadge>
                 <span className="truncate text-13 font-medium text-primary">{current.title}</span>
               </div>
             )}
@@ -419,14 +405,13 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       <nav aria-label={t("research.chains.tabs.label")} className="overflow-x-auto border-b border-subtle px-5">
         <TabNavigationList className="py-2">
           {tabs.map((tab) => (
-            <Link
+            <ResearchTabLink
               key={tab.id}
               href={`/${workspaceSlug}/research/chains/${chainId}?tab=${tab.id}`}
-              aria-current={tab.id === activeTab ? "page" : undefined}
-              className="whitespace-nowrap"
+              isActive={tab.id === activeTab}
             >
-              <TabNavigationItem isActive={tab.id === activeTab}>{t(tab.labelKey)}</TabNavigationItem>
-            </Link>
+              {t(tab.labelKey)}
+            </ResearchTabLink>
           ))}
         </TabNavigationList>
       </nav>
