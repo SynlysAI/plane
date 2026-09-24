@@ -1072,7 +1072,8 @@
       "open_overview": "进入科研总览",
       "open_chain": "打开当前课题",
       "snapshot": "最近快照",
-      "snapshot_empty": "暂无已确认快照；打开课题后可查看完整证据链。"
+      "snapshot_empty": "暂无已确认快照；打开课题后可查看完整证据链。",
+      "handle_current_node": "处理当前节点"
     },
     "todo": {
       "title": "跨组件待办",
@@ -1219,7 +1220,8 @@
           "paper_writing": "论文写作",
           "completion": "结题",
           "transfer": "转化"
-        }
+        },
+        "not_started_hint": "该阶段尚未产生实际节点"
       },
       "views": {
         "chains": "课题",

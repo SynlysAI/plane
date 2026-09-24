@@ -20,12 +20,13 @@ type Props = {
   onSelect: (nodeId: string) => void;
 };
 
-type TStepKind = "completed" | "current" | "attention" | "upcoming";
+type TStepKind = "completed" | "current" | "attention" | "archived" | "upcoming";
 
 /** Derive the visual step kind while keeping text status separate from color. */
 function stepKind(stage: TResearchWorkflowStage): TStepKind {
   if (stage.isCurrent) return "current";
   if (stage.status === "COMPLETED") return "completed";
+  if (stage.status === "ARCHIVED") return "archived";
   if (stage.status === "WAITING_HUMAN" || stage.status === "NEEDS_REVISION" || stage.status === "FAILED")
     return "attention";
   return "upcoming";
@@ -35,6 +36,7 @@ const STEP_DOT_CLASSES: Record<TStepKind, string> = {
   completed: "border-success-subtle bg-success-subtle-1 text-success-primary",
   current: "border-accent-strong bg-accent-primary text-on-color",
   attention: "border-warning-subtle bg-warning-subtle text-warning-primary",
+  archived: "border-subtle bg-surface-2 text-tertiary",
   upcoming: "border-subtle bg-surface-2 text-tertiary",
 };
 
@@ -42,6 +44,7 @@ const STEP_TITLE_CLASSES: Record<TStepKind, string> = {
   completed: "text-secondary",
   current: "font-medium text-primary",
   attention: "font-medium text-primary",
+  archived: "text-tertiary",
   upcoming: "text-tertiary",
 };
 
@@ -49,6 +52,7 @@ const STEP_SURFACE_CLASSES: Record<TStepKind, string> = {
   completed: "border-transparent bg-surface-1 hover:bg-surface-2",
   current: "border-accent-strong bg-surface-1",
   attention: "border-transparent bg-surface-1 hover:bg-surface-2",
+  archived: "border-transparent bg-surface-1/60 opacity-70 hover:bg-surface-2",
   upcoming: "border-transparent bg-surface-1/60 hover:bg-surface-2",
 };
 
@@ -65,7 +69,7 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedNodeId
       className="shrink-0 overflow-x-auto border-b border-subtle bg-canvas px-5 py-3"
       aria-label={t("research.chains.workflow_title")}
     >
-      <div className="flex min-w-max items-stretch gap-1 overflow-x-auto" role="list">
+      <div className="flex min-w-max items-stretch gap-1" role="list">
         {workflow.stages.map((stage, index) => {
           const kind = stepKind(stage);
           const selected =
@@ -79,6 +83,10 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedNodeId
           const summary = [statusLabel, stage.shared ? t("research.chains.workflow.shared") : ""]
             .filter(Boolean)
             .join(" · ");
+          const stageTitle =
+            stage.status === "NOT_STARTED"
+              ? `${t(stage.labelKey)} · ${summary} · ${t("research.chains.workflow.not_started_hint")}`
+              : `${t(stage.labelKey)} · ${summary}`;
 
           return (
             <div key={stage.id} className="flex items-stretch" role="listitem">
@@ -93,7 +101,7 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedNodeId
                 disabled={!stage.preferredNodeId}
                 aria-current={stage.isCurrent ? "step" : undefined}
                 aria-pressed={selected || undefined}
-                title={`${t(stage.labelKey)} · ${summary}`}
+                title={stageTitle}
                 className={`flex max-w-36 min-w-28 flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors disabled:cursor-default ${STEP_SURFACE_CLASSES[kind]} ${
                   selected ? "ring-border-strong border-strong ring-1" : ""
                 }`}
@@ -110,6 +118,9 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedNodeId
                   <span className={`truncate text-12 ${STEP_TITLE_CLASSES[kind]}`}>{t(stage.labelKey)}</span>
                 </span>
                 <span className="truncate text-11 text-secondary">{statusLabel}</span>
+                {stage.shared && (
+                  <span className="truncate text-10 text-tertiary">{t("research.chains.workflow.shared")}</span>
+                )}
                 {stage.associatedNodeIds.length > 0 && (
                   <span className="truncate text-10 text-tertiary">{t("research.chains.workflow.preparation")}</span>
                 )}

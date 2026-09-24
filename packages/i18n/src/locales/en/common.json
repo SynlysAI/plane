@@ -1072,7 +1072,8 @@
       "open_overview": "Open research overview",
       "open_chain": "Open current chain",
       "snapshot": "Latest snapshot",
-      "snapshot_empty": "No confirmed snapshot yet; open a chain to inspect the evidence trail."
+      "snapshot_empty": "No confirmed snapshot yet; open a chain to inspect the evidence trail.",
+      "handle_current_node": "Handle current node"
     },
     "todo": {
       "title": "Cross-component to-dos",
@@ -1283,7 +1284,10 @@
         "remove": "Remove",
         "empty": "This chain has no member yet."
       },
-      "member_action_failed": "The member action was not completed. Check the user and permission, then retry."
+      "member_action_failed": "The member action was not completed. Check the user and permission, then retry.",
+      "workflow": {
+        "not_started_hint": "No node has been created for this stage yet"
+      }
     },
     "knowledge": {
       "panel_title": "RAGPortal knowledge",

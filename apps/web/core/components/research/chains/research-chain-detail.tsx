@@ -23,6 +23,8 @@ import type {
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
+import { pickCurrentNode } from "@/components/research/chains/research-selection";
 import { ResearchAgentSidePanel } from "@/components/research/agent/research-agent-side-panel";
 import { ResearchChainGraph } from "@/components/research/chains/research-chain-graph";
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
@@ -80,16 +82,6 @@ const NODE_TYPE_OPTIONS = [
   "TRANSFER",
 ] as const;
 
-const STATUS_PRIORITY: Record<TResearchChainNode["status"], number> = {
-  WAITING_HUMAN: 0,
-  NEEDS_REVISION: 1,
-  FAILED: 2,
-  ACTIVE: 3,
-  DRAFT: 4,
-  COMPLETED: 5,
-  ARCHIVED: 6,
-};
-
 const NODE_TYPE_LABELS: Record<string, string> = {
   RESEARCH: "research.chains.node_types.research",
   LITERATURE_REVIEW: "research.chains.node_types.literature_review",
@@ -112,19 +104,9 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
   MEMBER: "research.chains.members.role_member",
 };
 
-/** Pick the node that should stay visible in the fixed context bar. */
-function currentNode(nodes: TResearchChainNode[]) {
-  // eslint-disable-next-line unicorn/no-array-sort
-  return [...nodes].sort(
-    (left, right) =>
-      STATUS_PRIORITY[left.status] - STATUS_PRIORITY[right.status] ||
-      new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
-  )[0];
-}
-
 /** Research Chain topic page with fixed context, tabs, graph, evidence and members. */
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const memberStore = useMember();
   const [searchParams] = useSearchParams();
@@ -179,7 +161,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       setChain(chainDetail);
       setNodes(chainNodes);
       setMembers(chainMembers);
-      const current = chainNodes.find((node) => node.id === requestedNodeId) ?? currentNode(chainNodes);
+      const current = chainNodes.find((node) => node.id === requestedNodeId) ?? pickCurrentNode(chainNodes);
       if (current) await loadNodeDetail(current.id);
     } catch (error) {
       const errorCode = (error as { error_code?: string })?.error_code;
@@ -302,7 +284,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     }
   };
 
-  const current = useMemo(() => currentNode(nodes), [nodes]);
+  const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
   const workspaceMembers = memberStore.workspace
     .getWorkspaceMemberIds(workspaceSlug)
     .map((userId) => memberStore.getUserDetails(userId))
@@ -376,7 +358,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               <span>
                 {t("research.chains.owner")}: {chain?.owner_name ?? "-"}
               </span>
-              <span>{chain ? new Date(chain.updated_at).toLocaleString() : "-"}</span>
+              <span>{chain ? formatResearchDateTime(chain.updated_at, currentLocale) : "-"}</span>
             </div>
             {current && (
               <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
@@ -463,7 +445,9 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-tertiary">{t("research.chains.updated_at")}</dt>
-                  <dd className="text-primary">{chain ? new Date(chain.updated_at).toLocaleString() : "-"}</dd>
+                  <dd className="text-primary">
+                    {chain ? formatResearchDateTime(chain.updated_at, currentLocale) : "-"}
+                  </dd>
                 </div>
               </dl>
             </article>
@@ -586,7 +570,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                       <TableCell className="font-medium text-primary">{report.period_key}</TableCell>
                       <TableCell className="text-secondary">{t(REPORT_STATUS_LABELS[report.status])}</TableCell>
                       <TableCell className="text-right text-tertiary tabular-nums">
-                        {new Date(report.updated_at).toLocaleString()}
+                        {formatResearchDateTime(report.updated_at, currentLocale)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -711,7 +695,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   <span className="bg-border-strong absolute top-4 -left-[21px] size-2 rounded-full" aria-hidden />
                   <p className="text-12 font-medium text-primary">{event.summary || event.event_type}</p>
                   <p className="mt-1 text-11 text-tertiary">
-                    {new Date(event.occurred_at).toLocaleString()} · {event.actor_type}
+                    {formatResearchDateTime(event.occurred_at, currentLocale)} · {event.actor_type}
                   </p>
                 </li>
               ))}
