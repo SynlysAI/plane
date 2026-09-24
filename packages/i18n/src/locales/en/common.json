@@ -1364,6 +1364,7 @@
       "event_output": "Output",
       "event_node_created": "Node created",
       "tools_title": "Tool calls",
+      "runtime_details": "Runtime details (tools / artifacts / trace)",
       "tools_empty": "No tool has run in this session yet.",
       "tool_status": {
         "ready": "Ready",

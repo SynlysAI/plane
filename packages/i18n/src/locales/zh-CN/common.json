@@ -1364,6 +1364,7 @@
       "event_output": "输出",
       "event_node_created": "节点创建",
       "tools_title": "工具调用",
+      "runtime_details": "运行详情（工具 / 产物 / Trace）",
       "tools_empty": "当前会话还没有工具调用。",
       "tool_status": {
         "ready": "可用",
