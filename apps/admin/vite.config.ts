@@ -29,7 +29,17 @@ const rewriteRedirectHost: NonNullable<ProxyOptions["configure"]> = (proxy, _opt
     if (!host || typeof location !== "string") return;
     const base = redirectBaseUrls.find((url) => location.startsWith(url));
     if (!base) return;
-    const scheme = (req.headers["x-forwarded-proto"] as string) || "http";
+    const forwardedProto = req.headers["x-forwarded-proto"];
+    let scheme = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+    if (!scheme) {
+      const sourceHeader = req.headers.origin ?? req.headers.referer;
+      const source = Array.isArray(sourceHeader) ? sourceHeader[0] : sourceHeader;
+      try {
+        scheme = source ? new URL(source).protocol.replace(":", "") : "http";
+      } catch {
+        scheme = "http";
+      }
+    }
     proxyRes.headers.location = `${scheme}://${host}${location.slice(base.length)}`;
   });
 };

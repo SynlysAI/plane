@@ -6,12 +6,15 @@
 
 ## 1. 访问与入口
 
-| 项目     | 值                                                                             |
-| -------- | ------------------------------------------------------------------------------ |
-| Web 地址 | <http://192.168.3.245:3000>（局域网）/ <http://100.109.35.2:3000>（Tailscale） |
-| 管理端   | <http://192.168.3.245:3001/god-mode/>                                          |
-| 工作区   | `fangyikai`                                                                    |
-| 科研入口 | <http://192.168.3.245:3000/fangyikai/research/>                                |
+| 项目     | 值                                                                                                  |
+| -------- | --------------------------------------------------------------------------------------------------- |
+| Web 地址 | <https://fangyikai-pc.tail1b4cb7.ts.net>（Tailnet 推荐）/ <http://192.168.3.245:3000>（局域网备用） |
+| 管理端   | <http://192.168.3.245:3001/god-mode/>                                                               |
+| 工作区   | `fangyikai`                                                                                         |
+| 科研入口 | <https://fangyikai-pc.tail1b4cb7.ts.net/fangyikai/research/>                                        |
+
+Tailnet 访问只暴露给已加入当前 Tailscale 网络的设备，不启用公网 Funnel。开启与排查步骤见
+[`tailnet-remote-access.md`](./tailnet-remote-access.md)。
 
 入口在左侧边栏的「科研」分组下：
 
@@ -189,6 +192,7 @@
   处理方式：① 把该地址补进 `CSRF_TRUSTED_ORIGINS` 后执行
   `docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d --no-deps api`；
   ② 开发态三个 Vite 代理已改为保留浏览器 Host（`changeOrigin: false`），重启 `web / admin / space` 启动进程即可用任意地址访问。
+  Tailnet HTTPS 入口 `https://fangyikai-pc.tail1b4cb7.ts.net` 已同时登记在 CORS 与 CSRF 来源中。
   排查：`docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml logs api | grep "CSRF verification failed"`，
   日志会打印被拒原因（来源不匹配 / 缺少 cookie / token 失效）。
 
