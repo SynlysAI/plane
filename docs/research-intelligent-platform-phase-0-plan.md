@@ -6,7 +6,7 @@
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §2、§6–§9、§11 |
 | 计划状态 | 已实施（Plane / RAGPortal / Synlora 自动化验证通过）                                            |
 | 目标     | 冻结跨仓契约，建立可灰度、可回滚、可观测的开发基础                                              |
-| 不在范围 | 用户可用的完整 研究链、自动实验、社会用户开放                                                   |
+| 不在范围 | 用户可用的完整研究链、自动实验、社会用户开放                                                    |
 
 ## 1. 阶段目标与出口
 
@@ -228,7 +228,7 @@ Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPorta
 
 ### 任务 0.6：同源门户骨架与 Feature Flag
 
-- 规划 研究链、Agent、RAGPortal 和组件入口路由。
+- 规划研究链、Agent、RAGPortal 和组件入口路由。
 - 增加首页卡片、科研待办和权限空态的接口占位。
 - 完成反向代理、CORS/CSP、短期 token 传递和禁止跨站 iframe 的安全配置。
 - 输出 `agent-plugin.v1` manifest、入口路由、BFF API、UI 状态和事件映射契约。
