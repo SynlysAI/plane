@@ -73,7 +73,7 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 ### 已交付：科研智能平台 Phase 0
 
-Phase 0 是跨仓库并行开发的基础层，不向普通用户开放完整 研究链。详细范围见 [科研智能平台 PRD](docs/research-intelligent-platform-prd.md)、[Phase 0 实施计划](docs/research-intelligent-platform-phase-0-plan.md) 与 [运维手册](docs/research-intelligent-platform-phase-0-runbook.md)。
+Phase 0 是跨仓库并行开发的基础层，不向普通用户开放完整研究链。详细范围见 [科研智能平台 PRD](docs/research-intelligent-platform-prd.md)、[Phase 0 实施计划](docs/research-intelligent-platform-phase-0-plan.md) 与 [运维手册](docs/research-intelligent-platform-phase-0-runbook.md)。
 
 | 能力域              | 说明                                                                                                                 |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------- |

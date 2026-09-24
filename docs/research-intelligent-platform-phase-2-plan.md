@@ -36,7 +36,7 @@ UI 边界：
 - 至少一种 PolyAgent 或 SpecAgent 分析能力可以受控调用并写回结果快照。
 - `job_id`、`run_id`、`trace_id`、`artifact_id` 在跨系统链路中可关联。
 - 垂类调用携带并返回 `research-correlation.v1` 关联字段。
-- 设备/算法失败、超时、重试、取消和重复回调不会破坏 研究链。
+- 设备/算法失败、超时、重试、取消和重复回调不会破坏研究链。
 - 工具白名单、人工确认、资源配额和调用审计生效。
 
 ## 2. 技术方案
@@ -127,7 +127,7 @@ WeKnora 已部署在内网 `http://10.26.15.93:8000/`，不在本项目中开发
 
 Phase 2 只做平台侧能力：
 
-- 将 RAGPortal 返回的 `knowledge_id`、`kb_id`、解析状态、版本和 hash 关联到 研究链。
+- 将 RAGPortal 返回的 `knowledge_id`、`kb_id`、解析状态、版本和 hash 关联到研究链。
 - 在 Plane/Agent UI 显示 RAGPortal/WeKnora 健康状态、解析中、完成、失败和重试入口。
 - 不新增 WeKnora 数据库写入、图谱 ingestion adapter 或底层索引管理。
 - 如果 RAGPortal 扩展图谱/关系配置，Plane 只透传受控参数并保存外部任务状态。
