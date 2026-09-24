@@ -1,0 +1,382 @@
+{
+  "original": {
+    "module_enabled": true,
+    "research_chain_enabled": true,
+    "research_agent_enabled": true,
+    "research_external_rag_enabled": true,
+    "research_account_link_enabled": true,
+    "research_ia_v2": true
+  },
+  "counts_before": {
+    "chains": 5,
+    "references": 3,
+    "active_links": 1
+  },
+  "SW01": {
+    "chain_create": {
+      "status": 403,
+      "body": {
+        "error_code": "research_submodule_disabled",
+        "message": "This research section is not enabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "events_read": {
+      "status": 403,
+      "body": {
+        "error_code": "research_submodule_disabled",
+        "message": "This research section is not enabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "export_read": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "agent_manifest": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": true,
+        "count": null
+      }
+    },
+    "account_links_read": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": 1
+      }
+    },
+    "kb_list": {
+      "status": 403,
+      "body": {
+        "error_code": "research_submodule_disabled",
+        "message": "This research section is not enabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    }
+  },
+  "SW01_restore": {
+    "manual_event": {
+      "status": 201,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    }
+  },
+  "SW02": {
+    "manifest": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": false,
+        "count": null
+      }
+    },
+    "session_create": {
+      "status": 403,
+      "body": {
+        "error_code": "research_submodule_disabled",
+        "message": "The research agent switch is disabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "existing_session_read": {
+      "status": 403,
+      "body": {
+        "error_code": "research_submodule_disabled",
+        "message": "The research agent switch is disabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "chain_events_read": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "manual_event": {
+      "status": 201,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "kb_list": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": false,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": 5
+      }
+    }
+  },
+  "SW03": {
+    "upload": {
+      "status": 503,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": true,
+        "degraded_reason": "not_configured",
+        "manual_record": true,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "manual_event": {
+      "status": 201,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "agent_manifest": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": true,
+        "count": null
+      }
+    },
+    "account_links_read": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": 1
+      }
+    },
+    "existing_successful_upload_status": "SUCCESS"
+  },
+  "SW04": {
+    "link_create": {
+      "status": 403,
+      "body": {
+        "error_code": "research_submodule_disabled",
+        "message": "The account-link switch is disabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "existing_link_status": "ACTIVE",
+    "session_create_with_existing_link": {
+      "status": 201,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "manual_event": {
+      "status": 201,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "kb_list": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": false,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": 5
+      }
+    }
+  },
+  "SW06": {
+    "identity": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "chain_create": {
+      "status": 403,
+      "body": {
+        "error_code": "research_module_not_enabled",
+        "message": "The research module is not enabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "agent_manifest": {
+      "status": 403,
+      "body": {
+        "error_code": "research_module_not_enabled",
+        "message": "The research module is not enabled for this workspace.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "settings": {
+      "status": 403,
+      "body": {
+        "error_code": "research_permission_denied",
+        "message": "You don't have the required permissions.",
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    }
+  },
+  "SW07": {
+    "chain_create": {
+      "status": 201,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "session_create": {
+      "status": 201,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "export": {
+      "status": 200,
+      "body": {
+        "error_code": null,
+        "message": null,
+        "degraded": null,
+        "degraded_reason": null,
+        "manual_record": null,
+        "enabled": null,
+        "count": null
+      }
+    },
+    "project_id": "78e8b8f7-9c29-4d39-8244-8d495ef8dbf3",
+    "chain_id": "a56ea278-426d-4d2d-b89f-c176e2fe14ff"
+  },
+  "restored": {
+    "module_enabled": true,
+    "research_chain_enabled": true,
+    "research_agent_enabled": true,
+    "research_external_rag_enabled": true,
+    "research_account_link_enabled": true,
+    "research_ia_v2": true
+  },
+  "counts_after": {
+    "chains": 6,
+    "references": 3,
+    "active_links": 1
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "VIS-1": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": true
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 201,
+      "error": null
+    },
+    "B": {
+      "detail": 200,
+      "export": 200,
+      "write": 201,
+      "error": null
+    }
+  },
+  "VIS-2": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": false
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    },
+    "B": {
+      "detail": 404,
+      "export": 404,
+      "write": 404,
+      "error": "CHAIN_NOT_FOUND"
+    }
+  },
+  "VIS-3": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": true
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 201,
+      "error": null
+    },
+    "B": {
+      "detail": 200,
+      "export": 200,
+      "write": 201,
+      "error": null
+    }
+  },
+  "VIS-4": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": true
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    },
+    "B": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    }
+  },
+  "VIS-5": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": false
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    },
+    "B": {
+      "detail": 404,
+      "export": 404,
+      "write": 404,
+      "error": "CHAIN_NOT_FOUND"
+    }
+  },
+  "VIS-6": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": true
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    },
+    "B": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    }
+  },
+  "VIS-7": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": false
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    },
+    "B": {
+      "detail": 404,
+      "export": 404,
+      "write": 404,
+      "error": "CHAIN_NOT_FOUND"
+    }
+  },
+  "VIS-8": {
+    "list_status": 200,
+    "list_contains": {
+      "A": true,
+      "B": false
+    },
+    "A": {
+      "detail": 200,
+      "export": 200,
+      "write": 403,
+      "error": "research_permission_denied"
+    },
+    "B": {
+      "detail": 404,
+      "export": 404,
+      "write": 404,
+      "error": "CHAIN_NOT_FOUND"
+    }
+  },
+  "VIS-9": {
+    "list_status": 403,
+    "list_contains": {
+      "A": false,
+      "B": false
+    },
+    "A": {
+      "detail": 403,
+      "export": 403,
+      "write": 403,
+      "error": "research_permission_denied"
+    },
+    "B": {
+      "detail": 403,
+      "export": 403,
+      "write": 403,
+      "error": "research_permission_denied"
+    }
+  }
+}
