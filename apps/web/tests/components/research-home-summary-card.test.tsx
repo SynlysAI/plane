@@ -93,7 +93,8 @@ it("shows the latest visible chain, current node and snapshot", async () => {
 
   expect(container.textContent).toContain("数据分析");
   expect(container.textContent).toContain("模型误差分析已冻结");
-  expect(container.querySelector('a[href="/lab/research"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research/chains/chain-1"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research"]')).toBeNull();
 });
 
 it("does not leak chain content when the summary is forbidden", async () => {

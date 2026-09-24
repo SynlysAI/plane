@@ -30,7 +30,6 @@ type Props = {
   workspaceSlug: string;
   limit?: number;
   periodDays?: number | null;
-  compact?: boolean;
 };
 
 type TTodoKind = "blocking" | "confirmation" | "reminder" | "syncing";
@@ -105,7 +104,7 @@ function uploadTodo(workspaceSlug: string, chainId: string, upload: TResearchCha
 }
 
 /** Cross-component to-do index assembled from each source system without local completion. */
-export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null, compact = false }: Props) {
+export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
   const translateRef = useRef(t);
@@ -278,8 +277,8 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null,
   const visibleTodos = useMemo(() => todos.slice(0, limit), [limit, todos]);
 
   return (
-    <section className="rounded-xl border border-subtle bg-surface-1" aria-label={t("research.todo.title")}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+    <section className="overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div>
           <h3 className="text-13 font-semibold text-primary">{t("research.todo.title")}</h3>
           <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description")}</p>
@@ -302,7 +301,7 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null,
       )}
       {state === "empty" && <p className="p-4 text-12 text-secondary">{t("research.todo.empty")}</p>}
       {state === "ready" && (
-        <ul className={compact ? "divide-y divide-subtle" : "divide-y divide-subtle"} role="list">
+        <ul className="divide-y divide-subtle" role="list">
           {visibleTodos.map((todo) => (
             <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">

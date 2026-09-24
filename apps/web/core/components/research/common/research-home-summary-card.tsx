@@ -17,6 +17,16 @@ import { ResearchChainService } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
 
+const STATUS_PRIORITY: Record<TResearchChainNode["status"], number> = {
+  WAITING_HUMAN: 0,
+  NEEDS_REVISION: 1,
+  FAILED: 2,
+  ACTIVE: 3,
+  DRAFT: 4,
+  COMPLETED: 5,
+  ARCHIVED: 6,
+};
+
 type Props = {
   workspaceSlug: string;
 };
@@ -41,8 +51,11 @@ async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
   const nodes = await chainService.getChainNodes(workspaceSlug, currentChain.id);
   const currentNode =
     // eslint-disable-next-line unicorn/no-array-sort
-    [...nodes].sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime())[0] ??
-    null;
+    [...nodes].sort(
+      (left, right) =>
+        STATUS_PRIORITY[left.status] - STATUS_PRIORITY[right.status] ||
+        new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
+    )[0] ?? null;
   const detail = currentNode
     ? await chainService.getChainNodeDetail(workspaceSlug, currentNode.id).catch(() => null)
     : null;
@@ -97,7 +110,12 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
     summary?.chains.length && summary.currentNode
       ? Number(summary.currentNode.status === "WAITING_HUMAN" || summary.currentNode.status === "NEEDS_REVISION")
       : 0;
-  const currentChain = summary?.chains.find((chain) => chain.id === summary.currentNode?.chain);
+  const currentChain =
+    summary?.chains.find((chain) => chain.id === summary.currentNode?.chain) ??
+    // eslint-disable-next-line unicorn/no-array-sort
+    [...(summary?.chains ?? [])].sort(
+      (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
+    )[0];
   const currentNode = summary?.currentNode ?? null;
   const latestSnapshot = summary?.latestSnapshot ?? null;
 
@@ -106,29 +124,30 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
       className="overflow-hidden rounded-xl border border-subtle bg-surface-1"
       aria-label={t("research.home_summary.title")}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle bg-surface-2 px-4 py-2.5">
         <div className="min-w-0">
-          <h3 className="text-13 font-semibold text-primary">{t("research.home_summary.title")}</h3>
+          <h3 className="text-12 font-semibold text-primary">{t("research.home_summary.title")}</h3>
           <p className="mt-0.5 text-11 text-tertiary">{t("research.home_summary.snapshot")}</p>
         </div>
-        <div className="flex items-center divide-x divide-subtle text-11 text-tertiary">
+        <div className="flex items-center divide-x divide-subtle text-11 text-tertiary tabular-nums">
           <span className="pr-3">
-            <span className="font-semibold text-primary">{activeCount}</span> {t("research.home_summary.active_chains")}
+            <span className="text-14 font-semibold text-primary">{activeCount}</span>{" "}
+            {t("research.home_summary.active_chains")}
           </span>
           <span className="pl-3">
-            <span className="font-semibold text-primary">{todoCount}</span> {t("research.home_summary.todos")}
+            <span className="text-14 font-semibold text-primary">{todoCount}</span> {t("research.home_summary.todos")}
           </span>
         </div>
       </div>
 
       {state === "ready" && currentChain ? (
-        <div className="px-4 py-3">
+        <div className="px-4 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Link
                   href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
-                  className="truncate text-14 font-medium text-primary hover:text-accent-primary"
+                  className="truncate text-18 font-semibold text-primary hover:text-accent-primary"
                 >
                   {currentChain.project_name ?? currentChain.project}
                 </Link>
@@ -137,18 +156,18 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
                 </ResearchStatusBadge>
               </div>
               {currentNode && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-12 text-secondary">
-                  <ResearchStatusBadge status={currentNode.status}>
-                    {t(`research.chains.node_status.${currentNode.status.toLowerCase()}`)}
-                  </ResearchStatusBadge>
-                  <span className="truncate">{currentNode.title}</span>
+                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
+                  <span className="text-11 text-tertiary">{t("research.chains.current_node")}</span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="truncate text-13 font-medium text-primary">{currentNode.title}</span>
+                    <ResearchStatusBadge status={currentNode.status} size="sm">
+                      {t(`research.chains.node_status.${currentNode.status.toLowerCase()}`)}
+                    </ResearchStatusBadge>
+                  </div>
                 </div>
               )}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Link href={`/${workspaceSlug}/research`} className={getButtonStyling("secondary", "base")}>
-                {t("research.home_summary.open_overview")}
-              </Link>
               <Link
                 href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
                 className={getButtonStyling("primary", "base")}

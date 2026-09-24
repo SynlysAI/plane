@@ -151,15 +151,17 @@ function WorkspaceResearchOverviewPage() {
           )}
         </nav>
 
-        <div className="h-full overflow-y-auto p-5">
+        <div className="h-full overflow-y-auto bg-canvas p-5">
           {workspaceSlug && research.canSee("research_chain") && (
             <ResearchHomeSummaryCard workspaceSlug={workspaceSlug} />
           )}
 
-          {workspaceSlug && <ResearchTodoIndex workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />}
+          <div className="mt-5">
+            {workspaceSlug && <ResearchTodoIndex workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />}
+          </div>
 
-          <section className="mt-6 overflow-hidden rounded-xl border border-subtle bg-surface-1">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+          <section className="mt-5 overflow-hidden rounded-xl bg-surface-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div>
                 <h3 className="text-13 font-semibold text-primary">{t("research.overview.chain_section")}</h3>
                 <p className="mt-0.5 text-11 text-tertiary">{t("research.overview.chain_section_hint")}</p>
@@ -181,7 +183,7 @@ function WorkspaceResearchOverviewPage() {
               ) : visibleChains.length ? (
                 <ul className="divide-y divide-subtle" role="list">
                   {visibleChains.slice(0, 6).map((chain) => (
-                    <li key={chain.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2">
+                    <li key={chain.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-1">
                       <Link
                         href={`/${workspaceSlug}/research/chains/${chain.id}`}
                         className="min-w-0 flex-1 truncate text-13 text-primary hover:text-accent-primary"
@@ -204,28 +206,25 @@ function WorkspaceResearchOverviewPage() {
           </section>
 
           {workspaceSlug && !research.isIaV2Enabled && research.canSee("research_chain") && (
-            <div className="mt-6">
+            <div className="mt-5">
               <ResearchChainPortal workspaceSlug={workspaceSlug} />
             </div>
           )}
           {workspaceSlug && research.canSee("dashboard") && (
-            <section className="mt-6" aria-label={t("research.pi.overview")}>
+            <section className="mt-5" aria-label={t("research.pi.overview")}>
               <ResearchPiAggregateBoard workspaceSlug={workspaceSlug} />
             </section>
           )}
 
           {!research.isIaV2Enabled && compactNavItems.length > 0 && (
-            <nav className="mt-6" aria-label={t("research.nav.group")}>
+            <nav className="mt-5" aria-label={t("research.nav.group")}>
               <h3 className="text-11 font-medium tracking-wide text-tertiary uppercase">{t("research.nav.group")}</h3>
-              <ul
-                className="mt-2 divide-y divide-subtle overflow-hidden rounded-xl border border-subtle bg-surface-1"
-                role="list"
-              >
+              <ul className="mt-2 divide-y divide-subtle overflow-hidden rounded-xl bg-surface-2" role="list">
                 {compactNavItems.map((card) => (
                   <li key={card.key}>
                     <Link
                       href={`/${workspaceSlug}/research/${card.path}`}
-                      className="group flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-surface-2"
+                      className="group flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-surface-1"
                     >
                       <div className="min-w-0">
                         <p className="text-13 font-medium text-primary">{t(card.titleKey)}</p>

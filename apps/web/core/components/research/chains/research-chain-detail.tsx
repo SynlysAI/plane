@@ -360,11 +360,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <section className="sticky top-0 z-10 border-b border-subtle bg-surface-1 px-5 py-3">
+      <section className="shrink-0 border-b border-subtle bg-surface-1 px-5 py-3.5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-16 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
+              <h3 className="truncate text-20 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
               <ResearchStatusBadge status={chain?.status}>
                 {t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}
               </ResearchStatusBadge>
@@ -379,12 +379,14 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               <span>{chain ? new Date(chain.updated_at).toLocaleString() : "-"}</span>
             </div>
             {current && (
-              <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-                <span className="text-12 text-tertiary">{t("research.chains.current_node")}:</span>
-                <ResearchStatusBadge status={current.status}>
-                  {t(`research.chains.node_status.${current.status.toLowerCase()}`)}
-                </ResearchStatusBadge>
-                <span className="truncate text-13 font-medium text-primary">{current.title}</span>
+              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
+                <span className="text-11 text-tertiary">{t("research.chains.current_node")}</span>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="truncate text-13 font-medium text-primary">{current.title}</span>
+                  <ResearchStatusBadge status={current.status} size="sm">
+                    {t(`research.chains.node_status.${current.status.toLowerCase()}`)}
+                  </ResearchStatusBadge>
+                </div>
               </div>
             )}
           </div>
@@ -403,6 +405,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
       <ResearchChainWorkflowRail
         nodes={nodes}
+        currentNodeId={current?.id ?? null}
         selectedNodeId={selected?.node.id ?? null}
         onSelect={(nodeId) => {
           setReason("");
@@ -410,7 +413,10 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         }}
       />
 
-      <nav aria-label={t("research.chains.tabs.label")} className="overflow-x-auto border-b border-subtle px-5">
+      <nav
+        aria-label={t("research.chains.tabs.label")}
+        className="shrink-0 overflow-x-auto border-b border-subtle bg-surface-1 px-5"
+      >
         <TabNavigationList className="py-2">
           {tabs.map((tab) => (
             <ResearchTabLink
@@ -432,7 +438,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         />
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-canvas">
         {actionError && (
           <p
             className="mx-5 mt-4 rounded-md border border-danger-subtle bg-danger-subtle px-3 py-2 text-12 text-danger-primary"
@@ -485,7 +491,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             />
             {selected && (
               <>
-                <div className="flex flex-wrap items-center gap-2 border-y border-subtle bg-surface-1 px-5 py-3">
+                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-y border-subtle bg-surface-1 px-5 py-3">
                   {ACTIONS_BY_STATUS[selected.node.status].map((action) => (
                     <Button
                       key={action}

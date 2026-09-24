@@ -25,6 +25,8 @@ export type TResearchWorkflowStage = {
   id: TResearchWorkflowStageId;
   labelKey: string;
   status: TResearchWorkflowStageStatus;
+  /** True only for the visual stage carrying the real current business node. */
+  isCurrent: boolean;
   /** Business nodes that determine this stage status. */
   nodeIds: string[];
   /** Preparation or shared nodes shown without overriding the stage status. */
@@ -109,7 +111,8 @@ function preferredNode(nodes: TResearchChainNode[], currentNodeId: string | null
     const current = nodes.find((node) => node.id === currentNodeId);
     if (current) return current;
   }
-  return [...nodes].toSorted(
+  // eslint-disable-next-line unicorn/no-array-sort
+  return [...nodes].sort(
     (left, right) =>
       STATUS_PRIORITY[left.status] - STATUS_PRIORITY[right.status] ||
       new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
@@ -181,10 +184,13 @@ export function buildResearchWorkflow(
 
     // Generic research nodes stay visible as supporting evidence next to their nearest mapped neighbor.
     const index = ordered.indexOf(node);
-    const neighbor = ordered
-      .slice(0, index)
-      .toReversed()
-      .find((candidate) => candidate.node_type !== "RESEARCH");
+    let neighbor: TResearchChainNode | undefined;
+    for (let position = index - 1; position >= 0; position -= 1) {
+      if (ordered[position].node_type !== "RESEARCH") {
+        neighbor = ordered[position];
+        break;
+      }
+    }
     const neighborStage = neighbor
       ? RESEARCH_WORKFLOW_STAGE_DEFINITIONS.find((definition) =>
           PRIMARY_TYPES[definition.id]?.includes(neighbor.node_type)
@@ -210,13 +216,16 @@ export function buildResearchWorkflow(
     const statusNodes = [...primaryNodes, ...sharedNodes];
 
     let status = stageStatus(statusNodes, currentNodeId);
+    let isCurrent = Boolean(currentNodeId && statusNodes.some((item) => item.id === currentNodeId));
     if ((definition.id === "topic_selection" || definition.id === "topic_evaluation") && sharedNodes.length) {
       const topicNode = sharedNodes[0];
       if (definition.id === "topic_selection" && topicNode.status !== "DRAFT" && topicNode.status !== "ACTIVE") {
         status = "COMPLETED";
+        isCurrent = false;
       }
       if (definition.id === "topic_evaluation" && (topicNode.status === "DRAFT" || topicNode.status === "ACTIVE")) {
         status = "NOT_STARTED";
+        isCurrent = false;
       }
     }
     const clickableNodes = [...primaryNodes, ...sharedNodes, ...associatedNodes];
@@ -226,6 +235,7 @@ export function buildResearchWorkflow(
       id: definition.id,
       labelKey: definition.labelKey,
       status,
+      isCurrent,
       nodeIds: [...new Set([...primaryNodes, ...sharedNodes].map((node) => node.id))],
       associatedNodeIds: associatedNodes.map((node) => node.id),
       preferredNodeId: preferred?.id ?? null,
