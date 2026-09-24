@@ -35,6 +35,49 @@ type Props = {
   currentUserId: string;
 };
 
+type ProjectListQueryFilters = {
+  view: string | null;
+  workflowStatus: string;
+  researchType: string;
+  orgUnit: string;
+  owner: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+const PROJECT_LIST_CONTROLLED_QUERY_KEYS = [
+  "view",
+  "workflow_status",
+  "research_type",
+  "org_unit",
+  "owner",
+  "date_from",
+  "date_to",
+  "cursor",
+] as const;
+
+/** Build project-list query parameters while preserving unrelated legacy query values.
+ *
+ * Args:
+ *   current: Query parameters currently present in the browser URL.
+ *   filters: Project-list filter values controlled by this component.
+ *
+ * Returns:
+ *   Query parameters containing the controlled filters and all unrelated values.
+ */
+export function buildProjectListSearchParams(current: URLSearchParams, filters: ProjectListQueryFilters) {
+  const params = new URLSearchParams(current);
+  PROJECT_LIST_CONTROLLED_QUERY_KEYS.forEach((key) => params.delete(key));
+  if (filters.view) params.set("view", filters.view);
+  if (filters.workflowStatus) params.set("workflow_status", filters.workflowStatus);
+  if (filters.researchType) params.set("research_type", filters.researchType);
+  if (filters.orgUnit) params.set("org_unit", filters.orgUnit);
+  if (filters.owner.trim()) params.set("owner", filters.owner.trim());
+  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters.dateTo) params.set("date_to", filters.dateTo);
+  return params;
+}
+
 /** Personal cultivation and team research projects in the current scope. */
 export const ResearchProjectList = observer(function ResearchProjectList({ workspaceSlug, currentUserId }: Props) {
   const { t } = useTranslation();
@@ -123,15 +166,15 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   useEffect(() => setCursor(""), [statusFilter, typeFilter, orgFilter, ownerFilter, dateFrom, dateTo]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    const savedView = searchParams.get("view");
-    if (savedView) params.set("view", savedView);
-    if (statusFilter) params.set("workflow_status", statusFilter);
-    if (typeFilter) params.set("research_type", typeFilter);
-    if (orgFilter) params.set("org_unit", orgFilter);
-    if (ownerFilter.trim()) params.set("owner", ownerFilter.trim());
-    if (dateFrom) params.set("date_from", dateFrom);
-    if (dateTo) params.set("date_to", dateTo);
+    const params = buildProjectListSearchParams(searchParams, {
+      view: searchParams.get("view"),
+      workflowStatus: statusFilter,
+      researchType: typeFilter,
+      orgUnit: orgFilter,
+      owner: ownerFilter,
+      dateFrom,
+      dateTo,
+    });
     const query = params.toString();
     window.history.replaceState(
       null,

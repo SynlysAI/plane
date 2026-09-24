@@ -18,7 +18,6 @@ function WorkspaceResearchChainDetailPage() {
       titleKey="research.nav.research_chain"
       descriptionKey="research.chains.description"
       section="research_chain"
-      navKey="research_chain"
     >
       <ResearchChainDetail workspaceSlug={workspaceSlug} chainId={chainId} />
     </ResearchPageShell>

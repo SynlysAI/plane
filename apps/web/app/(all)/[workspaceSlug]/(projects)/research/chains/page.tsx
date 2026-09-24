@@ -20,7 +20,6 @@ function WorkspaceResearchChainsPage() {
       titleKey={research.isIaV2Enabled ? "research.nav.research_chain_v2" : "research.nav.research_chain"}
       descriptionKey="research.chains.description"
       section="research_chain"
-      navKey="research_chain"
     >
       <ResearchChainWorkbench workspaceSlug={workspaceSlug} />
     </ResearchPageShell>

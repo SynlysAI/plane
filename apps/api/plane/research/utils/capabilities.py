@@ -184,7 +184,6 @@ LEVEL_NAV_KEYS = {
             NAV_OVERVIEW,
             NAV_REPORTS,
             NAV_PROJECTS,
-            NAV_APPROVALS,
             NAV_RESEARCH_CHAIN,
         )
     ),
