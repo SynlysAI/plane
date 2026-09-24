@@ -4,11 +4,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Badge } from "@plane/propel/badge";
+import { Button, getButtonStyling } from "@plane/propel/button";
+import { Skeleton } from "@plane/propel/skeleton";
 import type { TResearchAgentApproval } from "@plane/types";
 // services
 import { ResearchAgentService, type TAgentApprovalDecision } from "@/services/research/agent.service";
 
 const agentService = new ResearchAgentService();
+
+/** Risk level mapped to low-saturation Badge variants (Phase 5 extracts the shared dictionary). */
+const RISK_VARIANTS = {
+  LOW: "success",
+  MEDIUM: "warning",
+  HIGH: "danger",
+} as const;
 
 type Props = {
   workspaceSlug: string;
@@ -90,19 +100,15 @@ export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
           <h3 className="text-13 font-semibold text-primary">{t("research.approvals.tabs.agent_approval")}</h3>
           <p className="mt-0.5 text-11 text-tertiary">{t("research.approvals.agent_description")}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-        >
+        <Button variant="secondary" size="sm" onClick={() => void load()}>
           {t("research.todo.refresh")}
-        </button>
+        </Button>
       </div>
 
       {state === "loading" && (
         <div className="mt-4 space-y-2" role="status" aria-busy="true">
           {[0, 1, 2].map((row) => (
-            <div key={row} className="h-16 animate-pulse rounded-md bg-surface-2" />
+            <Skeleton.Item key={row} height="64px" width="100%" />
           ))}
         </div>
       )}
@@ -130,9 +136,10 @@ export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded border border-subtle bg-surface-2 px-1.5 py-0.5 text-11 text-secondary">
-                      {t("research.approvals.source_agent")}
-                    </span>
+                    <Badge variant="brand">{t("research.approvals.source_agent")}</Badge>
+                    <Badge variant={RISK_VARIANTS[item.risk_level as keyof typeof RISK_VARIANTS] ?? "neutral"}>
+                      {t(riskLabelKey(item.risk_level))}
+                    </Badge>
                     <p className="text-12 font-medium text-primary">{item.summary}</p>
                   </div>
                   <p className="mt-1 text-11 text-secondary">
@@ -141,24 +148,23 @@ export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
                   </p>
                   <p className="mt-0.5 text-11 text-tertiary">
                     {item.project_name ?? item.project} · {item.chain_node_title ?? item.chain_node} ·{" "}
-                    {t(riskLabelKey(item.risk_level))}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link
                     href={`/${workspaceSlug}/research/chains/${item.chain}?tab=nodes&node=${item.chain_node}`}
-                    className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
+                    className={getButtonStyling("secondary", "base")}
                   >
                     {t("research.approvals.open_chain_context")}
                   </Link>
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={() => setActiveId(item.session_id === activeId ? null : item.session_id)}
                     aria-expanded={item.session_id === activeId}
-                    className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color"
                   >
                     {t("research.approvals.process_agent")}
-                  </button>
+                  </Button>
                 </div>
               </div>
               {item.session_id === activeId && (
@@ -173,22 +179,12 @@ export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
                     />
                   </label>
                   <div className="mt-2 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void decide(item, "REJECTED")}
-                      disabled={busy}
-                      className="rounded-md border border-danger-strong/40 px-3 py-1.5 text-12 text-danger-primary disabled:opacity-50"
-                    >
+                    <Button variant="secondary" size="sm" onClick={() => void decide(item, "REJECTED")} disabled={busy}>
                       {t("research.approvals.reject")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void decide(item, "APPROVED")}
-                      disabled={busy}
-                      className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color disabled:opacity-50"
-                    >
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={() => void decide(item, "APPROVED")} disabled={busy}>
                       {t("research.approvals.approve")}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}

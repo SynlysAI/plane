@@ -6,6 +6,11 @@ import { useSearchParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Badge } from "@plane/propel/badge";
+import { Button, getButtonStyling } from "@plane/propel/button";
+import { Skeleton } from "@plane/propel/skeleton";
+import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import type {
   TExternalReference,
   TPeriodicReport,
@@ -17,11 +22,13 @@ import type {
   TResearchChainSnapshot,
 } from "@plane/types";
 // components
+import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ResearchChainGraph } from "@/components/research/chains/research-chain-graph";
 import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
 import { ExperimentList } from "@/components/research/experiments/experiment-list";
 import { OutcomeList } from "@/components/research/outcomes/outcome-list";
 // hooks
+import { useMember } from "@/hooks/store/use-member";
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
@@ -103,6 +110,23 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
   MEMBER: "research.chains.members.role_member",
 };
 
+/** Low-saturation Badge variants for chain and node status (Phase 5 extracts the shared dictionary). */
+const CHAIN_STATUS_VARIANTS = {
+  ACTIVE: "brand",
+  COMPLETED: "success",
+  ARCHIVED: "neutral",
+} as const;
+
+const NODE_STATUS_VARIANTS = {
+  DRAFT: "neutral",
+  ACTIVE: "brand",
+  WAITING_HUMAN: "warning",
+  NEEDS_REVISION: "danger",
+  COMPLETED: "success",
+  FAILED: "danger",
+  ARCHIVED: "neutral",
+} as const;
+
 /** Pick the node that should stay visible in the fixed context bar. */
 function currentNode(nodes: TResearchChainNode[]) {
   // eslint-disable-next-line unicorn/no-array-sort
@@ -117,6 +141,7 @@ function currentNode(nodes: TResearchChainNode[]) {
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
+  const memberStore = useMember();
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") as TChainTab | null;
   const requestedNodeId = searchParams.get("node");
@@ -182,6 +207,10 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void memberStore.workspace.fetchWorkspaceMembers(workspaceSlug).catch(() => undefined);
+  }, [memberStore, workspaceSlug]);
 
   useEffect(() => {
     if (!chain || (activeTab !== "reports" && activeTab !== "references")) return;
@@ -288,6 +317,18 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   };
 
   const current = useMemo(() => currentNode(nodes), [nodes]);
+  const workspaceMembers = memberStore.workspace
+    .getWorkspaceMemberIds(workspaceSlug)
+    .map((userId) => memberStore.getUserDetails(userId))
+    .filter((member): member is NonNullable<typeof member> => !!member)
+    .filter((member) => !memberStore.workspace.isUserSuspended(member.id, workspaceSlug))
+    .map((member) => ({
+      id: member.id,
+      display_name: member.display_name,
+      email: member.email,
+      first_name: member.first_name,
+      last_name: member.last_name,
+    }));
   const tabs: Array<{ id: TChainTab; labelKey: string }> = [
     { id: "overview", labelKey: "research.chains.tabs.overview" },
     { id: "nodes", labelKey: "research.chains.tabs.nodes" },
@@ -302,7 +343,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     return (
       <div className="space-y-2 p-5" role="status" aria-busy="true">
         {[0, 1].map((row) => (
-          <div key={row} className="h-12 animate-pulse rounded-md bg-surface-2" />
+          <Skeleton.Item key={row} height="48px" width="100%" />
         ))}
       </div>
     );
@@ -310,23 +351,23 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
   if (forbidden) {
     return (
-      <p className="m-5 rounded-lg border border-subtle bg-surface-1 p-6 text-13 text-primary" role="alert">
-        {t("research.common.permission_denied")}
-      </p>
+      <div className="flex h-full items-center justify-center p-5">
+        <section className="w-full max-w-xl rounded-lg border border-subtle bg-surface-1 p-6 text-center" role="alert">
+          <h2 className="text-16 font-medium text-primary">{t("research.common.permission_denied")}</h2>
+        </section>
+      </div>
     );
   }
 
   if (failed) {
     return (
-      <div className="p-5">
-        <p className="text-13 text-primary">{t("research.status.load_failed.title")}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-3 rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-        >
-          {t("research.chains.refresh")}
-        </button>
+      <div className="flex h-full items-center justify-center p-5">
+        <section className="w-full max-w-xl rounded-lg border border-subtle bg-surface-1 p-6 text-center" role="alert">
+          <h2 className="text-16 font-medium text-primary">{t("research.status.load_failed.title")}</h2>
+          <Button variant="secondary" size="sm" className="mt-4" onClick={() => void load()}>
+            {t("research.chains.refresh")}
+          </Button>
+        </section>
       </div>
     );
   }
@@ -337,31 +378,36 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-14 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
-              <span className="rounded border border-subtle bg-surface-2 px-2 py-0.5 text-11 text-secondary">
+              <h3 className="truncate text-16 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
+              <Badge variant={CHAIN_STATUS_VARIANTS[chain?.status ?? "ARCHIVED"] ?? "neutral"}>
                 {t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}
-              </span>
-              <span className="rounded border border-subtle bg-surface-2 px-2 py-0.5 text-11 text-secondary">
-                {t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}
-              </span>
+              </Badge>
+              <Badge variant="neutral">{t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}</Badge>
             </div>
-            <p className="mt-1 truncate text-11 text-tertiary">
-              {t("research.chains.owner")}: {chain?.owner_name ?? "-"} · {t("research.chains.current_node")}:{" "}
-              {current?.title ?? "-"}
-            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
+              <span>
+                {t("research.chains.owner")}: {chain?.owner_name ?? "-"}
+              </span>
+              <span>{chain ? new Date(chain.updated_at).toLocaleString() : "-"}</span>
+            </div>
+            {current && (
+              <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-12 text-tertiary">{t("research.chains.current_node")}:</span>
+                <Badge variant={NODE_STATUS_VARIANTS[current.status] ?? "neutral"}>
+                  {t(`research.chains.node_status.${current.status.toLowerCase()}`)}
+                </Badge>
+                <span className="truncate text-13 font-medium text-primary">{current.title}</span>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-            >
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
               {t("research.chains.refresh")}
-            </button>
+            </Button>
             {agentEnabled && current && (
               <Link
                 href={`/${workspaceSlug}/research/chains/${chainId}/nodes/${current.id}/agent`}
-                className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color"
+                className={getButtonStyling("primary", "base")}
               >
                 {t("research.chains.open_agent")}
               </Link>
@@ -370,22 +416,19 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         </div>
       </section>
 
-      <nav
-        aria-label={t("research.chains.tabs.label")}
-        className="flex gap-1 overflow-x-auto border-b border-subtle px-5 py-2"
-      >
-        {tabs.map((tab) => (
-          <Link
-            key={tab.id}
-            href={`/${workspaceSlug}/research/chains/${chainId}?tab=${tab.id}`}
-            aria-current={tab.id === activeTab ? "page" : undefined}
-            className={`rounded-md px-3 py-1.5 text-12 whitespace-nowrap transition-colors ${
-              tab.id === activeTab ? "bg-surface-2 font-medium text-primary" : "text-secondary hover:bg-surface-2"
-            }`}
-          >
-            {t(tab.labelKey)}
-          </Link>
-        ))}
+      <nav aria-label={t("research.chains.tabs.label")} className="overflow-x-auto border-b border-subtle px-5">
+        <TabNavigationList className="py-2">
+          {tabs.map((tab) => (
+            <Link
+              key={tab.id}
+              href={`/${workspaceSlug}/research/chains/${chainId}?tab=${tab.id}`}
+              aria-current={tab.id === activeTab ? "page" : undefined}
+              className="whitespace-nowrap"
+            >
+              <TabNavigationItem isActive={tab.id === activeTab}>{t(tab.labelKey)}</TabNavigationItem>
+            </Link>
+          ))}
+        </TabNavigationList>
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -443,15 +486,15 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               <>
                 <div className="flex flex-wrap items-center gap-2 border-y border-subtle bg-surface-1 px-5 py-3">
                   {ACTIONS_BY_STATUS[selected.node.status].map((action) => (
-                    <button
+                    <Button
                       key={action}
-                      type="button"
+                      variant={action === "APPROVE" ? "primary" : "secondary"}
+                      size="sm"
                       disabled={transitioning === selected.node.id}
                       onClick={() => void transition(selected.node, action)}
-                      className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2 disabled:opacity-50"
                     >
                       {t(`research.chains.action_${action.toLowerCase()}`)}
-                    </button>
+                    </Button>
                   ))}
                   {(selected.node.status === "ACTIVE" || selected.node.status === "WAITING_HUMAN") && (
                     <label className="flex flex-1 flex-col gap-1 text-11 text-tertiary">
@@ -498,14 +541,15 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                     className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
                   />
                 </label>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="mt-auto"
                   onClick={() => void createNode()}
                   disabled={!nodeTitle.trim() || creating}
-                  className="mt-auto rounded-md bg-accent-primary px-3 py-2 text-12 text-on-color disabled:opacity-50"
                 >
                   {t("research.chains.create_node")}
-                </button>
+                </Button>
               </div>
             </section>
           </section>
@@ -520,32 +564,34 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               </p>
             )}
             {contextReports && (
-              <table className="mt-4 w-full text-left text-12">
+              <Table className="mt-4">
                 <caption className="sr-only">{t("research.chains.tabs.reports")}</caption>
-                <thead>
-                  <tr className="border-b border-subtle text-11 text-tertiary uppercase">
-                    <th className="font-normal py-2">{t("research.chains.context.report_period")}</th>
-                    <th className="font-normal py-2">{t("research.chains.status")}</th>
-                    <th className="font-normal py-2">{t("research.chains.updated_at")}</th>
-                  </tr>
-                </thead>
-                <tbody>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("research.chains.context.report_period")}</TableHead>
+                    <TableHead>{t("research.chains.status")}</TableHead>
+                    <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {contextReports.map((report) => (
-                    <tr key={report.id} className="border-b border-subtle">
-                      <td className="py-2 text-primary">{report.period_key}</td>
-                      <td className="py-2 text-secondary">{t(REPORT_STATUS_LABELS[report.status])}</td>
-                      <td className="py-2 text-secondary">{new Date(report.updated_at).toLocaleString()}</td>
-                    </tr>
+                    <TableRow key={report.id}>
+                      <TableCell className="font-medium text-primary">{report.period_key}</TableCell>
+                      <TableCell className="text-secondary">{t(REPORT_STATUS_LABELS[report.status])}</TableCell>
+                      <TableCell className="text-right text-tertiary tabular-nums">
+                        {new Date(report.updated_at).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
                   ))}
                   {!contextReports.length && (
-                    <tr>
-                      <td colSpan={3} className="py-3 text-secondary">
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-3 text-secondary">
                         {t("research.chains.context.report_empty")}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
             <div className="mt-6">
               <h4 className="text-13 font-semibold text-primary">{t("research.chains.tabs.reports")}</h4>
@@ -587,15 +633,13 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
         {activeTab === "members" && (
           <section className="p-5">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_120px_auto]">
-              <label className="flex flex-col gap-1 text-12 text-secondary">
-                <span>{t("research.chains.members.user_id")}</span>
-                <input
-                  value={memberUserId}
-                  onChange={(event) => setMemberUserId(event.target.value)}
-                  className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
-                />
-              </label>
+            <div className="flex flex-wrap items-end gap-3">
+              <ResearchPersonSelect
+                people={workspaceMembers}
+                value={memberUserId}
+                onChange={setMemberUserId}
+                label={t("research.chains.members.user_id")}
+              />
               <label className="flex flex-col gap-1 text-12 text-secondary">
                 <span>{t("research.chains.members.role")}</span>
                 <select
@@ -607,53 +651,58 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   <option value="20">{t("research.chains.members.role_admin")}</option>
                 </select>
               </label>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="lg"
                 onClick={() => void addMember()}
                 disabled={!memberUserId.trim() || memberBusy}
-                className="mt-auto rounded-md bg-accent-primary px-3 py-2 text-12 text-on-color disabled:opacity-50"
               >
                 {t("research.chains.members.add")}
-              </button>
+              </Button>
             </div>
             {memberError && (
               <p className="mt-3 text-12 text-danger-primary" role="alert">
                 {memberError}
               </p>
             )}
-            <ul className="mt-4 divide-y divide-subtle rounded-lg border border-subtle bg-surface-1" role="list">
-              {members.map((member) => (
-                <li key={member.user_id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div>
-                    <p className="text-12 text-primary">{member.display_name}</p>
-                    <p className="mt-0.5 text-11 text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</p>
-                  </div>
-                  {!member.is_owner && (
-                    <button
-                      type="button"
-                      onClick={() => void removeMember(member.user_id)}
-                      disabled={memberBusy}
-                      className="rounded-md border border-subtle px-3 py-1.5 text-11 text-secondary hover:bg-surface-2 disabled:opacity-50"
-                    >
-                      {t("research.chains.members.remove")}
-                    </button>
-                  )}
-                </li>
-              ))}
-              {!members.length && (
-                <li className="px-4 py-3 text-12 text-secondary">{t("research.chains.members.empty")}</li>
-              )}
-            </ul>
+            <Table className="mt-4">
+              <TableBody>
+                {members.map((member) => (
+                  <TableRow key={member.user_id}>
+                    <TableCell className="font-medium text-primary">{member.display_name}</TableCell>
+                    <TableCell className="text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</TableCell>
+                    <TableCell className="text-right">
+                      {!member.is_owner && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void removeMember(member.user_id)}
+                          disabled={memberBusy}
+                        >
+                          {t("research.chains.members.remove")}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!members.length && (
+                  <TableRow>
+                    <TableCell className="py-3 text-secondary">{t("research.chains.members.empty")}</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </section>
         )}
 
         {activeTab === "replay" && selected && (
           <section className="p-5">
             <ResearchChainNodeDetail {...selected} />
-            <ol className="mt-4 space-y-2" role="list">
+            <ol className="mt-4 space-y-0 border-l border-subtle pl-4" role="list">
               {selected.events.map((event) => (
-                <li key={event.event_id} className="rounded-md border border-subtle bg-surface-1 p-3">
-                  <p className="text-11 font-medium text-primary">{event.summary || event.event_type}</p>
+                <li key={event.event_id} className="relative py-2 pl-4">
+                  <span className="bg-border-strong absolute top-4 -left-[21px] size-2 rounded-full" aria-hidden />
+                  <p className="text-12 font-medium text-primary">{event.summary || event.event_type}</p>
                   <p className="mt-1 text-11 text-tertiary">
                     {new Date(event.occurred_at).toLocaleString()} · {event.actor_type}
                   </p>

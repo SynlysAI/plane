@@ -40,6 +40,16 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
+vi.mock("@/hooks/store/use-member", () => ({
+  useMember: () => ({
+    workspace: {
+      getWorkspaceMemberIds: () => [],
+      fetchWorkspaceMembers: () => Promise.resolve([]),
+      isUserSuspended: () => false,
+    },
+    getUserDetails: () => null,
+  }),
+}));
 vi.mock("@/components/research/experiments/experiment-list", () => ({
   ExperimentList: () => <div>experiment-list</div>,
 }));

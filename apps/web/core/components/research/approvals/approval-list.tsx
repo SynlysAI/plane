@@ -16,6 +16,9 @@ import {
 import type { TApprovalRequestStatus, TApprovalType, TOrgRole } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { Badge } from "@plane/propel/badge";
+import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
@@ -32,6 +35,23 @@ const SCOPES = [
   { key: "mine", labelKey: "research.approvals.mine" },
   { key: "completed", labelKey: "research.approvals.completed" },
 ] as const;
+
+/** Low-saturation Badge variants for approval status (Phase 5 extracts the shared dictionary). */
+const APPROVAL_STATUS_VARIANTS = {
+  PENDING: "warning",
+  APPROVED: "success",
+  REJECTED: "danger",
+  WITHDRAWN: "neutral",
+  CANCELLED: "neutral",
+} as const;
+
+/** Human readable waiting time from the request creation timestamp. */
+function waitingTime(createdAt: string) {
+  const hours = Math.max(0, Math.round((Date.now() - new Date(createdAt).getTime()) / 3600000));
+  if (hours < 1) return "<1h";
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
 
 /** Office approvals built on work items (P0-APR-01 ~ P0-APR-07). */
 export const ResearchApprovalList = observer(function ResearchApprovalList({ workspaceSlug, isAdmin }: Props) {
@@ -107,47 +127,51 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-subtle">
+      <TabNavigationList className="border-b border-subtle">
         {SCOPES.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={`-mb-px border-b-2 px-2 py-1.5 text-12 ${
-              scope === item.key
-                ? "border-accent-primary text-primary"
-                : "border-transparent text-tertiary hover:text-secondary"
-            }`}
-            onClick={() => setScope(item.key)}
-          >
-            {t(item.labelKey)}
+          <button key={item.key} type="button" onClick={() => setScope(item.key)}>
+            <TabNavigationItem isActive={scope === item.key}>{t(item.labelKey)}</TabNavigationItem>
           </button>
         ))}
-      </div>
+      </TabNavigationList>
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.approvals.columns.subject")}</th>
-            <th className="font-normal py-2">{t("research.approvals.columns.type")}</th>
-            <th className="font-normal py-2">{t("research.approvals.columns.flow")}</th>
-            <th className="font-normal py-2">{t("research.approvals.columns.step")}</th>
-            <th className="font-normal py-2">{t("research.approvals.columns.status")}</th>
-            <th className="py-2" />
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("research.approvals.columns.subject")}</TableHead>
+            <TableHead>{t("research.approvals.columns.type")}</TableHead>
+            <TableHead>{t("research.approvals.columns.requester")}</TableHead>
+            <TableHead className="text-right">{t("research.approvals.columns.waiting")}</TableHead>
+            <TableHead>{t("research.approvals.columns.flow")}</TableHead>
+            <TableHead>{t("research.approvals.columns.step")}</TableHead>
+            <TableHead>{t("research.approvals.columns.status")}</TableHead>
+            <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {requests.map((request) => (
-            <tr key={request.id} className="border-b border-subtle/60 align-top">
-              <td className="py-2 text-secondary">{request.issue_detail?.name ?? request.issue}</td>
-              <td className="py-2 text-tertiary">{t(APPROVAL_TYPE_LABELS[request.approval_type])}</td>
-              <td className="py-2 text-tertiary">
+            <TableRow key={request.id} className="align-top">
+              <TableCell className="font-medium text-primary">{request.issue_detail?.name ?? request.issue}</TableCell>
+              <TableCell className="text-secondary">{t(APPROVAL_TYPE_LABELS[request.approval_type])}</TableCell>
+              <TableCell className="text-secondary">
+                {request.requested_by_detail?.display_name ?? request.requested_by}
+              </TableCell>
+              <TableCell
+                className="text-right text-tertiary tabular-nums"
+                title={new Date(request.created_at).toLocaleString()}
+              >
+                {waitingTime(request.created_at)}
+              </TableCell>
+              <TableCell className="text-tertiary">
                 {request.flow_name} · v{request.flow_version}
-              </td>
-              <td className="py-2 text-tertiary">{request.current_step_order}</td>
-              <td className="py-2 text-tertiary">
-                {t(APPROVAL_REQUEST_STATUS_LABELS[request.status as TApprovalRequestStatus])}
-              </td>
-              <td className="py-2 text-right">
+              </TableCell>
+              <TableCell className="text-tertiary">{request.current_step_order}</TableCell>
+              <TableCell>
+                <Badge variant={APPROVAL_STATUS_VARIANTS[request.status as keyof typeof APPROVAL_STATUS_VARIANTS]}>
+                  {t(APPROVAL_REQUEST_STATUS_LABELS[request.status as TApprovalRequestStatus])}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
                 {request.can_act && (
                   <>
                     <Button
@@ -178,18 +202,18 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
                     {t("research.approvals.withdraw")}
                   </Button>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
           {requests.length === 0 && (
-            <tr>
-              <td colSpan={6} className="py-3 text-center text-tertiary">
+            <TableRow>
+              <TableCell colSpan={8} className="py-3 text-center text-tertiary">
                 {t("research.approvals.empty")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
 
       {activeRequestId && (
         <div className="flex items-center gap-2 rounded-md border border-subtle bg-surface-2 p-3">

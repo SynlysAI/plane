@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Badge } from "@plane/propel/badge";
+import { Button } from "@plane/propel/button";
+import { Skeleton } from "@plane/propel/skeleton";
 import type { TApprovalRequest, TPeriodicReport, TToMeReview } from "@plane/types";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -48,6 +51,14 @@ const KIND_RANK: Record<TTodoKind, number> = {
   confirmation: 1,
   reminder: 2,
   syncing: 3,
+};
+
+/** Low-saturation Badge variants for to-do severity (Phase 5 extracts the shared dictionary). */
+const KIND_VARIANTS: Record<TTodoKind, "neutral" | "brand" | "warning" | "danger"> = {
+  blocking: "danger",
+  confirmation: "warning",
+  reminder: "brand",
+  syncing: "neutral",
 };
 
 /** Convert a timestamp to a stable numeric value even when a backend omits it. */
@@ -280,18 +291,14 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null,
           <h3 className="text-13 font-semibold text-primary">{t("research.todo.title")}</h3>
           <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description")}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary transition-colors hover:bg-surface-2"
-        >
+        <Button variant="secondary" size="sm" onClick={() => void load()}>
           {t("research.todo.refresh")}
-        </button>
+        </Button>
       </div>
       {state === "loading" && (
         <div className="space-y-2 p-4" role="status" aria-busy="true">
           {[0, 1, 2].map((row) => (
-            <div key={row} className="h-11 animate-pulse rounded-md bg-surface-2" />
+            <Skeleton.Item key={row} height="44px" width="100%" />
           ))}
         </div>
       )}
@@ -307,9 +314,7 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null,
             <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded border border-subtle bg-surface-2 px-1.5 py-0.5 text-11 text-secondary">
-                    {t(`research.todo.kind_${todo.kind}`)}
-                  </span>
+                  <Badge variant={KIND_VARIANTS[todo.kind]}>{t(`research.todo.kind_${todo.kind}`)}</Badge>
                   <p className="truncate text-12 font-medium text-primary">{todo.title}</p>
                 </div>
                 <p className="mt-1 truncate text-11 text-tertiary">

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 // components
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
 import { ResearchAgentApprovalQueue } from "@/components/research/approvals/research-agent-approval-queue";
@@ -109,22 +110,19 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
   return (
     <ResearchPageShell {...shellProps}>
       <div className="flex h-full flex-col overflow-hidden">
-        <nav
-          aria-label={t("research.nav.approvals_v2")}
-          className="flex gap-1 overflow-x-auto border-b border-subtle px-5 py-2"
-        >
-          {tabs.map((tab) => (
-            <Link
-              key={tab.id}
-              href={`/${workspaceSlug}/research/approvals?tab=${tab.id}`}
-              aria-current={tab.id === activeTab ? "page" : undefined}
-              className={`rounded-md px-3 py-1.5 text-12 whitespace-nowrap transition-colors ${
-                tab.id === activeTab ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
-              }`}
-            >
-              {t(tab.labelKey)}
-            </Link>
-          ))}
+        <nav aria-label={t("research.nav.approvals_v2")} className="overflow-x-auto border-b border-subtle px-5">
+          <TabNavigationList className="py-2">
+            {tabs.map((tab) => (
+              <Link
+                key={tab.id}
+                href={`/${workspaceSlug}/research/approvals?tab=${tab.id}`}
+                aria-current={tab.id === activeTab ? "page" : undefined}
+                className="whitespace-nowrap"
+              >
+                <TabNavigationItem isActive={tab.id === activeTab}>{t(tab.labelKey)}</TabNavigationItem>
+              </Link>
+            ))}
+          </TabNavigationList>
         </nav>
         <div className="min-h-0 flex-1 overflow-hidden">
           {activeTab === "stage_review" && <ReviewInbox workspaceSlug={workspaceSlug} />}

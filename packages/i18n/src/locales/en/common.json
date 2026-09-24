@@ -1168,12 +1168,7 @@
         "archived": "Archived",
         "completed": "Completed"
       },
-      "visibility": {
-        "private": "Private",
-        "members": "Chain members",
-        "org": "Organisation",
-        "workspace": "Workspace"
-      },
+      "visibility": "Visibility",
       "node_status": {
         "draft": "Draft",
         "active": "Active",
@@ -1212,7 +1207,6 @@
       "current_node": "Current node",
       "updated_at": "Updated",
       "status": "Status",
-      "visibility": "Visibility",
       "open": "Open chain",
       "nodes_empty": "This chain has no nodes yet.",
       "node": "Node",
@@ -1864,7 +1858,10 @@
         "type": "Approval type",
         "flow": "Flow",
         "step": "Current step",
-        "status": "Status"
+        "status": "Status",
+        "requester": "Requester",
+        "waiting": "Waiting",
+        "actions": "Actions"
       }
     },
     "platform": {
