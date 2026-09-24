@@ -7,6 +7,7 @@
 | 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md) v2.5.1                                                                          |
 | 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                      |
 | 使用方式 | 每个联调日从 §1 开始逐层勾选；失败项当日登记附录 A，证据按附录 B 归档                                                                      |
+| 人工测试 | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)     |
 
 ## 使用说明
 
