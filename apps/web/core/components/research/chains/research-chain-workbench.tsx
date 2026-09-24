@@ -5,11 +5,12 @@
  */
 
 import { observer } from "mobx-react";
-import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { TabNavigationList } from "@plane/propel/tab-navigation";
 // components
+import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
 import { ResearchProjectList } from "@/components/research/projects/research-project-list";
 import { ResearchReportList } from "@/components/research/reports/report-list";
@@ -45,22 +46,18 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <nav
-        aria-label={t("research.nav.research_chain_v2")}
-        className="flex gap-1 overflow-x-auto border-b border-subtle px-5 py-2"
-      >
-        {views.map((view) => (
-          <Link
-            key={view.id}
-            href={`/${workspaceSlug}/research/chains${view.id === "chains" ? "" : `?view=${view.id}`}`}
-            aria-current={view.id === activeView ? "page" : undefined}
-            className={`rounded-md px-3 py-1.5 text-12 whitespace-nowrap transition-colors ${
-              view.id === activeView ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
-            }`}
-          >
-            {t(view.labelKey)}
-          </Link>
-        ))}
+      <nav aria-label={t("research.nav.research_chain_v2")} className="overflow-x-auto border-b border-subtle px-5">
+        <TabNavigationList className="py-2">
+          {views.map((view) => (
+            <ResearchTabLink
+              key={view.id}
+              href={`/${workspaceSlug}/research/chains${view.id === "chains" ? "" : `?view=${view.id}`}`}
+              isActive={view.id === activeView}
+            >
+              {t(view.labelKey)}
+            </ResearchTabLink>
+          ))}
+        </TabNavigationList>
       </nav>
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeView === "chains" && <ResearchChainBoard workspaceSlug={workspaceSlug} />}

@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import type { TResearchAgentSession } from "@plane/types";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // services
 import {
   ResearchAgentService,
@@ -378,61 +381,44 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md border border-subtle px-2 py-1 text-11 text-secondary">
+          <ResearchStatusBadge status={session?.status ?? "unknown"}>
             {statusKey ? t(statusKey) : t("research.agent.no_session")}
-          </span>
+          </ResearchStatusBadge>
           <span className="rounded-md border border-subtle px-2 py-1 text-11 text-tertiary">
             {t("research.agent.last_seq", { seq: latestSeq })}
           </span>
           {activeApproval && (
-            <button
-              type="button"
-              onClick={() => setApprovalFor(activeApproval)}
-              className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color"
-            >
+            <Button variant="primary" size="base" onClick={() => setApprovalFor(activeApproval)}>
               {t("research.agent.open_approval")}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={() => setArtifactDrawerOpen(true)}
-            className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-          >
+          <Button variant="secondary" size="base" onClick={() => setArtifactDrawerOpen(true)}>
             {t("research.agent.open_artifact")}
-          </button>
-          <button
-            type="button"
-            onClick={() => void reconnect()}
-            disabled={!session || reconnecting}
-            className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2 disabled:opacity-50"
-          >
+          </Button>
+          <Button variant="secondary" size="base" onClick={() => void reconnect()} disabled={!session || reconnecting}>
             {t("research.agent.reconnect")}
-          </button>
+          </Button>
           {(state === "closed" || state === "error") && (
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-            >
+            <Button variant="secondary" size="base" onClick={() => window.location.reload()}>
               {t("research.agent.reload_context")}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="base"
             onClick={() => void stop()}
             disabled={!session || session.status === "CLOSED" || sending}
-            className="rounded-md border border-danger-strong/40 px-3 py-1.5 text-12 text-danger-primary disabled:opacity-50"
           >
             {t("research.agent.stop")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="base"
             onClick={() => void close()}
             disabled={!session || session.status === "CLOSED"}
-            className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2 disabled:opacity-50"
           >
             {t("research.agent.close")}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -485,7 +471,7 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
                 <article
                   key={`${event.run_id}:${event.seq}`}
                   id={`event-${event.seq}`}
-                  className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-secondary"
+                  className="relative border-l-2 border-subtle py-2 pl-4 text-12 text-secondary transition-colors hover:border-strong"
                 >
                   <p className="font-medium text-primary">
                     {eventLabel(event.event_type, t)} · #{event.seq}
@@ -554,9 +540,9 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-11 font-semibold text-primary">{toolName}</p>
-                        <span className="rounded border border-subtle bg-surface-2 px-1.5 py-0.5 text-10 text-secondary">
+                        <ResearchStatusBadge status={status} size="sm">
                           {t(`research.agent.tool_status.${status.toLowerCase()}`)}
-                        </span>
+                        </ResearchStatusBadge>
                       </div>
                       <dl className="mt-2 space-y-1 text-11">
                         {scope && (
