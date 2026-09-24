@@ -290,6 +290,14 @@ docker compose -f docker-compose-local.yml up -d
 pnpm dev
 ```
 
+`pnpm dev` 中的 Web 默认先构建生产包，再通过 Vite Preview 对外提供压缩后的静态模块，并继续复用
+`/api`、`/auth` 与 `/uploads` 代理。这是局域网和 Tailnet 远程访问的推荐启动方式。需要在 Web 页面上
+获得热更新时，先停止占用 3000 端口的 Preview 进程，再单独执行：
+
+```bash
+pnpm --filter web dev:hmr
+```
+
 启动后访问：
 
 - Web 应用：<http://localhost:3000>

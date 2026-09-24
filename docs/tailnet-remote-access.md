@@ -12,6 +12,11 @@
 
 局域网备用入口仍为 `http://192.168.3.245:3000/`；Tailscale HTTP 诊断入口为 `http://100.109.35.2:3000/`。
 
+Web 由 `pnpm dev` 先执行生产构建，再用 Vite Preview 监听 3000。不要把未压缩的
+`react-router dev` 直接暴露给 Tailnet 远程浏览器：DERP 中继下大量开发态模块容易超时，进而出现
+React 未执行的白屏。需要前端热更新时，仅在本机开发会话中使用
+`pnpm --filter web dev:hmr`。
+
 ## 2. 开启 Tailscale Serve
 
 1. 在开发机确认 Tailscale 已连接：
@@ -32,6 +37,8 @@
    ```bash
    tailscale serve status
    ```
+
+4. 确认本地 3000 已运行 Vite Preview（日志应出现 Preview 监听地址），而不是 `react-router dev`。
 
 ## 3. 本地配置口径
 
@@ -81,6 +88,12 @@ curl -fsS -o /dev/null -w 'web=%{http_code} final=%{url_effective}\n' \
 | 登录后跳回 `192.168.3.245`           | 检查 `VITE_WEB_BASE_URL`、`WEB_URL`、`APP_BASE_URL`，重启 Web 与 API   |
 | 页面出现 HTTP 子资源                 | 检查是否绕过 Tailnet Serve 直接访问了 HTTP 诊断地址                    |
 | 附件失败                             | 确认浏览器请求为同源 `/uploads/`，且 Vite 的 storage proxy 指向 MinIO  |
+
+### 传输问题
+
+| 现象                  | 处理                                                                     |
+| --------------------- | ------------------------------------------------------------------------ |
+| 首页 200 但长时间白屏 | 确认 3000 是 Vite Preview；开发态 HMR 请改用 `pnpm --filter web dev:hmr` |
 
 ## 6. 回滚
 
