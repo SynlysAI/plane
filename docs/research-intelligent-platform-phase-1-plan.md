@@ -269,7 +269,7 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 
 ### 任务 1.8：信息架构收敛与兼容路由补齐
 
-- 增加 `research_ia_v2` Workspace 开关，默认关闭；平台配置页提供管理员配置入口。
+- 增加 `research_ia_v2` Workspace 开关，默认开启；平台配置页提供管理员回退入口。
 - 开启后侧栏仅显示科研总览、Research Chain、审批中心、科研管理；Tab 继续按既有 capability 与 section 判定。
 - 审批中心聚合 `stage_review`、`report_review`、`agent_approval`、办公审批队列。
 - 科研管理聚合组织、系统、模板、身份、平台、审计与集成 Tab；平台配置在模块关闭时仍可恢复。

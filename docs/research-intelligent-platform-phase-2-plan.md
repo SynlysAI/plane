@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 计划版本 | v1.3                                                                                                                                                                                                   |
+| 计划版本 | v1.4                                                                                                                                                                                                   |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §6–§10                                                                                                                |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)、[`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) |
 | 计划状态 | 待评审                                                                                                                                                                                                 |
@@ -12,6 +12,13 @@
 ## 1. 阶段目标与出口
 
 Phase 2 不改变 Plane 是科研主数据和权限权威的原则。用户侧工具执行统一走 `Plane Node → Plane BFF → Synlora plugin/tool → 垂类系统`；Synlora 负责会话、插件、审批、沙箱和 Job Registry，专业系统负责执行、算法和原始数据；Plane 保存任务引用、状态、回执、版本和审计。
+
+信息架构基线：Phase 2 默认运行在 `research_ia_v2` 四入口结构上，不新增科研一级入口，也不恢复旧平铺导航。专业能力按以下位置扩展：
+
+- Research Chain：节点运行状态、Job 面板、工具卡、结果确认和外部引用。
+- 审批中心：Agent 审批从 Phase 1 空态升级为真实队列，并关联 Job 状态。
+- 科研管理：模板库从报告模板扩展为研究计划/实验记录模板；系统集成页承接连接健康和运行回执。
+- 科研总览：只聚合跨系统待办、降级和最近运行摘要，不复制 Chain 或 Job 详情。
 
 出口条件：
 
@@ -124,6 +131,7 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 - 实验工具卡：设备/模板、参数摘要、preview digest、风险等级、审批人和 dispatch 状态。
 - 分析工具卡：算法/谱学工具、输入资产、版本、预计耗时、输出类型和引用来源。
 - Job 面板：queued/running/blocked/completed/failed/cancelled、RunEvent、队列等待、重试和取消。
+- 审批中心入口：Agent 审批队列展示等待确认的工具、风险、scope、Job 状态和审批人；处理后写回 Synlora 审批结果并更新 Chain Event。
 - 结果确认：预览 Markdown/结构化结果/图表元数据，选择“保存为分析结果”“关联实验”“退回重试”或“仅保留外部引用”。
 - Trace 面板：工具调用、审批、运行回执、DataAsset、错误和 Chain Snapshot 关联。
 
@@ -194,6 +202,9 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 ### 任务 2.6：前端运行面板和数据快照
 
 - 在 Chain 节点显示 Job 状态、RunEvent、工具调用、审批和 DataAsset。
+- 将审批中心 `agent_approval` Tab 从空态升级为真实队列，支持等待审批、已批准、已拒绝、审批中和关联 Job 状态。
+- 将专业模板配置聚合到科研管理“模板”Tab，Phase 2 覆盖研究计划、实验记录和分析摘要模板。
+- 将连接健康、调用结果和运行回执聚合到科研管理“系统集成”Tab，不在侧栏新增专业系统一级入口。
 - 支持取消、重试、查看失败原因和打开权威系统链接。
 - 显示来源系统、版本、hash、降级和最后同步时间。
 - 在 Plane 通用 Agent 插件中实现实验/分析工具卡、preview/confirm、Job 状态、RunEvent、结果确认、重试/取消和 Chain 保存。
@@ -412,7 +423,8 @@ pnpm build
 | 4    | SpecAgent 插件              | 1、上游 NMR contract | 三个接口正常和错误场景通过                        |
 | 5    | Tool scope/配额             | 2–4                  | 未授权/超额 fail-closed                           |
 | 6    | Job 前端和通知              | 1–5                  | 状态刷新、取消、重试和降级可用                    |
-| 7    | 故障演练/灰度               | 全部                 | runbook 和补偿流程通过                            |
+| 7    | 四入口容器扩展              | 6、Phase 1 IA v2     | 审批中心/科研管理/Chain 扩展不新增一级入口        |
+| 8    | 故障演练/灰度               | 全部                 | runbook 和补偿流程通过                            |
 
 未完成真实服务契约或安全评审时，只能使用模拟运行，不得开放真实设备或高成本算法。
 
@@ -423,6 +435,8 @@ pnpm build
 - [ ] 实验/分析工具卡展示参数、版本、风险、审批和来源。
 - [ ] preview digest 与正式 dispatch 一致，重复确认不重复创建 job。
 - [ ] Job 面板支持状态、RunEvent、重试、取消、失败原因和权威系统链接。
+- [ ] 审批中心 Agent 队列支持审批、拒绝、scope 展示和 Job 状态关联。
+- [ ] 科研管理模板与集成 Tab 承接 Phase 2 专业配置和回执，不新增科研一级入口。
 - [ ] 结果确认可保存为分析结果、实验关联、Artifact 引用或退回修改。
 - [ ] 插件 Trace 与 `job_id`、`run_id`、`artifact_id`、Chain Snapshot 完整关联。
 - [ ] PolyAgent/SpecAgent/SpecLabOS 回执保留 correlation ID，并可在 Chain 回放中跳转原始 run/artifact。
