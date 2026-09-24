@@ -61,6 +61,9 @@ flowchart LR
     PLATFORM --> MVP[研究链+ RAGPortal + Synlora MVP]
     V3 --> GUIDE[UX 设计指南 · 系列入口]
     GUIDE --> ARCHIVE[UI/UX 过程档案 · 六合一]
+    GUIDE --> PRD412[4.12 UI/UX PRD]
+    PRD412 --> BASE412[4.12 Phase 0 基线]
+    PRD412 --> ACCEPT412[4.12 验收报告]
 ```
 
 - 路线图定义需求与分期，不直接修改业务代码。
@@ -71,6 +74,7 @@ flowchart LR
 - `research-intelligent-platform-prd.md` 是跨仓库平台建设目标和分期边界；它复用 v3 的组织、ACL 与 Context 契约，不替换 Plane P0/P1/P2 的已交付规格。涉及 RAGPortal、已部署 WeKnora、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 和 SpecAgent 的能力，以各仓库代码、服务运行契约与发布契约为准。
 - `research-workspace-ux-guide.md` 是科研工作台 UI/UX 系列的唯一入口与权威规范：整合三定位、信息分级方法、语义组件出口与页面模式，冲突以指南为准。
 - `research-workspace-ui-ux-archive.md` 原文收录 4.10.0 重构 PRD、Phase 1/2 审计、验收报告、发布说明与 4.11.0 信息精炼 PRD 六份文档；内容未删减，仅统一标题层级与内部引用。
+- `research-workspace-ui-ux-4.12-prd.md`、`research-workspace-ui-ux-4.12-phase-0-baseline.md` 与 `research-workspace-ui-ux-4.12-acceptance-report.md` 分别定义 4.12.0 增量、冻结基线和发布验收证据。
 - `research-intelligent-platform-ux-prototype.md` 是当前产品交互确认稿，先确认欢迎页、研究链、通用 Agent 插件和 RAGPortal 入库入口，再进入 UI 开发拆分。
 - `research-intelligent-platform-phase-0-plan.md` 至 `research-intelligent-platform-phase-3-plan.md` 是总 PRD §9 的阶段实施计划，分别定义技术方案、开发任务、依赖、测试验收、发布回滚和风险；计划完成状态不能替代代码验收报告。
 

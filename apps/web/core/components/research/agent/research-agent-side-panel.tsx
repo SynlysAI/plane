@@ -21,14 +21,37 @@ type Props = {
 export function ResearchAgentSidePanel({ workspaceSlug, chainNodeId, onClose }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panelRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
+      if (event.key !== "Tab") return;
+      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      const activeIndex = active instanceof HTMLElement ? Array.prototype.indexOf.call(focusable, active) : -1;
+      const next = event.shiftKey
+        ? activeIndex <= 0
+          ? last
+          : focusable[activeIndex - 1]
+        : activeIndex === -1 || activeIndex === focusable.length - 1
+          ? first
+          : focusable[activeIndex + 1];
+      event.preventDefault();
+      next.focus();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus();
+    };
   }, [onClose]);
 
   return (
