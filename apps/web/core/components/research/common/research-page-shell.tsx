@@ -21,6 +21,10 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 type Props = {
   titleKey: string;
   descriptionKey?: string;
+  /** Optional breadcrumb slot rendered above the page title (required on detail pages). */
+  breadcrumbs?: ReactNode;
+  /** Metadata row kept separate from actions (owner, period, updated time, scope). */
+  metadata?: ReactNode;
   section?:
     | "org"
     | "reports"
@@ -54,6 +58,8 @@ const MANAGEMENT_NAV_KEYS = new Set(["org", "system", "templates", "identity", "
 export const ResearchPageShell = observer(function ResearchPageShell({
   titleKey,
   descriptionKey,
+  breadcrumbs,
+  metadata,
   section = "reports",
   navKey,
   adminOnly = false,
@@ -134,12 +140,18 @@ export const ResearchPageShell = observer(function ResearchPageShell({
     <>
       <PageHead title={t(titleKey)} />
       <div className="flex h-full w-full flex-col overflow-hidden">
-        <div className="flex items-start justify-between gap-4 border-b border-subtle px-5 py-3">
-          <div>
-            <h2 className="text-14 font-medium text-primary">{t(titleKey)}</h2>
-            {descriptionKey && <p className="mt-0.5 text-12 text-tertiary">{t(descriptionKey)}</p>}
+        <div className="border-b border-subtle px-5 py-3">
+          {breadcrumbs && <div className="mb-1 text-12 text-tertiary">{breadcrumbs}</div>}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="truncate text-18 font-semibold text-primary">{t(titleKey)}</h2>
+              {descriptionKey && <p className="mt-0.5 text-13 text-tertiary">{t(descriptionKey)}</p>}
+              {metadata && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">{metadata}</div>
+              )}
+            </div>
+            {actions}
           </div>
-          {actions}
         </div>
         {showManagementTabs && <ResearchManagementTabs currentKey={navKey} />}
         <div className="flex-1 overflow-hidden">{children}</div>
