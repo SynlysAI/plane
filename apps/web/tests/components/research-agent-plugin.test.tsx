@@ -162,7 +162,7 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
   });
   await act(async () => {
     const saveButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "保存到科研链"
+      (button) => button.textContent === "保存到研究链"
     );
     expect(saveButton?.disabled).toBe(false);
     saveButton?.click();
