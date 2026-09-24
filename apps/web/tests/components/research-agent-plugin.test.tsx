@@ -226,3 +226,28 @@ it("renders structured approval cards and submits an idempotent Agent decision",
   );
   expect(container.textContent).toContain("审批已通过，Agent 可继续执行。");
 });
+
+it("keeps reconnection and collapsed runtime reachable in the side-panel layout", async () => {
+  const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
+  await act(async () => {
+    root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" variant="panel" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("上下文范围");
+  expect(container.textContent).not.toContain("最后事件");
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "重新连接")?.click();
+  });
+  expect(mocks.getEvents).toHaveBeenLastCalledWith("lab", "run-1", 1);
+
+  const runtimeDetails = container.querySelector("details");
+  expect(runtimeDetails).not.toBeNull();
+  expect(runtimeDetails?.textContent).toContain("运行详情");
+  runtimeDetails?.setAttribute("open", "true");
+  expect(runtimeDetails?.textContent).toContain("research-general");
+  expect(runtimeDetails?.textContent).toContain("需确认");
+  expect(runtimeDetails?.textContent).toContain("不可用");
+  expect(runtimeDetails?.textContent).toContain("Trace");
+});

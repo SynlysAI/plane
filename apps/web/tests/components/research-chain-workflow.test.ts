@@ -97,5 +97,25 @@ it("keeps plan as an opening preparation node and exposes unmapped nodes", () =>
   expect(opening?.status).toBe("NOT_STARTED");
   expect(opening?.preferredNodeId).toBe("plan");
   expect(workflow.stages.find((stage) => stage.id === "literature_review")?.nodeIds).toEqual(["literature"]);
-  expect(workflow.unmappedNodes.map((item) => item.id)).toEqual(["research"]);
+  expect(workflow.stages.find((stage) => stage.id === "literature_review")?.associatedNodeIds).toEqual(["research"]);
+  expect(workflow.unmappedNodes).toEqual([]);
+});
+
+it("keeps archived status distinct instead of treating it as a future stage", () => {
+  const archived = node({ id: "summary", node_type: "SUMMARY", title: "总结", status: "ARCHIVED" });
+  const workflow = buildResearchWorkflow([archived]);
+  const summary = workflow.stages.find((stage) => stage.id === "summary");
+
+  expect(summary?.status).toBe("ARCHIVED");
+  expect(summary?.isCurrent).toBe(false);
+  expect(summary?.preferredNodeId).toBe(archived.id);
+});
+
+it("maps a leading research node to its nearest successor stage", () => {
+  const research = node({ id: "research", node_type: "RESEARCH", title: "前置调研记录" });
+  const literature = node({ id: "literature", node_type: "LITERATURE_REVIEW", title: "文献调研", status: "COMPLETED" });
+  const workflow = buildResearchWorkflow([research, literature], literature.id);
+
+  expect(workflow.stages.find((stage) => stage.id === "literature_review")?.associatedNodeIds).toEqual(["research"]);
+  expect(workflow.unmappedNodes).toEqual([]);
 });
