@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
@@ -103,37 +104,35 @@ export const ResearchReportSummaryBoard = observer(function ResearchReportSummar
 
       <section className="rounded-lg border border-subtle bg-surface-1 p-4">
         <h3 className="text-13 font-medium text-primary">{t("research.summary.by_unit")}</h3>
-        <table className="mt-2 w-full text-12">
-          <thead>
-            <tr className="border-b border-subtle text-left text-tertiary">
-              <th className="font-normal py-2">{t("research.summary.columns.unit")}</th>
+        <Table>
+          <TableHeader>
+            <TableRow className="text-tertiary">
+              <TableHead>{t("research.summary.columns.unit")}</TableHead>
               {BUCKETS.map((bucket) => (
-                <th key={bucket.key} className="font-normal py-2">
-                  {t(bucket.labelKey)}
-                </th>
+                <TableHead key={bucket.key}>{t(bucket.labelKey)}</TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {(summary?.by_unit ?? []).map((entry) => (
-              <tr key={entry.org_unit} className="border-b border-subtle/60">
-                <td className="py-2 text-secondary">{entry.org_unit_name}</td>
+              <TableRow key={entry.org_unit}>
+                <TableCell className="text-secondary">{entry.org_unit_name}</TableCell>
                 {BUCKETS.map((bucket) => (
-                  <td key={bucket.key} className="py-2 text-tertiary">
+                  <TableCell key={bucket.key} className="text-tertiary">
                     {entry.counts[bucket.key]}
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
             {(summary?.by_unit ?? []).length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-3 text-center text-tertiary">
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-tertiary">
                   {t("research.summary.empty")}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </section>
 
       <section className="rounded-lg border border-subtle bg-surface-1 p-4">

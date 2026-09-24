@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { INVITE_CODE_STATUS_LABELS } from "@plane/constants";
 import type { TAccountProvisioningOptions, TInviteCode, TResearchProfileCategory } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, Spinner } from "@plane/ui";
@@ -200,23 +201,23 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
         <p className="text-12 text-tertiary">{t("research.invite_codes.empty")}</p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-subtle">
-          <table className="w-full text-12">
-            <thead className="bg-surface-2 text-11 text-tertiary">
-              <tr>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.code")}</th>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.profile_category")}</th>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.primary_org_unit")}</th>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.primary_advisor")}</th>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.usage")}</th>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.expires_at")}</th>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.status")}</th>
-                <th className="px-3 py-2 text-left">{t("research.invite_codes.columns.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader className="bg-surface-2 text-11 text-tertiary">
+              <TableRow>
+                <TableHead>{t("research.invite_codes.columns.code")}</TableHead>
+                <TableHead>{t("research.invite_codes.columns.profile_category")}</TableHead>
+                <TableHead>{t("research.invite_codes.columns.primary_org_unit")}</TableHead>
+                <TableHead>{t("research.invite_codes.columns.primary_advisor")}</TableHead>
+                <TableHead>{t("research.invite_codes.columns.usage")}</TableHead>
+                <TableHead>{t("research.invite_codes.columns.expires_at")}</TableHead>
+                <TableHead>{t("research.invite_codes.columns.status")}</TableHead>
+                <TableHead>{t("research.invite_codes.columns.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {codes.map((code) => (
-                <tr key={code.id} className="border-t border-subtle">
-                  <td className="font-mono px-3 py-2 text-11 text-primary">
+                <TableRow key={code.id}>
+                  <TableCell className="font-mono text-11 text-primary">
                     <button
                       type="button"
                       className="hover:text-accent-primary"
@@ -224,26 +225,26 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                     >
                       {code.code}
                     </button>
-                  </td>
-                  <td className="px-3 py-2 text-secondary">
+                  </TableCell>
+                  <TableCell className="text-secondary">
                     {code.profile_category || (code.provisioning_version === 1 ? "Legacy v1" : "-")}
-                  </td>
-                  <td className="px-3 py-2 text-secondary">
+                  </TableCell>
+                  <TableCell className="text-secondary">
                     {options?.org_units.find((unit) => unit.id === code.org_unit)?.display_path ?? "-"}
-                  </td>
-                  <td className="px-3 py-2 text-secondary">
+                  </TableCell>
+                  <TableCell className="text-secondary">
                     {options?.advisors.find((advisor) => advisor.id === code.primary_advisor)?.display_name ?? "-"}
-                  </td>
-                  <td className="px-3 py-2 text-secondary">
+                  </TableCell>
+                  <TableCell className="text-secondary">
                     {code.used_count} / {code.max_uses}
-                  </td>
-                  <td className="px-3 py-2 text-secondary">
+                  </TableCell>
+                  <TableCell className="text-secondary">
                     {code.expires_at ? new Date(code.expires_at).toLocaleString() : "-"}
-                  </td>
-                  <td className="px-3 py-2 text-secondary">
+                  </TableCell>
+                  <TableCell className="text-secondary">
                     {t(INVITE_CODE_STATUS_LABELS[code.effective_status] ?? "research.invite_codes.status.active")}
-                  </td>
-                  <td className="flex gap-2 px-3 py-2">
+                  </TableCell>
+                  <TableCell className="flex gap-2">
                     <button type="button" className="text-accent-primary" onClick={() => void handleToggle(code)}>
                       {code.status === "ACTIVE"
                         ? t("research.invite_codes.actions.disable")
@@ -252,11 +253,11 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                     <button type="button" className="text-danger-primary" onClick={() => void handleDelete(code)}>
                       {t("research.invite_codes.actions.delete")}
                     </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

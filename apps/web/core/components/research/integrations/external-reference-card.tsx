@@ -10,6 +10,8 @@ import { EXTERNAL_TYPE_LABELS, INTEGRATION_SYSTEM_LABELS } from "@plane/constant
 // plane imports
 import type { TExternalReference } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 
 type Props = {
   reference: TExternalReference;
@@ -35,9 +37,9 @@ export const ExternalReferenceCard = observer(function ExternalReferenceCard({ r
             {t(EXTERNAL_TYPE_LABELS[reference.external_type] ?? reference.external_type)}
           </span>
           {degraded && (
-            <span className="rounded bg-danger-subtle px-1.5 py-0.5 text-danger-primary">
+            <ResearchStatusBadge status={reference.status} size="sm">
               {t("research.integrations.degraded_hint")}
-            </span>
+            </ResearchStatusBadge>
           )}
         </span>
       </div>

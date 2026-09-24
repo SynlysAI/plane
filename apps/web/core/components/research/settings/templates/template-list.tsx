@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
@@ -112,43 +113,43 @@ export const ResearchTemplateList = observer(function ResearchTemplateList({ wor
         </Button>
       </div>
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.templates.columns.name")}</th>
-            <th className="font-normal py-2">{t("research.templates.columns.type")}</th>
-            <th className="font-normal py-2">{t("research.templates.columns.default")}</th>
-            <th className="py-2" />
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow className="text-tertiary">
+            <TableHead>{t("research.templates.columns.name")}</TableHead>
+            <TableHead>{t("research.templates.columns.type")}</TableHead>
+            <TableHead>{t("research.templates.columns.default")}</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {templates.map((template) => (
-            <tr key={template.id} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">{template.name}</td>
-              <td className="py-2 text-secondary">{t(REPORT_TYPE_LABELS[template.report_type])}</td>
-              <td className="py-2">
+            <TableRow key={template.id}>
+              <TableCell className="text-secondary">{template.name}</TableCell>
+              <TableCell className="text-secondary">{t(REPORT_TYPE_LABELS[template.report_type])}</TableCell>
+              <TableCell>
                 <input
                   type="checkbox"
                   checked={template.is_default}
                   onChange={(event) => void handleToggleDefault(template.id, event.target.checked)}
                 />
-              </td>
-              <td className="py-2 text-right">
+              </TableCell>
+              <TableCell className="text-right">
                 <Button variant="ghost" size="sm" onClick={() => void handleDelete(template.id)}>
                   {t("research.common.delete")}
                 </Button>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
           {templates.length === 0 && (
-            <tr>
-              <td colSpan={4} className="py-3 text-center text-tertiary">
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-tertiary">
                 {t("research.templates.empty")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 });
