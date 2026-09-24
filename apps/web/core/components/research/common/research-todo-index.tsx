@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Badge } from "@plane/propel/badge";
 import { Button } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
 import type { TApprovalRequest, TPeriodicReport, TToMeReview } from "@plane/types";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 // services
@@ -51,14 +52,6 @@ const KIND_RANK: Record<TTodoKind, number> = {
   confirmation: 1,
   reminder: 2,
   syncing: 3,
-};
-
-/** Low-saturation Badge variants for to-do severity (Phase 5 extracts the shared dictionary). */
-const KIND_VARIANTS: Record<TTodoKind, "neutral" | "brand" | "warning" | "danger"> = {
-  blocking: "danger",
-  confirmation: "warning",
-  reminder: "brand",
-  syncing: "neutral",
 };
 
 /** Convert a timestamp to a stable numeric value even when a backend omits it. */
@@ -314,7 +307,7 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null,
             <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={KIND_VARIANTS[todo.kind]}>{t(`research.todo.kind_${todo.kind}`)}</Badge>
+                  <ResearchStatusBadge status={todo.kind}>{t(`research.todo.kind_${todo.kind}`)}</ResearchStatusBadge>
                   <p className="truncate text-12 font-medium text-primary">{todo.title}</p>
                 </div>
                 <p className="mt-1 truncate text-11 text-tertiary">

@@ -5,11 +5,11 @@
  */
 
 import { observer } from "mobx-react";
-import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
+import { TabNavigationList } from "@plane/propel/tab-navigation";
+import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 // components
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
 import { ResearchAgentApprovalQueue } from "@/components/research/approvals/research-agent-approval-queue";
@@ -113,14 +113,13 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
         <nav aria-label={t("research.nav.approvals_v2")} className="overflow-x-auto border-b border-subtle px-5">
           <TabNavigationList className="py-2">
             {tabs.map((tab) => (
-              <Link
+              <ResearchTabLink
                 key={tab.id}
                 href={`/${workspaceSlug}/research/approvals?tab=${tab.id}`}
-                aria-current={tab.id === activeTab ? "page" : undefined}
-                className="whitespace-nowrap"
+                isActive={tab.id === activeTab}
               >
-                <TabNavigationItem isActive={tab.id === activeTab}>{t(tab.labelKey)}</TabNavigationItem>
-              </Link>
+                {t(tab.labelKey)}
+              </ResearchTabLink>
             ))}
           </TabNavigationList>
         </nav>
