@@ -12,6 +12,7 @@ from plane.db.models import (
     Project,
     ProjectMember,
     ResearchAuditEvent,
+    ResearchChain,
     ResearchProjectProfile,
     ResearchStageInstance,
     State,
@@ -158,6 +159,93 @@ class TestResearchProjectCreation:
         assert first.status_code == 201
         assert second.status_code == 201
         assert ResearchProjectProfile.objects.filter(workspace=env["workspace"]).count() == 2
+
+    def test_research_chain_project_creates_chain_projection(self, env):
+        env["workspace"].research_setting.research_chain_enabled = True
+        env["workspace"].research_setting.save(update_fields=["research_chain_enabled"])
+        response = env["admin_client"].post(
+            env["url"],
+            {
+                "name": "Parallel research chain",
+                "research_type": "RESEARCH_PROJECT",
+                "chain_kind": "RESEARCH_CHAIN",
+                "chain_visibility": "WORKSPACE",
+            },
+            format="json",
+        )
+
+        assert response.status_code == 201, response.json()
+        payload = response.json()
+        assert payload["research"]["chain_kind"] == "RESEARCH_CHAIN"
+        chain = ResearchChain.objects.get(project_id=payload["id"])
+        assert str(chain.id) == payload["research"]["chain_id"]
+        assert chain.visibility == "WORKSPACE"
+
+        chain_response = env["admin_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/",
+            {"request_id": "chain-project-replay", "project_id": payload["id"]},
+            format="json",
+        )
+        assert chain_response.status_code == 200, chain_response.json()
+        assert chain_response.json()["data"]["id"] == str(chain.id)
+
+    def test_parallel_research_chain_projects_do_not_use_legacy_owner_limit(self, env):
+        env["workspace"].research_setting.research_chain_enabled = True
+        env["workspace"].research_setting.save(update_fields=["research_chain_enabled"])
+        payload = {
+            "owner": str(env["member"].id),
+            "research_type": "PHD",
+            "chain_kind": "RESEARCH_CHAIN",
+            "chain_visibility": "PRIVATE",
+        }
+
+        first = env["admin_client"].post(env["url"], payload, format="json")
+        second = env["admin_client"].post(env["url"], {**payload, "name": "Second parallel chain"}, format="json")
+
+        assert first.status_code == 201, first.json()
+        assert second.status_code == 201, second.json()
+        assert ResearchChain.objects.filter(owner=env["member"]).count() == 2
+
+    def test_research_chain_does_not_consume_legacy_cultivation_slot(self, env):
+        env["workspace"].research_setting.research_chain_enabled = True
+        env["workspace"].research_setting.save(update_fields=["research_chain_enabled"])
+        parallel = env["admin_client"].post(
+            env["url"],
+            {
+                "owner": str(env["member"].id),
+                "research_type": "PHD",
+                "chain_kind": "RESEARCH_CHAIN",
+                "chain_visibility": "PRIVATE",
+            },
+            format="json",
+        )
+        legacy = env["admin_client"].post(
+            env["url"],
+            {
+                "owner": str(env["member"].id),
+                "research_type": "MASTER",
+            },
+            format="json",
+        )
+
+        assert parallel.status_code == 201, parallel.json()
+        assert legacy.status_code == 201, legacy.json()
+
+    def test_research_chain_creation_requires_workspace_switch(self, env):
+        response = env["member_client"].post(
+            env["url"],
+            {
+                "name": "Disabled chain",
+                "research_type": "RESEARCH_PROJECT",
+                "chain_kind": "RESEARCH_CHAIN",
+                "chain_visibility": "PRIVATE",
+            },
+            format="json",
+        )
+
+        assert response.status_code == 403, response.json()
+        assert response.json()["error_code"] == "research_submodule_disabled"
+        assert ResearchProjectProfile.objects.filter(workspace=env["workspace"]).count() == 0
 
     def test_workspace_admin_can_create_team_project_without_org_assignment(self, env):
         response = env["admin_client"].post(
@@ -335,6 +423,10 @@ class TestResearchProjectLifecycle:
     def _create(self, env, **payload):
         return env["admin_client"].post(env["url"], {"owner": str(env["member"].id), **payload}, format="json").json()
 
+    def _enable_chain(self, env):
+        env["workspace"].research_setting.research_chain_enabled = True
+        env["workspace"].research_setting.save(update_fields=["research_chain_enabled"])
+
     def test_archive_keeps_the_project_and_records_audit(self, env):
         created = self._create(env)
         response = env["admin_client"].post(f"{env['url']}{created['id']}/archive/", {}, format="json")
@@ -412,6 +504,48 @@ class TestResearchProjectLifecycle:
         )
         assert response.status_code == 200
         assert ResearchAuditEvent.objects.filter(action="project.owner.change").exists()
+
+    def test_research_chain_owner_follows_profile_owner_change(self, env):
+        self._enable_chain(env)
+        created = self._create(
+            env,
+            name="Owner sync chain",
+            research_type="PHD",
+            chain_kind="RESEARCH_CHAIN",
+            chain_visibility="PRIVATE",
+        )
+        successor = make_user(first_name="Successor")
+        add_workspace_member(env["workspace"], successor)
+
+        response = env["admin_client"].patch(
+            f"{env['url']}{created['id']}/",
+            {"owner": str(successor.id)},
+            format="json",
+        )
+
+        assert response.status_code == 200, response.json()
+        chain = ResearchChain.objects.get(project_id=created["id"])
+        assert chain.owner_id == successor.id
+
+    def test_project_lifecycle_state_is_projected_to_research_chain(self, env):
+        self._enable_chain(env)
+        created = self._create(
+            env,
+            name="Lifecycle sync chain",
+            research_type="RESEARCH_PROJECT",
+            chain_kind="RESEARCH_CHAIN",
+            chain_visibility="WORKSPACE",
+        )
+
+        archived = env["admin_client"].post(f"{env['url']}{created['id']}/archive/", {}, format="json")
+        chain_after_archive = ResearchChain.objects.get(project_id=created["id"])
+        restored = env["admin_client"].post(f"{env['url']}{created['id']}/restore/", {}, format="json")
+        chain_after_restore = ResearchChain.objects.get(project_id=created["id"])
+
+        assert archived.status_code == 200
+        assert chain_after_archive.status == "ARCHIVED"
+        assert restored.status_code == 200
+        assert chain_after_restore.status == "ACTIVE"
 
     def test_listing_filters_by_owner_and_status(self, env):
         self._create(env)

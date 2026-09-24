@@ -252,8 +252,6 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
                     "created_by": request.user,
                 },
             )
-            if not created and chain.request_id != request_id:
-                return conflict_response()
         return Response(_envelope(data=ResearchChainSerializer(chain).data, request_id=request_id, schema_version="research-chain.v1"), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 

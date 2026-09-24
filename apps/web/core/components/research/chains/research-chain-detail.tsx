@@ -75,6 +75,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [actionError, setActionError] = useState("");
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [reasonByNode, setReasonByNode] = useState<Record<string, string>>({});
+  const [reasonErrorByNode, setReasonErrorByNode] = useState<Record<string, string>>({});
   const [snapshotFilter, setSnapshotFilter] = useState("");
   const agentEnabled = Boolean(research.identity?.sections?.research_agent);
 
@@ -134,7 +135,16 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
   const transition = async (node: TResearchChainNode, action: TResearchChainNodeAction) => {
     const reason = reasonByNode[node.id]?.trim();
-    if ((action === "FAIL" || action === "RETURN") && !reason) return;
+    if ((action === "FAIL" || action === "RETURN") && !reason) {
+      setReasonErrorByNode((current) => ({ ...current, [node.id]: t("research.chains.reason_required") }));
+      return;
+    }
+    setReasonErrorByNode((current) => {
+      if (!current[node.id]) return current;
+      const next = { ...current };
+      delete next[node.id];
+      return next;
+    });
     setTransitioning(node.id);
     setActionError("");
     try {
@@ -295,9 +305,27 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                     <span>{t("research.chains.reason_label")}</span>
                     <input
                       value={reasonByNode[node.id] ?? ""}
-                      onChange={(event) => setReasonByNode({ ...reasonByNode, [node.id]: event.target.value })}
+                      aria-invalid={Boolean(reasonErrorByNode[node.id])}
+                      aria-describedby={reasonErrorByNode[node.id] ? `reason-error-${node.id}` : undefined}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setReasonByNode({ ...reasonByNode, [node.id]: value });
+                        if (value.trim()) {
+                          setReasonErrorByNode((current) => {
+                            if (!current[node.id]) return current;
+                            const next = { ...current };
+                            delete next[node.id];
+                            return next;
+                          });
+                        }
+                      }}
                       className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
                     />
+                    {reasonErrorByNode[node.id] && (
+                      <span id={`reason-error-${node.id}`} className="text-11 text-danger-primary" role="alert">
+                        {reasonErrorByNode[node.id]}
+                      </span>
+                    )}
                   </label>
                 )}
               </li>

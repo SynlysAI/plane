@@ -23,6 +23,13 @@ type Props = {
 
 type TPanelState = "loading" | "ready" | "degraded" | "forbidden" | "error";
 
+const DEGRADED_ERROR_CODES = new Set([
+  "UPSTREAM_DEGRADED",
+  "upstream_degraded",
+  "UPSTREAM_TIMEOUT",
+  "upstream_timeout",
+]);
+
 /** Upload, poll and confirm scoped RAGPortal knowledge for one node. */
 export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel({
   workspaceSlug,
@@ -52,6 +59,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       setKnowledgeBases(payload.items);
       setKnowledgeBaseId((current) => current || payload.items[0]?.external_id || "");
       setUploads(uploadPayload.data);
+      setDegradedReason(payload.degraded_reason ?? "");
       setState(payload.degraded ? "degraded" : "ready");
     } catch (error) {
       const errorCode = (error as { error_code?: string })?.error_code;
@@ -76,8 +84,15 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       const payload = error as { degraded_reason?: string; error_code?: string };
-      setDegradedReason(payload.degraded_reason ?? payload.error_code ?? "error");
-      setState("degraded");
+      const isDegraded = Boolean(payload.degraded_reason) || DEGRADED_ERROR_CODES.has(payload.error_code ?? "");
+      if (isDegraded) {
+        setDegradedReason(payload.degraded_reason ?? payload.error_code ?? "unknown");
+        setState("degraded");
+      } else {
+        setDegradedReason("");
+        setActionError(t("research.knowledge.action_failed"));
+        setState(payload.error_code === "research_permission_denied" ? "forbidden" : "ready");
+      }
     } finally {
       setUploading(false);
     }
@@ -142,6 +157,11 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                 ))}
               </select>
             </label>
+            {knowledgeBases.length === 0 && (
+              <p className="text-11 text-tertiary" role="status">
+                {t("research.knowledge.no_knowledge_bases")}
+              </p>
+            )}
             <label className="flex flex-col gap-1 text-11 text-secondary">
               {t("research.knowledge.file_label")}
               <input
