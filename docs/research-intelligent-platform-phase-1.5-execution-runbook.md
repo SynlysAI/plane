@@ -256,3 +256,4 @@
 | DEG     | 降级演练         | DEG-1 至 DEG-3                       | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 三项全部通过并恢复        |
 | P15-007 | DEG-1 缺陷回归   | Synlora 停机页面提示                 | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 中文原因 / 人工路径       |
 | P15-008 | DEG-2/3 缺陷回归 | RAGPortal 降级与上传入口             | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 401 中文化 / 恢复成功     |
+| D5      | 收敛与移交       | 最终测试、健康快照与灰度复演         | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260925-D5.md`              | Phase 1.5 验收通过        |

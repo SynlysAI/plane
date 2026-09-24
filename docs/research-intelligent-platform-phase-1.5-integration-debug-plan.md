@@ -7,7 +7,7 @@
 | 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                     |
 | 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                     |
 | 执行手册 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)       |
-| 计划状态 | 执行中（单人模式）                                                                                                                     |
+| 计划状态 | 已完成（单人模式，2026-09-25 验收通过）                                                                                                |
 | 执行模式 | 单人执行；A / B 保留为职责自查分区标签（见 §8）                                                                                        |
 | 修订记录 | v1.1（2026-09-24）：改为单人 5 天模式；新增 L3.5 功能开关矩阵与 L3.6 角色矩阵；降级演练补 WeKnora 失效模拟；缺陷清单落位执行手册附录 A |
 | 目标     | 在 Phase 1 代码交付基础上拉通开发环境真实联调，完成基础功能验证，收敛跨服务缺陷，为 Phase 2 提供可用的联调环境                         |
@@ -36,15 +36,15 @@ Phase 1.5 的定位：**不新增业务功能**，只做三件事——拉通开
 
 ### 2.2 出口条件
 
-- [ ] 五个服务健康检查通过（见 §4 自检清单）。
-- [ ] Synlora delegated token 交换、capability manifest、`agent-context.v2` 每轮复验在真实服务间通过。
-- [ ] RAGPortal 经 Plane BFF 上传一份真实文档到 WeKnora，解析状态可轮询、引用可确认。
-- [ ] 功能开关全量矩阵通过：5 个开关逐项 ON/OFF，关闭时入口降级、API 返回禁用口径、既有数据只读不受损、其余开关功能不受影响（见执行手册 L3.5）。
-- [ ] 角色功能矩阵通过：5 档 ResearchLevel + Guest 负例的导航、课题可见性、审批、Agent、知识、绑定与导出权限逐格验证（见执行手册 L3.6）。
-- [ ] 一次完整端到端闭环：双课题创建 → 上传入库 → Agent 会话与检索 → 事件回放 → 快照导出。
-- [ ] 降级演练通过：分别停止 Synlora、停止 RAGPortal、模拟 WeKnora key 失效，Chain 人工记录路径均不受阻断，恢复后自动重连。
-- [ ] 联调缺陷清单中 P0/P1 全部关闭，每条有根因、修复提交与回归证据。
-- [ ] Phase 1 灰度手册“准备外部服务”与“内部试点”两节可在本环境完整执行。
+- [x] 五个服务健康检查通过（见 §4 自检清单）。
+- [x] Synlora delegated token 交换、capability manifest、`agent-context.v2` 每轮复验在真实服务间通过。
+- [x] RAGPortal 经 Plane BFF 上传一份真实文档到 WeKnora，解析状态可轮询、引用可确认。
+- [x] 功能开关全量矩阵通过：5 个开关逐项 ON/OFF，关闭时入口降级、API 返回禁用口径、既有数据只读不受损、其余开关功能不受影响（见执行手册 L3.5）。
+- [x] 角色功能矩阵通过：5 档 ResearchLevel + Guest 负例的导航、课题可见性、审批、Agent、知识、绑定与导出权限逐格验证（见执行手册 L3.6）。
+- [x] 一次完整端到端闭环：双课题创建 → 上传入库 → Agent 会话与检索 → 事件回放 → 快照导出。
+- [x] 降级演练通过：分别停止 Synlora、停止 RAGPortal、模拟 WeKnora key 失效，Chain 人工记录路径均不受阻断，恢复后自动重连。
+- [x] 联调缺陷清单中 P0/P1 全部关闭，每条有根因、修复提交与回归证据。
+- [x] Phase 1 灰度手册“准备外部服务”与“内部试点”两节可在本环境完整执行。
 
 ## 3. 开发环境拓扑
 
