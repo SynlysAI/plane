@@ -2,23 +2,32 @@
 
 | 项目     | 内容                                                                                                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 计划版本 | v1.4                                                                                                                                                                                                   |
+| 计划版本 | v1.5                                                                                                                                                                                                   |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §6–§10                                                                                                                |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)、[`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) |
 | 计划状态 | 待评审                                                                                                                                                                                                 |
-| 目标     | 通过 Synlora 插件将 SpecLabOS、PolyAgent 和 SpecAgent 作为受控实验/分析能力接入 Research Chain                                                                                                         |
+| 目标     | 在 Phase 1 UI/UX Ready 容器内，通过 Synlora 插件将 SpecLabOS、PolyAgent 和 SpecAgent 作为受控实验/分析能力接入 Research Chain                                                                          |
 | 不在范围 | 未经契约确认的谱种、HPC 全量接入、ScienceDiscovery 公网多租户化                                                                                                                                        |
 
 ## 1. 阶段目标与出口
 
 Phase 2 不改变 Plane 是科研主数据和权限权威的原则。用户侧工具执行统一走 `Plane Node → Plane BFF → Synlora plugin/tool → 垂类系统`；Synlora 负责会话、插件、审批、沙箱和 Job Registry，专业系统负责执行、算法和原始数据；Plane 保存任务引用、状态、回执、版本和审计。
 
+Phase 2 前置条件：Phase 1 已完成四入口、科研总览、Research Chain 课题页、六段式节点详情、Agent 工作台、审批中心、科研管理和基础状态矩阵。Phase 2 不承担大规模界面搭建。
+
 信息架构基线：Phase 2 默认运行在 `research_ia_v2` 四入口结构上，不新增科研一级入口，也不恢复旧平铺导航。专业能力按以下位置扩展：
 
 - Research Chain：节点运行状态、Job 面板、工具卡、结果确认和外部引用。
-- 审批中心：Agent 审批从 Phase 1 空态升级为真实队列，并关联 Job 状态。
+- 审批中心：在 Phase 1 Agent 审批队列上关联 Job 阻塞、恢复、运行回执和专业工具状态。
 - 科研管理：模板库从报告模板扩展为研究计划/实验记录模板；系统集成页承接连接健康和运行回执。
 - 科研总览：只聚合跨系统待办、降级和最近运行摘要，不复制 Chain 或 Job 详情。
+
+UI 边界：
+
+- 只用真实 Job/RunEvent/DataAsset、专业工具状态、运行回执、专业模板和集成健康替换 Phase 1 占位。
+- 只对新增运行卡片、结果确认和回执面板做小型视觉调整。
+- 不重构科研总览、Research Chain、审批中心或科研管理的页面骨架。
+- 不因 SpecLabOS、PolyAgent 或 SpecAgent 未接入而延迟 Phase 1 UX Ready 验收。
 
 出口条件：
 
@@ -201,14 +210,15 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 
 ### 任务 2.6：前端运行面板和数据快照
 
+- 以 Phase 1 页面骨架为前置，不新增科研一级入口，不重排四入口信息架构。
 - 在 Chain 节点显示 Job 状态、RunEvent、工具调用、审批和 DataAsset。
-- 将审批中心 `agent_approval` Tab 从空态升级为真实队列，支持等待审批、已批准、已拒绝、审批中和关联 Job 状态。
+- 扩展 Phase 1 审批中心 `agent_approval` 队列，支持等待审批、已批准、已拒绝、审批中和关联 Job 状态。
 - 将专业模板配置聚合到科研管理“模板”Tab，Phase 2 覆盖研究计划、实验记录和分析摘要模板。
 - 将连接健康、调用结果和运行回执聚合到科研管理“系统集成”Tab，不在侧栏新增专业系统一级入口。
 - 支持取消、重试、查看失败原因和打开权威系统链接。
 - 显示来源系统、版本、hash、降级和最后同步时间。
 - 在 Plane 通用 Agent 插件中实现实验/分析工具卡、preview/confirm、Job 状态、RunEvent、结果确认、重试/取消和 Chain 保存。
-- 增加专业组件入口卡、健康状态、最近运行和跨组件待办聚合。
+- 将 Phase 1 专业组件占位替换为真实入口卡、健康状态、最近运行和跨组件待办；无法连接时保留降级和人工路径。
 
 依赖：2.1–2.5。验收：刷新/断线后状态一致，用户无法访问无权资产。
 
@@ -257,6 +267,14 @@ Phase 2 将 Phase 1 的通用 Agent 插件扩展为专业能力工作台：
 - 统计任务排队时间、运行时间、回调延迟、失败率和重试次数。
 - 在目标规模下压测 Agent/Job 并发、回调峰值、DataAsset 元数据写入和 Chain 回放。
 - 明确设备/算法服务独立 SLA；Plane 只保证提交、状态投影和降级体验。
+
+### 4.5 Phase 1 UX 骨架回归
+
+- 四入口、科研总览、Research Chain、审批中心、科研管理和 Agent 工作台骨架无大规模重构。
+- Job/RunEvent/DataAsset 只替换 Phase 1 对应占位卡片或面板，不改变页面信息架构。
+- 审批中心 Agent Tab 能显示真实等待审批、批准、拒绝、阻塞和恢复状态。
+- 专业组件入口从 Phase 1 占位变为真实状态；服务降级时占位/人工路径仍可用。
+- Phase 1 状态矩阵、响应式布局、键盘可达性和权限过滤回归通过。
 
 ## 5. 发布、回滚与风险
 
@@ -437,6 +455,7 @@ pnpm build
 - [ ] Job 面板支持状态、RunEvent、重试、取消、失败原因和权威系统链接。
 - [ ] 审批中心 Agent 队列支持审批、拒绝、scope 展示和 Job 状态关联。
 - [ ] 科研管理模板与集成 Tab 承接 Phase 2 专业配置和回执，不新增科研一级入口。
+- [ ] Phase 1 四入口、页面骨架、状态矩阵、响应式和可访问性无大规模回归。
 - [ ] 结果确认可保存为分析结果、实验关联、Artifact 引用或退回修改。
 - [ ] 插件 Trace 与 `job_id`、`run_id`、`artifact_id`、Chain Snapshot 完整关联。
 - [ ] PolyAgent/SpecAgent/SpecLabOS 回执保留 correlation ID，并可在 Chain 回放中跳转原始 run/artifact。
