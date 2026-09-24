@@ -1,4 +1,5 @@
 import type { TResearchChainNode } from "@plane/types";
+import { pickCurrentNode } from "./research-selection";
 
 /** Fixed thirteen-stage research process definition used by the workflow map. */
 export const RESEARCH_WORKFLOW_STAGE_DEFINITIONS = [
@@ -55,16 +56,6 @@ const PRIMARY_TYPES: Partial<Record<TResearchWorkflowStageId, string[]>> = {
   transfer: ["TRANSFER"],
 };
 
-const STATUS_PRIORITY: Record<TResearchChainNode["status"], number> = {
-  WAITING_HUMAN: 0,
-  NEEDS_REVISION: 1,
-  FAILED: 2,
-  ACTIVE: 3,
-  DRAFT: 4,
-  COMPLETED: 5,
-  ARCHIVED: 6,
-};
-
 /** Walk parent references in creation order while tolerating missing or cyclic parents. */
 function orderedNodes(nodes: TResearchChainNode[]): TResearchChainNode[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -106,17 +97,29 @@ function ancestorTypes(node: TResearchChainNode, byId: Map<string, TResearchChai
 
 /** Pick the node a stage should open without changing the real current node. */
 function preferredNode(nodes: TResearchChainNode[], currentNodeId: string | null): TResearchChainNode | null {
-  if (!nodes.length) return null;
   if (currentNodeId) {
     const current = nodes.find((node) => node.id === currentNodeId);
     if (current) return current;
   }
-  // eslint-disable-next-line unicorn/no-array-sort
-  return [...nodes].sort(
-    (left, right) =>
-      STATUS_PRIORITY[left.status] - STATUS_PRIORITY[right.status] ||
-      new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
-  )[0];
+  return pickCurrentNode(nodes);
+}
+
+/** Map a node type to its fixed workflow stage when the type has a primary mapping. */
+function primaryStageForType(nodeType: string): TResearchWorkflowStageId | undefined {
+  return RESEARCH_WORKFLOW_STAGE_DEFINITIONS.find((definition) => PRIMARY_TYPES[definition.id]?.includes(nodeType))?.id;
+}
+
+/** Find the nearest directly mappable neighbor stage in one direction. */
+function nearestStageInDirection(
+  ordered: TResearchChainNode[],
+  from: number,
+  step: -1 | 1
+): TResearchWorkflowStageId | undefined {
+  for (let position = from + step; position >= 0 && position < ordered.length; position += step) {
+    const stage = primaryStageForType(ordered[position].node_type);
+    if (stage) return stage;
+  }
+  return undefined;
 }
 
 /** Derive one stage status from its primary nodes and the real current node. */
@@ -143,6 +146,7 @@ export function buildResearchWorkflow(
 ): TResearchWorkflow {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const ordered = orderedNodes(nodes);
+  const orderedIndex = new Map(ordered.map((node, index) => [node.id, index]));
   const primary = new Map<TResearchWorkflowStageId, string[]>();
   const associated = new Map<TResearchWorkflowStageId, string[]>();
   const shared = new Set<TResearchWorkflowStageId>();
@@ -174,29 +178,17 @@ export function buildResearchWorkflow(
       continue;
     }
 
-    const stage = RESEARCH_WORKFLOW_STAGE_DEFINITIONS.find((definition) =>
-      PRIMARY_TYPES[definition.id]?.includes(node.node_type)
-    );
+    const stage = primaryStageForType(node.node_type);
     if (stage) {
-      addPrimary(stage.id, node);
+      addPrimary(stage, node);
       continue;
     }
 
-    // Generic research nodes stay visible as supporting evidence next to their nearest mapped neighbor.
-    const index = ordered.indexOf(node);
-    let neighbor: TResearchChainNode | undefined;
-    for (let position = index - 1; position >= 0; position -= 1) {
-      if (ordered[position].node_type !== "RESEARCH") {
-        neighbor = ordered[position];
-        break;
-      }
-    }
-    const neighborStage = neighbor
-      ? RESEARCH_WORKFLOW_STAGE_DEFINITIONS.find((definition) =>
-          PRIMARY_TYPES[definition.id]?.includes(neighbor.node_type)
-        )
-      : undefined;
-    if (node.node_type === "RESEARCH" && neighborStage) addAssociated(neighborStage.id, node);
+    // Generic research nodes stay visible as supporting evidence next to their
+    // nearest mappable neighbor. Predecessors win; successors cover chain heads.
+    const index = orderedIndex.get(node.id) ?? 0;
+    const neighborStage = nearestStageInDirection(ordered, index, -1) ?? nearestStageInDirection(ordered, index, 1);
+    if (node.node_type === "RESEARCH" && neighborStage) addAssociated(neighborStage, node);
     else unmappedNodes.push(node);
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 // plane imports
@@ -10,6 +10,8 @@ import { Skeleton } from "@plane/propel/skeleton";
 import type { TResearchChain, TResearchChainNode, TResearchChainSnapshot } from "@plane/types";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { collectResearchTodos } from "@/components/research/common/research-todo-source";
+import { pickCurrentChain, pickCurrentNode } from "@/components/research/chains/research-selection";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 // services
@@ -17,15 +19,8 @@ import { ResearchChainService } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
 
-const STATUS_PRIORITY: Record<TResearchChainNode["status"], number> = {
-  WAITING_HUMAN: 0,
-  NEEDS_REVISION: 1,
-  FAILED: 2,
-  ACTIVE: 3,
-  DRAFT: 4,
-  COMPLETED: 5,
-  ARCHIVED: 6,
-};
+/** Node statuses where the most important next action is handling the node itself. */
+const NODE_ACTION_STATUSES = new Set<TResearchChainNode["status"]>(["WAITING_HUMAN", "NEEDS_REVISION", "FAILED"]);
 
 type Props = {
   workspaceSlug: string;
@@ -37,25 +32,22 @@ type TChainSummary = {
   chains: TResearchChain[];
   currentNode: TResearchChainNode | null;
   latestSnapshot: TResearchChainSnapshot | null;
+  todoCount: number;
 };
 
-/** Read the newest visible chain, its active node and latest snapshot. */
-async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
+/** Read the newest visible chain, its active node, latest snapshot and todo count. */
+async function loadChainSummary(
+  workspaceSlug: string,
+  translate: (key: string) => string,
+  canSee: (key: string) => boolean,
+  agentEnabled: boolean
+): Promise<TChainSummary> {
   const chains = await chainService.getChains(workspaceSlug);
-  // eslint-disable-next-line unicorn/no-array-sort
-  const currentChain = [...chains].sort(
-    (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
-  )[0];
-  if (!currentChain) return { chains, currentNode: null, latestSnapshot: null };
+  const currentChain = pickCurrentChain(chains);
+  if (!currentChain) return { chains, currentNode: null, latestSnapshot: null, todoCount: 0 };
 
   const nodes = await chainService.getChainNodes(workspaceSlug, currentChain.id);
-  const currentNode =
-    // eslint-disable-next-line unicorn/no-array-sort
-    [...nodes].sort(
-      (left, right) =>
-        STATUS_PRIORITY[left.status] - STATUS_PRIORITY[right.status] ||
-        new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
-    )[0] ?? null;
+  const currentNode = pickCurrentNode(nodes);
   const detail = currentNode
     ? await chainService.getChainNodeDetail(workspaceSlug, currentNode.id).catch(() => null)
     : null;
@@ -65,13 +57,23 @@ async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
         (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
       )[0]
     : null;
-  return { chains, currentNode, latestSnapshot };
+  // Reuse the already loaded chains inside the shared todo aggregation so the
+  // summary card and the todo index share one deduplication and sorting rule.
+  const todos = await collectResearchTodos({
+    workspaceSlug,
+    access: { canSee, agentEnabled },
+    translate,
+    preloadedChains: chains,
+  }).catch(() => []);
+  return { chains, currentNode, latestSnapshot, todoCount: todos.length };
 }
 
 /** Compact research summary for the regular Plane workspace home. */
 export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
+  const translateRef = useRef(t);
+  const researchRef = useRef(research);
   const [state, setState] = useState<TSummaryState>("loading");
   const [summary, setSummary] = useState<TChainSummary | null>(null);
   const canLoadSummary = Boolean(
@@ -90,7 +92,13 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const result = await loadChainSummary(workspaceSlug);
+      const currentResearch = researchRef.current;
+      const result = await loadChainSummary(
+        workspaceSlug,
+        translateRef.current,
+        currentResearch.canSee.bind(currentResearch),
+        Boolean(currentResearch.identity?.sections?.research_agent)
+      );
       setSummary(result);
       setState(result.chains.length ? "ready" : "empty");
     } catch (error) {
@@ -106,18 +114,20 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
   if (!canLoadSummary) return null;
 
   const activeCount = summary?.chains.filter((chain) => chain.status === "ACTIVE").length ?? 0;
-  const todoCount =
-    summary?.chains.length && summary.currentNode
-      ? Number(summary.currentNode.status === "WAITING_HUMAN" || summary.currentNode.status === "NEEDS_REVISION")
-      : 0;
+  const todoCount = summary?.todoCount ?? 0;
   const currentChain =
-    summary?.chains.find((chain) => chain.id === summary.currentNode?.chain) ??
-    // eslint-disable-next-line unicorn/no-array-sort
-    [...(summary?.chains ?? [])].sort(
-      (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
-    )[0];
+    summary?.chains.find((chain) => chain.id === summary.currentNode?.chain) ?? pickCurrentChain(summary?.chains ?? []);
   const currentNode = summary?.currentNode ?? null;
   const latestSnapshot = summary?.latestSnapshot ?? null;
+  const nodeNeedsAction = Boolean(currentNode && NODE_ACTION_STATUSES.has(currentNode.status));
+  const primaryHref = currentChain
+    ? nodeNeedsAction && currentNode
+      ? `/${workspaceSlug}/research/chains/${currentChain.id}?node=${currentNode.id}`
+      : `/${workspaceSlug}/research/chains/${currentChain.id}`
+    : null;
+  const primaryLabel = nodeNeedsAction
+    ? t("research.home_summary.handle_current_node")
+    : t("research.home_summary.open_chain");
 
   return (
     <section
@@ -168,12 +178,11 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
               )}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Link
-                href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
-                className={getButtonStyling("primary", "base")}
-              >
-                {t("research.home_summary.open_chain")}
-              </Link>
+              {primaryHref && (
+                <Link href={primaryHref} className={getButtonStyling("primary", "base")}>
+                  {primaryLabel}
+                </Link>
+              )}
             </div>
           </div>
           <p className="mt-3 line-clamp-2 text-12 text-secondary">

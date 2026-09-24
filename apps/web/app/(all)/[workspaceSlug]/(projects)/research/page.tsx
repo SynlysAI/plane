@@ -16,8 +16,10 @@ import type { TResearchChain } from "@plane/types";
 // components
 import { ResearchHomeSummaryCard } from "@/components/research/common/research-home-summary-card";
 import { ResearchTodoIndex } from "@/components/research/common/research-todo-index";
+import { formatResearchDate, formatResearchTime } from "@/components/research/common/research-format";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchChainPortal } from "@/components/research/chains/research-chain-portal";
+import { pickCurrentChain } from "@/components/research/chains/research-selection";
 import { ResearchReportSummaryBoard } from "@/components/research/reports/report-summary-board";
 import { ResearchPiAggregateBoard } from "@/components/research/pi/pi-aggregate-board";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
@@ -53,7 +55,7 @@ const PERIOD_OPTIONS = [
 type TPeriod = "30" | "90" | "all";
 
 function WorkspaceResearchOverviewPage() {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const { workspaceSlug } = useParams();
   const research = useResearch();
   const [searchParams] = useSearchParams();
@@ -87,7 +89,7 @@ function WorkspaceResearchOverviewPage() {
   const periodDays = period === "all" ? null : Number(period);
   const periodStart = periodDays ? Date.now() - periodDays * 86400000 : 0;
   const visibleChains = chains.filter((chain) => new Date(chain.updated_at).getTime() >= periodStart);
-  const currentChain = visibleChains[0];
+  const currentChain = pickCurrentChain(visibleChains);
 
   if (workspaceSlug && view === "report_submission" && research.canSee("summary")) {
     return (
@@ -110,7 +112,7 @@ function WorkspaceResearchOverviewPage() {
     ) : undefined;
 
   const headerMetadata = refreshedAt ? (
-    <span>{`${t("research.overview.refreshed_at")} ${refreshedAt.toLocaleTimeString()}`}</span>
+    <span>{`${t("research.overview.refreshed_at")} ${formatResearchTime(refreshedAt, currentLocale)}`}</span>
   ) : undefined;
 
   const compactNavItems = [...businessCards, ...settingsCards];
@@ -194,7 +196,7 @@ function WorkspaceResearchOverviewPage() {
                         {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
                       </ResearchStatusBadge>
                       <span className="w-24 shrink-0 text-right text-11 text-tertiary tabular-nums">
-                        {new Date(chain.updated_at).toLocaleDateString()}
+                        {formatResearchDate(chain.updated_at, currentLocale)}
                       </span>
                     </li>
                   ))}
