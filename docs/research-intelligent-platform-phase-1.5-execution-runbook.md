@@ -54,12 +54,12 @@
 
 每条链路先自查 Plane 侧（API/worker 日志 + `integration.call`），再自查外部服务侧（启动终端日志），两侧证据都留。
 
-| 用例 | 链路                 | 验证点                                                                                                       | 通过标准                                                  | 结果 | 证据 |
-| ---- | -------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ---- | ---- |
-| L3-1 | Plane ↔ Synlora      | delegated token 交换、capability manifest、`agent-context.v2` 会话、每轮复验、`allowed_tools` 交集、事件游标 | 无 401/403；`after_seq` 单调回放，`(run_id, seq)` 无重复  | [ ]  |      |
-| L3-2 | Plane ↔ RAGPortal    | BFF 知识库列表、作用域上传、sha256 校验、状态轮询、引用确认、降级人工路径                                    | 上传返回 `knowledge_id/kb_id/task_id`；引用写入外部引用表 | [ ]  |      |
-| L3-3 | RAGPortal ↔ WeKnora  | 真实文档上传、解析任务状态流转、KB 列表刷新                                                                  | 文档在 WeKnora 可检索到条目                               | [ ]  |      |
-| L3-4 | Synlora → Plane 回连 | `PLANE_BASE_URL` 认证代理、`PLANE_API_TOKEN` 有效性、`PLANE_SERVICE_TOKEN` 验签                              | 回连请求无认证失败日志                                    | [ ]  |      |
+| 用例 | 链路                 | 验证点                                                                                                       | 通过标准                                                  | 结果 | 证据                   |
+| ---- | -------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ---- | ---------------------- |
+| L3-1 | Plane ↔ Synlora      | delegated token 交换、capability manifest、`agent-context.v2` 会话、每轮复验、`allowed_tools` 交集、事件游标 | 无 401/403；`after_seq` 单调回放，`(run_id, seq)` 无重复  | [x]  | `links/20260925-L3.md` |
+| L3-2 | Plane ↔ RAGPortal    | BFF 知识库列表、作用域上传、sha256 校验、状态轮询、引用确认、降级人工路径                                    | 上传返回 `knowledge_id/kb_id/task_id`；引用写入外部引用表 | [x]  | `links/20260925-L3.md` |
+| L3-3 | RAGPortal ↔ WeKnora  | 真实文档上传、解析任务状态流转、KB 列表刷新                                                                  | 文档在 WeKnora 可检索到条目                               | [x]  | `links/20260925-L3.md` |
+| L3-4 | Synlora → Plane 回连 | `PLANE_BASE_URL` 认证代理、`PLANE_API_TOKEN` 有效性、`PLANE_SERVICE_TOKEN` 验签                              | 回连请求无认证失败日志                                    | [x]  | `links/20260925-L3.md` |
 
 ## 4. L3.5：功能开关全量矩阵
 
@@ -224,16 +224,21 @@
 
 登记纪律：发现即登记、当日不过夜；字段口径与计划 §7.1 一致。状态取值：新建 / 定界中 / 修复中 / 回归中 / 已关闭。
 
-| 编号    | 日期       | 层级 | 严重度 | 负责分区          | 复现步骤                                         | 预期           | 实际                    | 根因                                                                                      | 修复提交  | 回归证据                                                        | 状态   |
-| ------- | ---------- | ---- | ------ | ----------------- | ------------------------------------------------ | -------------- | ----------------------- | ----------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------- | ------ |
-| P15-001 | 2026-09-24 | L1   | P0     | Plane integration | 启动 RAGPortal 后，Plane BFF 调用 `/api/kb/list` | 返回知识库列表 | HTTP 401 `unauthorized` | Plane HMAC 模式发送 `X-AI4MS-*` 请求头；RAGPortal 契约要求共享 secret 签发的 Bearer token | c282ecc20 | 单测 23 passed；真实 BFF HTTP 200、5 个知识库、调用日志 SUCCESS | 已关闭 |
+| 编号    | 日期       | 层级 | 严重度 | 负责分区              | 复现步骤                                                       | 预期                              | 实际                               | 根因                                                                                      | 修复提交            | 回归证据                                                         | 状态   |
+| ------- | ---------- | ---- | ------ | --------------------- | -------------------------------------------------------------- | --------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------- | ------ |
+| P15-001 | 2026-09-24 | L1   | P0     | Plane integration     | 启动 RAGPortal 后，Plane BFF 调用 `/api/kb/list`               | 返回知识库列表                    | HTTP 401 `unauthorized`            | Plane HMAC 模式发送 `X-AI4MS-*` 请求头；RAGPortal 契约要求共享 secret 签发的 Bearer token | c282ecc20           | 单测 23 passed；真实 BFF HTTP 200、5 个知识库、调用日志 SUCCESS  | 已关闭 |
+| P15-002 | 2026-09-25 | L3-4 | P0     | Synlora integration   | Synlora `PlaneResearchClient` 写入 Plane `agent/chain-events/` | 事件写入成功                      | Plane 返回 401，Synlora 归一为 502 | Synlora 使用 Bearer；Plane Agent 事件端点未启用 API Key 认证                              | 80f854e + e6b261de1 | Synlora 19 passed / 6 skipped；Plane 20 passed；真实事件写入成功 | 已关闭 |
+| P15-003 | 2026-09-25 | L3-2 | P2     | RAGPortal integration | Plane BFF 上传后检查 RAGPortal 回执                            | `knowledge_id/kb_id/task_id` 齐返 | `task_id` 为空                     | 部署版 WeKnora 上传响应省略独立 parse task ID                                             | 0a55fbd             | 单测 31 passed；真实二次上传三标识齐返并轮询 SUCCESS             | 已关闭 |
 
 ## 9. 附录 B：证据记录表
 
 目录约定：`plane/docs/evidence/phase-1.5/` 下设 `health/`、`links/`、`switches/`、`roles/`、`e2e/`、`degradation/`；文件名格式 `YYYYMMDD-用例编号.扩展名`；含敏感信息的截图先脱敏再归档。
 
-| 编号    | 层级        | 用例                                 | 证据类型（截图/日志/导出文件） | 文件路径                                                     | 备注                      |
-| ------- | ----------- | ------------------------------------ | ------------------------------ | ------------------------------------------------------------ | ------------------------- |
-| L1      | 环境健康    | 七步自检与五服务快照                 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L1.md`              | 2026-09-24 全部通过       |
-| L2      | 单服务契约  | Plane / Synlora / RAGPortal 测试摘要 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L2.md`              | 3+19+31 passed            |
-| P15-001 | L1 缺陷回归 | Plane BFF → RAGPortal 真实调用       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260924-L1-RAGPortal-BFF.md` | HTTP 200 / 5 KB / SUCCESS |
+| 编号    | 层级          | 用例                                 | 证据类型（截图/日志/导出文件） | 文件路径                                                     | 备注                      |
+| ------- | ------------- | ------------------------------------ | ------------------------------ | ------------------------------------------------------------ | ------------------------- |
+| L1      | 环境健康      | 七步自检与五服务快照                 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L1.md`              | 2026-09-24 全部通过       |
+| L2      | 单服务契约    | Plane / Synlora / RAGPortal 测试摘要 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L2.md`              | 3+19+31 passed            |
+| P15-001 | L1 缺陷回归   | Plane BFF → RAGPortal 真实调用       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260924-L1-RAGPortal-BFF.md` | HTTP 200 / 5 KB / SUCCESS |
+| L3      | 双服务链路    | L3-1 至 L3-4                         | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | 四条链路全部通过          |
+| P15-002 | L3-4 缺陷回归 | Synlora → Plane 回写                 | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | 真实事件写入成功          |
+| P15-003 | L3-2 缺陷回归 | 上传三标识回归                       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | task_id 齐返 / SUCCESS    |

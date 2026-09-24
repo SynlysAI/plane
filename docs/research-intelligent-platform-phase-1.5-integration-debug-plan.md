@@ -99,7 +99,7 @@ PLANE_BASE_URL="http://127.0.0.1:8001"
 PLANE_API_TOKEN="<A 在 Plane 侧创建并提供>"
 PLANE_SERVICE_TOKEN="<与 Plane SYNLORA_SERVICE_TOKEN 一致>"
 # 如启用 knowledge.list / knowledge.search 工具
-WEKNORA_BASE_URL="http://10.26.15.93:8000"
+WEKNORA_BASE_URL="http://10.26.15.93:8000/api/v1"
 WEKNORA_API_KEY="<WeKnora 受控 key>"
 ```
 
