@@ -1,17 +1,34 @@
-# 科研智能体平台 Phase 1 实施计划：Research Chain + RAGPortal + Synlora MVP
+# 科研智能体平台 Phase 1 实施计划：UI/UX Ready 科研智能体平台工作台
 
-| 项目     | 内容                                                                                               |
-| -------- | -------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.3                                                                                               |
-| 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10            |
-| 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) |
-| 计划状态 | 已交付                                                                                             |
-| 目标     | 交付一个学生可创建多个课题并完成调研、自动装配 Agent、计划、实验记录、分析和沉淀的最小闭环         |
-| 不在范围 | 自动设备执行、完整垂类 Tool Call 生产化、完整治理和社会用户开放                                    |
+| 项目     | 内容                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| 计划版本 | v1.4                                                                                                 |
+| 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10              |
+| 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)   |
+| 计划状态 | MVP 已交付；UX/UI 完整化待实施                                                                       |
+| 目标     | 交付 UI/UX Ready 的科研智能体平台工作台，并保持一个学生多课题调研、Agent、计划、实验、分析和沉淀闭环 |
+| 不在范围 | 自动设备执行、完整垂类 Tool Call 生产化、完整治理和社会用户开放                                      |
 
 ## 1. 阶段目标与出口
 
 Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课题、文献、对话、研究计划、实验记录、分析结果和 Trace 组织在同一条可回放链路中。
+
+当前实施状态：Chain、RAGPortal、Synlora、四入口 IA、审批中心/科研管理容器和 Agent 功能 MVP 已交付；Plane 首页紧凑摘要、跨组件待办索引、Chain 页面级 Tab、主链可视化、六段式节点详情、结构化工具卡、审批/产物抽屉和统一状态矩阵仍需按任务 1.9 补齐。
+
+| UX 区域               | 当前完成度 | 主要剩余工作                                                                   |
+| --------------------- | ---------- | ------------------------------------------------------------------------------ |
+| 四入口 IA             | 基本完成   | 窄屏、键盘可达性和角色矩阵手工验收系统化                                       |
+| Plane 首页紧凑摘要    | 未完成     | 首页摘要卡、权限过滤和降级态                                                   |
+| 科研总览              | 部分完成   | 按 UX 原型重排、真实最近快照、跨组件待办聚合排序去重                           |
+| Research Chain 列表   | 部分完成   | Chain 上下文过滤、卡片化呈现、更清晰的保存视图                                 |
+| Research Chain 课题页 | 部分完成   | 页面 Tab、固定上下文条、主链可视化、循环关系、成员管理、报告/实验/外部引用聚合 |
+| 节点详情              | 基础可用   | 六段式详情和结构化输入/产物/验证/决策展示                                      |
+| Agent 工作台          | 功能 MVP   | 结构化工具卡、审批抽屉、产物抽屉、Trace 筛选、Context 有效期和草稿保护         |
+| 审批中心              | 容器完成   | 统一队列卡片、上下文跳转和 Agent 审批真实接入                                  |
+| 科研管理              | 基本完成   | 命名对齐 UX 原型，审计/集成状态细化                                            |
+| 状态与可用性          | 部分完成   | 统一状态矩阵、骨架屏、恢复动作、响应式和 aria 验收                             |
+
+整体判断：信息架构和功能骨架约完成 70%–80%；达到 UX 原型的大部查看和操作体验约完成 50%–60%。差距集中在页面级信息组织、真实上下文聚合、结构化卡片、状态呈现和交互细节。
 
 出口条件：
 
@@ -21,6 +38,8 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 - RAGPortal 上传和 Synlora 检索可用；任一外部服务不可用时人工记录仍可继续。
 - Plane 自动注入 `agent-context.v2`，并装配 persona、插件、工具白名单和授权资源；用户无需手动安装或勾选 Synlora 插件。
 - 事件可按顺序回放，循环重试不会覆盖或复制正式快照。
+- UX 原型 §2–§7 的 Phase 1 必做项全部可见、可操作，或具有明确占位/降级态；专业运行、治理和配额不得伪造成功状态。
+- 角色、路由、状态、响应式和可访问性验收通过；Phase 2 只需在既有容器中填充真实专业能力，不需要重构页面骨架。
 
 ## 2. 技术方案
 
@@ -278,6 +297,53 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 
 依赖：1.1–1.7。验收：开关关闭旧行为完整回归；开关开启四入口、角色矩阵、兼容路由和基础 UI 状态通过。
 
+### 任务 1.9：UX/UI 完整化
+
+**Plane 首页与科研总览**
+
+- Plane 首页增加紧凑科研摘要卡：当前课题、待办、最近快照摘要和进入科研总览动作。
+- 无权限、未启用或外部降级时，首页摘要不泄露无权限课题标题、计数、正文或结果。
+- 科研总览按固定信息架构重排：范围筛选/统计周期/刷新时间/进入 Research Chain → 待办、待审批、待确认、阻塞/降级 → 课题摘要、报告提交汇总、近期成果 → 最近活动与管理统计。
+- 建立跨组件待办索引：聚合报告、阶段评审、办公审批、Agent 审批、RAG 上传状态和人工补录提醒。
+- 待办按“阻断 > 待确认 > 普通提醒 > 截止时间 > 更新时间”排序；同一来源对象只显示一条当前待办。
+- 外部待办先回写来源系统，回调未确认前显示“同步中”，不得提前标记完成。
+
+**Research Chain 课题页**
+
+- 增加固定上下文条：课题、状态、可见性、Owner、当前节点和主要动作。
+- 增加页面 Tab：课题、节点、报告与成果、实验记录、外部引用、成员、回放。
+- 实现主链可视化：节点状态、父子关系、循环编号、当前节点、阻塞和降级原因。
+- 节点详情按“输入 → AI 动作 → 中间产物 → 验证 → 人类决策 → 输出”六段展示。
+- 成员管理复用既有 Chain Member API，支持成员列表、添加、移除和权限原因展示。
+- 报告与成果、实验记录、外部引用必须携带 Chain/节点上下文；不得把无关全局列表直接堆叠进课题页。
+
+**Agent 工作台**
+
+- 顶部固定 Context 条：课题、节点、授权资源数量和 Context 有效期。
+- 自动装配摘要按“可用 / 需确认 / 不可用”分组，显示 persona、工具、风险和不可用原因。
+- 消息流显示连接状态、reasoning 摘要、来源引用和最后事件序号。
+- 工具卡结构化显示状态、capability scope、风险等级、输入摘要、输出引用和 Trace 链接；不直接展示原始 JSON payload。
+- Agent 审批抽屉支持批准、拒绝、原因、幂等提交和结果反馈。
+- 产物抽屉支持预览、编辑、选择保存类型、人工确认、保存成功反馈和失败保留草稿。
+- Trace 面板支持事件类型筛选、状态区分和跳转；Context 过期、撤权、降级和关闭均有恢复或替代路径。
+
+**审批中心与科研管理**
+
+- 四个审批 Tab 统一队列卡片：来源、状态、提交人、时间、课题/节点上下文和主操作。
+- 与课题关联的审批可跳回 Chain 节点或审批抽屉；非课题办公审批保留独立处理。
+- Agent 审批接入既有 approval endpoint，不再停留在空态。
+- 科研管理 Tab 命名对齐 UX 原型；平台配置保留 `research_ia_v2` 回退入口。
+- 审计与集成页面提供 loading、empty、error 和 degraded 状态，不显示原始技术错误码。
+
+**UX 基础质量**
+
+- 统一卡片、间距、标题层级、按钮层级、空态和错误恢复文案。
+- 1920px、1440px、1280px 和窄屏堆叠布局通过视觉验收。
+- 键盘可导航、焦点可见、aria role/name/state 正确。
+- 面向用户的界面不暴露原始 error key、事件 JSON 和未解释的技术枚举。
+
+依赖：1.1–1.8。验收：UX 原型 §2–§7 的 Phase 1 必做项全部可见、可操作或具有明确占位/降级态；页面矩阵、角色矩阵、路由矩阵、状态矩阵、布局矩阵和可访问性验收通过。
+
 ## 4. 测试与验收
 
 ### 4.1 后端和契约测试
@@ -291,6 +357,7 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 
 ### 4.2 前端验收
 
+- Plane 首页、科研总览、Chain 列表、Chain 详情、节点详情、Agent 工作台、审批中心和科研管理按 UX 覆盖矩阵完成页面验收。
 - 首页、课题页和时间线在加载、空、错误、降级和无权限状态下可理解。
 - 课题切换后所有卡片、对话和入口刷新到正确 scope。
 - 节点循环、回溯、重新提交和快照详情可操作。
@@ -299,7 +366,10 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 - `COMMUNICATION`、`APPROVAL`、`DATA_CHANGE` 和 `DEGRADED` 事件可以在时间线中区分显示。
 - 插件入口、侧边工作台、上下文摘要、消息流、工具卡、审批、产物抽屉和 Trace 时间线在桌面/窄屏布局均可用。
 - 自动装配摘要显示 persona、可用工具、风险等级和不可用原因，且不提供手动扩大范围控件。
+- 工具卡、审批抽屉、产物抽屉和 Trace 面板使用结构化卡片；不向用户暴露原始 JSON payload 或 error key。
 - 课题切换、Session 关闭、SSE 断线重连、停止生成和保存失败恢复符合状态字典。
+- loading、empty、forbidden、degraded、streaming、waiting approval、saving、error、expired 和 closed 均有界面状态、中文说明和恢复/替代路径。
+- 1920px、1440px、1280px 和窄屏堆叠布局通过视觉验收；键盘导航、焦点可见和 aria 语义通过。
 - 首页、草稿、我的工作、便签、工作区项目、More、添加项目及全部现有科研入口继续可见且功能不回归；Research Chain 按 capability 单独显隐。
 
 ### 4.3 端到端场景
@@ -315,6 +385,10 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 9. 使课题 A 的 Context 在两轮对话之间过期，验证第二轮 fail closed，刷新授权后可继续。
 10. 解绑 Synlora AccountLink，验证 delegated token 拒绝签发且既有 session 不能继续运行。
 11. 让 Plane 授权一个 Synlora 未配置或隐藏插件，验证 UI 显示不可用原因且工具不可见。
+12. 从 Plane 首页摘要进入科研总览，再从待办进入审批中心和对应 Chain 节点，验证上下文不丢失。
+13. 依次访问项目、报告、提交汇总、待评审、审计和集成旧路由，验证兼容跳转保留 query/hash。
+14. 在 Agent 工作台触发需要审批的工具、保存产物和断线重连，验证审批、产物、Trace 和状态回放完整。
+15. 在 1920/1440/1280 和窄屏宽度执行页面矩阵走查，验证响应式、键盘导航和 aria 语义。
 
 ## 5. 发布、回滚与风险
 
@@ -491,13 +565,15 @@ apps/web/core/components/research/agent-panel/
 apps/web/core/components/research/navigation/
 apps/web/core/components/research/approvals/research-approval-center.tsx
 apps/web/core/components/research/chains/research-chain-workbench.tsx
+apps/web/core/components/research/chains/research-chain-portal.tsx
+apps/web/core/components/research/agent/research-agent-plugin.tsx
 apps/web/core/services/research/chain.service.ts
 apps/web/core/services/research/agent.service.ts
 apps/web/core/store/research/chain.store.ts
 apps/web/app/(all)/[workspaceSlug]/(projects)/research/chains/
 ```
 
-前端状态必须区分 `loading`、`empty`、`degraded`、`forbidden`、`error` 和 `ready`；Trace 流式事件采用游标合并，不能按到达时间覆盖已存在事件。
+前端状态必须区分 `loading`、`empty`、`degraded`、`forbidden`、`streaming`、`waiting approval`、`saving`、`error`、`expired`、`closed` 和 `ready`；Trace 流式事件采用游标合并，不能按到达时间覆盖已存在事件。任务 1.9 的实现顺序为：首页摘要/总览重排 → 跨组件待办 → Chain 页面 Tab 与主链 → 六段式节点详情 → Agent 抽屉与结构化卡片 → 审批队列 → UX 状态与可访问性验收。
 
 ### 7.3 跨仓开发顺序
 
@@ -525,16 +601,17 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 
 ## 9. 任务拆分与完成门禁
 
-| 任务             | 前置          | 交付                                                              | 门禁                       |
-| ---------------- | ------------- | ----------------------------------------------------------------- | -------------------------- |
-| 平行课题/ACL     | Phase 0 0.2   | API、迁移、权限测试                                               | 双课题和撤权通过           |
-| Chain 状态/事件  | 平行课题      | service、snapshot、timeline                                       | 状态机和幂等通过           |
-| 门户骨架         | Phase 0 0.6   | 首页卡片、路由、空态                                              | 原功能无回归               |
-| IA 收敛          | 门户骨架      | `research_ia_v2`、四入口、管理/审批 Tab、兼容路由                 | 开关开关双向回归通过       |
-| RAGPortal BFF    | Phase 0 0.3   | 上传/状态/引用                                                    | fixture 和降级通过         |
-| Synlora 自动装配 | Phase 0 0.4   | delegated identity、Context、capability、session、SSE、projection | 跨课题、撤权、断线重连通过 |
-| 计划/实验/分析   | Chain + Agent | Page、Experiment、analysis                                        | 版本/失败记录通过          |
-| E2E 灰度         | 全部          | 测试夹具、runbook                                                 | P0/P1 回归和闭环通过       |
+| 任务             | 前置          | 交付                                                                                           | 门禁                          |
+| ---------------- | ------------- | ---------------------------------------------------------------------------------------------- | ----------------------------- |
+| 平行课题/ACL     | Phase 0 0.2   | API、迁移、权限测试                                                                            | 双课题和撤权通过              |
+| Chain 状态/事件  | 平行课题      | service、snapshot、timeline                                                                    | 状态机和幂等通过              |
+| 门户骨架         | Phase 0 0.6   | 首页卡片、路由、空态                                                                           | 原功能无回归                  |
+| IA 收敛          | 门户骨架      | `research_ia_v2`、四入口、管理/审批 Tab、兼容路由                                              | 开关开关双向回归通过          |
+| UX 完整化        | IA 收敛       | 首页摘要、总览重排、跨组件待办、Chain 页面 Tab、六段式节点详情、Agent 抽屉、审批队列和状态矩阵 | UX 原型 Phase 1 必做项通过    |
+| RAGPortal BFF    | Phase 0 0.3   | 上传/状态/引用                                                                                 | fixture 和降级通过            |
+| Synlora 自动装配 | Phase 0 0.4   | delegated identity、Context、capability、session、SSE、projection                              | 跨课题、撤权、断线重连通过    |
+| 计划/实验/分析   | Chain + Agent | Page、Experiment、analysis                                                                     | 版本/失败记录通过             |
+| E2E 灰度         | 全部          | 测试夹具、runbook                                                                              | P0/P1 回归、UX 矩阵和闭环通过 |
 
 任一门禁失败时，只允许保留人工记录模式，不开放对应 Agent/RAG 写操作。
 
@@ -549,3 +626,16 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 - [x] 研究计划/文献引用/分析摘要保存均经过人工确认并生成 Chain Event。
 - [x] 外部降级、无权限、Context 过期和保存失败都有替代路径。
 - [x] 开启 `research_ia_v2` 后侧栏、审批中心、科研管理和 Chain 保存视图完成收敛；关闭开关回退旧导航。
+
+## 11. UX/UI 完整化清单
+
+- [ ] Plane 首页紧凑科研摘要卡完成权限过滤、降级状态和总览跳转。
+- [ ] 科研总览按 UX 原型完成四层信息架构重排，不复制完整业务表格或 Chain 时间线。
+- [ ] 跨组件待办索引完成聚合、排序、去重、“同步中”和来源深链。
+- [ ] Research Chain 课题页完成固定上下文条、七个页面 Tab、主链可视化、循环关系和成员管理。
+- [ ] 节点详情完成输入、AI 动作、中间产物、验证、人类决策和输出六段式呈现。
+- [ ] 报告与成果、实验记录和外部引用全部携带 Chain/节点上下文。
+- [ ] Agent 工作台完成结构化工具卡、审批抽屉、产物抽屉、Trace 筛选和 Context 有效期展示。
+- [ ] 审批中心四个 Tab 统一队列卡片，Agent 审批不再停留在空态。
+- [ ] 科研管理 Tab 命名、状态和平台配置回退路径对齐 UX 原型。
+- [ ] 1920/1440/1280/窄屏、键盘导航、焦点可见、aria 和中文状态文案验收通过。
