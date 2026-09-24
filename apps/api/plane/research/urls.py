@@ -37,6 +37,7 @@ from plane.research.views import (
     ResearchAgentRunEventEndpoint,
     ResearchAgentRunCancelEndpoint,
     ResearchAgentApprovalEndpoint,
+    ResearchAgentApprovalListEndpoint,
     ResearchAgentArtifactEndpoint,
     ResearchAgentChainEventEndpoint,
     ResearchExternalHealthProbeEndpoint,
@@ -359,6 +360,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/agent/runs/<uuid:run_id>/cancel/",
         ResearchAgentRunCancelEndpoint.as_view(),
         name="research-agent-run-cancel",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/approvals/",
+        ResearchAgentApprovalListEndpoint.as_view(),
+        name="research-agent-approval-list",
     ),
     path(
         "research/workspaces/<str:slug>/agent/runs/<uuid:run_id>/approvals/",

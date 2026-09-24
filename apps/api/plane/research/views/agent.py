@@ -673,6 +673,101 @@ class ResearchAgentRunCancelEndpoint(AgentPluginMixin):
         return Response(ResearchAgentSessionSerializer(session).data)
 
 
+def _agent_approval_projection(session):
+    """Build one safe Agent approval card from a waiting session.
+
+    Args:
+        session: A waiting Agent session selected with project and node relations.
+
+    Returns:
+        A JSON-safe dictionary containing only queue and UI context fields.
+    """
+    latest_tool = (
+        session.run_events.filter(event_type__in=["TOOL_CALL", "AI_ACTION"])
+        .order_by("-seq")
+        .first()
+    )
+    payload = latest_tool.payload if latest_tool else {}
+    tool_call_id = str(payload.get("tool_call_id") or "")
+    if not tool_call_id and latest_tool is not None:
+        tool_call_id = str(latest_tool.seq)
+    summary = next(
+        (
+            str(value)
+            for value in (
+                payload.get("input_summary"),
+                payload.get("query"),
+                payload.get("summary"),
+                payload.get("action"),
+            )
+            if value
+        ),
+        session.chain_node.title,
+    )
+    return {
+        "session_id": str(session.session_id),
+        "run_id": str(session.run_id),
+        "workspace": str(session.workspace_id),
+        "user": str(session.user_id),
+        "user_detail": {
+            "id": str(session.user.id),
+            "email": session.user.email,
+            "first_name": session.user.first_name,
+            "last_name": session.user.last_name,
+            "display_name": session.user.display_name,
+            "avatar": session.user.avatar,
+            "avatar_url": session.user.avatar_url,
+            "is_active": session.user.is_active,
+        },
+        "project": str(session.project_id),
+        "project_name": session.project.name,
+        "chain": str(session.chain_node.chain_id),
+        "chain_node": str(session.chain_node_id),
+        "chain_node_title": session.chain_node.title,
+        "status": session.status,
+        "tool_call_id": tool_call_id,
+        "summary": summary,
+        "risk_level": str(payload.get("risk_level") or ""),
+        "capability_scope": str(payload.get("capability_scope") or payload.get("scope") or ""),
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+    }
+
+
+class ResearchAgentApprovalListEndpoint(AgentPluginMixin):
+    """List waiting Agent approvals for Chain nodes this caller can operate."""
+
+    def get(self, request, slug):
+        workspace, error = self.workspace_or_error(request, slug)
+        if error:
+            return error
+        sessions = (
+            ResearchAgentSession.objects.select_related(
+                "workspace",
+                "user",
+                "project",
+                "chain_node__chain",
+                "context_grant",
+            )
+            .filter(
+                workspace=workspace,
+                status=ResearchAgentSession.Status.WAITING_APPROVAL,
+                deleted_at__isnull=True,
+                context_grant__revoked_at__isnull=True,
+                context_grant__expires_at__gt=timezone.now(),
+            )
+            .order_by("-updated_at")
+        )
+        results = []
+        for session in sessions:
+            if _chain_readonly_error(session.chain_node.chain) is not None:
+                continue
+            if not _session_operator(workspace, request.user, session):
+                continue
+            results.append(_agent_approval_projection(session))
+        return Response({"results": results, "count": len(results)})
+
+
 class ResearchAgentApprovalEndpoint(AgentPluginMixin):
     """Record a human decision; execution remains fail-closed in Phase 0."""
 
@@ -697,6 +792,7 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id is required.")
 
         tool_call_id = str(request.data.get("tool_call_id") or "")
+        reason = str(request.data.get("reason") or "").strip()
         existing = ResearchAgentRunEvent.objects.select_related("session").filter(request_id=request_id).first()
         if existing is not None:
             payload_matches = (
@@ -704,6 +800,7 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
                 and existing.event_type == "HUMAN_DECISION"
                 and existing.payload.get("decision") == decision
                 and existing.payload.get("tool_call_id") == tool_call_id
+                and existing.payload.get("reason") == reason
             )
             if not payload_matches:
                 return research_conflict(
@@ -720,7 +817,7 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
         event = _append_event(
             session,
             "HUMAN_DECISION",
-            {"decision": decision, "tool_call_id": tool_call_id},
+            {"decision": decision, "tool_call_id": tool_call_id, "reason": reason},
             request_id,
         )
         session.status = ResearchAgentSession.Status.READY if decision == "APPROVED" else ResearchAgentSession.Status.ERROR
@@ -732,7 +829,7 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             resource_type=ResearchResourceType.AGENT_SESSION,
             resource_id=session.session_id,
             actor=request.user,
-            metadata={"run_id": str(run_id), "decision": decision},
+            metadata={"run_id": str(run_id), "decision": decision, "reason": reason},
             request=request,
         )
         return Response({"session": ResearchAgentSessionSerializer(session).data, "event": ResearchAgentRunEventSerializer(event).data})

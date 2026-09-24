@@ -33,6 +33,9 @@ vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key
 vi.mock("@/components/research/approvals/approval-list", () => ({
   ResearchApprovalList: () => <div>office-approvals</div>,
 }));
+vi.mock("@/components/research/approvals/research-agent-approval-queue", () => ({
+  ResearchAgentApprovalQueue: () => <div>agent-approval-queue</div>,
+}));
 vi.mock("@/components/research/common/research-page-shell", () => ({
   ResearchPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));

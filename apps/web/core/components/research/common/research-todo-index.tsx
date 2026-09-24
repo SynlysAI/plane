@@ -8,6 +8,7 @@ import type { TApprovalRequest, TPeriodicReport, TToMeReview } from "@plane/type
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 // services
+import { ResearchAgentService } from "@/services/research/agent.service";
 import { ResearchApprovalService } from "@/services/research/approval.service";
 import { ResearchChainService, type TResearchChainUpload } from "@/services/research/chain.service";
 import { ResearchIntegrationService } from "@/services/research/integration.service";
@@ -15,6 +16,7 @@ import { ResearchReportService } from "@/services/research/report.service";
 import { ResearchReviewService } from "@/services/research/review.service";
 
 const approvalService = new ResearchApprovalService();
+const agentService = new ResearchAgentService();
 const chainService = new ResearchChainService();
 const integrationService = new ResearchIntegrationService();
 const reportService = new ResearchReportService();
@@ -179,6 +181,27 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null,
                 href: `/${workspaceSlug}/research/approvals?tab=office`,
                 dueAt: null,
                 updatedAt: request.created_at,
+              });
+            }
+          }
+        })()
+      );
+    }
+    if (research.identity?.sections?.research_agent && research.canSee("research_chain")) {
+      tasks.push(
+        (async () => {
+          const payload = await agentService.getApprovals(workspaceSlug).catch(() => null);
+          if (payload) {
+            for (const approval of payload.results) {
+              collected.push({
+                id: `agent:${approval.session_id}`,
+                source: "agent",
+                kind: "confirmation",
+                title: `${approval.project_name ?? approval.project} · ${approval.chain_node_title ?? approval.chain_node}`,
+                context: approval.summary,
+                href: `/${workspaceSlug}/research/approvals?tab=agent_approval`,
+                dueAt: null,
+                updatedAt: approval.updated_at,
               });
             }
           }
