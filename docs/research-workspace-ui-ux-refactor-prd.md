@@ -2,8 +2,8 @@
 
 | 项目     | 内容                                                                                                                                                                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档状态 | 待评审                                                                                                                                                                                                                                         |
-| 文档版本 | v1.2                                                                                                                                                                                                                                           |
+| 文档状态 | 已实施（验收见 [`research-workspace-ui-ux-acceptance-report.md`](./research-workspace-ui-ux-acceptance-report.md)）                                                                                                                            |
+| 文档版本 | v1.3                                                                                                                                                                                                                                           |
 | 日期     | 2026-09-24                                                                                                                                                                                                                                     |
 | 适用版本 | `web 4.9.0` 及后续 develop 分支                                                                                                                                                                                                                |
 | 适用范围 | Plane web 端科研工作空间全部界面的视觉层级、组件构成与交互细节                                                                                                                                                                                 |
@@ -970,3 +970,5 @@ Golden Pages 依赖 Sidebar、Page Header、Breadcrumb、Button、Tabs、Status�
 | v1.0 | 2026-09-24 | 初版：完成现状审计、复用原则、视觉规范、组件需求、页面需求与实施计划。                                                                                                                                                                                                                                           |
 | v1.1 | 2026-09-24 | 收敛执行口径：默认不修改全局主题 token；Typography 遵循 Plane type scale；不改变业务排序；新增 Object / Context / Action 模型与两类详情结构；引入 Golden Pages 门禁；组件抽象改为语义稳定优先；补充信息密度原则、缩略图验收与视觉回归截图；成功度量改为"不新增重复实现 / 新代码不硬编码"。                       |
 | v1.2 | 2026-09-24 | 执行前防跑偏：App Shell 与基础 Page Shell 前置到 Golden Pages 之前；已有共享壳升级与新增语义组件提炼分离；Page Header 增加三种密度等级；Object / Context / Action 明确不要求全量首屏展示；新增视觉优先级决策表（每页最多一个 Primary）；动效遵循 Plane motion token；明确 Card 不是禁止项，禁止的是无语义 Card。 |
+
+| v1.3 | 2026-09-24 | 实施完成：Phase 1–9 按第 13 章顺序分阶段提交；交付设计系统 / 信息架构审计、共享壳升级、三大黄金页面、`ResearchStatusBadge` / `ResearchTabLink` / 泛化 `ResearchListState` 语义组件、核心与扩散页面及全局复查；随 `4.10.0` 发布。 |

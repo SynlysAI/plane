@@ -25,13 +25,13 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 ## 当前状态
 
-| 项目             | 内容                                                                                                                                                                                                                    |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 当前版本         | `4.9.0`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步）                                                                                                                                                   |
-| 上游基线         | Plane `1.4.x`                                                                                                                                                                                                           |
-| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研测试夹具（`2.3.0`）、系统管理改进（`2.4.0`）、科研目录分级可见（`2.5.0`）、演示组织树单链化（`2.5.1`）、科研智能平台 Phase 0、Phase 1 UI/UX 工作台（`4.9.0`） |
-| 未交付           | P2 扩展与治理、科研智能平台 Phase 2 专业能力填充、Phase 3 治理与开放能力                                                                                                                                                |
-| 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                                                                                    |
+| 项目             | 内容                                                                                                                                                                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 当前版本         | `4.10.0`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步）                                                                                                                                                                                           |
+| 上游基线         | Plane `1.4.x`                                                                                                                                                                                                                                                    |
+| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研测试夹具（`2.3.0`）、系统管理改进（`2.4.0`）、科研目录分级可见（`2.5.0`）、演示组织树单链化（`2.5.1`）、科研智能平台 Phase 0、Phase 1 UI/UX 工作台（`4.9.0`）、科研工作台产品级 UI/UX 重构（`4.10.0`） |
+| 未交付           | P2 扩展与治理、科研智能平台 Phase 2 专业能力填充、Phase 3 治理与开放能力                                                                                                                                                                                         |
+| 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                                                                                                                             |
 
 本仓库以 Plane `1.4.x` 为基线完成第一轮私有化改造：替换为 AI4MS 品牌、移除付费套餐与云注册遥测、改用私有 OpenAI 兼容网关，并在此基础上叠加「科研管理模块」。**科研模块是纯增量实现**：开关关闭时不渲染科研导航，Workspace / Project / Work Item / Page / Cycle / Module 仍按上游 Plane 行为工作。
 
@@ -103,6 +103,19 @@ Phase 1 在 Phase 0 契约上交付内部试点可用的 UI/UX Ready 科研智�
 | UX 质量        | 1920/1440/1280/390 响应式验收、状态矩阵、恢复动作和 aria 语义；界面不展示原始 JSON         |
 
 2026-09-24 本地验证：Chain MVP 7 passed、Agent Plugin 19 passed、Phase 1 Web 相关组件 15 passed、Web typecheck 通过。
+
+### 已交付：科研工作台产品级 UI/UX 重构（`4.10.0`）
+
+呈现层重构不改变业务规则、排序与权限，只把科研界面收敛为 Plane 原生延伸。需求见 [UI/UX 重构 PRD](docs/research-workspace-ui-ux-refactor-prd.md)，验收见 [验收报告](docs/research-workspace-ui-ux-acceptance-report.md)。
+
+| 能力域       | 说明                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------ |
+| 共享壳       | `ResearchPageShell` 支持面包屑与元信息插槽；侧边栏复用 `SidebarNavItem`；标题统一主档位          |
+| 黄金页面     | 科研总览按「当前工作 → 待处理 → 最近活动」重排；Chain 详情 Object Header；审批中心统一四队列     |
+| 科研语义组件 | `ResearchStatusBadge` 状态字典、`ResearchTabLink` 路由标签、泛化 `ResearchListState` 空态        |
+| 列表与表格   | 报告 / 项目 / 文献 / 成果 / 实验 / 引用 / 设置全部迁移 propel `Table`，手写原生 table 清零       |
+| Agent 运行页 | Run Header 状态徽标、结构化工具调用、事件流收敛为紧凑时间线，保留审批 / 产物抽屉与 Trace 筛选    |
+| 设计系统约束 | 仅消费语义 token；无新增硬编码色；无渐变、发光、AI 徽章等 Anti-AI-UI 元素；深浅色主题继承 propel |
 
 ### 尚未交付
 
@@ -233,16 +246,17 @@ AI4MS 作为统一入口连接材料研发、实验管理和科研及办公管�
 
 ## 实施路线图
 
-| 阶段             | 目标                                                                                       | 当前状态                 |
-| ---------------- | ------------------------------------------------------------------------------------------ | ------------------------ |
-| P0               | 系统管理与项目管理：组织、身份、权限、审计、个人科研 Project、周报月报、办公审批、科研界面 | 已交付（`2.1.0`）        |
-| P1               | 科研阶段流程与已有系统集成：阶段 gate、多人评审、文献、实验、代码、成果、时间线            | 已交付（`2.2.0`）        |
-| 智能平台 Phase 0 | 跨仓契约、Context 授权、Agent BFF、观测与回滚基线                                          | 已交付                   |
-| 智能平台 Phase 1 | UI/UX Ready 科研智能体工作台与跨仓最小闭环                                                 | 已交付（`4.9.0`）        |
-| 智能平台 Phase 2 | SpecLabOS、PolyAgent、SpecAgent 等专业能力填充                                             | 规划中                   |
-| 智能平台 Phase 3 | 治理、配额、开放与更完整智能体协作                                                         | 规划中                   |
-| P2               | 扩展、治理与发布：高级看板、更多审批类型、响应式移动端、治理与文档                         | 规划中                   |
-| P3               | 与 AI 结合的能力：创新性评分、辅助研究计划、论文写作辅助、智能体调用、记忆共享             | 暂缓，前置条件确认后启动 |
+| 阶段              | 目标                                                                                       | 当前状态                 |
+| ----------------- | ------------------------------------------------------------------------------------------ | ------------------------ |
+| P0                | 系统管理与项目管理：组织、身份、权限、审计、个人科研 Project、周报月报、办公审批、科研界面 | 已交付（`2.1.0`）        |
+| P1                | 科研阶段流程与已有系统集成：阶段 gate、多人评审、文献、实验、代码、成果、时间线            | 已交付（`2.2.0`）        |
+| 智能平台 Phase 0  | 跨仓契约、Context 授权、Agent BFF、观测与回滚基线                                          | 已交付                   |
+| 智能平台 Phase 1  | UI/UX Ready 科研智能体工作台与跨仓最小闭环                                                 | 已交付（`4.9.0`）        |
+| 工作台 UI/UX 重构 | 科研界面收敛到 Plane 设计系统：共享壳、黄金页面、语义组件与表格统一                        | 已交付（`4.10.0`）       |
+| 智能平台 Phase 2  | SpecLabOS、PolyAgent、SpecAgent 等专业能力填充                                             | 规划中                   |
+| 智能平台 Phase 3  | 治理、配额、开放与更完整智能体协作                                                         | 规划中                   |
+| P2                | 扩展、治理与发布：高级看板、更多审批类型、响应式移动端、治理与文档                         | 规划中                   |
+| P3                | 与 AI 结合的能力：创新性评分、辅助研究计划、论文写作辅助、智能体调用、记忆共享             | 暂缓，前置条件确认后启动 |
 
 路线图遵循“先保留 Plane 稳定基础，再叠加科研场景，最后完成跨系统证据链”的原则。每期范围与验收标准见 [科研管理 PRD 与路线图](docs/research-management-prd-roadmap.md)。
 
@@ -317,19 +331,21 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest -m unit
 
 ## 文档索引
 
-| 文档                                                                                  | 内容                                   |
-| ------------------------------------------------------------------------------------- | -------------------------------------- |
-| [`docs/README.md`](docs/README.md)                                                    | 文档总览、维护约定与阅读顺序           |
-| [`research-management-prd-roadmap.md`](docs/research-management-prd-roadmap.md)       | 产品需求、生态边界与 P0–P3 分期路线图  |
-| [`research-p0-development-prd.md`](docs/research-p0-development-prd.md)               | P0 开发规格（含实现回写记录）          |
-| [`research-p0-development-prd-review.md`](docs/research-p0-development-prd-review.md) | P0 开发规格评审与实现复核结论          |
-| [`research-p0-acceptance-report.md`](docs/research-p0-acceptance-report.md)           | P0 验收方法与逐条验收结论              |
-| [`research-p0-release-notes.md`](docs/research-p0-release-notes.md)                   | P0 发布、开关与回滚说明                |
-| [`research-p1-development-prd.md`](docs/research-p1-development-prd.md)               | P1 开发规格（含实现回写记录）          |
-| [`research-p1-development-prd-review.md`](docs/research-p1-development-prd-review.md) | P1 开发规格评审与实现复核结论          |
-| [`research-p1-release-notes.md`](docs/research-p1-release-notes.md)                   | P1 发布、开关、环境变量与回滚说明      |
-| [`production-deployment.md`](docs/production-deployment.md)                           | 当前生产环境架构、更新、验证与回滚流程 |
-| [`linting.md`](docs/linting.md)                                                       | 代码风格与静态检查约定                 |
+| 文档                                                                                                  | 内容                                   |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| [`docs/README.md`](docs/README.md)                                                                    | 文档总览、维护约定与阅读顺序           |
+| [`research-management-prd-roadmap.md`](docs/research-management-prd-roadmap.md)                       | 产品需求、生态边界与 P0–P3 分期路线图  |
+| [`research-p0-development-prd.md`](docs/research-p0-development-prd.md)                               | P0 开发规格（含实现回写记录）          |
+| [`research-p0-development-prd-review.md`](docs/research-p0-development-prd-review.md)                 | P0 开发规格评审与实现复核结论          |
+| [`research-p0-acceptance-report.md`](docs/research-p0-acceptance-report.md)                           | P0 验收方法与逐条验收结论              |
+| [`research-p0-release-notes.md`](docs/research-p0-release-notes.md)                                   | P0 发布、开关与回滚说明                |
+| [`research-p1-development-prd.md`](docs/research-p1-development-prd.md)                               | P1 开发规格（含实现回写记录）          |
+| [`research-p1-development-prd-review.md`](docs/research-p1-development-prd-review.md)                 | P1 开发规格评审与实现复核结论          |
+| [`research-p1-release-notes.md`](docs/research-p1-release-notes.md)                                   | P1 发布、开关、环境变量与回滚说明      |
+| [`research-workspace-ui-ux-refactor-prd.md`](docs/research-workspace-ui-ux-refactor-prd.md)           | 科研工作台 UI/UX 重构 PRD（已实施）    |
+| [`research-workspace-ui-ux-acceptance-report.md`](docs/research-workspace-ui-ux-acceptance-report.md) | UI/UX 重构验收与产品级视觉检查结论     |
+| [`production-deployment.md`](docs/production-deployment.md)                                           | 当前生产环境架构、更新、验证与回滚流程 |
+| [`linting.md`](docs/linting.md)                                                                       | 代码风格与静态检查约定                 |
 
 ## 生态与文档
 
