@@ -19,6 +19,7 @@ import { ResearchStatusBadge } from "@/components/research/common/research-statu
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useUser } from "@/hooks/store/user";
+import { formatResearchDate } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -27,7 +28,7 @@ type Props = {
 
 /** Experiment list with the per-record detail beside it (§6.2, P1-UI-04). */
 export const ExperimentList = observer(function ExperimentList({ workspaceSlug, projectId }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const { data: currentUser } = useUser();
   const records = research.getExperiments(workspaceSlug, projectId);
@@ -117,7 +118,7 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
                 )}
                 {(record.started_at ?? record.updated_at) && (
                   <span className="ml-auto text-tertiary tabular-nums">
-                    {new Date(record.started_at ?? record.updated_at).toLocaleDateString()}
+                    {formatResearchDate(record.started_at ?? record.updated_at, currentLocale)}
                   </span>
                 )}
               </span>

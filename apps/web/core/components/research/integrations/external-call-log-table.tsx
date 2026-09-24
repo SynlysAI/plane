@@ -11,6 +11,7 @@ import type { TIntegrationCallLog } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ResearchTableSurface } from "@/components/research/common/research-data-surface";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   logs: TIntegrationCallLog[];
@@ -18,7 +19,7 @@ type Props = {
 
 /** Read-only call log: metadata only, never a payload copy (P1-INT-08). */
 export const ExternalCallLogTable = observer(function ExternalCallLogTable({ logs }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   if (!logs.length) return <p className="text-12 text-tertiary">{t("research.integrations.no_logs")}</p>;
   return (
     <ResearchTableSurface>
@@ -42,7 +43,7 @@ export const ExternalCallLogTable = observer(function ExternalCallLogTable({ log
               <TableCell className="text-right text-tertiary tabular-nums">{log.latency_ms ?? "-"}</TableCell>
               <TableCell className="text-tertiary">{log.error_code || "-"}</TableCell>
               <TableCell className="text-right text-tertiary tabular-nums">
-                {new Date(log.created_at).toLocaleString()}
+                {formatResearchDateTime(log.created_at, currentLocale)}
               </TableCell>
             </TableRow>
           ))}

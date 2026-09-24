@@ -27,6 +27,7 @@ import {
 } from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -38,7 +39,7 @@ type Props = {
  * registers references and snapshots (P1-CODE-07).
  */
 export const CodeRepositoryList = observer(function CodeRepositoryList({ workspaceSlug, projectId }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const repositories = research.getCodeRepositories(workspaceSlug, projectId);
   const summary = research.codeSummary[projectId];
@@ -155,7 +156,7 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
                   {repository.sync_error && <span className="ml-2 text-11 text-tertiary">{repository.sync_error}</span>}
                 </TableCell>
                 <TableCell className="text-tertiary">
-                  {repository.last_sync_at ? new Date(repository.last_sync_at).toLocaleString() : "-"}
+                  {repository.last_sync_at ? formatResearchDateTime(repository.last_sync_at, currentLocale) : "-"}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button

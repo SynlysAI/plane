@@ -21,6 +21,7 @@ import { getResearchErrorKey } from "@/components/research/common/error-messages
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -46,7 +47,7 @@ function amendmentValue(value: unknown) {
  * actions, external asset references and the immutable version history.
  */
 export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSlug, recordId, currentUserId }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const record = research.experiments[recordId];
   const versions = research.experimentVersions[recordId] ?? [];
@@ -238,7 +239,9 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
                 {t(AMENDMENT_STATUS_LABELS[amendment.status])}
                 {amendment.requested_by_detail ? ` · ${amendment.requested_by_detail.display_name}` : ""}
               </span>
-              <span className="text-11 text-tertiary">{new Date(amendment.created_at).toLocaleString()}</span>
+              <span className="text-11 text-tertiary">
+                {formatResearchDateTime(amendment.created_at, currentLocale)}
+              </span>
             </div>
             <span className="text-tertiary">{amendment.reason}</span>
             <div className="flex flex-col gap-0.5">
@@ -334,7 +337,7 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
               {t("research.experiments.version", { version: version.version_no })}
               {` · ${version.change_source}`}
             </span>
-            <span className="text-11 text-tertiary">{new Date(version.created_at).toLocaleString()}</span>
+            <span className="text-11 text-tertiary">{formatResearchDateTime(version.created_at, currentLocale)}</span>
           </div>
         ))}
         {!versions.length && <p className="text-12 text-tertiary">{t("research.experiments.no_versions")}</p>}

@@ -17,6 +17,7 @@ import { ResearchListSurface, ResearchTableSurface } from "@/components/research
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 const chainService = new ResearchChainService();
 
@@ -26,7 +27,7 @@ type Props = {
 
 /** Structured list of research chains: identity, status, owner, freshness and next action. */
 export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const [chains, setChains] = useState<TResearchChain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +146,7 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
                 </TableCell>
                 <TableCell className="text-secondary">{chain.owner_name ?? chain.owner}</TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">
-                  {new Date(chain.updated_at).toLocaleString()}
+                  {formatResearchDateTime(chain.updated_at, currentLocale)}
                 </TableCell>
                 <TableCell className="text-right">
                   <Link

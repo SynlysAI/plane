@@ -30,6 +30,7 @@ import {
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -52,7 +53,7 @@ function waitingTime(createdAt: string) {
 
 /** Office approvals built on work items (P0-APR-01 ~ P0-APR-07). */
 export const ResearchApprovalList = observer(function ResearchApprovalList({ workspaceSlug, isAdmin }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [scope, setScope] = useState<(typeof SCOPES)[number]["key"]>("to_me");
   const [comment, setComment] = useState("");
@@ -160,7 +161,7 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
                 </TableCell>
                 <TableCell
                   className="text-right text-tertiary tabular-nums"
-                  title={new Date(request.created_at).toLocaleString()}
+                  title={formatResearchDateTime(request.created_at, currentLocale)}
                 >
                   {waitingTime(request.created_at)}
                 </TableCell>

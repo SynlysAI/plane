@@ -30,6 +30,7 @@ import { ResearchListState } from "@/components/research/common/research-list-st
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { formatResearchDate } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -39,7 +40,7 @@ type Props = {
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
 export const ResearchReportList = observer(function ResearchReportList({ workspaceSlug, variant = "default" }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const searchParams = useSearchParams();
   const { reportId } = useParams();
@@ -414,7 +415,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
                     {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}
                   </TableCell>
                   <TableCell className="text-right text-tertiary tabular-nums">
-                    {new Date(report.updated_at).toLocaleDateString()}
+                    {formatResearchDate(report.updated_at, currentLocale)}
                   </TableCell>
                   <TableCell className="text-right">
                     <Link

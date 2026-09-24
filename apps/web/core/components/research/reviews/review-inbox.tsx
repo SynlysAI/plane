@@ -16,6 +16,7 @@ import { getResearchErrorKey } from "@/components/research/common/error-messages
 import { ResearchFilterToolbar, ResearchListSurface } from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -28,7 +29,7 @@ type TScope = "to_me" | "mine";
  * mandatory review is never hidden behind optional ones (P1-REV-09, P1-UI-03).
  */
 export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [scope, setScope] = useState<TScope>("to_me");
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -112,7 +113,7 @@ export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Prop
                 {` · v${review.revision_no}`}
               </span>
               <span className="text-11 text-tertiary">
-                {review.submitted_at ? new Date(review.submitted_at).toLocaleString() : ""}
+                {review.submitted_at ? formatResearchDateTime(review.submitted_at, currentLocale) : ""}
               </span>
             </div>
           ))}

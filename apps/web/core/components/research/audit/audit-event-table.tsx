@@ -20,6 +20,7 @@ import {
 } from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -40,7 +41,7 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
 
 /** Read-only audit trail viewer (P0-AUD-05). */
 export const ResearchAuditEventTable = observer(function ResearchAuditEventTable({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [action, setAction] = useState("");
   const [resourceType, setResourceType] = useState("");
@@ -112,7 +113,7 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
             {events.map((event) => (
               <TableRow key={event.id}>
                 <TableCell className="text-right text-tertiary tabular-nums">
-                  {new Date(event.created_at).toLocaleString()}
+                  {formatResearchDateTime(event.created_at, currentLocale)}
                 </TableCell>
                 <TableCell className="text-secondary">
                   {event.actor_detail?.display_name ?? event.actor_detail?.email ?? "-"}

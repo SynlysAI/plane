@@ -11,6 +11,7 @@ import { useResearch } from "@/hooks/store/use-research";
 import { ResearchChainService } from "@/services/research/chain.service";
 import { ResearchIntegrationService } from "@/services/research/integration.service";
 import type { TResearchChain } from "@plane/types";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 const chainService = new ResearchChainService();
 const integrationService = new ResearchIntegrationService();
@@ -23,7 +24,7 @@ type TPortalState = "loading" | "empty" | "ready" | "forbidden" | "error";
 
 /** The fixed-order Research Chain area on the research welcome page. */
 export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [chains, setChains] = useState<TResearchChain[]>([]);
   const [connections, setConnections] = useState<TIntegrationConnection[]>([]);
@@ -52,9 +53,7 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
   const ragportal = connections.find((connection) => connection.system === "RAGPORTAL");
   const ragStatus = ragportal?.is_enabled ? (ragportal.health_status ?? "UNKNOWN") : ("UNKNOWN" as const);
   const agentAvailable = Boolean(research.identity?.sections?.research_agent);
-  const updatedTime = currentChain ? new Date(currentChain.updated_at) : null;
-  const updatedLabel =
-    updatedTime instanceof Date && !Number.isNaN(updatedTime.getTime()) ? updatedTime.toLocaleString() : "";
+  const updatedLabel = currentChain ? formatResearchDateTime(currentChain.updated_at, currentLocale) : "";
 
   return (
     <section className="mb-6 space-y-3" aria-label={t("research.portal.title")}>
