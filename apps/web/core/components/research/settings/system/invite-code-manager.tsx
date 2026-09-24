@@ -18,6 +18,7 @@ import { Input, Spinner } from "@plane/ui";
 import { ResearchAccountService } from "@/services/research/account.service";
 // components
 import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 const accountService = new ResearchAccountService();
 
@@ -33,7 +34,7 @@ type Props = {
  * closed to open registration (SYS-INV-01 ~ SYS-INV-08).
  */
 export const ResearchInviteCodeManager = observer(function ResearchInviteCodeManager({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const [codes, setCodes] = useState<TInviteCode[]>([]);
   const [options, setOptions] = useState<TAccountProvisioningOptions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -241,7 +242,7 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                     {code.used_count} / {code.max_uses}
                   </TableCell>
                   <TableCell className="text-right text-secondary tabular-nums">
-                    {code.expires_at ? new Date(code.expires_at).toLocaleString() : "-"}
+                    {code.expires_at ? formatResearchDateTime(code.expires_at, currentLocale) : "-"}
                   </TableCell>
                   <TableCell className="text-secondary">
                     {t(INVITE_CODE_STATUS_LABELS[code.effective_status] ?? "research.invite_codes.status.active")}

@@ -28,6 +28,7 @@ import { ResearchReportAttachments } from "@/components/research/reports/report-
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -40,7 +41,7 @@ type Props = {
  * shared editor and its versioning are reused (P0-UI-03).
  */
 export const ResearchReportDetail = observer(function ResearchReportDetail({ workspaceSlug, reportId }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const { getWorkspaceBySlug } = useWorkspace();
   const [returnReason, setReturnReason] = useState("");
@@ -415,7 +416,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
               </span>
               <span className="text-11 text-tertiary">
                 {entry.actor_detail?.display_name ?? entry.actor_detail?.email ?? entry.actor} ·{" "}
-                {new Date(entry.created_at).toLocaleString()}
+                {formatResearchDateTime(entry.created_at, currentLocale)}
               </span>
               {entry.comment && <span className="text-12 text-secondary">{entry.comment}</span>}
             </li>

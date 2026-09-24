@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { STAGE_TRANSITION_ACTION_LABELS, STAGE_STATUS_LABELS } from "@plane/constants";
 import type { TStageTransition } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   transitions: TStageTransition[];
@@ -16,7 +17,7 @@ type Props = {
 
 /** Append-only transition history; reasons are shown but never editable (P1-STG-10). */
 export const StageTransitionHistory = observer(function StageTransitionHistory({ transitions }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
 
   if (!transitions.length) {
     return <p className="text-12 text-tertiary">{t("research.stages.history_empty")}</p>;
@@ -33,7 +34,9 @@ export const StageTransitionHistory = observer(function StageTransitionHistory({
                 STAGE_STATUS_LABELS[transition.to_status] ?? transition.to_status
               )}`}
             </span>
-            <span className="text-11 text-tertiary">{new Date(transition.created_at).toLocaleString()}</span>
+            <span className="text-11 text-tertiary">
+              {formatResearchDateTime(transition.created_at, currentLocale)}
+            </span>
           </div>
           {transition.reason && <span className="text-tertiary">{transition.reason}</span>}
         </div>

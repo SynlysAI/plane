@@ -11,6 +11,7 @@ import type { TResearchAgentApproval } from "@plane/types";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // services
 import { ResearchAgentService, type TAgentApprovalDecision } from "@/services/research/agent.service";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 const agentService = new ResearchAgentService();
 
@@ -29,7 +30,7 @@ function riskLabelKey(value?: string) {
 
 /** Unified Agent approval queue backed by the real waiting-session endpoint. */
 export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const [items, setItems] = useState<TResearchAgentApproval[]>([]);
   const [state, setState] = useState<TQueueState>("loading");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -140,7 +141,7 @@ export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
                   </div>
                   <p className="mt-1 text-11 text-secondary">
                     {item.user_detail?.display_name || item.user_detail?.email || t("research.approvals.unknown_user")}
-                    {` · ${new Date(item.updated_at).toLocaleString()}`}
+                    {` · ${formatResearchDateTime(item.updated_at, currentLocale)}`}
                   </p>
                   <p className="mt-0.5 text-11 text-tertiary">
                     {item.project_name ?? item.project} · {item.chain_node_title ?? item.chain_node} ·{" "}

@@ -16,6 +16,7 @@ import { Input, Spinner } from "@plane/ui";
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchAccountService } from "@/services/research/account.service";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 const accountService = new ResearchAccountService();
 
@@ -25,7 +26,7 @@ type Props = {
 
 /** Permission-scoped research overview for a PI, direction owner or mentor. */
 export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoard({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [aggregate, setAggregate] = useState<TPiAggregate | null>(null);
   const [loading, setLoading] = useState(true);
@@ -134,7 +135,7 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-13 font-semibold text-primary">{t("research.pi.overview")}</h3>
         <span className="text-11 text-tertiary">
-          {t("research.pi.generated_at")} {new Date(aggregate.generated_at).toLocaleString()}
+          {t("research.pi.generated_at")} {formatResearchDateTime(aggregate.generated_at, currentLocale)}
         </span>
       </div>
 

@@ -24,6 +24,7 @@ import { ExternalReferencePicker } from "@/components/research/integrations/exte
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useUser } from "@/hooks/store/user";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -43,7 +44,7 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
   stageCode,
   materialId,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const { data: currentUser } = useUser();
   const material = research.stageMaterials[materialId];
@@ -192,7 +193,7 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
                 {t("research.stages.materials.version", { version: version.version_no })}
                 {` · ${t(STAGE_MATERIAL_CHANGE_SOURCE_LABELS[version.change_source] ?? version.change_source)}`}
               </span>
-              <span className="text-11 text-tertiary">{new Date(version.created_at).toLocaleString()}</span>
+              <span className="text-11 text-tertiary">{formatResearchDateTime(version.created_at, currentLocale)}</span>
             </div>
             {version.reason && <span className="text-tertiary">{version.reason}</span>}
             {Array.isArray((version.diff_summary as { changed?: string[] })?.changed) && (

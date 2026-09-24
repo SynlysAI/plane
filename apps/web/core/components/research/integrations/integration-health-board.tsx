@@ -11,6 +11,7 @@ import type { TIntegrationConnection } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ResearchTableSurface } from "@/components/research/common/research-data-surface";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   connections: TIntegrationConnection[];
@@ -19,7 +20,7 @@ type Props = {
 
 /** Connection health: normal / degraded / unavailable / unconfigured (P1-INT-10). */
 export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({ connections, health }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const statusBySystem = new Map(health.map((entry) => [String(entry.system), entry]));
   const rows = connections.length
     ? connections
@@ -65,7 +66,7 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
                   </span>
                 </TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">
-                  {entry.last_success_at ? new Date(String(entry.last_success_at)).toLocaleString() : "-"}
+                  {entry.last_success_at ? formatResearchDateTime(String(entry.last_success_at), currentLocale) : "-"}
                 </TableCell>
                 <TableCell className="text-tertiary">
                   {String(entry.degraded_reason ?? connection.last_error ?? "") || "-"}

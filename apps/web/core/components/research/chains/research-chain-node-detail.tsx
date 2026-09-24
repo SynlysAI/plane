@@ -3,6 +3,7 @@
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { TResearchChainEvent, TResearchChainNode, TResearchChainSnapshot } from "@plane/types";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   node: TResearchChainNode;
@@ -94,7 +95,7 @@ function buildSections(
 
 /** Six-section Chain node detail with append-only evidence and immutable snapshots. */
 export function ResearchChainNodeDetail({ node, events, snapshots }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const sections = buildSections(node, events, snapshots);
 
   return (
@@ -106,7 +107,8 @@ export function ResearchChainNodeDetail({ node, events, snapshots }: Props) {
         <h3 className="text-14 font-semibold text-primary">{node.title}</h3>
         <p className="mt-1 text-12 text-secondary">
           {t(NODE_TYPE_LABELS[node.node_type] ?? "research.chains.node_types.unknown")} ·{" "}
-          {t(`research.chains.node_status.${node.status.toLowerCase()}`)} · {new Date(node.updated_at).toLocaleString()}
+          {t(`research.chains.node_status.${node.status.toLowerCase()}`)} ·{" "}
+          {formatResearchDateTime(node.updated_at, currentLocale)}
         </p>
       </header>
       <div className="grid grid-cols-1 xl:grid-cols-2">

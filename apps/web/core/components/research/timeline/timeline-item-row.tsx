@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { INTEGRATION_SYSTEM_LABELS, TIMELINE_KIND_LABELS } from "@plane/constants";
 import type { TTimelineItem } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   item: TTimelineItem;
@@ -16,7 +17,7 @@ type Props = {
 
 /** One timeline node; external nodes link out instead of opening a Plane page. */
 export const TimelineItemRow = observer(function TimelineItemRow({ item }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   return (
     <div className="flex flex-col gap-0.5 rounded-lg bg-surface-2 px-3 py-2 text-12">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -36,7 +37,7 @@ export const TimelineItemRow = observer(function TimelineItemRow({ item }: Props
             </span>
           )}
         </span>
-        <span className="text-11 text-tertiary">{item.at ? new Date(item.at).toLocaleString() : ""}</span>
+        <span className="text-11 text-tertiary">{item.at ? formatResearchDateTime(item.at, currentLocale) : ""}</span>
       </div>
       {item.source_url && (
         <a

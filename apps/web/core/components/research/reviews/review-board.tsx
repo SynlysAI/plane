@@ -12,6 +12,7 @@ import { useTranslation } from "@plane/i18n";
 // components
 import { RequiredReviewerBadge } from "@/components/research/reviews/required-reviewer-badge";
 import { ReviewRevisionHistory } from "@/components/research/reviews/review-revision-history";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -38,7 +39,7 @@ export const ReviewBoard = observer(function ReviewBoard({
   myReview,
   currentUserId,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
 
   return (
     <div className="flex flex-col gap-2">
@@ -103,7 +104,7 @@ export const ReviewBoard = observer(function ReviewBoard({
                 {review.score !== null && review.score !== undefined && ` · ${review.score}`}
               </span>
               <span className="text-11 text-tertiary">
-                {review.submitted_at ? new Date(review.submitted_at).toLocaleString() : ""}
+                {review.submitted_at ? formatResearchDateTime(review.submitted_at, currentLocale) : ""}
               </span>
             </div>
             {review.comment && <span className="text-tertiary">{review.comment}</span>}
