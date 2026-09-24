@@ -300,6 +300,7 @@ export type TResearchAgentApproval = {
   user_detail?: TResearchUserLite | null;
   project: string;
   project_name?: string;
+  chain: string;
   chain_node: string;
   chain_node_title?: string;
   status: "WAITING_APPROVAL" | "DEGRADED" | "ERROR" | "CLOSED";

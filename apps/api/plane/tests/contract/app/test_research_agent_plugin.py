@@ -501,6 +501,63 @@ def test_agent_approval_replay_is_idempotent_and_rejects_payload_change(env):
     assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"], event_type="HUMAN_DECISION").count() == 1
 
 
+def test_agent_approval_queue_exposes_only_operable_waiting_sessions(env):
+    """The approval center reads real waiting sessions with Chain context."""
+    ResearchUserProfile.objects.create(
+        user=env["other"],
+        category=ResearchUserProfile.Category.STUDENT,
+        student_no=f"agent-queue-{uuid4().hex[:12]}",
+    )
+    session = _create_agent_session(env)
+    assert session["project_name"] == env["project"].name
+    assert session["chain_node_title"] == env["node"].title
+    assert session["context_expires_at"]
+
+    record = ResearchAgentSession.objects.select_related("chain_node").get(session_id=session["session_id"])
+    record.status = ResearchAgentSession.Status.WAITING_APPROVAL
+    record.save(update_fields=["status", "updated_at"])
+    ResearchAgentRunEvent.objects.create(
+        session=record,
+        run_id=record.run_id,
+        seq=record.run_events.count() + 1,
+        event_type="TOOL_CALL",
+        payload={
+            "tool_call_id": "tool-queue-1",
+            "input_summary": "Search polymer glass-transition literature",
+            "risk_level": "MEDIUM",
+            "capability_scope": "knowledge.search",
+        },
+        request_id=f"tool-{uuid4().hex}",
+    )
+
+    queue = env["client"].get(agent_url(env, "approvals/"))
+    assert queue.status_code == 200, queue.json()
+    result = queue.json()["results"][0]
+    assert result["run_id"] == session["run_id"]
+    assert result["project_name"] == env["project"].name
+    assert result["chain_node_title"] == env["node"].title
+    assert result["tool_call_id"] == "tool-queue-1"
+    assert result["summary"] == "Search polymer glass-transition literature"
+    assert "token" not in result
+
+    other_queue = env["other_client"].get(agent_url(env, "approvals/"))
+    assert other_queue.status_code == 200
+    assert other_queue.json()["count"] == 0
+
+    decision = env["client"].post(
+        agent_url(env, f"runs/{session['run_id']}/approvals/"),
+        {
+            "request_id": f"approval-{uuid4().hex}",
+            "decision": "REJECTED",
+            "tool_call_id": "tool-queue-1",
+            "reason": "outside the approved scope",
+        },
+        format="json",
+    )
+    assert decision.status_code == 200
+    assert decision.json()["event"]["payload"]["reason"] == "outside the approved scope"
+
+
 def test_agent_events_are_isolated_between_old_and_new_sessions(env):
     first = env["client"].post(
         agent_url(env, "sessions/"),

@@ -96,6 +96,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const research = useResearch();
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") as TChainTab | null;
+  const requestedNodeId = searchParams.get("node");
   const activeTab: TChainTab = requestedTab ?? "nodes";
   const [chain, setChain] = useState<TResearchChain | null>(null);
   const [nodes, setNodes] = useState<TResearchChainNode[]>([]);
@@ -144,7 +145,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       setChain(chainDetail);
       setNodes(chainNodes);
       setMembers(chainMembers);
-      const current = currentNode(chainNodes);
+      const current = chainNodes.find((node) => node.id === requestedNodeId) ?? currentNode(chainNodes);
       if (current) await loadNodeDetail(current.id);
     } catch (error) {
       const errorCode = (error as { error_code?: string })?.error_code;
@@ -153,7 +154,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     } finally {
       setLoading(false);
     }
-  }, [chainId, loadNodeDetail, workspaceSlug]);
+  }, [chainId, loadNodeDetail, requestedNodeId, workspaceSlug]);
 
   useEffect(() => {
     void load();

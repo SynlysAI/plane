@@ -37,6 +37,7 @@ from .account_links import (
 )
 from .agent import (
     ResearchAgentApprovalEndpoint,
+    ResearchAgentApprovalListEndpoint,
     ResearchAgentArtifactEndpoint,
     ResearchAgentChainEventEndpoint,
     ResearchAgentManifestEndpoint,
@@ -364,6 +365,7 @@ __all__ = [
     "ResearchAgentRunEventEndpoint",
     "ResearchAgentRunCancelEndpoint",
     "ResearchAgentApprovalEndpoint",
+    "ResearchAgentApprovalListEndpoint",
     "ResearchAgentArtifactEndpoint",
     "ResearchAgentChainEventEndpoint",
     "ResearchContextResourceEndpoint",

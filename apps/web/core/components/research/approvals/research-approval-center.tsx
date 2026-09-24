@@ -11,6 +11,7 @@ import { useSearchParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 // components
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
+import { ResearchAgentApprovalQueue } from "@/components/research/approvals/research-agent-approval-queue";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 import { ReviewInbox } from "@/components/research/reviews/review-inbox";
@@ -131,13 +132,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
           {activeTab === "office" && (
             <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isWorkspaceAdmin} />
           )}
-          {activeTab === "agent_approval" && (
-            <div className="flex h-full items-center justify-center p-5">
-              <p className="rounded-lg border border-subtle bg-surface-1 px-6 py-4 text-13 text-secondary">
-                {t("research.approvals.agent_empty")}
-              </p>
-            </div>
-          )}
+          {activeTab === "agent_approval" && <ResearchAgentApprovalQueue workspaceSlug={workspaceSlug} />}
         </div>
       </div>
     </ResearchPageShell>
