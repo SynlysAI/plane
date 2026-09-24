@@ -64,7 +64,7 @@ it("renders the same status shape in list and detail contexts", async () => {
       </>
     )
   );
-  const badges = [...container.querySelectorAll("span")];
+  const badges = [...container.querySelectorAll("span > span")];
   expect(badges).toHaveLength(2);
   expect(badges.every((badge) => badge.textContent === "等待人工确认")).toBe(true);
 });
