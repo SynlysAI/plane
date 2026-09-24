@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import type { TIdentityMapping } from "@plane/types";
 import { Input } from "@plane/ui";
@@ -109,43 +110,43 @@ export const ResearchIdentityMappingTable = observer(function ResearchIdentityMa
         </Button>
       </div>
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.identity.columns.user")}</th>
-            <th className="font-normal py-2">{t("research.identity.columns.provider")}</th>
-            <th className="font-normal py-2">{t("research.identity.columns.subject")}</th>
-            <th className="font-normal py-2">{t("research.identity.columns.employee_id")}</th>
-            <th className="font-normal py-2">{t("research.identity.columns.last_login")}</th>
-            <th className="py-2" />
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow className="text-tertiary">
+            <TableHead>{t("research.identity.columns.user")}</TableHead>
+            <TableHead>{t("research.identity.columns.provider")}</TableHead>
+            <TableHead>{t("research.identity.columns.subject")}</TableHead>
+            <TableHead>{t("research.identity.columns.employee_id")}</TableHead>
+            <TableHead>{t("research.identity.columns.last_login")}</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {mappings.map((mapping) => (
-            <tr key={mapping.id} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">
+            <TableRow key={mapping.id}>
+              <TableCell className="text-secondary">
                 {mapping.user_detail?.display_name ?? mapping.user_detail?.email ?? mapping.user}
-              </td>
-              <td className="py-2 text-secondary">{mapping.provider}</td>
-              <td className="py-2 text-tertiary">{mapping.subject}</td>
-              <td className="py-2 text-tertiary">{mapping.employee_id ?? "-"}</td>
-              <td className="py-2 text-tertiary">{mapping.last_login_at ?? "-"}</td>
-              <td className="py-2 text-right">
+              </TableCell>
+              <TableCell className="text-secondary">{mapping.provider}</TableCell>
+              <TableCell className="text-tertiary">{mapping.subject}</TableCell>
+              <TableCell className="text-tertiary">{mapping.employee_id ?? "-"}</TableCell>
+              <TableCell className="text-tertiary">{mapping.last_login_at ?? "-"}</TableCell>
+              <TableCell className="text-right">
                 <Button variant="ghost" size="sm" onClick={() => void handleDelete(mapping.id)}>
                   {t("research.identity.unbind")}
                 </Button>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
           {mappings.length === 0 && (
-            <tr>
-              <td colSpan={6} className="py-3 text-center text-tertiary">
+            <TableRow>
+              <TableCell colSpan={6} className="text-center text-tertiary">
                 {t("research.identity.empty")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 });

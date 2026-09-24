@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TMentorBinding, TOrgUnit } from "@plane/types";
@@ -243,24 +244,24 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
         </div>
       )}
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.org.columns.mentee")}</th>
-            <th className="font-normal py-2">{t("research.org.columns.mentor")}</th>
-            <th className="font-normal py-2">{t("research.org.columns.advisor_kind")}</th>
-            <th className="font-normal py-2">{t("research.org.columns.effective_from")}</th>
-            <th className="py-2" />
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow className="text-tertiary">
+            <TableHead>{t("research.org.columns.mentee")}</TableHead>
+            <TableHead>{t("research.org.columns.mentor")}</TableHead>
+            <TableHead>{t("research.org.columns.advisor_kind")}</TableHead>
+            <TableHead>{t("research.org.columns.effective_from")}</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {bindings.map((binding) => (
-            <tr
+            <TableRow
               id={`mentor-binding-${binding.id}`}
               key={binding.id}
               className={`border-b border-subtle/60 ${focusedBindingId === binding.id ? "bg-accent-primary/10" : ""}`}
             >
-              <td className="py-2 text-secondary">
+              <TableCell className="text-secondary">
                 <button
                   type="button"
                   className="text-left text-accent-primary"
@@ -269,8 +270,8 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
                   {binding.mentee_detail?.display_name ?? binding.mentee_detail?.email ?? binding.mentee}
                 </button>
                 <span className="block text-11 text-tertiary">{binding.mentee_detail?.email}</span>
-              </td>
-              <td className="py-2 text-secondary">
+              </TableCell>
+              <TableCell className="text-secondary">
                 <button
                   type="button"
                   className="text-left text-accent-primary"
@@ -279,27 +280,27 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
                   {binding.mentor_detail?.display_name ?? binding.mentor_detail?.email ?? binding.mentor}
                 </button>
                 <span className="block text-11 text-tertiary">{binding.mentor_detail?.email}</span>
-              </td>
-              <td className="py-2 text-tertiary">
+              </TableCell>
+              <TableCell className="text-tertiary">
                 {t(binding.is_primary_advisor ? "research.org.primary_advisor" : "research.org.co_advisor")}
-              </td>
-              <td className="py-2 text-tertiary">{binding.effective_from}</td>
-              <td className="py-2 text-right">
+              </TableCell>
+              <TableCell className="text-tertiary">{binding.effective_from}</TableCell>
+              <TableCell className="text-right">
                 <Button variant="ghost" size="sm" disabled={busy} onClick={() => setBindingToDelete(binding)}>
                   {t("research.common.remove")}
                 </Button>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
           {!loading && !loadFailed && bindings.length === 0 && (
-            <tr>
-              <td colSpan={5} className="py-3 text-center text-tertiary">
+            <TableRow>
+              <TableCell colSpan={5} className="text-center text-tertiary">
                 {t("research.org.no_mentor_bindings")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
 
       <AlertModalCore
         isOpen={Boolean(bindingToDelete)}

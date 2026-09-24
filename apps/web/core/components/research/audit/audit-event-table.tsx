@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
@@ -92,42 +93,42 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
       </div>
 
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-12">
-          <thead>
-            <tr className="border-b border-subtle text-left text-tertiary">
-              <th className="font-normal py-2">{t("research.audit.columns.time")}</th>
-              <th className="font-normal py-2">{t("research.audit.columns.actor")}</th>
-              <th className="font-normal py-2">{t("research.audit.columns.action")}</th>
-              <th className="font-normal py-2">{t("research.audit.columns.resource")}</th>
-              <th className="font-normal py-2">{t("research.audit.columns.metadata")}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow className="text-tertiary">
+              <TableHead>{t("research.audit.columns.time")}</TableHead>
+              <TableHead>{t("research.audit.columns.actor")}</TableHead>
+              <TableHead>{t("research.audit.columns.action")}</TableHead>
+              <TableHead>{t("research.audit.columns.resource")}</TableHead>
+              <TableHead>{t("research.audit.columns.metadata")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {events.map((event) => (
-              <tr key={event.id} className="border-b border-subtle/60 align-top">
-                <td className="py-2 text-tertiary">{new Date(event.created_at).toLocaleString()}</td>
-                <td className="py-2 text-secondary">
+              <TableRow key={event.id}>
+                <TableCell className="text-tertiary">{new Date(event.created_at).toLocaleString()}</TableCell>
+                <TableCell className="text-secondary">
                   {event.actor_detail?.display_name ?? event.actor_detail?.email ?? "-"}
-                </td>
-                <td className="py-2 text-secondary">{event.action}</td>
-                <td className="py-2 text-tertiary">
+                </TableCell>
+                <TableCell className="text-secondary">{event.action}</TableCell>
+                <TableCell className="text-tertiary">
                   {event.resource_type}
                   {event.org_unit_detail?.name ? ` · ${event.org_unit_detail.name}` : ""}
-                </td>
-                <td className="max-w-[22rem] truncate py-2 text-tertiary">
+                </TableCell>
+                <TableCell className="max-w-[22rem] truncate text-tertiary">
                   {auditMetadataSummary(event.metadata) || t("research.audit.metadata_omitted")}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
             {events.length === 0 && (
-              <tr>
-                <td colSpan={5} className="py-3 text-center text-tertiary">
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-tertiary">
                   {t("research.audit.empty")}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

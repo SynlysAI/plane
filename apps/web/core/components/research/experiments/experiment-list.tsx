@@ -105,13 +105,21 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
               }`}
             >
               <span className="text-12 text-primary">{`#${record.sequence_no} ${record.title}`}</span>
-              <span className="flex items-center gap-1 text-11">
+              <span className="flex flex-wrap items-center gap-1 text-11">
                 <ResearchStatusBadge status={record.status} size="sm">
                   {t(EXPERIMENT_STATUS_LABELS[record.status])}
                 </ResearchStatusBadge>
                 <span className="rounded bg-surface-2 px-1.5 py-0.5 text-tertiary">
                   {t(EXPERIMENT_SOURCE_LABELS[record.source])}
                 </span>
+                {record.owner_detail?.display_name && (
+                  <span className="text-tertiary">{record.owner_detail.display_name}</span>
+                )}
+                {(record.started_at ?? record.updated_at) && (
+                  <span className="ml-auto text-tertiary tabular-nums">
+                    {new Date(record.started_at ?? record.updated_at).toLocaleDateString()}
+                  </span>
+                )}
               </span>
             </button>
           ))}

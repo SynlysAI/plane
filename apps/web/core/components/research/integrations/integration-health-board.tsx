@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { INTEGRATION_HEALTH_LABELS, INTEGRATION_SYSTEM_LABELS } from "@plane/constants";
 import type { TIntegrationConnection } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 
 type Props = {
   connections: TIntegrationConnection[];
@@ -27,28 +28,28 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
       );
 
   return (
-    <table className="w-full text-12">
-      <thead>
-        <tr className="border-b border-subtle text-left text-tertiary">
-          <th className="font-normal py-2">{t("research.integrations.columns.system")}</th>
-          <th className="font-normal py-2">{t("research.integrations.columns.status")}</th>
-          <th className="font-normal py-2">{t("research.integrations.columns.last_success")}</th>
-          <th className="font-normal py-2">{t("research.integrations.columns.reason")}</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow className="text-tertiary">
+          <TableHead>{t("research.integrations.columns.system")}</TableHead>
+          <TableHead>{t("research.integrations.columns.status")}</TableHead>
+          <TableHead>{t("research.integrations.columns.last_success")}</TableHead>
+          <TableHead>{t("research.integrations.columns.reason")}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map((connection) => {
           const entry = statusBySystem.get(String(connection.system)) ?? {};
           const status = String(entry.status ?? connection.health_status ?? "UNKNOWN");
           return (
-            <tr key={connection.system} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">
+            <TableRow key={connection.system}>
+              <TableCell className="text-secondary">
                 {t(INTEGRATION_SYSTEM_LABELS[connection.system])}
                 {!connection.is_enabled && (
                   <span className="ml-2 text-11 text-tertiary">{t("research.integrations.disabled")}</span>
                 )}
-              </td>
-              <td className="py-2">
+              </TableCell>
+              <TableCell>
                 <span
                   className={`rounded px-1.5 py-0.5 text-11 ${
                     status === "OK"
@@ -60,17 +61,17 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
                 >
                   {t(INTEGRATION_HEALTH_LABELS[status] ?? INTEGRATION_HEALTH_LABELS.UNKNOWN)}
                 </span>
-              </td>
-              <td className="py-2 text-tertiary">
+              </TableCell>
+              <TableCell className="text-tertiary">
                 {entry.last_success_at ? new Date(String(entry.last_success_at)).toLocaleString() : "-"}
-              </td>
-              <td className="py-2 text-tertiary">
+              </TableCell>
+              <TableCell className="text-tertiary">
                 {String(entry.degraded_reason ?? connection.last_error ?? "") || "-"}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           );
         })}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 });

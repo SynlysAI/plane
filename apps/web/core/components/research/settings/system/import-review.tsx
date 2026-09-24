@@ -4,6 +4,7 @@ import type { TAccountProvisioningOptions, TUserImportBatch, TUserImportRow } fr
 import { Button } from "@plane/propel/button";
 import { ResearchAccountService } from "@/services/research/account.service";
 import type { ImportApprovalPreview, ImportRelations } from "@/services/research/account.service";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 
 const service = new ResearchAccountService();
 const inputClass = "rounded border border-subtle bg-surface-1 px-2 py-1 text-12";
@@ -188,10 +189,10 @@ export function ImportReview({
       </div>
       <fieldset disabled={busy || !editable || !!editing} className="min-w-0">
         <div className="max-h-96 overflow-auto rounded border border-subtle">
-          <table className="w-full text-12">
-            <thead className="sticky top-0 z-10 bg-surface-2 text-left">
-              <tr>
-                <th className="p-2">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-surface-2">
+              <TableRow>
+                <TableHead>
                   <label>
                     <input
                       ref={allInput}
@@ -203,18 +204,18 @@ export function ImportReview({
                     />{" "}
                     全选筛选结果
                   </label>
-                </th>
-                <th>姓名 / 邮箱</th>
-                <th>审核决定 / 保存状态</th>
-                <th>校验</th>
-                <th>组织与导师</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+                <TableHead>姓名 / 邮箱</TableHead>
+                <TableHead>审核决定 / 保存状态</TableHead>
+                <TableHead>校验</TableHead>
+                <TableHead>组织与导师</TableHead>
+                <TableHead>操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {visible.map((row) => (
-                <tr key={row.id} className="border-t border-subtle align-top">
-                  <td className="p-2">
+                <TableRow key={row.id}>
+                  <TableCell>
                     <input
                       type="checkbox"
                       aria-label={`选择第 ${row.row_number} 行`}
@@ -226,13 +227,13 @@ export function ImportReview({
                       }
                     />{" "}
                     {row.row_number}
-                  </td>
-                  <td className="p-2">
+                  </TableCell>
+                  <TableCell>
                     <strong className="block">{row.display_name}</strong>
                     <span className="block text-11 break-all text-tertiary">{row.email}</span>
                     {row.category === "ADVISOR" ? "导师" : "学生"} {row.student_no}
-                  </td>
-                  <td className="p-2">
+                  </TableCell>
+                  <TableCell>
                     <span
                       className={`block font-medium whitespace-nowrap ${row.review_decision === "INCLUDED" ? "text-success-primary" : "text-secondary"}`}
                     >
@@ -245,12 +246,12 @@ export function ImportReview({
                     <span aria-live="polite" className="text-11">
                       {savingRow === row.id ? "保存中…" : feedback[row.id!]}
                     </span>
-                  </td>
-                  <td className="p-2">
+                  </TableCell>
+                  <TableCell>
                     校验：{validation[row.status]}
                     <p className="max-w-64 text-11 text-danger-primary">{row.status !== "OK" ? row.message : ""}</p>
-                  </td>
-                  <td className="p-2">
+                  </TableCell>
+                  <TableCell>
                     <p>{row.group_label}</p>
                     <p className="text-11">
                       {row.advisor_name && `主导师：${row.advisor_name} · ${row.primary_advisor_email}`}
@@ -266,8 +267,8 @@ export function ImportReview({
                         查看组织关系
                       </a>
                     )}
-                  </td>
-                  <td className="p-2">
+                  </TableCell>
+                  <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {editable && (
                         <>
@@ -293,11 +294,11 @@ export function ImportReview({
                         </>
                       )}
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           {!visible.length && <p className="p-4 text-12">没有符合筛选条件的记录</p>}
         </div>
       </fieldset>
