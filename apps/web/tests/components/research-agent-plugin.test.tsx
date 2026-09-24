@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   closeSession: vi.fn(),
   sendMessage: vi.fn(),
   saveArtifact: vi.fn(),
+  decideApproval: vi.fn(),
 }));
 
 vi.mock("@plane/i18n", () => ({
@@ -34,6 +35,7 @@ vi.mock("@/services/research/agent.service", () => ({
     closeSession = mocks.closeSession;
     sendMessage = mocks.sendMessage;
     saveArtifact = mocks.saveArtifact;
+    decideApproval = mocks.decideApproval;
   },
 }));
 
@@ -93,6 +95,10 @@ beforeEach(() => {
     latest_seq: afterSeq === 0 ? 1 : 2,
   }));
   mocks.cancelRun.mockResolvedValue({ ...session, status: "CLOSED" });
+  mocks.decideApproval.mockResolvedValue({
+    session: { ...session, status: "READY" },
+    event: event(4, "HUMAN_DECISION"),
+  });
   mocks.saveArtifact.mockResolvedValue({
     snapshot_id: "snap-1",
     snapshot_type: "ANALYSIS_RESULT",
@@ -140,6 +146,9 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
   root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
   await act(async () => undefined);
   await act(async () => undefined);
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "预览产物")?.click();
+  });
   const textarea = [...container.querySelectorAll("textarea")].at(-1);
   expect(textarea).not.toBeNull();
   await act(async () => {
@@ -164,4 +173,52 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
     expect.objectContaining({ artifact_type: "ANALYSIS_SUMMARY", confirmed: true })
   );
   expect(container.textContent).toContain("ANALYSIS_RESULT v2");
+});
+
+it("renders structured approval cards and submits an idempotent Agent decision", async () => {
+  const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
+  mocks.createSession.mockResolvedValue({ ...session, status: "WAITING_APPROVAL" });
+  mocks.getEvents.mockResolvedValue({
+    results: [
+      {
+        ...event(2, "TOOL_CALL"),
+        payload: {
+          tool_name: "knowledge.search",
+          status: "WAITING_APPROVAL",
+          requires_approval: true,
+          capability_scope: "chain-node:node-1",
+          risk_level: "MEDIUM",
+          input_summary: "检索聚合物 Tg 文献",
+          output_refs: [{ title: "Polymer Tg dataset" }],
+        },
+      },
+    ],
+    count: 1,
+    latest_seq: 2,
+  });
+
+  await act(async () => {
+    root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("knowledge.search");
+  expect(container.textContent).toContain("等待审批");
+  expect(container.textContent).toContain("检索聚合物 Tg 文献");
+  expect(container.textContent).toContain("Polymer Tg dataset");
+  expect(container.textContent).not.toContain('{"tool_name"');
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "处理审批")?.click();
+  });
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "通过")?.click();
+  });
+
+  expect(mocks.decideApproval).toHaveBeenCalledWith(
+    "lab",
+    "run-1",
+    expect.objectContaining({ decision: "APPROVED", tool_call_id: "2", reason: undefined })
+  );
+  expect(container.textContent).toContain("审批已通过，Agent 可继续执行。");
 });
