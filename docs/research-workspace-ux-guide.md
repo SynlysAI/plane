@@ -3,12 +3,12 @@
 | 项目     | 内容                                                              |
 | -------- | ----------------------------------------------------------------- |
 | 文档状态 | 当前有效                                                          |
-| 文档版本 | v1.0                                                              |
+| 文档版本 | v1.1                                                              |
 | 日期     | 2026-09-24                                                        |
 | 适用版本 | `4.11.0` 起                                                       |
 | 定位     | 科研工作台 UI/UX 系列文档的**唯一入口与权威规范**；冲突以本文为准 |
 
-本文整合 4.10.0 视觉重构与 4.11.0 信息架构精炼两轮成果，沉淀为可持续执行的 UX 规范。历史 PRD、审计、验收与发布说明保留为过程档案，见 §8 文档地图。
+本文整合 4.10.0 视觉重构与 4.11.0 信息架构精炼两轮成果，沉淀为可持续执行的 UX 规范。两轮 PRD、审计、验收与发布说明原文收录于 [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)，见 §8 文档地图。
 
 ## 1. 产品三定位
 
@@ -32,7 +32,7 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 
 规则：Primary 不折叠；Secondary 不抢视觉；Supporting 用 Disclosure / Details / Drawer 渐进披露。目标是 **Progressive Disclosure，不是 Progressive Hiding**。
 
-三份已冻结的分级表见《信息架构精炼 PRD》§2。
+三份已冻结的分级表见[过程档案](./research-workspace-ui-ux-archive.md)第 6 部分 §2。
 
 ## 3. 设计原则
 
@@ -93,19 +93,17 @@ Header（对象 + 当前节点）→ **Workflow Rail（常驻，全节点）** �
 
 ## 8. 文档地图
 
-| 文档                                                                                               | 角色                             | 何时查阅                    |
-| -------------------------------------------------------------------------------------------------- | -------------------------------- | --------------------------- |
-| 本文                                                                                               | 权威规范与入口                   | 日常开发、评审              |
-| [`research-workspace-ux-refinement-prd.md`](./research-workspace-ux-refinement-prd.md)             | 4.11.0 信息精炼 PRD 与三页分级表 | 改总览 / Chain / Agent 时   |
-| [`research-workspace-ui-ux-refactor-prd.md`](./research-workspace-ui-ux-refactor-prd.md)           | 4.10.0 视觉重构 PRD（历史）      | 追溯视觉规范来源            |
-| [`research-workspace-ui-ux-phase-1-audit.md`](./research-workspace-ui-ux-phase-1-audit.md)         | 设计系统审计（档案）             | 查 token / 组件复用映射     |
-| [`research-workspace-ui-ux-phase-2-ia-audit.md`](./research-workspace-ui-ux-phase-2-ia-audit.md)   | 信息架构审计（档案）             | 查对象层级映射              |
-| [`research-workspace-ui-ux-acceptance-report.md`](./research-workspace-ui-ux-acceptance-report.md) | 4.10.0 验收（档案）              | 查验收方法与残留            |
-| [`research-workspace-ui-ux-release-notes.md`](./research-workspace-ui-ux-release-notes.md)         | 4.10.0 发布说明（档案）          | 查开关 / 回滚               |
-| [`research-intelligent-platform-ux-prototype.md`](./research-intelligent-platform-ux-prototype.md) | 智能平台 UX 原型（确认稿）       | 涉及 Chain / Agent 新交互时 |
+| 文档                                                                                               | 角色                       | 何时查阅                           |
+| -------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- |
+| 本文                                                                                               | 权威规范与入口             | 日常开发、评审                     |
+| [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)                     | 过程档案（六合一）         | 查分级表、审计映射、验收、开关回滚 |
+| [`research-intelligent-platform-ux-prototype.md`](./research-intelligent-platform-ux-prototype.md) | 智能平台 UX 原型（确认稿） | 涉及 Chain / Agent 新交互时        |
+
+档案内部索引：第 1 部分 4.10.0 重构 PRD；第 2 部分 Phase 1 设计系统审计；第 3 部分 Phase 2 信息架构审计；第 4 部分 4.10.0 验收报告；第 5 部分 4.10.0 发布说明；第 6 部分 4.11.0 信息精炼 PRD。
 
 ## 9. 变更记录
 
-| 版本 | 日期       | 变更                                                                |
-| ---- | ---------- | ------------------------------------------------------------------- |
-| v1.0 | 2026-09-24 | 整合两轮 UI/UX 成果：三定位、分级方法、组件出口、页面模式与文档地图 |
+| 版本 | 日期       | 变更                                                                                              |
+| ---- | ---------- | ------------------------------------------------------------------------------------------------- |
+| v1.0 | 2026-09-24 | 整合两轮 UI/UX 成果：三定位、分级方法、组件出口、页面模式与文档地图                               |
+| v1.1 | 2026-09-24 | 六份过程文档合并为 `research-workspace-ui-ux-archive.md`，系列收敛为「指南 + 档案」两份，命名统一 |
