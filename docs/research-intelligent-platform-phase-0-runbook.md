@@ -96,7 +96,7 @@ PATCH /api/research/workspaces/{slug}/settings/
 
 验证：
 
-1. 侧栏不显示“科研链”。
+1. 侧栏不显示“研究链”。
 2. `GET /api/research/workspaces/{slug}/chains/` 返回 403/404。
 3. `POST /api/research/workspaces/{slug}/agent/sessions/` 返回 403。
 4. 普通 Plane 首页、项目、Page、附件和既有科研入口回归通过。
