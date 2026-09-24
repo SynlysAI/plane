@@ -1056,6 +1056,44 @@
         "load": "Could not load the aggregate."
       }
     },
+    "home_summary": {
+      "title": "Research summary",
+      "loading": "Reading visible Research Chain summaries…",
+      "forbidden": "This account has no research data access.",
+      "error": "The research summary is temporarily unavailable.",
+      "empty": "No visible Research Chain yet.",
+      "chain": "{active} active / {total} visible chains",
+      "current_node": "Current node: {node}",
+      "active_chains": "Active chains",
+      "todos": "To-dos",
+      "open_overview": "Open research overview",
+      "open_chain": "Open current chain",
+      "snapshot": "Latest snapshot",
+      "snapshot_empty": "No confirmed snapshot yet; open a chain to inspect the evidence trail."
+    },
+    "todo": {
+      "title": "Cross-component to-dos",
+      "description": "Reports, reviews, approvals, Agent actions and external systems.",
+      "refresh": "Refresh to-dos",
+      "empty": "No cross-component item needs attention.",
+      "error": "Some sources are unavailable; readable to-dos are retained.",
+      "open": "Open",
+      "kind_blocking": "Blocking",
+      "kind_confirmation": "Confirmation",
+      "kind_reminder": "Reminder",
+      "kind_syncing": "Syncing",
+      "source_report": "Periodic report",
+      "source_review": "Stage review",
+      "source_office": "Office approval",
+      "source_upload": "RAG upload",
+      "source_manual": "Manual record",
+      "source_agent": "Agent approval",
+      "report_revision": "Report needs revision",
+      "stage_review": "Stage review pending",
+      "office_approval": "Office approval pending",
+      "manual_backfill": "External system degraded; keep manual records",
+      "external_degraded": "RAGPortal is unavailable; sync after it recovers."
+    },
     "overview": {
       "description": "Research management for this workspace: organisation, projects, periodic reports and office approvals.",
       "business_sections": "Business sections",
@@ -1080,7 +1118,16 @@
       "open_approvals": "Open approvals",
       "open_revisions": "Open reports to revise",
       "open_projects": "Open research projects",
-      "open_reports": "Open periodic reports"
+      "open_reports": "Open periodic reports",
+      "period": "Period",
+      "period_30": "Last 30 days",
+      "period_90": "Last 90 days",
+      "period_all": "All",
+      "refreshed_at": "Refreshed",
+      "open_chain": "Open Research Chain",
+      "open_summary": "Open submission summary",
+      "chain_section": "Chain summaries",
+      "chain_section_hint": "Visible Research Chain topics ordered by update time."
     },
     "portal": {
       "title": "Research Chain workspace",

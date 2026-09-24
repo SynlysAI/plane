@@ -1056,6 +1056,44 @@
         "load": "汇总加载失败。"
       }
     },
+    "home_summary": {
+      "title": "科研摘要",
+      "loading": "正在读取你有权限的科研链摘要…",
+      "forbidden": "当前账号没有科研数据访问权限。",
+      "error": "科研摘要暂时不可用，可稍后重试。",
+      "empty": "当前还没有可见科研链。",
+      "chain": "{active} 个进行中 / {total} 个可见课题",
+      "current_node": "当前节点：{node}",
+      "active_chains": "进行中课题",
+      "todos": "待处理",
+      "open_overview": "进入科研总览",
+      "open_chain": "打开当前课题",
+      "snapshot": "最近快照",
+      "snapshot_empty": "暂无已确认快照；打开课题后可查看完整证据链。"
+    },
+    "todo": {
+      "title": "跨组件待办",
+      "description": "聚合报告、评审、审批、Agent 与外部系统状态。",
+      "refresh": "刷新待办",
+      "empty": "当前没有需要处理的跨组件事项。",
+      "error": "部分来源暂时不可用；已保留可读取的待办。",
+      "open": "处理",
+      "kind_blocking": "阻断",
+      "kind_confirmation": "待确认",
+      "kind_reminder": "提醒",
+      "kind_syncing": "同步中",
+      "source_report": "周期报告",
+      "source_review": "阶段评审",
+      "source_office": "办公审批",
+      "source_upload": "RAG 上传",
+      "source_manual": "人工记录",
+      "source_agent": "Agent 审批",
+      "report_revision": "报告需修订",
+      "stage_review": "阶段评审待处理",
+      "office_approval": "办公审批待处理",
+      "manual_backfill": "外部系统降级，请保留人工记录",
+      "external_degraded": "RAGPortal 不可用，待其恢复后再同步。"
+    },
     "overview": {
       "description": "本工作区的科研管理：组织架构、科研项目、周期报告与办公审批。",
       "business_sections": "业务功能",
@@ -1080,7 +1118,16 @@
       "open_approvals": "查看待审批",
       "open_revisions": "查看需修改报告",
       "open_projects": "进入科研项目",
-      "open_reports": "进入周期报告"
+      "open_reports": "进入周期报告",
+      "period": "统计周期",
+      "period_30": "近 30 天",
+      "period_90": "近 90 天",
+      "period_all": "全部",
+      "refreshed_at": "刷新于",
+      "open_chain": "进入 Research Chain",
+      "open_summary": "查看提交汇总",
+      "chain_section": "课题摘要",
+      "chain_section_hint": "按更新时间展示当前权限范围内的科研链课题。"
     },
     "portal": {
       "title": "科研链工作区",
