@@ -106,7 +106,7 @@ Phase 1 在 Phase 0 契约上交付内部试点可用的 UI/UX Ready 科研智�
 
 ### 已交付：科研工作台产品级 UI/UX 重构（`4.10.0`）
 
-呈现层重构不改变业务规则、排序与权限，只把科研界面收敛为 Plane 原生延伸。需求见 [UI/UX 重构 PRD](docs/research-workspace-ui-ux-refactor-prd.md)，验收见 [验收报告](docs/research-workspace-ui-ux-acceptance-report.md)。
+呈现层重构不改变业务规则、排序与权限，只把科研界面收敛为 Plane 原生延伸。规范见 [UX 设计指南](docs/research-workspace-ux-guide.md)，过程 PRD 与验收收录于 [UI/UX 过程档案](docs/research-workspace-ui-ux-archive.md)。
 
 | 能力域       | 说明                                                                                             |
 | ------------ | ------------------------------------------------------------------------------------------------ |
@@ -331,21 +331,21 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest -m unit
 
 ## 文档索引
 
-| 文档                                                                                                  | 内容                                   |
-| ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| [`docs/README.md`](docs/README.md)                                                                    | 文档总览、维护约定与阅读顺序           |
-| [`research-management-prd-roadmap.md`](docs/research-management-prd-roadmap.md)                       | 产品需求、生态边界与 P0–P3 分期路线图  |
-| [`research-p0-development-prd.md`](docs/research-p0-development-prd.md)                               | P0 开发规格（含实现回写记录）          |
-| [`research-p0-development-prd-review.md`](docs/research-p0-development-prd-review.md)                 | P0 开发规格评审与实现复核结论          |
-| [`research-p0-acceptance-report.md`](docs/research-p0-acceptance-report.md)                           | P0 验收方法与逐条验收结论              |
-| [`research-p0-release-notes.md`](docs/research-p0-release-notes.md)                                   | P0 发布、开关与回滚说明                |
-| [`research-p1-development-prd.md`](docs/research-p1-development-prd.md)                               | P1 开发规格（含实现回写记录）          |
-| [`research-p1-development-prd-review.md`](docs/research-p1-development-prd-review.md)                 | P1 开发规格评审与实现复核结论          |
-| [`research-p1-release-notes.md`](docs/research-p1-release-notes.md)                                   | P1 发布、开关、环境变量与回滚说明      |
-| [`research-workspace-ui-ux-refactor-prd.md`](docs/research-workspace-ui-ux-refactor-prd.md)           | 科研工作台 UI/UX 重构 PRD（已实施）    |
-| [`research-workspace-ui-ux-acceptance-report.md`](docs/research-workspace-ui-ux-acceptance-report.md) | UI/UX 重构验收与产品级视觉检查结论     |
-| [`production-deployment.md`](docs/production-deployment.md)                                           | 当前生产环境架构、更新、验证与回滚流程 |
-| [`linting.md`](docs/linting.md)                                                                       | 代码风格与静态检查约定                 |
+| 文档                                                                                  | 内容                                   |
+| ------------------------------------------------------------------------------------- | -------------------------------------- |
+| [`docs/README.md`](docs/README.md)                                                    | 文档总览、维护约定与阅读顺序           |
+| [`research-management-prd-roadmap.md`](docs/research-management-prd-roadmap.md)       | 产品需求、生态边界与 P0–P3 分期路线图  |
+| [`research-p0-development-prd.md`](docs/research-p0-development-prd.md)               | P0 开发规格（含实现回写记录）          |
+| [`research-p0-development-prd-review.md`](docs/research-p0-development-prd-review.md) | P0 开发规格评审与实现复核结论          |
+| [`research-p0-acceptance-report.md`](docs/research-p0-acceptance-report.md)           | P0 验收方法与逐条验收结论              |
+| [`research-p0-release-notes.md`](docs/research-p0-release-notes.md)                   | P0 发布、开关与回滚说明                |
+| [`research-p1-development-prd.md`](docs/research-p1-development-prd.md)               | P1 开发规格（含实现回写记录）          |
+| [`research-p1-development-prd-review.md`](docs/research-p1-development-prd-review.md) | P1 开发规格评审与实现复核结论          |
+| [`research-p1-release-notes.md`](docs/research-p1-release-notes.md)                   | P1 发布、开关、环境变量与回滚说明      |
+| [`research-workspace-ux-guide.md`](docs/research-workspace-ux-guide.md)               | 科研工作台 UX 设计指南（系列入口）     |
+| [`research-workspace-ui-ux-archive.md`](docs/research-workspace-ui-ux-archive.md)     | UI/UX 两轮 PRD / 审计 / 验收过程档案   |
+| [`production-deployment.md`](docs/production-deployment.md)                           | 当前生产环境架构、更新、验证与回滚流程 |
+| [`linting.md`](docs/linting.md)                                                       | 代码风格与静态检查约定                 |
 
 ## 生态与文档
 
