@@ -8,27 +8,22 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { LITERATURE_STATUSES, LITERATURE_STATUS_LABELS } from "@plane/constants";
-import type { TLiteratureStatus } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Input } from "@plane/ui";
 // components
 import { LiteratureForm } from "@/components/research/literature/literature-form";
 import { LiteratureImportDialog } from "@/components/research/literature/literature-import-dialog";
 import { LiteratureStatusBoard } from "@/components/research/literature/literature-status-board";
 import { LiteratureThresholdPanel } from "@/components/research/literature/literature-threshold-panel";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
 type Props = {
   workspaceSlug: string;
   projectId: string;
-};
-
-const STATUS_TONES: Record<TLiteratureStatus, string> = {
-  COLLECTED: "bg-surface-2 text-tertiary",
-  SCREENED: "bg-accent-subtle text-accent-primary",
-  INCLUDED: "bg-success-subtle text-success-primary",
-  EXCLUDED: "bg-danger-subtle text-danger-primary",
 };
 
 /** Literature page: filters, status board, threshold panel and entries (§6.2). */
@@ -74,35 +69,35 @@ export const LiteratureList = observer(function LiteratureList({ workspaceSlug, 
         }}
       />
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.literature.columns.title")}</th>
-            <th className="font-normal py-2">{t("research.literature.columns.year")}</th>
-            <th className="font-normal py-2">{t("research.literature.columns.venue")}</th>
-            <th className="font-normal py-2">{t("research.literature.columns.doi")}</th>
-            <th className="font-normal py-2">{t("research.literature.columns.status")}</th>
-            <th className="py-2" />
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("research.literature.columns.title")}</TableHead>
+            <TableHead>{t("research.literature.columns.year")}</TableHead>
+            <TableHead>{t("research.literature.columns.venue")}</TableHead>
+            <TableHead>{t("research.literature.columns.doi")}</TableHead>
+            <TableHead>{t("research.literature.columns.status")}</TableHead>
+            <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {entries.map((entry) => (
-            <tr key={entry.id} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">
+            <TableRow key={entry.id} className="hover:bg-surface-2">
+              <TableCell className="font-medium text-primary">
                 {entry.title}
                 {!entry.is_annotated && (
                   <span className="ml-2 text-11 text-warning-primary">{t("research.literature.needs_notes")}</span>
                 )}
-              </td>
-              <td className="py-2 text-tertiary">{entry.year ?? "-"}</td>
-              <td className="py-2 text-tertiary">{entry.venue || "-"}</td>
-              <td className="py-2 text-tertiary">{entry.doi || "-"}</td>
-              <td className="py-2">
-                <span className={`rounded px-1.5 py-0.5 text-11 ${STATUS_TONES[entry.status]}`}>
+              </TableCell>
+              <TableCell className="text-tertiary">{entry.year ?? "-"}</TableCell>
+              <TableCell className="text-tertiary">{entry.venue || "-"}</TableCell>
+              <TableCell className="text-tertiary">{entry.doi || "-"}</TableCell>
+              <TableCell>
+                <ResearchStatusBadge status={entry.status} size="sm">
                   {t(LITERATURE_STATUS_LABELS[entry.status])}
-                </span>
-              </td>
-              <td className="py-2 text-right">
+                </ResearchStatusBadge>
+              </TableCell>
+              <TableCell className="text-right">
                 <select
                   className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
                   value={entry.status}
@@ -118,18 +113,18 @@ export const LiteratureList = observer(function LiteratureList({ workspaceSlug, 
                     </option>
                   ))}
                 </select>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
           {!entries.length && (
-            <tr>
-              <td colSpan={6} className="py-3 text-tertiary">
+            <TableRow>
+              <TableCell colSpan={6} className="py-3 text-tertiary">
                 {t("research.literature.empty")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 });

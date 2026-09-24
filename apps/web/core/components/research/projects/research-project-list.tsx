@@ -12,6 +12,7 @@ import { useSearchParams } from "next/navigation";
 import { RESEARCH_PROJECT_STATUS_LABELS, RESEARCH_PROJECT_TYPE_LABELS, RESEARCH_PROJECT_TYPES } from "@plane/constants";
 import type { TResearchProjectType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TResearchProject } from "@/services/research/project.service";
@@ -19,6 +20,7 @@ import { AlertModalCore, Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchListState } from "@/components/research/common/research-list-state";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -410,36 +412,36 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
           onClearFilters={clearFilters}
         />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[840px] text-12">
-            <thead>
-              <tr className="border-b border-subtle text-left text-tertiary">
-                <th className="font-normal py-2">{t("research.projects.columns.name")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.owner")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.type")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.org_unit")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.status")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.started_at")}</th>
-                <th className="py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project) => (
-                <tr key={project.id} className="border-b border-subtle/60">
-                  <td className="py-2 text-secondary">{project.name}</td>
-                  <td className="py-2 text-tertiary">
-                    {project.research?.owner_detail?.display_name ||
-                      project.research?.owner_detail?.email ||
-                      project.research?.owner ||
-                      "-"}
-                  </td>
-                  <td className="py-2 text-tertiary">
-                    {project.research
-                      ? t(RESEARCH_PROJECT_TYPE_LABELS[project.research.research_type as TResearchProjectType])
-                      : "-"}
-                  </td>
-                  <td className="py-2 text-tertiary">{orgUnitName(project.research?.org_unit)}</td>
-                  <td className="py-2 text-tertiary">
+        <Table className="min-w-[840px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("research.projects.columns.name")}</TableHead>
+              <TableHead>{t("research.projects.columns.owner")}</TableHead>
+              <TableHead>{t("research.projects.columns.type")}</TableHead>
+              <TableHead>{t("research.projects.columns.org_unit")}</TableHead>
+              <TableHead>{t("research.projects.columns.status")}</TableHead>
+              <TableHead>{t("research.projects.columns.started_at")}</TableHead>
+              <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {projects.map((project) => (
+              <TableRow key={project.id} className="hover:bg-surface-2">
+                <TableCell className="font-medium text-primary">{project.name}</TableCell>
+                <TableCell className="text-secondary">
+                  {project.research?.owner_detail?.display_name ||
+                    project.research?.owner_detail?.email ||
+                    project.research?.owner ||
+                    "-"}
+                </TableCell>
+                <TableCell className="text-tertiary">
+                  {project.research
+                    ? t(RESEARCH_PROJECT_TYPE_LABELS[project.research.research_type as TResearchProjectType])
+                    : "-"}
+                </TableCell>
+                <TableCell className="text-tertiary">{orgUnitName(project.research?.org_unit)}</TableCell>
+                <TableCell>
+                  <ResearchStatusBadge status={project.research?.workflow_status ?? "unknown"} size="sm">
                     {project.research
                       ? t(
                           RESEARCH_PROJECT_STATUS_LABELS[
@@ -447,48 +449,48 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                           ]
                         )
                       : "-"}
-                  </td>
-                  <td className="py-2 text-tertiary">{project.research?.started_at ?? "-"}</td>
-                  <td className="py-2 text-right">
-                    {project.research?.research_type === "RESEARCH_PROJECT" ? (
-                      <Link
-                        className="mr-2 text-12 text-accent-primary hover:underline"
-                        href={`/${workspaceSlug}/projects/${project.id}/issues`}
+                  </ResearchStatusBadge>
+                </TableCell>
+                <TableCell className="text-tertiary tabular-nums">{project.research?.started_at ?? "-"}</TableCell>
+                <TableCell className="text-right">
+                  {project.research?.research_type === "RESEARCH_PROJECT" ? (
+                    <Link
+                      className="mr-2 text-12 text-accent-primary hover:underline"
+                      href={`/${workspaceSlug}/projects/${project.id}/issues`}
+                    >
+                      {t("research.projects.open_team_project")}
+                    </Link>
+                  ) : (
+                    <Link
+                      className="mr-2 text-12 text-accent-primary hover:underline"
+                      href={`/${workspaceSlug}/research/projects/${project.id}/stages`}
+                    >
+                      {t("research.nav.stages")}
+                    </Link>
+                  )}
+                  {project.research?.owner === currentUserId &&
+                    (project.research?.workflow_status === "ACTIVE" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPendingProjectAction({ project, action: "archive" })}
                       >
-                        {t("research.projects.open_team_project")}
-                      </Link>
+                        {t("research.projects.archive")}
+                      </Button>
                     ) : (
-                      <Link
-                        className="mr-2 text-12 text-accent-primary hover:underline"
-                        href={`/${workspaceSlug}/research/projects/${project.id}/stages`}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPendingProjectAction({ project, action: "restore" })}
                       >
-                        {t("research.nav.stages")}
-                      </Link>
-                    )}
-                    {project.research?.owner === currentUserId &&
-                      (project.research?.workflow_status === "ACTIVE" ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPendingProjectAction({ project, action: "archive" })}
-                        >
-                          {t("research.projects.archive")}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPendingProjectAction({ project, action: "restore" })}
-                        >
-                          {t("research.projects.restore")}
-                        </Button>
-                      ))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                        {t("research.projects.restore")}
+                      </Button>
+                    ))}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
       <div className="flex items-center justify-between gap-2 text-12 text-tertiary">
         <span>{t("research.common.total_results", { count: pagination?.total_results ?? projects.length })}</span>

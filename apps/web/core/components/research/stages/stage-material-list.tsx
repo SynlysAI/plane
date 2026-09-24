@@ -11,6 +11,8 @@ import Link from "next/link";
 import { STAGE_MATERIAL_STATUS_LABELS, STAGE_MATERIAL_TYPES, stageMaterialLabelKey } from "@plane/constants";
 import type { TStageMaterialStatus } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 
 type Props = {
   workspaceSlug: string;
@@ -26,13 +28,6 @@ type Props = {
   }>;
   canEdit: boolean;
   onCreate: (materialType: string) => Promise<void>;
-};
-
-const STATUS_TONES: Record<TStageMaterialStatus, string> = {
-  DRAFT: "bg-surface-2 text-tertiary",
-  SUBMITTED: "bg-warning-subtle text-warning-primary",
-  ACCEPTED: "bg-success-subtle text-success-primary",
-  REJECTED: "bg-danger-subtle text-danger-primary",
 };
 
 /**
@@ -79,11 +74,9 @@ export const StageMaterialList = observer(function StageMaterialList({
               <span className="flex items-center gap-2">
                 {material ? (
                   <>
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-11 ${STATUS_TONES[material.status] ?? "bg-surface-2"}`}
-                    >
+                    <ResearchStatusBadge status={material.status} size="sm">
                       {t(STAGE_MATERIAL_STATUS_LABELS[material.status])}
-                    </span>
+                    </ResearchStatusBadge>
                     <span className="text-11 text-tertiary">v{material.last_version_no}</span>
                     <Link
                       className="text-11 text-accent-primary hover:underline"
