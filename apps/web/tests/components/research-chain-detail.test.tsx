@@ -15,7 +15,8 @@ const mocks = vi.hoisted(() => ({
   getChainMembers: vi.fn(),
   createChainNode: vi.fn(),
   transitionChainNode: vi.fn(),
-  tab: "nodes",
+  query: "tab=nodes",
+  setSearchParams: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -26,7 +27,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("react-router", () => ({
-  useSearchParams: () => [new URLSearchParams(mocks.tab ? `tab=${mocks.tab}` : "")],
+  useSearchParams: () => [new URLSearchParams(mocks.query), mocks.setSearchParams],
 }));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
@@ -100,7 +101,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  mocks.tab = "nodes";
+  mocks.query = "tab=nodes";
   mocks.getChain.mockResolvedValue(chain);
   mocks.getChainNodes.mockResolvedValue([node]);
   mocks.getChainMembers.mockResolvedValue([]);
@@ -167,19 +168,56 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   expect(container.textContent).toContain("输入");
   expect(container.textContent).toContain("人类决策");
   expect(container.textContent).toContain("R2");
-  expect(container.querySelector("path[stroke-dasharray='4 4']")).not.toBeNull();
+  expect(container.textContent).toContain("阶段节点");
+  expect(container.textContent).toContain("快照");
+  expect(container.textContent).toContain("Trace log");
+  expect(container.querySelector("path[stroke-dasharray='4 4']")).toBeNull();
   expect(
     container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
   ).toBe("page");
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(
-    expect.arrayContaining(["课题", "节点", "报告与成果", "实验记录", "外部引用", "成员", "回放"])
+    expect.arrayContaining(["课题", "节点", "报告与成果", "实验记录", "外部引用", "成员"])
   );
+  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).not.toContain("回放");
 
   await act(async () => {
     [...container.querySelectorAll("button")].find((button) => button.textContent === "启动")?.click();
   });
   expect(mocks.transitionChainNode).toHaveBeenCalledWith("lab", "node-1", "START", undefined);
+});
+
+it("navigates to an empty stage through the workflow itself", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("转化"))?.click();
+  });
+
+  expect(mocks.setSearchParams).toHaveBeenCalledTimes(1);
+  const nextParams = mocks.setSearchParams.mock.calls[0][0] as URLSearchParams;
+  expect(nextParams.get("tab")).toBe("nodes");
+  expect(nextParams.get("stage")).toBe("transfer");
+  expect(nextParams.get("node")).toBeNull();
+});
+
+it("normalizes legacy replay links into the workflow detail view", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=replay&node=node-1";
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(
+    container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
+  ).toBe("page");
+  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).not.toContain("回放");
+  expect(container.textContent).toContain("文献快照");
 });
 
 it("renders the fixed thirteen-stage workflow even when later stages have no nodes", async () => {

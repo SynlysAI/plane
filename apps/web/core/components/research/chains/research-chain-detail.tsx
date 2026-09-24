@@ -13,11 +13,9 @@ import type {
   TExternalReference,
   TPeriodicReport,
   TResearchChain,
-  TResearchChainEvent,
   TResearchChainMember,
   TResearchChainNode,
   TResearchChainNodeAction,
-  TResearchChainSnapshot,
 } from "@plane/types";
 // components
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
@@ -26,9 +24,15 @@ import { ResearchTabLink } from "@/components/research/common/research-tab-link"
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { pickCurrentNode } from "@/components/research/chains/research-selection";
 import { ResearchAgentSidePanel } from "@/components/research/agent/research-agent-side-panel";
-import { ResearchChainGraph } from "@/components/research/chains/research-chain-graph";
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
-import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
+import {
+  buildResearchWorkflow,
+  type TResearchWorkflowStage,
+} from "@/components/research/chains/research-chain-workflow";
+import {
+  ResearchChainWorkflowStageDetail,
+  type TResearchChainStageNodeDetail,
+} from "@/components/research/chains/research-chain-workflow-stage-detail";
 import { ExperimentList } from "@/components/research/experiments/experiment-list";
 import { OutcomeList } from "@/components/research/outcomes/outcome-list";
 // hooks
@@ -48,13 +52,8 @@ type Props = {
   chainId: string;
 };
 
-type TNodeDetail = {
-  node: TResearchChainNode;
-  events: TResearchChainEvent[];
-  snapshots: TResearchChainSnapshot[];
-};
-
-type TChainTab = "overview" | "nodes" | "reports" | "experiments" | "references" | "members" | "replay";
+type TChainTab = "overview" | "nodes" | "reports" | "experiments" | "references" | "members";
+type TRequestedChainTab = TChainTab | "replay";
 
 const ACTIONS_BY_STATUS: Record<TResearchChainNode["status"], TResearchChainNodeAction[]> = {
   DRAFT: ["START", "ARCHIVE"],
@@ -104,19 +103,22 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
   MEMBER: "research.chains.members.role_member",
 };
 
-/** Research Chain topic page with fixed context, tabs, graph, evidence and members. */
+/** Research Chain topic page with fixed context, tabs, workflow evidence and members. */
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const memberStore = useMember();
-  const [searchParams] = useSearchParams();
-  const requestedTab = searchParams.get("tab") as TChainTab | null;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab") as TRequestedChainTab | null;
   const requestedNodeId = searchParams.get("node");
-  const activeTab: TChainTab = requestedTab ?? "nodes";
+  const activeTab: TChainTab = requestedTab === "replay" ? "nodes" : (requestedTab ?? "nodes");
   const [chain, setChain] = useState<TResearchChain | null>(null);
   const [nodes, setNodes] = useState<TResearchChainNode[]>([]);
   const [members, setMembers] = useState<TResearchChainMember[]>([]);
-  const [selected, setSelected] = useState<TNodeDetail | null>(null);
+  const [stageDetails, setStageDetails] = useState<TResearchChainStageNodeDetail[]>([]);
+  const [selected, setSelected] = useState<TResearchChainStageNodeDetail | null>(null);
+  const [stageDetailLoading, setStageDetailLoading] = useState(false);
+  const [stageDetailError, setStageDetailError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [forbidden, setForbidden] = useState(false);
@@ -135,23 +137,35 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [contextError, setContextError] = useState(false);
   const [agentNodeId, setAgentNodeId] = useState<string | null>(null);
   const agentEnabled = Boolean(research.identity?.sections?.research_agent);
-
-  const loadNodeDetail = useCallback(
-    async (nodeId: string) => {
-      try {
-        setSelected(await chainService.getChainNodeDetail(workspaceSlug, nodeId));
-      } catch {
-        setSelected(null);
-      }
-    },
-    [workspaceSlug]
-  );
+  const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
+  const workflow = useMemo(() => buildResearchWorkflow(nodes, current?.id ?? null), [current, nodes]);
+  const requestedStageId = searchParams.get("stage");
+  const requestedNode = nodes.find((node) => node.id === requestedNodeId);
+  const selectedStage =
+    workflow.stages.find((stage) => stage.id === requestedStageId) ??
+    workflow.stages.find(
+      (stage) => requestedNode && [...stage.nodeIds, ...stage.associatedNodeIds].includes(requestedNode.id)
+    ) ??
+    workflow.stages.find((stage) => stage.isCurrent) ??
+    workflow.stages[0];
+  const stageNodes = useMemo(() => {
+    if (!selectedStage) return [];
+    const ids = [...selectedStage.nodeIds, ...selectedStage.associatedNodeIds];
+    if (requestedNode && !ids.includes(requestedNode.id)) ids.push(requestedNode.id);
+    return ids
+      .map((nodeId) => nodes.find((node) => node.id === nodeId))
+      .filter((node): node is TResearchChainNode => Boolean(node));
+  }, [nodes, requestedNode, selectedStage]);
+  const stageNodeIds = stageNodes.map((node) => node.id).join(",");
+  const preferredNodeId = requestedNode?.id ?? selectedStage?.preferredNodeId ?? null;
 
   const load = useCallback(async () => {
     setLoading(true);
     setFailed(false);
     setForbidden(false);
+    setStageDetails([]);
     setSelected(null);
+    setStageDetailError(false);
     try {
       const [chainDetail, chainNodes, chainMembers] = await Promise.all([
         chainService.getChain(workspaceSlug, chainId),
@@ -161,8 +175,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       setChain(chainDetail);
       setNodes(chainNodes);
       setMembers(chainMembers);
-      const current = chainNodes.find((node) => node.id === requestedNodeId) ?? pickCurrentNode(chainNodes);
-      if (current) await loadNodeDetail(current.id);
     } catch (error) {
       const errorCode = (error as { error_code?: string })?.error_code;
       setForbidden(errorCode === "research_permission_denied");
@@ -170,11 +182,62 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     } finally {
       setLoading(false);
     }
-  }, [chainId, loadNodeDetail, requestedNodeId, workspaceSlug]);
+  }, [chainId, workspaceSlug]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const nodeIds = stageNodeIds ? stageNodeIds.split(",") : [];
+    if (activeTab !== "nodes" || !nodeIds.length) {
+      setStageDetails([]);
+      setSelected(null);
+      setStageDetailLoading(false);
+      setStageDetailError(false);
+      return;
+    }
+    let active = true;
+    setStageDetailLoading(true);
+    setStageDetailError(false);
+    void (async () => {
+      const responses = await Promise.allSettled(
+        nodeIds.map((nodeId) => chainService.getChainNodeDetail(workspaceSlug, nodeId))
+      );
+      if (!active) return;
+      const details = responses.flatMap((response) => (response.status === "fulfilled" ? [response.value] : []));
+      setStageDetails(details);
+      setSelected(details.find((detail) => detail.node.id === preferredNodeId) ?? details[0] ?? null);
+      setStageDetailError(responses.some((response) => response.status === "rejected"));
+      setStageDetailLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [activeTab, preferredNodeId, stageNodeIds, workspaceSlug]);
+
+  const selectStage = useCallback(
+    (stage: TResearchWorkflowStage) => {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("tab", "nodes");
+      nextParams.set("stage", stage.id);
+      if (stage.preferredNodeId) nextParams.set("node", stage.preferredNodeId);
+      else nextParams.delete("node");
+      setSearchParams(nextParams);
+    },
+    [searchParams, setSearchParams]
+  );
+
+  const selectNode = useCallback(
+    (nodeId: string) => {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("tab", "nodes");
+      if (selectedStage) nextParams.set("stage", selectedStage.id);
+      nextParams.set("node", nodeId);
+      setSearchParams(nextParams);
+    },
+    [searchParams, selectedStage, setSearchParams]
+  );
 
   useEffect(() => {
     void memberStore.workspace.fetchWorkspaceMembers(workspaceSlug).catch(() => undefined);
@@ -276,7 +339,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     setMemberError("");
     try {
       await chainService.removeChainMember(workspaceSlug, chainId, userId);
-      setMembers((current) => current.filter((member) => member.user_id !== userId));
+      setMembers((latestMembers) => latestMembers.filter((member) => member.user_id !== userId));
     } catch {
       setMemberError(t("research.chains.member_action_failed"));
     } finally {
@@ -284,7 +347,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     }
   };
 
-  const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
   const workspaceMembers = memberStore.workspace
     .getWorkspaceMemberIds(workspaceSlug)
     .map((userId) => memberStore.getUserDetails(userId))
@@ -304,8 +366,37 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     { id: "experiments", labelKey: "research.chains.tabs.experiments" },
     { id: "references", labelKey: "research.chains.tabs.references" },
     { id: "members", labelKey: "research.chains.tabs.members" },
-    { id: "replay", labelKey: "research.chains.tabs.replay" },
   ];
+  const selectedNodeActions = selected ? (
+    <div className="flex flex-wrap items-center gap-2 bg-surface-1 px-5 py-3">
+      {ACTIONS_BY_STATUS[selected.node.status].map((action) => (
+        <Button
+          key={action}
+          variant={action === "APPROVE" ? "primary" : "secondary"}
+          size="sm"
+          disabled={transitioning === selected.node.id}
+          onClick={() => void transition(selected.node, action)}
+        >
+          {t(`research.chains.action_${action.toLowerCase()}`)}
+        </Button>
+      ))}
+      {(selected.node.status === "ACTIVE" || selected.node.status === "WAITING_HUMAN") && (
+        <label className="flex flex-1 flex-col gap-1 text-11 text-tertiary">
+          <span>{t("research.chains.reason_label")}</span>
+          <input
+            value={reason}
+            aria-invalid={Boolean(actionError === t("research.chains.reason_required"))}
+            aria-describedby="chain-reason-error"
+            onChange={(event) => setReason(event.target.value)}
+            className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
+          />
+          <span id="chain-reason-error" className="text-11 text-danger-primary">
+            {actionError === t("research.chains.reason_required") ? actionError : ""}
+          </span>
+        </label>
+      )}
+    </div>
+  ) : null;
 
   if (loading) {
     return (
@@ -388,10 +479,10 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       <ResearchChainWorkflowRail
         nodes={nodes}
         currentNodeId={current?.id ?? null}
-        selectedNodeId={selected?.node.id ?? null}
-        onSelect={(nodeId) => {
+        selectedStageId={selectedStage?.id ?? null}
+        onSelectStage={(stage) => {
           setReason("");
-          void loadNodeDetail(nodeId);
+          selectStage(stage);
         }}
       />
 
@@ -465,46 +556,20 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
         {activeTab === "nodes" && (
           <section>
-            <ResearchChainGraph
-              nodes={nodes}
-              selectedNodeId={selected?.node.id ?? null}
-              onSelect={(nodeId) => {
-                setReason("");
-                void loadNodeDetail(nodeId);
-              }}
-            />
-            {selected && (
-              <>
-                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-y border-subtle bg-surface-1 px-5 py-3">
-                  {ACTIONS_BY_STATUS[selected.node.status].map((action) => (
-                    <Button
-                      key={action}
-                      variant={action === "APPROVE" ? "primary" : "secondary"}
-                      size="sm"
-                      disabled={transitioning === selected.node.id}
-                      onClick={() => void transition(selected.node, action)}
-                    >
-                      {t(`research.chains.action_${action.toLowerCase()}`)}
-                    </Button>
-                  ))}
-                  {(selected.node.status === "ACTIVE" || selected.node.status === "WAITING_HUMAN") && (
-                    <label className="flex flex-1 flex-col gap-1 text-11 text-tertiary">
-                      <span>{t("research.chains.reason_label")}</span>
-                      <input
-                        value={reason}
-                        aria-invalid={Boolean(actionError === t("research.chains.reason_required"))}
-                        aria-describedby="chain-reason-error"
-                        onChange={(event) => setReason(event.target.value)}
-                        className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
-                      />
-                      <span id="chain-reason-error" className="text-11 text-danger-primary">
-                        {actionError === t("research.chains.reason_required") ? actionError : ""}
-                      </span>
-                    </label>
-                  )}
-                </div>
-                <ResearchChainNodeDetail {...selected} />
-              </>
+            {selectedStage && (
+              <ResearchChainWorkflowStageDetail
+                stage={selectedStage}
+                nodes={stageNodes}
+                details={stageDetails}
+                selectedNodeId={selected?.node.id ?? null}
+                loading={stageDetailLoading}
+                error={stageDetailError}
+                onSelectNode={(nodeId) => {
+                  setReason("");
+                  selectNode(nodeId);
+                }}
+                actionSlot={selectedNodeActions}
+              />
             )}
             <section className="border-t border-subtle p-5">
               <h4 className="text-13 font-semibold text-primary">{t("research.chains.create_node_title")}</h4>
@@ -683,23 +748,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 )}
               </TableBody>
             </Table>
-          </section>
-        )}
-
-        {activeTab === "replay" && selected && (
-          <section className="p-5">
-            <ResearchChainNodeDetail {...selected} />
-            <ol className="mt-4 space-y-0 border-l border-subtle pl-4" role="list">
-              {selected.events.map((event) => (
-                <li key={event.event_id} className="relative py-2 pl-4">
-                  <span className="bg-border-strong absolute top-4 -left-[21px] size-2 rounded-full" aria-hidden />
-                  <p className="text-12 font-medium text-primary">{event.summary || event.event_type}</p>
-                  <p className="mt-1 text-11 text-tertiary">
-                    {formatResearchDateTime(event.occurred_at, currentLocale)} · {event.actor_type}
-                  </p>
-                </li>
-              ))}
-            </ol>
           </section>
         )}
       </div>

@@ -57,8 +57,8 @@ it("renders archived stages with a muted archived style instead of a future styl
       <ResearchChainWorkflowRail
         nodes={[archived]}
         currentNodeId={null}
-        selectedNodeId={null}
-        onSelect={() => undefined}
+        selectedStageId="summary"
+        onSelectStage={() => undefined}
       />
     );
   });
@@ -77,8 +77,8 @@ it("keeps the shared marker readable inside shared stage buttons", async () => {
       <ResearchChainWorkflowRail
         nodes={[topic]}
         currentNodeId={topic.id}
-        selectedNodeId={null}
-        onSelect={() => undefined}
+        selectedStageId="topic_evaluation"
+        onSelectStage={() => undefined}
       />
     );
   });
@@ -87,12 +87,34 @@ it("keeps the shared marker readable inside shared stage buttons", async () => {
   expect(selectionButton?.textContent).toContain("共享节点");
 });
 
-it("explains why a stage without nodes is disabled", async () => {
+it("keeps a stage without nodes clickable and explains its empty state", async () => {
   await act(async () => {
     root.render(
-      <ResearchChainWorkflowRail nodes={[]} currentNodeId={null} selectedNodeId={null} onSelect={() => undefined} />
+      <ResearchChainWorkflowRail
+        nodes={[]}
+        currentNodeId={null}
+        selectedStageId={null}
+        onSelectStage={() => undefined}
+      />
     );
   });
-  const disabled = container.querySelector<HTMLButtonElement>("button:disabled");
-  expect(disabled?.getAttribute("title")).toContain("该阶段尚未产生实际节点");
+  const buttons = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')];
+  expect(buttons).toHaveLength(13);
+  expect(buttons.every((button) => !button.disabled)).toBe(true);
+  expect(buttons[0].getAttribute("title")).toContain("该阶段尚未产生实际节点");
+});
+
+it("selects the clicked stage without deriving it from a node", async () => {
+  const onSelectStage = vi.fn();
+  await act(async () => {
+    root.render(
+      <ResearchChainWorkflowRail nodes={[]} currentNodeId={null} selectedStageId={null} onSelectStage={onSelectStage} />
+    );
+  });
+  const transfer = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')].find((button) =>
+    button.textContent?.includes("转化")
+  );
+  transfer?.click();
+  expect(onSelectStage).toHaveBeenCalledTimes(1);
+  expect(onSelectStage.mock.calls[0][0]).toMatchObject({ id: "transfer", preferredNodeId: null });
 });
