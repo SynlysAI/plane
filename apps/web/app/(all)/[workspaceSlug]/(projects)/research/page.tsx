@@ -130,55 +130,62 @@ function WorkspaceResearchOverviewPage() {
       <div className="h-full overflow-y-auto p-5">
         {workspaceSlug && <ResearchTodoIndex workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />}
 
-        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <section className="rounded-xl border border-subtle bg-surface-1" aria-label={t("research.portal.title")}>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
-              <div>
-                <h3 className="text-13 font-semibold text-primary">{t("research.overview.chain_section")}</h3>
-                <p className="mt-0.5 text-11 text-tertiary">{t("research.overview.chain_section_hint")}</p>
-              </div>
-              {currentChain && (
-                <Link
-                  href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
-                  className="text-12 text-accent-primary hover:underline"
-                >
-                  {t("research.home_summary.open_chain")}
-                </Link>
+        <section className="mt-6 overflow-hidden rounded-xl border border-subtle bg-surface-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+            <div>
+              <h3 className="text-13 font-semibold text-primary">{t("research.overview.chain_section")}</h3>
+              <p className="mt-0.5 text-11 text-tertiary">{t("research.overview.chain_section_hint")}</p>
+            </div>
+            {currentChain && (
+              <Link
+                href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
+                className="text-12 text-accent-primary hover:underline"
+              >
+                {t("research.home_summary.open_chain")}
+              </Link>
+            )}
+          </div>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div aria-label={t("research.portal.title")}>
+              {chainsError ? (
+                <p className="p-4 text-12 text-secondary">{t("research.portal.load_failed")}</p>
+              ) : visibleChains.length ? (
+                <ul className="divide-y divide-subtle" role="list">
+                  {visibleChains.slice(0, 6).map((chain) => (
+                    <li key={chain.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <Link
+                        href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                        className="min-w-0 flex-1 truncate text-12 text-primary hover:text-accent-primary"
+                      >
+                        {chain.project_name ?? chain.project}
+                      </Link>
+                      <span className="text-11 text-tertiary">
+                        {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
+                      </span>
+                      <span className="text-11 text-tertiary">{new Date(chain.updated_at).toLocaleDateString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="p-4 text-12 text-secondary">{t("research.chains.empty")}</p>
               )}
             </div>
-            {chainsError ? (
-              <p className="p-4 text-12 text-secondary">{t("research.portal.load_failed")}</p>
-            ) : visibleChains.length ? (
-              <ul className="divide-y divide-subtle" role="list">
-                {visibleChains.slice(0, 6).map((chain) => (
-                  <li key={chain.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <Link
-                      href={`/${workspaceSlug}/research/chains/${chain.id}`}
-                      className="min-w-0 flex-1 truncate text-12 text-primary hover:text-accent-primary"
-                    >
-                      {chain.project}
-                    </Link>
-                    <span className="text-11 text-tertiary">{chain.status}</span>
-                    <span className="text-11 text-tertiary">{new Date(chain.updated_at).toLocaleDateString()}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="p-4 text-12 text-secondary">{t("research.chains.empty")}</p>
-            )}
-          </section>
 
-          <section className="rounded-xl border border-subtle bg-surface-1 p-4" aria-label={t("research.nav.summary")}>
-            <h3 className="text-13 font-semibold text-primary">{t("research.nav.summary")}</h3>
-            <p className="mt-1 text-11 text-tertiary">{t("research.summary.description")}</p>
-            <Link
-              href={`/${workspaceSlug}/research?view=report_submission`}
-              className="mt-3 inline-block rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
+            <aside
+              className="border-t border-subtle p-4 xl:border-t-0 xl:border-l"
+              aria-label={t("research.nav.summary")}
             >
-              {t("research.overview.open_summary")}
-            </Link>
-          </section>
-        </div>
+              <h4 className="text-12 font-semibold text-primary">{t("research.nav.summary")}</h4>
+              <p className="mt-1 text-11 text-tertiary">{t("research.summary.description")}</p>
+              <Link
+                href={`/${workspaceSlug}/research?view=report_submission`}
+                className="mt-3 inline-block rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
+              >
+                {t("research.overview.open_summary")}
+              </Link>
+            </aside>
+          </div>
+        </section>
 
         {workspaceSlug && !research.isIaV2Enabled && research.canSee("research_chain") && (
           <div className="mt-6">
