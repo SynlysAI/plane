@@ -67,11 +67,11 @@ class TestResearchSettingsEndpoint:
         assert payload["pdf_max_mb"] == 100
         assert payload["markdown_max_mb"] == 5
         assert payload["audit_retention_days"] == 0
-        assert payload["research_ia_v2"] is False
+        assert payload["research_ia_v2"] is True
         assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
         identity = env["member_client"].get(env["identity_url"]).json()
         assert identity["workspace_enabled"] is True
-        assert identity["research_ia_v2"] is False
+        assert identity["research_ia_v2"] is True
 
     def test_workspace_without_row_renders_research_by_default(self, env):
         assert not WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()

@@ -91,7 +91,7 @@ AUTH_SECRET=test-secret .venv/bin/pytest -q \
    - 保持 `research_chain_enabled=false`、`research_agent_enabled=false`、`research_external_rag_enabled=false`。
    - 执行 Plane migrations 0146–0156；所有变更均为 additive。
    - 验证 RAGPortal `/api/health` 与 Synlora `/api/health`。
-   - IA v2 不随部署自动开启；先确认 Chain 闭环可用，再为试点 Workspace 打开 `research_ia_v2`。
+   - IA v2 默认开启；灰度前先确认 Chain 闭环可用，回退时由工作区管理员关闭 `research_ia_v2`。
 3. **内部试点**
    - 仅给试点 Workspace 打开 `research_account_link_enabled`、`research_external_rag_enabled`、`research_chain_enabled`、`research_agent_enabled`。
    - 为学生绑定 ACTIVE Synlora AccountLink。

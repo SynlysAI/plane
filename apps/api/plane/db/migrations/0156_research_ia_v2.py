@@ -16,6 +16,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="workspaceresearchsetting",
             name="research_ia_v2",
-            field=models.BooleanField(default=False),
+            field=models.BooleanField(default=True),
         ),
     ]
