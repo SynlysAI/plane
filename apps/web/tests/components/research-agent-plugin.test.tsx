@@ -175,6 +175,22 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
   expect(container.textContent).toContain("ANALYSIS_RESULT v2");
 });
 
+it("shows the Chinese degradation path when Synlora session creation fails", async () => {
+  mocks.createSession.mockRejectedValueOnce({
+    error_code: "AGENT_UPSTREAM_NOT_CONFIGURED",
+    message: "Synlora is unavailable.",
+  });
+  const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
+  await act(async () => {
+    root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("智能体运行时尚未配置");
+  expect(container.textContent).toContain("研究链功能仍可继续使用");
+  expect(container.textContent).not.toContain("你没有访问当前科研对象的权限");
+});
+
 it("renders structured approval cards and submits an idempotent Agent decision", async () => {
   const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
   mocks.createSession.mockResolvedValue({ ...session, status: "WAITING_APPROVAL" });

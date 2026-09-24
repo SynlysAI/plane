@@ -25,6 +25,7 @@ import { formatResearchDateTime } from "@/components/research/common/research-fo
 import { pickCurrentNode } from "@/components/research/chains/research-selection";
 import { ResearchAgentSidePanel } from "@/components/research/agent/research-agent-side-panel";
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
+import { ResearchChainKnowledgePanel } from "@/components/research/chains/research-chain-knowledge-panel";
 import {
   buildResearchWorkflow,
   type TResearchWorkflowStage,
@@ -663,6 +664,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         {activeTab === "references" && (
           <section className="p-5">
             <p className="text-11 text-tertiary">{t("research.chains.context.external_hint")}</p>
+            {current && (
+              <div className="mt-4">
+                <ResearchChainKnowledgePanel workspaceSlug={workspaceSlug} chainId={chainId} nodeId={current.id} />
+              </div>
+            )}
             <ul className="mt-4 divide-y divide-subtle rounded-lg border border-subtle bg-surface-1" role="list">
               {(contextReferences ?? []).map((reference) => (
                 <li key={reference.id} className="px-4 py-3">

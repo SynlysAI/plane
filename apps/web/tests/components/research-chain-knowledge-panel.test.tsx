@@ -93,6 +93,22 @@ it("selects a scoped knowledge base and uploads through the BFF", async () => {
   expect(container.textContent).toContain("PENDING");
 });
 
+it("explains an upstream authentication failure in Chinese", async () => {
+  mocks.getKnowledgeBases.mockResolvedValueOnce({
+    items: [],
+    degraded: true,
+    degraded_reason: "unauthorized",
+  });
+  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
+  await act(async () => {
+    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("认证失败");
+  expect(container.textContent).toContain("人工记录可继续");
+});
+
 it("restores pending uploads for the selected node after a page reload", async () => {
   const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
   mocks.getKnowledgeUploads.mockResolvedValueOnce({

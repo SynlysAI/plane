@@ -1325,6 +1325,7 @@
       "panel_title": "RAGPortal 知识库",
       "reasons": {
         "not_configured": "服务尚未配置",
+        "unauthorized": "认证失败",
         "disabled": "连接已停用",
         "http_error": "服务返回异常",
         "timeout": "连接超时",
