@@ -20,35 +20,35 @@
 
 前置：WeKnora 已部署于 `http://10.26.15.93:8000/`，不自建；Synlora 必须单实例（`workers=1`）。
 
-| #   | 动作                                   | 自检命令与预期                                                                                                                                              | 结果 | 证据 |
-| --- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---- |
-| 1   | 确认 WeKnora 可达                      | `curl -s http://10.26.15.93:8000/` 返回 HTTP 响应（非超时/拒绝）                                                                                            | [ ]  |      |
-| 2   | 启动 RAGPortal                         | `cd RAGPortal/backend && conda activate ragportal && uvicorn app.main:app --host 0.0.0.0 --port 8004`；`curl -s http://127.0.0.1:8004/api/health` 正常 JSON | [ ]  |      |
-| 3   | 启动 Synlora（单实例）                 | `cd Synlora/apps/web/backend && conda activate synlysagent && python run_uvicorn.py`；`curl -s http://127.0.0.1:8005/api/health` 正常 JSON                  | [ ]  |      |
-| 4   | 更新 Plane env 并重启容器              | `docker compose restart api worker beat-worker`；`docker ps` 确认容器 Up                                                                                    | [ ]  |      |
-| 5   | 容器内验证两个上游服务                 | `docker exec plane-api-1 curl -s http://172.19.0.1:8004/api/health` 与 `:8005/api/health` 均通                                                              | [ ]  |      |
-| 6   | 录入 RAGPortal 集成连接并启用          | 科研管理 / 集成界面连接测试返回 success，非 `not_configured`                                                                                                | [ ]  |      |
-| 7   | 开四个 research 开关并绑定 AccountLink | 试点学生账号（`liuyang.phd@ai4ms.local`）AccountLink 状态 ACTIVE                                                                                            | [ ]  |      |
+| #   | 动作                                   | 自检命令与预期                                                                                                                                                     | 结果 | 证据                                 |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------------------------------ |
+| 1   | 确认 WeKnora 可达                      | `curl -s http://10.26.15.93:8000/` 返回 HTTP 响应（非超时/拒绝）                                                                                                   | [x]  | `health/20260924-L1.md`              |
+| 2   | 启动 RAGPortal                         | `cd RAGPortal/backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8004`；`curl -s http://127.0.0.1:8004/api/health` 正常 JSON                | [x]  | `health/20260924-L1.md`              |
+| 3   | 启动 Synlora（单实例）                 | `cd Synlora/apps/web/backend && .venv/bin/python run_uvicorn.py`；`curl -s http://127.0.0.1:8005/api/health` 正常 JSON                                             | [x]  | `health/20260924-L1.md`              |
+| 4   | 更新 Plane env 并重建容器              | `docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d --force-recreate --no-deps api worker beat-worker`；`docker ps` 确认容器 Up | [x]  | `health/20260924-L1.md`              |
+| 5   | 容器内验证两个上游服务                 | 容器内 Python urllib 访问 `http://172.19.0.1:8004/api/health` 与 `:8005/api/health` 均通（API 镜像不含 curl）                                                      | [x]  | `health/20260924-L1.md`              |
+| 6   | 录入 RAGPortal 集成连接并启用          | 科研管理 / 集成界面连接测试返回 success，非 `not_configured`                                                                                                       | [x]  | `links/20260924-L1-RAGPortal-BFF.md` |
+| 7   | 开四个 research 开关并绑定 AccountLink | 试点学生账号（`liuyang.phd@ai4ms.local`）AccountLink 状态 ACTIVE                                                                                                   | [x]  | `health/20260924-L1.md`              |
 
 ### 五服务健康快照（每轮联调开始时记录）
 
-| 服务      | 时间 | 状态 | 版本 / 提交号 | 备注       |
-| --------- | ---- | ---- | ------------- | ---------- |
-| Plane Web |      |      |               |            |
-| Plane API |      |      |               |            |
-| Synlora   |      |      |               | 单实例确认 |
-| RAGPortal |      |      |               |            |
-| WeKnora   |      |      | 已部署实例    |            |
+| 服务      | 时间             | 状态 | 版本 / 提交号   | 备注               |
+| --------- | ---------------- | ---- | --------------- | ------------------ |
+| Plane Web | 2026-09-24 23:50 | OK   | 33bacf0db       | `/` 返回 200       |
+| Plane API | 2026-09-24 23:49 | OK   | c282ecc20       | 已加载集成环境变量 |
+| Synlora   | 2026-09-24 23:50 | OK   | 1.4.0 / f59f6fb | tmux 单实例确认    |
+| RAGPortal | 2026-09-24 23:50 | OK   | 5c7d0a9         | tmux 单实例确认    |
+| WeKnora   | 2026-09-24 23:33 | OK   | 已部署实例      | 内网部署           |
 
 ## 2. L2：单服务契约回归
 
-环境口径：RAGPortal 服务启动用 conda 环境 `ragportal`；本节契约测试用 `RAGPortal/backend/.venv` 中的 pytest。两套环境并存、用途不同，不要混用。
+环境口径：当前联调机的 RAGPortal 服务与契约测试均使用 `RAGPortal/backend/.venv`；Synlora 使用后端仓内 `.venv`。不要混用其他项目的 Python 环境。
 
-| 用例 | 命令要点                                                                                                                                                   | 结果 | 记录（passed/skipped） | 证据 |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------- | ---- |
-| L2-1 | Plane API contract：`docker exec plane-api-tests-live pytest -q` 跑 `test_research_phase1_e2e.py` + `test_research_agent_orchestrator.py`                  | [ ]  |                        |      |
-| L2-2 | Synlora：`.venv/bin/pytest -q` 跑 `test_research_context.py` / `test_research_agent_contracts.py` / `test_runtime_assembly.py` / `test_session_runtime.py` | [ ]  |                        |      |
-| L2-3 | RAGPortal：`backend/.venv` 全量 pytest（带 `AUTH_SECRET` / `AI4MS_BASE_URL` / `WEKNORA_*` 测试环境变量）                                                   | [ ]  |                        |      |
+| 用例 | 命令要点                                                                                                                                                              | 结果 | 记录（passed/skipped） | 证据                    |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------- | ----------------------- |
+| L2-1 | Plane API contract：`docker compose -f docker-compose-test.yml run --rm api-tests pytest -q` 跑 `test_research_phase1_e2e.py` + `test_research_agent_orchestrator.py` | [x]  | 3 passed / 0 skipped   | `health/20260924-L2.md` |
+| L2-2 | Synlora：`.venv/bin/pytest -q` 跑 `test_research_context.py` / `test_research_agent_contracts.py` / `test_runtime_assembly.py` / `test_session_runtime.py`            | [x]  | 19 passed / 6 skipped  | `health/20260924-L2.md` |
+| L2-3 | RAGPortal：`backend/.venv` 全量 pytest（带 `AUTH_SECRET` / `AI4MS_BASE_URL` / `WEKNORA_*` 测试环境变量）                                                              | [x]  | 31 passed / 0 skipped  | `health/20260924-L2.md` |
 
 ## 3. L3：双服务链路验证
 
@@ -224,14 +224,16 @@
 
 登记纪律：发现即登记、当日不过夜；字段口径与计划 §7.1 一致。状态取值：新建 / 定界中 / 修复中 / 回归中 / 已关闭。
 
-| 编号 | 日期 | 层级 | 严重度 | 负责分区 | 复现步骤 | 预期 | 实际 | 根因 | 修复提交 | 回归证据 | 状态 |
-| ---- | ---- | ---- | ------ | -------- | -------- | ---- | ---- | ---- | -------- | -------- | ---- |
-|      |      |      |        |          |          |      |      |      |          |          |      |
+| 编号    | 日期       | 层级 | 严重度 | 负责分区          | 复现步骤                                         | 预期           | 实际                    | 根因                                                                                      | 修复提交  | 回归证据                                                        | 状态   |
+| ------- | ---------- | ---- | ------ | ----------------- | ------------------------------------------------ | -------------- | ----------------------- | ----------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------- | ------ |
+| P15-001 | 2026-09-24 | L1   | P0     | Plane integration | 启动 RAGPortal 后，Plane BFF 调用 `/api/kb/list` | 返回知识库列表 | HTTP 401 `unauthorized` | Plane HMAC 模式发送 `X-AI4MS-*` 请求头；RAGPortal 契约要求共享 secret 签发的 Bearer token | c282ecc20 | 单测 23 passed；真实 BFF HTTP 200、5 个知识库、调用日志 SUCCESS | 已关闭 |
 
 ## 9. 附录 B：证据记录表
 
 目录约定：`plane/docs/evidence/phase-1.5/` 下设 `health/`、`links/`、`switches/`、`roles/`、`e2e/`、`degradation/`；文件名格式 `YYYYMMDD-用例编号.扩展名`；含敏感信息的截图先脱敏再归档。
 
-| 编号 | 层级 | 用例 | 证据类型（截图/日志/导出文件） | 文件路径 | 备注 |
-| ---- | ---- | ---- | ------------------------------ | -------- | ---- |
-|      |      |      |                                |          |      |
+| 编号    | 层级        | 用例                                 | 证据类型（截图/日志/导出文件） | 文件路径                                                     | 备注                      |
+| ------- | ----------- | ------------------------------------ | ------------------------------ | ------------------------------------------------------------ | ------------------------- |
+| L1      | 环境健康    | 七步自检与五服务快照                 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L1.md`              | 2026-09-24 全部通过       |
+| L2      | 单服务契约  | Plane / Synlora / RAGPortal 测试摘要 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L2.md`              | 3+19+31 passed            |
+| P15-001 | L1 缺陷回归 | Plane BFF → RAGPortal 真实调用       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260924-L1-RAGPortal-BFF.md` | HTTP 200 / 5 KB / SUCCESS |
