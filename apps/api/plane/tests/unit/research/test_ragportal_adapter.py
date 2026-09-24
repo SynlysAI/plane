@@ -1,5 +1,10 @@
 """RAGPortal v1 endpoint contract tests."""
 
+import base64
+import hashlib
+import hmac
+import json
+
 from unittest.mock import patch
 
 import pytest
@@ -49,6 +54,26 @@ def test_kb_list_uses_actual_ragportal_path(client):
     assert result.degraded is False
     assert result.items[0]["external_id"] == "kb-1"
     assert get.call_args.args[0].endswith("/api/kb/list")
+
+
+def test_ragportal_hmac_uses_ai4ms_bearer_token(client, settings):
+    """RAGPortal HMAC mode must use the AI4MS bearer-token contract."""
+    client.connection.auth_mode = "HMAC"
+    client.connection.credential_ref = "RAGPORTAL_AUTH_SECRET"
+    client.connection.save(update_fields=["auth_mode", "credential_ref"])
+    settings.RAGPORTAL_AUTH_SECRET = "top-secret"
+
+    headers = client.headers(path="/api/kb/list")
+
+    token = headers["Authorization"].removeprefix("Bearer ")
+    payload_b64, signature = token.rsplit(".", 1)
+    expected_signature = hmac.new(b"top-secret", payload_b64.encode(), hashlib.sha256).hexdigest()
+    padding = 4 - len(payload_b64) % 4
+    payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "=" * (padding % 4)))
+    assert signature == expected_signature
+    assert payload["sub"] == "plane-research-bff"
+    assert payload["role"] == "user"
+    assert "X-AI4MS-Signature" not in headers
 
 
 def test_upload_passes_research_scope_metadata_and_request_id(client):
