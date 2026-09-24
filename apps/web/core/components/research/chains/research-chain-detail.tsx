@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Button, getButtonStyling } from "@plane/propel/button";
+import { Button } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -24,6 +23,7 @@ import type {
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
+import { ResearchAgentSidePanel } from "@/components/research/agent/research-agent-side-panel";
 import { ResearchChainGraph } from "@/components/research/chains/research-chain-graph";
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
 import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
@@ -151,6 +151,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [contextReports, setContextReports] = useState<TPeriodicReport[] | null>(null);
   const [contextReferences, setContextReferences] = useState<TExternalReference[] | null>(null);
   const [contextError, setContextError] = useState(false);
+  const [agentNodeId, setAgentNodeId] = useState<string | null>(null);
   const agentEnabled = Boolean(research.identity?.sections?.research_agent);
 
   const loadNodeDetail = useCallback(
@@ -392,12 +393,9 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               {t("research.chains.refresh")}
             </Button>
             {agentEnabled && current && (
-              <Link
-                href={`/${workspaceSlug}/research/chains/${chainId}/nodes/${current.id}/agent`}
-                className={getButtonStyling("primary", "base")}
-              >
+              <Button variant="primary" size="base" onClick={() => setAgentNodeId(current.id)}>
                 {t("research.chains.open_agent")}
-              </Link>
+              </Button>
             )}
           </div>
         </div>
@@ -425,6 +423,14 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           ))}
         </TabNavigationList>
       </nav>
+
+      {agentNodeId && (
+        <ResearchAgentSidePanel
+          workspaceSlug={workspaceSlug}
+          chainNodeId={agentNodeId}
+          onClose={() => setAgentNodeId(null)}
+        />
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {actionError && (

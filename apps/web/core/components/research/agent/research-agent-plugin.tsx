@@ -19,6 +19,8 @@ const agentService = new ResearchAgentService();
 type Props = {
   workspaceSlug: string;
   chainNodeId: string;
+  /** "panel" renders a condensed side-panel layout; "page" keeps the full workbench. */
+  variant?: "page" | "panel";
 };
 
 type TPluginState =
@@ -121,7 +123,11 @@ function sessionState(session: TResearchAgentSession): TPluginState {
 }
 
 /** Same-origin Research Agent workbench with structured cards, drawers and trace filters. */
-export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug, chainNodeId }: Props) {
+export const ResearchAgentPlugin = function ResearchAgentPlugin({
+  workspaceSlug,
+  chainNodeId,
+  variant = "page",
+}: Props) {
   const { t } = useTranslation();
   const [session, setSession] = useState<TResearchAgentSession | null>(null);
   const [events, setEvents] = useState<TAgentRunEvent[]>([]);
@@ -364,6 +370,149 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
   const authorizedResourceCount =
     (session?.assembly.allowed_knowledge_base_ids.length ?? 0) + (session?.assembly.allowed_file_ids.length ?? 0);
 
+  const runtimeSections = (
+    <>
+      <section className="border-b border-subtle p-4">
+        <h3 className="text-12 font-semibold text-primary">{t("research.agent.tools_title")}</h3>
+        {toolEvents.length ? (
+          <ul className="mt-2 space-y-2" role="list">
+            {toolEvents.map((event) => {
+              const status = toolStatus(event.payload);
+              const risk = riskLevel(event.payload);
+              const toolName =
+                payloadText(event.payload, ["tool_name", "tool", "name", "capability"]) ||
+                eventLabel(event.event_type, t);
+              const scope = payloadText(event.payload, ["capability_scope", "scope", "scope_id"]);
+              const input = payloadText(event.payload, ["input_summary", "query", "input", "prompt"]);
+              const outputs = payloadReferences(event.payload, ["output_refs", "output", "references"]);
+              return (
+                <li
+                  key={`tool-${event.run_id}-${event.seq}`}
+                  id={`tool-${event.seq}`}
+                  className="rounded-lg border border-subtle bg-surface-1 p-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-11 font-semibold text-primary">{toolName}</p>
+                    <ResearchStatusBadge status={status} size="sm">
+                      {t(`research.agent.tool_status.${status.toLowerCase()}`)}
+                    </ResearchStatusBadge>
+                  </div>
+                  <dl className="mt-2 space-y-1 text-11">
+                    {scope && (
+                      <div className="flex gap-2">
+                        <dt className="text-tertiary">{t("research.agent.tool_scope")}</dt>
+                        <dd className="min-w-0 flex-1 break-words text-secondary">{scope}</dd>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <dt className="text-tertiary">{t("research.agent.tool_risk")}</dt>
+                      <dd className="text-secondary">{t(`research.agent.risk.${risk.toLowerCase()}`)}</dd>
+                    </div>
+                    {input && (
+                      <div className="flex gap-2">
+                        <dt className="text-tertiary">{t("research.agent.tool_input")}</dt>
+                        <dd className="min-w-0 flex-1 break-words text-secondary">{input}</dd>
+                      </div>
+                    )}
+                    {outputs.length > 0 && (
+                      <div className="flex gap-2">
+                        <dt className="text-tertiary">{t("research.agent.tool_output")}</dt>
+                        <dd className="min-w-0 flex-1 break-words text-secondary">{outputs.join("；")}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  <button
+                    type="button"
+                    onClick={() => jumpToEvent(event.seq)}
+                    className="mt-2 text-11 text-accent-primary hover:underline"
+                  >
+                    {t("research.agent.open_trace")}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="mt-2 text-11 text-tertiary">{t("research.agent.tools_empty")}</p>
+        )}
+      </section>
+
+      <section className="border-b border-subtle p-4">
+        <h3 className="text-12 font-semibold text-primary">{t("research.agent.artifacts_title")}</h3>
+        <button
+          type="button"
+          onClick={() => setArtifactDrawerOpen(true)}
+          className="mt-2 rounded-md border border-subtle px-3 py-1.5 text-11 text-secondary hover:bg-surface-2"
+        >
+          {t("research.agent.open_artifact")}
+        </button>
+        <ul className="mt-3 space-y-2" role="list">
+          {artifactEvents.map((event) => {
+            const summary = payloadText(event.payload, ["summary", "content", "artifact_type", "action"]);
+            return (
+              <li key={`artifact-${event.run_id}-${event.seq}`} className="rounded-md border border-subtle p-3">
+                <p className="text-11 font-medium text-primary">{eventLabel(event.event_type, t)}</p>
+                {summary && <p className="mt-1 text-11 text-secondary">{summary}</p>}
+              </li>
+            );
+          })}
+          {!artifactEvents.length && <li className="text-11 text-tertiary">{t("research.agent.artifacts_empty")}</li>}
+        </ul>
+      </section>
+
+      <section className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-12 font-semibold text-primary">{t("research.agent.trace_title")}</h3>
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={traceTypeFilter}
+              onChange={(event) => setTraceTypeFilter(event.target.value)}
+              aria-label={t("research.agent.trace_type_filter")}
+              className="rounded-md border border-subtle bg-surface-1 px-2 py-1 text-11 text-primary"
+            >
+              <option value="">{t("research.agent.trace_all_types")}</option>
+              {traceTypes.map((type) => (
+                <option key={type} value={type}>
+                  {eventLabel(type, t)}
+                </option>
+              ))}
+            </select>
+            <select
+              value={traceStatusFilter}
+              onChange={(event) => setTraceStatusFilter(event.target.value)}
+              aria-label={t("research.agent.trace_status_filter")}
+              className="rounded-md border border-subtle bg-surface-1 px-2 py-1 text-11 text-primary"
+            >
+              <option value="">{t("research.agent.trace_all_statuses")}</option>
+              {traceStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {t(`research.agent.tool_status.${status.toLowerCase()}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <ol className="mt-3 space-y-2" role="list">
+          {visibleEvents.map((event) => (
+            <li key={`trace-${event.run_id}-${event.seq}`} className="flex items-center justify-between gap-2 text-11">
+              <span className="min-w-0 truncate text-tertiary">
+                <span className="font-medium text-secondary">#{event.seq}</span> {eventLabel(event.event_type, t)}
+              </span>
+              <button
+                type="button"
+                onClick={() => jumpToEvent(event.seq)}
+                className="shrink-0 text-accent-primary hover:underline"
+              >
+                {t("research.agent.open_trace")}
+              </button>
+            </li>
+          ))}
+          {!visibleEvents.length && <li className="text-11 text-tertiary">{t("research.agent.trace_empty")}</li>}
+        </ol>
+      </section>
+    </>
+  );
+
   return (
     <section className="flex h-full flex-col overflow-hidden" aria-label={t("research.agent.description")}>
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-subtle bg-surface-1 px-5 py-3">
@@ -395,10 +544,17 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
           <Button variant="secondary" size="base" onClick={() => setArtifactDrawerOpen(true)}>
             {t("research.agent.open_artifact")}
           </Button>
-          <Button variant="secondary" size="base" onClick={() => void reconnect()} disabled={!session || reconnecting}>
-            {t("research.agent.reconnect")}
-          </Button>
-          {(state === "closed" || state === "error") && (
+          {variant === "page" && (
+            <Button
+              variant="secondary"
+              size="base"
+              onClick={() => void reconnect()}
+              disabled={!session || reconnecting}
+            >
+              {t("research.agent.reconnect")}
+            </Button>
+          )}
+          {variant === "page" && (state === "closed" || state === "error") && (
             <Button variant="secondary" size="base" onClick={() => window.location.reload()}>
               {t("research.agent.reload_context")}
             </Button>
@@ -411,20 +567,28 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
           >
             {t("research.agent.stop")}
           </Button>
-          <Button
-            variant="secondary"
-            size="base"
-            onClick={() => void close()}
-            disabled={!session || session.status === "CLOSED"}
-          >
-            {t("research.agent.close")}
-          </Button>
+          {variant === "page" && (
+            <Button
+              variant="secondary"
+              size="base"
+              onClick={() => void close()}
+              disabled={!session || session.status === "CLOSED"}
+            >
+              {t("research.agent.close")}
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_440px]">
-        <div className="flex min-h-0 flex-col">
-          <div className="border-b border-subtle px-5 py-3">
+      <div
+        className={
+          variant === "panel"
+            ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+            : "grid min-h-0 flex-1 grid-cols-1 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_440px]"
+        }
+      >
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className={variant === "panel" ? "hidden" : "border-b border-subtle px-5 py-3"}>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <section>
                 <h3 className="text-11 font-semibold text-secondary">{t("research.agent.assembly_available")}</h3>
@@ -489,6 +653,15 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
             })}
           </div>
 
+          {variant === "panel" && (
+            <details className="border-t border-subtle">
+              <summary className="cursor-pointer list-none px-4 py-2 text-11 text-secondary hover:text-primary">
+                {t("research.agent.runtime_details")}
+              </summary>
+              <div className="max-h-72 overflow-y-auto border-t border-subtle">{runtimeSections}</div>
+            </details>
+          )}
+
           <form
             className="border-t border-subtle p-4"
             onSubmit={(formEvent) => {
@@ -518,150 +691,11 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({ workspaceSlug,
           </form>
         </div>
 
-        <aside className="min-h-0 border-subtle xl:border-l">
-          <section className="border-b border-subtle p-4">
-            <h3 className="text-12 font-semibold text-primary">{t("research.agent.tools_title")}</h3>
-            {toolEvents.length ? (
-              <ul className="mt-2 space-y-2" role="list">
-                {toolEvents.map((event) => {
-                  const status = toolStatus(event.payload);
-                  const risk = riskLevel(event.payload);
-                  const toolName =
-                    payloadText(event.payload, ["tool_name", "tool", "name", "capability"]) ||
-                    eventLabel(event.event_type, t);
-                  const scope = payloadText(event.payload, ["capability_scope", "scope", "scope_id"]);
-                  const input = payloadText(event.payload, ["input_summary", "query", "input", "prompt"]);
-                  const outputs = payloadReferences(event.payload, ["output_refs", "output", "references"]);
-                  return (
-                    <li
-                      key={`tool-${event.run_id}-${event.seq}`}
-                      id={`tool-${event.seq}`}
-                      className="rounded-lg border border-subtle bg-surface-1 p-3"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-11 font-semibold text-primary">{toolName}</p>
-                        <ResearchStatusBadge status={status} size="sm">
-                          {t(`research.agent.tool_status.${status.toLowerCase()}`)}
-                        </ResearchStatusBadge>
-                      </div>
-                      <dl className="mt-2 space-y-1 text-11">
-                        {scope && (
-                          <div className="flex gap-2">
-                            <dt className="text-tertiary">{t("research.agent.tool_scope")}</dt>
-                            <dd className="min-w-0 flex-1 break-words text-secondary">{scope}</dd>
-                          </div>
-                        )}
-                        <div className="flex gap-2">
-                          <dt className="text-tertiary">{t("research.agent.tool_risk")}</dt>
-                          <dd className="text-secondary">{t(`research.agent.risk.${risk.toLowerCase()}`)}</dd>
-                        </div>
-                        {input && (
-                          <div className="flex gap-2">
-                            <dt className="text-tertiary">{t("research.agent.tool_input")}</dt>
-                            <dd className="min-w-0 flex-1 break-words text-secondary">{input}</dd>
-                          </div>
-                        )}
-                        {outputs.length > 0 && (
-                          <div className="flex gap-2">
-                            <dt className="text-tertiary">{t("research.agent.tool_output")}</dt>
-                            <dd className="min-w-0 flex-1 break-words text-secondary">{outputs.join("；")}</dd>
-                          </div>
-                        )}
-                      </dl>
-                      <button
-                        type="button"
-                        onClick={() => jumpToEvent(event.seq)}
-                        className="mt-2 text-11 text-accent-primary hover:underline"
-                      >
-                        {t("research.agent.open_trace")}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="mt-2 text-11 text-tertiary">{t("research.agent.tools_empty")}</p>
-            )}
-          </section>
-
-          <section className="border-b border-subtle p-4">
-            <h3 className="text-12 font-semibold text-primary">{t("research.agent.artifacts_title")}</h3>
-            <button
-              type="button"
-              onClick={() => setArtifactDrawerOpen(true)}
-              className="mt-2 rounded-md border border-subtle px-3 py-1.5 text-11 text-secondary hover:bg-surface-2"
-            >
-              {t("research.agent.open_artifact")}
-            </button>
-            <ul className="mt-3 space-y-2" role="list">
-              {artifactEvents.map((event) => {
-                const summary = payloadText(event.payload, ["summary", "content", "artifact_type", "action"]);
-                return (
-                  <li key={`artifact-${event.run_id}-${event.seq}`} className="rounded-md border border-subtle p-3">
-                    <p className="text-11 font-medium text-primary">{eventLabel(event.event_type, t)}</p>
-                    {summary && <p className="mt-1 text-11 text-secondary">{summary}</p>}
-                  </li>
-                );
-              })}
-              {!artifactEvents.length && (
-                <li className="text-11 text-tertiary">{t("research.agent.artifacts_empty")}</li>
-              )}
-            </ul>
-          </section>
-
-          <section className="p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-12 font-semibold text-primary">{t("research.agent.trace_title")}</h3>
-              <div className="flex flex-wrap gap-2">
-                <select
-                  value={traceTypeFilter}
-                  onChange={(event) => setTraceTypeFilter(event.target.value)}
-                  aria-label={t("research.agent.trace_type_filter")}
-                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1 text-11 text-primary"
-                >
-                  <option value="">{t("research.agent.trace_all_types")}</option>
-                  {traceTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {eventLabel(type, t)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={traceStatusFilter}
-                  onChange={(event) => setTraceStatusFilter(event.target.value)}
-                  aria-label={t("research.agent.trace_status_filter")}
-                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1 text-11 text-primary"
-                >
-                  <option value="">{t("research.agent.trace_all_statuses")}</option>
-                  {traceStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {t(`research.agent.tool_status.${status.toLowerCase()}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <ol className="mt-3 space-y-2" role="list">
-              {visibleEvents.map((event) => (
-                <li
-                  key={`trace-${event.run_id}-${event.seq}`}
-                  className="flex items-center justify-between gap-2 text-11"
-                >
-                  <span className="min-w-0 truncate text-tertiary">
-                    <span className="font-medium text-secondary">#{event.seq}</span> {eventLabel(event.event_type, t)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => jumpToEvent(event.seq)}
-                    className="shrink-0 text-accent-primary hover:underline"
-                  >
-                    {t("research.agent.open_trace")}
-                  </button>
-                </li>
-              ))}
-              {!visibleEvents.length && <li className="text-11 text-tertiary">{t("research.agent.trace_empty")}</li>}
-            </ol>
-          </section>
+        <aside
+          className={variant === "panel" ? "hidden" : "min-h-0 border-subtle xl:border-l"}
+          aria-hidden={variant === "panel"}
+        >
+          {variant === "panel" ? null : runtimeSections}
         </aside>
       </div>
 
