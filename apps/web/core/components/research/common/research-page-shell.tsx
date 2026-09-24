@@ -13,6 +13,7 @@ import { Spinner } from "@plane/ui";
 // components
 import { PageHead } from "@/components/core/page-title";
 import { ResearchStatusPanel, type TResearchStatus } from "@/components/research/common/research-status-panel";
+import { ResearchManagementTabs } from "@/components/research/navigation/research-management-tabs";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -43,6 +44,8 @@ type Props = {
   actions?: ReactNode;
   children: ReactNode;
 };
+
+const MANAGEMENT_NAV_KEYS = new Set(["org", "system", "templates", "identity", "platform", "audit", "integrations"]);
 
 /**
  * Shared shell for research pages: resolves the caller's research identity once
@@ -107,6 +110,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   if (!workspaceSlug) return null;
 
   const sectionEnabled = identity.sections?.[section] ?? identity.sections?.reports;
+  const showManagementTabs = research.isIaV2Enabled && navKey !== undefined && MANAGEMENT_NAV_KEYS.has(navKey);
 
   // Switch off, disabled section or a level that does not open this surface:
   // fall back to the workspace home (P0-UI-07). Pages that stay reachable while
@@ -137,6 +141,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
           </div>
           {actions}
         </div>
+        {showManagementTabs && <ResearchManagementTabs currentKey={navKey} />}
         <div className="flex-1 overflow-hidden">{children}</div>
       </div>
     </>

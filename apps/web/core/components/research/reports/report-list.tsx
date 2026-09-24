@@ -24,6 +24,8 @@ import { useResearch } from "@/hooks/store/use-research";
 
 type Props = {
   workspaceSlug: string;
+  /** `review` turns the list into an approval queue without creation controls. */
+  variant?: "default" | "review";
 };
 
 const STATUS_TONES: Record<TReportStatus, string> = {
@@ -34,20 +36,24 @@ const STATUS_TONES: Record<TReportStatus, string> = {
 };
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
-export const ResearchReportList = observer(function ResearchReportList({ workspaceSlug }: Props) {
+export const ResearchReportList = observer(function ResearchReportList({ workspaceSlug, variant = "default" }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
   const searchParams = useSearchParams();
   const { reportId } = useParams();
   const [reportType, setReportType] = useState<TReportType>("WEEKLY");
   const [periodKey, setPeriodKey] = useState("");
-  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") ?? "");
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams.get("status") ?? (variant === "review" ? "SUBMITTED" : "")
+  );
   const [typeFilter, setTypeFilter] = useState(() => searchParams.get("report_type") ?? "");
   const [periodFilter, setPeriodFilter] = useState(() => searchParams.get("period_key") ?? "");
   const [mineOnly, setMineOnly] = useState(() =>
     searchParams.has("mine")
       ? searchParams.get("mine") === "true"
-      : !["org_unit", "owner", "date_from", "date_to"].some((key) => searchParams.has(key))
+      : variant === "review"
+        ? false
+        : !["org_unit", "owner", "date_from", "date_to"].some((key) => searchParams.has(key))
   );
   const [orgFilter, setOrgFilter] = useState(() => searchParams.get("org_unit") ?? "");
   const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get("owner") ?? "");
@@ -144,6 +150,10 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
 
   useEffect(() => {
     const params = new URLSearchParams();
+    const savedView = searchParams.get("view");
+    if (savedView) params.set("view", savedView);
+    const savedTab = searchParams.get("tab");
+    if (savedTab) params.set("tab", savedTab);
     if (statusFilter) params.set("status", statusFilter);
     if (typeFilter) params.set("report_type", typeFilter);
     if (periodFilter.trim()) params.set("period_key", periodFilter.trim());
@@ -153,8 +163,12 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
     const query = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  }, [dateFrom, dateTo, mineOnly, orgFilter, ownerFilter, periodFilter, statusFilter, typeFilter]);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
+    );
+  }, [dateFrom, dateTo, mineOnly, orgFilter, ownerFilter, periodFilter, searchParams, statusFilter, typeFilter]);
 
   useEffect(() => {
     void research.fetchResearchProjects(workspaceSlug, { research_type: "RESEARCH_PROJECT" }).catch(() => undefined);
@@ -188,7 +202,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
   }, [isCreating, periodKey, reportType, research, selectedTeamProjects, t, workspaceSlug]);
 
   const clearFilters = useCallback(() => {
-    setStatusFilter("");
+    setStatusFilter(variant === "review" ? "SUBMITTED" : "");
     setTypeFilter("");
     setPeriodFilter("");
     setMineOnly(false);
@@ -196,7 +210,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     setOwnerFilter("");
     setDateFrom("");
     setDateTo("");
-  }, []);
+  }, [variant]);
 
   return (
     <div className="flex flex-col gap-3 p-5">
@@ -207,7 +221,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
       )}
 
       <div className="flex flex-wrap items-end gap-2">
-        {canCreateReport && (
+        {canCreateReport && variant === "default" && (
           <>
             <select
               className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"

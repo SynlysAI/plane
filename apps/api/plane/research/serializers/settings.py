@@ -25,6 +25,7 @@ class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
             "research_trace_enabled",
             "research_account_link_enabled",
             "research_external_rag_enabled",
+            "research_ia_v2",
             "allow_multiple_projects",
             "default_report_visibility",
             "weekly_default_visibility",

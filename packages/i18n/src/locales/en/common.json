@@ -871,7 +871,10 @@
       "summary": "Submission summary",
       "projects": "Research projects",
       "research_chain": "Research Chain",
+      "research_chain_v2": "Research Chain",
       "approvals": "Office approvals",
+      "approvals_v2": "Approval center",
+      "management": "Research management",
       "org_settings": "Organisation",
       "templates": "Report templates",
       "identity": "Identity mappings",
@@ -1103,6 +1106,11 @@
     },
     "chains": {
       "description": "Research Chain projections with node, event and snapshot metadata.",
+      "views": {
+        "chains": "Chains",
+        "projects": "Project management",
+        "reports": "Reports and outcomes"
+      },
       "empty": "No research chain has been created in your visible projects yet.",
       "refresh": "Refresh",
       "project": "Project",
@@ -1142,6 +1150,14 @@
     },
     "knowledge": {
       "panel_title": "RAGPortal knowledge",
+      "reasons": {
+        "not_configured": "service is not configured",
+        "disabled": "connection is disabled",
+        "http_error": "service returned an error",
+        "timeout": "connection timed out",
+        "transport_error": "network transport failed",
+        "unknown": "an unknown reason"
+      },
       "loading": "Loading knowledge bases…",
       "degraded": "RAGPortal is degraded ({reason}); you can continue with manual records.",
       "kb_label": "Knowledge base",
@@ -1343,6 +1359,7 @@
       "yes": "Yes",
       "no": "No",
       "open": "Open",
+      "permission_denied": "You do not have access to this research object. Contact the chain owner or a workspace administrator if you need access.",
       "previous": "Previous",
       "next": "Next",
       "date_from": "Start date",
@@ -1613,6 +1630,13 @@
     },
     "approvals": {
       "description": "Task and purchase approvals built on work items.",
+      "tabs": {
+        "stage_review": "Stage reviews",
+        "report_review": "Report reviews",
+        "agent_approval": "Agent approvals",
+        "office": "Office approvals"
+      },
+      "agent_empty": "No Agent action is waiting for human confirmation.",
       "to_me": "Waiting for me",
       "mine": "Raised by me",
       "completed": "Completed",
@@ -1643,6 +1667,8 @@
       "org_enabled": "Organisation structure",
       "report_enabled": "Periodic reports",
       "approval_enabled": "Office approvals",
+      "research_chain_enabled": "Research Chain",
+      "research_ia_v2": "Four-entry information architecture",
       "allow_multiple_projects": "Allow several active research projects per owner",
       "visibility": "Default report visibility",
       "default_visibility": "Default visibility",

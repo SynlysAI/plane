@@ -35,6 +35,7 @@ BOOLEAN_FIELDS = (
     "research_trace_enabled",
     "research_account_link_enabled",
     "research_external_rag_enabled",
+    "research_ia_v2",
 )
 
 VISIBILITY_FIELDS = (

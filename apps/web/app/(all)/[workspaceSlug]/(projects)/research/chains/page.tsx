@@ -7,20 +7,22 @@ import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
-import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
+import { ResearchChainWorkbench } from "@/components/research/chains/research-chain-workbench";
+import { useResearch } from "@/hooks/store/use-research";
 
 function WorkspaceResearchChainsPage() {
   const { workspaceSlug } = useParams();
+  const research = useResearch();
   if (!workspaceSlug) return null;
 
   return (
     <ResearchPageShell
-      titleKey="research.nav.research_chain"
+      titleKey={research.isIaV2Enabled ? "research.nav.research_chain_v2" : "research.nav.research_chain"}
       descriptionKey="research.chains.description"
       section="research_chain"
       navKey="research_chain"
     >
-      <ResearchChainBoard workspaceSlug={workspaceSlug} />
+      <ResearchChainWorkbench workspaceSlug={workspaceSlug} />
     </ResearchPageShell>
   );
 }

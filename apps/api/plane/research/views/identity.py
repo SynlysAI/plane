@@ -23,7 +23,11 @@ from plane.research.utils.errors import (
 )
 from plane.research.utils.org import effective_mentee_ids, effective_mentor_ids, is_workspace_admin
 from plane.research.utils.roles import ADMIN_ROLES, admin_roles, is_main_pi, is_research_admin, is_system_admin
-from plane.research.utils.settings import workspace_research_enabled, workspace_research_sections
+from plane.research.utils.settings import (
+    get_workspace_research_settings,
+    workspace_research_enabled,
+    workspace_research_sections,
+)
 from plane.research.views.base import ResearchAPIView, resolve_user
 from plane.utils.workspace_access import filter_workspaces_for_private_access
 
@@ -65,6 +69,7 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
         roles_held = admin_roles(request.user)
         profile = getattr(request.user, "research_profile", None)
         capabilities = build_research_capabilities(request.user, workspace)
+        workspace_settings = get_workspace_research_settings(workspace)
         workspace_queryset = Workspace.objects.filter(
                 workspace_member__member=request.user,
                 workspace_member__is_active=True,
@@ -80,6 +85,7 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
             {
                 "module_enabled": research_module_enabled(),
                 "workspace_enabled": workspace_research_enabled(workspace),
+                "research_ia_v2": bool(workspace_settings["research_ia_v2"]),
                 "sections": workspace_research_sections(workspace),
                 "capabilities": capabilities,
                 "user": {

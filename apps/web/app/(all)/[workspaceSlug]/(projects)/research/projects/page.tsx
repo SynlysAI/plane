@@ -8,11 +8,12 @@ import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchIaV2Redirect } from "@/components/research/navigation/research-ia-v2-redirect";
 import { ResearchProjectList } from "@/components/research/projects/research-project-list";
 // hooks
 import { useUser } from "@/hooks/store/user";
 
-function WorkspaceResearchProjectsPage() {
+function WorkspaceResearchProjectsContent() {
   const { workspaceSlug } = useParams();
   const { data: currentUser } = useUser();
   if (!workspaceSlug) return null;
@@ -26,6 +27,16 @@ function WorkspaceResearchProjectsPage() {
     >
       <ResearchProjectList workspaceSlug={workspaceSlug} currentUserId={currentUser?.id ?? ""} />
     </ResearchPageShell>
+  );
+}
+
+function WorkspaceResearchProjectsPage() {
+  const { workspaceSlug } = useParams();
+  if (!workspaceSlug) return null;
+  return (
+    <ResearchIaV2Redirect to={`/${workspaceSlug}/research/chains`} query={{ view: "projects" }}>
+      <WorkspaceResearchProjectsContent />
+    </ResearchIaV2Redirect>
   );
 }
 

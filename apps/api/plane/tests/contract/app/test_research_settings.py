@@ -67,8 +67,11 @@ class TestResearchSettingsEndpoint:
         assert payload["pdf_max_mb"] == 100
         assert payload["markdown_max_mb"] == 5
         assert payload["audit_retention_days"] == 0
+        assert payload["research_ia_v2"] is False
         assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
-        assert env["member_client"].get(env["identity_url"]).json()["workspace_enabled"] is True
+        identity = env["member_client"].get(env["identity_url"]).json()
+        assert identity["workspace_enabled"] is True
+        assert identity["research_ia_v2"] is False
 
     def test_workspace_without_row_renders_research_by_default(self, env):
         assert not WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
@@ -93,9 +96,24 @@ class TestResearchSettingsEndpoint:
         assert env["member_client"].get(env["identity_url"]).status_code == 404
 
     def test_workspace_member_cannot_patch_settings(self, env):
-        response = env["member_client"].patch(env["url"], {"module_enabled": True}, format="json")
+        response = env["member_client"].patch(
+            env["url"], {"module_enabled": True, "research_ia_v2": True}, format="json"
+        )
         assert response.status_code == 403
         assert response.json()["error_code"] == "research_permission_denied"
+
+    def test_admin_can_toggle_research_ia_v2_without_changing_api_semantics(self, env):
+        response = env["admin_client"].patch(env["url"], {"research_ia_v2": True}, format="json")
+
+        assert response.status_code == 200
+        assert response.json()["research_ia_v2"] is True
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_ia_v2 is True
+        assert env["member_client"].get(env["identity_url"]).json()["research_ia_v2"] is True
+        assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
+
+        rollback = env["admin_client"].patch(env["url"], {"research_ia_v2": False}, format="json")
+        assert rollback.status_code == 200
+        assert rollback.json()["research_ia_v2"] is False
 
     def test_admin_can_toggle_switches_and_limits(self, env):
         response = env["admin_client"].patch(
