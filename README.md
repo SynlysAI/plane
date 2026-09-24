@@ -73,11 +73,11 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 ### 已交付：科研智能平台 Phase 0
 
-Phase 0 是跨仓库并行开发的基础层，不向普通用户开放完整 Research Chain。详细范围见 [科研智能平台 PRD](docs/research-intelligent-platform-prd.md)、[Phase 0 实施计划](docs/research-intelligent-platform-phase-0-plan.md) 与 [运维手册](docs/research-intelligent-platform-phase-0-runbook.md)。
+Phase 0 是跨仓库并行开发的基础层，不向普通用户开放完整 研究链。详细范围见 [科研智能平台 PRD](docs/research-intelligent-platform-prd.md)、[Phase 0 实施计划](docs/research-intelligent-platform-phase-0-plan.md) 与 [运维手册](docs/research-intelligent-platform-phase-0-runbook.md)。
 
 | 能力域              | 说明                                                                                                                 |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 跨仓契约            | Research Chain、Node、Event、Snapshot、Agent Context/Trace、AccountLink、Integration、Job 与 Agent Plugin v1 schema  |
+| 跨仓契约            | 研究链、Node、Event、Snapshot、Agent Context/Trace、AccountLink、Integration、Job 与 Agent Plugin v1 schema          |
 | 数据与 API 基础     | Chain / Node / append-only Event / Snapshot / Reflection 模型，幂等写接口、错误 envelope、Workspace 子开关与页面守卫 |
 | 短期授权            | 服务端 opaque context token 只存哈希，校验 Workspace / 课题 / 节点 / hash / 过期，撤销后立即失效                     |
 | AccountLink         | pending → 二次验证激活 → 解绑 / 撤销，支持多 subject 与邮箱冲突检查，撤销传播到 Context token                        |
@@ -94,9 +94,9 @@ Phase 1 在 Phase 0 契约上交付内部试点可用的 UI/UX Ready 科研智�
 | 能力域         | 说明                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------------ |
 | Plane 首页摘要 | 当前课题、当前节点、待办数量、最近快照与科研总览入口；无权限或降级时不泄露课题内容         |
-| 科研总览       | 统计周期、刷新时间、跨组件待办、课题摘要、提交汇总、管理统计与 Research Chain 深链         |
+| 科研总览       | 统计周期、刷新时间、跨组件待办、课题摘要、提交汇总、管理统计与研究链深链                   |
 | 跨组件待办     | 聚合报告修订、阶段评审、办公审批、Agent 审批、RAG 上传状态与人工补录提醒，按严重级排序去重 |
-| Research Chain | 固定上下文条、课题/节点/报告成果/实验/外部引用/成员/回放七类 Tab、主链可视化与循环编号     |
+| 研究链         | 固定上下文条、课题/节点/报告成果/实验/外部引用/成员/回放七类 Tab、主链可视化与循环编号     |
 | 六段式节点详情 | 输入、AI 动作、中间产物、验证、人类决策、输出六段证据结构                                  |
 | Agent 工作台   | Context 有效期、授权资源、装配分组、结构化工具卡、审批/产物抽屉与 Trace 筛选跳转           |
 | 审批中心       | 阶段评审、报告审核、Agent 审批与办公审批统一队列；Agent 审批复用幂等 Run endpoint          |
@@ -128,28 +128,28 @@ P2 / P3 的范围与启动前置条件见 [科研管理 PRD 与路线图](docs/r
 
 所有入口只有在模块开关打开、且当前用户具备对应科研角色时才渲染。
 
-开启 `research_ia_v2` 后，科研导航收敛为科研总览、Research Chain、审批中心和科研管理四个入口；下表旧路由继续兼容并重定向到对应保存视图或 Tab。
+开启 `research_ia_v2` 后，科研导航收敛为科研总览、研究链、审批中心和科研管理四个入口；下表旧路由继续兼容并重定向到对应保存视图或 Tab。
 
-| 入口           | 路径                                       | 说明                                     |
-| -------------- | ------------------------------------------ | ---------------------------------------- |
-| 科研总览       | `/{workspace}/research`                    | 跨课题待办、课题摘要、提交汇总与统计     |
-| 周报 / 月报    | `/{workspace}/research/reports`            | 报告列表、编辑、Markdown 导入、附件      |
-| 提交汇总       | `/{workspace}/research/reports/summary`    | 按组织架构查看提交情况（管理员）         |
-| 科研 Project   | `/{workspace}/research/projects`           | 一人一项目，可进入项目级科研工作台       |
-| Research Chain | `/{workspace}/research/chains`             | 课题、节点、报告成果、实验、成员与回放   |
-| 阶段流程       | `.../projects/{projectId}/stages`          | 四阶段材料、gate 结果与流转记录          |
-| 文献调研       | `.../projects/{projectId}/literature`      | 文献登记、纳入门槛与批量导入             |
-| 实验记录       | `.../projects/{projectId}/experiments`     | 实验条目、修订审批与版本历史             |
-| 代码登记       | `.../projects/{projectId}/code`            | 仓库、制品与快照                         |
-| 成果登记       | `.../projects/{projectId}/outcomes`        | 结题成果与研发链条引用                   |
-| 时间线         | `.../projects/{projectId}/timeline`        | 思维链 / 研发链全流程时间线              |
-| 审批中心       | `/{workspace}/research/approvals`          | 阶段评审、报告审核、Agent 审批与办公审批 |
-| 组织设置       | `/{workspace}/research/settings/org`       | 组织树、成员角色、课题组主 PI、导师关系  |
-| 报告模板       | `/{workspace}/research/settings/templates` | 周报 / 月报与阶段材料模板                |
-| 身份映射       | `/{workspace}/research/settings/identity`  | OIDC 身份绑定与解绑记录                  |
-| 平台配置       | `/{workspace}/research/settings/platform`  | 子开关、默认可见级别、文件限制与门槛     |
-| 审计查询       | `/{workspace}/research/audit`              | 只读审计事件查询                         |
-| 集成配置       | `/{workspace}/research/integrations`       | 外部系统连接、健康状态、引用与调用日志   |
+| 入口         | 路径                                       | 说明                                     |
+| ------------ | ------------------------------------------ | ---------------------------------------- |
+| 科研总览     | `/{workspace}/research`                    | 跨课题待办、课题摘要、提交汇总与统计     |
+| 周报 / 月报  | `/{workspace}/research/reports`            | 报告列表、编辑、Markdown 导入、附件      |
+| 提交汇总     | `/{workspace}/research/reports/summary`    | 按组织架构查看提交情况（管理员）         |
+| 科研 Project | `/{workspace}/research/projects`           | 一人一项目，可进入项目级科研工作台       |
+| 研究链       | `/{workspace}/research/chains`             | 课题、节点、报告成果、实验、成员与回放   |
+| 阶段流程     | `.../projects/{projectId}/stages`          | 四阶段材料、gate 结果与流转记录          |
+| 文献调研     | `.../projects/{projectId}/literature`      | 文献登记、纳入门槛与批量导入             |
+| 实验记录     | `.../projects/{projectId}/experiments`     | 实验条目、修订审批与版本历史             |
+| 代码登记     | `.../projects/{projectId}/code`            | 仓库、制品与快照                         |
+| 成果登记     | `.../projects/{projectId}/outcomes`        | 结题成果与研发链条引用                   |
+| 时间线       | `.../projects/{projectId}/timeline`        | 思维链 / 研发链全流程时间线              |
+| 审批中心     | `/{workspace}/research/approvals`          | 阶段评审、报告审核、Agent 审批与办公审批 |
+| 组织设置     | `/{workspace}/research/settings/org`       | 组织树、成员角色、课题组主 PI、导师关系  |
+| 报告模板     | `/{workspace}/research/settings/templates` | 周报 / 月报与阶段材料模板                |
+| 身份映射     | `/{workspace}/research/settings/identity`  | OIDC 身份绑定与解绑记录                  |
+| 平台配置     | `/{workspace}/research/settings/platform`  | 子开关、默认可见级别、文件限制与门槛     |
+| 审计查询     | `/{workspace}/research/audit`              | 只读审计事件查询                         |
+| 集成配置     | `/{workspace}/research/integrations`       | 外部系统连接、健康状态、引用与调用日志   |
 
 ## AI4MS 集成架构
 

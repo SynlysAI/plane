@@ -38,7 +38,7 @@
 | 参与 P0/P1 开发 | 路线图 §5.1 / §5.2 → 开发 PRD 的需求编号与接口契约 → 评审报告的决策项 → PRD §16 实现回写记录 → 验收报告 / 发布门禁结果                                                        |
 | 部署与运维      | [`production-deployment.md`](./production-deployment.md) → 根 README「启用科研模块」→ 各期发布说明的「环境变量清单」「开关层级」「回滚策略」                                  |
 | 手工测试与验收  | [`research-test-accounts.md`](./research-test-accounts.md)（选账号）→ [`research-test-fixtures.md`](./research-test-fixtures.md)（数据与流程）→ 对应期次的开发 PRD 与验收报告 |
-| 产品与业务方    | 平台总 PRD §1–§5（目标、边界、Research Chain、MVP）→ §9 阶段路线 → 各阶段计划 → 路线图 §6 功能需求和 §11 测试要求                                                             |
+| 产品与业务方    | 平台总 PRD §1–§5（目标、边界、研究链、MVP）→ §9 阶段路线 → 各阶段计划 → 路线图 §6 功能需求和 §11 测试要求                                                                     |
 
 ## 3. 文档关系
 
@@ -58,7 +58,7 @@ flowchart LR
     P1 --> V3
     R --> PLATFORM[科研智能体平台总 PRD]
     V3 --> PLATFORM
-    PLATFORM --> MVP[Research Chain + RAGPortal + Synlora MVP]
+    PLATFORM --> MVP[研究链+ RAGPortal + Synlora MVP]
     V3 --> GUIDE[UX 设计指南 · 系列入口]
     GUIDE --> ARCHIVE[UI/UX 过程档案 · 六合一]
 ```
@@ -71,7 +71,7 @@ flowchart LR
 - `research-intelligent-platform-prd.md` 是跨仓库平台建设目标和分期边界；它复用 v3 的组织、ACL 与 Context 契约，不替换 Plane P0/P1/P2 的已交付规格。涉及 RAGPortal、已部署 WeKnora、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 和 SpecAgent 的能力，以各仓库代码、服务运行契约与发布契约为准。
 - `research-workspace-ux-guide.md` 是科研工作台 UI/UX 系列的唯一入口与权威规范：整合三定位、信息分级方法、语义组件出口与页面模式，冲突以指南为准。
 - `research-workspace-ui-ux-archive.md` 原文收录 4.10.0 重构 PRD、Phase 1/2 审计、验收报告、发布说明与 4.11.0 信息精炼 PRD 六份文档；内容未删减，仅统一标题层级与内部引用。
-- `research-intelligent-platform-ux-prototype.md` 是当前产品交互确认稿，先确认欢迎页、Research Chain、通用 Agent 插件和 RAGPortal 入库入口，再进入 UI 开发拆分。
+- `research-intelligent-platform-ux-prototype.md` 是当前产品交互确认稿，先确认欢迎页、研究链、通用 Agent 插件和 RAGPortal 入库入口，再进入 UI 开发拆分。
 - `research-intelligent-platform-phase-0-plan.md` 至 `research-intelligent-platform-phase-3-plan.md` 是总 PRD §9 的阶段实施计划，分别定义技术方案、开发任务、依赖、测试验收、发布回滚和风险；计划完成状态不能替代代码验收报告。
 
 ## 4. 维护约定

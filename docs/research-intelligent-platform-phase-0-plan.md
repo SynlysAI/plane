@@ -6,7 +6,7 @@
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §2、§6–§9、§11 |
 | 计划状态 | 已实施（Plane / RAGPortal / Synlora 自动化验证通过）                                            |
 | 目标     | 冻结跨仓契约，建立可灰度、可回滚、可观测的开发基础                                              |
-| 不在范围 | 用户可用的完整 Research Chain、自动实验、社会用户开放                                           |
+| 不在范围 | 用户可用的完整 研究链、自动实验、社会用户开放                                                   |
 
 ## 1. 阶段目标与出口
 
@@ -14,7 +14,8 @@ Phase 0 不向普通用户开放完整功能，只交付后续开发必须依赖
 
 出口条件：
 
-- Research Chain、Trace、ExternalReference、AccountLink 和 Job 的 schema 均有版本号、示例和错误码。
+-研究链、Trace、ExternalReference、AccountLink 和 Job 的 schema 均有版本号、示例和错误码。
+
 - Plane 现有 RAGPortal 适配器与实际 `/api/kb/list`、`/api/uploads`、上传详情接口通过 contract fixture，并能检查内网 WeKnora 服务健康状态。
 - 未绑定账号、跨课题访问和撤权后的短期 token 均无法读取受保护资源。
 - Chain/Agent/Trace 开关默认关闭，迁移可回滚，普通 Plane P0/P1 回归通过。
@@ -227,7 +228,7 @@ Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPorta
 
 ### 任务 0.6：同源门户骨架与 Feature Flag
 
-- 规划 Research Chain、Agent、RAGPortal 和组件入口路由。
+- 规划 研究链、Agent、RAGPortal 和组件入口路由。
 - 增加首页卡片、科研待办和权限空态的接口占位。
 - 完成反向代理、CORS/CSP、短期 token 传递和禁止跨站 iframe 的安全配置。
 - 输出 `agent-plugin.v1` manifest、入口路由、BFF API、UI 状态和事件映射契约。
@@ -278,7 +279,7 @@ Phase 0 固定跨系统事件和快照字典，避免 Plane、Synlora、RAGPorta
 
 ## 6. 详细数据设计
 
-### 6.1 Research Chain 基础字段
+### 6.1 研究链基础字段
 
 Phase 0 只建立迁移和 API 骨架，字段允许为空，避免一次性改变既有培养项目。建议字段如下：
 
@@ -403,7 +404,7 @@ Phase 0 不允许进入 Phase 1 的条件：契约尚未冻结、RAGPortal fixtu
 
 - [x] `agent-plugin.v1` manifest、scope 和状态字典评审通过。
 - [x] Plane Agent BFF 的请求/响应、错误码、幂等和审计契约通过 contract test。
-- [x] 插件入口在 Workspace 首页、Research Chain 和 Node 详情的路由方案确定。
+- [x] 插件入口在 Workspace 首页、研究链和 Node 详情的路由方案确定。
 - [x] session 创建、恢复、关闭、SSE 取消和课题切换行为有自动化测试。
 - [x] CSP、token 存储、工具审批和日志脱敏通过安全检查。
 
