@@ -21,11 +21,23 @@ const mocks = vi.hoisted(() => ({
     { key: "audit", labelKey: "research.nav.audit", path: "audit", section: "org" },
     { key: "integrations", labelKey: "research.nav.integrations", path: "integrations", section: "integrations" },
   ],
+  iaV2Items: [
+    { key: "overview", labelKey: "research.nav.overview", path: "", section: null },
+    {
+      key: "research_chain",
+      labelKey: "research.nav.research_chain_v2",
+      path: "chains",
+      section: "research_chain",
+    },
+    { key: "approvals", labelKey: "research.nav.approvals_v2", path: "approvals", section: "approvals" },
+    { key: "management", labelKey: "research.nav.management", path: "settings", section: "org" },
+  ],
   research: {
     identityWorkspaceSlug: "lab",
     identity: {
       module_enabled: true,
       workspace_enabled: true,
+      research_ia_v2: false,
       sections: {
         org: true,
         reports: true,
@@ -39,9 +51,10 @@ const mocks = vi.hoisted(() => ({
       },
     },
     isEnabled: true,
+    isIaV2Enabled: false,
     researchLevel: "RESEARCHER",
     visibleNavKeys: ["overview", "reports", "summary", "projects", "research_chain", "reviews", "approvals"],
-    canSee: (_key: string) => true,
+    canSee: (key: string) => mocks.research.visibleNavKeys.includes(key),
     identityLoader: false,
     identityErrorCode: null,
     isResearchAdmin: false,
@@ -59,6 +72,7 @@ vi.mock("@plane/constants", async () => {
   return {
     RESEARCH_NAVIGATION_ITEMS: mocks.businessItems,
     RESEARCH_SETTINGS_NAVIGATION_ITEMS: mocks.settingItems,
+    RESEARCH_IA_V2_NAVIGATION_ITEMS: mocks.iaV2Items,
   };
 });
 vi.mock("@plane/i18n", () => ({
@@ -107,14 +121,23 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-function setSwitches(researchChain: boolean, researchAgent = false) {
+function setSwitches(researchChain: boolean, researchAgent = false, iaV2 = false) {
   mocks.research.identity.sections.research_chain = researchChain;
   mocks.research.identity.sections.research_agent = researchAgent;
+  mocks.research.isIaV2Enabled = iaV2;
+  mocks.research.identity.research_ia_v2 = iaV2;
 }
 
 it("keeps every existing research entry and hides Research Chain while the switch is off", async () => {
   setSwitches(false);
+  const originalNavKeys = mocks.research.visibleNavKeys;
+  mocks.research.visibleNavKeys = [
+    "overview",
+    ...mocks.businessItems.map((item) => item.key),
+    ...mocks.settingItems.map((item) => item.key),
+  ];
   await act(async () => root.render(<ResearchSidebarItems />));
+  mocks.research.visibleNavKeys = originalNavKeys;
   expect(container.textContent).toContain("报告");
   expect(container.textContent).toContain("提交汇总");
   expect(container.textContent).toContain("科研项目");
@@ -141,6 +164,30 @@ it("shows Research Chain only when the workspace switch is on", async () => {
   expect(container.textContent).toContain("科研链");
   const link = container.querySelector('a[href="/lab/research/chains"]');
   expect(link).not.toBeNull();
+});
+
+it("collapses research to four destinations when IA v2 is enabled", async () => {
+  setSwitches(true, false, true);
+  await act(async () => root.render(<ResearchSidebarItems />));
+
+  const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
+  expect(links).toEqual(["/lab/research", "/lab/research/chains", "/lab/research/approvals"]);
+  expect(container.textContent).toContain("Research Chain");
+  expect(container.textContent).toContain("审批中心");
+  expect(container.textContent).not.toContain("报告");
+  expect(container.textContent).not.toContain("提交汇总");
+  expect(container.textContent).not.toContain("科研项目");
+  expect(container.textContent).not.toContain("待我评审");
+});
+
+it("shows the management destination only for callers with a management tab", async () => {
+  setSwitches(true, false, true);
+  const originalCanSee = mocks.research.canSee;
+  mocks.research.canSee = (key: string) => key === "overview" || key === "research_chain" || key === "approvals";
+  await act(async () => root.render(<ResearchSidebarItems />));
+  mocks.research.canSee = originalCanSee;
+
+  expect(container.querySelector('a[href="/lab/research/settings"]')).toBeNull();
 });
 
 it("guards the agent route with the independent workspace switch", async () => {

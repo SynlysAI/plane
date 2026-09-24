@@ -102,6 +102,7 @@ class WorkspaceResearchSetting(BaseModel):
     research_trace_enabled = models.BooleanField(default=False)
     research_account_link_enabled = models.BooleanField(default=False)
     research_external_rag_enabled = models.BooleanField(default=False)
+    research_ia_v2 = models.BooleanField(default=False)
     literature_min_included = models.PositiveIntegerField(default=20)
     literature_max_entries = models.PositiveIntegerField(default=100)
     stage_min_reviewers = models.PositiveIntegerField(default=3)

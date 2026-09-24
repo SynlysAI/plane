@@ -11,6 +11,7 @@ Phase 1 已交付以下闭环：
 - Plane 自动装配 persona、插件、工具和授权资源，并将 Synlora 事件投影为 Agent run event 与 Chain event。
 - 研究计划/分析类 AI 产物必须经过人工确认；确认后生成六类 typed snapshot 之一。
 - 实验、失败原因、外部资产、修订和版本锁定复用既有 Experiment 服务。
+- 开启 `research_ia_v2` 后，科研导航收敛为科研总览、Research Chain、审批中心、科研管理；旧列表路由显式兼容，关闭开关完整回退旧界面。
 
 ## 2. 自动化验收
 
@@ -26,7 +27,8 @@ docker exec plane-api-tests-live pytest -q \
   plane/tests/contract/app/test_research_agent_plugin.py \
   plane/tests/contract/app/test_research_context_tokens.py \
   plane/tests/contract/app/test_research_experiments.py \
-  plane/tests/contract/app/test_research_stages.py
+  plane/tests/contract/app/test_research_stages.py \
+  plane/tests/contract/app/test_research_settings.py
 ```
 
 覆盖：
@@ -50,7 +52,8 @@ pnpm exec vitest run --config vitest.config.ts \
   tests/components/research-chain-detail.test.tsx \
   tests/components/research-chain-knowledge-panel.test.tsx \
   tests/components/research-chain-navigation.test.tsx \
-  tests/components/research-chain-route-registration.test.ts
+  tests/components/research-chain-route-registration.test.ts \
+  tests/components/research-ia-v2-redirect.test.ts
 ```
 
 ### RAGPortal
@@ -86,8 +89,9 @@ AUTH_SECRET=test-secret .venv/bin/pytest -q \
    - Plane 配置 `SYNLORA_BASE_URL`、`SYNLORA_SERVICE_TOKEN` 和 Context TTL。
 2. **迁移与开关**
    - 保持 `research_chain_enabled=false`、`research_agent_enabled=false`、`research_external_rag_enabled=false`。
-   - 执行 Plane migrations 0146–0155；所有变更均为 additive。
+   - 执行 Plane migrations 0146–0156；所有变更均为 additive。
    - 验证 RAGPortal `/api/health` 与 Synlora `/api/health`。
+   - IA v2 不随部署自动开启；先确认 Chain 闭环可用，再为试点 Workspace 打开 `research_ia_v2`。
 3. **内部试点**
    - 仅给试点 Workspace 打开 `research_account_link_enabled`、`research_external_rag_enabled`、`research_chain_enabled`、`research_agent_enabled`。
    - 为学生绑定 ACTIVE Synlora AccountLink。
@@ -97,6 +101,16 @@ AUTH_SECRET=test-secret .venv/bin/pytest -q \
    - Synlora event cursor 是否单调、是否有重复 `(run_id, seq)`。
    - Context 过期、AccountLink 解绑和 RAGPortal 降级计数。
    - Chain event 增长速率与导出大小。
+
+### 3.1 IA v2 手工验收
+
+1. 关闭 `research_ia_v2`，确认旧科研平铺侧栏、旧列表页面、普通 Plane 首页/草稿/我的工作/便签/项目入口不变。
+2. 开启 `research_ia_v2`，确认科研侧栏最多显示四个入口；学生不可见科研管理，导师/PI 按评审能力显示审批中心，管理员可见科研管理。
+3. 逐项验证旧路由兼容：项目、报告、提交汇总、待我评审、审计、集成跳转后 query/hash 不丢失；报告详情、项目详情、课题详情、节点详情不改址。
+4. 在 1920/1440/1280px 宽度检查侧栏、审批中心 Tab、科研管理 Tab 和 Chain 保存视图不溢出。
+5. 构造无权限与 RAGPortal `not_configured` 状态，确认页面显示中文原因和人工路径，不显示原始 key/code。
+
+2026-09-24 本地开发栈实测：迁移 0156 后，管理员在平台配置页开启开关，侧栏收敛为四个入口；项目、提交汇总、待我评审、审计、集成旧路由均重定向到目标路由，query/hash 保留；关闭开关后旧平铺侧栏和旧项目路由完整恢复。浏览器中仍存在 Plane 侧栏嵌套 button 的既有 hydration 警告，与本轮 IA 改动无关。
 
 ## 4. 回滚与支持
 

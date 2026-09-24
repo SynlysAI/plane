@@ -249,6 +249,19 @@ export const RESEARCH_NAVIGATION_ITEMS = [
   { key: "approvals", labelKey: "research.nav.approvals", path: "approvals", section: "approvals" },
 ] as const;
 
+/** Phase 1 IA v2 renders at most four first-level research destinations. */
+export const RESEARCH_IA_V2_NAVIGATION_ITEMS = [
+  { key: "overview", labelKey: "research.nav.overview", path: "", section: null },
+  {
+    key: "research_chain",
+    labelKey: "research.nav.research_chain_v2",
+    path: "chains",
+    section: "research_chain",
+  },
+  { key: "approvals", labelKey: "research.nav.approvals_v2", path: "approvals", section: "approvals" },
+  { key: "management", labelKey: "research.nav.management", path: "settings", section: "org" },
+] as const;
+
 // ---------------------------------------------------------------------------
 // P1 stage workflow (§3.1, §4.2)
 // ---------------------------------------------------------------------------

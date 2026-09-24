@@ -30,4 +30,21 @@ describe("research chain route registration", () => {
       file: "./(all)/[workspaceSlug]/(projects)/research/chains/[chainId]/nodes/[nodeId]/agent/page.tsx",
     });
   });
+
+  it("registers the IA v2 management destination and aggregated audit and integration tabs", () => {
+    const routes = flattenRoutes(coreRoutes);
+
+    expect(routes).toContainEqual({
+      path: ":workspaceSlug/research/settings",
+      file: "./(all)/[workspaceSlug]/(projects)/research/settings/page.tsx",
+    });
+    expect(routes).toContainEqual({
+      path: ":workspaceSlug/research/settings/audit",
+      file: "./(all)/[workspaceSlug]/(projects)/research/settings/audit/page.tsx",
+    });
+    expect(routes).toContainEqual({
+      path: ":workspaceSlug/research/settings/integrations",
+      file: "./(all)/[workspaceSlug]/(projects)/research/settings/integrations/page.tsx",
+    });
+  });
 });

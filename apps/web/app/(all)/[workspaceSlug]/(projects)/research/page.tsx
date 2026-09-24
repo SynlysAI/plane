@@ -6,12 +6,13 @@
 
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // components
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchChainPortal } from "@/components/research/chains/research-chain-portal";
+import { ResearchReportSummaryBoard } from "@/components/research/reports/report-summary-board";
 import { ResearchPiAggregateBoard } from "@/components/research/pi/pi-aggregate-board";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -42,12 +43,27 @@ function WorkspaceResearchOverviewPage() {
   const { workspaceSlug } = useParams();
   const research = useResearch();
   const sections = research.identity?.sections;
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view");
 
   const isCardVisible = (card: { key: string; section: string }) =>
     Boolean(sections?.[card.section as keyof typeof sections]) && research.canSee(card.key);
 
   const businessCards = BUSINESS_CARDS.filter(isCardVisible);
   const settingsCards = SETTINGS_CARDS.filter(isCardVisible);
+
+  if (workspaceSlug && view === "report_submission" && research.canSee("summary")) {
+    return (
+      <ResearchPageShell
+        titleKey="research.nav.summary"
+        descriptionKey="research.summary.description"
+        section="reports"
+        navKey="summary"
+      >
+        <ResearchReportSummaryBoard workspaceSlug={workspaceSlug} />
+      </ResearchPageShell>
+    );
+  }
 
   return (
     <ResearchPageShell
@@ -71,7 +87,11 @@ function WorkspaceResearchOverviewPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               {research.canSee("reviews") && (
                 <Link
-                  href={`/${workspaceSlug}/research/reviews`}
+                  href={
+                    research.isIaV2Enabled
+                      ? `/${workspaceSlug}/research/approvals?tab=stage_review`
+                      : `/${workspaceSlug}/research/reviews`
+                  }
                   className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
                 >
                   {t("research.overview.open_reviews")}
@@ -87,7 +107,11 @@ function WorkspaceResearchOverviewPage() {
               )}
               {research.canSee("reports") && (
                 <Link
-                  href={`/${workspaceSlug}/research/reports?status=NEEDS_REVISION&mine=true`}
+                  href={
+                    research.isIaV2Enabled
+                      ? `/${workspaceSlug}/research/chains?view=reports&status=NEEDS_REVISION&mine=true`
+                      : `/${workspaceSlug}/research/reports?status=NEEDS_REVISION&mine=true`
+                  }
                   className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
                 >
                   {t("research.overview.open_revisions")}
@@ -101,7 +125,11 @@ function WorkspaceResearchOverviewPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               {research.canSee("projects") && (
                 <Link
-                  href={`/${workspaceSlug}/research/projects`}
+                  href={
+                    research.isIaV2Enabled
+                      ? `/${workspaceSlug}/research/chains?view=projects`
+                      : `/${workspaceSlug}/research/projects`
+                  }
                   className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color"
                 >
                   {t("research.overview.open_projects")}
@@ -109,7 +137,11 @@ function WorkspaceResearchOverviewPage() {
               )}
               {research.canSee("reports") && (
                 <Link
-                  href={`/${workspaceSlug}/research/reports`}
+                  href={
+                    research.isIaV2Enabled
+                      ? `/${workspaceSlug}/research/chains?view=reports`
+                      : `/${workspaceSlug}/research/reports`
+                  }
                   className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
                 >
                   {t("research.overview.open_reports")}
@@ -118,25 +150,11 @@ function WorkspaceResearchOverviewPage() {
             </div>
           </div>
         </section>
-        <h3 className="text-13 font-medium text-primary">{t("research.overview.business_sections")}</h3>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {businessCards.map((card) => (
-            <Link
-              key={card.key}
-              href={`/${workspaceSlug}/research/${card.path}`}
-              className="rounded-lg border border-subtle bg-surface-1 p-4 transition-colors hover:bg-surface-2"
-            >
-              <p className="text-13 font-medium text-primary">{t(card.titleKey)}</p>
-              <p className="mt-1 text-11 text-tertiary">{t(`research.overview.${card.key}_hint`)}</p>
-            </Link>
-          ))}
-        </div>
-
-        {settingsCards.length > 0 && (
+        {!research.isIaV2Enabled && (
           <>
-            <h3 className="mt-8 text-13 font-medium text-primary">{t("research.overview.settings_sections")}</h3>
+            <h3 className="text-13 font-medium text-primary">{t("research.overview.business_sections")}</h3>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {settingsCards.map((card) => (
+              {businessCards.map((card) => (
                 <Link
                   key={card.key}
                   href={`/${workspaceSlug}/research/${card.path}`}
@@ -147,6 +165,24 @@ function WorkspaceResearchOverviewPage() {
                 </Link>
               ))}
             </div>
+
+            {settingsCards.length > 0 && (
+              <>
+                <h3 className="mt-8 text-13 font-medium text-primary">{t("research.overview.settings_sections")}</h3>
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {settingsCards.map((card) => (
+                    <Link
+                      key={card.key}
+                      href={`/${workspaceSlug}/research/${card.path}`}
+                      className="rounded-lg border border-subtle bg-surface-1 p-4 transition-colors hover:bg-surface-2"
+                    >
+                      <p className="text-13 font-medium text-primary">{t(card.titleKey)}</p>
+                      <p className="mt-1 text-11 text-tertiary">{t(`research.overview.${card.key}_hint`)}</p>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

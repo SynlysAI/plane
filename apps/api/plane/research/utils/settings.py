@@ -82,6 +82,7 @@ def get_workspace_research_settings(workspace):
         "research_trace_enabled": bool(setting.research_trace_enabled),
         "research_account_link_enabled": bool(setting.research_account_link_enabled),
         "research_external_rag_enabled": bool(setting.research_external_rag_enabled),
+        "research_ia_v2": bool(setting.research_ia_v2),
         "literature_min_included": setting.literature_min_included,
         "literature_max_entries": setting.literature_max_entries,
         "stage_min_reviewers": setting.stage_min_reviewers,

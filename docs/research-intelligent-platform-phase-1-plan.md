@@ -53,15 +53,15 @@ Phase 1 首次向内部试点用户开放 Research Chain。平台必须能把课
 - Agent 分析入口：带当前课题、节点和 Context ID。
 - 科研组件入口：RAGPortal、Synlora，以及后续专业系统占位。
 
-现有导航和功能必须全部保留：Plane 的首页、草稿、我的工作、便签、工作区项目、More、添加项目，以及科研总览、报告、科研项目、办公审批、系统管理、平台配置、审计记录和系统集成。Research Chain 作为科研分组新增一级入口，不替换科研总览或科研项目。
+Plane 的首页、草稿、我的工作、便签、工作区项目、More 和添加项目保持原路由与行为。开启 `research_ia_v2` 后，科研分组收敛为科研总览、Research Chain、审批中心、科研管理四个一级入口；关闭开关时，现有科研平铺导航和页面行为完整保留。
 
 职责区分：
 
 - 科研总览：跨课题聚合、待办、统计和最近活动。
-- Research Chain：课题过程节点、快照、事件、Agent 和回放。
-- 科研项目：科研项目创建、列表、成员和项目级资源。
-- 报告：周报/月报、提交、退回和正式版本。
-- 管理入口：保持管理员能力和现有 URL，不因 Research Chain 开放而扩大权限。
+- Research Chain：课题、项目管理视图、报告与成果、过程节点、快照、事件、Agent 和回放。
+- 审批中心：阶段评审、报告审核、Agent 审批和办公审批。
+- 科研管理：组织与人员、账号与系统、模板、身份绑定、平台配置、审计记录和系统集成。
+- 旧列表路由在开关开启时显式兼容跳转；报告详情、项目详情等对象级深链不改址。
 
 入口通过 ResearchGuard、Workspace 开关和课题 ACL 过滤。外部页面首期使用同源反向代理/BFF 跳转；页面回到 Plane 后，通过 `chain_id` 和 `node_id` 恢复上下文。
 
@@ -223,8 +223,8 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 - 通过同源代理/BFF 打开 RAGPortal 和 Synlora。
 - 实现通用 Agent 插件壳、课题/节点 scope provider、消息流、工具卡、产物抽屉和 Trace 面板。
 - 实现 loading/empty/forbidden/degraded/streaming/saving/error 状态和课题切换清理。
-- 在科研侧栏新增 Research Chain 一级入口，同时保留所有现有 Plane/科研入口和“添加项目”流程。
-- 更新科研总览：增加 Research Chain 摘要卡和跳转，不在总览复制完整 Chain 时间线。
+- 增加四入口侧栏、科研管理 Tab、审批中心 Tab 和 Chain 内项目/报告保存视图。
+- 更新科研总览：增加 Research Chain 摘要卡和跳转，不在总览复制完整 Chain 时间线、完整项目表格或完整审批队列。
 
 依赖：1.1、Phase 0 任务 0.6。验收：不同角色看到不同入口；关闭开关不影响原首页。
 
@@ -266,6 +266,17 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 - 在单一内部 Workspace 灰度，提供操作说明和问题回滚流程。
 
 依赖：1.1–1.6。验收：E2E 和 P0/P1 回归通过，灰度期间错误率和外部降级可观测。
+
+### 任务 1.8：信息架构收敛与兼容路由补齐
+
+- 增加 `research_ia_v2` Workspace 开关，默认关闭；平台配置页提供管理员配置入口。
+- 开启后侧栏仅显示科研总览、Research Chain、审批中心、科研管理；Tab 继续按既有 capability 与 section 判定。
+- 审批中心聚合 `stage_review`、`report_review`、`agent_approval`、办公审批队列。
+- 科研管理聚合组织、系统、模板、身份、平台、审计与集成 Tab；平台配置在模块关闭时仍可恢复。
+- 显式兼容旧列表路由并保留 query/hash；对象详情深链不改址。
+- 为权限拒绝和 RAGPortal 降级原因提供人类可读文案及人工路径。
+
+依赖：1.1–1.7。验收：开关关闭旧行为完整回归；开关开启四入口、角色矩阵、兼容路由和基础 UI 状态通过。
 
 ## 4. 测试与验收
 
@@ -477,6 +488,9 @@ apps/api/plane/tests/contract/app/test_research_chain_permissions.py
 apps/web/core/components/research/chain/
 apps/web/core/components/research/chain-timeline/
 apps/web/core/components/research/agent-panel/
+apps/web/core/components/research/navigation/
+apps/web/core/components/research/approvals/research-approval-center.tsx
+apps/web/core/components/research/chains/research-chain-workbench.tsx
 apps/web/core/services/research/chain.service.ts
 apps/web/core/services/research/agent.service.ts
 apps/web/core/store/research/chain.store.ts
@@ -501,6 +515,7 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest -q \
   apps/api/plane/tests/contract/app/test_research_chain_mvp.py \
   apps/api/plane/tests/contract/app/test_research_chain_permissions.py \
   apps/api/plane/tests/contract/app/test_research_context.py
+  apps/api/plane/tests/contract/app/test_research_settings.py
 pnpm check:types
 pnpm check:lint
 pnpm build
@@ -515,6 +530,7 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 | 平行课题/ACL     | Phase 0 0.2   | API、迁移、权限测试                                               | 双课题和撤权通过           |
 | Chain 状态/事件  | 平行课题      | service、snapshot、timeline                                       | 状态机和幂等通过           |
 | 门户骨架         | Phase 0 0.6   | 首页卡片、路由、空态                                              | 原功能无回归               |
+| IA 收敛          | 门户骨架      | `research_ia_v2`、四入口、管理/审批 Tab、兼容路由                 | 开关开关双向回归通过       |
 | RAGPortal BFF    | Phase 0 0.3   | 上传/状态/引用                                                    | fixture 和降级通过         |
 | Synlora 自动装配 | Phase 0 0.4   | delegated identity、Context、capability、session、SSE、projection | 跨课题、撤权、断线重连通过 |
 | 计划/实验/分析   | Chain + Agent | Page、Experiment、analysis                                        | 版本/失败记录通过          |
@@ -532,3 +548,4 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 - [x] 对话流、停止、重连、工具卡、审批、产物保存和 Trace 回放可用。
 - [x] 研究计划/文献引用/分析摘要保存均经过人工确认并生成 Chain Event。
 - [x] 外部降级、无权限、Context 过期和保存失败都有替代路径。
+- [x] 开启 `research_ia_v2` 后侧栏、审批中心、科研管理和 Chain 保存视图完成收敛；关闭开关回退旧导航。

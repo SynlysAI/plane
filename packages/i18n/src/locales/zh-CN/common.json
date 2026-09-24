@@ -871,7 +871,10 @@
       "summary": "提交汇总",
       "projects": "科研项目",
       "research_chain": "科研链",
+      "research_chain_v2": "Research Chain",
       "approvals": "办公审批",
+      "approvals_v2": "审批中心",
+      "management": "科研管理",
       "org_settings": "组织架构",
       "templates": "报告模板",
       "identity": "身份映射",
@@ -1103,6 +1106,11 @@
     },
     "chains": {
       "description": "科研链投影，包含节点、事件与快照元数据。",
+      "views": {
+        "chains": "课题",
+        "projects": "项目管理",
+        "reports": "报告与成果"
+      },
       "empty": "当前可见课题还没有科研链。",
       "refresh": "刷新",
       "project": "课题",
@@ -1142,6 +1150,14 @@
     },
     "knowledge": {
       "panel_title": "RAGPortal 知识库",
+      "reasons": {
+        "not_configured": "服务尚未配置",
+        "disabled": "连接已停用",
+        "http_error": "服务返回异常",
+        "timeout": "连接超时",
+        "transport_error": "网络传输失败",
+        "unknown": "未知原因"
+      },
       "loading": "正在加载知识库…",
       "degraded": "RAGPortal 当前降级（{reason}），人工记录可继续。",
       "kb_label": "知识库",
@@ -1343,6 +1359,7 @@
       "yes": "是",
       "no": "否",
       "open": "打开",
+      "permission_denied": "你没有访问当前科研对象的权限；如需继续，请联系课题负责人或工作区管理员。",
       "previous": "上一页",
       "next": "下一页",
       "date_from": "开始日期",
@@ -1613,6 +1630,13 @@
     },
     "approvals": {
       "description": "基于工作项的任务审批与采购审批。",
+      "tabs": {
+        "stage_review": "阶段评审",
+        "report_review": "报告审核",
+        "agent_approval": "Agent 审批",
+        "office": "办公审批"
+      },
+      "agent_empty": "暂无需要人工确认的 Agent 操作。",
       "to_me": "待我审批",
       "mine": "我发起的",
       "completed": "已完成",
@@ -1643,6 +1667,8 @@
       "org_enabled": "组织架构",
       "report_enabled": "周期报告",
       "approval_enabled": "办公审批",
+      "research_chain_enabled": "Research Chain",
+      "research_ia_v2": "四入口信息架构",
       "allow_multiple_projects": "允许一个责任人存在多个进行中项目",
       "visibility": "报告默认可见级别",
       "default_visibility": "默认可见级别",

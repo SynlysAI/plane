@@ -11,7 +11,11 @@ import { useParams, usePathname } from "next/navigation";
 import { ChevronRightOutline } from "@makeplane/propel/icons";
 import { Disclosure, Transition } from "@headlessui/react";
 // plane imports
-import { RESEARCH_NAVIGATION_ITEMS, RESEARCH_SETTINGS_NAVIGATION_ITEMS } from "@plane/constants";
+import {
+  RESEARCH_IA_V2_NAVIGATION_ITEMS,
+  RESEARCH_NAVIGATION_ITEMS,
+  RESEARCH_SETTINGS_NAVIGATION_ITEMS,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { cn } from "@plane/utils";
@@ -77,6 +81,11 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   const visibleSettingsItems = RESEARCH_SETTINGS_NAVIGATION_ITEMS.filter(
     (item) => Boolean(sections?.[item.section]) && research.canSee(item.key)
   );
+  const visibleIaV2Items = RESEARCH_IA_V2_NAVIGATION_ITEMS.filter((item) => {
+    if (item.key === "management") return visibleSettingsItems.length > 0;
+    if (!item.section) return research.canSee(item.key);
+    return Boolean(sections?.[item.section]) && research.canSee(item.key);
+  });
 
   const menuAriaLabel = t(
     isMenuOpen ? "aria_labels.projects_sidebar.close_research_menu" : "aria_labels.projects_sidebar.open_research_menu"
@@ -84,9 +93,9 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
 
   const toggleMenu = (isOpen: boolean) => setIsMenuOpen(isOpen);
 
-  const renderItem = (key: string, labelKey: string, path: string) => {
-    const href = `/${workspaceSlug}/research/${path}`;
-    const isActive = pathname?.startsWith(href);
+  const renderItem = (key: string, labelKey: string, path: string, exact = false) => {
+    const href = path ? `/${workspaceSlug}/research/${path}` : `/${workspaceSlug}/research`;
+    const isActive = exact ? pathname === href : pathname === href || pathname?.startsWith(`${href}/`);
     return (
       <Link
         key={key}
@@ -139,9 +148,13 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
       >
         {isMenuOpen && (
           <Disclosure.Panel as="div" className="flex flex-col gap-0.5" static>
-            {research.canSee("overview") && renderItem("overview", "research.nav.overview", "")}
-            {visibleBusinessItems.map((item) => renderItem(item.key, item.labelKey, item.path))}
-            {visibleSettingsItems.map((item) => renderItem(item.key, item.labelKey, item.path))}
+            {research.isIaV2Enabled
+              ? visibleIaV2Items.map((item) => renderItem(item.key, item.labelKey, item.path, item.key === "overview"))
+              : [
+                  ...(research.canSee("overview") ? [renderItem("overview", "research.nav.overview", "", true)] : []),
+                  ...visibleBusinessItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
+                  ...visibleSettingsItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
+                ]}
           </Disclosure.Panel>
         )}
       </Transition>

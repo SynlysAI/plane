@@ -116,6 +116,8 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
 
   useEffect(() => {
     const params = new URLSearchParams();
+    const savedView = searchParams.get("view");
+    if (savedView) params.set("view", savedView);
     if (statusFilter) params.set("workflow_status", statusFilter);
     if (typeFilter) params.set("research_type", typeFilter);
     if (orgFilter) params.set("org_unit", orgFilter);
@@ -123,8 +125,12 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
     const query = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  }, [dateFrom, dateTo, orgFilter, ownerFilter, statusFilter, typeFilter]);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
+    );
+  }, [dateFrom, dateTo, orgFilter, ownerFilter, searchParams, statusFilter, typeFilter]);
 
   useEffect(() => {
     void research.fetchOrgUnits(workspaceSlug).catch(() => undefined);

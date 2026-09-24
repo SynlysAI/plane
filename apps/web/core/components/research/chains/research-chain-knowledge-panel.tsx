@@ -30,6 +30,17 @@ const DEGRADED_ERROR_CODES = new Set([
   "upstream_timeout",
 ]);
 
+const DEGRADED_REASON_LABELS: Record<string, string> = {
+  not_configured: "research.knowledge.reasons.not_configured",
+  integration_not_configured: "research.knowledge.reasons.not_configured",
+  synlora_not_configured: "research.knowledge.reasons.not_configured",
+  disabled: "research.knowledge.reasons.disabled",
+  connection_disabled: "research.knowledge.reasons.disabled",
+  http_error: "research.knowledge.reasons.http_error",
+  timeout: "research.knowledge.reasons.timeout",
+  transport_error: "research.knowledge.reasons.transport_error",
+};
+
 /** Upload, poll and confirm scoped RAGPortal knowledge for one node. */
 export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel({
   workspaceSlug,
@@ -132,7 +143,11 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       )}
       {state === "degraded" && (
         <p className="mt-2 text-11 text-warning-primary">
-          {t("research.knowledge.degraded", { reason: degradedReason || "unknown" })}
+          {t("research.knowledge.degraded", {
+            reason: DEGRADED_REASON_LABELS[degradedReason]
+              ? t(DEGRADED_REASON_LABELS[degradedReason])
+              : t("research.knowledge.reasons.unknown"),
+          })}
         </p>
       )}
       {actionError && (

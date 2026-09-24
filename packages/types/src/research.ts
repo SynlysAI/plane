@@ -126,6 +126,7 @@ export type TWorkspaceResearchSetting = {
   research_trace_enabled?: boolean;
   research_account_link_enabled?: boolean;
   research_external_rag_enabled?: boolean;
+  research_ia_v2?: boolean;
   allow_multiple_projects: boolean;
   default_report_visibility: TReportVisibility;
   weekly_default_visibility?: TReportVisibility | null;
@@ -411,6 +412,7 @@ export type TIdentityMapping = {
 export type TResearchIdentity = {
   module_enabled: boolean;
   workspace_enabled: boolean;
+  research_ia_v2?: boolean;
   sections: {
     org: boolean;
     reports: boolean;

@@ -8,9 +8,10 @@ import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchIaV2Redirect } from "@/components/research/navigation/research-ia-v2-redirect";
 import { ResearchReportSummaryBoard } from "@/components/research/reports/report-summary-board";
 
-function WorkspaceResearchSummaryPage() {
+function WorkspaceResearchSummaryContent() {
   const { workspaceSlug } = useParams();
   if (!workspaceSlug) return null;
 
@@ -23,6 +24,16 @@ function WorkspaceResearchSummaryPage() {
     >
       <ResearchReportSummaryBoard workspaceSlug={workspaceSlug} />
     </ResearchPageShell>
+  );
+}
+
+function WorkspaceResearchSummaryPage() {
+  const { workspaceSlug } = useParams();
+  if (!workspaceSlug) return null;
+  return (
+    <ResearchIaV2Redirect to={`/${workspaceSlug}/research`} query={{ view: "report_submission" }}>
+      <WorkspaceResearchSummaryContent />
+    </ResearchIaV2Redirect>
   );
 }
 
