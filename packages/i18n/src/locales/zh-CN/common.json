@@ -1153,6 +1153,26 @@
     },
     "chains": {
       "description": "科研链投影，包含节点、事件与快照元数据。",
+      "tabs": {
+        "label": "科研链页面分区",
+        "overview": "课题",
+        "nodes": "节点",
+        "reports": "报告与成果",
+        "experiments": "实验记录",
+        "references": "外部引用",
+        "members": "成员",
+        "replay": "回放"
+      },
+      "node_status": {
+        "draft": "草稿",
+        "active": "进行中",
+        "waiting_human": "等待人工确认",
+        "needs_revision": "需修订",
+        "completed": "已完成",
+        "failed": "已失败",
+        "archived": "已归档"
+      },
+      "graph_title": "主链可视化",
       "views": {
         "chains": "课题",
         "projects": "项目管理",
@@ -1161,6 +1181,9 @@
       "empty": "当前可见课题还没有科研链。",
       "refresh": "刷新",
       "project": "课题",
+      "owner": "Owner",
+      "current_node": "当前节点",
+      "updated_at": "更新时间",
       "status": "状态",
       "visibility": "可见范围",
       "open": "打开科研链",
@@ -1193,7 +1216,48 @@
       "action_approve": "确认",
       "action_return": "退回",
       "action_fail": "标记失败",
-      "action_archive": "归档"
+      "action_archive": "归档",
+      "detail_title": "六段式节点详情",
+      "sections": {
+        "input": "输入",
+        "input_hint": "进入节点的材料、引用和授权资源。",
+        "ai_action": "AI 动作",
+        "ai_action_hint": "Agent 在当前范围内执行的动作。",
+        "intermediate": "中间产物",
+        "intermediate_hint": "尚未正式冻结的草稿与中间结果。",
+        "validation": "验证",
+        "validation_hint": "方法、数据与结论的验证证据。",
+        "human_decision": "人类决策",
+        "human_decision_hint": "研究者确认、退回或阻断的原因。",
+        "output": "输出",
+        "output_hint": "确认后进入链路的版本化结果。",
+        "empty": "该分段暂无记录。"
+      },
+      "overview": {
+        "meta": "课题信息",
+        "node_summary": "链路摘要",
+        "node_count": "{count} 个节点",
+        "member_count": "{count} 个成员"
+      },
+      "context_filter": "以下内容已按当前课题过滤，不包含无关全局列表。",
+      "context_load_failed": "上下文列表暂时不可用，请稍后重试。",
+      "context": {
+        "report_period": "报告周期",
+        "report_empty": "该课题还没有关联周期报告。",
+        "external_hint": "仅显示显式关联到当前课题或节点的外部引用。",
+        "external_empty": "该课题还没有关联外部引用。",
+        "open_source": "打开来源"
+      },
+      "members": {
+        "user_id": "成员用户 ID",
+        "role": "权限",
+        "role_member": "成员",
+        "role_admin": "管理员",
+        "add": "添加成员",
+        "remove": "移除",
+        "empty": "该课题还没有成员。"
+      },
+      "member_action_failed": "成员操作未完成，请确认用户和权限后重试。"
     },
     "knowledge": {
       "panel_title": "RAGPortal 知识库",

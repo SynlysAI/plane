@@ -12,12 +12,17 @@ const mocks = vi.hoisted(() => ({
   getChain: vi.fn(),
   getChainNodes: vi.fn(),
   getChainNodeDetail: vi.fn(),
+  getChainMembers: vi.fn(),
   createChainNode: vi.fn(),
   transitionChainNode: vi.fn(),
+  tab: "nodes",
 }));
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+}));
+vi.mock("react-router", () => ({
+  useSearchParams: () => [new URLSearchParams(mocks.tab ? `tab=${mocks.tab}` : "")],
 }));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
@@ -31,14 +36,18 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
-vi.mock("@/components/research/chains/research-chain-knowledge-panel", () => ({
-  ResearchChainKnowledgePanel: () => <div>knowledge-panel</div>,
+vi.mock("@/components/research/experiments/experiment-list", () => ({
+  ExperimentList: () => <div>experiment-list</div>,
+}));
+vi.mock("@/components/research/outcomes/outcome-list", () => ({
+  OutcomeList: () => <div>outcome-list</div>,
 }));
 vi.mock("@/services/research/chain.service", () => ({
   ResearchChainService: class {
     getChain = mocks.getChain;
     getChainNodes = mocks.getChainNodes;
     getChainNodeDetail = mocks.getChainNodeDetail;
+    getChainMembers = mocks.getChainMembers;
     createChainNode = mocks.createChainNode;
     transitionChainNode = mocks.transitionChainNode;
   },
@@ -77,8 +86,10 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  mocks.tab = "nodes";
   mocks.getChain.mockResolvedValue(chain);
   mocks.getChainNodes.mockResolvedValue([node]);
+  mocks.getChainMembers.mockResolvedValue([]);
   mocks.getChainNodeDetail.mockResolvedValue({
     node,
     events: [
@@ -127,16 +138,24 @@ afterEach(() => {
 
 it("opens node evidence and runs lifecycle actions through the service", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.getChainNodes.mockResolvedValue([
+    node,
+    { ...node, id: "node-2", title: "模型迭代", parent_node: "node-1", loop_iteration: 2 },
+  ]);
   await act(async () => {
     root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
   });
 
   expect(container.textContent).toContain("文献调研");
-  await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "打开时间线")?.click();
-  });
   expect(container.textContent).toContain("创建节点");
   expect(container.textContent).toContain("文献快照");
+  expect(container.textContent).toContain("输入");
+  expect(container.textContent).toContain("人类决策");
+  expect(container.textContent).toContain("R2");
+  expect(container.querySelector("path[stroke-dasharray='4 4']")).not.toBeNull();
+  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(
+    expect.arrayContaining(["课题", "节点", "报告与成果", "实验记录", "外部引用", "成员", "回放"])
+  );
 
   await act(async () => {
     [...container.querySelectorAll("button")].find((button) => button.textContent === "启动")?.click();
@@ -151,7 +170,7 @@ it("uses bounded node types and preserves the page when creation fails", async (
     root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
   });
 
-  const typeSelect = container.querySelector('select[aria-label="节点类型"]');
+  const typeSelect = container.querySelector("select");
   expect(typeSelect).not.toBeNull();
   const typeOptions = [...((typeSelect as HTMLSelectElement | null)?.options ?? [])];
   expect(typeOptions.map((option) => option.value)).not.toContain("not-a-research-node");
@@ -175,6 +194,11 @@ it("uses bounded node types and preserves the page when creation fails", async (
 it("explains that a failure or return reason is required before sending the transition", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   mocks.getChainNodes.mockResolvedValueOnce([{ ...node, status: "ACTIVE" }]);
+  mocks.getChainNodeDetail.mockResolvedValueOnce({
+    node: { ...node, status: "ACTIVE" },
+    events: [],
+    snapshots: [],
+  });
   await act(async () => {
     root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
   });
@@ -185,5 +209,5 @@ it("explains that a failure or return reason is required before sending the tran
 
   expect(mocks.transitionChainNode).not.toHaveBeenCalled();
   expect(container.textContent).toContain("请先填写原因。");
-  expect(container.querySelector('[aria-invalid="true"]')).not.toBeNull();
+  expect(container.querySelector('input[aria-invalid="true"]')).not.toBeNull();
 });

@@ -27,20 +27,23 @@ type TChainSummary = {
 /** Read the newest visible chain, its active node and latest snapshot. */
 async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
   const chains = await chainService.getChains(workspaceSlug);
-  const currentChain = chains.toSorted(
+  // eslint-disable-next-line unicorn/no-array-sort
+  const currentChain = [...chains].sort(
     (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
   )[0];
   if (!currentChain) return { chains, currentNode: null, latestSnapshot: null };
 
   const nodes = await chainService.getChainNodes(workspaceSlug, currentChain.id);
   const currentNode =
-    nodes.toSorted((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime())[0] ??
+    // eslint-disable-next-line unicorn/no-array-sort
+    [...nodes].sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime())[0] ??
     null;
   const detail = currentNode
     ? await chainService.getChainNodeDetail(workspaceSlug, currentNode.id).catch(() => null)
     : null;
   const latestSnapshot = detail
-    ? detail.snapshots.toSorted(
+    ? // eslint-disable-next-line unicorn/no-array-sort
+      [...detail.snapshots].sort(
         (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
       )[0]
     : null;
