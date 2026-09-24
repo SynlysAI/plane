@@ -9,7 +9,15 @@ shared reference shape. Field口径 differences stay inside the adapter so the
 generic layer never learns about a single vendor.
 """
 
-from .base import BaseIntegrationClient
+import base64
+import hashlib
+import hmac
+import json
+import time
+
+from plane.db.models import ExternalSystemConnection
+
+from .base import BaseIntegrationClient, resolve_secret
 
 
 class RagPortalClient(BaseIntegrationClient):
@@ -21,6 +29,34 @@ class RagPortalClient(BaseIntegrationClient):
     health_path = "/api/health"
     external_type = "KNOWLEDGE_ENTRY"
     operation = "fetch_knowledge_entries"
+
+    def headers(self, *, path, query=""):
+        """Build RAGPortal's AI4MS-compatible bearer token.
+
+        Args:
+            path: Request path; retained for the shared adapter signature.
+            query: Serialized query string; retained for the shared adapter signature.
+
+        Returns:
+            Authentication headers for RAGPortal. Non-HMAC modes fall back to the
+            generic integration contract.
+        """
+        if self.connection is None or self.connection.auth_mode != ExternalSystemConnection.AuthMode.HMAC:
+            return super().headers(path=path, query=query)
+        secret = resolve_secret(self.connection)
+        if not secret:
+            return {}
+        now = int(time.time())
+        payload = {
+            "sub": "plane-research-bff",
+            "username": "plane-research-bff",
+            "role": "user",
+            "iat": now,
+            "exp": now + 300,
+        }
+        payload_b64 = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=").decode()
+        signature = hmac.new(secret.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+        return {"Authorization": f"Bearer {payload_b64}.{signature}"}
 
     def normalise(self, payload):
         """Normalise RAGPortal KB list and upload responses to references."""

@@ -60,7 +60,9 @@ def test_secret_resolution_prefers_the_secret_store(env, settings):
 
 def test_hmac_headers_never_expose_the_secret(env, settings):
     settings.RAGPORTAL_SHARED_SECRET = "top-secret"
-    client = client_for("RAGPORTAL", env["connection"])
+    # RAGPortal overrides HMAC with its AI4MS bearer-token contract; use a
+    # generic adapter here to keep this test focused on shared HMAC behavior.
+    client = client_for("SPECLABOS", env["connection"])
     headers = client.headers(path="/api/knowledge/entries/", query="q=x")
     assert headers["X-AI4MS-Signature"]
     assert headers["X-AI4MS-Timestamp"]
