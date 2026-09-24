@@ -68,7 +68,8 @@ function normalizeTodos(todos: TResearchTodo[]) {
       byObject.set(todo.id, todo);
     }
   }
-  return [...byObject.values()].toSorted((left, right) => {
+  // eslint-disable-next-line unicorn/no-array-sort
+  return [...byObject.values()].sort((left, right) => {
     if (KIND_RANK[left.kind] !== KIND_RANK[right.kind]) return KIND_RANK[left.kind] - KIND_RANK[right.kind];
     const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
     const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;

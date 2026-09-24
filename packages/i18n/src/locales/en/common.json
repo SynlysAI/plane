@@ -1153,6 +1153,26 @@
     },
     "chains": {
       "description": "Research Chain projections with node, event and snapshot metadata.",
+      "tabs": {
+        "label": "Research Chain page sections",
+        "overview": "Topic",
+        "nodes": "Nodes",
+        "reports": "Reports and outcomes",
+        "experiments": "Experiment records",
+        "references": "External references",
+        "members": "Members",
+        "replay": "Replay"
+      },
+      "node_status": {
+        "draft": "Draft",
+        "active": "Active",
+        "waiting_human": "Waiting for confirmation",
+        "needs_revision": "Needs revision",
+        "completed": "Completed",
+        "failed": "Failed",
+        "archived": "Archived"
+      },
+      "graph_title": "Main chain visualization",
       "views": {
         "chains": "Chains",
         "projects": "Project management",
@@ -1161,6 +1181,9 @@
       "empty": "No research chain has been created in your visible projects yet.",
       "refresh": "Refresh",
       "project": "Project",
+      "owner": "Owner",
+      "current_node": "Current node",
+      "updated_at": "Updated",
       "status": "Status",
       "visibility": "Visibility",
       "open": "Open chain",
@@ -1193,7 +1216,48 @@
       "action_approve": "Approve",
       "action_return": "Return",
       "action_fail": "Mark failed",
-      "action_archive": "Archive"
+      "action_archive": "Archive",
+      "detail_title": "Six-section node detail",
+      "sections": {
+        "input": "Input",
+        "input_hint": "Materials, references and authorised resources entering this node.",
+        "ai_action": "AI actions",
+        "ai_action_hint": "Actions executed by the Agent within the current scope.",
+        "intermediate": "Intermediate artifacts",
+        "intermediate_hint": "Drafts and interim results not yet frozen.",
+        "validation": "Validation",
+        "validation_hint": "Evidence validating method, data and conclusions.",
+        "human_decision": "Human decisions",
+        "human_decision_hint": "Researcher confirmation, return or blocking reasons.",
+        "output": "Output",
+        "output_hint": "Versioned results confirmed into the chain.",
+        "empty": "No record in this section yet."
+      },
+      "overview": {
+        "meta": "Topic information",
+        "node_summary": "Chain summary",
+        "node_count": "{count} nodes",
+        "member_count": "{count} members"
+      },
+      "context_filter": "This content is filtered to the current topic; unrelated global lists are excluded.",
+      "context_load_failed": "Context lists are temporarily unavailable.",
+      "context": {
+        "report_period": "Report period",
+        "report_empty": "No periodic report is linked to this topic yet.",
+        "external_hint": "Only external references explicitly linked to this topic or node are shown.",
+        "external_empty": "No external reference is linked to this topic yet.",
+        "open_source": "Open source"
+      },
+      "members": {
+        "user_id": "Member user ID",
+        "role": "Permission",
+        "role_member": "Member",
+        "role_admin": "Administrator",
+        "add": "Add member",
+        "remove": "Remove",
+        "empty": "This chain has no member yet."
+      },
+      "member_action_failed": "The member action was not completed. Check the user and permission, then retry."
     },
     "knowledge": {
       "panel_title": "RAGPortal knowledge",
