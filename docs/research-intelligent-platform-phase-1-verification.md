@@ -12,6 +12,9 @@ Phase 1 已交付以下闭环：
 - 研究计划/分析类 AI 产物必须经过人工确认；确认后生成六类 typed snapshot 之一。
 - 实验、失败原因、外部资产、修订和版本锁定复用既有 Experiment 服务。
 - 开启 `research_ia_v2` 后，科研导航收敛为科研总览、Research Chain、审批中心、科研管理；旧列表路由显式兼容，关闭开关完整回退旧界面。
+- Plane 首页提供权限安全的科研摘要卡；科研总览提供跨组件待办、课题摘要、提交汇总与管理统计。
+- Research Chain 课题页提供固定上下文条、七类 Tab、主链可视化、循环编号、成员管理和六段式节点详情。
+- Agent 工作台提供 Context 条、结构化工具卡、审批/产物抽屉与 Trace 筛选；审批中心接入真实 Agent 等待会话队列。
 
 ## 2. 自动化验收
 
@@ -50,6 +53,9 @@ cd apps/web
 pnpm exec vitest run --config vitest.config.ts \
   tests/components/research-agent-plugin.test.tsx \
   tests/components/research-chain-detail.test.tsx \
+  tests/components/research-agent-approval-queue.test.tsx \
+  tests/components/research-home-summary-card.test.tsx \
+  tests/components/research-todo-index.test.tsx \
   tests/components/research-chain-knowledge-panel.test.tsx \
   tests/components/research-chain-navigation.test.tsx \
   tests/components/research-chain-route-registration.test.ts \
@@ -81,6 +87,14 @@ AUTH_SECRET=test-secret .venv/bin/pytest -q \
 
 完整 Synlora 后端套件在本环境执行结果为 605 passed / 186 skipped；Docker 专属沙箱提示词断言在 SDK/daemon 不可用时跳过，环境可用时仍执行。
 
+2026-09-24 任务 1.9 本地验证：
+
+- Plane API：`test_research_chain_mvp.py` 7 passed；`test_research_agent_plugin.py` 19 passed。
+- Plane Web：6 个相关组件测试文件 15 passed；`pnpm --filter web run check:types` 通过；变更文件 oxlint 0 warnings。
+- 浏览器验收：科研总览在 1920×1080、1440×900、1280×800、390×844 均无横向溢出；首页摘要卡、跨组件待办、课题摘要和范围统计可见。
+- 可访问性断言覆盖首页 loading/empty/forbidden、Chain Tab `aria-current`、主链节点 `aria-pressed`、Agent 抽屉 `role=dialog` 与 `aria-modal`、消息流 `aria-live`、Trace 筛选可访问名称。
+- 既有 Plane 侧栏 hydration warning 仍存在，来源与任务 1.9 改动无关，未阻断客户端渲染。
+
 ## 3. 灰度步骤
 
 1. **准备外部服务**
@@ -107,7 +121,7 @@ AUTH_SECRET=test-secret .venv/bin/pytest -q \
 1. 关闭 `research_ia_v2`，确认旧科研平铺侧栏、旧列表页面、普通 Plane 首页/草稿/我的工作/便签/项目入口不变。
 2. 开启 `research_ia_v2`，确认科研侧栏最多显示四个入口；学生不可见科研管理，导师/PI 按评审能力显示审批中心，管理员可见科研管理。
 3. 逐项验证旧路由兼容：项目、报告、提交汇总、待我评审、审计、集成跳转后 query/hash 不丢失；报告详情、项目详情、课题详情、节点详情不改址。
-4. 在 1920/1440/1280px 宽度检查侧栏、审批中心 Tab、科研管理 Tab 和 Chain 保存视图不溢出。
+4. 在 1920/1440/1280/390px 宽度检查侧栏、审批中心 Tab、科研管理 Tab、科研总览和 Chain 保存视图不溢出。
 5. 构造无权限与 RAGPortal `not_configured` 状态，确认页面显示中文原因和人工路径，不显示原始 key/code。
 
 2026-09-24 本地开发栈实测：迁移 0156 后，管理员在平台配置页开启开关，侧栏收敛为四个入口；项目、提交汇总、待我评审、审计、集成旧路由均重定向到目标路由，query/hash 保留；关闭开关后旧平铺侧栏和旧项目路由完整恢复。浏览器中仍存在 Plane 侧栏嵌套 button 的既有 hydration 警告，与本轮 IA 改动无关。
