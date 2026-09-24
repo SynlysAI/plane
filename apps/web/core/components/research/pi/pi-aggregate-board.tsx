@@ -143,7 +143,7 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
           {t("research.pi.empty_scope")}
         </p>
       ) : (
-        <div className="flex flex-wrap items-stretch divide-x divide-subtle overflow-x-auto rounded-lg border border-subtle bg-surface-1">
+        <div className="flex flex-wrap items-stretch divide-x divide-subtle overflow-x-auto rounded-xl bg-surface-1">
           {cards.map((card) =>
             card.href ? (
               <Link
@@ -165,7 +165,7 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
         </div>
       )}
 
-      <details className="rounded-lg border border-subtle bg-surface-1">
+      <details className="rounded-xl bg-surface-1">
         <summary className="cursor-pointer list-none px-4 py-2 text-12 text-secondary hover:text-primary">
           {t("research.pi.show_filters")}
         </summary>
@@ -209,7 +209,7 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
       </details>
 
       {aggregate.org_units.length > 0 && (
-        <details className="rounded-lg border border-subtle bg-surface-1">
+        <details className="rounded-xl bg-surface-1">
           <summary className="cursor-pointer list-none px-4 py-2 text-12 text-secondary hover:text-primary">
             {t("research.pi.org_units")} · {aggregate.org_units.length}
           </summary>
@@ -227,7 +227,7 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
         </details>
       )}
       {(aggregate.outcomes?.recent.length ?? 0) > 0 && (
-        <details className="rounded-lg border border-subtle bg-surface-1" open>
+        <details className="rounded-xl bg-surface-1" open>
           <summary className="cursor-pointer list-none px-4 py-2 text-12 text-secondary hover:text-primary">
             {t("research.pi.recent_outcomes")}
           </summary>

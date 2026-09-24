@@ -55,8 +55,8 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
   const selected = records.find((record) => record.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <div className="flex w-96 flex-col gap-2 overflow-y-auto border-r border-subtle p-3">
+    <div className="flex h-full overflow-hidden bg-canvas">
+      <div className="flex w-96 flex-col gap-2 overflow-y-auto border-r border-subtle bg-surface-2 p-3">
         <div className="flex items-center gap-2">
           <Input
             className="!w-40"
@@ -100,8 +100,8 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
               key={record.id}
               type="button"
               onClick={() => setSelectedId(record.id)}
-              className={`flex flex-col gap-1 rounded border px-2 py-1.5 text-left ${
-                record.id === selectedId ? "border-accent-strong bg-surface-2" : "border-subtle"
+              className={`flex flex-col gap-1 rounded-md border px-2 py-1.5 text-left transition-colors ${
+                record.id === selectedId ? "border-accent-strong bg-surface-1" : "border-transparent hover:bg-surface-1"
               }`}
             >
               <span className="text-12 text-primary">{`#${record.sequence_no} ${record.title}`}</span>

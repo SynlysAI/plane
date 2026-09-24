@@ -2166,6 +2166,8 @@
         "open_editor": "在页面编辑器中打开",
         "title_field": "材料标题",
         "change_reason": "修改原因",
+        "edit_title": "编辑与提交",
+        "edit_hint": "标题、修改原因与提交状态保持同一上下文。",
         "read_only_hint": "材料提交后只读，阶段退回后可再次编辑。",
         "versions_title": "版本历史",
         "changed_fields": "变更字段",

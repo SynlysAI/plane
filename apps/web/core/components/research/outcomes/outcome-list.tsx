@@ -15,6 +15,11 @@ import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
@@ -42,8 +47,8 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
   }, [workspaceSlug, projectId]);
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-5">
-      <div className="flex flex-wrap items-center gap-2">
+    <ResearchListSurface>
+      <ResearchFilterToolbar>
         <Input
           className="!w-64"
           value={title}
@@ -103,59 +108,61 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
         >
           {t("research.outcomes.export_chain")}
         </a>
-      </div>
+      </ResearchFilterToolbar>
 
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("research.outcomes.columns.title")}</TableHead>
-            <TableHead>{t("research.outcomes.columns.type")}</TableHead>
-            <TableHead>{t("research.outcomes.columns.venue")}</TableHead>
-            <TableHead>{t("research.outcomes.columns.status")}</TableHead>
-            <TableHead>{t("research.outcomes.columns.links")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {outcomes.map((outcome) => (
-            <TableRow key={outcome.id} className="hover:bg-surface-2">
-              <TableCell className="font-medium text-primary">{outcome.title}</TableCell>
-              <TableCell className="text-tertiary">{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</TableCell>
-              <TableCell className="text-tertiary">{outcome.venue || outcome.doi || "-"}</TableCell>
-              <TableCell>
-                <select
-                  className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
-                  value={outcome.status}
-                  onChange={(event) =>
-                    void research
-                      .updateOutcome(workspaceSlug, outcome.id, { status: event.target.value })
-                      .catch(() => undefined)
-                  }
-                >
-                  {OUTCOME_STATUSES.map((value) => (
-                    <option key={value} value={value}>
-                      {t(OUTCOME_STATUS_LABELS[value])}
-                    </option>
-                  ))}
-                </select>
-                <ResearchStatusBadge status={outcome.status} size="sm" className="ml-2">
-                  {t(OUTCOME_STATUS_LABELS[outcome.status])}
-                </ResearchStatusBadge>
-              </TableCell>
-              <TableCell className="text-tertiary">{outcome.links?.length ?? 0}</TableCell>
-            </TableRow>
-          ))}
-          {!outcomes.length && (
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={5} className="py-3 text-tertiary">
-                {t("research.outcomes.empty")}
-              </TableCell>
+              <TableHead>{t("research.outcomes.columns.title")}</TableHead>
+              <TableHead>{t("research.outcomes.columns.type")}</TableHead>
+              <TableHead>{t("research.outcomes.columns.venue")}</TableHead>
+              <TableHead>{t("research.outcomes.columns.status")}</TableHead>
+              <TableHead className="text-right">{t("research.outcomes.columns.links")}</TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {outcomes.map((outcome) => (
+              <TableRow key={outcome.id} className="hover:bg-surface-2">
+                <TableCell className="font-medium text-primary">{outcome.title}</TableCell>
+                <TableCell className="text-tertiary">{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</TableCell>
+                <TableCell className="text-tertiary">{outcome.venue || outcome.doi || "-"}</TableCell>
+                <TableCell>
+                  <select
+                    className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
+                    value={outcome.status}
+                    onChange={(event) =>
+                      void research
+                        .updateOutcome(workspaceSlug, outcome.id, { status: event.target.value })
+                        .catch(() => undefined)
+                    }
+                  >
+                    {OUTCOME_STATUSES.map((value) => (
+                      <option key={value} value={value}>
+                        {t(OUTCOME_STATUS_LABELS[value])}
+                      </option>
+                    ))}
+                  </select>
+                  <ResearchStatusBadge status={outcome.status} size="sm" className="ml-2">
+                    {t(OUTCOME_STATUS_LABELS[outcome.status])}
+                  </ResearchStatusBadge>
+                </TableCell>
+                <TableCell className="text-right text-tertiary tabular-nums">{outcome.links?.length ?? 0}</TableCell>
+              </TableRow>
+            ))}
+            {!outcomes.length && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-3 text-tertiary">
+                  {t("research.outcomes.empty")}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
       <p className="text-11 text-tertiary">{t("research.outcomes.link_hint")}</p>
-    </div>
+    </ResearchListSurface>
   );
 });

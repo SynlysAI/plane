@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { TResearchChain } from "@plane/types";
 // components
 import { ResearchListState } from "@/components/research/common/research-list-state";
+import { ResearchListSurface, ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
@@ -109,54 +110,56 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
   }
 
   return (
-    <div className="h-full overflow-y-auto p-5">
-      <Table>
-        <caption className="sr-only">{t("research.nav.research_chain")}</caption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("research.chains.project")}</TableHead>
-            <TableHead>{t("research.chains.status")}</TableHead>
-            <TableHead>{t("research.chains.visibility")}</TableHead>
-            <TableHead>{t("research.chains.owner")}</TableHead>
-            <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
-            <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {chains.map((chain) => (
-            <TableRow key={chain.id} className="hover:bg-surface-2">
-              <TableCell>
-                <Link
-                  href={`/${workspaceSlug}/research/chains/${chain.id}`}
-                  className="font-medium text-primary hover:text-accent-primary"
-                >
-                  {chain.project_name ?? chain.project}
-                </Link>
-              </TableCell>
-              <TableCell>
-                <ResearchStatusBadge status={chain.status} size="sm">
-                  {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
-                </ResearchStatusBadge>
-              </TableCell>
-              <TableCell className="text-secondary">
-                {t(`research.chains.visibility.${chain.visibility.toLowerCase()}`)}
-              </TableCell>
-              <TableCell className="text-secondary">{chain.owner_name ?? chain.owner}</TableCell>
-              <TableCell className="text-right text-tertiary tabular-nums">
-                {new Date(chain.updated_at).toLocaleString()}
-              </TableCell>
-              <TableCell className="text-right">
-                <Link
-                  href={`/${workspaceSlug}/research/chains/${chain.id}`}
-                  className={getButtonStyling("secondary", "base")}
-                >
-                  {t("research.chains.open")}
-                </Link>
-              </TableCell>
+    <ResearchListSurface>
+      <ResearchTableSurface>
+        <Table>
+          <caption className="sr-only">{t("research.nav.research_chain")}</caption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("research.chains.project")}</TableHead>
+              <TableHead>{t("research.chains.status")}</TableHead>
+              <TableHead>{t("research.chains.visibility")}</TableHead>
+              <TableHead>{t("research.chains.owner")}</TableHead>
+              <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
+              <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {chains.map((chain) => (
+              <TableRow key={chain.id} className="hover:bg-surface-2">
+                <TableCell>
+                  <Link
+                    href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                    className="font-medium text-primary hover:text-accent-primary"
+                  >
+                    {chain.project_name ?? chain.project}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <ResearchStatusBadge status={chain.status} size="sm">
+                    {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
+                  </ResearchStatusBadge>
+                </TableCell>
+                <TableCell className="text-secondary">
+                  {t(`research.chains.visibility.${chain.visibility.toLowerCase()}`)}
+                </TableCell>
+                <TableCell className="text-secondary">{chain.owner_name ?? chain.owner}</TableCell>
+                <TableCell className="text-right text-tertiary tabular-nums">
+                  {new Date(chain.updated_at).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                    className={getButtonStyling("secondary", "base")}
+                  >
+                    {t("research.chains.open")}
+                  </Link>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
+    </ResearchListSurface>
   );
 };

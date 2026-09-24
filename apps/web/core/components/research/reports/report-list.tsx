@@ -19,6 +19,12 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterChips,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 import { ResearchListState } from "@/components/research/common/research-list-state";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
@@ -209,14 +215,14 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
   }, [variant]);
 
   return (
-    <div className="flex flex-col gap-3 p-5">
+    <ResearchListSurface>
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
+      <ResearchFilterToolbar>
         {canCreateReport && variant === "default" && (
           <>
             <select
@@ -342,20 +348,15 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
           <input type="checkbox" checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />
           {t("research.reports.mine_only")}
         </label>
-      </div>
+      </ResearchFilterToolbar>
 
       {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 text-11 text-tertiary">
-          <span>{t("research.list_state.active_filters")}</span>
-          {filterSummary.map((filter) => (
-            <span key={filter} className="rounded bg-surface-2 px-2 py-0.5 text-secondary">
-              {filter}
-            </span>
-          ))}
-          <button type="button" className="text-accent-primary hover:underline" onClick={clearFilters}>
-            {t("research.list_state.clear_filters")}
-          </button>
-        </div>
+        <ResearchFilterChips
+          filters={filterSummary}
+          activeLabel={t("research.list_state.active_filters")}
+          clearLabel={t("research.list_state.clear_filters")}
+          onClear={clearFilters}
+        />
       )}
 
       {research.reportLoader && reports.length === 0 ? (
@@ -369,63 +370,65 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
           onClearFilters={clearFilters}
         />
       ) : (
-        <Table className="min-w-[860px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("research.reports.columns.period")}</TableHead>
-              <TableHead>{t("research.reports.columns.type")}</TableHead>
-              <TableHead>{t("research.reports.columns.owner")}</TableHead>
-              <TableHead>{t("research.reports.columns.org_unit")}</TableHead>
-              <TableHead>{t("research.reports.columns.status")}</TableHead>
-              <TableHead>{t("research.reports.columns.visibility")}</TableHead>
-              <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
-              <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {reports.map((report) => (
-              <TableRow key={report.id} className="hover:bg-surface-2">
-                <TableCell>
-                  <Link
-                    href={`/${workspaceSlug}/research/reports/${report.id}`}
-                    className={`font-medium text-primary hover:text-accent-primary ${reportId === report.id ? "text-accent-primary" : ""}`}
-                  >
-                    {report.period_key}
-                  </Link>
-                  {report.is_backfill && (
-                    <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-10 text-tertiary">
-                      {t("research.reports.backfill")}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-secondary">{t(REPORT_TYPE_LABELS[report.report_type])}</TableCell>
-                <TableCell className="text-secondary">
-                  {report.owner_detail?.display_name ?? report.owner_detail?.email ?? report.owner}
-                </TableCell>
-                <TableCell className="text-tertiary">{report.org_unit_detail?.name ?? "-"}</TableCell>
-                <TableCell>
-                  <ResearchStatusBadge status={report.status} size="sm">
-                    {t(REPORT_STATUS_LABELS[report.status])}
-                  </ResearchStatusBadge>
-                </TableCell>
-                <TableCell className="text-tertiary">
-                  {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}
-                </TableCell>
-                <TableCell className="text-right text-tertiary tabular-nums">
-                  {new Date(report.updated_at).toLocaleDateString()}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Link
-                    href={`/${workspaceSlug}/research/reports/${report.id}`}
-                    className="text-12 text-accent-primary hover:underline"
-                  >
-                    {t("research.common.open")}
-                  </Link>
-                </TableCell>
+        <ResearchTableSurface>
+          <Table className="min-w-[860px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("research.reports.columns.period")}</TableHead>
+                <TableHead>{t("research.reports.columns.type")}</TableHead>
+                <TableHead>{t("research.reports.columns.owner")}</TableHead>
+                <TableHead>{t("research.reports.columns.org_unit")}</TableHead>
+                <TableHead>{t("research.reports.columns.status")}</TableHead>
+                <TableHead>{t("research.reports.columns.visibility")}</TableHead>
+                <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
+                <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {reports.map((report) => (
+                <TableRow key={report.id} className="hover:bg-surface-2">
+                  <TableCell>
+                    <Link
+                      href={`/${workspaceSlug}/research/reports/${report.id}`}
+                      className={`font-medium text-primary hover:text-accent-primary ${reportId === report.id ? "text-accent-primary" : ""}`}
+                    >
+                      {report.period_key}
+                    </Link>
+                    {report.is_backfill && (
+                      <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-10 text-tertiary">
+                        {t("research.reports.backfill")}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-secondary">{t(REPORT_TYPE_LABELS[report.report_type])}</TableCell>
+                  <TableCell className="text-secondary">
+                    {report.owner_detail?.display_name ?? report.owner_detail?.email ?? report.owner}
+                  </TableCell>
+                  <TableCell className="text-tertiary">{report.org_unit_detail?.name ?? "-"}</TableCell>
+                  <TableCell>
+                    <ResearchStatusBadge status={report.status} size="sm">
+                      {t(REPORT_STATUS_LABELS[report.status])}
+                    </ResearchStatusBadge>
+                  </TableCell>
+                  <TableCell className="text-tertiary">
+                    {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}
+                  </TableCell>
+                  <TableCell className="text-right text-tertiary tabular-nums">
+                    {new Date(report.updated_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/${workspaceSlug}/research/reports/${report.id}`}
+                      className="text-12 text-accent-primary hover:underline"
+                    >
+                      {t("research.common.open")}
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ResearchTableSurface>
       )}
       <div className="flex items-center justify-between gap-2 text-12 text-tertiary">
         <span>{t("research.common.total_results", { count: pagination?.total_results ?? reports.length })}</span>
@@ -448,6 +451,6 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
           </Button>
         </div>
       </div>
-    </div>
+    </ResearchListSurface>
   );
 });

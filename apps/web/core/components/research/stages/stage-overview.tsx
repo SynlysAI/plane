@@ -64,7 +64,7 @@ export const StageOverview = observer(function StageOverview({ workspaceSlug, pr
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <ResearchProjectNav workspaceSlug={workspaceSlug} projectId={projectId} />
-      <div className="flex flex-1 flex-col gap-3 overflow-hidden p-5">
+      <div className="flex flex-1 flex-col gap-4 overflow-hidden bg-canvas p-5">
         <div className="flex items-center justify-between gap-2">
           <StageTimeline stages={stages} selectedStageId={selectedId} onSelect={(stage) => setSelectedId(stage.id)} />
           {!stages.length && (
@@ -77,7 +77,7 @@ export const StageOverview = observer(function StageOverview({ workspaceSlug, pr
             </Button>
           )}
         </div>
-        <div className="flex-1 overflow-hidden rounded border border-subtle">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-1">
           {selected ? (
             <StageDetail
               key={selected.id}

@@ -18,6 +18,7 @@ import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ExternalReferenceCard } from "@/components/research/integrations/external-reference-card";
 import { ExternalReferencePicker } from "@/components/research/integrations/external-reference-picker";
 // hooks
@@ -91,38 +92,42 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
   if (!material) return null;
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-14 font-medium text-primary">{t(stageMaterialLabelKey(material.material_type))}</h2>
-          <span className="rounded bg-surface-2 px-1.5 py-0.5 text-11 text-secondary">
-            {t(STAGE_MATERIAL_STATUS_LABELS[material.status])}
-          </span>
-          <span className="text-11 text-tertiary">
-            {t("research.stages.materials.version", { version: material.last_version_no })}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            className="text-12 text-accent-primary hover:underline"
-            href={`/${workspaceSlug}/projects/${projectId}/pages/${material.page}`}
-          >
-            {t("research.stages.materials.open_editor")}
-          </Link>
-          {material.can_edit && (
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={busy}
-              onClick={() => void run(() => research.submitStageMaterial(workspaceSlug, materialId))}
+    <div className="flex h-full flex-col gap-4 overflow-y-auto bg-canvas p-5">
+      <ResearchDetailHeader
+        title={t(stageMaterialLabelKey(material.material_type))}
+        metadata={
+          <>
+            <span>{t(STAGE_MATERIAL_STATUS_LABELS[material.status])}</span>
+            <span>{t("research.stages.materials.version", { version: material.last_version_no })}</span>
+          </>
+        }
+        hint={t("research.stages.materials.stage_hint", { stage: stageCode })}
+        actions={
+          <>
+            <Link
+              className="text-12 text-accent-primary hover:underline"
+              href={`/${workspaceSlug}/projects/${projectId}/pages/${material.page}`}
             >
-              {t("research.stages.materials.submit")}
-            </Button>
-          )}
-        </div>
-      </div>
+              {t("research.stages.materials.open_editor")}
+            </Link>
+            {material.can_edit && (
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={busy}
+                onClick={() => void run(() => research.submitStageMaterial(workspaceSlug, materialId))}
+              >
+                {t("research.stages.materials.submit")}
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      <div className="flex flex-col gap-2">
+      <ResearchDetailSurface
+        title={t("research.stages.materials.edit_title")}
+        hint={t("research.stages.materials.edit_hint")}
+      >
         <label className="text-12 text-secondary" htmlFor="material-title">
           {t("research.stages.materials.title_field")}
         </label>
@@ -177,10 +182,9 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
             </div>
           </div>
         )}
-      </div>
+      </ResearchDetailSurface>
 
-      <div className="flex flex-col gap-1">
-        <h3 className="text-13 font-medium text-primary">{t("research.stages.materials.versions_title")}</h3>
+      <ResearchDetailSurface title={t("research.stages.materials.versions_title")} collapsible>
         {versions.map((version) => (
           <div key={version.id} className="flex flex-col gap-0.5 rounded border border-subtle px-2 py-1.5 text-12">
             <div className="flex items-center justify-between gap-2">
@@ -199,10 +203,8 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
             )}
           </div>
         ))}
-      </div>
-      <p className="text-11 text-tertiary">{t("research.stages.materials.stage_hint", { stage: stageCode })}</p>
-      <div className="flex flex-col gap-2">
-        <h3 className="text-13 font-medium text-primary">{t("research.integrations.references_title")}</h3>
+      </ResearchDetailSurface>
+      <ResearchDetailSurface title={t("research.integrations.references_title")}>
         {linkedReferences.map((reference) => (
           <ExternalReferenceCard
             key={reference.id}
@@ -219,7 +221,7 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
             await research.fetchExternalReferences(workspaceSlug).catch(() => undefined);
           }}
         />
-      </div>
+      </ResearchDetailSurface>
       {currentUser && <span className="text-11 text-tertiary">{t("research.stages.materials.reviewer_hint")}</span>}
     </div>
   );

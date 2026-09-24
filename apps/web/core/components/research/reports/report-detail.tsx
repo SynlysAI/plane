@@ -23,6 +23,7 @@ import { Input, ModalCore } from "@plane/ui";
 // components
 import { DocumentEditor } from "@/components/editor/document/editor";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ResearchReportAttachments } from "@/components/research/reports/report-attachments";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -198,66 +199,69 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
     : null;
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
+    <div className="flex h-full flex-col gap-4 overflow-y-auto bg-canvas p-5">
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-14 font-medium text-primary">
-            {report.period_key} · {t(REPORT_TYPE_LABELS[report.report_type])}
-          </h2>
-          <p className="mt-0.5 text-12 text-tertiary">
-            {t(REPORT_STATUS_LABELS[report.status])} · {report.period_start} ~ {report.period_end}
-          </p>
-          <p className="mt-1 text-11 text-tertiary">{t(`research.reports.next_step.${report.status.toLowerCase()}`)}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canOpenDraft && pageProject && (
-            <Link
-              href={`/${workspaceSlug}/projects/${pageProject}/pages/${report.page}`}
-              className="rounded-md border border-strong px-2 py-1 text-12 text-secondary hover:bg-surface-2"
-            >
-              {t("research.reports.open_body")}
-            </Link>
-          )}
-          {report.can_edit && (
-            <Button
-              variant="primary"
-              size="sm"
-              loading={pendingAction === "submit"}
-              disabled={pendingAction !== null}
-              onClick={() => void handleSubmit()}
-            >
-              {t("research.reports.submit")}
-            </Button>
-          )}
-          {report.can_review && report.status === "SUBMITTED" && (
-            <>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={pendingAction !== null}
-                onClick={() => setShowReturn(true)}
+      <ResearchDetailHeader
+        title={`${report.period_key} · ${t(REPORT_TYPE_LABELS[report.report_type])}`}
+        metadata={
+          <>
+            <span>{t(REPORT_STATUS_LABELS[report.status])}</span>
+            <span className="tabular-nums">
+              {report.period_start} ~ {report.period_end}
+            </span>
+          </>
+        }
+        hint={t(`research.reports.next_step.${report.status.toLowerCase()}`)}
+        actions={
+          <>
+            {canOpenDraft && pageProject && (
+              <Link
+                href={`/${workspaceSlug}/projects/${pageProject}/pages/${report.page}`}
+                className="rounded-md border border-strong px-2 py-1 text-12 text-secondary hover:bg-surface-2"
               >
-                {t("research.reports.return")}
-              </Button>
+                {t("research.reports.open_body")}
+              </Link>
+            )}
+            {report.can_edit && (
               <Button
                 variant="primary"
                 size="sm"
-                loading={pendingAction === "accept"}
+                loading={pendingAction === "submit"}
                 disabled={pendingAction !== null}
-                onClick={() => void handleAccept()}
+                onClick={() => void handleSubmit()}
               >
-                {t("research.reports.accept")}
+                {t("research.reports.submit")}
               </Button>
-            </>
-          )}
-        </div>
-      </div>
+            )}
+            {report.can_review && report.status === "SUBMITTED" && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={pendingAction !== null}
+                  onClick={() => setShowReturn(true)}
+                >
+                  {t("research.reports.return")}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={pendingAction === "accept"}
+                  disabled={pendingAction !== null}
+                  onClick={() => void handleAccept()}
+                >
+                  {t("research.reports.accept")}
+                </Button>
+              </>
+            )}
+          </>
+        }
+      />
 
       {isAuthor && !pageProject && standaloneDraftDocument && workspaceId && (
         <section className="rounded-lg border border-subtle bg-surface-1 p-4">
@@ -348,8 +352,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         </section>
       )}
 
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.reports.visibility")}</h3>
+      <ResearchDetailSurface title={t("research.reports.visibility")}>
         <div className="mt-2 flex flex-wrap gap-2">
           {REPORT_VISIBILITIES.filter((visibility) => visibility !== "CUSTOM").map((visibility) => (
             <button
@@ -368,7 +371,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
           ))}
         </div>
         <p className="mt-2 text-11 text-tertiary">{t("research.reports.visibility_hint")}</p>
-      </section>
+      </ResearchDetailSurface>
 
       <ModalCore isOpen={showReturn} handleClose={() => pendingAction === null && setShowReturn(false)}>
         <section className="bg-surface-1 p-5">
@@ -403,8 +406,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         </section>
       </ModalCore>
 
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.reports.history")}</h3>
+      <ResearchDetailSurface title={t("research.reports.history")} collapsible>
         <ol className="mt-3 flex flex-col gap-3">
           {history.map((entry) => (
             <li key={entry.id} className="flex flex-col gap-0.5 border-l border-subtle pl-3">
@@ -420,7 +422,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
           ))}
           {history.length === 0 && <li className="text-12 text-tertiary">{t("research.reports.no_history")}</li>}
         </ol>
-      </section>
+      </ResearchDetailSurface>
 
       <ResearchReportAttachments
         workspaceSlug={workspaceSlug}

@@ -27,6 +27,14 @@ const { ResearchStatusBadge, researchStatusVariant } =
   await import("@/components/research/common/research-status-badge");
 const { ResearchTabLink } = await import("@/components/research/common/research-tab-link");
 const { ResearchListState } = await import("@/components/research/common/research-list-state");
+const {
+  ResearchDetailHeader,
+  ResearchDetailSurface,
+  ResearchFilterChips,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} = await import("@/components/research/common/research-data-surface");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
@@ -102,4 +110,45 @@ it("supports generic empty state config for lists outside the built-in resources
     )
   );
   expect(container.textContent).toContain("还没有科研项目");
+});
+
+it("provides one semantic surface system for research lists and details", async () => {
+  await act(async () =>
+    root.render(
+      <>
+        <ResearchListSurface>
+          <ResearchFilterToolbar>
+            <input aria-label="筛选" />
+          </ResearchFilterToolbar>
+          <ResearchFilterChips
+            filters={["近 30 天", "待评审"]}
+            activeLabel="当前筛选"
+            clearLabel="清除筛选"
+            onClear={() => undefined}
+          />
+          <ResearchTableSurface>
+            <table>
+              <tbody>
+                <tr>
+                  <td>结构化记录</td>
+                </tr>
+              </tbody>
+            </table>
+          </ResearchTableSurface>
+        </ResearchListSurface>
+        <ResearchDetailHeader title="周期报告" metadata={<span>草稿</span>} hint="下一步提交评审" />
+        <ResearchDetailSurface title="历史记录" collapsible>
+          <p>低频证据</p>
+        </ResearchDetailSurface>
+      </>
+    )
+  );
+
+  expect(container.querySelector(".bg-canvas")).not.toBeNull();
+  expect(container.querySelector(".bg-surface-2")).not.toBeNull();
+  expect(container.querySelector("button")?.textContent).toBe("清除筛选");
+  expect(container.querySelector("h2")?.textContent).toBe("周期报告");
+  const collapsible = container.querySelector("details");
+  expect(collapsible?.open).toBe(false);
+  expect(collapsible?.textContent).toContain("低频证据");
 });

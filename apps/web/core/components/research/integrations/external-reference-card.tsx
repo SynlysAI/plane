@@ -26,7 +26,7 @@ export const ExternalReferenceCard = observer(function ExternalReferenceCard({ r
   const { t } = useTranslation();
   const degraded = reference.status !== "ACTIVE";
   return (
-    <div className="flex flex-col gap-1 rounded border border-subtle px-3 py-2 text-12">
+    <div className="flex flex-col gap-1 rounded-lg bg-surface-2 px-3 py-2 text-12">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-primary">{reference.title}</span>
         <span className="flex items-center gap-2 text-11">
