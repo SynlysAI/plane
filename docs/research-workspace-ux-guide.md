@@ -3,12 +3,12 @@
 | 项目     | 内容                                                              |
 | -------- | ----------------------------------------------------------------- |
 | 文档状态 | 当前有效                                                          |
-| 文档版本 | v1.2                                                              |
+| 文档版本 | v1.3                                                              |
 | 日期     | 2026-09-24                                                        |
-| 适用版本 | `4.11.0` 起                                                       |
+| 适用版本 | `4.12.0` 起                                                       |
 | 定位     | 科研工作台 UI/UX 系列文档的**唯一入口与权威规范**；冲突以本文为准 |
 
-本文整合 4.10.0 视觉重构与 4.11.0 信息架构精炼两轮成果，沉淀为可持续执行的 UX 规范。两轮 PRD、审计、验收与发布说明原文收录于 [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)，见 §8 文档地图。
+本文整合 4.10.0 视觉重构、4.11.0 信息架构精炼与 4.12.0 产品级 UI 精细化成果，沉淀为可持续执行的 UX 规范。4.10 / 4.11 过程档案见 [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)；4.12 PRD、基线与验收见 §8 文档地图。
 
 ## 1. 产品三定位
 
@@ -44,17 +44,19 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 
 ## 4. 语义组件清单（唯一出口）
 
-| 需求        | 组件 / 方案                                         | 位置                                               |
-| ----------- | --------------------------------------------------- | -------------------------------------------------- |
-| 状态标签    | `ResearchStatusBadge`（统一状态字典）               | `research/common/research-status-badge.tsx`        |
-| 路由标签页  | `ResearchTabLink`（保留 `aria-current`）            | `research/common/research-tab-link.tsx`            |
-| 列表空态    | `ResearchListState`（六类状态 × compact/detailed）  | `research/common/research-list-state.tsx`          |
-| 页面壳      | `ResearchPageShell`（面包屑 / 元信息 / 权限分支）   | `research/common/research-page-shell.tsx`          |
-| 状态面板    | `ResearchStatusPanel`                               | `research/common/research-status-panel.tsx`        |
-| 工作流导轨  | `ResearchChainWorkflowRail`（全节点流程 + 当前态）  | `research/chains/research-chain-workflow-rail.tsx` |
-| Agent 面板  | `ResearchAgentSidePanel`（400px 抽屉 + 上下文继承） | `research/agent/research-agent-side-panel.tsx`     |
-| 表格        | propel `Table` 系列（禁手写原生 table）             | `@plane/propel/table`                              |
-| 按钮 / 加载 | propel `Button` / `getButtonStyling` / `Skeleton`   | `@plane/propel/*`                                  |
+| 需求         | 组件 / 方案                                             | 位置                                               |
+| ------------ | ------------------------------------------------------- | -------------------------------------------------- |
+| 状态标签     | `ResearchStatusBadge`（统一状态字典）                   | `research/common/research-status-badge.tsx`        |
+| 路由标签页   | `ResearchTabLink`（保留 `aria-current`）                | `research/common/research-tab-link.tsx`            |
+| 列表空态     | `ResearchListState`（六类状态 × compact/detailed）      | `research/common/research-list-state.tsx`          |
+| 页面壳       | `ResearchPageShell`（面包屑 / 元信息 / 权限分支）       | `research/common/research-page-shell.tsx`          |
+| 数据 Surface | `ResearchDataSurface` 系列（列表 / 筛选 / 表格 / 详情） | `research/common/research-data-surface.tsx`        |
+| 状态面板     | `ResearchStatusPanel`                                   | `research/common/research-status-panel.tsx`        |
+| 工作流导轨   | `ResearchChainWorkflowRail`（固定 13 阶段 + 当前态）    | `research/chains/research-chain-workflow-rail.tsx` |
+| 工作流映射   | `buildResearchWorkflow`（纯展示层阶段推导）             | `research/chains/research-chain-workflow.ts`       |
+| Agent 面板   | `ResearchAgentSidePanel`（400px 抽屉 + 上下文继承）     | `research/agent/research-agent-side-panel.tsx`     |
+| 表格         | propel `Table` 系列（禁手写原生 table）                 | `@plane/propel/table`                              |
+| 按钮 / 加载  | propel `Button` / `getButtonStyling` / `Skeleton`       | `@plane/propel/*`                                  |
 
 新实现不得绕过以上出口另写平行实现。
 
@@ -66,21 +68,22 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 
 ### 5.2 研究链
 
-Header（对象 + 当前节点）→ **Workflow Rail（常驻，全节点）** → Tabs → 当前节点详情（六段结构）→ Supporting。Rail 状态语义：已完成 muted + check、当前 accent、待人工 warning、未来 neutral；点击节点仅查看摘要，不跳出 Chain。
+Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段）** → Tabs → 当前节点详情（六段结构）→ Supporting。Rail 始终显示：文献调研 → 选题 → 评估 → 预实验 → 分析 → 开题 → 实验 → 分析 → 迭代 → 总结 → 论文写作 → 结题 → 转化；两个“分析”阶段按结构前后关系区分。`TOPIC_EVALUATION` 在“选题 / 评估”共享关联，`PLAN` 是开题准备节点；点击阶段仅查看摘要，不改变真实当前节点。
 
 ### 5.3 Agent
 
-默认从 Chain 详情右侧抽屉打开（360–440px），自动继承课题 / 节点上下文；默认只展示上下文摘要、对话流、固定输入与待审批操作；Tool / Trace / 装配详情折叠在"运行详情"。完整工作台保留在独立路由。
+默认从 Chain 详情右侧 400px 抽屉打开，自动继承课题 / 节点上下文；默认只展示上下文摘要、对话流、固定输入与待审批操作；Tool / Trace / 装配详情折叠在“运行详情”。抽屉使用 overlay，打开前后主内容坐标不变；Tab 焦点圈定在面板内，Escape 关闭并返回触发按钮。完整工作台保留在独立路由。
 
 ### 5.4 列表与设置
 
-结构化 propel Table 行（标题链接 / 状态徽标 / Owner / 日期右对齐 / 操作右对齐），统一筛选 chips 与空态；设置页沿用 Plane settings 布局语言。
+列表使用 `ResearchListSurface` + `ResearchFilterToolbar` + `ResearchTableSurface`，结构化 propel Table 行（标题链接 / 状态徽标 / Owner / 日期右对齐 / 操作右对齐），统一筛选 chips 与空态；详情使用 `ResearchDetailHeader` / `ResearchDetailSurface`，历史与 Trace 默认折叠。设置页沿用 Plane settings 布局语言，组织树仅当前节点显示“添加子节点”入口，避免整树操作噪音。
 
 ## 6. 交互与可访问性基线
 
 - 主操作唯一，次级操作图标按钮 + tooltip；
 - 长文本 truncate + title；表格不横向破坏；
 - `aria-current` / `aria-busy` / `role=status|alert` / Escape 关闭浮层；
+- 模态抽屉 Tab 焦点圈定，关闭后焦点返回触发元素；
 - 1440 / 1920 可用，深浅色主题继承 propel，无硬编码色。
 
 ## 7. 新增页面 Checklist
@@ -93,11 +96,14 @@ Header（对象 + 当前节点）→ **Workflow Rail（常驻，全节点）** �
 
 ## 8. 文档地图
 
-| 文档                                                                                               | 角色                       | 何时查阅                           |
-| -------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- |
-| 本文                                                                                               | 权威规范与入口             | 日常开发、评审                     |
-| [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)                     | 过程档案（六合一）         | 查分级表、审计映射、验收、开关回滚 |
-| [`research-intelligent-platform-ux-prototype.md`](./research-intelligent-platform-ux-prototype.md) | 智能平台 UX 原型（确认稿） | 涉及 Chain / Agent 新交互时        |
+| 文档                                                                                                         | 角色                       | 何时查阅                           |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------- | ---------------------------------- |
+| 本文                                                                                                         | 权威规范与入口             | 日常开发、评审                     |
+| [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)                               | 过程档案（六合一）         | 查分级表、审计映射、验收、开关回滚 |
+| [`research-intelligent-platform-ux-prototype.md`](./research-intelligent-platform-ux-prototype.md)           | 智能平台 UX 原型（确认稿） | 涉及 Chain / Agent 新交互时        |
+| [`research-workspace-ui-ux-4.12-prd.md`](./research-workspace-ui-ux-4.12-prd.md)                             | 4.12.0 PRD                 | 本轮范围、映射与验收口径           |
+| [`research-workspace-ui-ux-4.12-phase-0-baseline.md`](./research-workspace-ui-ux-4.12-phase-0-baseline.md)   | 4.12.0 基线冻结            | 信息分级、回归清单与映射用例       |
+| [`research-workspace-ui-ux-4.12-acceptance-report.md`](./research-workspace-ui-ux-4.12-acceptance-report.md) | 4.12.0 验收报告            | 交付证据、截图矩阵与质量结果       |
 
 档案内部索引：第 1 部分 4.10.0 重构 PRD；第 2 部分 Phase 1 设计系统审计；第 3 部分 Phase 2 信息架构审计；第 4 部分 4.10.0 验收报告；第 5 部分 4.10.0 发布说明；第 6 部分 4.11.0 信息精炼 PRD。
 
@@ -108,3 +114,4 @@ Header（对象 + 当前节点）→ **Workflow Rail（常驻，全节点）** �
 | v1.0 | 2026-09-24 | 整合两轮 UI/UX 成果：三定位、分级方法、组件出口、页面模式与文档地图                               |
 | v1.1 | 2026-09-24 | 六份过程文档合并为 `research-workspace-ui-ux-archive.md`，系列收敛为「指南 + 档案」两份，命名统一 |
 | v1.2 | 2026-09-24 | 将 Research Chain 的中文产品名称统一为“研究链”，同步产品定位与页面模式                            |
+| v1.3 | 2026-09-24 | 登记固定 13 阶段流程地图、共享数据 Surface、列表 / 详情模式与 Agent 键盘焦点规则                  |

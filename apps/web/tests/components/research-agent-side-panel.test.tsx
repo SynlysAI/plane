@@ -21,6 +21,9 @@ vi.mock("@plane/i18n", () => ({
 vi.mock("@/components/research/agent/research-agent-plugin", () => ({
   ResearchAgentPlugin: ({ chainNodeId, variant }: { chainNodeId: string; variant?: string }) => (
     <div data-testid="agent-plugin" data-variant={variant}>
+      <button type="button" data-testid="agent-plugin-last">
+        last
+      </button>
       {chainNodeId}
     </div>
   ),
@@ -50,7 +53,7 @@ it("opens as a right drawer that inherits the current node context", async () =>
   const dialog = container.querySelector('[role="dialog"][aria-modal="true"]');
   expect(dialog).not.toBeNull();
   const plugin = container.querySelector('[data-testid="agent-plugin"]');
-  expect(plugin?.textContent).toBe("node-1");
+  expect(plugin?.textContent).toContain("node-1");
   expect(plugin?.getAttribute("data-variant")).toBe("panel");
   expect(dialog?.className).toContain("right-0");
   expect(dialog?.className).toContain("w-[400px]");
@@ -62,8 +65,39 @@ it("closes from the close button", async () => {
   await act(async () =>
     root.render(<ResearchAgentSidePanel workspaceSlug="lab" chainNodeId="node-1" onClose={onClose} />)
   );
-  const closeButton = container.querySelector('button[aria-label="关闭抽屉"]');
+  const dialog = container.querySelector('[role="dialog"][aria-modal="true"]');
+  const closeButton = dialog?.querySelector('button[aria-label="关闭抽屉"]');
   expect(closeButton).not.toBeNull();
   await act(async () => closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(onClose).toHaveBeenCalled();
+});
+
+it("traps Tab focus and returns focus to the caller after closing", async () => {
+  const opener = document.createElement("button");
+  opener.type = "button";
+  opener.textContent = "打开智能体";
+  document.body.append(opener);
+  opener.focus();
+  await act(async () =>
+    root.render(<ResearchAgentSidePanel workspaceSlug="lab" chainNodeId="node-1" onClose={() => undefined} />)
+  );
+  const dialog = container.querySelector('[role="dialog"][aria-modal="true"]');
+  const closeButton = dialog?.querySelector('button[aria-label="关闭抽屉"]');
+  const pluginLast = container.querySelector<HTMLElement>('[data-testid="agent-plugin-last"]');
+  expect(dialog).toBe(document.activeElement);
+
+  pluginLast?.focus();
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true }));
+  });
+  expect(document.activeElement).toBe(closeButton);
+
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  });
+  expect(document.activeElement).toBe(pluginLast);
+
+  await act(async () => root.unmount());
+  expect(document.activeElement).toBe(opener);
+  opener.remove();
 });
