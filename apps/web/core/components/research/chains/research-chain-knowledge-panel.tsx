@@ -34,6 +34,7 @@ const DEGRADED_REASON_LABELS: Record<string, string> = {
   not_configured: "research.knowledge.reasons.not_configured",
   integration_not_configured: "research.knowledge.reasons.not_configured",
   synlora_not_configured: "research.knowledge.reasons.not_configured",
+  unauthorized: "research.knowledge.reasons.unauthorized",
   disabled: "research.knowledge.reasons.disabled",
   connection_disabled: "research.knowledge.reasons.disabled",
   http_error: "research.knowledge.reasons.http_error",

@@ -57,6 +57,13 @@ vi.mock("@/components/research/experiments/experiment-list", () => ({
 vi.mock("@/components/research/outcomes/outcome-list", () => ({
   OutcomeList: () => <div>outcome-list</div>,
 }));
+vi.mock("@/components/research/chains/research-chain-knowledge-panel", () => ({
+  ResearchChainKnowledgePanel: ({ chainId, nodeId }: { chainId: string; nodeId: string }) => (
+    <div data-testid="chain-knowledge-panel" data-chain={chainId} data-node={nodeId}>
+      knowledge-panel
+    </div>
+  ),
+}));
 vi.mock("@/services/research/chain.service", () => ({
   ResearchChainService: class {
     getChain = mocks.getChain;
@@ -185,6 +192,19 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     [...container.querySelectorAll("button")].find((button) => button.textContent === "启动")?.click();
   });
   expect(mocks.transitionChainNode).toHaveBeenCalledWith("lab", "node-1", "START", undefined);
+});
+
+it("keeps the scoped knowledge upload entry on the references tab", async () => {
+  mocks.query = "tab=references";
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  const panel = container.querySelector('[data-testid="chain-knowledge-panel"]');
+  expect(panel?.getAttribute("data-chain")).toBe("chain-1");
+  expect(panel?.getAttribute("data-node")).toBe("node-1");
 });
 
 it("navigates to an empty stage through the workflow itself", async () => {

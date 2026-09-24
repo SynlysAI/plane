@@ -87,11 +87,12 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
         setSession(created);
         setEvents(mergeAgentEvents([], initial?.results ?? []));
         setState(researchAgentSessionState(created));
-      } catch {
+      } catch (error) {
         if (!active) return;
         sessionRef.current = null;
         setSession(null);
-        setState("forbidden");
+        const errorCode = (error as { error_code?: string })?.error_code;
+        setState(errorCode === "AGENT_UPSTREAM_NOT_CONFIGURED" ? "degraded" : "forbidden");
       }
     };
 
