@@ -19,6 +19,19 @@ type Props = {
   workspaceSlug: string;
 };
 
+/** Extract readable audit values and omit opaque technical JSON. */
+function auditMetadataSummary(metadata: Record<string, unknown>) {
+  return Object.entries(metadata ?? {})
+    .filter(
+      ([key, value]) =>
+        ["decision", "reason", "status", "action", "name", "title", "summary"].includes(key) &&
+        typeof value !== "object"
+    )
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .slice(0, 4)
+    .join(" · ");
+}
+
 /** Read-only audit trail viewer (P0-AUD-05). */
 export const ResearchAuditEventTable = observer(function ResearchAuditEventTable({ workspaceSlug }: Props) {
   const { t } = useTranslation();
@@ -101,7 +114,9 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
                   {event.resource_type}
                   {event.org_unit_detail?.name ? ` · ${event.org_unit_detail.name}` : ""}
                 </td>
-                <td className="max-w-[22rem] truncate py-2 text-tertiary">{JSON.stringify(event.metadata)}</td>
+                <td className="max-w-[22rem] truncate py-2 text-tertiary">
+                  {auditMetadataSummary(event.metadata) || t("research.audit.metadata_omitted")}
+                </td>
               </tr>
             ))}
             {events.length === 0 && (

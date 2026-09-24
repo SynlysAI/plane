@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
+import { REPORT_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type {
   TExternalReference,
@@ -78,6 +79,28 @@ const STATUS_PRIORITY: Record<TResearchChainNode["status"], number> = {
   DRAFT: 4,
   COMPLETED: 5,
   ARCHIVED: 6,
+};
+
+const NODE_TYPE_LABELS: Record<string, string> = {
+  RESEARCH: "research.chains.node_types.research",
+  LITERATURE_REVIEW: "research.chains.node_types.literature_review",
+  TOPIC_EVALUATION: "research.chains.node_types.topic_evaluation",
+  PRE_EXPERIMENT: "research.chains.node_types.pre_experiment",
+  PLAN: "research.chains.node_types.plan",
+  OPENING: "research.chains.node_types.opening",
+  EXPERIMENT: "research.chains.node_types.experiment",
+  ANALYSIS: "research.chains.node_types.analysis",
+  ITERATION: "research.chains.node_types.iteration",
+  SUMMARY: "research.chains.node_types.summary",
+  PAPER_WRITING: "research.chains.node_types.paper_writing",
+  COMPLETION: "research.chains.node_types.completion",
+  TRANSFER: "research.chains.node_types.transfer",
+};
+
+const MEMBER_ROLE_LABELS: Record<string, string> = {
+  OWNER: "research.chains.members.role_owner",
+  ADMIN: "research.chains.members.role_admin",
+  MEMBER: "research.chains.members.role_member",
 };
 
 /** Pick the node that should stay visible in the fixed context bar. */
@@ -314,16 +337,16 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-14 font-semibold text-primary">{chain?.project}</h3>
+              <h3 className="truncate text-14 font-semibold text-primary">{chain?.project_name ?? chain?.project}</h3>
               <span className="rounded border border-subtle bg-surface-2 px-2 py-0.5 text-11 text-secondary">
-                {chain?.status}
+                {t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}
               </span>
               <span className="rounded border border-subtle bg-surface-2 px-2 py-0.5 text-11 text-secondary">
-                {chain?.visibility}
+                {t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}
               </span>
             </div>
             <p className="mt-1 truncate text-11 text-tertiary">
-              {t("research.chains.owner")}: {chain?.owner} · {t("research.chains.current_node")}:{" "}
+              {t("research.chains.owner")}: {chain?.owner_name ?? "-"} · {t("research.chains.current_node")}:{" "}
               {current?.title ?? "-"}
             </p>
           </div>
@@ -382,11 +405,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               <dl className="mt-3 space-y-2 text-12">
                 <div className="flex justify-between gap-3">
                   <dt className="text-tertiary">{t("research.chains.status")}</dt>
-                  <dd className="text-primary">{chain?.status}</dd>
+                  <dd className="text-primary">{t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-tertiary">{t("research.chains.visibility")}</dt>
-                  <dd className="text-primary">{chain?.visibility}</dd>
+                  <dd className="text-primary">{t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-tertiary">{t("research.chains.updated_at")}</dt>
@@ -461,7 +484,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   >
                     {NODE_TYPE_OPTIONS.map((type) => (
                       <option key={type} value={type}>
-                        {type}
+                        {t(NODE_TYPE_LABELS[type])}
                       </option>
                     ))}
                   </select>
@@ -510,7 +533,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   {contextReports.map((report) => (
                     <tr key={report.id} className="border-b border-subtle">
                       <td className="py-2 text-primary">{report.period_key}</td>
-                      <td className="py-2 text-secondary">{report.status}</td>
+                      <td className="py-2 text-secondary">{t(REPORT_STATUS_LABELS[report.status])}</td>
                       <td className="py-2 text-secondary">{new Date(report.updated_at).toLocaleString()}</td>
                     </tr>
                   ))}
@@ -603,7 +626,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 <li key={member.user_id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div>
                     <p className="text-12 text-primary">{member.display_name}</p>
-                    <p className="mt-0.5 text-11 text-tertiary">{member.role}</p>
+                    <p className="mt-0.5 text-11 text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</p>
                   </div>
                   {!member.is_owner && (
                     <button

@@ -19,7 +19,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+  default: ({ href, children, ...props }: { href: string; children: React.ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams(mocks.tab ? `tab=${mocks.tab}` : "")],
@@ -153,6 +157,10 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   expect(container.textContent).toContain("人类决策");
   expect(container.textContent).toContain("R2");
   expect(container.querySelector("path[stroke-dasharray='4 4']")).not.toBeNull();
+  expect(
+    container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
+  ).toBe("page");
+  expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(
     expect.arrayContaining(["课题", "节点", "报告与成果", "实验记录", "外部引用", "成员", "回放"])
   );

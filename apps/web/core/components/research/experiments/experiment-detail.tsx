@@ -27,6 +27,19 @@ type Props = {
   currentUserId?: string;
 };
 
+/** Render primitive amendment values and summarize opaque structured values. */
+function amendmentValue(value: unknown) {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `${value.length}`;
+  if (value && typeof value === "object") {
+    const readable = ["title", "name", "summary", "id"]
+      .map((key) => (value as Record<string, unknown>)?.[key])
+      .find((entry) => typeof entry === "string" || typeof entry === "number");
+    return readable === undefined ? null : String(readable);
+  }
+  return null;
+}
+
 /**
  * Record detail: fields with the lock state, amendment diff and approver
  * actions, external asset references and the immutable version history.
@@ -229,10 +242,12 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
             <div className="flex flex-col gap-0.5">
               {amendment.change_set.map((change) => (
                 <span
-                  key={`${amendment.id}-${change.field}-${JSON.stringify(change.new ?? "")}`}
+                  key={`${amendment.id}-${change.field}-${String(change.old)}-${String(change.new)}`}
                   className="text-11 text-secondary"
                 >
-                  {`${change.field}: ${JSON.stringify(change.old ?? "")} → ${JSON.stringify(change.new ?? "")}`}
+                  {`${change.field}: ${amendmentValue(change.old) ?? t("research.experiments.structured_value")} → ${
+                    amendmentValue(change.new) ?? t("research.experiments.structured_value")
+                  }`}
                 </span>
               ))}
             </div>

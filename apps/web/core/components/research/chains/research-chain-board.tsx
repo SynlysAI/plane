@@ -112,9 +112,13 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
         <tbody>
           {chains.map((chain) => (
             <tr key={chain.id} className="border-b border-subtle">
-              <td className="py-3 pr-4 text-13 text-primary">{chain.project}</td>
-              <td className="py-3 pr-4 text-12 text-secondary">{chain.status}</td>
-              <td className="py-3 pr-4 text-12 text-secondary">{chain.visibility}</td>
+              <td className="py-3 pr-4 text-13 text-primary">{chain.project_name ?? chain.project}</td>
+              <td className="py-3 pr-4 text-12 text-secondary">
+                {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
+              </td>
+              <td className="py-3 pr-4 text-12 text-secondary">
+                {t(`research.chains.visibility.${chain.visibility.toLowerCase()}`)}
+              </td>
               <td className="py-3 text-right">
                 <Link
                   href={`/${workspaceSlug}/research/chains/${chain.id}`}

@@ -207,6 +207,10 @@ it("renders structured approval cards and submits an idempotent Agent decision",
   expect(container.textContent).toContain("检索聚合物 Tg 文献");
   expect(container.textContent).toContain("Polymer Tg dataset");
   expect(container.textContent).not.toContain('{"tool_name"');
+  expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+  expect(container.querySelector('[aria-live="polite"]')).not.toBeNull();
+  expect(container.querySelectorAll('select[aria-label="事件类型"]').length).toBe(1);
+  expect(container.querySelectorAll('select[aria-label="事件状态"]').length).toBe(1);
 
   await act(async () => {
     [...container.querySelectorAll("button")].find((button) => button.textContent === "处理审批")?.click();
