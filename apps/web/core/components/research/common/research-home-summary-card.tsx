@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { observer } from "mobx-react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -51,11 +52,17 @@ async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
 }
 
 /** Compact research summary for the regular Plane workspace home. */
-export function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
+export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
   const [state, setState] = useState<TSummaryState>("loading");
   const [summary, setSummary] = useState<TChainSummary | null>(null);
+  const canLoadSummary = Boolean(
+    research.identity?.module_enabled &&
+    research.identity?.workspace_enabled &&
+    research.identity?.sections?.research_chain &&
+    research.canSee("research_chain")
+  );
 
   useEffect(() => {
     if (research.identityWorkspaceSlug !== workspaceSlug || !research.identity) {
@@ -76,11 +83,10 @@ export function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
   }, [workspaceSlug]);
 
   useEffect(() => {
-    if (research.identity?.sections?.research_chain && research.canSee("research_chain")) void load();
-  }, [load, research]);
+    if (canLoadSummary) void load();
+  }, [canLoadSummary, load]);
 
-  if (!research.identity?.module_enabled || !research.identity?.workspace_enabled) return null;
-  if (!research.identity?.sections?.research_chain || !research.canSee("research_chain")) return null;
+  if (!canLoadSummary) return null;
 
   const activeCount = summary?.chains.filter((chain) => chain.status === "ACTIVE").length ?? 0;
   const todoCount =
@@ -99,7 +105,7 @@ export function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-11 font-medium tracking-wide text-tertiary uppercase">{t("research.nav.group")}</p>
-          <h2 className="mt-1 text-18 font-semibold text-primary">{t("research.home_summary.title")}</h2>
+          <h3 className="mt-1 text-16 font-semibold text-primary">{t("research.home_summary.title")}</h3>
           <p className="mt-2 max-w-xl text-13 text-secondary">
             {state === "loading" && t("research.home_summary.loading")}
             {state === "forbidden" && t("research.home_summary.forbidden")}
@@ -155,6 +161,12 @@ export function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
           </div>
         </div>
       </div>
+      {state === "loading" && (
+        <div className="mt-4 space-y-2" role="status" aria-busy="true">
+          <div className="h-4 animate-pulse rounded-md bg-surface-2" />
+          <div className="h-4 w-2/3 animate-pulse rounded-md bg-surface-2" />
+        </div>
+      )}
       <div className="mt-4 border-t border-subtle pt-3">
         <p className="text-11 text-tertiary">{t("research.home_summary.snapshot")}</p>
         <p className="mt-1 line-clamp-2 text-12 text-secondary">
@@ -165,4 +177,4 @@ export function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
       </div>
     </section>
   );
-}
+});

@@ -16,13 +16,35 @@ class ResearchChainSerializer(serializers.ModelSerializer):
     """Expose chain metadata without leaking project internals."""
 
     schema_version = serializers.SerializerMethodField()
+    project_name = serializers.SerializerMethodField()
+    owner_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChain
-        fields = ["schema_version", "id", "project", "workspace", "owner", "status", "visibility", "created_at", "updated_at"]
+        fields = [
+            "schema_version",
+            "id",
+            "project",
+            "project_name",
+            "workspace",
+            "owner",
+            "owner_name",
+            "status",
+            "visibility",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_schema_version(self, _obj):
         return "research-chain.v1"
+
+    def get_project_name(self, obj):
+        """Return the topic title for fixed Chain UI context."""
+        return obj.project.name
+
+    def get_owner_name(self, obj):
+        """Return the owner display name without exposing a raw user ID."""
+        return obj.owner.display_name or obj.owner.email
 
 
 class ResearchChainNodeSerializer(serializers.ModelSerializer):

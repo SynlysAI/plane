@@ -159,8 +159,10 @@ export type TResearchChain = {
   schema_version: "research-chain.v1";
   id: string;
   project: string;
+  project_name?: string;
   workspace: string;
   owner: string;
+  owner_name?: string;
   status: "ACTIVE" | "ARCHIVED" | "COMPLETED";
   visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   created_at: string;

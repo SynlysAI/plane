@@ -15,6 +15,22 @@ type TNodeSection = {
   items: string[];
 };
 
+const NODE_TYPE_LABELS: Record<string, string> = {
+  RESEARCH: "research.chains.node_types.research",
+  LITERATURE_REVIEW: "research.chains.node_types.literature_review",
+  TOPIC_EVALUATION: "research.chains.node_types.topic_evaluation",
+  PRE_EXPERIMENT: "research.chains.node_types.pre_experiment",
+  PLAN: "research.chains.node_types.plan",
+  OPENING: "research.chains.node_types.opening",
+  EXPERIMENT: "research.chains.node_types.experiment",
+  ANALYSIS: "research.chains.node_types.analysis",
+  ITERATION: "research.chains.node_types.iteration",
+  SUMMARY: "research.chains.node_types.summary",
+  PAPER_WRITING: "research.chains.node_types.paper_writing",
+  COMPLETION: "research.chains.node_types.completion",
+  TRANSFER: "research.chains.node_types.transfer",
+};
+
 /** Normalize event type codes before matching evidence sections. */
 function eventType(value: string) {
   return value.toUpperCase();
@@ -82,34 +98,42 @@ export function ResearchChainNodeDetail({ node, events, snapshots }: Props) {
   const sections = buildSections(node, events, snapshots);
 
   return (
-    <section className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-2" aria-label={t("research.chains.detail_title")}>
-      <header className="xl:col-span-2">
+    <section
+      className="overflow-hidden rounded-xl border border-subtle bg-surface-1"
+      aria-label={t("research.chains.detail_title")}
+    >
+      <header className="border-b border-subtle px-4 py-3">
         <h3 className="text-14 font-semibold text-primary">{node.title}</h3>
         <p className="mt-1 text-12 text-secondary">
-          {node.node_type} · {t(`research.chains.node_status.${node.status.toLowerCase()}`)} ·{" "}
-          {new Date(node.updated_at).toLocaleString()}
+          {t(NODE_TYPE_LABELS[node.node_type] ?? "research.chains.node_types.unknown")} ·{" "}
+          {t(`research.chains.node_status.${node.status.toLowerCase()}`)} · {new Date(node.updated_at).toLocaleString()}
         </p>
       </header>
-      {sections.map((section) => (
-        <article key={section.key} className="rounded-lg border border-subtle bg-surface-1 p-4">
-          <h4 className="text-12 font-semibold text-primary">{t(`research.chains.sections.${section.key}`)}</h4>
-          <p className="mt-0.5 text-11 text-tertiary">{t(`research.chains.sections.${section.key}_hint`)}</p>
-          <ul className="mt-3 space-y-2" role="list">
-            {section.items.length ? (
-              [...new Set(section.items)].map((item) => (
-                <li
-                  key={`${section.key}-${item}`}
-                  className="border-b border-subtle pb-2 text-12 text-secondary last:border-0"
-                >
-                  {item}
-                </li>
-              ))
-            ) : (
-              <li className="text-12 text-tertiary">{t("research.chains.sections.empty")}</li>
-            )}
-          </ul>
-        </article>
-      ))}
+      <div className="grid grid-cols-1 xl:grid-cols-2">
+        {sections.map((section) => (
+          <article
+            key={section.key}
+            className="border-b border-subtle p-4 last:border-b-0 xl:border-b-0 xl:border-l xl:first:border-l-0"
+          >
+            <h4 className="text-12 font-semibold text-primary">{t(`research.chains.sections.${section.key}`)}</h4>
+            <p className="mt-0.5 text-11 text-tertiary">{t(`research.chains.sections.${section.key}_hint`)}</p>
+            <ul className="mt-3 space-y-2" role="list">
+              {section.items.length ? (
+                [...new Set(section.items)].map((item) => (
+                  <li
+                    key={`${section.key}-${item}`}
+                    className="border-b border-subtle pb-2 text-12 text-secondary last:border-0"
+                  >
+                    {item}
+                  </li>
+                ))
+              ) : (
+                <li className="text-12 text-tertiary">{t("research.chains.sections.empty")}</li>
+              )}
+            </ul>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

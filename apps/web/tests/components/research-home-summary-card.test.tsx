@@ -104,3 +104,14 @@ it("does not leak chain content when the summary is forbidden", async () => {
   expect(container.textContent).toContain("当前账号没有科研数据访问权限。");
   expect(container.textContent).not.toContain("高分子课题");
 });
+
+it("renders the loading and empty states with stable accessibility semantics", async () => {
+  mocks.getChains.mockReturnValue(new Promise(() => undefined));
+  await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" />));
+  expect(container.querySelector('[role="status"][aria-busy="true"]')).not.toBeNull();
+
+  mocks.getChains.mockResolvedValue([]);
+  await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" key="empty" />));
+  expect(container.textContent).toContain("当前还没有可见科研链。");
+  expect(container.textContent).not.toContain("NaN");
+});

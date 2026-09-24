@@ -106,13 +106,6 @@ function WorkspaceResearchOverviewPage() {
           <option value="all">{t("research.overview.period_all")}</option>
         </select>
       </label>
-      <button
-        type="button"
-        onClick={() => void loadChains()}
-        className="rounded-md border border-subtle px-3 py-1.5 text-11 text-secondary transition-colors hover:bg-surface-2"
-      >
-        {t("research.todo.refresh")}
-      </button>
       <span className="text-11 text-tertiary">
         {refreshedAt ? `${t("research.overview.refreshed_at")} ${refreshedAt.toLocaleTimeString()}` : ""}
       </span>
@@ -187,7 +180,7 @@ function WorkspaceResearchOverviewPage() {
           </section>
         </div>
 
-        {workspaceSlug && research.canSee("research_chain") && (
+        {workspaceSlug && !research.isIaV2Enabled && research.canSee("research_chain") && (
           <div className="mt-6">
             <ResearchChainPortal workspaceSlug={workspaceSlug} />
           </div>

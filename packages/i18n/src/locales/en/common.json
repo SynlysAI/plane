@@ -1163,6 +1163,17 @@
         "members": "Members",
         "replay": "Replay"
       },
+      "chain_status": {
+        "active": "Active",
+        "archived": "Archived",
+        "completed": "Completed"
+      },
+      "visibility": {
+        "private": "Private",
+        "members": "Chain members",
+        "org": "Organisation",
+        "workspace": "Workspace"
+      },
       "node_status": {
         "draft": "Draft",
         "active": "Active",
@@ -1171,6 +1182,22 @@
         "completed": "Completed",
         "failed": "Failed",
         "archived": "Archived"
+      },
+      "node_types": {
+        "research": "Research",
+        "literature_review": "Literature review",
+        "topic_evaluation": "Topic evaluation",
+        "pre_experiment": "Pre-experiment",
+        "plan": "Research plan",
+        "opening": "Opening",
+        "experiment": "Experiment",
+        "analysis": "Analysis",
+        "iteration": "Iteration",
+        "summary": "Summary",
+        "paper_writing": "Paper writing",
+        "completion": "Completion",
+        "transfer": "Transfer",
+        "unknown": "Research node"
       },
       "graph_title": "Main chain visualization",
       "views": {
@@ -1253,6 +1280,7 @@
         "role": "Permission",
         "role_member": "Member",
         "role_admin": "Administrator",
+        "role_owner": "Owner",
         "add": "Add member",
         "remove": "Remove",
         "empty": "This chain has no member yet."
@@ -1883,6 +1911,7 @@
       "action_placeholder": "Filter by action",
       "resource_placeholder": "Filter by resource type",
       "empty": "No audit event matches the filters",
+      "metadata_omitted": "Technical details omitted.",
       "columns": {
         "time": "Time",
         "actor": "Actor",
@@ -2254,6 +2283,7 @@
       "create": "Register",
       "empty": "No experiment registered yet.",
       "select_hint": "Select an experiment to see its details.",
+      "structured_value": "Structured value",
       "title_placeholder": "Experiment title",
       "all_statuses": "All statuses",
       "start": "Start run",
