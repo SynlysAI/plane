@@ -93,7 +93,7 @@ it("keeps the office approval page when IA v2 is disabled", async () => {
   expect(container.textContent).toContain("office-approvals");
 });
 
-it("embeds the legacy project list as a Research Chain saved view", async () => {
+it("embeds the legacy project list as a 研究链 saved view", async () => {
   mocks.view = "projects";
   await act(async () => root.render(<ResearchChainWorkbench workspaceSlug="lab" />));
 

@@ -2,38 +2,38 @@
 
 | 项目     | 内容                                                                                                                                                                                                         |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 文档版本 | v2.0                                                                                                                                                                                                         |
+| 文档版本 | v2.1                                                                                                                                                                                                         |
 | 文档状态 | 平台级建设规划；Phase 0 与 Phase 1 Plane UI/UX 闭环已实施，进入灰度验收                                                                                                                                      |
 | 日期     | 2026-09-24                                                                                                                                                                                                   |
-| 适用范围 | Plane、Research Chain、RAGPortal、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 及 SpecAgent 的跨仓库协作                                                                                                  |
+| 适用范围 | Plane、研究链、RAGPortal、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 及 SpecAgent 的跨仓库协作                                                                                                          |
 | 目标规模 | 内部约 500 名成员，预留后续社会用户开放能力                                                                                                                                                                  |
 | 上游文档 | [`research-management-prd-roadmap.md`](./research-management-prd-roadmap.md)、[`research-workspace-v3.md`](./research-workspace-v3.md)、[`research-p0-p1-architecture.md`](./research-p0-p1-architecture.md) |
 
 ## 1. 文档定位与决策摘要
 
-本文档是科研智能体平台的跨仓库总 PRD，定义产品边界、系统分工、Research Chain 主线、第一阶段最小闭环和后续演进路线。它不替换 Plane 已有的 P0/P1/P2 开发、验收和发布文档，也不直接修改业务代码、数据库或部署配置。
+本文档是科研智能体平台的跨仓库总 PRD，定义产品边界、系统分工、研究链主线、第一阶段最小闭环和后续演进路线。它不替换 Plane 已有的 P0/P1/P2 开发、验收和发布文档，也不直接修改业务代码、数据库或部署配置。
 
 平台采用以下职责分工：
 
-| 能力层                   | 权威系统             | 平台职责                                                                   |
-| ------------------------ | -------------------- | -------------------------------------------------------------------------- |
-| 统一门户、身份与科研权限 | Plane                | 提供统一入口、课题 ACL、科研待办、审批、审计和跨系统引用聚合               |
-| 科研过程主线             | Plane Research Chain | 组织课题、节点、快照、事件、反思和人工决策                                 |
-| Agent 科研管理层         | Plane Orchestrator   | 解析课题/节点/角色策略，签发与复验 Context，装配 Synlora persona/插件/工具 |
-| 云端通用 Agent Runtime   | Synlora              | 提供会话、模型路由、工具调用、审批、插件、沙箱、SSE 和 Trace               |
-| 知识资产入口             | RAGPortal            | 负责文献/资料上传、阅读入口、上传审计和 WeKnora BFF                        |
-| 知识检索底座             | WeKnora              | 已部署的内网知识服务，负责文档解析、向量和混合检索；Plane 不开发 WeKnora   |
-| 本地或可信端科研工作站   | ScienceDiscovery     | 提供本地连接器、MCP、长任务、证据溯源和可复现执行参考                      |
-| 实验与设备能力           | SpecLabOS            | 提供设备、工作流、Experiment Runtime、RunEvent 和数据资产                  |
-| 高分子研发与算法能力     | PolyAgent            | 提供 ResearchEngine、阶段 Gate、算法运行、实验下发和 Trace                 |
-| 谱学垂类能力             | SpecAgent            | 通过 Synlora 插件提供已验证的 NMR 能力；其他谱种和异步任务后续确认         |
+| 能力层                   | 权威系统           | 平台职责                                                                   |
+| ------------------------ | ------------------ | -------------------------------------------------------------------------- |
+| 统一门户、身份与科研权限 | Plane              | 提供统一入口、课题 ACL、科研待办、审批、审计和跨系统引用聚合               |
+| 科研过程主线             | Plane 研究链       | 组织课题、节点、快照、事件、反思和人工决策                                 |
+| Agent 科研管理层         | Plane Orchestrator | 解析课题/节点/角色策略，签发与复验 Context，装配 Synlora persona/插件/工具 |
+| 云端通用 Agent Runtime   | Synlora            | 提供会话、模型路由、工具调用、审批、插件、沙箱、SSE 和 Trace               |
+| 知识资产入口             | RAGPortal          | 负责文献/资料上传、阅读入口、上传审计和 WeKnora BFF                        |
+| 知识检索底座             | WeKnora            | 已部署的内网知识服务，负责文档解析、向量和混合检索；Plane 不开发 WeKnora   |
+| 本地或可信端科研工作站   | ScienceDiscovery   | 提供本地连接器、MCP、长任务、证据溯源和可复现执行参考                      |
+| 实验与设备能力           | SpecLabOS          | 提供设备、工作流、Experiment Runtime、RunEvent 和数据资产                  |
+| 高分子研发与算法能力     | PolyAgent          | 提供 ResearchEngine、阶段 Gate、算法运行、实验下发和 Trace                 |
+| 谱学垂类能力             | SpecAgent          | 通过 Synlora 插件提供已验证的 NMR 能力；其他谱种和异步任务后续确认         |
 
 总体定位为：**Plane 负责科研过程、课题权限、能力策略、Context 授权和 Chain 投影；Synlora 负责唯一云端 Agent Runtime 与插件工具执行；RAGPortal 负责知识资产入口；WeKnora 负责检索；专业系统负责实验和分析能力。**
 
 Agent 侧采用统一管理层：
 
 ```text
-Plane Research Chain / Node
+Plane 研究链 / Node
   → Plane Research Agent Orchestrator
       ├─ 课题与节点 ACL
       ├─ Research Context 签发、刷新与复验
@@ -49,14 +49,14 @@ Plane Research Chain / Node
 
 Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具调用；Plane 只保存能力策略投影和映射关系。健康检查、管理配置和状态投影可以由 Plane Integration 层执行。
 
-信息架构采用“权威对象保留、用户入口收敛、科研过程回归 Research Chain”的原则：`Project`、`PeriodicReport`、审批、审计、集成等权威模型不合并；开启 `research_ia_v2` 后，科研导航收敛为科研总览、Research Chain、审批中心和科研管理四个一级入口，旧列表路由提供兼容跳转。
+信息架构采用“权威对象保留、用户入口收敛、科研过程回归 研究链”的原则：`Project`、`PeriodicReport`、审批、审计、集成等权威模型不合并；开启 `research_ia_v2` 后，科研导航收敛为科研总览、研究链、审批中心和科研管理四个一级入口，旧列表路由提供兼容跳转。
 
 ## 2. 现状基线与必须先解决的阻塞项
 
 ### 2.1 仓库事实
 
 - Plane 已有科研项目、阶段、文献、实验、代码、成果、审批、评审、审计、双链时间线、外部引用和只读 Agent Context API。
-- Plane 当前培养类项目对同一 Workspace 和责任人限制为一个 active project；团队型 `RESEARCH_PROJECT` 才允许多个项目。这与 Research Chain 的平行课题需求不一致。
+- Plane 当前培养类项目对同一 Workspace 和责任人限制为一个 active project；团队型 `RESEARCH_PROJECT` 才允许多个项目。这与研究链的平行课题需求不一致。
 - Plane 当前时间线聚合已有科研对象，但还没有完整的“输入 → AI 动作 → 中间产物 → 验证 → 人类决策 → 输出”节点模型，也没有通用循环边和反思日志。
 - RAGPortal 当前是 FastAPI 上传 BFF，实际接口包括 `/api/kb/list`、`/api/uploads` 和上传详情接口；Plane 现有适配器中预期的 `/api/knowledge/entries/` 路径尚未与工作区 RAGPortal 对齐。
 - Synlora 已有 Agent 会话、工具审批、SSE、事件持久化、沙箱、WeKnora hybrid-search、能力中心（专家/技能/扩展）、用户 MCP、插件市场和已接入的 Poly_Agent / Spec_Agent / Sciverse 插件；但插件仍需管理员配置、用户手动安装或会话勾选，且项目、会话、文件和运行记录按自身 `user_id` 隔离，尚无 Plane Workspace/课题 ACL、delegated identity 和自动能力装配语义。
@@ -91,7 +91,7 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 - 持续沉淀数据、文档、实验记录、AI 交互、验证结果和人类决策。
 - 让用户直观看到课题位于科研链路的哪个位置，以及已产生的过程数据。
 - 为通用 Agent 注入经过 ACL 过滤的课题上下文、文件上下文和知识库上下文。
-- 形成可导出、可审计、可复现的 Research Chain。
+- 形成可导出、可审计、可复现的研究链。
 
 ### 3.2 非目标
 
@@ -104,18 +104,18 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 - ScienceDiscovery 的云端多租户化。
 - 模型隐藏思维链的完整保存或对外展示。
 
-## 4. Research Chain 产品模型
+## 4. 研究链产品模型
 
 ### 4.1 课题组织
 
-Research Chain 以平行课题为基本组织单元，不预设“主毕业课题”和“辅助课题”。一个学生可以创建和参与多个相互独立的课题；课题之间通过 ACL 隔离。
+研究链以平行课题为基本组织单元，不预设“主毕业课题”和“辅助课题”。一个学生可以创建和参与多个相互独立的课题；课题之间通过 ACL 隔离。
 
 建议在现有 `ResearchProjectProfile` 上增加 `chain_kind`：
 
 | 值                | 语义                             | 约束                                                             |
 | ----------------- | -------------------------------- | ---------------------------------------------------------------- |
 | `LEGACY_TRAINING` | 既有 PHD/MASTER/POSTDOC 培养项目 | 继续遵守历史的一人一个 active project 规则，除非迁移方案另行批准 |
-| `RESEARCH_CHAIN`  | Research Chain 平行课题          | 同一学生可以创建多个 active 课题                                 |
+| `RESEARCH_CHAIN`  | 研究链平行课题                   | 同一学生可以创建多个 active 课题                                 |
 
 课题仍复用普通 Plane Project、ProjectMember 和科研对象 ACL，不创建第二套项目系统。创建、归档、恢复、报告归属、阶段初始化和列表查询都必须识别 `chain_kind`。
 
@@ -186,7 +186,7 @@ Research Chain 以平行课题为基本组织单元，不预设“主毕业课�
 第一阶段必须完成以下最小闭环，并通过对应的 Plane UI/UX 工作台完成查看、操作、确认和回放：
 
 1. 学生创建第一个和第二个平行课题，并分别设置公开和隔离可见性。
-2. 从 Plane 进入对应课题的 Research Chain。
+2. 从 Plane 进入对应课题的研究链。
 3. 在课题内打开 RAGPortal，上传文献和研究资料，查看上传状态并引用知识条目。
 4. 通过 Synlora 进行文献检索、阅读讨论、选题和评估。
 5. 根据已有研究上下文生成研究计划，学生和导师可以修改并确认。
@@ -220,15 +220,15 @@ AI Trace 展示可解释摘要、工具调用和结果引用，不承诺展示�
 
 ### 5.4 Phase 1 Plane UI/UX 交付记录
 
-| 交付范围       | 已交付行为                                                                                                | 验收口径                                                                   |
-| -------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Plane 首页     | 紧凑科研摘要卡展示当前课题、当前节点、待办数量、最近快照和科研总览入口                                    | 无权限、未启用、空态、错误态不泄露课题标题、正文、结果或计数               |
-| 科研总览       | 统计周期、刷新时间、跨组件待办、课题摘要、提交汇总、管理统计和 Research Chain 入口按固定顺序组织          | 待办按阻断、待确认、提醒、截止时间与更新时间排序，并按来源对象去重         |
-| Research Chain | 课题页提供固定上下文条、七类页面 Tab、主链可视化、循环编号、成员管理和上下文过滤列表                      | 报告、成果、实验与外部引用仅显示显式关联当前课题或节点的对象               |
-| 节点详情       | 按“输入 → AI 动作 → 中间产物 → 验证 → 人类决策 → 输出”六段展示事件与快照证据                              | 不向用户展示原始事件 JSON、未解释技术枚举或 Context token                  |
-| Agent 工作台   | 固定 Context 条、三组装配摘要、结构化工具卡、审批抽屉、产物抽屉、Trace 筛选和事件跳转                     | 审批按 request id 幂等；产物保存失败保留草稿；Context 过期提供恢复入口     |
-| 审批中心       | 阶段评审、报告审核、Agent 审批与办公审批统一 Tab；Agent 队列展示课题、节点、提交人、风险与主操作          | 仅返回当前用户可操作且 Context 未过期的等待会话；决策写入既有 Run endpoint |
-| 状态与可用性   | loading、empty、degraded、forbidden、waiting approval、saving、error、closed 等状态具备可读文案和恢复动作 | 1920/1440/1280/390 无横向溢出；关键 Tab、抽屉、状态和按钮具备 aria 语义    |
+| 交付范围     | 已交付行为                                                                                                | 验收口径                                                                   |
+| ------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Plane 首页   | 紧凑科研摘要卡展示当前课题、当前节点、待办数量、最近快照和科研总览入口                                    | 无权限、未启用、空态、错误态不泄露课题标题、正文、结果或计数               |
+| 科研总览     | 统计周期、刷新时间、跨组件待办、课题摘要、提交汇总、管理统计和研究链入口按固定顺序组织                    | 待办按阻断、待确认、提醒、截止时间与更新时间排序，并按来源对象去重         |
+| 研究链       | 课题页提供固定上下文条、七类页面 Tab、主链可视化、循环编号、成员管理和上下文过滤列表                      | 报告、成果、实验与外部引用仅显示显式关联当前课题或节点的对象               |
+| 节点详情     | 按“输入 → AI 动作 → 中间产物 → 验证 → 人类决策 → 输出”六段展示事件与快照证据                              | 不向用户展示原始事件 JSON、未解释技术枚举或 Context token                  |
+| Agent 工作台 | 固定 Context 条、三组装配摘要、结构化工具卡、审批抽屉、产物抽屉、Trace 筛选和事件跳转                     | 审批按 request id 幂等；产物保存失败保留草稿；Context 过期提供恢复入口     |
+| 审批中心     | 阶段评审、报告审核、Agent 审批与办公审批统一 Tab；Agent 队列展示课题、节点、提交人、风险与主操作          | 仅返回当前用户可操作且 Context 未过期的等待会话；决策写入既有 Run endpoint |
+| 状态与可用性 | loading、empty、degraded、forbidden、waiting approval、saving、error、closed 等状态具备可读文案和恢复动作 | 1920/1440/1280/390 无横向溢出；关键 Tab、抽屉、状态和按钮具备 aria 语义    |
 
 ## 6. 统一门户与通用 Agent
 
@@ -242,7 +242,7 @@ Plane
 ├─ 工作区 / 项目 / More
 └─ 科研
    ├─ 科研总览       ← 跨课题工作台、提交汇总与活动索引
-   ├─ Research Chain ← 课题、节点、报告、成果、实验与过程回放
+   ├─ 研究链 ← 课题、节点、报告、成果、实验与过程回放
    ├─ 审批中心       ← 阶段评审、报告审核、Agent 审批与办公审批
    └─ 科研管理       ← 组织、系统、模板、身份、平台、审计与集成
 ```
@@ -250,31 +250,31 @@ Plane
 四个入口的职责如下：
 
 - **科研总览**是唯一跨课题工作台，负责科研概览、提交汇总、管理统计、最近活动和待办索引；不维护第二套 Chain 时间线。
-- **Research Chain**是科研过程主线，负责课题创建、成员、节点、快照、事件、报告与成果、实验记录、外部引用、Agent 协作和过程回放。
+- **研究链**是科研过程主线，负责课题创建、成员、节点、快照、事件、报告与成果、实验记录、外部引用、Agent 协作和过程回放。
 - **审批中心**统一处理阶段评审、报告审核、Agent 审批和办公审批；与课题关联的审批生成 Chain Event，并可跳回节点上下文。
 - **科研管理**聚合管理域能力，包含组织与人员、账号与系统、模板、身份与账号绑定、平台配置、审计记录和系统集成。
 
 `research_ia_v2` 仅控制信息架构呈现，默认开启；工作区管理员可将其关闭以回退现有科研导航和页面行为。该开关不合并、不放宽任何既有权限语义，也不改变既有 API 契约。
 
-Research Chain 入口、课题页和组件入口必须经过同一套 Workspace 与课题 ACL。
+研究链入口、课题页和组件入口必须经过同一套 Workspace 与课题 ACL。
 
 ### 6.1.1 旧功能收敛与兼容矩阵
 
-| 原入口   | 重合判断                                                          | 收敛方案                                                                                                           |
-| -------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 科研总览 | 与 Plane 首页、Research Chain 进度、待办和活动重复                | 保留为唯一跨课题工作台；承接提交汇总、管理统计、最近活动索引；不复制 Chain 时间线                                  |
-| 报告     | 与 Chain 快照、过程事件、导师确认重复                             | 保留 `PeriodicReport`、正式快照和审核状态为权威对象；报告列表、创建、提交、退回入口迁入 Chain 的“报告与成果”视图   |
-| 提交汇总 | 与科研总览、导师和 PI 聚合看板重复                                | 移除独立入口，改为科研总览中的 `report_submission` 保存视图，沿用原 ACL                                            |
-| 科研项目 | 与 Research Chain 课题列表强重复；当前 Chain 已一对一挂接 Project | Research Chain 课题列表成为科研项目主入口；项目创建、成员、归档、恢复在 Chain 内完成；旧项目列表路由重定向到 Chain |
-| 待我评审 | 与统一待办、Chain HITL、导师确认重复                              | 并入审批中心的 `stage_review`、`report_review`、`agent_approval` 队列；从待办可跳回 Chain 节点上下文               |
-| 办公审批 | 与 Chain 审批事件部分重合，但仍有非课题办公审批                   | 保留为审批中心；Chain 关联审批生成事件和节点状态，独立办公审批继续在审批中心处理                                   |
-| 组织架构 | 非科研过程功能，但支撑 ACL                                        | 并入科研管理的“组织与人员”页；Chain 只消费组织与导师关系，不复制组织树                                             |
-| 系统管理 | 管理域功能，与科研链日常操作不重合                                | 并入科研管理的“账号与系统”页                                                                                       |
-| 报告模板 | 模板配置入口分散，且未来需服务 Chain 产物                         | 并入科研管理的“模板”页；Phase 1 仅保留报告模板，Phase 2 扩展为研究计划、实验记录等科研模板                         |
-| 身份映射 | 管理域功能，与 AccountLink 相关但不应进入科研链                   | 并入科研管理的“身份与账号绑定”页                                                                                   |
-| 平台配置 | Feature Flag 和模块开关配置                                       | 并入科研管理的“平台配置”页；`research_ia_v2`、`research_chain_enabled` 均在此配置                                  |
-| 审计记录 | 全局审计与 Chain Event、Trace 有查询重复，但事实粒度不同          | 全局审计保留在科研管理；Chain 节点内展示过程事件和 Trace，并通过 `request_id`、`trace_id` 双向跳转                 |
-| 系统集成 | 集成配置与 Chain 外部引用、Job 结果混杂                           | 配置、健康、调用日志进入科研管理的“集成”页；用户侧外部结果、Job、DataAsset 只在 Chain 节点展示                     |
+| 原入口   | 重合判断                                                 | 收敛方案                                                                                                         |
+| -------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 科研总览 | 与 Plane 首页、研究链进度、待办和活动重复                | 保留为唯一跨课题工作台；承接提交汇总、管理统计、最近活动索引；不复制 Chain 时间线                                |
+| 报告     | 与 Chain 快照、过程事件、导师确认重复                    | 保留 `PeriodicReport`、正式快照和审核状态为权威对象；报告列表、创建、提交、退回入口迁入 Chain 的“报告与成果”视图 |
+| 提交汇总 | 与科研总览、导师和 PI 聚合看板重复                       | 移除独立入口，改为科研总览中的 `report_submission` 保存视图，沿用原 ACL                                          |
+| 科研项目 | 与研究链课题列表强重复；当前 Chain 已一对一挂接 Project  | 研究链课题列表成为科研项目主入口；项目创建、成员、归档、恢复在 Chain 内完成；旧项目列表路由重定向到 Chain        |
+| 待我评审 | 与统一待办、Chain HITL、导师确认重复                     | 并入审批中心的 `stage_review`、`report_review`、`agent_approval` 队列；从待办可跳回 Chain 节点上下文             |
+| 办公审批 | 与 Chain 审批事件部分重合，但仍有非课题办公审批          | 保留为审批中心；Chain 关联审批生成事件和节点状态，独立办公审批继续在审批中心处理                                 |
+| 组织架构 | 非科研过程功能，但支撑 ACL                               | 并入科研管理的“组织与人员”页；Chain 只消费组织与导师关系，不复制组织树                                           |
+| 系统管理 | 管理域功能，与研究链日常操作不重合                       | 并入科研管理的“账号与系统”页                                                                                     |
+| 报告模板 | 模板配置入口分散，且未来需服务 Chain 产物                | 并入科研管理的“模板”页；Phase 1 仅保留报告模板，Phase 2 扩展为研究计划、实验记录等科研模板                       |
+| 身份映射 | 管理域功能，与 AccountLink 相关但不应进入研究链          | 并入科研管理的“身份与账号绑定”页                                                                                 |
+| 平台配置 | Feature Flag 和模块开关配置                              | 并入科研管理的“平台配置”页；`research_ia_v2`、`research_chain_enabled` 均在此配置                                |
+| 审计记录 | 全局审计与 Chain Event、Trace 有查询重复，但事实粒度不同 | 全局审计保留在科研管理；Chain 节点内展示过程事件和 Trace，并通过 `request_id`、`trace_id` 双向跳转               |
+| 系统集成 | 集成配置与 Chain 外部引用、Job 结果混杂                  | 配置、健康、调用日志进入科研管理的“集成”页；用户侧外部结果、Job、DataAsset 只在 Chain 节点展示                   |
 
 开启 `research_ia_v2` 后，旧列表路由按以下规则兼容；报告详情、项目详情等对象级深链保留，不在本轮强制改址：
 
@@ -296,7 +296,7 @@ Research Chain 入口、课题页和组件入口必须经过同一套 Workspace 
 
 欢迎页的科研待办是跨组件聚合视图，不是 Plane 自己的一套孤立任务。每条待办统一包含来源系统、课题、节点、责任人、优先级、截止时间、动作类型、状态、深链和权限范围；来源系统不可用时显示降级标记，不伪造已完成状态。
 
-视觉演进采用增量式设计：复用 Plane 现有导航、颜色、组件和交互约定，只新增 Research Chain、Agent、组件入口和科研待办的视觉层；不通过大规模重写替换现有项目管理界面。桌面端、窄屏端和无障碍状态共享同一信息层级。
+视觉演进采用增量式设计：复用 Plane 现有导航、颜色、组件和交互约定，只新增 研究链、Agent、组件入口和科研待办的视觉层；不通过大规模重写替换现有项目管理界面。桌面端、窄屏端和无障碍状态共享同一信息层级。
 
 ### 6.2 Synlora 与 ScienceDiscovery 的角色
 
@@ -311,11 +311,11 @@ ScienceDiscovery 如未来云化，必须单独完成租户隔离、TLS、用户
 
 ### 6.3 通用 Agent 插件
 
-首期将“Plane 中的通用 Agent 插件”定义为 Plane Web 内的同源业务模块，不直接 iframe 外部页面，也不依赖跨站 `localStorage` 共享 token。插件继承 Synlora 的通用 Agent 能力，但由 Plane Research Agent Orchestrator 提供课题上下文、权限、页面生命周期、能力装配和 Research Chain 投影。
+首期将“Plane 中的通用 Agent 插件”定义为 Plane Web 内的同源业务模块，不直接 iframe 外部页面，也不依赖跨站 `localStorage` 共享 token。插件继承 Synlora 的通用 Agent 能力，但由 Plane Research Agent Orchestrator 提供课题上下文、权限、页面生命周期、能力装配和研究链投影。
 
 插件由四部分组成：
 
-1. **入口层**：欢迎页、Research Chain 课题页和节点详情页中的 Agent 入口。
+1. **入口层**：欢迎页、研究链课题页和节点详情页中的 Agent 入口。
 2. **工作台层**：对话、上下文摘要、工具状态、人工确认和产物列表。
 3. **链路层**：将会话、工具调用、验证、人工决策和输出写回当前 Chain Node。
 4. **治理层**：显示课题 scope、工具授权、敏感操作审批、用量和审计链接。
@@ -336,7 +336,7 @@ Plane 负责：
 - 课题和节点 ACL。
 - 上下文授权和短期交换 token。
 - Synlora AccountLink、delegated identity 和能力策略解析。
-- Research Chain 节点、快照、审批和审计。
+- 研究链节点、快照、审批和审计。
 - Agent 结果和事件的链路投影。
 - capability manifest 的只读投影和不可用原因展示。
 
@@ -393,7 +393,7 @@ Context 返回版本、生成时间、分页信息和经过 ACL 过滤的资源�
 
 Agent 通过短期 exchange token 或受控的 Research Context ID 调用该接口，token 继承当前用户和课题权限，不使用长期共享 API Key 代替课题鉴权。
 
-### 7.2 Research Chain API
+### 7.2 研究链 API
 
 新增接口统一放在 `/api/research/` 命名空间下，至少覆盖：
 
@@ -439,7 +439,7 @@ Plane 只保存：
 
 Plane 不保存文档正文、向量副本或 WeKnora API Key。检索由 Synlora 的 `knowledge.search` 调用 WeKnora，知识库范围必须与课题 ACL 取交集。
 
-RAGPortal 或 WeKnora 不可用时，按 `LINK_ONLY` 或 `HIDDEN` 降级；手动研究记录仍可继续，Research Chain 保留 `degraded` 状态、`request_id` 和原因。
+RAGPortal 或 WeKnora 不可用时，按 `LINK_ONLY` 或 `HIDDEN` 降级；手动研究记录仍可继续，研究链保留 `degraded` 状态、`request_id` 和原因。
 
 ### 7.4 专业系统接口边界
 
@@ -621,20 +621,20 @@ Phase 0 解决跨仓库开发可以并行推进的共同边界，不向用户开
 
 Phase 1 交付研究生可以使用的最小闭环，并首次把第 6 节的统一门户和通用 Agent、第 7 节的跨仓接口、第 8 节的账号权限落到可用流程中。阶段目标包含 Plane 所属 UI/UX 主体：Phase 2 只能在这些容器中填充真实专业能力，Phase 3 只能叠加治理与开放能力，均不得重构科研信息架构。
 
-**Research Chain 与门户**
+**研究链与门户**
 
 - 实现平行课题创建、成员管理、`chain_visibility` 和课题级 ACL。
 - 实现规范节点、循环编号、父子关系、快照、事件、反思日志、时间线和 Markdown 导出。
-- 增加 `research_ia_v2` 开关；开启后交付科研总览、Research Chain、审批中心、科研管理四入口，并为旧列表路由提供兼容跳转。
+- 增加 `research_ia_v2` 开关；开启后交付科研总览、研究链、审批中心、科研管理四入口，并为旧列表路由提供兼容跳转。
 - Plane 首页仅增加紧凑科研摘要卡；完整科研待办、提交汇总和活动索引进入科研总览。
-- 在 Research Chain 内提供课题、报告与成果、实验记录、外部引用和项目成员管理入口；报告权威对象和正式版本仍由既有报告模型承载。
+- 在研究链内提供课题、报告与成果、实验记录、外部引用和项目成员管理入口；报告权威对象和正式版本仍由既有报告模型承载。
 - 提供课题上下文下的 RAGPortal 跳转、Synlora 会话入口和返回状态。
 - 提供文献调研、实验执行、实验数据、分析结果、论文调研和其他过程快照卡片，支持按阶段、来源、时间、责任人和状态筛选。
 - 聚合 RAGPortal、Agent、导师确认、审批、实验和专业组件待办，显示来源、深链、截止时间和降级状态。
 - 交付 Plane 首页紧凑科研摘要卡；卡片只显示摘要和入口，不复制科研总览。
 - 科研总览按“范围与刷新信息 → 待办/审批/确认/阻塞 → 课题/报告/成果 → 最近活动与管理统计”重排。
 - 交付跨组件待办索引：按阻断级别、待确认、普通提醒、截止时间和更新时间排序，同一来源对象去重，外部待办回写前显示“同步中”。
-- Research Chain 课题页交付固定上下文条、课题/节点/报告与成果/实验记录/外部引用/成员/回放 Tab、主链可视化、循环编号和六段式节点详情。
+- 研究链课题页交付固定上下文条、课题/节点/报告与成果/实验记录/外部引用/成员/回放 Tab、主链可视化、循环编号和六段式节点详情。
 - 审批中心交付统一队列卡片、来源、课题/节点上下文、主操作和跳回节点路径；Agent 审批接入既有 approval endpoint。
 
 **调研、计划、实验和分析**
@@ -670,7 +670,7 @@ Phase 1 交付研究生可以使用的最小闭环，并首次把第 6 节的统
 - Phase 1 通过 RAGPortal 完成文献/资料入库，保存课题、节点、上传者、来源、版本和授权 metadata，引用 WeKnora 返回的知识库/条目状态。
 - 本项目不新增 WeKnora ingestion adapter、不直接写 WeKnora 数据库；如果未来需要图谱增强，只在 RAGPortal 现有入库能力上扩展配置和状态展示。
 
-**出口条件**：一个学生可以创建两个课题并完成“调研 → AI 讨论 → 计划 → 实验记录 → 分析 → 快照/导出”；跨课题 Context、RAG、文件和 Trace 不串；外部服务降级不阻塞人工记录；Plane 首页、科研总览、Research Chain、节点详情、Agent 工作台、审批中心和科研管理通过 UX Ready 验收；详细任务见 [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)。
+**出口条件**：一个学生可以创建两个课题并完成“调研 → AI 讨论 → 计划 → 实验记录 → 分析 → 快照/导出”；跨课题 Context、RAG、文件和 Trace 不串；外部服务降级不阻塞人工记录；Plane 首页、科研总览、研究链、节点详情、Agent 工作台、审批中心和科研管理通过 UX Ready 验收；详细任务见 [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)。
 
 ### 9.5 Phase 2：实验运行与垂类科研能力
 
@@ -702,7 +702,7 @@ Phase 2 在 Phase 1 UI/UX Ready 工作台稳定后接入专业科研执行能力
 - 审批中心增加 Agent 审批、异步 Job 状态和运行回执队列，保留阶段评审、报告审核与办公审批 Tab。
 - 将报告模板扩展为科研模板库，支持研究计划、实验记录和阶段材料模板；模板实例化仍写入对应权威对象。
 - 专业系统集成配置保留在科研管理，运行结果、外部引用和 DataAsset 只在 Chain 节点与审批中心展示。
-- Phase 2 前置条件：Phase 1 已完成四入口、科研总览、Research Chain、审批中心、科研管理和 Agent 工作台的主要 UX 容器。
+- Phase 2 前置条件：Phase 1 已完成四入口、科研总览、研究链、审批中心、科研管理和 Agent 工作台的主要 UX 容器。
 - Phase 2 禁止新增科研一级入口，禁止重构科研总览、Chain 页、审批中心或科研管理骨架；专业系统未接入时不得阻塞 Phase 1 UX 验收。
 
 **统一运行时**
@@ -762,12 +762,12 @@ flowchart LR
 
 每个阶段的计划文档必须独立评审、实施和验收：
 
-| 计划                                                                                               | 覆盖内容                                                                                           |
-| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) | 契约、数据模型、适配器、身份、Agent Context、门户骨架、开关、安全和测试基线                        |
-| [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) | UI/UX Ready 工作台、平行课题、Research Chain、RAGPortal、Synlora、研究计划、实验记录、Trace 和 E2E |
-| [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md) | SpecLabOS、PolyAgent、SpecAgent、Experiment Runtime、Job、数据资产、回执和失败恢复                 |
-| [`research-intelligent-platform-phase-3-plan.md`](./research-intelligent-platform-phase-3-plan.md) | 治理、ScienceDiscovery Worker、规模化、灾备、社会用户和开放前置                                    |
+| 计划                                                                                               | 覆盖内容                                                                                   |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) | 契约、数据模型、适配器、身份、Agent Context、门户骨架、开关、安全和测试基线                |
+| [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) | UI/UX Ready 工作台、平行课题、研究链、RAGPortal、Synlora、研究计划、实验记录、Trace 和 E2E |
+| [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md) | SpecLabOS、PolyAgent、SpecAgent、Experiment Runtime、Job、数据资产、回执和失败恢复         |
+| [`research-intelligent-platform-phase-3-plan.md`](./research-intelligent-platform-phase-3-plan.md) | 治理、ScienceDiscovery Worker、规模化、灾备、社会用户和开放前置                            |
 
 ## 10. 验收标准与测试矩阵
 
@@ -824,7 +824,7 @@ flowchart LR
 ### 10.7 信息架构收敛与兼容
 
 - 关闭 `research_ia_v2` 时，现有科研导航、路由和页面行为完整回归。
-- 开启后仅显示科研总览、Research Chain、审批中心、科研管理四个一级入口。
+- 开启后仅显示科研总览、研究链、审批中心、科研管理四个一级入口。
 - RESEARCHER 可见 overview、Chain 和审批中心，不可见科研管理 Tab；MENTOR / PRINCIPAL 按评审、汇总或组织管理能力增加对应 Tab；ADMIN 可见全部管理 Tab。
 - 旧列表路由重定向正确；报告详情、项目详情等对象级深链保留且不丢失上下文。
 - 报告提交、项目归档、审批、审计、集成配置的既有 API 和数据行为不变。
@@ -873,7 +873,7 @@ flowchart LR
 
 - 第一阶段实际交付通过 RAGPortal 入库、知识库引用和检索；WeKnora 已部署服务由 RAGPortal 使用，Plane 不开发 WeKnora，也不直接写 WeKnora。
 - 第一阶段实际交付检索/分析 Agent 和人工确认；实验 Agent、写作 Agent、评审 Agent 按 Phase 2/3 逐步开放。
-- Research Chain 的交流、导师 HITL、审批和数据变化都进入统一事件模型，但正文和原始数据继续由权威系统保存。
+- 研究链的交流、导师 HITL、审批和数据变化都进入统一事件模型，但正文和原始数据继续由权威系统保存。
 - 欢迎页和 Agent 插件必须复用 Plane 现有视觉/导航体系；`research_ia_v2` 只做入口收敛和卡片/面板调整，不进行大规模 UI 重写。
 - Plane capability broker 只保存 Synlora 能力清单的策略投影和映射，不复制工具注册表、插件配置或凭证。
 - Synlora 是唯一用户侧云端工具执行面；Plane 的健康检查、管理配置和状态投影不得演变为第二套工具调用链。
@@ -893,19 +893,20 @@ flowchart LR
 - `research-management-prd-roadmap.md`：Plane 科研管理 P0–P3 路线和生态边界。
 - `research-workspace-v3.md`：Plane 当前组织、权限、工作空间、正式快照和只读 Context 契约。
 - `research-p0-development-prd.md`、`research-p1-development-prd.md`：已交付功能的开发规格和验收基线。
-- 本文档：跨仓库科研智能体平台的目标架构、Research Chain 和阶段性建设需求。
+- 本文档：跨仓库科研智能体平台的目标架构、研究链和阶段性建设需求。
 
 实现与文档不一致时，先以代码和发布 manifest 为事实来源，再回写相应文档。本文档不覆盖既有实现契约。
 
 | 文档版本 | 日期       | 变更摘要                                                                                                                                                                                                                                            |
 | -------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.1     | 2026-09-24 | 统一术语：将 Research Chain 的中文产品名称调整为“研究链”，同步信息架构、产品模型与阶段交付口径。                                                                                                                                                    |
 | v1.9     | 2026-09-24 | 将 Phase 1 定位升级为 UI/UX Ready 科研智能体平台工作台：大部分 Plane 所属 UX 前移到 Phase 1，Phase 2/3 收窄为真实能力填充、治理叠加和小型视觉调整；新增 UX Ready 验收矩阵。                                                                         |
 | v1.8     | 2026-09-24 | 确认 `research_ia_v2` 默认开启；工作区管理员可关闭以回退旧平铺导航。                                                                                                                                                                                |
 | v1.7     | 2026-09-22 | 基于 Synlora 最新能力中心与插件体系，确立 Plane Research Agent Orchestrator / Capability Broker：新增自动能力装配、`agent-context.v2`、delegated identity、capability manifest、Synlora 统一工具执行链、event cursor 投影和垂类 correlation layer。 |
-| v1.6     | 2026-09-22 | 确认科研信息架构从“新增 Chain 并保留旧入口”收敛为四入口：科研总览、Research Chain、审批中心、科研管理；补充 `research_ia_v2`、旧功能收敛矩阵、兼容路由、阶段交付和验收标准。                                                                        |
+| v1.6     | 2026-09-22 | 确认科研信息架构从“新增 Chain 并保留旧入口”收敛为四入口：科研总览、研究链、审批中心、科研管理；补充 `research_ia_v2`、旧功能收敛矩阵、兼容路由、阶段交付和验收标准。                                                                                |
 | v1.5     | 2026-09-22 | 回写 Phase 0 实施状态：契约、Plane 基础与安全边界、RAGPortal 课题 metadata、Synlora Context Adapter、观测与回滚基线完成自动化验证。                                                                                                                 |
 | v1.4     | 2026-09-22 | 确认 WeKnora 已部署内网服务并由 RAGPortal 作为唯一入库入口；新增 UX 交互原型确认稿。                                                                                                                                                                |
 | v1.3     | 2026-09-22 | 按原始需求交叉核对，补充知识/数据层、Agent 角色、快照、HITL、交流/待办、组件入口、图谱/ELN、写作评审及项目治理分期。                                                                                                                                |
 | v1.2     | 2026-09-21 | 细化四阶段技术实施边界，并补充 Plane 通用 Agent 插件的 UI、生命周期、AI 接入、治理和分阶段交付要求。                                                                                                                                                |
 | v1.1     | 2026-09-21 | 将门户、通用 Agent、跨仓库接口、账号权限、治理、测试和运维全部纳入阶段路线；新增 Phase 0–3 实施计划索引。                                                                                                                                           |
-| v1.0     | 2026-09-21 | 建立跨仓库科研智能体平台总 PRD，明确 Research Chain、MVP、Agent 分工、账号绑定和验收边界。                                                                                                                                                          |
+| v1.0     | 2026-09-21 | 建立跨仓库科研智能体平台总 PRD，明确 研究链、MVP、Agent 分工、账号绑定和验收边界。                                                                                                                                                                  |

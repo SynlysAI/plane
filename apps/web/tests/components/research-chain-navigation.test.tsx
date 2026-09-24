@@ -128,7 +128,7 @@ function setSwitches(researchChain: boolean, researchAgent = false, iaV2 = false
   mocks.research.identity.research_ia_v2 = iaV2;
 }
 
-it("keeps every existing research entry and hides Research Chain while the switch is off", async () => {
+it("keeps every existing research entry and hides 研究链 while the chain switch is off", async () => {
   setSwitches(false);
   const originalNavKeys = mocks.research.visibleNavKeys;
   mocks.research.visibleNavKeys = [
@@ -145,7 +145,7 @@ it("keeps every existing research entry and hides Research Chain while the switc
   expect(container.textContent).toContain("办公审批");
   expect(container.textContent).toContain("组织架构");
   expect(container.textContent).toContain("系统集成");
-  expect(container.textContent).not.toContain("科研链");
+  expect(container.textContent).not.toContain("研究链");
   expect(mocks.businessItems.some((item) => item.key === "research_chain")).toBe(true);
   expect(mocks.settingItems.map((item) => item.key)).toEqual([
     "org",
@@ -158,10 +158,10 @@ it("keeps every existing research entry and hides Research Chain while the switc
   ]);
 });
 
-it("shows Research Chain only when the workspace switch is on", async () => {
+it("shows 研究链 only when the workspace chain switch is on", async () => {
   setSwitches(true);
   await act(async () => root.render(<ResearchSidebarItems />));
-  expect(container.textContent).toContain("科研链");
+  expect(container.textContent).toContain("研究链");
   const link = container.querySelector('a[href="/lab/research/chains"]');
   expect(link).not.toBeNull();
 });
@@ -172,7 +172,7 @@ it("collapses research to four destinations when IA v2 is enabled", async () => 
 
   const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
   expect(links).toEqual(["/lab/research", "/lab/research/chains", "/lab/research/approvals"]);
-  expect(container.textContent).toContain("Research Chain");
+  expect(container.textContent).toContain("研究链");
   expect(container.textContent).toContain("审批中心");
   expect(container.textContent).not.toContain("报告");
   expect(container.textContent).not.toContain("提交汇总");

@@ -112,6 +112,6 @@ it("renders the loading and empty states with stable accessibility semantics", a
 
   mocks.getChains.mockResolvedValue([]);
   await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" key="empty" />));
-  expect(container.textContent).toContain("当前还没有可见科研链。");
+  expect(container.textContent).toContain("当前还没有可见研究链。");
   expect(container.textContent).not.toContain("NaN");
 });
