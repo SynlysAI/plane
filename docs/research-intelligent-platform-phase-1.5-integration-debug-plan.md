@@ -130,15 +130,15 @@ Plane 调用 RAGPortal 不走环境变量 base URL，而是通过 `ExternalSyste
 
 按以下顺序拉起服务，每步自检通过后再进行下一步：
 
-| 步骤 | 动作                                                                                                                            | 自检命令与预期                                                                                 | 负责人 |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------ |
-| 1    | 确认 WeKnora 可达（已部署，无需启动）                                                                                           | `curl -s http://10.26.15.93:8000/` 返回 HTTP 响应（非超时/拒绝）                               | B      |
-| 2    | 配置并启动 RAGPortal：`cd RAGPortal/backend && conda activate ragportal && uvicorn app.main:app --host 0.0.0.0 --port 8004`     | `curl -s http://127.0.0.1:8004/api/health` 返回正常 JSON                                       | B      |
-| 3    | 配置并启动 Synlora：`cd Synlora/apps/web/backend && conda activate synlysagent && python run_uvicorn.py`（默认 `0.0.0.0:8005`） | `curl -s http://127.0.0.1:8005/api/health` 返回正常 JSON                                       | B      |
-| 4    | A 更新 `plane/apps/api/.env` 后重启 Plane 容器                                                                                  | `docker compose restart api worker beat-worker`；`docker ps` 确认容器 Up                       | A      |
-| 5    | 从容器内验证两个上游服务                                                                                                        | `docker exec plane-api-1 curl -s http://172.19.0.1:8004/api/health` 与 `:8005/api/health` 均通 | A      |
-| 6    | 录入 RAGPortal `ExternalSystemConnection` 并启用                                                                                | 科研管理 / 集成界面连接测试返回 success，非 `not_configured`                                   | A      |
-| 7    | 开启联调工作区四个 research 开关，绑定 Synlora AccountLink                                                                      | 试点学生账号 AccountLink 状态 ACTIVE                                                           | A      |
+| 步骤 | 动作                                                                                                                | 自检命令与预期                                                                                                                                                     | 负责人 |
+| ---- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| 1    | 确认 WeKnora 可达（已部署，无需启动）                                                                               | `curl -s http://10.26.15.93:8000/` 返回 HTTP 响应（非超时/拒绝）                                                                                                   | B      |
+| 2    | 配置并启动 RAGPortal：`cd RAGPortal/backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8004` | `curl -s http://127.0.0.1:8004/api/health` 返回正常 JSON                                                                                                           | B      |
+| 3    | 配置并启动 Synlora：`cd Synlora/apps/web/backend && .venv/bin/python run_uvicorn.py`（默认 `0.0.0.0:8005`）         | `curl -s http://127.0.0.1:8005/api/health` 返回正常 JSON                                                                                                           | B      |
+| 4    | A 更新 `plane/apps/api/.env` 后重建 Plane 容器                                                                      | `docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d --force-recreate --no-deps api worker beat-worker`；`docker ps` 确认容器 Up | A      |
+| 5    | 从容器内验证两个上游服务                                                                                            | 容器内 Python urllib 访问 `http://172.19.0.1:8004/api/health` 与 `:8005/api/health` 均通（API 镜像不含 curl）                                                      | A      |
+| 6    | 录入 RAGPortal `ExternalSystemConnection` 并启用                                                                    | 科研管理 / 集成界面连接测试返回 success，非 `not_configured`                                                                                                       | A      |
+| 7    | 开启联调工作区四个 research 开关，绑定 Synlora AccountLink                                                          | 试点学生账号 AccountLink 状态 ACTIVE                                                                                                                               | A      |
 
 ## 5. 分层联调与基础功能验证
 
@@ -172,7 +172,7 @@ cd RAGPortal/backend && AUTH_SECRET=test-secret \
   .venv/bin/pytest -q
 ```
 
-> 环境口径说明：RAGPortal 服务启动用 conda 环境 `ragportal`；本节契约测试用 `RAGPortal/backend/.venv` 中的 pytest。两套环境并存、用途不同，不要混用。
+> 环境口径说明：当前联调机的 RAGPortal 服务与契约测试均使用 `RAGPortal/backend/.venv`；Synlora 同样使用后端仓内 `.venv`。不要混用其他项目的 Python 环境。
 
 ### 5.3 L3：双服务链路验证
 
