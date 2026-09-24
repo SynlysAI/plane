@@ -1199,6 +1199,28 @@
       },
       "graph_title": "主链可视化",
       "workflow_title": "研究流程",
+      "workflow": {
+        "not_started": "未开始",
+        "shared": "共享节点",
+        "preparation": "准备节点",
+        "unmapped": "未映射节点",
+        "stage_action": "查看 {stage}",
+        "stages": {
+          "literature_review": "文献调研",
+          "topic_selection": "选题",
+          "topic_evaluation": "评估",
+          "pre_experiment": "预实验",
+          "analysis_pre_experiment": "分析",
+          "opening": "开题",
+          "experiment": "实验",
+          "analysis_experiment": "分析",
+          "iteration": "迭代",
+          "summary": "总结",
+          "paper_writing": "论文写作",
+          "completion": "结题",
+          "transfer": "转化"
+        }
+      },
       "views": {
         "chains": "课题",
         "projects": "项目管理",
