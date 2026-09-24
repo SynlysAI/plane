@@ -209,7 +209,7 @@ function WorkspaceResearchOverviewPage() {
             </div>
           )}
           {workspaceSlug && research.canSee("dashboard") && (
-            <section className="mt-6 overflow-hidden rounded-xl border border-subtle bg-surface-1">
+            <section className="mt-6" aria-label={t("research.pi.overview")}>
               <ResearchPiAggregateBoard workspaceSlug={workspaceSlug} />
             </section>
           )}
