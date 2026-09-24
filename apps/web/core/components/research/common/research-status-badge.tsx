@@ -5,6 +5,7 @@
 
 import type { ReactNode } from "react";
 import { Badge, type TBadgeSize, type TBadgeVariant } from "@plane/propel/badge";
+import { cn } from "@plane/utils";
 
 /**
  * 科研状态字典：把 Chain、节点、审批、报告、Agent、集成等实体状态统一映射到
@@ -58,6 +59,13 @@ const STATUS_VARIANTS: Record<string, TBadgeVariant> = {
   syncing: "neutral",
   // 科研来源标记
   agent_source: "brand",
+  // 实验 / 文献 / 成果扩展状态
+  planned: "neutral",
+  running: "brand",
+  collected: "neutral",
+  screened: "brand",
+  included: "success",
+  excluded: "danger",
 };
 
 /**
@@ -80,13 +88,17 @@ type TResearchStatusBadgeProps = {
   children: ReactNode;
   /** Badge 尺寸，列表行建议 sm，详情页建议 base。 */
   size?: TBadgeSize;
+  /** 追加样式类。 */
+  className?: string;
 };
 
 /** 科研统一状态标签：基于 propel Badge 与科研状态字典渲染。 */
-export function ResearchStatusBadge({ status, children, size = "base" }: TResearchStatusBadgeProps) {
+export function ResearchStatusBadge({ status, children, size = "base", className }: TResearchStatusBadgeProps) {
   return (
-    <Badge variant={researchStatusVariant(status)} size={size}>
-      {children}
-    </Badge>
+    <span className={cn("inline-flex", className)}>
+      <Badge variant={researchStatusVariant(status)} size={size}>
+        {children}
+      </Badge>
+    </span>
   );
 }

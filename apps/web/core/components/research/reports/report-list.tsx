@@ -14,11 +14,14 @@ import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/c
 import type { TReportStatus, TReportType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchListState } from "@/components/research/common/research-list-state";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -26,13 +29,6 @@ type Props = {
   workspaceSlug: string;
   /** `review` turns the list into an approval queue without creation controls. */
   variant?: "default" | "review";
-};
-
-const STATUS_TONES: Record<TReportStatus, string> = {
-  DRAFT: "bg-surface-2 text-tertiary",
-  SUBMITTED: "bg-accent-subtle text-accent-primary",
-  NEEDS_REVISION: "bg-danger-subtle text-danger-primary",
-  ACCEPTED: "bg-success-subtle text-success-primary",
 };
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
@@ -373,52 +369,63 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
           onClearFilters={clearFilters}
         />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-12">
-            <thead>
-              <tr className="border-b border-subtle text-left text-tertiary">
-                <th className="font-normal py-2">{t("research.reports.columns.period")}</th>
-                <th className="font-normal py-2">{t("research.reports.columns.type")}</th>
-                <th className="font-normal py-2">{t("research.reports.columns.owner")}</th>
-                <th className="font-normal py-2">{t("research.reports.columns.org_unit")}</th>
-                <th className="font-normal py-2">{t("research.reports.columns.status")}</th>
-                <th className="font-normal py-2">{t("research.reports.columns.visibility")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map((report) => (
-                <tr key={report.id} className="border-b border-subtle/60">
-                  <td className="py-2">
-                    <Link
-                      href={`/${workspaceSlug}/research/reports/${report.id}`}
-                      className={`text-accent-primary ${reportId === report.id ? "font-medium" : ""}`}
-                    >
-                      {report.period_key}
-                    </Link>
-                    {report.is_backfill && (
-                      <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-10 text-tertiary">
-                        {t("research.reports.backfill")}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 text-secondary">{t(REPORT_TYPE_LABELS[report.report_type])}</td>
-                  <td className="py-2 text-tertiary">
-                    {report.owner_detail?.display_name ?? report.owner_detail?.email ?? report.owner}
-                  </td>
-                  <td className="py-2 text-tertiary">{report.org_unit_detail?.name ?? "-"}</td>
-                  <td className="py-2">
-                    <span className={`rounded px-1.5 py-0.5 text-10 ${STATUS_TONES[report.status]}`}>
-                      {t(REPORT_STATUS_LABELS[report.status])}
+        <Table className="min-w-[860px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("research.reports.columns.period")}</TableHead>
+              <TableHead>{t("research.reports.columns.type")}</TableHead>
+              <TableHead>{t("research.reports.columns.owner")}</TableHead>
+              <TableHead>{t("research.reports.columns.org_unit")}</TableHead>
+              <TableHead>{t("research.reports.columns.status")}</TableHead>
+              <TableHead>{t("research.reports.columns.visibility")}</TableHead>
+              <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
+              <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {reports.map((report) => (
+              <TableRow key={report.id} className="hover:bg-surface-2">
+                <TableCell>
+                  <Link
+                    href={`/${workspaceSlug}/research/reports/${report.id}`}
+                    className={`font-medium text-primary hover:text-accent-primary ${reportId === report.id ? "text-accent-primary" : ""}`}
+                  >
+                    {report.period_key}
+                  </Link>
+                  {report.is_backfill && (
+                    <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-10 text-tertiary">
+                      {t("research.reports.backfill")}
                     </span>
-                  </td>
-                  <td className="py-2 text-tertiary">
-                    {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                </TableCell>
+                <TableCell className="text-secondary">{t(REPORT_TYPE_LABELS[report.report_type])}</TableCell>
+                <TableCell className="text-secondary">
+                  {report.owner_detail?.display_name ?? report.owner_detail?.email ?? report.owner}
+                </TableCell>
+                <TableCell className="text-tertiary">{report.org_unit_detail?.name ?? "-"}</TableCell>
+                <TableCell>
+                  <ResearchStatusBadge status={report.status} size="sm">
+                    {t(REPORT_STATUS_LABELS[report.status])}
+                  </ResearchStatusBadge>
+                </TableCell>
+                <TableCell className="text-tertiary">
+                  {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}
+                </TableCell>
+                <TableCell className="text-right text-tertiary tabular-nums">
+                  {new Date(report.updated_at).toLocaleDateString()}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/${workspaceSlug}/research/reports/${report.id}`}
+                    className="text-12 text-accent-primary hover:underline"
+                  >
+                    {t("research.common.open")}
+                  </Link>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
       <div className="flex items-center justify-between gap-2 text-12 text-tertiary">
         <span>{t("research.common.total_results", { count: pagination?.total_results ?? reports.length })}</span>

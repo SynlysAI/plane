@@ -8,13 +8,14 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { EXPERIMENT_SOURCE_LABELS, EXPERIMENT_STATUSES, EXPERIMENT_STATUS_LABELS } from "@plane/constants";
-import type { TExperimentStatus } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { ExperimentDetail } from "@/components/research/experiments/experiment-detail";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useUser } from "@/hooks/store/user";
@@ -22,15 +23,6 @@ import { useUser } from "@/hooks/store/user";
 type Props = {
   workspaceSlug: string;
   projectId: string;
-};
-
-const STATUS_TONES: Record<TExperimentStatus, string> = {
-  PLANNED: "bg-surface-2 text-tertiary",
-  RUNNING: "bg-accent-subtle text-accent-primary",
-  COMPLETED: "bg-success-subtle text-success-primary",
-  FAILED: "bg-danger-subtle text-danger-primary",
-  CANCELLED: "bg-surface-2 text-secondary",
-  ARCHIVED: "bg-surface-2 text-tertiary",
 };
 
 /** Experiment list with the per-record detail beside it (§6.2, P1-UI-04). */
@@ -114,9 +106,9 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
             >
               <span className="text-12 text-primary">{`#${record.sequence_no} ${record.title}`}</span>
               <span className="flex items-center gap-1 text-11">
-                <span className={`rounded px-1.5 py-0.5 ${STATUS_TONES[record.status]}`}>
+                <ResearchStatusBadge status={record.status} size="sm">
                   {t(EXPERIMENT_STATUS_LABELS[record.status])}
-                </span>
+                </ResearchStatusBadge>
                 <span className="rounded bg-surface-2 px-1.5 py-0.5 text-tertiary">
                   {t(EXPERIMENT_SOURCE_LABELS[record.source])}
                 </span>

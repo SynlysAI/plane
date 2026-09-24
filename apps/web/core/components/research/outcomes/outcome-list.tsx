@@ -8,25 +8,21 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { OUTCOME_STATUSES, OUTCOME_STATUS_LABELS, OUTCOME_TYPES, OUTCOME_TYPE_LABELS } from "@plane/constants";
-import type { TOutcomeStatus, TOutcomeType } from "@plane/constants";
+import type { TOutcomeType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
 type Props = {
   workspaceSlug: string;
   projectId: string;
-};
-
-const STATUS_TONES: Record<TOutcomeStatus, string> = {
-  DRAFT: "bg-surface-2 text-tertiary",
-  SUBMITTED: "bg-accent-subtle text-accent-primary",
-  ACCEPTED: "bg-success-subtle text-success-primary",
-  PUBLISHED: "bg-success-subtle text-success-primary",
 };
 
 /** Outcomes page: register results and link them back into the chain (P1-FIN-02). */
@@ -111,23 +107,23 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
 
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.outcomes.columns.title")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.type")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.venue")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.status")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.links")}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("research.outcomes.columns.title")}</TableHead>
+            <TableHead>{t("research.outcomes.columns.type")}</TableHead>
+            <TableHead>{t("research.outcomes.columns.venue")}</TableHead>
+            <TableHead>{t("research.outcomes.columns.status")}</TableHead>
+            <TableHead>{t("research.outcomes.columns.links")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {outcomes.map((outcome) => (
-            <tr key={outcome.id} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">{outcome.title}</td>
-              <td className="py-2 text-tertiary">{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</td>
-              <td className="py-2 text-tertiary">{outcome.venue || outcome.doi || "-"}</td>
-              <td className="py-2">
+            <TableRow key={outcome.id} className="hover:bg-surface-2">
+              <TableCell className="font-medium text-primary">{outcome.title}</TableCell>
+              <TableCell className="text-tertiary">{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</TableCell>
+              <TableCell className="text-tertiary">{outcome.venue || outcome.doi || "-"}</TableCell>
+              <TableCell>
                 <select
                   className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
                   value={outcome.status}
@@ -143,22 +139,22 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
                     </option>
                   ))}
                 </select>
-                <span className={`ml-2 rounded px-1.5 py-0.5 text-11 ${STATUS_TONES[outcome.status]}`}>
+                <ResearchStatusBadge status={outcome.status} size="sm" className="ml-2">
                   {t(OUTCOME_STATUS_LABELS[outcome.status])}
-                </span>
-              </td>
-              <td className="py-2 text-tertiary">{outcome.links?.length ?? 0}</td>
-            </tr>
+                </ResearchStatusBadge>
+              </TableCell>
+              <TableCell className="text-tertiary">{outcome.links?.length ?? 0}</TableCell>
+            </TableRow>
           ))}
           {!outcomes.length && (
-            <tr>
-              <td colSpan={5} className="py-3 text-tertiary">
+            <TableRow>
+              <TableCell colSpan={5} className="py-3 text-tertiary">
                 {t("research.outcomes.empty")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       <p className="text-11 text-tertiary">{t("research.outcomes.link_hint")}</p>
     </div>
   );
