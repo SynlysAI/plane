@@ -10,14 +10,15 @@ import type { TResearchChainNode } from "@plane/types";
 // components
 import {
   buildResearchWorkflow,
+  type TResearchWorkflowStageId,
   type TResearchWorkflowStage,
 } from "@/components/research/chains/research-chain-workflow";
 
 type Props = {
   nodes: TResearchChainNode[];
   currentNodeId: string | null;
-  selectedNodeId: string | null;
-  onSelect: (nodeId: string) => void;
+  selectedStageId: TResearchWorkflowStageId | null;
+  onSelectStage: (stage: TResearchWorkflowStage) => void;
 };
 
 type TStepKind = "completed" | "current" | "attention" | "archived" | "upcoming";
@@ -60,7 +61,7 @@ const STEP_SURFACE_CLASSES: Record<TStepKind, string> = {
  * Fixed thirteen-stage research workflow map. It communicates the complete flow,
  * the real current position and a temporary viewing position without changing node state.
  */
-export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedNodeId, onSelect }: Props) {
+export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageId, onSelectStage }: Props) {
   const { t } = useTranslation();
   const workflow = buildResearchWorkflow(nodes, currentNodeId);
 
@@ -72,10 +73,7 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedNodeId
       <div className="flex min-w-max items-stretch gap-1" role="list">
         {workflow.stages.map((stage, index) => {
           const kind = stepKind(stage);
-          const selected =
-            Boolean(selectedNodeId) &&
-            !stage.isCurrent &&
-            [...stage.nodeIds, ...stage.associatedNodeIds].includes(selectedNodeId as string);
+          const selected = selectedStageId === stage.id;
           const statusLabel =
             stage.status === "NOT_STARTED"
               ? t("research.chains.workflow.not_started")
@@ -97,12 +95,11 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedNodeId
               )}
               <button
                 type="button"
-                onClick={() => stage.preferredNodeId && onSelect(stage.preferredNodeId)}
-                disabled={!stage.preferredNodeId}
+                onClick={() => onSelectStage(stage)}
                 aria-current={stage.isCurrent ? "step" : undefined}
                 aria-pressed={selected || undefined}
                 title={stageTitle}
-                className={`flex max-w-36 min-w-28 flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors disabled:cursor-default ${STEP_SURFACE_CLASSES[kind]} ${
+                className={`flex max-w-36 min-w-28 flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors ${STEP_SURFACE_CLASSES[kind]} ${
                   selected ? "ring-border-strong border-strong ring-1" : ""
                 }`}
               >

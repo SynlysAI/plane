@@ -1198,7 +1198,6 @@
         "transfer": "Transfer",
         "unknown": "Research node"
       },
-      "graph_title": "Main chain visualization",
       "workflow_title": "Research workflow",
       "views": {
         "chains": "Chains",
@@ -1286,6 +1285,39 @@
       },
       "member_action_failed": "The member action was not completed. Check the user and permission, then retry.",
       "workflow": {
+        "not_started": "Not started",
+        "shared": "Shared node",
+        "preparation": "Preparation node",
+        "unmapped": "Unmapped nodes",
+        "unmapped_node": "Unmapped node",
+        "stage_detail_title": "Stage detail",
+        "stage_nodes": "Stage nodes",
+        "stage_node_count": "{count} linked nodes",
+        "stage_empty": "No node has been created for this stage yet.",
+        "stage_snapshot": "Stage snapshot",
+        "snapshot_version": "Version {version}",
+        "stage_snapshot_empty": "No confirmed snapshot exists for this stage yet.",
+        "trace_title": "Trace log",
+        "trace_id": "Trace {id}",
+        "trace_id_empty": "Trace not recorded",
+        "trace_empty": "No trace event exists for this stage yet.",
+        "detail_load_failed": "Some node details could not load; available records are shown.",
+        "stage_action": "View {stage}",
+        "stages": {
+          "literature_review": "Literature review",
+          "topic_selection": "Topic selection",
+          "topic_evaluation": "Evaluation",
+          "pre_experiment": "Pre-experiment",
+          "analysis_pre_experiment": "Analysis",
+          "opening": "Opening",
+          "experiment": "Experiment",
+          "analysis_experiment": "Analysis",
+          "iteration": "Iteration",
+          "summary": "Summary",
+          "paper_writing": "Paper writing",
+          "completion": "Completion",
+          "transfer": "Transfer"
+        },
         "not_started_hint": "No node has been created for this stage yet"
       }
     },

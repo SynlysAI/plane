@@ -44,22 +44,23 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 
 ## 4. 语义组件清单（唯一出口）
 
-| 需求         | 组件 / 方案                                             | 位置                                               |
-| ------------ | ------------------------------------------------------- | -------------------------------------------------- |
-| 状态标签     | `ResearchStatusBadge`（统一状态字典）                   | `research/common/research-status-badge.tsx`        |
-| 路由标签页   | `ResearchTabLink`（保留 `aria-current`）                | `research/common/research-tab-link.tsx`            |
-| 列表空态     | `ResearchListState`（六类状态 × compact/detailed）      | `research/common/research-list-state.tsx`          |
-| 页面壳       | `ResearchPageShell`（面包屑 / 元信息 / 权限分支）       | `research/common/research-page-shell.tsx`          |
-| 数据 Surface | `ResearchDataSurface` 系列（列表 / 筛选 / 表格 / 详情） | `research/common/research-data-surface.tsx`        |
-| 状态面板     | `ResearchStatusPanel`                                   | `research/common/research-status-panel.tsx`        |
-| 工作流导轨   | `ResearchChainWorkflowRail`（固定 13 阶段 + 当前态）    | `research/chains/research-chain-workflow-rail.tsx` |
-| 工作流映射   | `buildResearchWorkflow`（纯展示层阶段推导）             | `research/chains/research-chain-workflow.ts`       |
-| 当前对象选择 | `pickCurrentChain` / `pickCurrentNode`（统一口径）      | `research/chains/research-selection.ts`            |
-| 日期格式化   | `formatResearchDateTime` / `formatResearchDate`         | `research/common/research-format.ts`               |
-| 待办聚合     | `collectResearchTodos`（跨组件共享口径）                | `research/common/research-todo-source.ts`          |
-| Agent 面板   | `ResearchAgentSidePanel`（400px 抽屉 + 上下文继承）     | `research/agent/research-agent-side-panel.tsx`     |
-| 表格         | propel `Table` 系列（禁手写原生 table）                 | `@plane/propel/table`                              |
-| 按钮 / 加载  | propel `Button` / `getButtonStyling` / `Skeleton`       | `@plane/propel/*`                                  |
+| 需求         | 组件 / 方案                                               | 位置                                                       |
+| ------------ | --------------------------------------------------------- | ---------------------------------------------------------- |
+| 状态标签     | `ResearchStatusBadge`（统一状态字典）                     | `research/common/research-status-badge.tsx`                |
+| 路由标签页   | `ResearchTabLink`（保留 `aria-current`）                  | `research/common/research-tab-link.tsx`                    |
+| 列表空态     | `ResearchListState`（六类状态 × compact/detailed）        | `research/common/research-list-state.tsx`                  |
+| 页面壳       | `ResearchPageShell`（面包屑 / 元信息 / 权限分支）         | `research/common/research-page-shell.tsx`                  |
+| 数据 Surface | `ResearchDataSurface` 系列（列表 / 筛选 / 表格 / 详情）   | `research/common/research-data-surface.tsx`                |
+| 状态面板     | `ResearchStatusPanel`                                     | `research/common/research-status-panel.tsx`                |
+| 工作流导轨   | `ResearchChainWorkflowRail`（固定 13 阶段 + 当前态）      | `research/chains/research-chain-workflow-rail.tsx`         |
+| 工作流映射   | `buildResearchWorkflow`（纯展示层阶段推导）               | `research/chains/research-chain-workflow.ts`               |
+| 阶段详情     | `ResearchChainWorkflowStageDetail`（节点 / 快照 / Trace） | `research/chains/research-chain-workflow-stage-detail.tsx` |
+| 当前对象选择 | `pickCurrentChain` / `pickCurrentNode`（统一口径）        | `research/chains/research-selection.ts`                    |
+| 日期格式化   | `formatResearchDateTime` / `formatResearchDate`           | `research/common/research-format.ts`                       |
+| 待办聚合     | `collectResearchTodos`（跨组件共享口径）                  | `research/common/research-todo-source.ts`                  |
+| Agent 面板   | `ResearchAgentSidePanel`（400px 抽屉 + 上下文继承）       | `research/agent/research-agent-side-panel.tsx`             |
+| 表格         | propel `Table` 系列（禁手写原生 table）                   | `@plane/propel/table`                                      |
+| 按钮 / 加载  | propel `Button` / `getButtonStyling` / `Skeleton`         | `@plane/propel/*`                                          |
 
 新实现不得绕过以上出口另写平行实现。
 
@@ -73,7 +74,7 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 
 ### 5.2 研究链
 
-Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段）** → Tabs → 当前节点详情（六段结构）→ Supporting。Rail 始终显示：文献调研 → 选题 → 评估 → 预实验 → 分析 → 开题 → 实验 → 分析 → 迭代 → 总结 → 论文写作 → 结题 → 转化；两个“分析”阶段按结构前后关系区分。`TOPIC_EVALUATION` 在“选题 / 评估”共享关联，`PLAN` 是开题准备节点；点击阶段仅查看摘要，不改变真实当前节点。
+Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段）** → Tabs → 阶段详情（关联节点、快照、Trace log 与六段式节点详情）→ Supporting。Rail 始终显示：文献调研 → 选题 → 评估 → 预实验 → 分析 → 开题 → 实验 → 分析 → 迭代 → 总结 → 论文写作 → 结题 → 转化；两个“分析”阶段按结构前后关系区分。`TOPIC_EVALUATION` 在“选题 / 评估”共享关联，`PLAN` 是开题准备节点；点击阶段仅查看该阶段证据，不改变真实当前节点。
 
 ### 5.3 Agent
 
