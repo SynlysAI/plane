@@ -1,7 +1,7 @@
 import path from "node:path";
 import * as dotenv from "dotenv";
 import { reactRouter } from "@react-router/dev/vite";
-import { defineConfig, type ProxyOptions } from "vite";
+import { defineConfig, type Plugin, type ProxyOptions } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
@@ -82,6 +82,42 @@ const viteEnv = Object.keys(process.env)
     return a;
   }, {});
 
+/**
+ * 为远程访问提供最小访问日志与静态资源缓存策略。
+ *
+ * Returns:
+ *     Vite 插件；仅影响 Preview 服务器，不改变构建产物。
+ */
+function previewRemoteDiagnostics(): Plugin {
+  const accessLogEnabled = process.env.PLANE_PREVIEW_ACCESS_LOG === "1";
+
+  return {
+    name: "plane-preview-remote-diagnostics",
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathname = new URL(req.url || "/", "http://localhost").pathname;
+        if (pathname.startsWith("/assets/")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+        if (!accessLogEnabled) {
+          next();
+          return;
+        }
+
+        const startedAt = Date.now();
+        res.on("finish", () => {
+          const remote = req.socket.remoteAddress || "-";
+          const userAgent = req.headers["user-agent"] || "-";
+          console.log(
+            `[preview-access] ${new Date().toISOString()} ${remote} ${req.method} ${req.url} ${res.statusCode} ${Date.now() - startedAt}ms ${userAgent}`
+          );
+        });
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig(() => ({
   define: {
     "process.env": JSON.stringify(viteEnv),
@@ -89,7 +125,11 @@ export default defineConfig(() => ({
   build: {
     assetsInlineLimit: 0,
   },
-  plugins: [reactRouter(), tsconfigPaths({ projects: [path.resolve(__dirname, "tsconfig.json")] })],
+  plugins: [
+    reactRouter(),
+    tsconfigPaths({ projects: [path.resolve(__dirname, "tsconfig.json")] }),
+    previewRemoteDiagnostics(),
+  ],
   resolve: {
     alias: {
       // Next.js compatibility shims used within web
