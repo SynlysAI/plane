@@ -13,6 +13,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 import { ExternalReferenceCard } from "@/components/research/integrations/external-reference-card";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -44,7 +45,7 @@ export const ExternalReferencePicker = observer(function ExternalReferencePicker
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+      <ResearchFilterToolbar>
         <select
           className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
           value={system}
@@ -65,7 +66,7 @@ export const ExternalReferencePicker = observer(function ExternalReferencePicker
         <Button size="sm" variant="secondary" disabled={!query.trim()} onClick={() => void search()}>
           {t("research.integrations.search")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
       {degraded && (
         <p className="text-12 text-warning-primary">
           {t("research.integrations.degraded_banner", { reason: degraded })}

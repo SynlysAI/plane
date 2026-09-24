@@ -40,7 +40,10 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
   // disabled and every section switch is therefore false.
   if (visibleTabs.length === 0 && currentKey === "platform" && research.isResearchAdmin) {
     return (
-      <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle px-5">
+      <nav
+        aria-label={t("research.nav.management")}
+        className="overflow-x-auto border-b border-subtle bg-surface-1 px-5"
+      >
         <TabNavigationList className="py-2">
           <span aria-current="page" className="text-13 font-medium whitespace-nowrap text-primary">
             {t("research.nav.platform")}
@@ -51,7 +54,7 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
   }
 
   return (
-    <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle px-5">
+    <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle bg-surface-1 px-5">
       <TabNavigationList className="py-2">
         {visibleTabs.map((item) => {
           const path = TAB_PATHS[item.key] ?? `settings/${item.key}`;

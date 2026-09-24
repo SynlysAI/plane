@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // components
+import { ResearchDetailSurface, ResearchListSurface } from "@/components/research/common/research-data-surface";
 import { ExternalCallLogTable } from "@/components/research/integrations/external-call-log-table";
 import { ExternalReferencePicker } from "@/components/research/integrations/external-reference-picker";
 import { IntegrationConnectionForm } from "@/components/research/integrations/integration-connection-form";
@@ -40,9 +41,8 @@ export const IntegrationSettings = observer(function IntegrationSettings({ works
   }, [workspaceSlug]);
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
-      <section className="flex flex-col gap-2">
-        <h3 className="text-13 font-medium text-primary">{t("research.integrations.connections_title")}</h3>
+    <ResearchListSurface>
+      <ResearchDetailSurface title={t("research.integrations.connections_title")}>
         <IntegrationConnectionForm
           connections={research.integrationConnections}
           onSave={async (items) => {
@@ -53,19 +53,17 @@ export const IntegrationSettings = observer(function IntegrationSettings({ works
           }}
         />
         <IntegrationHealthBoard connections={research.integrationConnections} health={research.integrationHealth} />
-      </section>
+      </ResearchDetailSurface>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-13 font-medium text-primary">{t("research.integrations.references_title")}</h3>
+      <ResearchDetailSurface title={t("research.integrations.references_title")}>
         <ExternalReferencePicker workspaceSlug={workspaceSlug} />
-      </section>
+      </ResearchDetailSurface>
 
       {loaded && research.isWorkspaceAdmin && (
-        <section className="flex flex-col gap-2">
-          <h3 className="text-13 font-medium text-primary">{t("research.integrations.call_logs_title")}</h3>
+        <ResearchDetailSurface title={t("research.integrations.call_logs_title")} collapsible>
           <ExternalCallLogTable logs={research.integrationCallLogs} />
-        </section>
+        </ResearchDetailSurface>
       )}
-    </div>
+    </ResearchListSurface>
   );
 });

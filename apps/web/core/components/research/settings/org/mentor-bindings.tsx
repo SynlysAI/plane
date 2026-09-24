@@ -15,6 +15,7 @@ import type { TMentorBinding, TOrgUnit } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -189,7 +190,7 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
+      <ResearchFilterToolbar>
         <ResearchPersonSelect
           label="选择本组学生 / 科研责任人"
           people={workspaceMembers.filter((member) => menteeIds.has(member.id))}
@@ -223,7 +224,7 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
         >
           {t("research.org.bind_mentor")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
       {loading && (
         <p role="status" className="text-12">
           正在加载指导关系…
@@ -244,63 +245,65 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
         </div>
       )}
 
-      <Table>
-        <TableHeader>
-          <TableRow className="text-tertiary">
-            <TableHead>{t("research.org.columns.mentee")}</TableHead>
-            <TableHead>{t("research.org.columns.mentor")}</TableHead>
-            <TableHead>{t("research.org.columns.advisor_kind")}</TableHead>
-            <TableHead>{t("research.org.columns.effective_from")}</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {bindings.map((binding) => (
-            <TableRow
-              id={`mentor-binding-${binding.id}`}
-              key={binding.id}
-              className={`border-b border-subtle/60 ${focusedBindingId === binding.id ? "bg-accent-primary/10" : ""}`}
-            >
-              <TableCell className="text-secondary">
-                <button
-                  type="button"
-                  className="text-left text-accent-primary"
-                  onClick={() => onLocateMember?.(binding.mentee)}
-                >
-                  {binding.mentee_detail?.display_name ?? binding.mentee_detail?.email ?? binding.mentee}
-                </button>
-                <span className="block text-11 text-tertiary">{binding.mentee_detail?.email}</span>
-              </TableCell>
-              <TableCell className="text-secondary">
-                <button
-                  type="button"
-                  className="text-left text-accent-primary"
-                  onClick={() => onLocateMember?.(binding.mentor)}
-                >
-                  {binding.mentor_detail?.display_name ?? binding.mentor_detail?.email ?? binding.mentor}
-                </button>
-                <span className="block text-11 text-tertiary">{binding.mentor_detail?.email}</span>
-              </TableCell>
-              <TableCell className="text-tertiary">
-                {t(binding.is_primary_advisor ? "research.org.primary_advisor" : "research.org.co_advisor")}
-              </TableCell>
-              <TableCell className="text-tertiary">{binding.effective_from}</TableCell>
-              <TableCell className="text-right">
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setBindingToDelete(binding)}>
-                  {t("research.common.remove")}
-                </Button>
-              </TableCell>
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
+            <TableRow className="text-tertiary">
+              <TableHead>{t("research.org.columns.mentee")}</TableHead>
+              <TableHead>{t("research.org.columns.mentor")}</TableHead>
+              <TableHead>{t("research.org.columns.advisor_kind")}</TableHead>
+              <TableHead className="text-right">{t("research.org.columns.effective_from")}</TableHead>
+              <TableHead />
             </TableRow>
-          ))}
-          {!loading && !loadFailed && bindings.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-tertiary">
-                {t("research.org.no_mentor_bindings")}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {bindings.map((binding) => (
+              <TableRow
+                id={`mentor-binding-${binding.id}`}
+                key={binding.id}
+                className={`border-b border-subtle/60 ${focusedBindingId === binding.id ? "bg-accent-primary/10" : ""}`}
+              >
+                <TableCell className="text-secondary">
+                  <button
+                    type="button"
+                    className="text-left text-accent-primary"
+                    onClick={() => onLocateMember?.(binding.mentee)}
+                  >
+                    {binding.mentee_detail?.display_name ?? binding.mentee_detail?.email ?? binding.mentee}
+                  </button>
+                  <span className="block text-11 text-tertiary">{binding.mentee_detail?.email}</span>
+                </TableCell>
+                <TableCell className="text-secondary">
+                  <button
+                    type="button"
+                    className="text-left text-accent-primary"
+                    onClick={() => onLocateMember?.(binding.mentor)}
+                  >
+                    {binding.mentor_detail?.display_name ?? binding.mentor_detail?.email ?? binding.mentor}
+                  </button>
+                  <span className="block text-11 text-tertiary">{binding.mentor_detail?.email}</span>
+                </TableCell>
+                <TableCell className="text-tertiary">
+                  {t(binding.is_primary_advisor ? "research.org.primary_advisor" : "research.org.co_advisor")}
+                </TableCell>
+                <TableCell className="text-right text-tertiary">{binding.effective_from}</TableCell>
+                <TableCell className="text-right">
+                  <Button variant="ghost" size="sm" disabled={busy} onClick={() => setBindingToDelete(binding)}>
+                    {t("research.common.remove")}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {!loading && !loadFailed && bindings.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-tertiary">
+                  {t("research.org.no_mentor_bindings")}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
 
       <AlertModalCore
         isOpen={Boolean(bindingToDelete)}
