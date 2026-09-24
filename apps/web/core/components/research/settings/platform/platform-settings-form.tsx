@@ -15,6 +15,7 @@ import type { TResearchProfileCategory, TWorkspaceResearchSetting } from "@plane
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -106,7 +107,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
   }
 
   return (
-    <div className="flex h-full flex-col gap-5 overflow-y-auto p-5">
+    <div className="flex h-full flex-col gap-4 overflow-y-auto bg-canvas p-5">
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
@@ -114,8 +115,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
       )}
       {savedAt && !errorKey && <p className="text-12 text-tertiary">{t("research.common.saved")}</p>}
 
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.platform.switches")}</h3>
+      <ResearchDetailSurface title={t("research.platform.switches")}>
         <div className="mt-3 flex flex-col gap-3">
           {TOGGLES.map((item) => (
             <label key={item.field} className="flex items-center justify-between gap-4 text-12 text-secondary">
@@ -128,10 +128,9 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
             </label>
           ))}
         </div>
-      </section>
+      </ResearchDetailSurface>
 
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.platform.visibility")}</h3>
+      <ResearchDetailSurface title={t("research.platform.visibility")}>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
           {(
             [
@@ -165,11 +164,12 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
             onChange={(event) => setDraft({ ...draft, timezone: event.target.value || null })}
           />
         </label>
-      </section>
+      </ResearchDetailSurface>
 
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.platform.reporting_scope")}</h3>
-        <p className="mt-1 text-11 text-tertiary">{t("research.platform.reporting_scope_hint")}</p>
+      <ResearchDetailSurface
+        title={t("research.platform.reporting_scope")}
+        hint={t("research.platform.reporting_scope_hint")}
+      >
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
           {REPORTER_CATEGORIES.map((category) => (
             <label key={category} className="flex items-center gap-2 text-12 text-secondary">
@@ -189,23 +189,20 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
             </label>
           ))}
         </div>
-      </section>
+      </ResearchDetailSurface>
 
       {research.identity?.user.is_system_admin && (
-        <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-          <h3 className="text-13 font-medium text-primary">{t("research.platform.main_pi")}</h3>
-          <p className="mt-1 text-11 text-tertiary">{t("research.platform.main_pi_hint")}</p>
+        <ResearchDetailSurface title={t("research.platform.main_pi")} hint={t("research.platform.main_pi_hint")}>
           <Input
             className="mt-3"
             value={draft.main_pi ?? ""}
             placeholder={t("research.platform.main_pi_placeholder")}
             onChange={(event) => setDraft({ ...draft, main_pi: event.target.value.trim() || null })}
           />
-        </section>
+        </ResearchDetailSurface>
       )}
 
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.platform.limits")}</h3>
+      <ResearchDetailSurface title={t("research.platform.limits")}>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
           {LIMITS.map((item) => (
             <label key={item.field} className="flex flex-col gap-1 text-12 text-secondary">
@@ -220,9 +217,9 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
           ))}
         </div>
         <p className="mt-2 text-11 text-tertiary">{t("research.platform.limits_hint")}</p>
-      </section>
+      </ResearchDetailSurface>
 
-      <div className="flex justify-end">
+      <div className="sticky bottom-0 flex justify-end bg-canvas py-3">
         <Button variant="primary" size="lg" loading={saving} onClick={() => void handleSave()}>
           {t("research.common.save")}
         </Button>

@@ -17,6 +17,7 @@ import type { TOrgUnit, TMentorBinding } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -252,7 +253,7 @@ export const ResearchOrgMemberTable = observer(function ResearchOrgMemberTable({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
+      <ResearchFilterToolbar>
         <ResearchPersonSelect
           label="选择成员"
           people={workspaceMembers}
@@ -280,7 +281,7 @@ export const ResearchOrgMemberTable = observer(function ResearchOrgMemberTable({
         >
           {t("research.org.add_member")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
       <p className="text-11 text-tertiary">
         人员类别表示学生、导师等身份；组织角色用于组织职责，具体师生关系请在“直接导师”页签查看和维护。
       </p>
@@ -295,108 +296,117 @@ export const ResearchOrgMemberTable = observer(function ResearchOrgMemberTable({
         </p>
       )}
 
-      <Table>
-        <TableHeader>
-          <TableRow className="text-tertiary">
-            <TableHead>{t("research.org.columns.member")}</TableHead>
-            <TableHead>{t("research.org.columns.role")}</TableHead>
-            <TableHead>{t("research.org.columns.primary")}</TableHead>
-            <TableHead>{t("research.org.columns.effective_to")}</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {(!loading && !loadFailed ? members : []).map((member) => {
-            const memberName = member.member_detail?.display_name ?? member.member_detail?.email ?? member.user;
-            return (
-              <TableRow
-                id={`org-member-${member.user}`}
-                key={member.id}
-                className={`border-b border-subtle/60 ${focusedUserId === member.user ? "bg-accent-primary/10" : ""}`}
-              >
-                <TableCell className="text-secondary">
-                  <span className="block">{memberName}</span>
-                  <span className="block text-11 text-tertiary">{member.member_detail?.email}</span>
-                  <span className="block text-11">
-                    人员类别：
-                    {(
-                      {
-                        STUDENT: "学生",
-                        ADVISOR: "导师",
-                        PI: "PI",
-                        POSTDOC: "博士后",
-                        STAFF: "员工",
-                        OTHER: "其他",
-                      } as Record<string, string>
-                    )[(member as typeof member & { profile_category?: string }).profile_category ?? ""] || "待完善"}
-                  </span>
-                  {bindings
-                    .filter((binding) => binding.mentee === member.user)
-                    .map((binding) => (
-                      <button
-                        type="button"
-                        className="block text-left text-11 text-accent-primary"
-                        key={binding.id}
-                        onClick={() => onLocateBinding?.(binding.id)}
-                      >
-                        {binding.is_primary_advisor ? "主导师" : "联合导师"}：{binding.mentor_detail?.display_name} ·{" "}
-                        {binding.mentor_detail?.email}
-                      </button>
-                    ))}
-                  {bindings
-                    .filter((binding) => binding.mentor === member.user)
-                    .map((binding) => (
-                      <button
-                        type="button"
-                        className="block text-left text-11 text-accent-primary"
-                        key={binding.id}
-                        onClick={() => onLocateBinding?.(binding.id)}
-                      >
-                        指导：{binding.mentee_detail?.display_name} · {binding.mentee_detail?.email}
-                      </button>
-                    ))}
-                </TableCell>
-                <TableCell>
-                  <select
-                    className="rounded border border-subtle bg-surface-1 px-1.5 py-1 text-12 text-primary"
-                    value={member.org_role}
-                    disabled={busy}
-                    onChange={(event) => handleRoleChange(member.id, memberName, event.target.value)}
-                  >
-                    {ORG_ROLES.map((role) => (
-                      <option key={role} value={role}>
-                        {t(ROLE_LABEL_KEYS[role])}
-                      </option>
-                    ))}
-                  </select>
-                </TableCell>
-                <TableCell>
-                  <input
-                    type="checkbox"
-                    checked={member.is_primary}
-                    aria-label={t("research.org.primary_for", { member: memberName })}
-                    disabled={busy}
-                    onChange={(event) => handleSetPrimary(member.id, memberName, event.target.checked)}
-                  />
-                </TableCell>
-                <TableCell className="text-tertiary">{member.effective_to ?? t("research.common.unlimited")}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" disabled={busy} onClick={() => handleRemove(member.id, memberName)}>
-                    {t("research.common.remove")}
-                  </Button>
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
+            <TableRow className="text-tertiary">
+              <TableHead>{t("research.org.columns.member")}</TableHead>
+              <TableHead>{t("research.org.columns.role")}</TableHead>
+              <TableHead>{t("research.org.columns.primary")}</TableHead>
+              <TableHead className="text-right">{t("research.org.columns.effective_to")}</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(!loading && !loadFailed ? members : []).map((member) => {
+              const memberName = member.member_detail?.display_name ?? member.member_detail?.email ?? member.user;
+              return (
+                <TableRow
+                  id={`org-member-${member.user}`}
+                  key={member.id}
+                  className={`border-b border-subtle/60 ${focusedUserId === member.user ? "bg-accent-primary/10" : ""}`}
+                >
+                  <TableCell className="text-secondary">
+                    <span className="block">{memberName}</span>
+                    <span className="block text-11 text-tertiary">{member.member_detail?.email}</span>
+                    <span className="block text-11">
+                      人员类别：
+                      {(
+                        {
+                          STUDENT: "学生",
+                          ADVISOR: "导师",
+                          PI: "PI",
+                          POSTDOC: "博士后",
+                          STAFF: "员工",
+                          OTHER: "其他",
+                        } as Record<string, string>
+                      )[(member as typeof member & { profile_category?: string }).profile_category ?? ""] || "待完善"}
+                    </span>
+                    {bindings
+                      .filter((binding) => binding.mentee === member.user)
+                      .map((binding) => (
+                        <button
+                          type="button"
+                          className="block text-left text-11 text-accent-primary"
+                          key={binding.id}
+                          onClick={() => onLocateBinding?.(binding.id)}
+                        >
+                          {binding.is_primary_advisor ? "主导师" : "联合导师"}：{binding.mentor_detail?.display_name} ·{" "}
+                          {binding.mentor_detail?.email}
+                        </button>
+                      ))}
+                    {bindings
+                      .filter((binding) => binding.mentor === member.user)
+                      .map((binding) => (
+                        <button
+                          type="button"
+                          className="block text-left text-11 text-accent-primary"
+                          key={binding.id}
+                          onClick={() => onLocateBinding?.(binding.id)}
+                        >
+                          指导：{binding.mentee_detail?.display_name} · {binding.mentee_detail?.email}
+                        </button>
+                      ))}
+                  </TableCell>
+                  <TableCell>
+                    <select
+                      className="rounded border border-subtle bg-surface-1 px-1.5 py-1 text-12 text-primary"
+                      value={member.org_role}
+                      disabled={busy}
+                      onChange={(event) => handleRoleChange(member.id, memberName, event.target.value)}
+                    >
+                      {ORG_ROLES.map((role) => (
+                        <option key={role} value={role}>
+                          {t(ROLE_LABEL_KEYS[role])}
+                        </option>
+                      ))}
+                    </select>
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      checked={member.is_primary}
+                      aria-label={t("research.org.primary_for", { member: memberName })}
+                      disabled={busy}
+                      onChange={(event) => handleSetPrimary(member.id, memberName, event.target.checked)}
+                    />
+                  </TableCell>
+                  <TableCell className="text-right text-tertiary">
+                    {member.effective_to ?? t("research.common.unlimited")}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => handleRemove(member.id, memberName)}
+                    >
+                      {t("research.common.remove")}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {!loading && !loadFailed && members.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-tertiary">
+                  {t("research.org.no_members")}
                 </TableCell>
               </TableRow>
-            );
-          })}
-          {!loading && !loadFailed && members.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-tertiary">
-                {t("research.org.no_members")}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
 
       <div className="rounded-md border border-subtle bg-surface-2 p-3">
         <h4 className="text-12 font-medium text-primary">{t("research.org.pi_transfer")}</h4>

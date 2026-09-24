@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TAccountProvisioningOptions, TUserImportBatch, TUserImportBatchSummary } from "@plane/types";
 import { Button } from "@plane/propel/button";
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 import { ResearchAccountService } from "@/services/research/account.service";
 import { SingleImportForm } from "./single-import-form";
 import { ImportReview } from "./import-review";
@@ -98,7 +99,7 @@ export function ResearchUserImportPanel({
   };
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2" role="tablist" aria-label="人员录入方式">
+      <ResearchFilterToolbar>
         {[
           ["single", "单条录入"],
           ["bulk", "批量导入"],
@@ -108,20 +109,22 @@ export function ResearchUserImportPanel({
             role="tab"
             aria-selected={mode === value}
             disabled={busy || reviewBusy}
-            className={`rounded px-3 py-2 text-13 ${mode === value ? "bg-surface-2 text-accent-primary" : "text-secondary"}`}
+            className={`rounded-md px-3 py-2 text-13 ${
+              mode === value ? "bg-surface-1 text-accent-primary" : "text-secondary"
+            }`}
             onClick={() => setMode(value)}
           >
             {label}
           </button>
         ))}
-      </div>
+      </ResearchFilterToolbar>
       {mode === "single" ? (
         <fieldset disabled={reviewBusy}>
           <SingleImportForm workspaceSlug={workspaceSlug} options={options} onCreated={accept} onBusy={setBusy} />
         </fieldset>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3 rounded border border-subtle p-3">
+          <div className="flex flex-wrap items-end gap-3 rounded-lg bg-surface-2 p-3">
             <label className="text-12">
               成员名册
               <input className="block" ref={students} type="file" accept=".csv,.xlsx" disabled={busy || reviewBusy} />
@@ -180,7 +183,7 @@ export function ResearchUserImportPanel({
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
             {history.map((item) => (
-              <li key={item.id} className="rounded border border-subtle p-2">
+              <li key={item.id} className="rounded-lg bg-surface-2 p-2">
                 <button
                   disabled={busy || reviewBusy}
                   className="text-left text-12"

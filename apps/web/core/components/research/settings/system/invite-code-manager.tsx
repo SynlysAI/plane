@@ -16,6 +16,8 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, Spinner } from "@plane/ui";
 // services
 import { ResearchAccountService } from "@/services/research/account.service";
+// components
+import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
 
 const accountService = new ResearchAccountService();
 
@@ -111,7 +113,7 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-md border border-subtle p-3">
+      <ResearchFilterToolbar>
         <label className="flex flex-col gap-1 text-11 text-tertiary">
           {t("research.invite_codes.fields.profile_category")}
           <select
@@ -189,7 +191,7 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
         <Button variant="primary" size="sm" loading={creating} onClick={handleCreate}>
           {t("research.invite_codes.actions.create")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
 
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
@@ -200,7 +202,7 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
       ) : codes.length === 0 ? (
         <p className="text-12 text-tertiary">{t("research.invite_codes.empty")}</p>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-subtle">
+        <ResearchTableSurface>
           <Table>
             <TableHeader className="bg-surface-2 text-11 text-tertiary">
               <TableRow>
@@ -208,10 +210,10 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                 <TableHead>{t("research.invite_codes.columns.profile_category")}</TableHead>
                 <TableHead>{t("research.invite_codes.columns.primary_org_unit")}</TableHead>
                 <TableHead>{t("research.invite_codes.columns.primary_advisor")}</TableHead>
-                <TableHead>{t("research.invite_codes.columns.usage")}</TableHead>
-                <TableHead>{t("research.invite_codes.columns.expires_at")}</TableHead>
+                <TableHead className="text-right">{t("research.invite_codes.columns.usage")}</TableHead>
+                <TableHead className="text-right">{t("research.invite_codes.columns.expires_at")}</TableHead>
                 <TableHead>{t("research.invite_codes.columns.status")}</TableHead>
-                <TableHead>{t("research.invite_codes.columns.actions")}</TableHead>
+                <TableHead className="text-right">{t("research.invite_codes.columns.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -235,16 +237,16 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                   <TableCell className="text-secondary">
                     {options?.advisors.find((advisor) => advisor.id === code.primary_advisor)?.display_name ?? "-"}
                   </TableCell>
-                  <TableCell className="text-secondary">
+                  <TableCell className="text-right text-secondary tabular-nums">
                     {code.used_count} / {code.max_uses}
                   </TableCell>
-                  <TableCell className="text-secondary">
+                  <TableCell className="text-right text-secondary tabular-nums">
                     {code.expires_at ? new Date(code.expires_at).toLocaleString() : "-"}
                   </TableCell>
                   <TableCell className="text-secondary">
                     {t(INVITE_CODE_STATUS_LABELS[code.effective_status] ?? "research.invite_codes.status.active")}
                   </TableCell>
-                  <TableCell className="flex gap-2">
+                  <TableCell className="text-right">
                     <button type="button" className="text-accent-primary" onClick={() => void handleToggle(code)}>
                       {code.status === "ACTIVE"
                         ? t("research.invite_codes.actions.disable")
@@ -258,7 +260,7 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
               ))}
             </TableBody>
           </Table>
-        </div>
+        </ResearchTableSurface>
       )}
     </div>
   );

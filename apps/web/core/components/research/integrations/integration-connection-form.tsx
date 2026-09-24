@@ -14,6 +14,7 @@ import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 
 type Props = {
   connections: TIntegrationConnection[];
@@ -33,8 +34,8 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
   const existing = connections.find((connection) => connection.system === system);
 
   return (
-    <div className="flex flex-col gap-2 rounded border border-subtle p-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-2">
+      <ResearchFilterToolbar>
         <select
           className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
           value={system}
@@ -99,7 +100,7 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
         >
           {t("research.common.save")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
       <p className="text-11 text-tertiary">
         {existing?.has_credential

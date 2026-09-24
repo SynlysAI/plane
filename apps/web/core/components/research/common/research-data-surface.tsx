@@ -4,7 +4,6 @@
  */
 
 import type { ReactNode } from "react";
-import { cn } from "@plane/utils";
 
 type TResearchListSurfaceProps = {
   /** Page-level list content. */
@@ -112,7 +111,7 @@ export function ResearchDetailSurface({
 
   if (collapsible) {
     return (
-      <details className={cn(surfaceClassName, className)} open={defaultOpen}>
+      <details className={[surfaceClassName, className].filter(Boolean).join(" ")} open={defaultOpen}>
         {(title || actions) && (
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-13 font-medium text-primary">
             {title}
@@ -126,7 +125,7 @@ export function ResearchDetailSurface({
   }
 
   return (
-    <section className={cn(surfaceClassName, className)}>
+    <section className={[surfaceClassName, className].filter(Boolean).join(" ")}>
       {(title || hint || actions) && (
         <header className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3.5">
           <div className="min-w-0">

@@ -13,6 +13,11 @@ import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -65,14 +70,14 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
   }, [workspaceSlug]);
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-hidden p-5">
+    <ResearchListSurface>
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
+      <ResearchFilterToolbar>
         <Input
           className="!w-52"
           placeholder={t("research.audit.action_placeholder")}
@@ -90,13 +95,13 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
         <Button variant="secondary" size="sm" onClick={() => void load()}>
           {t("research.common.refresh")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
 
-      <div className="flex-1 overflow-auto">
+      <ResearchTableSurface>
         <Table>
           <TableHeader>
             <TableRow className="text-tertiary">
-              <TableHead>{t("research.audit.columns.time")}</TableHead>
+              <TableHead className="text-right">{t("research.audit.columns.time")}</TableHead>
               <TableHead>{t("research.audit.columns.actor")}</TableHead>
               <TableHead>{t("research.audit.columns.action")}</TableHead>
               <TableHead>{t("research.audit.columns.resource")}</TableHead>
@@ -106,7 +111,9 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
           <TableBody>
             {events.map((event) => (
               <TableRow key={event.id}>
-                <TableCell className="text-tertiary">{new Date(event.created_at).toLocaleString()}</TableCell>
+                <TableCell className="text-right text-tertiary tabular-nums">
+                  {new Date(event.created_at).toLocaleString()}
+                </TableCell>
                 <TableCell className="text-secondary">
                   {event.actor_detail?.display_name ?? event.actor_detail?.email ?? "-"}
                 </TableCell>
@@ -129,7 +136,7 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
             )}
           </TableBody>
         </Table>
-      </div>
-    </div>
+      </ResearchTableSurface>
+    </ResearchListSurface>
   );
 });
