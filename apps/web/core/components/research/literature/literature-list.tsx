@@ -12,6 +12,11 @@ import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Input } from "@plane/ui";
 // components
+import {
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 import { LiteratureForm } from "@/components/research/literature/literature-form";
 import { LiteratureImportDialog } from "@/components/research/literature/literature-import-dialog";
 import { LiteratureStatusBoard } from "@/components/research/literature/literature-status-board";
@@ -43,9 +48,9 @@ export const LiteratureList = observer(function LiteratureList({ workspaceSlug, 
   }, [workspaceSlug, projectId, status]);
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-5">
+    <ResearchListSurface>
       <LiteratureThresholdPanel threshold={threshold} />
-      <div className="flex flex-wrap items-center gap-2">
+      <ResearchFilterToolbar>
         <LiteratureStatusBoard counters={threshold?.counters} active={status} onSelect={(value) => setStatus(value)} />
         <Input
           className="!w-56"
@@ -60,7 +65,7 @@ export const LiteratureList = observer(function LiteratureList({ workspaceSlug, 
           }}
         />
         <LiteratureImportDialog onImport={(payload) => research.importLiterature(workspaceSlug, projectId, payload)} />
-      </div>
+      </ResearchFilterToolbar>
 
       <LiteratureForm
         onCreate={async (payload) => {
@@ -69,62 +74,64 @@ export const LiteratureList = observer(function LiteratureList({ workspaceSlug, 
         }}
       />
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("research.literature.columns.title")}</TableHead>
-            <TableHead>{t("research.literature.columns.year")}</TableHead>
-            <TableHead>{t("research.literature.columns.venue")}</TableHead>
-            <TableHead>{t("research.literature.columns.doi")}</TableHead>
-            <TableHead>{t("research.literature.columns.status")}</TableHead>
-            <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {entries.map((entry) => (
-            <TableRow key={entry.id} className="hover:bg-surface-2">
-              <TableCell className="font-medium text-primary">
-                {entry.title}
-                {!entry.is_annotated && (
-                  <span className="ml-2 text-11 text-warning-primary">{t("research.literature.needs_notes")}</span>
-                )}
-              </TableCell>
-              <TableCell className="text-tertiary">{entry.year ?? "-"}</TableCell>
-              <TableCell className="text-tertiary">{entry.venue || "-"}</TableCell>
-              <TableCell className="text-tertiary">{entry.doi || "-"}</TableCell>
-              <TableCell>
-                <ResearchStatusBadge status={entry.status} size="sm">
-                  {t(LITERATURE_STATUS_LABELS[entry.status])}
-                </ResearchStatusBadge>
-              </TableCell>
-              <TableCell className="text-right">
-                <select
-                  className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
-                  value={entry.status}
-                  onChange={(event) =>
-                    void research
-                      .updateLiteratureStatus(workspaceSlug, entry.id, { status: event.target.value })
-                      .catch(() => undefined)
-                  }
-                >
-                  {LITERATURE_STATUSES.map((value) => (
-                    <option key={value} value={value}>
-                      {t(LITERATURE_STATUS_LABELS[value])}
-                    </option>
-                  ))}
-                </select>
-              </TableCell>
-            </TableRow>
-          ))}
-          {!entries.length && (
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={6} className="py-3 text-tertiary">
-                {t("research.literature.empty")}
-              </TableCell>
+              <TableHead>{t("research.literature.columns.title")}</TableHead>
+              <TableHead>{t("research.literature.columns.year")}</TableHead>
+              <TableHead>{t("research.literature.columns.venue")}</TableHead>
+              <TableHead>{t("research.literature.columns.doi")}</TableHead>
+              <TableHead>{t("research.literature.columns.status")}</TableHead>
+              <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {entries.map((entry) => (
+              <TableRow key={entry.id} className="hover:bg-surface-2">
+                <TableCell className="font-medium text-primary">
+                  {entry.title}
+                  {!entry.is_annotated && (
+                    <span className="ml-2 text-11 text-warning-primary">{t("research.literature.needs_notes")}</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-tertiary">{entry.year ?? "-"}</TableCell>
+                <TableCell className="text-tertiary">{entry.venue || "-"}</TableCell>
+                <TableCell className="text-tertiary">{entry.doi || "-"}</TableCell>
+                <TableCell>
+                  <ResearchStatusBadge status={entry.status} size="sm">
+                    {t(LITERATURE_STATUS_LABELS[entry.status])}
+                  </ResearchStatusBadge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <select
+                    className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
+                    value={entry.status}
+                    onChange={(event) =>
+                      void research
+                        .updateLiteratureStatus(workspaceSlug, entry.id, { status: event.target.value })
+                        .catch(() => undefined)
+                    }
+                  >
+                    {LITERATURE_STATUSES.map((value) => (
+                      <option key={value} value={value}>
+                        {t(LITERATURE_STATUS_LABELS[value])}
+                      </option>
+                    ))}
+                  </select>
+                </TableCell>
+              </TableRow>
+            ))}
+            {!entries.length && (
+              <TableRow>
+                <TableCell colSpan={6} className="py-3 text-tertiary">
+                  {t("research.literature.empty")}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
+    </ResearchListSurface>
   );
 });

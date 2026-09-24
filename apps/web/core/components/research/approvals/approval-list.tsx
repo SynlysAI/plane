@@ -21,6 +21,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchDetailSurface,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -111,100 +117,106 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
   }, [approverRole, flowName, flowType, research, workspaceSlug]);
 
   return (
-    <div className="flex flex-col gap-4 p-5">
+    <ResearchListSurface>
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
         </div>
       )}
 
-      <TabNavigationList className="border-b border-subtle">
-        {SCOPES.map((item) => (
-          <button key={item.key} type="button" onClick={() => setScope(item.key)}>
-            <TabNavigationItem isActive={scope === item.key}>{t(item.labelKey)}</TabNavigationItem>
-          </button>
-        ))}
-      </TabNavigationList>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("research.approvals.columns.subject")}</TableHead>
-            <TableHead>{t("research.approvals.columns.type")}</TableHead>
-            <TableHead>{t("research.approvals.columns.requester")}</TableHead>
-            <TableHead className="text-right">{t("research.approvals.columns.waiting")}</TableHead>
-            <TableHead>{t("research.approvals.columns.flow")}</TableHead>
-            <TableHead>{t("research.approvals.columns.step")}</TableHead>
-            <TableHead>{t("research.approvals.columns.status")}</TableHead>
-            <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {requests.map((request) => (
-            <TableRow key={request.id} className="align-top">
-              <TableCell className="font-medium text-primary">{request.issue_detail?.name ?? request.issue}</TableCell>
-              <TableCell className="text-secondary">{t(APPROVAL_TYPE_LABELS[request.approval_type])}</TableCell>
-              <TableCell className="text-secondary">
-                {request.requested_by_detail?.display_name ?? request.requested_by}
-              </TableCell>
-              <TableCell
-                className="text-right text-tertiary tabular-nums"
-                title={new Date(request.created_at).toLocaleString()}
-              >
-                {waitingTime(request.created_at)}
-              </TableCell>
-              <TableCell className="text-tertiary">
-                {request.flow_name} · v{request.flow_version}
-              </TableCell>
-              <TableCell className="text-tertiary">{request.current_step_order}</TableCell>
-              <TableCell>
-                <ResearchStatusBadge status={request.status}>
-                  {t(APPROVAL_REQUEST_STATUS_LABELS[request.status as TApprovalRequestStatus])}
-                </ResearchStatusBadge>
-              </TableCell>
-              <TableCell className="text-right">
-                {request.can_act && (
-                  <>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      className="mr-2"
-                      onClick={() => {
-                        setActiveRequestId(request.id);
-                        void act(request.id, "approve");
-                      }}
-                    >
-                      {t("research.approvals.approve")}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setActiveRequestId(request.id);
-                        setComment(t("research.approvals.reject_placeholder"));
-                      }}
-                    >
-                      {t("research.approvals.reject")}
-                    </Button>
-                  </>
-                )}
-                {scope === "mine" && request.status === "PENDING" && (
-                  <Button variant="ghost" size="sm" onClick={() => void act(request.id, "withdraw")}>
-                    {t("research.approvals.withdraw")}
-                  </Button>
-                )}
-              </TableCell>
-            </TableRow>
+      <ResearchFilterToolbar>
+        <TabNavigationList>
+          {SCOPES.map((item) => (
+            <button key={item.key} type="button" onClick={() => setScope(item.key)}>
+              <TabNavigationItem isActive={scope === item.key}>{t(item.labelKey)}</TabNavigationItem>
+            </button>
           ))}
-          {requests.length === 0 && (
+        </TabNavigationList>
+      </ResearchFilterToolbar>
+
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={8} className="py-3 text-center text-tertiary">
-                {t("research.approvals.empty")}
-              </TableCell>
+              <TableHead>{t("research.approvals.columns.subject")}</TableHead>
+              <TableHead>{t("research.approvals.columns.type")}</TableHead>
+              <TableHead>{t("research.approvals.columns.requester")}</TableHead>
+              <TableHead className="text-right">{t("research.approvals.columns.waiting")}</TableHead>
+              <TableHead>{t("research.approvals.columns.flow")}</TableHead>
+              <TableHead>{t("research.approvals.columns.step")}</TableHead>
+              <TableHead>{t("research.approvals.columns.status")}</TableHead>
+              <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {requests.map((request) => (
+              <TableRow key={request.id} className="align-top">
+                <TableCell className="font-medium text-primary">
+                  {request.issue_detail?.name ?? request.issue}
+                </TableCell>
+                <TableCell className="text-secondary">{t(APPROVAL_TYPE_LABELS[request.approval_type])}</TableCell>
+                <TableCell className="text-secondary">
+                  {request.requested_by_detail?.display_name ?? request.requested_by}
+                </TableCell>
+                <TableCell
+                  className="text-right text-tertiary tabular-nums"
+                  title={new Date(request.created_at).toLocaleString()}
+                >
+                  {waitingTime(request.created_at)}
+                </TableCell>
+                <TableCell className="text-tertiary">
+                  {request.flow_name} · v{request.flow_version}
+                </TableCell>
+                <TableCell className="text-tertiary">{request.current_step_order}</TableCell>
+                <TableCell>
+                  <ResearchStatusBadge status={request.status}>
+                    {t(APPROVAL_REQUEST_STATUS_LABELS[request.status as TApprovalRequestStatus])}
+                  </ResearchStatusBadge>
+                </TableCell>
+                <TableCell className="text-right">
+                  {request.can_act && (
+                    <>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="mr-2"
+                        onClick={() => {
+                          setActiveRequestId(request.id);
+                          void act(request.id, "approve");
+                        }}
+                      >
+                        {t("research.approvals.approve")}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setActiveRequestId(request.id);
+                          setComment(t("research.approvals.reject_placeholder"));
+                        }}
+                      >
+                        {t("research.approvals.reject")}
+                      </Button>
+                    </>
+                  )}
+                  {scope === "mine" && request.status === "PENDING" && (
+                    <Button variant="ghost" size="sm" onClick={() => void act(request.id, "withdraw")}>
+                      {t("research.approvals.withdraw")}
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+            {requests.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="py-3 text-center text-tertiary">
+                  {t("research.approvals.empty")}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
 
       {activeRequestId && (
         <div className="flex items-center gap-2 rounded-md border border-subtle bg-surface-2 p-3">
@@ -224,8 +236,7 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
       )}
 
       {isAdmin && (
-        <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-          <h3 className="text-13 font-medium text-primary">{t("research.approvals.flows")}</h3>
+        <ResearchDetailSurface title={t("research.approvals.flows")} collapsible>
           <div className="mt-2 flex flex-wrap items-end gap-2">
             <Input
               className="!w-56"
@@ -268,8 +279,8 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
             ))}
             {flows.length === 0 && <li className="text-12 text-tertiary">{t("research.approvals.no_flows")}</li>}
           </ul>
-        </section>
+        </ResearchDetailSurface>
       )}
-    </div>
+    </ResearchListSurface>
   );
 });

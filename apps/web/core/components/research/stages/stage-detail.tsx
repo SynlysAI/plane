@@ -11,6 +11,7 @@ import { STAGE_STATUS_LABELS, STAGE_TYPE_LABELS } from "@plane/constants";
 import type { TStageGateItem, TStageInstance } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
+import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { StageActions } from "@/components/research/stages/stage-actions";
 import { StageGateChecklist } from "@/components/research/stages/stage-gate-checklist";
 import { StageMaterialList } from "@/components/research/stages/stage-material-list";
@@ -103,36 +104,34 @@ export const StageDetail = observer(function StageDetail({ workspaceSlug, projec
   }, [research, stage.id, workspaceSlug]);
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-14 font-medium text-primary">{t(STAGE_TYPE_LABELS[stage.stage])}</h2>
-          <span className="rounded bg-surface-2 px-1.5 py-0.5 text-11 text-secondary">
-            {t(STAGE_STATUS_LABELS[stage.status])}
-          </span>
-          {stage.attempt_count > 0 && (
-            <span className="text-11 text-tertiary">
-              {t("research.stages.attempts", { count: stage.attempt_count })}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-11">
-          <button
-            type="button"
-            className={`rounded px-2 py-0.5 ${phase === "submit" ? "bg-surface-2 text-primary" : "text-tertiary"}`}
-            onClick={() => setPhase("submit")}
-          >
-            {t("research.stages.gate.phase_submit")}
-          </button>
-          <button
-            type="button"
-            className={`rounded px-2 py-0.5 ${phase === "pass" ? "bg-surface-2 text-primary" : "text-tertiary"}`}
-            onClick={() => void showPassGate()}
-          >
-            {t("research.stages.gate.phase_pass")}
-          </button>
-        </div>
-      </div>
+    <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
+      <ResearchDetailHeader
+        title={t(STAGE_TYPE_LABELS[stage.stage])}
+        metadata={
+          <>
+            <span>{t(STAGE_STATUS_LABELS[stage.status])}</span>
+            {stage.attempt_count > 0 && <span>{t("research.stages.attempts", { count: stage.attempt_count })}</span>}
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-2 text-11">
+            <button
+              type="button"
+              className={`rounded px-2 py-0.5 ${phase === "submit" ? "bg-surface-2 text-primary" : "text-tertiary"}`}
+              onClick={() => setPhase("submit")}
+            >
+              {t("research.stages.gate.phase_submit")}
+            </button>
+            <button
+              type="button"
+              className={`rounded px-2 py-0.5 ${phase === "pass" ? "bg-surface-2 text-primary" : "text-tertiary"}`}
+              onClick={() => void showPassGate()}
+            >
+              {t("research.stages.gate.phase_pass")}
+            </button>
+          </div>
+        }
+      />
 
       <StageActions
         stage={stage}
@@ -180,13 +179,11 @@ export const StageDetail = observer(function StageDetail({ workspaceSlug, projec
         <StageProgressPanel workspaceSlug={workspaceSlug} projectId={projectId} />
       )}
 
-      <div className="flex flex-col gap-2">
-        <h3 className="text-13 font-medium text-primary">{t("research.stages.history_title")}</h3>
+      <ResearchDetailSurface title={t("research.stages.history_title")} collapsible>
         <StageTransitionHistory transitions={transitions} />
-      </div>
+      </ResearchDetailSurface>
 
-      <div className="flex flex-col gap-3">
-        <h3 className="text-13 font-medium text-primary">{t("research.reviews.section_title")}</h3>
+      <ResearchDetailSurface title={t("research.reviews.section_title")}>
         <ReviewSummaryCard summary={reviewSummary} />
         <ReviewBoard
           workspaceSlug={workspaceSlug}
@@ -217,7 +214,7 @@ export const StageDetail = observer(function StageDetail({ workspaceSlug, projec
             }}
           />
         )}
-      </div>
+      </ResearchDetailSurface>
     </div>
   );
 });

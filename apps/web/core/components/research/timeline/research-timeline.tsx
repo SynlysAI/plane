@@ -10,6 +10,11 @@ import { observer } from "mobx-react";
 import type { TTimelineFilters } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
+import {
+  ResearchDetailSurface,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+} from "@/components/research/common/research-data-surface";
 import { ChainFilters } from "@/components/research/timeline/chain-filters";
 import { DevelopmentChainView } from "@/components/research/timeline/development-chain-view";
 import { ThinkingChainView } from "@/components/research/timeline/thinking-chain-view";
@@ -48,8 +53,8 @@ export const ResearchTimeline = observer(function ResearchTimeline({ workspaceSl
   const showChains = !filters.chain;
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <ResearchListSurface>
+      <ResearchFilterToolbar>
         <ChainFilters filters={filters} onChange={setFilters} />
         <a
           className="text-12 text-accent-primary hover:underline"
@@ -59,7 +64,7 @@ export const ResearchTimeline = observer(function ResearchTimeline({ workspaceSl
         >
           {t("research.timeline.export")}
         </a>
-      </div>
+      </ResearchFilterToolbar>
 
       {timeline?.degraded_sources?.length ? (
         <p className="text-12 text-warning-primary">
@@ -71,18 +76,16 @@ export const ResearchTimeline = observer(function ResearchTimeline({ workspaceSl
 
       {showChains ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <section className="flex flex-col gap-2">
-            <h3 className="text-13 font-medium text-primary">{t("research.timeline.chain.thinking")}</h3>
+          <ResearchDetailSurface title={t("research.timeline.chain.thinking")}>
             <ThinkingChainView items={thinking} />
-          </section>
-          <section className="flex flex-col gap-2">
-            <h3 className="text-13 font-medium text-primary">{t("research.timeline.chain.development")}</h3>
+          </ResearchDetailSurface>
+          <ResearchDetailSurface title={t("research.timeline.chain.development")}>
             <DevelopmentChainView items={development} />
-          </section>
+          </ResearchDetailSurface>
         </div>
       ) : (
         <ThinkingChainView items={items} />
       )}
-    </div>
+    </ResearchListSurface>
   );
 });

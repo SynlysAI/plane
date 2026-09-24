@@ -88,7 +88,7 @@ export function ResearchAgentApprovalQueue({ workspaceSlug }: Props) {
   };
 
   return (
-    <section className="h-full overflow-y-auto p-5" aria-label={t("research.approvals.tabs.agent_approval")}>
+    <section className="h-full overflow-y-auto bg-canvas p-5" aria-label={t("research.approvals.tabs.agent_approval")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-13 font-semibold text-primary">{t("research.approvals.tabs.agent_approval")}</h3>

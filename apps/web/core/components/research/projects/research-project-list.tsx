@@ -19,6 +19,12 @@ import type { TResearchProject } from "@/services/research/project.service";
 import { AlertModalCore, Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterChips,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 import { ResearchListState } from "@/components/research/common/research-list-state";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
@@ -221,7 +227,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   }, []);
 
   return (
-    <div className="flex flex-col gap-3 p-5">
+    <ResearchListSurface>
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
@@ -327,7 +333,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         </section>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2">
+      <ResearchFilterToolbar>
         <select
           aria-label={t("research.projects.fields.type")}
           className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
@@ -385,20 +391,15 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
             </option>
           ))}
         </select>
-      </div>
+      </ResearchFilterToolbar>
 
       {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 text-11 text-tertiary">
-          <span>{t("research.list_state.active_filters")}</span>
-          {filterSummary.map((filter) => (
-            <span key={filter} className="rounded bg-surface-2 px-2 py-0.5 text-secondary">
-              {filter}
-            </span>
-          ))}
-          <button type="button" className="text-accent-primary hover:underline" onClick={clearFilters}>
-            {t("research.list_state.clear_filters")}
-          </button>
-        </div>
+        <ResearchFilterChips
+          filters={filterSummary}
+          activeLabel={t("research.list_state.active_filters")}
+          clearLabel={t("research.list_state.clear_filters")}
+          onClear={clearFilters}
+        />
       )}
 
       {research.projectLoader && projects.length === 0 ? (
@@ -412,85 +413,87 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
           onClearFilters={clearFilters}
         />
       ) : (
-        <Table className="min-w-[840px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("research.projects.columns.name")}</TableHead>
-              <TableHead>{t("research.projects.columns.owner")}</TableHead>
-              <TableHead>{t("research.projects.columns.type")}</TableHead>
-              <TableHead>{t("research.projects.columns.org_unit")}</TableHead>
-              <TableHead>{t("research.projects.columns.status")}</TableHead>
-              <TableHead>{t("research.projects.columns.started_at")}</TableHead>
-              <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {projects.map((project) => (
-              <TableRow key={project.id} className="hover:bg-surface-2">
-                <TableCell className="font-medium text-primary">{project.name}</TableCell>
-                <TableCell className="text-secondary">
-                  {project.research?.owner_detail?.display_name ||
-                    project.research?.owner_detail?.email ||
-                    project.research?.owner ||
-                    "-"}
-                </TableCell>
-                <TableCell className="text-tertiary">
-                  {project.research
-                    ? t(RESEARCH_PROJECT_TYPE_LABELS[project.research.research_type as TResearchProjectType])
-                    : "-"}
-                </TableCell>
-                <TableCell className="text-tertiary">{orgUnitName(project.research?.org_unit)}</TableCell>
-                <TableCell>
-                  <ResearchStatusBadge status={project.research?.workflow_status ?? "unknown"} size="sm">
-                    {project.research
-                      ? t(
-                          RESEARCH_PROJECT_STATUS_LABELS[
-                            project.research.workflow_status as keyof typeof RESEARCH_PROJECT_STATUS_LABELS
-                          ]
-                        )
-                      : "-"}
-                  </ResearchStatusBadge>
-                </TableCell>
-                <TableCell className="text-tertiary tabular-nums">{project.research?.started_at ?? "-"}</TableCell>
-                <TableCell className="text-right">
-                  {project.research?.research_type === "RESEARCH_PROJECT" ? (
-                    <Link
-                      className="mr-2 text-12 text-accent-primary hover:underline"
-                      href={`/${workspaceSlug}/projects/${project.id}/issues`}
-                    >
-                      {t("research.projects.open_team_project")}
-                    </Link>
-                  ) : (
-                    <Link
-                      className="mr-2 text-12 text-accent-primary hover:underline"
-                      href={`/${workspaceSlug}/research/projects/${project.id}/stages`}
-                    >
-                      {t("research.nav.stages")}
-                    </Link>
-                  )}
-                  {project.research?.owner === currentUserId &&
-                    (project.research?.workflow_status === "ACTIVE" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPendingProjectAction({ project, action: "archive" })}
-                      >
-                        {t("research.projects.archive")}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPendingProjectAction({ project, action: "restore" })}
-                      >
-                        {t("research.projects.restore")}
-                      </Button>
-                    ))}
-                </TableCell>
+        <ResearchTableSurface>
+          <Table className="min-w-[840px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("research.projects.columns.name")}</TableHead>
+                <TableHead>{t("research.projects.columns.owner")}</TableHead>
+                <TableHead>{t("research.projects.columns.type")}</TableHead>
+                <TableHead>{t("research.projects.columns.org_unit")}</TableHead>
+                <TableHead>{t("research.projects.columns.status")}</TableHead>
+                <TableHead>{t("research.projects.columns.started_at")}</TableHead>
+                <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {projects.map((project) => (
+                <TableRow key={project.id} className="hover:bg-surface-2">
+                  <TableCell className="font-medium text-primary">{project.name}</TableCell>
+                  <TableCell className="text-secondary">
+                    {project.research?.owner_detail?.display_name ||
+                      project.research?.owner_detail?.email ||
+                      project.research?.owner ||
+                      "-"}
+                  </TableCell>
+                  <TableCell className="text-tertiary">
+                    {project.research
+                      ? t(RESEARCH_PROJECT_TYPE_LABELS[project.research.research_type as TResearchProjectType])
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="text-tertiary">{orgUnitName(project.research?.org_unit)}</TableCell>
+                  <TableCell>
+                    <ResearchStatusBadge status={project.research?.workflow_status ?? "unknown"} size="sm">
+                      {project.research
+                        ? t(
+                            RESEARCH_PROJECT_STATUS_LABELS[
+                              project.research.workflow_status as keyof typeof RESEARCH_PROJECT_STATUS_LABELS
+                            ]
+                          )
+                        : "-"}
+                    </ResearchStatusBadge>
+                  </TableCell>
+                  <TableCell className="text-tertiary tabular-nums">{project.research?.started_at ?? "-"}</TableCell>
+                  <TableCell className="text-right">
+                    {project.research?.research_type === "RESEARCH_PROJECT" ? (
+                      <Link
+                        className="mr-2 text-12 text-accent-primary hover:underline"
+                        href={`/${workspaceSlug}/projects/${project.id}/issues`}
+                      >
+                        {t("research.projects.open_team_project")}
+                      </Link>
+                    ) : (
+                      <Link
+                        className="mr-2 text-12 text-accent-primary hover:underline"
+                        href={`/${workspaceSlug}/research/projects/${project.id}/stages`}
+                      >
+                        {t("research.nav.stages")}
+                      </Link>
+                    )}
+                    {project.research?.owner === currentUserId &&
+                      (project.research?.workflow_status === "ACTIVE" ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPendingProjectAction({ project, action: "archive" })}
+                        >
+                          {t("research.projects.archive")}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPendingProjectAction({ project, action: "restore" })}
+                        >
+                          {t("research.projects.restore")}
+                        </Button>
+                      ))}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ResearchTableSurface>
       )}
       <div className="flex items-center justify-between gap-2 text-12 text-tertiary">
         <span>{t("research.common.total_results", { count: pagination?.total_results ?? projects.length })}</span>
@@ -532,6 +535,6 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         secondaryButtonText={t("research.common.cancel")}
         variant={pendingProjectAction?.action === "archive" ? "danger" : "primary"}
       />
-    </div>
+    </ResearchListSurface>
   );
 });

@@ -26,8 +26,8 @@ export const ChainFilters = observer(function ChainFilters({ filters, onChange }
           key={value || "all"}
           type="button"
           onClick={() => onChange({ ...filters, chain: value || undefined })}
-          className={`rounded px-2 py-1 text-12 ${
-            (filters.chain ?? "") === value ? "bg-surface-2 text-primary" : "text-tertiary hover:bg-surface-2"
+          className={`rounded-md px-2 py-1 text-12 transition-colors ${
+            (filters.chain ?? "") === value ? "bg-surface-1 text-primary" : "text-tertiary hover:bg-surface-1"
           }`}
         >
           {t(value ? `research.timeline.chain.${value}` : "research.timeline.chain.all")}

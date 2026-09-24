@@ -18,7 +18,7 @@ type Props = {
 export const TimelineItemRow = observer(function TimelineItemRow({ item }: Props) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col gap-0.5 rounded border border-subtle px-3 py-2 text-12">
+    <div className="flex flex-col gap-0.5 rounded-lg bg-surface-2 px-3 py-2 text-12">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-primary">
           <span className="rounded bg-surface-2 px-1.5 py-0.5 text-11 text-tertiary">

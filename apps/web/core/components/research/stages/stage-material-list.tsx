@@ -12,6 +12,7 @@ import { STAGE_MATERIAL_STATUS_LABELS, STAGE_MATERIAL_TYPES, stageMaterialLabelK
 import type { TStageMaterialStatus } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
+import { ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 
 type Props = {
@@ -60,15 +61,14 @@ export const StageMaterialList = observer(function StageMaterialList({
   );
 
   return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-13 font-medium text-primary">{t("research.stages.materials.title")}</h3>
+    <ResearchDetailSurface title={t("research.stages.materials.title")}>
       <div className="flex flex-col gap-1">
         {requiredTypes.map((materialType) => {
           const material = byType.get(materialType);
           return (
             <div
               key={materialType}
-              className="flex items-center justify-between gap-2 rounded border border-subtle px-2 py-1.5 text-12"
+              className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-2 py-1.5 text-12"
             >
               <span className="text-primary">{t(stageMaterialLabelKey(materialType))}</span>
               <span className="flex items-center gap-2">
@@ -102,6 +102,6 @@ export const StageMaterialList = observer(function StageMaterialList({
           );
         })}
       </div>
-    </div>
+    </ResearchDetailSurface>
   );
 });

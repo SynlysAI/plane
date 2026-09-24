@@ -15,6 +15,12 @@ import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchDetailSurface,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -58,14 +64,14 @@ export const ResearchReportSummaryBoard = observer(function ResearchReportSummar
   }, [workspaceSlug, reportType]);
 
   return (
-    <div className="flex flex-col gap-4 p-5">
+    <ResearchListSurface>
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
+      <ResearchFilterToolbar>
         <select
           className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
           value={reportType}
@@ -91,52 +97,56 @@ export const ResearchReportSummaryBoard = observer(function ResearchReportSummar
             {summary.period_key} · {summary.period_start} ~ {summary.period_end}
           </span>
         )}
-      </div>
+      </ResearchFilterToolbar>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        {BUCKETS.map((bucket) => (
-          <div key={bucket.key} className="rounded-lg border border-subtle bg-surface-1 p-3">
-            <p className="text-11 text-tertiary">{t(bucket.labelKey)}</p>
-            <p className="mt-1 text-16 font-medium text-primary">{summary?.counts?.[bucket.key] ?? 0}</p>
-          </div>
-        ))}
-      </div>
-
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.summary.by_unit")}</h3>
-        <Table>
-          <TableHeader>
-            <TableRow className="text-tertiary">
-              <TableHead>{t("research.summary.columns.unit")}</TableHead>
-              {BUCKETS.map((bucket) => (
-                <TableHead key={bucket.key}>{t(bucket.labelKey)}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(summary?.by_unit ?? []).map((entry) => (
-              <TableRow key={entry.org_unit}>
-                <TableCell className="text-secondary">{entry.org_unit_name}</TableCell>
-                {BUCKETS.map((bucket) => (
-                  <TableCell key={bucket.key} className="text-tertiary">
-                    {entry.counts[bucket.key]}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-            {(summary?.by_unit ?? []).length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-tertiary">
-                  {t("research.summary.empty")}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+      <section className="overflow-x-auto rounded-xl bg-surface-1" aria-label={t("research.nav.summary")}>
+        <div className="grid min-w-[720px] grid-cols-5 divide-x divide-subtle">
+          {BUCKETS.map((bucket) => (
+            <div key={bucket.key} className="px-4 py-3">
+              <p className="text-11 text-tertiary">{t(bucket.labelKey)}</p>
+              <p className="mt-1 text-20 font-semibold text-primary tabular-nums">
+                {summary?.counts?.[bucket.key] ?? 0}
+              </p>
+            </div>
+          ))}
+        </div>
       </section>
 
-      <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-        <h3 className="text-13 font-medium text-primary">{t("research.summary.pending")}</h3>
+      <ResearchDetailSurface title={t("research.summary.by_unit")}>
+        <ResearchTableSurface>
+          <Table>
+            <TableHeader>
+              <TableRow className="text-tertiary">
+                <TableHead>{t("research.summary.columns.unit")}</TableHead>
+                {BUCKETS.map((bucket) => (
+                  <TableHead key={bucket.key}>{t(bucket.labelKey)}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(summary?.by_unit ?? []).map((entry) => (
+                <TableRow key={entry.org_unit}>
+                  <TableCell className="text-secondary">{entry.org_unit_name}</TableCell>
+                  {BUCKETS.map((bucket) => (
+                    <TableCell key={bucket.key} className="text-tertiary">
+                      {entry.counts[bucket.key]}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+              {(summary?.by_unit ?? []).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-tertiary">
+                    {t("research.summary.empty")}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ResearchTableSurface>
+      </ResearchDetailSurface>
+
+      <ResearchDetailSurface title={t("research.summary.pending")} collapsible>
         <ul className="mt-2 flex flex-wrap gap-2">
           {(summary?.pending_members ?? []).map((member) => (
             <li key={member.id} className="rounded bg-surface-2 px-2 py-1 text-12 text-secondary">
@@ -147,7 +157,7 @@ export const ResearchReportSummaryBoard = observer(function ResearchReportSummar
             <li className="text-12 text-tertiary">{t("research.summary.no_pending")}</li>
           )}
         </ul>
-      </section>
-    </div>
+      </ResearchDetailSurface>
+    </ResearchListSurface>
   );
 });

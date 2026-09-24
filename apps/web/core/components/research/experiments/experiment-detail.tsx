@@ -18,6 +18,7 @@ import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -85,125 +86,126 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-14 font-medium text-primary">{`#${record.sequence_no} ${record.title}`}</h2>
-          <span className="rounded bg-surface-2 px-1.5 py-0.5 text-11 text-secondary">
-            {t(EXPERIMENT_STATUS_LABELS[record.status])}
-          </span>
-          <span className="rounded bg-surface-2 px-1.5 py-0.5 text-11 text-tertiary">
-            {t(EXPERIMENT_SOURCE_LABELS[record.source])}
-          </span>
-          <span className="text-11 text-tertiary">
-            {t("research.experiments.version", { version: record.current_version_no })}
-          </span>
-          {record.status_note === "pending_source_sync" && (
-            <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-11 text-warning-primary">
-              {t("research.experiments.pending_source")}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {record.status === "PLANNED" && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                void run(() => research.updateExperimentStatus(workspaceSlug, recordId, { status: "RUNNING" }))
-              }
-            >
-              {t("research.experiments.start")}
-            </Button>
-          )}
-          {record.status === "RUNNING" && (
-            <>
+    <div className="flex h-full flex-col gap-4 overflow-y-auto bg-canvas p-5">
+      <ResearchDetailHeader
+        title={`#${record.sequence_no} ${record.title}`}
+        metadata={
+          <>
+            <span>{t(EXPERIMENT_STATUS_LABELS[record.status])}</span>
+            <span>{t(EXPERIMENT_SOURCE_LABELS[record.source])}</span>
+            <span>{t("research.experiments.version", { version: record.current_version_no })}</span>
+            {record.status_note === "pending_source_sync" && (
+              <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-11 text-warning-primary">
+                {t("research.experiments.pending_source")}
+              </span>
+            )}
+          </>
+        }
+        actions={
+          <>
+            {record.status === "PLANNED" && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  void run(() => research.updateExperimentStatus(workspaceSlug, recordId, { status: "RUNNING" }))
+                }
+              >
+                {t("research.experiments.start")}
+              </Button>
+            )}
+            {record.status === "RUNNING" && (
+              <>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() =>
+                    void run(() => research.updateExperimentStatus(workspaceSlug, recordId, { status: "COMPLETED" }))
+                  }
+                >
+                  {t("research.experiments.complete")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    void run(() =>
+                      research.updateExperimentStatus(workspaceSlug, recordId, {
+                        status: "FAILED",
+                        failure_reason: "reported as failed",
+                      })
+                    )
+                  }
+                >
+                  {t("research.experiments.fail")}
+                </Button>
+              </>
+            )}
+            {!record.submitted_at && (
               <Button
                 size="sm"
                 variant="primary"
-                onClick={() =>
-                  void run(() => research.updateExperimentStatus(workspaceSlug, recordId, { status: "COMPLETED" }))
-                }
+                onClick={() => void run(() => research.submitExperiment(workspaceSlug, recordId))}
               >
-                {t("research.experiments.complete")}
+                {t("research.experiments.submit")}
               </Button>
+            )}
+            {record.submitted_at && ["COMPLETED", "FAILED", "CANCELLED"].includes(record.status) && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void run(() => research.archiveExperiment(workspaceSlug, recordId))}
+              >
+                {t("research.experiments.archive")}
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <ResearchDetailSurface>
+        <div className="grid grid-cols-2 gap-3 text-12">
+          <div className="flex flex-col gap-1">
+            <span className="text-tertiary">{t("research.experiments.fields.molecular_system")}</span>
+            <span className="text-primary">{record.molecular_system || "-"}</span>
+            <span className="text-tertiary">{t("research.experiments.fields.method")}</span>
+            <span className="text-primary">{record.method || "-"}</span>
+            <span className="text-tertiary">{t("research.experiments.fields.hypothesis")}</span>
+            <span className="text-primary">{record.hypothesis || "-"}</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-tertiary">{t("research.experiments.fields.result")}</span>
+            <textarea
+              className="min-h-16 rounded border border-subtle bg-surface-1 p-2 text-12 text-primary disabled:opacity-60"
+              value={result}
+              disabled={!record.can_edit}
+              onChange={(event) => setResult(event.target.value)}
+            />
+            <span className="text-tertiary">{t("research.experiments.fields.status_note")}</span>
+            <Input
+              value={statusNote}
+              disabled={!record.can_edit}
+              onChange={(event) => setStatusNote(event.target.value)}
+            />
+            {record.can_edit && (
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() =>
                   void run(() =>
-                    research.updateExperimentStatus(workspaceSlug, recordId, {
-                      status: "FAILED",
-                      failure_reason: "reported as failed",
-                    })
+                    research.updateExperiment(workspaceSlug, recordId, { result, status_note: statusNote })
                   )
                 }
               >
-                {t("research.experiments.fail")}
+                {t("research.common.save")}
               </Button>
-            </>
-          )}
-          {!record.submitted_at && (
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => void run(() => research.submitExperiment(workspaceSlug, recordId))}
-            >
-              {t("research.experiments.submit")}
-            </Button>
-          )}
-          {record.submitted_at && ["COMPLETED", "FAILED", "CANCELLED"].includes(record.status) && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void run(() => research.archiveExperiment(workspaceSlug, recordId))}
-            >
-              {t("research.experiments.archive")}
-            </Button>
-          )}
+            )}
+            {!record.can_edit && <p className="text-11 text-tertiary">{t("research.experiments.read_only_hint")}</p>}
+          </div>
         </div>
-      </div>
+      </ResearchDetailSurface>
 
-      <div className="grid grid-cols-2 gap-2 text-12">
-        <div className="flex flex-col gap-1 rounded border border-subtle p-2">
-          <span className="text-tertiary">{t("research.experiments.fields.molecular_system")}</span>
-          <span className="text-primary">{record.molecular_system || "-"}</span>
-          <span className="text-tertiary">{t("research.experiments.fields.method")}</span>
-          <span className="text-primary">{record.method || "-"}</span>
-          <span className="text-tertiary">{t("research.experiments.fields.hypothesis")}</span>
-          <span className="text-primary">{record.hypothesis || "-"}</span>
-        </div>
-        <div className="flex flex-col gap-1 rounded border border-subtle p-2">
-          <span className="text-tertiary">{t("research.experiments.fields.result")}</span>
-          <textarea
-            className="min-h-16 rounded border border-subtle bg-surface-1 p-2 text-12 text-primary disabled:opacity-60"
-            value={result}
-            disabled={!record.can_edit}
-            onChange={(event) => setResult(event.target.value)}
-          />
-          <span className="text-tertiary">{t("research.experiments.fields.status_note")}</span>
-          <Input
-            value={statusNote}
-            disabled={!record.can_edit}
-            onChange={(event) => setStatusNote(event.target.value)}
-          />
-          {record.can_edit && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                void run(() => research.updateExperiment(workspaceSlug, recordId, { result, status_note: statusNote }))
-              }
-            >
-              {t("research.common.save")}
-            </Button>
-          )}
-          {!record.can_edit && <p className="text-11 text-tertiary">{t("research.experiments.read_only_hint")}</p>}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <h3 className="text-13 font-medium text-primary">{t("research.experiments.amendments_title")}</h3>
+      <ResearchDetailSurface title={t("research.experiments.amendments_title")} collapsible>
         {record.submitted_at && (
           <div className="flex items-center gap-2">
             <Input
@@ -288,10 +290,9 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
             )}
           </div>
         ))}
-      </div>
+      </ResearchDetailSurface>
 
-      <div className="flex flex-col gap-2">
-        <h3 className="text-13 font-medium text-primary">{t("research.experiments.assets_title")}</h3>
+      <ResearchDetailSurface title={t("research.experiments.assets_title")} collapsible>
         {assets.map((asset) => (
           <div
             key={asset.id}
@@ -321,10 +322,9 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
           </div>
         ))}
         {!assets.length && <p className="text-12 text-tertiary">{t("research.experiments.no_assets")}</p>}
-      </div>
+      </ResearchDetailSurface>
 
-      <div className="flex flex-col gap-1">
-        <h3 className="text-13 font-medium text-primary">{t("research.experiments.versions_title")}</h3>
+      <ResearchDetailSurface title={t("research.experiments.versions_title")} collapsible>
         {versions.map((version) => (
           <div
             key={version.id}
@@ -338,7 +338,7 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
           </div>
         ))}
         {!versions.length && <p className="text-12 text-tertiary">{t("research.experiments.no_versions")}</p>}
-      </div>
+      </ResearchDetailSurface>
     </div>
   );
 });

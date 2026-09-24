@@ -20,6 +20,11 @@ import { Input } from "@plane/ui";
 // components
 import { CodeSummaryCard } from "@/components/research/code/code-summary-card";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -69,11 +74,11 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
   const selected = repositories.find((repository) => repository.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-5">
+    <ResearchListSurface>
       <CodeSummaryCard summary={summary} />
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <ResearchFilterToolbar>
         <Input
           className="!w-72"
           value={repositoryUrl}
@@ -110,67 +115,69 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
         >
           {t("research.code.register")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
 
-      <Table>
-        <TableHeader>
-          <TableRow className="text-tertiary">
-            <TableHead>{t("research.code.columns.repository")}</TableHead>
-            <TableHead>{t("research.code.columns.provider")}</TableHead>
-            <TableHead>{t("research.code.columns.status")}</TableHead>
-            <TableHead>{t("research.code.columns.last_sync")}</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {repositories.map((repository) => (
-            <TableRow
-              key={repository.id}
-              className={`border-b border-subtle/60 ${repository.id === selectedId ? "bg-surface-2" : ""}`}
-            >
-              <TableCell className="text-secondary">
-                <button type="button" className="hover:underline" onClick={() => setSelectedId(repository.id)}>
-                  {repository.repository_url}
-                </button>
-              </TableCell>
-              <TableCell className="text-tertiary">{t(CODE_PROVIDER_LABELS[repository.provider])}</TableCell>
-              <TableCell>
-                <span
-                  className={`rounded px-1.5 py-0.5 text-11 ${
-                    repository.status === "ACTIVE"
-                      ? "bg-success-subtle text-success-primary"
-                      : repository.status === "SYNC_FAILED"
-                        ? "bg-danger-subtle text-danger-primary"
-                        : "bg-surface-2 text-tertiary"
-                  }`}
-                >
-                  {t(CODE_REPOSITORY_STATUS_LABELS[repository.status])}
-                </span>
-                {repository.sync_error && <span className="ml-2 text-11 text-tertiary">{repository.sync_error}</span>}
-              </TableCell>
-              <TableCell className="text-tertiary">
-                {repository.last_sync_at ? new Date(repository.last_sync_at).toLocaleString() : "-"}
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void research.syncCodeRepository(workspaceSlug, repository.id)}
-                >
-                  {t("research.code.sync")}
-                </Button>
-              </TableCell>
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
+            <TableRow className="text-tertiary">
+              <TableHead>{t("research.code.columns.repository")}</TableHead>
+              <TableHead>{t("research.code.columns.provider")}</TableHead>
+              <TableHead>{t("research.code.columns.status")}</TableHead>
+              <TableHead>{t("research.code.columns.last_sync")}</TableHead>
+              <TableHead />
             </TableRow>
-          ))}
-          {!repositories.length && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-tertiary">
-                {t("research.code.empty")}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {repositories.map((repository) => (
+              <TableRow
+                key={repository.id}
+                className={`border-b border-subtle/60 ${repository.id === selectedId ? "bg-surface-2" : ""}`}
+              >
+                <TableCell className="text-secondary">
+                  <button type="button" className="hover:underline" onClick={() => setSelectedId(repository.id)}>
+                    {repository.repository_url}
+                  </button>
+                </TableCell>
+                <TableCell className="text-tertiary">{t(CODE_PROVIDER_LABELS[repository.provider])}</TableCell>
+                <TableCell>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-11 ${
+                      repository.status === "ACTIVE"
+                        ? "bg-success-subtle text-success-primary"
+                        : repository.status === "SYNC_FAILED"
+                          ? "bg-danger-subtle text-danger-primary"
+                          : "bg-surface-2 text-tertiary"
+                    }`}
+                  >
+                    {t(CODE_REPOSITORY_STATUS_LABELS[repository.status])}
+                  </span>
+                  {repository.sync_error && <span className="ml-2 text-11 text-tertiary">{repository.sync_error}</span>}
+                </TableCell>
+                <TableCell className="text-tertiary">
+                  {repository.last_sync_at ? new Date(repository.last_sync_at).toLocaleString() : "-"}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void research.syncCodeRepository(workspaceSlug, repository.id)}
+                  >
+                    {t("research.code.sync")}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {!repositories.length && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-tertiary">
+                  {t("research.code.empty")}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
 
       {selected && (
         <div className="flex flex-col gap-3">
@@ -243,37 +250,39 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
             </Button>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow className="text-tertiary">
-                <TableHead>{t("research.code.columns.ref_type")}</TableHead>
-                <TableHead>{t("research.code.columns.ref_value")}</TableHead>
-                <TableHead>{t("research.code.columns.message")}</TableHead>
-                <TableHead>{t("research.code.columns.experiment")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {artifacts.map((artifact) => (
-                <TableRow key={artifact.id}>
-                  <TableCell className="text-tertiary">{t(CODE_REF_TYPE_LABELS[artifact.ref_type])}</TableCell>
-                  <TableCell className="text-secondary">{artifact.ref_value}</TableCell>
-                  <TableCell className="text-tertiary">{artifact.commit_message || "-"}</TableCell>
-                  <TableCell className="text-tertiary">
-                    {artifact.linked_experiment ? t("research.code.linked") : "-"}
-                  </TableCell>
+          <ResearchTableSurface>
+            <Table>
+              <TableHeader>
+                <TableRow className="text-tertiary">
+                  <TableHead>{t("research.code.columns.ref_type")}</TableHead>
+                  <TableHead>{t("research.code.columns.ref_value")}</TableHead>
+                  <TableHead>{t("research.code.columns.message")}</TableHead>
+                  <TableHead>{t("research.code.columns.experiment")}</TableHead>
                 </TableRow>
-              ))}
-              {!artifacts.length && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-tertiary">
-                    {t("research.code.no_artifacts")}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {artifacts.map((artifact) => (
+                  <TableRow key={artifact.id}>
+                    <TableCell className="text-tertiary">{t(CODE_REF_TYPE_LABELS[artifact.ref_type])}</TableCell>
+                    <TableCell className="text-secondary">{artifact.ref_value}</TableCell>
+                    <TableCell className="text-tertiary">{artifact.commit_message || "-"}</TableCell>
+                    <TableCell className="text-tertiary">
+                      {artifact.linked_experiment ? t("research.code.linked") : "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!artifacts.length && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-tertiary">
+                      {t("research.code.no_artifacts")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ResearchTableSurface>
         </div>
       )}
-    </div>
+    </ResearchListSurface>
   );
 });
