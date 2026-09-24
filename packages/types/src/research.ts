@@ -271,6 +271,7 @@ export type TResearchAgentSession = {
   chain_node: string;
   context_id: string;
   context_hash: string;
+  context_expires_at?: string;
   status: "INITIALIZING" | "READY" | "STREAMING" | "WAITING_APPROVAL" | "SAVING" | "DEGRADED" | "ERROR" | "CLOSED";
   last_error: string;
   synlora_session_id: string;
@@ -285,6 +286,27 @@ export type TResearchAgentSession = {
     unavailable_reasons: string[];
     policy_id: string;
   };
+  chain_node_title?: string;
+  project_name?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchAgentApproval = {
+  session_id: string;
+  run_id: string;
+  workspace: string;
+  user: string;
+  user_detail?: TResearchUserLite | null;
+  project: string;
+  project_name?: string;
+  chain_node: string;
+  chain_node_title?: string;
+  status: "WAITING_APPROVAL" | "DEGRADED" | "ERROR" | "CLOSED";
+  tool_call_id: string;
+  summary: string;
+  risk_level?: string;
+  capability_scope?: string;
   created_at: string;
   updated_at: string;
 };
