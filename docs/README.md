@@ -20,10 +20,12 @@
 | [`research-system-management-testing.md`](./research-system-management-testing.md)                                                         | 系统管理改进测试手册：一键冒烟、自动化测试与界面走查                     | v1.0，已交付（v2.4.0）                   |
 | [`research-navigation-visibility.md`](./research-navigation-visibility.md)                                                                 | 科研目录分级可见：四档级别、菜单矩阵、强制点与验收方式                   | v1.0，已交付（v2.5.0）                   |
 | [`research-workspace-v3.md`](./research-workspace-v3.md)                                                                                   | v3 权威实现契约：组织、权限、工作空间、项目、报告与 Agent 上下文         | v1.4，对应 `3.0.3`，UI 重构见 4.10.0     |
+| [`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)                                                                       | **UX 设计指南（系列入口）**：三定位、分级方法、组件出口、页面模式        | v1.0，当前有效                           |
+| [`research-workspace-ux-refinement-prd.md`](./research-workspace-ux-refinement-prd.md)                                                     | 信息架构精炼 PRD：信息减法、工作流可视化、Agent 侧边插件化               | v1.1，已实施（`4.11.0` 预告）            |
 | [`research-workspace-ui-ux-refactor-prd.md`](./research-workspace-ui-ux-refactor-prd.md)                                                   | 科研工作台产品级 UI/UX 重构 PRD：复用原则、视觉规范、组件与九阶段计划    | v1.3，已实施（`4.10.0`）                 |
 | [`research-workspace-ui-ux-phase-1-audit.md`](./research-workspace-ui-ux-phase-1-audit.md)                                                 | Phase 1 设计系统审计：token、组件清单、复用映射与业务回归用例冻结        | 已冻结                                   |
-| [`research-workspace-ui-ux-phase-2-ia-audit.md`](./research-workspace-ui-ux-phase-2-ia-audit.md)                                           | Phase 2 信息架构审计：对象层级映射、页面优先级与重复实现清单             | 已冻结                                   |
-| [`research-workspace-ui-ux-acceptance-report.md`](./research-workspace-ui-ux-acceptance-report.md)                                         | UI/UX 重构验收：阶段记录、功能回归、产品级视觉检查与残留说明             | 已完成（`4.10.0`）                       |
+| [`research-workspace-ui-ux-phase-2-ia-audit.md`](./research-workspace-ui-ux-phase-2-ia-audit.md)                                           | Phase 2 信息架构审计：对象层级映射、页面优先级与重复实现清单             | 档案（指南 §8）                          |
+| [`research-workspace-ui-ux-acceptance-report.md`](./research-workspace-ui-ux-acceptance-report.md)                                         | UI/UX 重构验收：阶段记录、功能回归、产品级视觉检查与残留说明             | 档案（指南 §8）                          |
 | [`research-workspace-ui-ux-release-notes.md`](./research-workspace-ui-ux-release-notes.md)                                                 | UI/UX 重构发布说明：范围、开关、验证与回滚                               | `4.9.1 → 4.10.0`                         |
 | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md)                                                           | 跨仓库科研智能体平台总 PRD：Research Chain、Agent 分工、MVP 与建设路线   | v1.4，待评审                             |
 | [`research-intelligent-platform-ux-prototype.md`](./research-intelligent-platform-ux-prototype.md)                                         | 科研智能体平台 UX 交互原型：欢迎页、Research Chain、Agent 插件和入库流程 | v1.1，待确认                             |
@@ -74,10 +76,12 @@ flowchart LR
     R --> PLATFORM[科研智能体平台总 PRD]
     V3 --> PLATFORM
     PLATFORM --> MVP[Research Chain + RAGPortal + Synlora MVP]
-    V3 --> UIUX[工作台 UI/UX 重构 PRD]
-    UIUX --> AUDIT1[Phase 1 设计系统审计]
-    UIUX --> AUDIT2[Phase 2 信息架构审计]
-    UIUX --> ACCEPT[UI/UX 验收报告]
+    V3 --> GUIDE[UX 设计指南 · 系列入口]
+    GUIDE --> REFINEMENT[信息架构精炼 PRD]
+    GUIDE --> UIUX[工作台 UI/UX 重构 PRD · 档案]
+    UIUX --> AUDIT1[Phase 1 设计系统审计 · 档案]
+    UIUX --> AUDIT2[Phase 2 信息架构审计 · 档案]
+    UIUX --> ACCEPT[UI/UX 验收报告 · 档案]
 ```
 
 - 路线图定义需求与分期，不直接修改业务代码。
@@ -86,7 +90,8 @@ flowchart LR
 - 验收报告与发布说明记录验证结果、开关层级和回滚方式。
 - `research-workspace-v3.md` 是 `3.0.0` 起组织、权限、双工作空间和只读 Agent 上下文的当前契约；`3.0.1` 收紧 Context 元数据、导入预检与用户档案隔离，`3.0.3` 统一科研前端状态反馈、高风险操作和列表导航体验；v2.4/v2.5 文档保留历史事实，冲突处由 v3 文档取代。
 - `research-intelligent-platform-prd.md` 是跨仓库平台建设目标和分期边界；它复用 v3 的组织、ACL 与 Context 契约，不替换 Plane P0/P1/P2 的已交付规格。涉及 RAGPortal、已部署 WeKnora、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 和 SpecAgent 的能力，以各仓库代码、服务运行契约与发布契约为准。
-- `research-workspace-ui-ux-refactor-prd.md` 是 `4.10.0` 科研工作台呈现层重构的执行依据：只收敛视觉与组件，不改业务规则；Phase 1/2 审计冻结复用映射与回归用例，验收报告记录九阶段交付与残留事项。
+- `research-workspace-ux-guide.md` 是科研工作台 UI/UX 系列的唯一入口与权威规范：整合三定位、信息分级方法、语义组件出口与页面模式；4.10.0 重构 PRD、Phase 1/2 审计、验收与发布说明降级为档案（指南 §8），冲突以指南为准。
+- `research-workspace-ux-refinement-prd.md` 是 `4.11.0` 信息架构精炼（信息减法 / 工作流可视化 / Agent 侧边插件化）的执行依据，其信息分级表并入指南 §2 引用。
 - `research-intelligent-platform-ux-prototype.md` 是当前产品交互确认稿，先确认欢迎页、Research Chain、通用 Agent 插件和 RAGPortal 入库入口，再进入 UI 开发拆分。
 - `research-intelligent-platform-phase-0-plan.md` 至 `research-intelligent-platform-phase-3-plan.md` 是总 PRD §9 的阶段实施计划，分别定义技术方案、开发任务、依赖、测试验收、发布回滚和风险；计划完成状态不能替代代码验收报告。
 
