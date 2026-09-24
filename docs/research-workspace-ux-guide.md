@@ -3,12 +3,12 @@
 | 项目     | 内容                                                              |
 | -------- | ----------------------------------------------------------------- |
 | 文档状态 | 当前有效                                                          |
-| 文档版本 | v1.3                                                              |
+| 文档版本 | v1.4                                                              |
 | 日期     | 2026-09-24                                                        |
-| 适用版本 | `4.12.0` 起                                                       |
+| 适用版本 | `4.13.0` 起                                                       |
 | 定位     | 科研工作台 UI/UX 系列文档的**唯一入口与权威规范**；冲突以本文为准 |
 
-本文整合 4.10.0 视觉重构、4.11.0 信息架构精炼与 4.12.0 产品级 UI 精细化成果，沉淀为可持续执行的 UX 规范。4.10 / 4.11 过程档案见 [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)；4.12 PRD、基线与验收见 §8 文档地图。
+本文整合 4.10.0 视觉重构、4.11.0 信息架构精炼、4.12.0 产品级 UI 精细化与 4.13.0 复核修复成果，沉淀为可持续执行的 UX 规范。4.10 / 4.11 过程档案见 [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)；4.12 PRD、基线与验收见 §8 文档地图。
 
 ## 1. 产品三定位
 
@@ -54,11 +54,16 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 | 状态面板     | `ResearchStatusPanel`                                   | `research/common/research-status-panel.tsx`        |
 | 工作流导轨   | `ResearchChainWorkflowRail`（固定 13 阶段 + 当前态）    | `research/chains/research-chain-workflow-rail.tsx` |
 | 工作流映射   | `buildResearchWorkflow`（纯展示层阶段推导）             | `research/chains/research-chain-workflow.ts`       |
+| 当前对象选择 | `pickCurrentChain` / `pickCurrentNode`（统一口径）      | `research/chains/research-selection.ts`            |
+| 日期格式化   | `formatResearchDateTime` / `formatResearchDate`         | `research/common/research-format.ts`               |
+| 待办聚合     | `collectResearchTodos`（跨组件共享口径）                | `research/common/research-todo-source.ts`          |
 | Agent 面板   | `ResearchAgentSidePanel`（400px 抽屉 + 上下文继承）     | `research/agent/research-agent-side-panel.tsx`     |
 | 表格         | propel `Table` 系列（禁手写原生 table）                 | `@plane/propel/table`                              |
 | 按钮 / 加载  | propel `Button` / `getButtonStyling` / `Skeleton`       | `@plane/propel/*`                                  |
 
 新实现不得绕过以上出口另写平行实现。
+
+例外口径：overlay 遮罩允许 `bg-black/*` 透明度（对齐 Plane 原生 `password-reset-gate` 惯例），不计入硬编码色值违规；除遮罩外的所有颜色仍必须使用 semantic token。
 
 ## 5. 页面模式
 
@@ -104,6 +109,8 @@ Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段
 | [`research-workspace-ui-ux-4.12-prd.md`](./research-workspace-ui-ux-4.12-prd.md)                             | 4.12.0 PRD                 | 本轮范围、映射与验收口径           |
 | [`research-workspace-ui-ux-4.12-phase-0-baseline.md`](./research-workspace-ui-ux-4.12-phase-0-baseline.md)   | 4.12.0 基线冻结            | 信息分级、回归清单与映射用例       |
 | [`research-workspace-ui-ux-4.12-acceptance-report.md`](./research-workspace-ui-ux-4.12-acceptance-report.md) | 4.12.0 验收报告            | 交付证据、截图矩阵与质量结果       |
+| [`research-workspace-ui-ux-4.13-prd.md`](./research-workspace-ui-ux-4.13-prd.md)                             | 4.13.0 优化 PRD            | 复核偏离、修复方案与验收口径       |
+| [`research-workspace-ui-ux-4.13-acceptance-report.md`](./research-workspace-ui-ux-4.13-acceptance-report.md) | 4.13.0 验收报告            | 修复证据与质量结果                 |
 
 档案内部索引：第 1 部分 4.10.0 重构 PRD；第 2 部分 Phase 1 设计系统审计；第 3 部分 Phase 2 信息架构审计；第 4 部分 4.10.0 验收报告；第 5 部分 4.10.0 发布说明；第 6 部分 4.11.0 信息精炼 PRD。
 
@@ -115,3 +122,4 @@ Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段
 | v1.1 | 2026-09-24 | 六份过程文档合并为 `research-workspace-ui-ux-archive.md`，系列收敛为「指南 + 档案」两份，命名统一 |
 | v1.2 | 2026-09-24 | 将 Research Chain 的中文产品名称统一为“研究链”，同步产品定位与页面模式                            |
 | v1.3 | 2026-09-24 | 登记固定 13 阶段流程地图、共享数据 Surface、列表 / 详情模式与 Agent 键盘焦点规则                  |
+| v1.4 | 2026-09-24 | 新增选择器 / 日期 / 待办聚合语义出口，登记遮罩例外与 fixed 抽屉审计口径                           |
