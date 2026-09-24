@@ -44,12 +44,12 @@ export function ResearchAgentSidePanel({ workspaceSlug, chainNodeId, onClose }: 
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={t("research.agent.context_summary")}
+        aria-label={t("research.agent.title")}
         tabIndex={-1}
-        className="fixed top-0 right-0 z-50 flex h-full w-full max-w-[400px] flex-col border-l border-subtle bg-surface-1 outline-none"
+        className="fixed top-0 right-0 z-50 flex h-full w-[400px] shrink-0 flex-col border-l border-subtle bg-surface-1 outline-none"
       >
-        <div className="flex items-center justify-between border-b border-subtle px-4 py-2.5">
-          <span className="text-13 font-semibold text-primary">{t("research.agent.context_summary")}</span>
+        <div className="flex items-center justify-between bg-surface-2 px-4 py-2.5">
+          <span className="text-13 font-semibold text-primary">{t("research.agent.title")}</span>
           <IconButton
             variant="ghost"
             size="sm"

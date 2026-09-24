@@ -159,6 +159,7 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   await act(async () => {
     root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
   });
+  await act(async () => undefined);
 
   expect(container.textContent).toContain("文献调研");
   expect(container.textContent).toContain("创建节点");
@@ -179,6 +180,21 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     [...container.querySelectorAll("button")].find((button) => button.textContent === "启动")?.click();
   });
   expect(mocks.transitionChainNode).toHaveBeenCalledWith("lab", "node-1", "START", undefined);
+});
+
+it("renders the fixed thirteen-stage workflow even when later stages have no nodes", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.getChainNodes.mockResolvedValueOnce([node]);
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+
+  const workflow = container.querySelector('[aria-label="研究流程"]');
+  expect(workflow).not.toBeNull();
+  expect(workflow?.querySelectorAll('[role="listitem"]')).toHaveLength(13);
+  expect(workflow?.textContent).toContain("未开始");
+  expect(workflow?.textContent).toContain("转化");
+  expect(workflow?.querySelector('[aria-current="step"]')?.textContent).toContain("文献调研");
 });
 
 it("uses bounded node types and preserves the page when creation fails", async () => {

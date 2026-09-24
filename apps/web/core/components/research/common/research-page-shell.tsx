@@ -139,12 +139,12 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   return (
     <>
       <PageHead title={t(titleKey)} />
-      <div className="flex h-full w-full flex-col overflow-hidden">
-        <div className="border-b border-subtle px-5 py-3">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
+        <div className="border-b border-subtle bg-surface-1 px-5 py-3.5">
           {breadcrumbs && <div className="mb-1 text-12 text-tertiary">{breadcrumbs}</div>}
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h2 className="truncate text-18 font-semibold text-primary">{t(titleKey)}</h2>
+              <h2 className="text-22 truncate font-semibold text-primary">{t(titleKey)}</h2>
               {descriptionKey && <p className="mt-0.5 text-13 text-tertiary">{t(descriptionKey)}</p>}
               {metadata && (
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">{metadata}</div>

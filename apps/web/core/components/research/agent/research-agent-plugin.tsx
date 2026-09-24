@@ -515,7 +515,11 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({
 
   return (
     <section className="flex h-full flex-col overflow-hidden" aria-label={t("research.agent.description")}>
-      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-subtle bg-surface-1 px-5 py-3">
+      <div
+        className={`sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-subtle bg-surface-1 ${
+          variant === "panel" ? "px-4 py-2.5" : "px-5 py-3"
+        }`}
+      >
         <div className="min-w-0">
           <p className="text-13 font-semibold text-primary">{t("research.agent.context_summary")}</p>
           <p className="mt-1 truncate text-11 text-secondary">
@@ -533,17 +537,21 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({
           <ResearchStatusBadge status={session?.status ?? "unknown"}>
             {statusKey ? t(statusKey) : t("research.agent.no_session")}
           </ResearchStatusBadge>
-          <span className="rounded-md border border-subtle px-2 py-1 text-11 text-tertiary">
-            {t("research.agent.last_seq", { seq: latestSeq })}
-          </span>
+          {variant === "page" && (
+            <span className="rounded-md border border-subtle px-2 py-1 text-11 text-tertiary tabular-nums">
+              {t("research.agent.last_seq", { seq: latestSeq })}
+            </span>
+          )}
           {activeApproval && (
             <Button variant="primary" size="base" onClick={() => setApprovalFor(activeApproval)}>
               {t("research.agent.open_approval")}
             </Button>
           )}
-          <Button variant="secondary" size="base" onClick={() => setArtifactDrawerOpen(true)}>
-            {t("research.agent.open_artifact")}
-          </Button>
+          {variant === "page" && (
+            <Button variant="secondary" size="base" onClick={() => setArtifactDrawerOpen(true)}>
+              {t("research.agent.open_artifact")}
+            </Button>
+          )}
           {variant === "page" && (
             <Button
               variant="secondary"
@@ -621,7 +629,7 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({
             </div>
           </div>
 
-          <div className="flex-1 space-y-2 p-5" role="log" aria-live="polite">
+          <div className="flex-1 space-y-2 p-4" role="log" aria-live="polite">
             {state === "loading_context" && <p className="text-12 text-tertiary">{t("research.agent.description")}</p>}
             {state === "forbidden" && <p className="text-12 text-primary">{t("research.common.permission_denied")}</p>}
             {state === "degraded" && <p className="text-12 text-primary">{t("research.agent.degraded")}</p>}
@@ -663,7 +671,7 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({
           )}
 
           <form
-            className="border-t border-subtle p-4"
+            className="shrink-0 border-t border-subtle p-4"
             onSubmit={(formEvent) => {
               formEvent.preventDefault();
               void send();
@@ -681,13 +689,15 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({
               className="focus:border-accent-primary mt-2 w-full resize-none rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
               disabled={!session || session.status === "CLOSED" || sending}
             />
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
+              className="mt-2"
               disabled={!session || session.status === "CLOSED" || sending || !message.trim()}
-              className="mt-2 rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color disabled:opacity-50"
             >
               {sending ? t("research.agent.status.STREAMING") : t("research.agent.send")}
-            </button>
+            </Button>
           </form>
         </div>
 

@@ -53,7 +53,8 @@ it("opens as a right drawer that inherits the current node context", async () =>
   expect(plugin?.textContent).toBe("node-1");
   expect(plugin?.getAttribute("data-variant")).toBe("panel");
   expect(dialog?.className).toContain("right-0");
-  expect(dialog?.className).toContain("max-w-[400px]");
+  expect(dialog?.className).toContain("w-[400px]");
+  expect(dialog?.getAttribute("aria-label")).toBe("科研智能体");
 });
 
 it("closes from the close button", async () => {

@@ -1330,6 +1330,7 @@
     },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",
+      "title": "科研智能体",
       "launch": "启动会话",
       "close": "关闭会话",
       "input_label": "消息",
