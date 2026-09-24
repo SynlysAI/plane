@@ -9,6 +9,7 @@ import Link from "next/link";
 // plane imports
 import { RESEARCH_SETTINGS_NAVIGATION_ITEMS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -39,37 +40,35 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
   // disabled and every section switch is therefore false.
   if (visibleTabs.length === 0 && currentKey === "platform" && research.isResearchAdmin) {
     return (
-      <nav
-        aria-label={t("research.nav.management")}
-        className="flex gap-1 overflow-x-auto border-b border-subtle px-5 py-2"
-      >
-        <span aria-current="page" className="rounded-md bg-surface-2 px-3 py-1.5 text-12 text-primary">
-          {t("research.nav.platform")}
-        </span>
+      <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle px-5">
+        <TabNavigationList className="py-2">
+          <TabNavigationItem isActive>
+            <span aria-current="page" className="whitespace-nowrap">
+              {t("research.nav.platform")}
+            </span>
+          </TabNavigationItem>
+        </TabNavigationList>
       </nav>
     );
   }
 
   return (
-    <nav
-      aria-label={t("research.nav.management")}
-      className="flex gap-1 overflow-x-auto border-b border-subtle px-5 py-2"
-    >
-      {visibleTabs.map((item) => {
-        const path = TAB_PATHS[item.key] ?? `settings/${item.key}`;
-        return (
-          <Link
-            key={item.key}
-            href={`/${workspaceSlug}/research/${path}`}
-            aria-current={item.key === currentKey ? "page" : undefined}
-            className={`rounded-md px-3 py-1.5 text-12 whitespace-nowrap transition-colors ${
-              item.key === currentKey ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
-            }`}
-          >
-            {t(item.labelKey)}
-          </Link>
-        );
-      })}
+    <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle px-5">
+      <TabNavigationList className="py-2">
+        {visibleTabs.map((item) => {
+          const path = TAB_PATHS[item.key] ?? `settings/${item.key}`;
+          return (
+            <Link
+              key={item.key}
+              href={`/${workspaceSlug}/research/${path}`}
+              aria-current={item.key === currentKey ? "page" : undefined}
+              className="whitespace-nowrap"
+            >
+              <TabNavigationItem isActive={item.key === currentKey}>{t(item.labelKey)}</TabNavigationItem>
+            </Link>
+          );
+        })}
+      </TabNavigationList>
     </nav>
   );
 });

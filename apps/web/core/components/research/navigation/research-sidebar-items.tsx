@@ -19,6 +19,8 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { cn } from "@plane/utils";
+// components
+import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import useLocalStorage from "@/hooks/use-local-storage";
@@ -97,14 +99,10 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
     const href = path ? `/${workspaceSlug}/research/${path}` : `/${workspaceSlug}/research`;
     const isActive = exact ? pathname === href : pathname === href || pathname?.startsWith(`${href}/`);
     return (
-      <Link
-        key={key}
-        href={href}
-        className={`flex items-center rounded-md px-2 py-1.5 text-13 transition-colors ${
-          isActive ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
-        }`}
-      >
-        {t(labelKey)}
+      <Link key={key} href={href}>
+        <SidebarNavItem isActive={isActive}>
+          <span className="flex-1 truncate text-13 leading-5 font-medium whitespace-nowrap">{t(labelKey)}</span>
+        </SidebarNavItem>
       </Link>
     );
   };
