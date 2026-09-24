@@ -17,6 +17,8 @@ from plane.db.models import (
     ResearchChainNode,
     ResearchChainSnapshot,
 )
+from plane.api.middleware.api_authentication import APIKeyAuthentication
+from plane.authentication.session import BaseSessionAuthentication
 from plane.research.serializers import ResearchAgentRunEventSerializer, ResearchAgentSessionSerializer
 from plane.research.services.agent_orchestrator import (
     AgentAssembly,
@@ -983,6 +985,8 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
 
 class ResearchAgentChainEventEndpoint(AgentPluginMixin):
     """Write a scoped Chain fact through the Agent BFF."""
+
+    authentication_classes = [BaseSessionAuthentication, APIKeyAuthentication]
 
     def post(self, request, slug):
         workspace, error = self.workspace_or_error(request, slug)

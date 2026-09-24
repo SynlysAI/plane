@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from plane.db.models import (
     AccountLink,
+    APIToken,
     Project,
     ResearchAgentSession,
     ResearchAgentRunEvent,
@@ -372,6 +373,29 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
     assert event.status_code == 201, event.json()
     replay_event = env["client"].post(agent_url(env, "chain-events/"), event_request, format="json")
     assert replay_event.status_code == 200
+
+
+def test_agent_chain_event_accepts_backend_api_key(env):
+    """Synlora backend tokens use the Plane API-key contract for write-back."""
+    token = APIToken.objects.create(
+        user=env["owner"],
+        workspace=env["workspace"],
+        label="Synlora write-back",
+        token="synlora-write-back-token",
+        is_service=True,
+    )
+    client = APIClient()
+    client.credentials(HTTP_X_API_KEY=token.token)
+    payload = {
+        "request_id": f"service-event-{uuid4().hex}",
+        "event_id": f"service-event-id-{uuid4().hex}",
+        "chain_node_id": str(env["node"].id),
+        "event_type": "AI_ACTION",
+        "summary": "Backend write-back",
+    }
+    response = client.post(agent_url(env, "chain-events/"), payload, format="json")
+    assert response.status_code == 201, response.json()
+    assert ResearchChainEvent.objects.filter(request_id=payload["request_id"]).exists()
 
 
 def test_ai_artifact_draft_requires_human_confirmation(env):
