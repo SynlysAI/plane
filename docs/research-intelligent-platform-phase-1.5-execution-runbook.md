@@ -167,56 +167,56 @@
 
 ### E2E-1 双课题与 ACL
 
-- [ ] `liuyang.phd` 创建课题 A（WORKSPACE）与课题 B（PRIVATE）。
-- [ ] 页面、API、Context、导出四条路径权限一致；`hexue.guest` 负例生效。
-- [ ] 按 L3.6 矩阵复验 VIS-1 至 VIS-9 全格。
+- [x] `liuyang.phd` 创建课题 A（WORKSPACE）与课题 B（PRIVATE）。
+- [x] 页面、API、Context、导出四条路径权限一致；`hexue.guest` 负例生效。
+- [x] 按 L3.6 矩阵复验 VIS-1 至 VIS-9 全格。
 
 ### E2E-2 上传入库引用
 
-- [ ] 课题节点上传 PDF → RAGPortal → WeKnora 解析。
-- [ ] 状态轮询至完成；引用确认写入外部引用表。
-- [ ] 同 `sha256 + chain_id + node_id` 重复上传幂等（不产生重复记录）。
+- [x] 课题节点上传 PDF → RAGPortal → WeKnora 解析。
+- [x] 状态轮询至完成；引用确认写入外部引用表。
+- [x] 同 `sha256 + chain_id + node_id` 重复上传幂等（不产生重复记录）。
 
 ### E2E-3 Agent 会话与检索
 
-- [ ] Plane 自动装配 persona / 插件 / 工具白名单创建 Synlora 会话。
-- [ ] Agent 使用 `knowledge.search` 命中 E2E-2 已入库文档。
-- [ ] 事件投影为 Agent run event 与 Chain event，`after_seq` 单调、`(run_id, seq)` 无重复。
+- [x] Plane 自动装配 persona / 插件 / 工具白名单创建 Synlora 会话。
+- [x] Agent 使用 `knowledge.search` 命中 E2E-2 已入库文档。
+- [x] 事件投影为 Agent run event 与 Chain event，`after_seq` 单调、`(run_id, seq)` 无重复。
 
 ### E2E-4 计划实验分析沉淀
 
-- [ ] 调研 → AI 讨论/选题 → 研究计划 → 实验记录 → 分析逐节点推进。
-- [ ] AI 产物经人工确认生成 typed snapshot。
-- [ ] Markdown 导出并核对 `X-Research-Chain-SHA256` 与文件内容一致。
+- [x] 调研 → AI 讨论/选题 → 研究计划 → 实验记录 → 分析逐节点推进。
+- [x] AI 产物经人工确认生成 typed snapshot。
+- [x] Markdown 导出并核对 `X-Research-Chain-SHA256` 与文件内容一致。
 
 ### E2E-5 降级演练
 
 见 §7 三项降级演练，全部通过后勾选本项。
 
-- [ ] 停 Synlora、停 RAGPortal、WeKnora key 失效三项全部通过。
+- [x] 停 Synlora、停 RAGPortal、WeKnora key 失效三项全部通过。
 
 ## 7. 降级演练三项（编号 DEG）
 
 ### DEG-1 停止 Synlora
 
-| 步骤 | 验证点                                                                | 结果 | 证据 |
-| ---- | --------------------------------------------------------------------- | ---- | ---- |
-| 演练 | `Ctrl+C` 停 Synlora；Chain 人工记录不阻断；页面显示中文原因与人工路径 | [ ]  |      |
-| 恢复 | 重启后 Agent 会话可继续；事件自动补投，`(run_id, seq)` 不重复         | [ ]  |      |
+| 步骤 | 验证点                                                                | 结果 | 证据                          |
+| ---- | --------------------------------------------------------------------- | ---- | ----------------------------- |
+| 演练 | `Ctrl+C` 停 Synlora；Chain 人工记录不阻断；页面显示中文原因与人工路径 | [x]  | `degradation/20260925-DEG.md` |
+| 恢复 | 重启后 Agent 会话可继续；事件自动补投，`(run_id, seq)` 不重复         | [x]  | `degradation/20260925-DEG.md` |
 
 ### DEG-2 停止 RAGPortal
 
-| 步骤 | 验证点                                                              | 结果 | 证据 |
-| ---- | ------------------------------------------------------------------- | ---- | ---- |
-| 演练 | `Ctrl+C` 停 RAGPortal；上传入口降级为人工路径；Chain 人工记录不阻断 | [ ]  |      |
-| 恢复 | 重启后上传/状态/引用恢复；`not_configured` 或连接错误提示消失       | [ ]  |      |
+| 步骤 | 验证点                                                              | 结果 | 证据                          |
+| ---- | ------------------------------------------------------------------- | ---- | ----------------------------- |
+| 演练 | `Ctrl+C` 停 RAGPortal；上传入口降级为人工路径；Chain 人工记录不阻断 | [x]  | `degradation/20260925-DEG.md` |
+| 恢复 | 重启后上传/状态/引用恢复；`not_configured` 或连接错误提示消失       | [x]  | `degradation/20260925-DEG.md` |
 
 ### DEG-3 模拟 WeKnora key 失效
 
-| 步骤 | 验证点                                                                                           | 结果 | 证据 |
-| ---- | ------------------------------------------------------------------------------------------------ | ---- | ---- |
-| 演练 | 临时将 RAGPortal `WEKNORA_API_KEY` 改为无效值并重启；上传返回 401 中文原因；Chain 人工记录不阻断 | [ ]  |      |
-| 恢复 | 恢复原 key 并重启；重测入库成功；此前失败的文档可重新上传且幂等                                  | [ ]  |      |
+| 步骤 | 验证点                                                                                           | 结果 | 证据                          |
+| ---- | ------------------------------------------------------------------------------------------------ | ---- | ----------------------------- |
+| 演练 | 临时将 RAGPortal `WEKNORA_API_KEY` 改为无效值并重启；上传返回 401 中文原因；Chain 人工记录不阻断 | [x]  | `degradation/20260925-DEG.md` |
+| 恢复 | 恢复原 key 并重启；重测入库成功；此前失败的文档可重新上传且幂等                                  | [x]  | `degradation/20260925-DEG.md` |
 
 > DEG-3 演练后必须立即恢复 key 并复测 `L1` 步骤 1 与 `L3-3`，确认 WeKnora 链路回到绿色后再继续后续用例。
 
@@ -224,29 +224,35 @@
 
 登记纪律：发现即登记、当日不过夜；字段口径与计划 §7.1 一致。状态取值：新建 / 定界中 / 修复中 / 回归中 / 已关闭。
 
-| 编号    | 日期       | 层级 | 严重度 | 负责分区              | 复现步骤                                                       | 预期                                 | 实际                                          | 根因                                                                                      | 修复提交            | 回归证据                                                         | 状态   |
-| ------- | ---------- | ---- | ------ | --------------------- | -------------------------------------------------------------- | ------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------- | ------ |
-| P15-001 | 2026-09-24 | L1   | P0     | Plane integration     | 启动 RAGPortal 后，Plane BFF 调用 `/api/kb/list`               | 返回知识库列表                       | HTTP 401 `unauthorized`                       | Plane HMAC 模式发送 `X-AI4MS-*` 请求头；RAGPortal 契约要求共享 secret 签发的 Bearer token | c282ecc20           | 单测 23 passed；真实 BFF HTTP 200、5 个知识库、调用日志 SUCCESS  | 已关闭 |
-| P15-002 | 2026-09-25 | L3-4 | P0     | Synlora integration   | Synlora `PlaneResearchClient` 写入 Plane `agent/chain-events/` | 事件写入成功                         | Plane 返回 401，Synlora 归一为 502            | Synlora 使用 Bearer；Plane Agent 事件端点未启用 API Key 认证                              | 80f854e + e6b261de1 | Synlora 19 passed / 6 skipped；Plane 20 passed；真实事件写入成功 | 已关闭 |
-| P15-003 | 2026-09-25 | L3-2 | P2     | RAGPortal integration | Plane BFF 上传后检查 RAGPortal 回执                            | `knowledge_id/kb_id/task_id` 齐返    | `task_id` 为空                                | 部署版 WeKnora 上传响应省略独立 parse task ID                                             | 0a55fbd             | 单测 31 passed；真实二次上传三标识齐返并轮询 SUCCESS             | 已关闭 |
-| P15-004 | 2026-09-25 | L3.5 | P1     | Plane Web IA          | 关闭 IA v2 后访问旧项目路由并携带 query/hash                   | query 与 hash 均保留                 | `#projects` 保留，`source=sw05` 丢失          | 项目路由归一化/跳转时未透传 search                                                        | 1d81a468b           | 五条旧路由 query/hash 均保留；组件 82 passed                     | 已关闭 |
-| P15-005 | 2026-09-25 | L3.6 | P1     | Plane capabilities    | `liuyang.phd` 无评审指派时查看导航与 identity                  | 审批中心不渲染                       | identity nav 含 `approvals`，侧栏渲染审批中心 | RESEARCHER 级别默认 nav 集合包含审批入口                                                  | 1d81a468b           | identity nav 不含 approvals；浏览器 NAV-1 不渲染审批中心         | 已关闭 |
-| P15-006 | 2026-09-25 | L3.6 | P1     | Plane research ACL    | VIS-7 管理员写 A；VIS-8 NONE 读 A                              | 管理员只读；NONE 可读 WORKSPACE 课题 | 管理员事件写入 201；NONE Chain API 403        | Chain manager 误包含工作区管理员；Chain 读接口被 nav 能力提前拦截                         | 1d81a468b           | 相关后端 51 passed；VIS-7 写 403，VIS-8 A 页面/API/导出可读      | 已关闭 |
+| 编号    | 日期       | 层级    | 严重度 | 负责分区              | 复现步骤                                                       | 预期                                 | 实际                                          | 根因                                                                                      | 修复提交            | 回归证据                                                          | 状态   |
+| ------- | ---------- | ------- | ------ | --------------------- | -------------------------------------------------------------- | ------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------- | ------ |
+| P15-001 | 2026-09-24 | L1      | P0     | Plane integration     | 启动 RAGPortal 后，Plane BFF 调用 `/api/kb/list`               | 返回知识库列表                       | HTTP 401 `unauthorized`                       | Plane HMAC 模式发送 `X-AI4MS-*` 请求头；RAGPortal 契约要求共享 secret 签发的 Bearer token | c282ecc20           | 单测 23 passed；真实 BFF HTTP 200、5 个知识库、调用日志 SUCCESS   | 已关闭 |
+| P15-002 | 2026-09-25 | L3-4    | P0     | Synlora integration   | Synlora `PlaneResearchClient` 写入 Plane `agent/chain-events/` | 事件写入成功                         | Plane 返回 401，Synlora 归一为 502            | Synlora 使用 Bearer；Plane Agent 事件端点未启用 API Key 认证                              | 80f854e + e6b261de1 | Synlora 19 passed / 6 skipped；Plane 20 passed；真实事件写入成功  | 已关闭 |
+| P15-003 | 2026-09-25 | L3-2    | P2     | RAGPortal integration | Plane BFF 上传后检查 RAGPortal 回执                            | `knowledge_id/kb_id/task_id` 齐返    | `task_id` 为空                                | 部署版 WeKnora 上传响应省略独立 parse task ID                                             | 0a55fbd             | 单测 31 passed；真实二次上传三标识齐返并轮询 SUCCESS              | 已关闭 |
+| P15-004 | 2026-09-25 | L3.5    | P1     | Plane Web IA          | 关闭 IA v2 后访问旧项目路由并携带 query/hash                   | query 与 hash 均保留                 | `#projects` 保留，`source=sw05` 丢失          | 项目路由归一化/跳转时未透传 search                                                        | 1d81a468b           | 五条旧路由 query/hash 均保留；组件 82 passed                      | 已关闭 |
+| P15-005 | 2026-09-25 | L3.6    | P1     | Plane capabilities    | `liuyang.phd` 无评审指派时查看导航与 identity                  | 审批中心不渲染                       | identity nav 含 `approvals`，侧栏渲染审批中心 | RESEARCHER 级别默认 nav 集合包含审批入口                                                  | 1d81a468b           | identity nav 不含 approvals；浏览器 NAV-1 不渲染审批中心          | 已关闭 |
+| P15-006 | 2026-09-25 | L3.6    | P1     | Plane research ACL    | VIS-7 管理员写 A；VIS-8 NONE 读 A                              | 管理员只读；NONE 可读 WORKSPACE 课题 | 管理员事件写入 201；NONE Chain API 403        | Chain manager 误包含工作区管理员；Chain 读接口被 nav 能力提前拦截                         | 1d81a468b           | 相关后端 51 passed；VIS-7 写 403，VIS-8 A 页面/API/导出可读       | 已关闭 |
+| P15-007 | 2026-09-25 | DEG-1   | P1     | Plane Web Agent       | 停止 Synlora 后打开 Agent 页面                                 | 显示中文降级原因与人工路径           | 显示“没有访问当前科研对象的权限”              | 会话创建失败被前端统一映射为 forbidden                                                    | cb4178931           | 组件 85 passed；浏览器显示中文降级与人工路径                      | 已关闭 |
+| P15-008 | 2026-09-25 | DEG-2/3 | P1     | RAGPortal UI/API      | 停 RAGPortal 或 WeKnora key 失效后上传                         | 中文降级、上传入口与人工路径可用     | key 失效返回 500；上传面板未挂载              | WeknoraError 未在 KB 校验层捕获；ResearchChainKnowledgePanel 未接入外部引用页             | 5efbe91 + cb4178931 | RAGPortal 33 passed；DEG-2/3 页面中文降级、人工路径与恢复回归通过 | 已关闭 |
 
 ## 9. 附录 B：证据记录表
 
 目录约定：`plane/docs/evidence/phase-1.5/` 下设 `health/`、`links/`、`switches/`、`roles/`、`e2e/`、`degradation/`；文件名格式 `YYYYMMDD-用例编号.扩展名`；含敏感信息的截图先脱敏再归档。
 
-| 编号    | 层级          | 用例                                 | 证据类型（截图/日志/导出文件） | 文件路径                                                     | 备注                      |
-| ------- | ------------- | ------------------------------------ | ------------------------------ | ------------------------------------------------------------ | ------------------------- |
-| L1      | 环境健康      | 七步自检与五服务快照                 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L1.md`              | 2026-09-24 全部通过       |
-| L2      | 单服务契约    | Plane / Synlora / RAGPortal 测试摘要 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L2.md`              | 3+19+31 passed            |
-| P15-001 | L1 缺陷回归   | Plane BFF → RAGPortal 真实调用       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260924-L1-RAGPortal-BFF.md` | HTTP 200 / 5 KB / SUCCESS |
-| L3      | 双服务链路    | L3-1 至 L3-4                         | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | 四条链路全部通过          |
-| P15-002 | L3-4 缺陷回归 | Synlora → Plane 回写                 | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | 真实事件写入成功          |
-| P15-003 | L3-2 缺陷回归 | 上传三标识回归                       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | task_id 齐返 / SUCCESS    |
-| L3.5    | 功能开关矩阵  | SW-00 至 SW-07                       | Markdown + JSON + 截图         | `docs/evidence/phase-1.5/switches/20260925-L3.5.md`          | 全部通过                  |
-| L3.6    | 角色矩阵      | NAV / VIS / PER / NEG                | Markdown + JSON + 截图         | `docs/evidence/phase-1.5/roles/20260925-L3.6.md`             | 全部通过                  |
-| P15-004 | L3.5 缺陷回归 | 旧路由 query/hash                    | Markdown 记录                  | `docs/evidence/phase-1.5/switches/20260925-L3.5.md`          | 五条路由完整保留          |
-| P15-005 | L3.6 缺陷回归 | RESEARCHER 审批入口                  | Markdown + 截图                | `docs/evidence/phase-1.5/roles/20260925-L3.6.md`             | 默认不渲染审批中心        |
-| P15-006 | L3.6 缺陷回归 | WORKSPACE 课题 ACL                   | Markdown + JSON                | `docs/evidence/phase-1.5/roles/20260925-VIS-matrix.json`     | 管理员/NONE 只读          |
+| 编号    | 层级             | 用例                                 | 证据类型（截图/日志/导出文件） | 文件路径                                                     | 备注                      |
+| ------- | ---------------- | ------------------------------------ | ------------------------------ | ------------------------------------------------------------ | ------------------------- |
+| L1      | 环境健康         | 七步自检与五服务快照                 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L1.md`              | 2026-09-24 全部通过       |
+| L2      | 单服务契约       | Plane / Synlora / RAGPortal 测试摘要 | Markdown 记录                  | `docs/evidence/phase-1.5/health/20260924-L2.md`              | 3+19+31 passed            |
+| P15-001 | L1 缺陷回归      | Plane BFF → RAGPortal 真实调用       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260924-L1-RAGPortal-BFF.md` | HTTP 200 / 5 KB / SUCCESS |
+| L3      | 双服务链路       | L3-1 至 L3-4                         | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | 四条链路全部通过          |
+| P15-002 | L3-4 缺陷回归    | Synlora → Plane 回写                 | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | 真实事件写入成功          |
+| P15-003 | L3-2 缺陷回归    | 上传三标识回归                       | Markdown 记录                  | `docs/evidence/phase-1.5/links/20260925-L3.md`               | task_id 齐返 / SUCCESS    |
+| L3.5    | 功能开关矩阵     | SW-00 至 SW-07                       | Markdown + JSON + 截图         | `docs/evidence/phase-1.5/switches/20260925-L3.5.md`          | 全部通过                  |
+| L3.6    | 角色矩阵         | NAV / VIS / PER / NEG                | Markdown + JSON + 截图         | `docs/evidence/phase-1.5/roles/20260925-L3.6.md`             | 全部通过                  |
+| P15-004 | L3.5 缺陷回归    | 旧路由 query/hash                    | Markdown 记录                  | `docs/evidence/phase-1.5/switches/20260925-L3.5.md`          | 五条路由完整保留          |
+| P15-005 | L3.6 缺陷回归    | RESEARCHER 审批入口                  | Markdown + 截图                | `docs/evidence/phase-1.5/roles/20260925-L3.6.md`             | 默认不渲染审批中心        |
+| P15-006 | L3.6 缺陷回归    | WORKSPACE 课题 ACL                   | Markdown + JSON                | `docs/evidence/phase-1.5/roles/20260925-VIS-matrix.json`     | 管理员/NONE 只读          |
+| L4      | 端到端闭环       | E2E-1 至 E2E-5                       | Markdown + 导出文件            | `docs/evidence/phase-1.5/e2e/20260925-L4.md`                 | 五场景全部通过            |
+| DEG     | 降级演练         | DEG-1 至 DEG-3                       | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 三项全部通过并恢复        |
+| P15-007 | DEG-1 缺陷回归   | Synlora 停机页面提示                 | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 中文原因 / 人工路径       |
+| P15-008 | DEG-2/3 缺陷回归 | RAGPortal 降级与上传入口             | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 401 中文化 / 恢复成功     |
