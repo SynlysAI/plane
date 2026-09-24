@@ -1198,6 +1198,7 @@
         "unknown": "Research node"
       },
       "graph_title": "Main chain visualization",
+      "workflow_title": "Research workflow",
       "views": {
         "chains": "Chains",
         "projects": "Project management",

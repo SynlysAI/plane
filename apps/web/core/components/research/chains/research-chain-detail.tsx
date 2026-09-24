@@ -25,6 +25,7 @@ import { ResearchPersonSelect } from "@/components/research/common/person-select
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainGraph } from "@/components/research/chains/research-chain-graph";
+import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
 import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
 import { ExperimentList } from "@/components/research/experiments/experiment-list";
 import { OutcomeList } from "@/components/research/outcomes/outcome-list";
@@ -401,6 +402,15 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           </div>
         </div>
       </section>
+
+      <ResearchChainWorkflowRail
+        nodes={nodes}
+        selectedNodeId={selected?.node.id ?? null}
+        onSelect={(nodeId) => {
+          setReason("");
+          void loadNodeDetail(nodeId);
+        }}
+      />
 
       <nav aria-label={t("research.chains.tabs.label")} className="overflow-x-auto border-b border-subtle px-5">
         <TabNavigationList className="py-2">
