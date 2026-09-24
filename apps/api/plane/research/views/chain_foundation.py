@@ -30,7 +30,6 @@ from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_act
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
-from plane.research.utils.org import is_workspace_admin
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import can_read_project_research_metadata, profile_queryset
 
@@ -106,7 +105,7 @@ def _chain_readonly_error(chain):
 
 def _chain_manager(workspace, user, chain):
     """Return whether the caller can manage chain lifecycle and collaborators."""
-    if chain.owner_id == user.id or is_workspace_admin(user, workspace.id):
+    if chain.owner_id == user.id:
         return True
     return ProjectMember.objects.filter(
         project_id=chain.project_id,
@@ -197,7 +196,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def get(self, request, slug):
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return error
         if not _flag_enabled(workspace):
@@ -261,7 +260,7 @@ class ResearchChainDetailEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def get(self, request, slug, chain_id):
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return error
         if not _flag_enabled(workspace):
@@ -370,7 +369,7 @@ class ResearchChainMemberListCreateEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def get(self, request, slug, chain_id):
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return error
         if not _flag_enabled(workspace):
@@ -527,7 +526,7 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def _chain(self, request, slug, chain_id):
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return None, error
         if not _flag_enabled(workspace):
@@ -741,7 +740,7 @@ class ResearchChainEventListCreateEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def _node(self, request, slug, node_id):
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return None, error
         if not _flag_enabled(workspace):

@@ -467,7 +467,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             <Button variant="secondary" size="sm" onClick={() => void load()}>
               {t("research.chains.refresh")}
             </Button>
-            {agentEnabled && current && (
+            {agentEnabled && research.canSee("research_chain") && current && (
               <Button variant="primary" size="base" onClick={() => setAgentNodeId(current.id)}>
                 {t("research.chains.open_agent")}
               </Button>

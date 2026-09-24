@@ -115,7 +115,7 @@ def test_identity_publishes_the_level_and_the_menu(env):
 
     student_identity = identity_of(env, env["student"])
     assert student_identity["user"]["research_level"] == "RESEARCHER"
-    assert student_identity["capabilities"]["nav"] == ["overview", "reports", "projects", "approvals"]
+    assert student_identity["capabilities"]["nav"] == ["overview", "reports", "projects"]
 
     bystander_identity = identity_of(env, env["bystander"])
     assert bystander_identity["user"]["research_level"] == "NONE"
@@ -162,12 +162,12 @@ def test_student_keeps_the_tree_but_loses_the_administration_surfaces(env):
     assert client.get(env["settings_url"]).status_code == 403
 
 
-def test_student_keeps_the_business_surfaces(env):
+def test_student_keeps_reports_and_projects_but_not_the_approval_queue(env):
     client = client_for(env["student"])
 
     assert client.get(f"/api/research/workspaces/{env['workspace'].slug}/reports/").status_code == 200
     assert client.get(env["projects_url"]).status_code == 200
-    assert client.get(f"/api/research/workspaces/{env['workspace'].slug}/approval-requests/").status_code == 200
+    assert client.get(f"/api/research/workspaces/{env['workspace'].slug}/approval-requests/").status_code == 403
 
 
 def test_review_inbox_opens_for_the_assigned_reviewer(env):

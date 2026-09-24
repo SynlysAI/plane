@@ -82,6 +82,65 @@ def test_chain_requires_request_id_and_switch(env):
     WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(research_chain_enabled=True)
 
 
+def test_workspace_visible_chain_is_readable_without_research_nav(env):
+    """A NONE member may read WORKSPACE chains while the research nav stays hidden."""
+    env["project"].research_profile.chain_visibility = "WORKSPACE"
+    env["project"].research_profile.save(update_fields=["chain_visibility", "updated_at"])
+    created, _ = create_chain(env)
+    assert created.status_code == 201, created.json()
+    chain_id = created.json()["data"]["id"]
+    node = ResearchChainNode.objects.create(
+        chain_id=chain_id,
+        node_type="LITERATURE_REVIEW",
+        title="Workspace node",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+
+    assert env["outsider_client"].get(chains_url(env)).status_code == 200
+    assert env["outsider_client"].get(f"{chains_url(env)}{chain_id}/").status_code == 200
+    assert (
+        env["outsider_client"].get(
+            f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node.id}/events/"
+        ).status_code
+        == 200
+    )
+    denied = env["outsider_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node.id}/events/",
+        {"request_id": f"event-{uuid4().hex}", "event_id": f"event-{uuid4().hex}", "event_type": "RESEARCH_NOTE"},
+        format="json",
+    )
+    assert denied.status_code == 403
+
+
+def test_workspace_admin_does_not_automatically_become_chain_writer(env):
+    """Workspace administration is not a research-chain writer grant."""
+    env["project"].research_profile.chain_visibility = "WORKSPACE"
+    env["project"].research_profile.save(update_fields=["chain_visibility", "updated_at"])
+    created, _ = create_chain(env)
+    chain = ResearchChain.objects.get(id=created.json()["data"]["id"])
+    node = ResearchChainNode.objects.create(
+        chain=chain,
+        node_type="LITERATURE_REVIEW",
+        title="Admin probe",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+    admin = make_user(first_name="Workspace admin")
+    add_workspace_member(env["workspace"], admin, role=20)
+    response = _client(admin).post(
+        f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node.id}/events/",
+        {
+            "request_id": f"admin-event-{uuid4().hex}",
+            "event_id": f"admin-event-{uuid4().hex}",
+            "event_type": "RESEARCH_NOTE",
+            "summary": "Admin should not write",
+        },
+        format="json",
+    )
+    assert response.status_code == 403
+
+
 def test_chain_create_is_idempotent_and_detects_payload_conflict(env):
     created, payload = create_chain(env)
     assert created.status_code == 201, created.json()
@@ -101,9 +160,11 @@ def test_chain_create_is_idempotent_and_detects_payload_conflict(env):
 def test_chain_list_and_detail_use_project_visibility(env):
     created, _ = create_chain(env)
     chain_id = created.json()["data"]["id"]
-    assert env["outsider_client"].get(chains_url(env)).status_code == 403
+    outsider_list = env["outsider_client"].get(chains_url(env))
+    assert outsider_list.status_code == 200
+    assert outsider_list.json()["data"] == []
     detail_url = f"{chains_url(env).rstrip('/')}/{chain_id}/"
-    assert env["outsider_client"].get(detail_url).status_code == 403
+    assert env["outsider_client"].get(detail_url).status_code == 404
 
     listed = env["client"].get(chains_url(env))
     assert listed.status_code == 200

@@ -189,7 +189,10 @@ def test_phase1_student_research_loop_and_guardrails(env):
     node_b = _create_node(env, chain_b["id"], "EXPERIMENT", "课题 B 实验")
 
     visible = env["guest_client"].get(f"/api/research/workspaces/{env['workspace'].slug}/chains/")
-    assert visible.status_code in (403, 404)
+    assert visible.status_code == 200
+    visible_ids = {item["id"] for item in visible.json()["data"]}
+    assert str(chain_a["id"]) in visible_ids
+    assert str(chain_b["id"]) not in visible_ids
     private_detail = env["guest_client"].get(
         f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_b['id']}/"
     )
