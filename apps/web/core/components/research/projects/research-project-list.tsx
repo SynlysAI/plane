@@ -34,6 +34,8 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [researchType, setResearchType] = useState<TResearchProjectType>("RESEARCH_PROJECT");
+  const [chainKind, setChainKind] = useState<"LEGACY_TRAINING" | "RESEARCH_CHAIN">("LEGACY_TRAINING");
+  const [chainVisibility, setChainVisibility] = useState<"PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE">("PRIVATE");
   const [orgUnit, setOrgUnit] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -49,6 +51,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     action: "archive" | "restore";
   } | null>(null);
   const [isUpdatingProject, setIsUpdatingProject] = useState(false);
+  const researchChainEnabled = Boolean(research.identity?.sections?.research_chain);
 
   const projects = research.getResearchProjects(workspaceSlug);
   const orgUnits = research.getOrgUnits(workspaceSlug);
@@ -73,6 +76,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const isTeamProject = researchType === "RESEARCH_PROJECT";
   const requiresOrgUnit = !isTeamProject || !research.isWorkspaceAdmin;
   const hasActiveFilters = Boolean(typeFilter || orgFilter || ownerFilter.trim() || dateFrom || dateTo || statusFilter);
+
   const filterSummary = useMemo(
     () =>
       [
@@ -140,6 +144,8 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         owner: currentUserId,
         research_type: researchType,
         org_unit: orgUnit || null,
+        chain_kind: chainKind,
+        ...(chainKind === "RESEARCH_CHAIN" ? { chain_visibility: chainVisibility } : {}),
       });
       setName("");
       setErrorKey(null);
@@ -149,16 +155,29 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         message: t("research.feedback.project_created.message"),
       });
       window.location.assign(
-        researchType === "RESEARCH_PROJECT"
-          ? `/${workspaceSlug}/projects/${project.id}/issues`
-          : `/${workspaceSlug}/research/projects/${project.id}/stages`
+        chainKind === "RESEARCH_CHAIN" && project.research?.chain_id
+          ? `/${workspaceSlug}/research/chains/${project.research.chain_id}`
+          : researchType === "RESEARCH_PROJECT"
+            ? `/${workspaceSlug}/projects/${project.id}/issues`
+            : `/${workspaceSlug}/research/projects/${project.id}/stages`
       );
     } catch (error) {
       setErrorKey(getResearchErrorKey(error));
     } finally {
       setIsCreating(false);
     }
-  }, [currentUserId, name, orgUnit, requiresOrgUnit, research, researchType, t, workspaceSlug]);
+  }, [
+    chainKind,
+    chainVisibility,
+    currentUserId,
+    name,
+    orgUnit,
+    requiresOrgUnit,
+    research,
+    researchType,
+    t,
+    workspaceSlug,
+  ]);
 
   const handleProjectAction = useCallback(async () => {
     if (!pendingProjectAction || isUpdatingProject) return;
@@ -248,6 +267,37 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                 ))}
               </select>
             </label>
+            {researchChainEnabled && (
+              <label className="flex flex-col gap-1 text-12 text-secondary">
+                <span>{t("research.projects.fields.chain_kind")}</span>
+                <select
+                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+                  value={chainKind}
+                  onChange={(event) => setChainKind(event.target.value as "LEGACY_TRAINING" | "RESEARCH_CHAIN")}
+                >
+                  <option value="LEGACY_TRAINING">{t("research.projects.chain_kinds.legacy_training")}</option>
+                  <option value="RESEARCH_CHAIN">{t("research.projects.chain_kinds.research_chain")}</option>
+                </select>
+              </label>
+            )}
+            {researchChainEnabled && chainKind === "RESEARCH_CHAIN" && (
+              <label className="flex flex-col gap-1 text-12 text-secondary">
+                <span>{t("research.projects.fields.chain_visibility")}</span>
+                <select
+                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+                  value={chainVisibility}
+                  onChange={(event) =>
+                    setChainVisibility(event.target.value as "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE")
+                  }
+                >
+                  {(["PRIVATE", "MEMBERS", "ORG", "WORKSPACE"] as const).map((visibility) => (
+                    <option key={visibility} value={visibility}>
+                      {t(`research.projects.chain_visibility.${visibility.toLowerCase()}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           {!primaryOrgUnit && requiresOrgUnit && (
             <p className="mt-2 text-11 text-warning-primary">{t("research.projects.missing_primary_org")}</p>

@@ -151,6 +151,7 @@ export type TResearchProjectProfile = {
   is_active: boolean;
   chain_kind?: "LEGACY_TRAINING" | "RESEARCH_CHAIN";
   chain_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  chain_id?: string | null;
 };
 
 export type TResearchChain = {

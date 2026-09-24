@@ -199,8 +199,14 @@ export class ResearchChainService extends APIService {
   async getKnowledgeBases(workspaceSlug: string, chainId: string) {
     return this.get(researchEndpoints.chainKnowledgeBases(workspaceSlug, chainId))
       .then((res) => {
-        const payload = res?.data as { items?: TResearchKnowledgeBase[]; degraded?: boolean } | undefined;
-        return { items: payload?.items ?? [], degraded: Boolean(payload?.degraded) };
+        const payload = res?.data as
+          | { items?: TResearchKnowledgeBase[]; degraded?: boolean; degraded_reason?: string }
+          | undefined;
+        return {
+          items: payload?.items ?? [],
+          degraded: Boolean(payload?.degraded),
+          degraded_reason: payload?.degraded_reason ?? "",
+        };
       })
       .catch((err) => {
         throw err?.response?.data ?? err;

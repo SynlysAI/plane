@@ -1132,6 +1132,7 @@
       "snapshot_type_paper_research": "Paper research",
       "snapshot_type_process": "Process",
       "reason_label": "Reason (required for fail/return)",
+      "reason_required": "Enter a reason before continuing.",
       "action_start": "Start",
       "action_submit_review": "Submit for review",
       "action_approve": "Approve",
@@ -1149,7 +1150,8 @@
       "uploading": "Uploading…",
       "refresh_status": "Refresh status",
       "confirm_reference": "Confirm reference",
-      "action_failed": "The action was not completed. Your records have been preserved."
+      "action_failed": "The action was not completed. Your records have been preserved.",
+      "no_knowledge_bases": "No knowledge bases are available. Check the RAGPortal configuration or try again later."
     },
     "agent": {
       "description": "Same-origin agent workbench with server-side context authorization.",
@@ -1488,11 +1490,23 @@
       "fields": {
         "name": "Project name",
         "type": "Project type",
-        "org_unit": "Primary organisation"
+        "org_unit": "Primary organisation",
+        "chain_kind": "Research chain type",
+        "chain_visibility": "Chain visibility"
       },
       "type_groups": {
         "cultivation": "Cultivation",
         "team": "Team research"
+      },
+      "chain_kinds": {
+        "research_chain": "Parallel research chain",
+        "legacy_training": "Training project (legacy flow)"
+      },
+      "chain_visibility": {
+        "private": "Project members only",
+        "members": "Project members",
+        "org": "Organisation scope",
+        "workspace": "Workspace members"
       },
       "name_placeholder": "Enter a clear project name",
       "org_unit_placeholder": "Select the primary organisation",

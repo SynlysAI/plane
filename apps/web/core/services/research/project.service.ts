@@ -20,7 +20,11 @@ export type TResearchProject = {
   identifier: string;
   is_research_project: boolean;
   archived_at: string | null;
-  research: (TResearchProjectProfile & { org_unit_name?: string | null }) | null;
+  research:
+    | (TResearchProjectProfile & {
+        org_unit_name?: string | null;
+      })
+    | null;
 };
 
 export type TResearchProjectCreatePayload = {
@@ -29,6 +33,8 @@ export type TResearchProjectCreatePayload = {
   owner?: string;
   org_unit?: string | null;
   research_type?: string;
+  chain_kind?: "LEGACY_TRAINING" | "RESEARCH_CHAIN";
+  chain_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   started_at?: string | null;
   expected_end_at?: string | null;
   create_project?: boolean;

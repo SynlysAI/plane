@@ -1132,6 +1132,7 @@
       "snapshot_type_paper_research": "论文调研",
       "snapshot_type_process": "过程记录",
       "reason_label": "原因（失败/退回必填）",
+      "reason_required": "请先填写原因。",
       "action_start": "启动",
       "action_submit_review": "提交确认",
       "action_approve": "确认",
@@ -1149,7 +1150,8 @@
       "uploading": "上传中…",
       "refresh_status": "刷新状态",
       "confirm_reference": "确认引用",
-      "action_failed": "操作未完成，当前记录已保留。"
+      "action_failed": "操作未完成，当前记录已保留。",
+      "no_knowledge_bases": "暂无可用知识库，请检查 RAGPortal 配置或稍后重试。"
     },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",
@@ -1488,11 +1490,23 @@
       "fields": {
         "name": "项目名称",
         "type": "项目类型",
-        "org_unit": "主归属"
+        "org_unit": "主归属",
+        "chain_kind": "科研链类型",
+        "chain_visibility": "课题可见范围"
       },
       "type_groups": {
         "cultivation": "个人培养",
         "team": "团队课题"
+      },
+      "chain_kinds": {
+        "research_chain": "平行科研课题",
+        "legacy_training": "培养项目（旧流程）"
+      },
+      "chain_visibility": {
+        "private": "仅课题成员",
+        "members": "课题成员",
+        "org": "组织范围",
+        "workspace": "工作区成员"
       },
       "name_placeholder": "输入清晰的项目名称",
       "org_unit_placeholder": "选择主归属",

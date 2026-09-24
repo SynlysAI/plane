@@ -144,3 +144,25 @@ it("keeps the upload record available when reference confirmation fails", async 
   expect(container.textContent).toContain("操作未完成，当前记录已保留。");
   expect(container.querySelector("button")?.textContent).toContain("上传");
 });
+
+it("keeps validation failures actionable instead of presenting them as upstream degradation", async () => {
+  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
+  mocks.uploadKnowledgeFile.mockRejectedValueOnce({ error_code: "file_type_not_allowed" });
+  await act(async () => {
+    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+  });
+  await act(async () => undefined);
+
+  const input = container.querySelector('input[type="file"]');
+  const file = new File(["binary"], "paper.exe", { type: "application/octet-stream" });
+  await act(async () => {
+    Object.defineProperty(input, "files", { value: [file] });
+    input?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "通过 BFF 上传")?.click();
+  });
+
+  expect(container.textContent).toContain("操作未完成，当前记录已保留。");
+  expect(container.textContent).not.toContain("RAGPortal 当前降级");
+});

@@ -171,3 +171,19 @@ it("uses bounded node types and preserves the page when creation fails", async (
   expect(container.textContent).toContain("操作未完成，请根据提示修改后重试；当前页面内容已保留。");
   expect(container.textContent).not.toContain("无法加载");
 });
+
+it("explains that a failure or return reason is required before sending the transition", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.getChainNodes.mockResolvedValueOnce([{ ...node, status: "ACTIVE" }]);
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "标记失败")?.click();
+  });
+
+  expect(mocks.transitionChainNode).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("请先填写原因。");
+  expect(container.querySelector('[aria-invalid="true"]')).not.toBeNull();
+});
