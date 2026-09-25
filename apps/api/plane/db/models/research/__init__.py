@@ -35,6 +35,7 @@ from .integration import (
     IntegrationSystem,
     ResearchExternalReference,
 )
+from .knowledge_request import ResearchKnowledgeRequest
 from .literature import LiteratureEntry
 from .membership import (
     ResearchInviteCode,
@@ -104,6 +105,7 @@ __all__ = [
     "IntegrationCallLog",
     "IntegrationSystem",
     "ResearchExternalReference",
+    "ResearchKnowledgeRequest",
     "AMENDABLE_FIELDS",
     "LOCKED_FIELDS",
     "ExperimentAmendment",

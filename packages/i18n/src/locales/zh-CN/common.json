@@ -1348,7 +1348,8 @@
       "refresh_status": "刷新状态",
       "confirm_reference": "确认引用",
       "action_failed": "操作未完成，当前记录已保留。",
-      "no_knowledge_bases": "暂无可用知识库，请检查 RAGPortal 配置或稍后重试。"
+      "no_knowledge_bases": "暂无可用知识库，请检查 RAGPortal 配置或稍后重试。",
+      "pending_admin": "课题知识库状态：{state}。管理员完成手工建库并回填后才能上传。"
     },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",

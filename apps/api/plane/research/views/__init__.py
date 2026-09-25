@@ -54,6 +54,7 @@ from .attachments import (
     ResearchReportAttachmentPresignEndpoint,
     ResearchReportMarkdownImportEndpoint,
 )
+from .knowledge_requests import ResearchKnowledgeRequestDetailEndpoint
 from .approvals import (
     ResearchApprovalFlowDetailEndpoint,
     ResearchApprovalFlowListCreateEndpoint,

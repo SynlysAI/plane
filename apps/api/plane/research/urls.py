@@ -172,6 +172,7 @@ from plane.research.views import (
     ResearchChainEventListCreateEndpoint,
     ResearchChainSnapshotCreateEndpoint,
     ResearchChainKnowledgeBaseListEndpoint,
+    ResearchKnowledgeRequestDetailEndpoint,
     ResearchChainUploadEndpoint,
     ResearchChainUploadDetailEndpoint,
     ResearchChainReferenceEndpoint,
@@ -238,6 +239,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/knowledge-bases/",
         ResearchChainKnowledgeBaseListEndpoint.as_view(),
         name="research-chain-knowledge-bases",
+    ),
+    path(
+        "research/workspaces/<str:slug>/knowledge-requests/<uuid:request_id>/",
+        ResearchKnowledgeRequestDetailEndpoint.as_view(),
+        name="research-knowledge-request-detail",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/",

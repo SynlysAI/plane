@@ -15,6 +15,7 @@ from plane.db.models import (
     ResearchChainNode,
     ResearchChainUpload,
     ResearchExternalReference,
+    ResearchKnowledgeRequest,
     ResearchProjectProfile,
     ResearchUserProfile,
     WorkspaceResearchSetting,
@@ -131,6 +132,35 @@ def test_chain_knowledge_bases_use_ragportal_result(env):
     assert response.status_code == 200, response.json()
     assert response.json()["items"][0]["external_id"] == "kb-1"
     assert response.json()["chain_id"] == str(env["chain"].id)
+
+
+def test_chain_knowledge_request_blocks_new_upload_until_admin_binding(env):
+    """A newly created chain exposes its request and gates external writes."""
+    request = ResearchKnowledgeRequest.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        request_key=f"chain:{env['chain'].id}",
+        state=ResearchKnowledgeRequest.State.PENDING_ADMIN,
+        created_by=env["owner"],
+    )
+    bases = env["owner_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/knowledge-bases/"
+    )
+    assert bases.status_code == 200
+    assert bases.json()["state"] == ResearchKnowledgeRequest.State.PENDING_ADMIN
+    response = env["owner_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+        {
+            "node_id": str(env["node"].id),
+            "kb_id": "kb-1",
+            "file": SimpleUploadedFile("pending.md", b"pending", content_type="text/markdown"),
+        },
+        format="multipart",
+        HTTP_X_REQUEST_ID="req-pending-kb",
+    )
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "KB_NOT_READY"
+    assert request.state == ResearchKnowledgeRequest.State.PENDING_ADMIN
 
 
 def test_scoped_upload_is_idempotent_and_creates_reference_event(env):

@@ -14,6 +14,7 @@ from plane.db.models import (
     ResearchChainEvent,
     ResearchChainUpload,
     ResearchExternalReference,
+    ResearchKnowledgeRequest,
 )
 from plane.research.serializers import (
     ResearchChainUploadSerializer,
@@ -57,6 +58,27 @@ def _rag_client(workspace):
     return client_for("RAGPORTAL", connection), connection
 
 
+def _knowledge_request(chain):
+    """Return the per-chain KB request projection, if one exists."""
+    return ResearchKnowledgeRequest.objects.filter(chain=chain, deleted_at__isnull=True).first()
+
+
+def _require_ready(chain):
+    """Return a stable error until an administrator binds an external KB."""
+    request = _knowledge_request(chain)
+    # Chains created before the lifecycle projection keep their established
+    # read/upload behaviour until an administrator backfills a request.
+    if request is None:
+        return None
+    if request.state != ResearchKnowledgeRequest.State.READY:
+        return research_error(
+            ResearchErrorCode.KB_NOT_READY,
+            "课题知识库仍在申请或绑定处理中，完成管理员回填后才能上传。",
+            status.HTTP_409_CONFLICT,
+        )
+    return None
+
+
 def _event_id(request_id, kind):
     """Build a bounded deterministic event id for a BFF write."""
     return payload_hash({"request_id": request_id, "kind": kind})
@@ -97,6 +119,18 @@ class ResearchChainKnowledgeBaseListEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
+        request_projection = _knowledge_request(chain)
+        if request_projection is not None and request_projection.state != ResearchKnowledgeRequest.State.READY:
+            return Response(
+                {
+                    "items": [],
+                    "chain_id": str(chain.id),
+                    "state": request_projection.state,
+                    "request_id": str(request_projection.id),
+                    "degraded": False,
+                },
+                status=status.HTTP_200_OK,
+            )
         client, _connection = _rag_client(workspace)
         result = client.knowledge_bases(request=request)
         payload = result.as_payload(chain_id=str(chain.id))
@@ -132,6 +166,9 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
+        ready_error = _require_ready(chain)
+        if ready_error:
+            return ready_error
         readonly_error = _chain_readonly_error(chain)
         if readonly_error:
             return readonly_error
@@ -155,6 +192,13 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
             return research_error(
                 ResearchErrorCode.IDEMPOTENCY_CONFLICT,
                 "request_id, file and kb_id are required.",
+            )
+        knowledge_request = _knowledge_request(chain)
+        if knowledge_request is not None and knowledge_request.external_kb_id != knowledge_base_id:
+            return research_error(
+                ResearchErrorCode.KB_SCOPE_CONFLICT,
+                "kb_id must match the knowledge base bound to this research chain.",
+                status.HTTP_403_FORBIDDEN,
             )
         file_name = os.path.basename(str(uploaded.name or "document"))
         extension = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
