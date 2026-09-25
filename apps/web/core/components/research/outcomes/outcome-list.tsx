@@ -169,6 +169,26 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
                       : t("research.outcomes.upload_file")}
                   </button>
                   {outcome.links?.length ?? 0}
+                  {outcome.attachments?.map((attachment) => (
+                    <span key={attachment.id} className="ml-2 inline-flex items-center gap-1">
+                      <a className="text-12 text-accent-primary hover:underline" href={attachment.download_url}>
+                        {attachment.file_name}
+                      </a>
+                      {outcome.status === "DRAFT" && (
+                        <button
+                          type="button"
+                          className="text-11 text-danger-primary hover:underline"
+                          onClick={() =>
+                            void outcomeService
+                              .deleteOutcomeAttachment(workspaceSlug, outcome.id, attachment.id)
+                              .then(() => research.fetchOutcomes(workspaceSlug, projectId))
+                          }
+                        >
+                          {t("research.outcomes.remove_file")}
+                        </button>
+                      )}
+                    </span>
+                  ))}
                 </TableCell>
               </TableRow>
             ))}

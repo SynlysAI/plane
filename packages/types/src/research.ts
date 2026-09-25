@@ -1038,6 +1038,7 @@ export type TResearchOutcome = {
   published_at: string | null;
   visibility: TReportVisibility;
   links: TResearchOutcomeLink[];
+  attachments?: TResearchOutcomeAttachment[];
   created_at: string;
   updated_at: string;
 };
@@ -1048,6 +1049,7 @@ export type TResearchOutcomeAttachment = {
   content_type: string;
   file_size: number;
   asset: string;
+  download_url?: string;
 };
 
 export type TIntegrationSystem = "RAGPORTAL" | "WEKNORA" | "SPECLABOS" | "SMARTACCESS" | "POLY_AGENT" | "SPEC_AGENT";

@@ -85,6 +85,12 @@ export class ResearchOutcomeService extends APIService {
       });
   }
 
+  async deleteOutcomeAttachment(workspaceSlug: string, outcomeId: string, attachmentId: string) {
+    return this.delete(researchEndpoints.outcomeAttachment(workspaceSlug, outcomeId, attachmentId)).catch((err) => {
+      throw err?.response?.data;
+    });
+  }
+
   async linkOutcome(workspaceSlug: string, outcomeId: string, payload: { target_type: string; target_id: string }) {
     return this.post(researchEndpoints.outcomeLinks(workspaceSlug, outcomeId), payload)
       .then((res) => res?.data as TResearchOutcome)

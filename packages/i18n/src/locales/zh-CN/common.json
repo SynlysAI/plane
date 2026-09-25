@@ -2457,6 +2457,7 @@
       "export_chain": "导出引用清单（Markdown）",
       "link_hint": "成果可通过接口关联实验与代码制品；导出清单只包含引用信息。",
       "upload_file": "上传 PDF/Markdown",
+      "remove_file": "删除附件",
       "uploading": "上传中…",
       "type": {
         "paper": "论文",

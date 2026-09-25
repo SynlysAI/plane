@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                                                                         |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 文档版本 | v2.2                                                                                                                                                                                                         |
+| 文档版本 | v2.3                                                                                                                                                                                                         |
 | 文档状态 | 平台级建设规划；Phase 0 与 Phase 1 Plane UI/UX 闭环已实施，进入灰度验收                                                                                                                                      |
 | 日期     | 2026-09-24                                                                                                                                                                                                   |
 | 适用范围 | Plane、研究链、RAGPortal、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 及 SpecAgent 的跨仓库协作                                                                                                          |
@@ -178,6 +178,19 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 事件、正式快照和审计记录均为 append-only，不允许覆盖或静默删除。日志不得写入 API Key、密码、长期 token 或未获授权的正文。
 
 ## 5. 第一阶段：UI/UX Ready 科研智能体平台工作台
+
+### 5.0 Phase 1.5 优化修复落地状态（2026-09-25）
+
+本轮人工测试问题已按 Plane 仓库内可闭环范围完成实现：
+
+- 研究链与 Plane Project 的一对一关系在 Chain 头部显示项目标识、所属组织、负责人、可见性和状态；节点详情提供报告、实验、知识库和 Agent 上下文入口，并保留刷新后的 `tab/stage/node` 深链。
+- Chain/Node 响应增加 `research-capabilities.v1` 能力投影，前端按 `allowed/reason_code/reason` 渲染动作；普通管理员不会因配置权限获得业务内容写权。
+- 首页摘要支持全部可见课题切换；跨组件待办默认最多显示五行并支持键盘/按钮分页，同一来源对象只保留一条当前待办。
+- `RESEARCH_CHAIN` 创建时生成唯一课题知识库申请；管理员回填外部 KB ID 后进入 `READY`，未 READY 时保留已有本地记录读取但禁止新增上传，跨课题 KB ID 返回 `KB_SCOPE_CONFLICT`。
+- 报告成果支持 PDF/Markdown 两步上传和提交锁定；实验记录只关联 SpecLabOS 等外部资产，不在 Plane 保存实验原始数据文件。
+- 成员增删提供成功回执；界面状态遵循 academic editorial UI 规范，不新增渐变、发光和彩色装饰卡片。
+
+本轮没有虚构跨仓完成状态：Synlora 的主 PI/直接导师 `REVIEW` context、AI4MS ↔ Plane 真实 OIDC/SSO、RAGPortal 站内通知和管理员 SLA 仍需在对应仓库完成联调与证据双签；Plane 已保留 fail-closed 边界和契约字段。
 
 **实施状态（2026-09-24）**：Plane 已完成任务 1.9 的首页摘要、科研总览重排、跨组件待办、Chain 页面 Tab/主链/六段详情、Agent 结构化卡片与抽屉、审批中心 Agent 队列，以及状态矩阵、响应式和可访问性验收。RAGPortal 与 Synlora 的跨仓能力沿用 Phase 1 既有契约；本轮优化冻结课题自动创建 Project/KB 申请、主 PI/导师 review Agent、报告成果附件、实验外部资产关联和真实 OIDC/SSO 绑定口径。
 
