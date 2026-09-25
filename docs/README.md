@@ -22,7 +22,7 @@
 | [`research-workspace-v3.md`](./research-workspace-v3.md)                                                                                 | v3 权威实现契约：组织、权限、工作空间、项目、报告与 Agent 上下文      | v1.4，对应 `3.0.3`，UI 重构见 4.10.0     |
 | [`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)                                                                     | **UX 设计指南（系列唯一入口）**：三定位、分级方法、组件出口、页面模式 | v1.1，当前有效                           |
 | [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)                                                           | UI/UX 过程档案（六合一）：两轮 PRD、双审计、验收与发布说明原文        | 档案（`4.9.1 → 4.11.0`）                 |
-| [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md) | Phase 1.5 人工测试问题分析与优化修复计划                              | v1.1，待业务决策与排期                   |
+| [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md) | Phase 1.5 人工测试问题分析与优化修复计划                              | v1.3，开发/测试/灰度执行基线             |
 
 `ai4ms-plane-integration.png` 与 `ai4ms-plane-enhanced-integration.png` 是生态边界与集成架构的参考图，供产品文档引用。
 `research-p0-architecture.png` 与 `research-p1-architecture.png` 是两期技术架构图的渲染产物，源码见

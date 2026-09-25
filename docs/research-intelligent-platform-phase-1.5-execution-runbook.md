@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                       |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 手册版本 | v1.0（配套计划 v1.1）                                                                                                                      |
+| 手册版本 | v1.0（配套计划 v1.3）                                                                                                                      |
 | 上游计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md) |
 | 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md) v2.5.1                                                                          |
 | 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                      |
