@@ -182,3 +182,26 @@ it("keeps validation failures actionable instead of presenting them as upstream 
   expect(container.textContent).toContain("操作未完成，当前记录已保留。");
   expect(container.textContent).not.toContain("RAGPortal 当前降级");
 });
+
+it("blocks uploads while the chain knowledge request awaits administrator binding", async () => {
+  mocks.getKnowledgeBases.mockResolvedValueOnce({
+    items: [],
+    state: "PENDING_ADMIN",
+    request_id: "request-1",
+    degraded: false,
+  });
+  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
+  await act(async () => {
+    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("管理员完成手工建库并回填后才能上传");
+  expect(container.querySelector('input[type="file"]')?.hasAttribute("disabled")).toBe(true);
+  expect(
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "通过 BFF 上传")
+      ?.hasAttribute("disabled")
+  ).toBe(true);
+  expect(mocks.uploadKnowledgeFile).not.toHaveBeenCalled();
+});

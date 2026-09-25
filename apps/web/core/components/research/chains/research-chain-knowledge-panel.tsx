@@ -22,6 +22,7 @@ type Props = {
 };
 
 type TPanelState = "loading" | "ready" | "degraded" | "forbidden" | "error";
+const KB_READY_STATE = "READY";
 
 const DEGRADED_ERROR_CODES = new Set([
   "UPSTREAM_DEGRADED",
@@ -57,6 +58,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const [uploading, setUploading] = useState(false);
   const [degradedReason, setDegradedReason] = useState("");
   const [actionError, setActionError] = useState("");
+  const [knowledgeState, setKnowledgeState] = useState(KB_READY_STATE);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -69,6 +71,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
         chainService.getKnowledgeUploads(workspaceSlug, chainId, nodeId),
       ]);
       setKnowledgeBases(payload.items);
+      setKnowledgeState(payload.state ?? KB_READY_STATE);
       setKnowledgeBaseId((current) => current || payload.items[0]?.external_id || "");
       setUploads(uploadPayload.data);
       setDegradedReason(payload.degraded_reason ?? "");
@@ -84,7 +87,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   }, [load]);
 
   const submitUpload = async () => {
-    if (!file || !knowledgeBaseId || uploading) return;
+    if (!file || !knowledgeBaseId || uploading || knowledgeState !== KB_READY_STATE) return;
     setUploading(true);
     setDegradedReason("");
     setActionError("");
@@ -151,6 +154,11 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
           })}
         </p>
       )}
+      {knowledgeState !== KB_READY_STATE && state !== "loading" && state !== "forbidden" && (
+        <p className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary" role="status">
+          {t("research.knowledge.pending_admin", { state: knowledgeState })}
+        </p>
+      )}
       {actionError && (
         <p className="mt-2 text-11 text-danger-primary" role="alert">
           {actionError}
@@ -185,13 +193,14 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                 accept=".pdf,.md,.markdown,.txt,.doc,.docx"
                 ref={fileInputRef}
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                className="text-11 text-secondary"
+                className="text-11 text-secondary disabled:opacity-50"
+                disabled={knowledgeState !== KB_READY_STATE}
               />
             </label>
             <button
               type="button"
               onClick={() => void submitUpload()}
-              disabled={!file || !knowledgeBaseId || uploading}
+              disabled={!file || !knowledgeBaseId || uploading || knowledgeState !== KB_READY_STATE}
               className="rounded-md bg-accent-primary px-3 py-2 text-12 text-on-color disabled:opacity-50"
             >
               {uploading ? t("research.knowledge.uploading") : t("research.knowledge.upload")}

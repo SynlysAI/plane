@@ -38,6 +38,17 @@ export type TResearchKnowledgeBase = {
   summary?: string;
 };
 
+export type TResearchKnowledgeRequestState =
+  | "REQUESTED"
+  | "PENDING_ADMIN"
+  | "NEEDS_INFO"
+  | "REJECTED"
+  | "CREATED_PENDING_BINDING"
+  | "READY"
+  | "FAILED"
+  | "ARCHIVED"
+  | "RESTORE_PENDING";
+
 export type TResearchChainUpload = {
   id: string;
   status: "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "DEGRADED";
@@ -200,12 +211,20 @@ export class ResearchChainService extends APIService {
     return this.get(researchEndpoints.chainKnowledgeBases(workspaceSlug, chainId))
       .then((res) => {
         const payload = res?.data as
-          | { items?: TResearchKnowledgeBase[]; degraded?: boolean; degraded_reason?: string }
+          | {
+              items?: TResearchKnowledgeBase[];
+              degraded?: boolean;
+              degraded_reason?: string;
+              state?: TResearchKnowledgeRequestState;
+              request_id?: string;
+            }
           | undefined;
         return {
           items: payload?.items ?? [],
           degraded: Boolean(payload?.degraded),
           degraded_reason: payload?.degraded_reason ?? "",
+          state: payload?.state ?? "READY",
+          request_id: payload?.request_id ?? "",
         };
       })
       .catch((err) => {

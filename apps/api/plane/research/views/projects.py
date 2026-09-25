@@ -20,6 +20,7 @@ from plane.db.models import (
     ProjectIdentifier,
     ProjectMember,
     ResearchChain,
+    ResearchKnowledgeRequest,
     ResearchProjectProfile,
     ResearchUserProfile,
     State,
@@ -546,13 +547,20 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
                 )
                 if chain_kind == ResearchProjectProfile.ChainKind.RESEARCH_CHAIN:
                     chain_request_id = f"project:{project.id}"
-                    ResearchChain.objects.create(
+                    chain = ResearchChain.objects.create(
                         project=project,
                         workspace=workspace,
                         owner=owner,
                         visibility=chain_visibility,
                         request_id=chain_request_id,
                         payload_hash=hashlib.sha256(chain_request_id.encode()).hexdigest(),
+                        created_by=request.user,
+                    )
+                    ResearchKnowledgeRequest.objects.create(
+                        workspace=workspace,
+                        chain=chain,
+                        request_key=f"chain:{chain.id}",
+                        state=ResearchKnowledgeRequest.State.PENDING_ADMIN,
                         created_by=request.user,
                     )
                 if is_legacy_cultivation:

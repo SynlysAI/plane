@@ -104,6 +104,7 @@ from .research import (
     ResearchChainNode,
     ResearchChainSnapshot,
     ResearchChainUpload,
+    ResearchKnowledgeRequest,
     ResearchAnalysisResult,
     ResearchReflectionLog,
     ResearchContextGrant,
