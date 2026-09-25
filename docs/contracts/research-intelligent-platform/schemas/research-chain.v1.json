@@ -13,6 +13,9 @@
     "visibility": { "enum": ["PRIVATE", "MEMBERS", "ORG", "WORKSPACE"] },
     "owner_id": { "type": "string", "minLength": 1 },
     "status": { "enum": ["ACTIVE", "ARCHIVED", "COMPLETED"] },
+    "project_identifier": { "type": "string" },
+    "org_unit_name": { "type": ["string", "null"] },
+    "capabilities": { "$ref": "research-capabilities.v1.json" },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   }

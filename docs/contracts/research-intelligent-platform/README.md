@@ -8,6 +8,7 @@
 - `examples/*.json`：可直接作为 contract fixture 的最小合法示例。
 - `error-codes.json`：Plane BFF、外部适配器和 Agent 运行统一错误码。
 - `taxonomy.json`：节点、事件、快照、待办和降级状态字典。
+- `research-capabilities.v1.json`：资源动作能力投影；每个动作都返回允许状态、稳定错误码和中文原因。
 
 契约对象必须携带 `schema_version`（事件对象另以 `event_id` 幂等）。跨服务写请求必须携带 `request_id`；同一 `request_id` 与相同 payload hash 重放时返回首次结果，不同 hash 返回 `IDEMPOTENCY_CONFLICT`。
 
