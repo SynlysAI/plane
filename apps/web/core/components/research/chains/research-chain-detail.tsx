@@ -370,17 +370,69 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   ];
   const selectedNodeActions = selected ? (
     <div className="flex flex-wrap items-center gap-2 bg-surface-1 px-5 py-3">
-      {ACTIONS_BY_STATUS[selected.node.status].map((action) => (
-        <Button
-          key={action}
-          variant={action === "APPROVE" ? "primary" : "secondary"}
-          size="sm"
-          disabled={transitioning === selected.node.id}
-          onClick={() => void transition(selected.node, action)}
-        >
-          {t(`research.chains.action_${action.toLowerCase()}`)}
+      {ACTIONS_BY_STATUS[selected.node.status]
+        .filter(() => {
+          const capability = selected.node.capabilities?.actions.transition;
+          return capability ? capability.allowed : true;
+        })
+        .map((action) => (
+          <Button
+            key={action}
+            variant={action === "APPROVE" ? "primary" : "secondary"}
+            size="sm"
+            disabled={transitioning === selected.node.id}
+            onClick={() => void transition(selected.node, action)}
+          >
+            {t(`research.chains.action_${action.toLowerCase()}`)}
+          </Button>
+        ))}
+      {selected.node.capabilities?.actions.transition && !selected.node.capabilities.actions.transition.allowed && (
+        <span className="text-12 text-secondary" role="status">
+          {selected.node.capabilities.actions.transition.reason}
+        </span>
+      )}
+      <span className="bg-border-subtle mx-1 h-5 w-px" aria-hidden="true" />
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          const nextParams = new URLSearchParams(searchParams);
+          nextParams.set("tab", "references");
+          nextParams.set("node", selected.node.id);
+          setSearchParams(nextParams);
+        }}
+      >
+        {t("research.chains.open_knowledge")}
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          const nextParams = new URLSearchParams(searchParams);
+          nextParams.set("tab", "reports");
+          nextParams.set("node", selected.node.id);
+          setSearchParams(nextParams);
+        }}
+      >
+        {t("research.chains.open_reports")}
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          const nextParams = new URLSearchParams(searchParams);
+          nextParams.set("tab", "experiments");
+          nextParams.set("node", selected.node.id);
+          setSearchParams(nextParams);
+        }}
+      >
+        {t("research.chains.open_experiments")}
+      </Button>
+      {agentEnabled && (
+        <Button variant="secondary" size="sm" onClick={() => setAgentNodeId(selected.node.id)}>
+          {t("research.chains.open_agent")}
         </Button>
-      ))}
+      )}
       {(selected.node.status === "ACTIVE" || selected.node.status === "WAITING_HUMAN") && (
         <label className="flex flex-1 flex-col gap-1 text-11 text-tertiary">
           <span>{t("research.chains.reason_label")}</span>

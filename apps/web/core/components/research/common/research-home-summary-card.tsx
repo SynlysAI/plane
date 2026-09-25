@@ -30,8 +30,11 @@ type TSummaryState = "loading" | "ready" | "empty" | "forbidden" | "error";
 
 type TChainSummary = {
   chains: TResearchChain[];
-  currentNode: TResearchChainNode | null;
-  latestSnapshot: TResearchChainSnapshot | null;
+  chainDetails: Array<{
+    chainId: string;
+    currentNode: TResearchChainNode | null;
+    latestSnapshot: TResearchChainSnapshot | null;
+  }>;
   todoCount: number;
 };
 
@@ -44,19 +47,24 @@ async function loadChainSummary(
 ): Promise<TChainSummary> {
   const chains = await chainService.getChains(workspaceSlug);
   const currentChain = pickCurrentChain(chains);
-  if (!currentChain) return { chains, currentNode: null, latestSnapshot: null, todoCount: 0 };
+  if (!currentChain) return { chains, chainDetails: [], todoCount: 0 };
 
-  const nodes = await chainService.getChainNodes(workspaceSlug, currentChain.id);
-  const currentNode = pickCurrentNode(nodes);
-  const detail = currentNode
-    ? await chainService.getChainNodeDetail(workspaceSlug, currentNode.id).catch(() => null)
-    : null;
-  const latestSnapshot = detail
-    ? // eslint-disable-next-line unicorn/no-array-sort
-      [...detail.snapshots].sort(
-        (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-      )[0]
-    : null;
+  const chainDetails = await Promise.all(
+    chains.map(async (chain) => {
+      const nodes = await chainService.getChainNodes(workspaceSlug, chain.id);
+      const currentNode = pickCurrentNode(nodes);
+      const detail = currentNode
+        ? await chainService.getChainNodeDetail(workspaceSlug, currentNode.id).catch(() => null)
+        : null;
+      const latestSnapshot = detail
+        ? // eslint-disable-next-line unicorn/no-array-sort
+          [...detail.snapshots].sort(
+            (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+          )[0]
+        : null;
+      return { chainId: chain.id, currentNode, latestSnapshot };
+    })
+  );
   // Reuse the already loaded chains inside the shared todo aggregation so the
   // summary card and the todo index share one deduplication and sorting rule.
   const todos = await collectResearchTodos({
@@ -65,7 +73,7 @@ async function loadChainSummary(
     translate,
     preloadedChains: chains,
   }).catch(() => []);
-  return { chains, currentNode, latestSnapshot, todoCount: todos.length };
+  return { chains, chainDetails, todoCount: todos.length };
 }
 
 /** Compact research summary for the regular Plane workspace home. */
@@ -76,6 +84,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
   const researchRef = useRef(research);
   const [state, setState] = useState<TSummaryState>("loading");
   const [summary, setSummary] = useState<TChainSummary | null>(null);
+  const [chainIndex, setChainIndex] = useState(0);
   const canLoadSummary = Boolean(
     research.identity?.module_enabled &&
     research.identity?.workspace_enabled &&
@@ -100,6 +109,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
         Boolean(currentResearch.identity?.sections?.research_agent)
       );
       setSummary(result);
+      setChainIndex(0);
       setState(result.chains.length ? "ready" : "empty");
     } catch (error) {
       setSummary(null);
@@ -115,10 +125,10 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
 
   const activeCount = summary?.chains.filter((chain) => chain.status === "ACTIVE").length ?? 0;
   const todoCount = summary?.todoCount ?? 0;
-  const currentChain =
-    summary?.chains.find((chain) => chain.id === summary.currentNode?.chain) ?? pickCurrentChain(summary?.chains ?? []);
-  const currentNode = summary?.currentNode ?? null;
-  const latestSnapshot = summary?.latestSnapshot ?? null;
+  const currentChain = summary?.chains[chainIndex] ?? pickCurrentChain(summary?.chains ?? []);
+  const selectedDetails = summary?.chainDetails.find((item) => item.chainId === currentChain?.id);
+  const currentNode = selectedDetails?.currentNode ?? null;
+  const latestSnapshot = selectedDetails?.latestSnapshot ?? null;
   const nodeNeedsAction = Boolean(currentNode && NODE_ACTION_STATUSES.has(currentNode.status));
   const primaryHref = currentChain
     ? nodeNeedsAction && currentNode
@@ -129,6 +139,11 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
     ? t("research.home_summary.handle_current_node")
     : t("research.home_summary.open_chain");
 
+  const moveChain = (direction: -1 | 1) => {
+    if (!summary?.chains.length) return;
+    setChainIndex((index) => (index + direction + summary.chains.length) % summary.chains.length);
+  };
+
   return (
     <section
       className="overflow-hidden rounded-xl border border-subtle bg-surface-1"
@@ -138,6 +153,31 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
         <div className="min-w-0">
           <h3 className="text-12 font-semibold text-primary">{t("research.home_summary.title")}</h3>
           <p className="mt-0.5 text-11 text-tertiary">{t("research.home_summary.snapshot")}</p>
+        </div>
+        <div className="flex items-center gap-2 text-11 text-tertiary tabular-nums">
+          {summary && summary.chains.length > 1 && (
+            <div className="flex items-center gap-1" aria-label={t("research.home_summary.chain_switcher")}>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={t("research.home_summary.previous_chain")}
+                onClick={() => moveChain(-1)}
+              >
+                ‹
+              </Button>
+              <span aria-live="polite">
+                {chainIndex + 1}/{summary.chains.length}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={t("research.home_summary.next_chain")}
+                onClick={() => moveChain(1)}
+              >
+                ›
+              </Button>
+            </div>
+          )}
         </div>
         <div className="flex items-center divide-x divide-subtle text-11 text-tertiary tabular-nums">
           <span className="pr-3">
@@ -165,6 +205,11 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
                   {t(`research.chains.chain_status.${currentChain.status.toLowerCase()}`)}
                 </ResearchStatusBadge>
               </div>
+              {currentChain && summary && summary.chains.length > 1 && (
+                <p className="mt-1 text-11 text-tertiary">
+                  {t("research.home_summary.chain_position", { current: chainIndex + 1, total: summary.chains.length })}
+                </p>
+              )}
               {currentNode && (
                 <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
                   <span className="text-11 text-tertiary">{t("research.chains.current_node")}</span>

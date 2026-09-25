@@ -1131,7 +1131,11 @@
       "open_chain": "进入研究链",
       "open_summary": "查看提交汇总",
       "chain_section": "课题摘要",
-      "chain_section_hint": "按更新时间展示当前权限范围内的研究链课题。"
+      "chain_section_hint": "按更新时间展示当前权限范围内的研究链课题。",
+      "chain_switcher": "切换研究课题",
+      "previous_chain": "上一个课题",
+      "next_chain": "下一个课题",
+      "chain_position": "第 {current} / {total} 个课题"
     },
     "portal": {
       "title": "研究链工作区",
@@ -1251,6 +1255,9 @@
       "nodes_empty": "该研究链还没有节点。",
       "node": "节点",
       "open_agent": "打开智能体",
+      "open_knowledge": "记录与知识库",
+      "open_reports": "报告与成果",
+      "open_experiments": "实验记录",
       "create_node_title": "创建研究节点",
       "node_type": "节点类型",
       "node_title": "标题",
