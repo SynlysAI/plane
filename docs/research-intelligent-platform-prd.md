@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                                                                         |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 文档版本 | v2.1                                                                                                                                                                                                         |
+| 文档版本 | v2.2                                                                                                                                                                                                         |
 | 文档状态 | 平台级建设规划；Phase 0 与 Phase 1 Plane UI/UX 闭环已实施，进入灰度验收                                                                                                                                      |
 | 日期     | 2026-09-24                                                                                                                                                                                                   |
 | 适用范围 | Plane、研究链、RAGPortal、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 及 SpecAgent 的跨仓库协作                                                                                                          |
@@ -58,10 +58,10 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 - Plane 已有科研项目、阶段、文献、实验、代码、成果、审批、评审、审计、双链时间线、外部引用和只读 Agent Context API。
 - Plane 当前培养类项目对同一 Workspace 和责任人限制为一个 active project；团队型 `RESEARCH_PROJECT` 才允许多个项目。这与研究链的平行课题需求不一致。
 - Plane 当前时间线聚合已有科研对象，但还没有完整的“输入 → AI 动作 → 中间产物 → 验证 → 人类决策 → 输出”节点模型，也没有通用循环边和反思日志。
-- RAGPortal 当前是 FastAPI 上传 BFF，实际接口包括 `/api/kb/list`、`/api/uploads` 和上传详情接口；Plane 现有适配器中预期的 `/api/knowledge/entries/` 路径尚未与工作区 RAGPortal 对齐。
+- RAGPortal 当前是 FastAPI 上传 BFF，实际接口包括 `/api/kb/list`、`/api/uploads` 和上传详情接口；Plane 现有适配器中预期的 `/api/knowledge/entries/` 路径尚未与工作区 RAGPortal 对齐。`RESEARCH_CHAIN` 课题创建时由 Plane 自动提交独立 KB 申请，RAGPortal 不直接创建 WeKnora KB；AI4MS/Plane 管理员在 WeKnora 手工建库后回填，课题在此期间保持 `PENDING_ADMIN`。
 - Synlora 已有 Agent 会话、工具审批、SSE、事件持久化、沙箱、WeKnora hybrid-search、能力中心（专家/技能/扩展）、用户 MCP、插件市场和已接入的 Poly_Agent / Spec_Agent / Sciverse 插件；但插件仍需管理员配置、用户手动安装或会话勾选，且项目、会话、文件和运行记录按自身 `user_id` 隔离，尚无 Plane Workspace/课题 ACL、delegated identity 和自动能力装配语义。
 - ScienceDiscovery 的 README 明确其不是多用户生产服务，默认使用 loopback、单 bearer token 且不终止 TLS；不能直接作为 500 人云端 Agent 后端。
-- Plane 的 OIDC `IdentityMapping` 是登录身份映射，不等同于 Plane 账号与 AI4MS 账号的双向绑定，也不提供账号合并语义。
+- Plane 的 OIDC `IdentityMapping` 是登录身份映射，不等同于 Plane 账号与 AI4MS 账号的双向绑定，也不提供账号合并语义。本阶段按已确认方案实现 AI4MS ↔ Plane 的真实 OIDC/SSO 绑定，并保留 `AccountLink` 的独立撤权和审计语义。
 - WeKnora 虽不在本代码仓库，但已作为内网服务部署在 `http://10.26.15.93:8000/`；其服务维护、索引、向量、图谱和底层数据生命周期不属于本项目开发范围。
 
 ### 2.2 一期开发前的阻塞决策
@@ -72,7 +72,7 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 2. 以 RAGPortal 实际接口为准重写 Plane 适配器和联调契约。
 3. 为 Synlora 增加 Plane 课题上下文、delegated identity、capability manifest、每轮 ACL 复验、自动能力装配、并发队列和 Trace 对齐。
 4. 明确 ScienceDiscovery 作为本地/可信端能力，不承诺直接云化；如需云化，另行完成多租户安全改造。
-5. 设计独立的 `AccountLink` 账号绑定契约，不把 `IdentityMapping` 当作账号合并机制。
+5. 设计独立的 `AccountLink` 账号绑定契约，不把 `IdentityMapping` 当作账号合并机制；同时完成 AI4MS ↔ Plane 的真实 OIDC/SSO 登录绑定。
 
 ## 3. 产品目标与非目标
 
@@ -97,7 +97,7 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 
 第一阶段不在 Plane 内重复建设：
 
-- RAGPortal/WeKnora 的文档解析、向量索引、知识图谱和完整知识库管理。所有文献和研究资料统一由 RAGPortal 作为入库入口，Plane 不直连 WeKnora 写入接口。
+- RAGPortal/WeKnora 的文档解析、向量索引、知识图谱和完整知识库管理。所有文献和研究资料统一由 RAGPortal 作为入库入口，Plane 不直连 WeKnora 写入接口。Plane 只负责在课题创建时提交 KB 申请、展示 `PENDING_ADMIN`/`READY` 状态并阻止未就绪 KB 的上传。
 - SpecLabOS 的设备管理、湿实验执行、原始数据存储和设备监控。
 - PolyAgent 的算法包、计算引擎和高分子研发工作台。
 - SpecAgent 的完整谱学服务；工作区当前只验证 Synlora 中的 NMR 插件适配层。
@@ -117,7 +117,7 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 | `LEGACY_TRAINING` | 既有 PHD/MASTER/POSTDOC 培养项目 | 继续遵守历史的一人一个 active project 规则，除非迁移方案另行批准 |
 | `RESEARCH_CHAIN`  | 研究链平行课题                   | 同一学生可以创建多个 active 课题                                 |
 
-课题仍复用普通 Plane Project、ProjectMember 和科研对象 ACL，不创建第二套项目系统。创建、归档、恢复、报告归属、阶段初始化和列表查询都必须识别 `chain_kind`。
+课题仍复用普通 Plane Project、ProjectMember 和科研对象 ACL，不创建第二套项目系统。创建 `RESEARCH_CHAIN` 课题时强制在同一事务/补偿流程中创建独立 Plane Project，并自动向 RAGPortal 提交独立 KB 申请；课题先以 `PENDING_ADMIN` 可用，管理员在 WeKnora 手工建库、回填和校验完成后才进入 KB `READY`。创建、归档、恢复、报告归属、阶段初始化和列表查询都必须识别 `chain_kind`。
 
 ### 4.2 课题可见性
 
@@ -130,7 +130,7 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 | `ORG`       | 所属组织节点成员及其授权管理者   |
 | `WORKSPACE` | Workspace 内有科研模块权限的成员 |
 
-默认值为 `PRIVATE`。课题负责人可以收窄或在授权策略允许的范围内扩大可见性，不能绕过 Workspace 权限。后端必须在课题列表、详情、搜索、Context、引用、文件下载、Agent 工具和导出接口统一判权；前端隐藏入口不能替代后端鉴权。
+默认值为 `PRIVATE`。课题负责人可以收窄或在授权策略允许的范围内扩大可见性，不能绕过 Workspace 权限。课题 KB 默认向学生 owner、直接导师、产业化负责人、基础研究负责人、课题组主 PI 以及组织架构中按继承规则位于其上级的领导开放；课题组主 PI 同时是平台配置中的唯一 `Main PI`。后端必须在课题列表、详情、搜索、Context、引用、文件下载、Agent 工具和导出接口统一判权；前端隐藏入口不能替代后端鉴权。
 
 ### 4.3 主链与可循环节点
 
@@ -179,7 +179,7 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 
 ## 5. 第一阶段：UI/UX Ready 科研智能体平台工作台
 
-**实施状态（2026-09-24）**：Plane 已完成任务 1.9 的首页摘要、科研总览重排、跨组件待办、Chain 页面 Tab/主链/六段详情、Agent 结构化卡片与抽屉、审批中心 Agent 队列，以及状态矩阵、响应式和可访问性验收。RAGPortal 与 Synlora 的跨仓能力沿用 Phase 1 既有契约；本阶段不扩大专业系统执行范围。
+**实施状态（2026-09-24）**：Plane 已完成任务 1.9 的首页摘要、科研总览重排、跨组件待办、Chain 页面 Tab/主链/六段详情、Agent 结构化卡片与抽屉、审批中心 Agent 队列，以及状态矩阵、响应式和可访问性验收。RAGPortal 与 Synlora 的跨仓能力沿用 Phase 1 既有契约；本轮优化冻结课题自动创建 Project/KB 申请、主 PI/导师 review Agent、报告成果附件、实验外部资产关联和真实 OIDC/SSO 绑定口径。
 
 ### 5.1 用户闭环
 
@@ -203,6 +203,9 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 - AI 调用的 Agent、工具、时间、状态、输入输出摘要和中间产物引用。
 - 学生、导师或 PI 的修改、确认、退回和决策理由。
 - 研究计划版本、实验记录、分析结果和引用关系。
+- 报告成果支持 PDF/Markdown 附件上传、状态跟踪、下载和删除；提交后按报告权限锁定。
+- 实验原始数据不落 Plane；实验记录提供 SpecLabOS 外部资产搜索、选择、元数据预览、关联/解除关联和验证状态。
+- 实验资产引用至少保留 `source_system`、`asset_id`/`run_id`、URL、版本和 hash；Plane 只保存引用和状态。
 - 外部服务调用状态、request ID、耗时和降级原因。
 
 AI Trace 展示可解释摘要、工具调用和结果引用，不承诺展示模型隐藏推理过程。
@@ -419,20 +422,23 @@ Agent 通过短期 exchange token 或受控的 Research Context ID 调用该接�
 
 ### 7.3 RAGPortal 与 WeKnora
 
-第一阶段以工作区实际 RAGPortal 接口为准：
+第一阶段以工作区实际 RAGPortal 接口为准，并补充课题知识库申请状态接口：
 
 ```text
-GET /api/kb/list
+POST /api/research/workspaces/{slug}/chains/{chain_id}/knowledge-base-requests
+GET  /api/research/workspaces/{slug}/chains/{chain_id}/knowledge-base-request
+GET  /api/kb/list
 POST /api/uploads
-GET /api/uploads/{id}
+GET  /api/uploads/{id}
 ```
 
-上传请求需要关联 `workspace_slug`、`research_project_id` 和 `chain_node_id`；RAGPortal 和 Plane 后端必须二次校验用户课题权限。
+创建 `RESEARCH_CHAIN` 课题时，Plane 必须幂等提交独立 KB 申请并将课题标记为 `PENDING_ADMIN`。RAGPortal 不直接创建 WeKnora KB；AI4MS/Plane 管理员在 WeKnora 手工建库并回填后，绑定状态才变为 `READY`。上传请求需要关联 `workspace_slug`、`research_project_id` 和 `chain_node_id`；只有 `READY` 的课题 KB 才允许创建外部上传任务。RAGPortal 和 Plane 后端必须二次校验用户课题权限。
 
 Plane 只保存：
 
 - `knowledge_id`。
 - `kb_id`。
+- KB 申请 ID、`PENDING_ADMIN`/`READY` 状态、管理员处理状态和回填校验结果。
 - 上传记录和状态。
 - 课题、节点和阶段关联。
 - 外部对象标题、摘要、链接、版本和 hash。
@@ -543,7 +549,7 @@ Synlora 使用 `plane-delegated-auth.v1`：
 
 ### 8.2 权限矩阵
 
-至少覆盖以下身份：学生、直接导师、课题组主 PI、组织管理员、Workspace Admin、Guest 和未绑定账号。
+至少覆盖以下身份：学生、直接导师、产业化负责人、基础研究负责人、课题组主 PI（唯一 Main PI）、组织上级领导、组织管理员、Workspace Admin、Guest 和未绑定账号。
 
 权限判断分为四层：
 
@@ -553,6 +559,14 @@ Synlora 使用 `plane-delegated-auth.v1`：
 4. 用户是否能执行读取、编辑、审批、导出或 Agent 工具调用。
 
 任何上层权限都不能扩大下层对象可见性；管理员的审计查看权限也不能静默修改科研事实。
+
+本阶段冻结以下业务规则：
+
+- **审批范围**：只有当前用户是必评人、唯一 Main PI、有效直接导师或明确指派人时，才能审批其授权范围内的正式报告和项目审批；普通 `WORKSPACE` 可读者不能审批。
+- **项目审批**：项目审批复用现有 `ApprovalRequest`/Plane Issue，通过 `research_project` 关联课题并追加 Chain Event，不新增第二套项目审批对象。
+- **Agent review**：主 PI 和直接导师可在授权范围内使用只读 review scope；允许检索、查看事件/快照/引用、发表评论和提交分析结果草稿。评论和分析结果先进入草稿/待确认状态；不允许修改节点生命周期、上传文件、确认外部引用或覆盖正式报告。
+- **组织继承**：课题 KB、报告、项目和 Agent review 的可见范围按组织架构向上继承，包含直接导师、产业化负责人、基础研究负责人、课题组主 PI 和其上级领导；具体动作仍受对象 ACL 与审批指派约束。
+- **唯一 Main PI**：当前课题组主 PI 与平台配置中的唯一 Main PI 是同一身份，平台只允许一个有效 Main PI。
 
 ## 9. 分阶段建设路线
 
@@ -661,9 +675,9 @@ Phase 1 交付研究生可以使用的最小闭环，并首次把第 6 节的统
 
 - Synlora 会话绑定 `agent-context.v2`、`plane-delegated-auth.v1` 和 Plane capability policy 派生的 persona/plugins/tools。
 - Agent 只通过 Plane Context API 获取 ACL 过滤的课题元数据和授权引用；Context token 每轮复验，过期或撤权时 fail closed。
-- RAGPortal 上传经后端校验并写入课题/节点 metadata；RAGPortal 负责将资料送入已部署的 WeKnora，Synlora 只通过受控检索能力读取课题授权范围。
+- RAGPortal 上传经后端校验并写入课题/节点 metadata；`RESEARCH_CHAIN` 课题创建时 Plane 自动提交独立 KB 申请，RAGPortal 负责申请、通知、回填和绑定状态，AI4MS/Plane 管理员在 WeKnora 手工建库后才进入 `READY`。Synlora 只通过受控检索能力读取课题授权范围。
 - Agent Trace 展示调用、工具、摘要、中间产物、验证结果、人工修改和决策理由，不展示隐藏思维链。
-- 调研、选题、评估、开题和分析使用检索/分析 Agent；写作和评审 Agent 在本阶段只保留入口与权限占位，不自动写入正式论文或评审结论。
+- 调研、选题、评估、开题和分析使用检索/分析 Agent；主 PI 与直接导师可使用只读 review scope 检索、查看事件/快照/引用，并新增评论和分析结果；不能修改节点生命周期、上传文件、确认外部引用或覆盖正式报告。评论和分析结果先进入草稿/待确认状态。
 
 **知识图谱与数据层**
 
@@ -787,6 +801,10 @@ flowchart LR
 - 文献、上传记录和知识库引用。
 - 实验、分析结果和研究计划。
 - Context、Trace、文件下载和链路导出。
+- 报告成果 PDF/Markdown 附件上传、下载、删除和提交锁定。
+- SpecLabOS 外部资产关联、解除关联、元数据查看和引用状态。
+- 主 PI/直接导师 review Agent 的评论、分析结果草稿、人工确认和正式快照边界。
+- 项目审批复用 `ApprovalRequest`/Plane Issue、`research_project` 关联和 Chain Event 回写。
 
 验证 Workspace ACL、课题 ACL、RAGPortal/WeKnora ACL 不互相扩大；直链、搜索、缓存和撤权后的旧 token 均不能绕过权限。
 
@@ -872,15 +890,15 @@ flowchart LR
 ### 12.2 本轮补充后的边界
 
 - 第一阶段实际交付通过 RAGPortal 入库、知识库引用和检索；WeKnora 已部署服务由 RAGPortal 使用，Plane 不开发 WeKnora，也不直接写 WeKnora。
-- 第一阶段实际交付检索/分析 Agent 和人工确认；实验 Agent、写作 Agent、评审 Agent 按 Phase 2/3 逐步开放。
+- 第一阶段实际交付检索/分析 Agent 和人工确认；主 PI/直接导师 review Agent 在授权范围内支持评论和分析结果草稿；实验 Agent、写作 Agent 和其他自动执行能力仍按 Phase 2/3 逐步开放。
 - 研究链的交流、导师 HITL、审批和数据变化都进入统一事件模型，但正文和原始数据继续由权威系统保存。
 - 欢迎页和 Agent 插件必须复用 Plane 现有视觉/导航体系；`research_ia_v2` 只做入口收敛和卡片/面板调整，不进行大规模 UI 重写。
 - Plane capability broker 只保存 Synlora 能力清单的策略投影和映射，不复制工具注册表、插件配置或凭证。
 - Synlora 是唯一用户侧云端工具执行面；Plane 的健康检查、管理配置和状态投影不得演变为第二套工具调用链。
 - 垂类系统的 correlation metadata 只用于审计和回执，不能替代其原生账号、设备和数据权限校验。
 
-- `RESEARCH_CHAIN` 课题是否允许跨组织协作者，需要结合最终组织 ACL 方案确认。
-- WeKnora 服务地址、健康检查、可用知识库范围和检索错误协议需要由服务维护方提供运行契约；本项目只负责 RAGPortal 入口和 Plane 侧引用/降级。
+- `RESEARCH_CHAIN` 课题跨组织协作者暂不改变组织继承规则；新增协作者必须显式加入课题并通过对象 ACL。
+- WeKnora 服务地址、健康检查、可用知识库范围和检索错误协议需要由服务维护方提供运行契约；本项目只负责 RAGPortal 入口、KB 申请状态、回填绑定和 Plane 侧引用/降级。
 - SpecAgent 独立服务版本、异步 Job API 和 IR/Raman/GPC/LCMS 能力需要在独立仓库核对。
 - Agent Trace 的原始事件保留期、摘要规则和跨系统 canonical source 需要在 Phase 0 冻结。
 - 500 人规模下的 Synlora 并发、队列和 Mongo 持久化方案需要压测后确定。
@@ -899,6 +917,7 @@ flowchart LR
 
 | 文档版本 | 日期       | 变更摘要                                                                                                                                                                                                                                            |
 | -------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.2     | 2026-09-25 | 根据人工测试确认冻结课题自动创建独立 Project/KB 申请、PENDING_ADMIN、组织继承唯一 Main PI、主 PI/导师 review Agent 评论与分析结果草稿、项目审批复用 ApprovalRequest、报告附件、实验外部资产关联和真实 OIDC/SSO。                                    |
 | v2.1     | 2026-09-24 | 统一术语：将 Research Chain 的中文产品名称调整为“研究链”，同步信息架构、产品模型与阶段交付口径。                                                                                                                                                    |
 | v1.9     | 2026-09-24 | 将 Phase 1 定位升级为 UI/UX Ready 科研智能体平台工作台：大部分 Plane 所属 UX 前移到 Phase 1，Phase 2/3 收窄为真实能力填充、治理叠加和小型视觉调整；新增 UX Ready 验收矩阵。                                                                         |
 | v1.8     | 2026-09-24 | 确认 `research_ia_v2` 默认开启；工作区管理员可关闭以回退旧平铺导航。                                                                                                                                                                                |
