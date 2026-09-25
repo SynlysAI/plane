@@ -4,24 +4,25 @@
 
 ## 1. 文档清单
 
-| 文档                                                                                     | 定位                                                                  | 状态                                     |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
-| [`research-management-prd-roadmap.md`](./research-management-prd-roadmap.md)             | 产品需求、生态边界、权限模型与 P0–P3 分期实施路线图                   | v0.3，P0 / P1 已实施，P2 规划中，P3 暂缓 |
-| [`research-p0-development-prd.md`](./research-p0-development-prd.md)                     | P0 开发规格：需求编号、数据模型、接口契约、阶段与验收清单             | v1.1，已实施（§16 实现回写记录）         |
-| [`research-p0-development-prd-review.md`](./research-p0-development-prd-review.md)       | P0 开发规格评审结论与实现复核                                         | v1.1，复核通过                           |
-| [`research-p0-acceptance-report.md`](./research-p0-acceptance-report.md)                 | P0 验收方法、需求逐条验收与回归安全结论                               | 已验收，89 条需求编号通过                |
-| [`research-p0-release-notes.md`](./research-p0-release-notes.md)                         | P0 发布流程、环境变量、开关、回滚与已知限制                           | `2.0.1 → 2.1.0`                          |
-| [`research-p1-development-prd.md`](./research-p1-development-prd.md)                     | P1 开发规格：阶段流程、评审、文献、实验、代码、集成与时间线           | v1.1，已实施（§16 实现回写记录）         |
-| [`research-p1-development-prd-review.md`](./research-p1-development-prd-review.md)       | P1 开发规格评审结论与实现复核                                         | v1.1，复核通过                           |
-| [`research-p1-release-notes.md`](./research-p1-release-notes.md)                         | P1 发布流程、环境变量、开关、回滚与发布门禁结果                       | `2.1.0 → 2.2.0`                          |
-| [`research-p0-p1-architecture.md`](./research-p0-p1-architecture.md)                     | P0 / P1 功能清单整理与两期技术架构图                                  | v1.0，随实现同步维护                     |
-| [`research-system-management-prd.md`](./research-system-management-prd.md)               | 系统管理改进：双工作区、管理员标签、邀请码、批量导入、主PI看板        | v1.0，已交付（v2.4.0）                   |
-| [`research-system-management-acceptance.md`](./research-system-management-acceptance.md) | 系统管理改进的验收方法与开发环境跑通记录                              | 已验收                                   |
-| [`research-system-management-testing.md`](./research-system-management-testing.md)       | 系统管理改进测试手册：一键冒烟、自动化测试与界面走查                  | v1.0，已交付（v2.4.0）                   |
-| [`research-navigation-visibility.md`](./research-navigation-visibility.md)               | 科研目录分级可见：四档级别、菜单矩阵、强制点与验收方式                | v1.0，已交付（v2.5.0）                   |
-| [`research-workspace-v3.md`](./research-workspace-v3.md)                                 | v3 权威实现契约：组织、权限、工作空间、项目、报告与 Agent 上下文      | v1.4，对应 `3.0.3`，UI 重构见 4.10.0     |
-| [`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)                     | **UX 设计指南（系列唯一入口）**：三定位、分级方法、组件出口、页面模式 | v1.1，当前有效                           |
-| [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)           | UI/UX 过程档案（六合一）：两轮 PRD、双审计、验收与发布说明原文        | 档案（`4.9.1 → 4.11.0`）                 |
+| 文档                                                                                                                                     | 定位                                                                  | 状态                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
+| [`research-management-prd-roadmap.md`](./research-management-prd-roadmap.md)                                                             | 产品需求、生态边界、权限模型与 P0–P3 分期实施路线图                   | v0.3，P0 / P1 已实施，P2 规划中，P3 暂缓 |
+| [`research-p0-development-prd.md`](./research-p0-development-prd.md)                                                                     | P0 开发规格：需求编号、数据模型、接口契约、阶段与验收清单             | v1.1，已实施（§16 实现回写记录）         |
+| [`research-p0-development-prd-review.md`](./research-p0-development-prd-review.md)                                                       | P0 开发规格评审结论与实现复核                                         | v1.1，复核通过                           |
+| [`research-p0-acceptance-report.md`](./research-p0-acceptance-report.md)                                                                 | P0 验收方法、需求逐条验收与回归安全结论                               | 已验收，89 条需求编号通过                |
+| [`research-p0-release-notes.md`](./research-p0-release-notes.md)                                                                         | P0 发布流程、环境变量、开关、回滚与已知限制                           | `2.0.1 → 2.1.0`                          |
+| [`research-p1-development-prd.md`](./research-p1-development-prd.md)                                                                     | P1 开发规格：阶段流程、评审、文献、实验、代码、集成与时间线           | v1.1，已实施（§16 实现回写记录）         |
+| [`research-p1-development-prd-review.md`](./research-p1-development-prd-review.md)                                                       | P1 开发规格评审结论与实现复核                                         | v1.1，复核通过                           |
+| [`research-p1-release-notes.md`](./research-p1-release-notes.md)                                                                         | P1 发布流程、环境变量、开关、回滚与发布门禁结果                       | `2.1.0 → 2.2.0`                          |
+| [`research-p0-p1-architecture.md`](./research-p0-p1-architecture.md)                                                                     | P0 / P1 功能清单整理与两期技术架构图                                  | v1.0，随实现同步维护                     |
+| [`research-system-management-prd.md`](./research-system-management-prd.md)                                                               | 系统管理改进：双工作区、管理员标签、邀请码、批量导入、主PI看板        | v1.0，已交付（v2.4.0）                   |
+| [`research-system-management-acceptance.md`](./research-system-management-acceptance.md)                                                 | 系统管理改进的验收方法与开发环境跑通记录                              | 已验收                                   |
+| [`research-system-management-testing.md`](./research-system-management-testing.md)                                                       | 系统管理改进测试手册：一键冒烟、自动化测试与界面走查                  | v1.0，已交付（v2.4.0）                   |
+| [`research-navigation-visibility.md`](./research-navigation-visibility.md)                                                               | 科研目录分级可见：四档级别、菜单矩阵、强制点与验收方式                | v1.0，已交付（v2.5.0）                   |
+| [`research-workspace-v3.md`](./research-workspace-v3.md)                                                                                 | v3 权威实现契约：组织、权限、工作空间、项目、报告与 Agent 上下文      | v1.4，对应 `3.0.3`，UI 重构见 4.10.0     |
+| [`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)                                                                     | **UX 设计指南（系列唯一入口）**：三定位、分级方法、组件出口、页面模式 | v1.1，当前有效                           |
+| [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)                                                           | UI/UX 过程档案（六合一）：两轮 PRD、双审计、验收与发布说明原文        | 档案（`4.9.1 → 4.11.0`）                 |
+| [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md) | Phase 1.5 人工测试问题分析与优化修复计划                              | v1.1，待业务决策与排期                   |
 
 `ai4ms-plane-integration.png` 与 `ai4ms-plane-enhanced-integration.png` 是生态边界与集成架构的参考图，供产品文档引用。
 `research-p0-architecture.png` 与 `research-p1-architecture.png` 是两期技术架构图的渲染产物，源码见

@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                 |
 | -------- | ---------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.5                                                                                                 |
+| 计划版本 | v1.6                                                                                                 |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10              |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)   |
 | 计划状态 | MVP 与任务 1.9 UX/UI 完整化已交付；进入灰度验收                                                      |
@@ -35,7 +35,7 @@ Phase 1 首次向内部试点用户开放研究链。平台必须能把课题、
 - 一个学生可以创建两个 `RESEARCH_CHAIN` 课题，并分别设置公开和隔离可见性。
 - 课题 ACL 在页面、API、Context、RAG、文件、Trace 和导出路径一致。
 - 用户完成“调研 → AI 讨论/选题 → 研究计划 → 实验记录 → 分析 → 快照/导出”。
-- RAGPortal 上传和 Synlora 检索可用；任一外部服务不可用时人工记录仍可继续。
+- `RESEARCH_CHAIN` 课题创建强制创建独立 Plane Project 并自动提交独立 RAGPortal KB 申请；课题在管理员手工建库和回填前保持 `PENDING_ADMIN`，任一外部服务不可用时人工记录仍可继续。
 - Plane 自动注入 `agent-context.v2`，并装配 persona、插件、工具白名单和授权资源；用户无需手动安装或勾选 Synlora 插件。
 - 事件可按顺序回放，循环重试不会覆盖或复制正式快照。
 - UX 原型 §2–§7 的 Phase 1 必做项全部可见、可操作，或具有明确占位/降级态；专业运行、治理和配额不得伪造成功状态。
@@ -122,10 +122,11 @@ Plane 的首页、草稿、我的工作、便签、工作区项目、More 和添
 课题内上传流程：
 
 1. Plane 后端生成带课题/节点范围的上传授权。
-2. RAGPortal 校验用户 token、课题 metadata 和上传权限。
-3. RAGPortal 调用内网已部署的 WeKnora 服务上传，返回 `knowledge_id`、`kb_id`、状态和 task ID。
-4. Plane 写入 `ExternalReference` 和 Chain Event，不保存文件正文。
-5. 前端轮询或刷新上传状态，显示解析中、完成、失败或降级。
+2. RAGPortal 校验用户 token、课题 metadata 和上传权限；`RESEARCH_CHAIN` 课题创建时由 Plane 自动提交唯一 KB 申请。
+3. AI4MS/Plane 管理员收到申请后在 WeKnora 手工创建知识库，并将 `knowledge_base_id`、实际配置摘要回填 RAGPortal；绑定校验通过后状态为 `READY`。
+4. 只有 `READY` 的课题 KB 才允许 RAGPortal 接收外部上传，返回 `knowledge_id`、`kb_id`、状态和 task ID；申请处理中保存源文件/人工记录但不创建外部上传任务。
+5. Plane 写入 `ExternalReference` 和 Chain Event，不保存文件正文。
+6. 前端轮询或刷新上传状态，显示解析中、完成、失败或降级。
 
 检索流程由 Synlora `knowledge.search` 执行，知识库范围只能来自 Plane 授权的课题 KB 集合；WeKnora 的服务调用和索引维护由 RAGPortal/既有 Agent 能力负责。引用结果写入 Literature/ExternalReference 和 Snapshot；检索失败时保留查询摘要、错误码和人工记录入口。
 
@@ -160,7 +161,7 @@ Plane Research Agent Orchestrator 根据 Workspace、课题、节点、用户角
 
 Synlora 每次运行前重新校验 `X-Research-Context-Token`；工具调用不得超出 session scope。Plane 消费运行事件，映射为 `AI_ACTION`、`TOOL_CALL`、`INTERMEDIATE_ARTIFACT`、`VALIDATION`、`HUMAN_DECISION` 和 `OUTPUT` 事件。
 
-首期工具范围：知识检索、文件 read/list/write、文本分析、研究计划草稿和结构化结果保存。已配置且被策略允许的只读查询类插件可作为试点。Poly_Agent、Spec_Agent 等完整专业执行不在 Phase 1 强制开放，但自动装配机制和契约 fixture 必须兼容其 capability manifest。工具审批由 Synlora 提供，Plane 记录审批结果和人工决策引用。
+首期工具范围：知识检索、文件 read/list、文本分析、研究计划草稿、评论和结构化分析结果保存。主 PI/直接导师 review scope 禁止节点生命周期写操作、文件上传、外部引用确认和正式报告覆盖；评论/分析结果先写入草稿或待确认产物。已配置且被策略允许的只读查询类插件可作为试点。Poly_Agent、Spec_Agent 等完整专业执行不在 Phase 1 强制开放，但自动装配机制和契约 fixture 必须兼容其 capability manifest。工具审批由 Synlora 提供，Plane 记录审批结果和人工决策引用。
 
 自动装配流程：
 
@@ -212,7 +213,7 @@ AI 接入应用逻辑：
 
 WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图谱 ingestion adapter，只记录 RAGPortal 返回的知识库/条目/解析状态和引用关系。
 
-导师 Human-in-the-Loop 流程：AI 草稿 → 学生提交 → 导师/课题组主 PI 收到待办 → 预览输入/引用/修改 diff → 接受、退回或要求补充 → 追加 `HUMAN_DECISION` 和 `APPROVAL` 事件。导师审批不直接覆盖 AI 输出，退回必须填写原因。
+导师 Human-in-the-Loop 流程：AI 草稿 → 学生提交 → 导师/课题组主 PI 收到待办 → 预览输入/引用/修改 diff → 接受、退回或要求补充 → 追加 `HUMAN_DECISION` 和 `APPROVAL` 事件。导师审批不直接覆盖 AI 输出，退回必须填写原因。主 PI/直接导师 review Agent 可以发表评论和提交分析结果草稿，正式快照仍需人工确认。
 
 跨组件待办由 Plane 聚合 adapter 返回的待办引用；每条待办包含 `source_system`、`source_id`、`chain_id`、`node_id`、`assignee_id`、`due_at`、`status`、`deep_link` 和 `degraded`。待办完成必须回写来源系统或记录明确的本地完成依据。
 
@@ -247,13 +248,15 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 
 依赖：1.1、Phase 0 任务 0.6。验收：不同角色看到不同入口；关闭开关不影响原首页。
 
-### 任务 1.4：RAGPortal 上传与引用
+### 任务 1.4：课题创建、RAGPortal KB 申请与上传引用
 
-- 实现课题/节点绑定上传、知识库列表、状态刷新和失败重试。
+- 实现 `RESEARCH_CHAIN` 课题创建时的独立 Plane Project 创建与独立 RAGPortal KB 申请。
+- 申请状态显示 `PENDING_ADMIN`；由 AI4MS/Plane 管理员在 WeKnora 手工建库后回填并推进到 `READY`。
+- 仅 `READY` 的课题 KB 允许课题/节点绑定上传、知识库列表、状态刷新和失败重试；申请处理中保留人工记录入口。
 - 写入 ExternalReference、LiteratureEntry 或 Stage Material 引用。
 - 实现 LINK_ONLY/HIDDEN 降级和撤权传播。
 
-依赖：Phase 0 任务 0.3、1.1。验收：PDF/Markdown 等允许文件可上传，上传状态可追踪，跨课题不能引用。
+依赖：Phase 0 任务 0.3、1.1。验收：课题创建自动生成唯一申请；管理员手工建库回填后状态变为 READY；PDF/Markdown 等允许文件可上传，上传状态可追踪，跨课题不能引用。
 
 ### 任务 1.5：Synlora 课题 Agent 自动装配和 Trace
 
@@ -272,11 +275,13 @@ WeKnora 已部署并由 RAGPortal 作为入库入口使用；Plane 不新增图�
 
 - 研究计划草稿生成、人工编辑、导师确认和版本差异。
 - 手动实验记录、失败记录、附件/外部资产引用和提交锁定。
+- 报告成果支持 PDF/Markdown 附件上传、状态、下载和删除；提交后按报告权限锁定。
+- 实验记录保留原始数据在 SpecLabOS，只通过关联 UI 搜索、选择、查看元数据和引用外部资产。
 - 分析结果保存、指标、结论和 Chain Snapshot。
 - 在插件产物抽屉提供“预览 → 编辑 → 选择保存类型 → 人工确认 → 写入版本/快照”的完整流程。
 - 实现六类研究快照卡片、导师/PI 待办、修改 diff、退回原因和跨组件待办聚合。
 
-依赖：1.2、1.5。验收：AI 草稿不能直接成为正式计划；实验修改生成新版本；失败实验可检索和回放。
+依赖：1.2、1.5。验收：AI 草稿不能直接成为正式计划；主 PI/直接导师可在授权 review scope 下评论和提交分析结果草稿，但不能改变节点生命周期、上传文件或确认外部引用；实验修改生成新版本；失败实验可检索和回放。
 
 ### 任务 1.7：E2E、灰度和用户支持
 
@@ -486,13 +491,17 @@ Timeline 接口支持 `chain=thinking|development|all`、`stage`、`source_syste
 Plane BFF 建议接口：
 
 ```text
+POST /api/research/workspaces/{slug}/chains/{chain_id}/knowledge-base-requests
+GET  /api/research/workspaces/{slug}/chains/{chain_id}/knowledge-base-request
 GET  /api/research/workspaces/{slug}/chains/{chain_id}/knowledge-bases
 POST /api/research/workspaces/{slug}/chains/{chain_id}/uploads
 GET  /api/research/workspaces/{slug}/chains/{chain_id}/uploads/{upload_id}
 POST /api/research/workspaces/{slug}/chains/{chain_id}/references
 ```
 
-上传由 Plane 接收并转发，表单 metadata 至少包含 `chain_id`、`node_id`、`filename`、`content_type`、`size` 和 `sha256`。服务端执行文件类型、大小、恶意内容扫描和课题 ACL；RAGPortal 返回的 `knowledge_id/kb_id/task_id` 写入外部引用。
+创建 `RESEARCH_CHAIN` 课题时，Plane 必须幂等调用 `knowledge-base-requests`，保存申请 ID、`PENDING_ADMIN`/`READY` 状态、管理员处理状态和回填校验结果。RAGPortal 不直接创建 WeKnora KB；AI4MS/Plane 管理员在 WeKnora 手工建库后，通过管理回填流程绑定外部 KB。
+
+上传由 Plane 接收并转发，表单 metadata 至少包含 `chain_id`、`node_id`、`filename`、`content_type`、`size` 和 `sha256`。服务端执行文件类型、大小、恶意内容扫描和课题 ACL；只有课题 KB 为 `READY` 时才创建外部上传任务。RAGPortal 返回的 `knowledge_id/kb_id/task_id` 写入外部引用；申请未完成时保留源文件/人工记录并显示降级状态。
 
 同一 `sha256 + chain_id + node_id` 默认幂等；不同文件内容不得复用旧 upload ID。引用动作记录引用者、检索 query 摘要、知识库范围和 source version。
 
@@ -528,9 +537,9 @@ Plane 到 Synlora 的创建请求使用 `agent-context.v2`：
 
 研究计划状态：`DRAFT`、`PENDING_HUMAN_REVIEW`、`ACCEPTED`、`REJECTED`、`SUPERSEDED`。只有 `ACCEPTED` 版本可作为后续实验节点的正式输入。
 
-实验记录首期字段：目标、假设、方法、参数、环境、输入资产引用、输出资产引用、结果、指标、结论、失败原因、状态和责任人。提交后关键字段锁定，修改必须创建 amendment 和新 version。
+实验记录首期字段：目标、假设、方法、参数、环境、输入资产引用、输出资产引用、结果、指标、结论、失败原因、状态和责任人。提交后关键字段锁定，修改必须创建 amendment 和新 version。Plane 不保存实验原始数据文件；前端提供 SpecLabOS 资产搜索、选择、预览元数据、关联、解除关联和验证状态展示，资产引用至少包含 `source_system`、`asset_id`/`run_id`、URL、版本和 hash。
 
-分析结果至少包含：分析方法、输入引用、输出摘要、指标、置信/质量说明、结论、操作者、工具/模型版本和关联节点。
+分析结果至少包含：分析方法、输入引用、输出摘要、指标、置信/质量说明、结论、操作者、工具/模型版本和关联节点。主 PI/直接导师通过 review Agent 提交的分析结果先保存为草稿，经过人工确认后才生成正式 Analysis Snapshot。
 
 ## 7. 代码落点与接口实现顺序
 
@@ -601,17 +610,17 @@ RAGPortal 和 Synlora 分别执行各仓库的后端单测、contract fixture、
 
 ## 9. 任务拆分与完成门禁
 
-| 任务             | 前置          | 交付                                                                                           | 门禁                          |
-| ---------------- | ------------- | ---------------------------------------------------------------------------------------------- | ----------------------------- |
-| 平行课题/ACL     | Phase 0 0.2   | API、迁移、权限测试                                                                            | 双课题和撤权通过              |
-| Chain 状态/事件  | 平行课题      | service、snapshot、timeline                                                                    | 状态机和幂等通过              |
-| 门户骨架         | Phase 0 0.6   | 首页卡片、路由、空态                                                                           | 原功能无回归                  |
-| IA 收敛          | 门户骨架      | `research_ia_v2`、四入口、管理/审批 Tab、兼容路由                                              | 开关开关双向回归通过          |
-| UX 完整化        | IA 收敛       | 首页摘要、总览重排、跨组件待办、Chain 页面 Tab、六段式节点详情、Agent 抽屉、审批队列和状态矩阵 | UX 原型 Phase 1 必做项通过    |
-| RAGPortal BFF    | Phase 0 0.3   | 上传/状态/引用                                                                                 | fixture 和降级通过            |
-| Synlora 自动装配 | Phase 0 0.4   | delegated identity、Context、capability、session、SSE、projection                              | 跨课题、撤权、断线重连通过    |
-| 计划/实验/分析   | Chain + Agent | Page、Experiment、analysis                                                                     | 版本/失败记录通过             |
-| E2E 灰度         | 全部          | 测试夹具、runbook                                                                              | P0/P1 回归、UX 矩阵和闭环通过 |
+| 任务                  | 前置          | 交付                                                                                           | 门禁                            |
+| --------------------- | ------------- | ---------------------------------------------------------------------------------------------- | ------------------------------- |
+| 平行课题/ACL          | Phase 0 0.2   | API、迁移、权限测试                                                                            | 双课题和撤权通过                |
+| Chain 状态/事件       | 平行课题      | service、snapshot、timeline                                                                    | 状态机和幂等通过                |
+| 门户骨架              | Phase 0 0.6   | 首页卡片、路由、空态                                                                           | 原功能无回归                    |
+| IA 收敛               | 门户骨架      | `research_ia_v2`、四入口、管理/审批 Tab、兼容路由                                              | 开关开关双向回归通过            |
+| UX 完整化             | IA 收敛       | 首页摘要、总览重排、跨组件待办、Chain 页面 Tab、六段式节点详情、Agent 抽屉、审批队列和状态矩阵 | UX 原型 Phase 1 必做项通过      |
+| RAGPortal BFF/KB 申请 | Phase 0 0.3   | 课题自动申请、PENDING_ADMIN/READY 门禁、上传/状态/引用                                         | fixture、手工回填和降级通过     |
+| Synlora 自动装配      | Phase 0 0.4   | delegated identity、Context、capability、session、SSE、projection                              | 跨课题、撤权、断线重连通过      |
+| 计划/实验/分析        | Chain + Agent | Page、Experiment、SpecLabOS 资产关联 UI、analysis                                              | 版本/失败记录和外部资产引用通过 |
+| E2E 灰度              | 全部          | 测试夹具、runbook                                                                              | P0/P1 回归、UX 矩阵和闭环通过   |
 
 任一门禁失败时，只允许保留人工记录模式，不开放对应 Agent/RAG 写操作。
 
