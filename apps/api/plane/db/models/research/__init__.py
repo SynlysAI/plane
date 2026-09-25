@@ -45,7 +45,7 @@ from .membership import (
     UserImportRow,
 )
 from .org import MentorBinding, OrgUnit, OrgUnitMember
-from .outcome import ResearchOutcome, ResearchOutcomeLink
+from .outcome import ResearchOutcome, ResearchOutcomeAttachment, ResearchOutcomeLink
 from .project import ResearchProjectProfile
 from .report import (
     PeriodicReport,
@@ -137,6 +137,7 @@ __all__ = [
     "ResearchWorkspaceAccessGrant",
     "MentorBinding",
     "ResearchOutcome",
+    "ResearchOutcomeAttachment",
     "ResearchOutcomeLink",
     "OrgUnit",
     "OrgUnitMember",

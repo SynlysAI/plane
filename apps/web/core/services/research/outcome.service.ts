@@ -5,7 +5,7 @@
  */
 
 import { API_BASE_URL, researchEndpoints } from "@plane/constants";
-import type { TResearchOutcome } from "@plane/types";
+import type { TResearchOutcome, TResearchOutcomeAttachment } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
@@ -55,6 +55,34 @@ export class ResearchOutcomeService extends APIService {
     return this.delete(researchEndpoints.outcome(workspaceSlug, outcomeId)).catch((err) => {
       throw err?.response?.data;
     });
+  }
+
+  async getOutcomeAttachments(workspaceSlug: string, outcomeId: string) {
+    return this.get(researchEndpoints.outcomeAttachments(workspaceSlug, outcomeId))
+      .then((res) => res?.data as { results: TResearchOutcomeAttachment[] })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async presignOutcomeAttachment(
+    workspaceSlug: string,
+    outcomeId: string,
+    payload: { file_name: string; content_type: string; size: number }
+  ) {
+    return this.post(researchEndpoints.outcomeAttachmentPresign(workspaceSlug, outcomeId), payload)
+      .then((res) => res?.data as { asset_id: string; upload_data: { url: string; fields: Record<string, string> } })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async registerOutcomeAttachment(workspaceSlug: string, outcomeId: string, assetId: string) {
+    return this.post(researchEndpoints.outcomeAttachments(workspaceSlug, outcomeId), { asset_id: assetId })
+      .then((res) => res?.data as TResearchOutcomeAttachment)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
   }
 
   async linkOutcome(workspaceSlug: string, outcomeId: string, payload: { target_type: string; target_id: string }) {

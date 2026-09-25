@@ -126,6 +126,8 @@ from plane.research.views import (
     ResearchProjectProgressEndpoint,
     ResearchChainExportEndpoint,
     ResearchOutcomeDetailEndpoint,
+    ResearchOutcomeAttachmentEndpoint,
+    ResearchOutcomeAttachmentPresignEndpoint,
     ResearchOutcomeLinkEndpoint,
     ResearchOutcomeListCreateEndpoint,
     ResearchProjectChainEndpoint,
@@ -593,6 +595,16 @@ urlpatterns = [
         "research/workspaces/<str:slug>/outcomes/<uuid:outcome_id>/",
         ResearchOutcomeDetailEndpoint.as_view(),
         name="research-outcome",
+    ),
+    path(
+        "research/workspaces/<str:slug>/outcomes/<uuid:outcome_id>/attachments/",
+        ResearchOutcomeAttachmentEndpoint.as_view(),
+        name="research-outcome-attachments",
+    ),
+    path(
+        "research/workspaces/<str:slug>/outcomes/<uuid:outcome_id>/attachments/presign/",
+        ResearchOutcomeAttachmentPresignEndpoint.as_view(),
+        name="research-outcome-attachment-presign",
     ),
     path(
         "research/workspaces/<str:slug>/outcomes/<uuid:outcome_id>/links/",

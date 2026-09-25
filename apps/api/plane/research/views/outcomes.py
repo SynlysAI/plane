@@ -5,6 +5,7 @@
 """Outcome endpoints (§5.8) and the frozen reference list export (P1-CHAIN-07)."""
 
 import hashlib
+import uuid
 
 from django.http import HttpResponse
 from django.utils import timezone
@@ -17,6 +18,7 @@ from plane.db.models import (
     FileAsset,
     PeriodicReport,
     ResearchOutcome,
+    ResearchOutcomeAttachment,
     ResearchOutcomeLink,
     ResearchProjectProfile,
     StageMaterial,
@@ -47,6 +49,8 @@ from plane.research.utils.projects import (
 from plane.research.utils.resource_projections import outcome_resource
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import can_read_project_research_metadata, profile_queryset
+from plane.settings.storage import S3Storage
+from plane.utils.path_validator import sanitize_filename
 
 SECTION = "stages"
 LINK_TARGETS = {
@@ -257,6 +261,65 @@ class ResearchOutcomeDetailEndpoint(ResearchAPIView):
             request=request,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ResearchOutcomeAttachmentEndpoint(ResearchAPIView):
+    """List or register a PDF/Markdown attachment for a draft outcome."""
+
+    def get(self, request, slug, outcome_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        outcome, error = visible_outcome(request, workspace, outcome_id)
+        if error:
+            return error
+        return Response({"results": [{"id": str(item.id), "file_name": item.file_name, "content_type": item.content_type, "file_size": item.file_size, "asset": str(item.asset_id)} for item in outcome.attachments.filter(deleted_at__isnull=True)]}, status=status.HTTP_200_OK)
+
+    def post(self, request, slug, outcome_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        outcome, error = visible_outcome(request, workspace, outcome_id, action="edit")
+        if error:
+            return error
+        if outcome.status != ResearchOutcome.Status.DRAFT:
+            return research_error(ResearchErrorCode.OUTCOME_INVALID, "Submitted outcomes are read-only.", status.HTTP_409_CONFLICT)
+        asset = FileAsset.objects.filter(pk=request.data.get("asset_id"), workspace=workspace, entity_type="RESEARCH_OUTCOME_ATTACHMENT", entity_identifier=str(outcome.id), is_uploaded=True).first()
+        if asset is None:
+            return research_not_found(ResearchErrorCode.ATTACHMENT_NOT_FOUND, "The uploaded outcome asset was not found.")
+        file_name = str(asset.attributes.get("name") or asset.asset.name)
+        if not file_name.lower().endswith((".pdf", ".md", ".markdown")):
+            return research_error(ResearchErrorCode.FILE_TYPE_NOT_ALLOWED, "Only PDF and Markdown outcome files are allowed.", status.HTTP_422_UNPROCESSABLE_ENTITY)
+        attachment = ResearchOutcomeAttachment.objects.create(outcome=outcome, asset=asset, file_name=file_name, content_type=str(asset.attributes.get("type") or ""), file_size=int(asset.size or 0), created_by=request.user)
+        return Response({"id": str(attachment.id), "file_name": attachment.file_name, "content_type": attachment.content_type, "file_size": attachment.file_size, "asset": str(attachment.asset_id)}, status=status.HTTP_201_CREATED)
+
+
+class ResearchOutcomeAttachmentPresignEndpoint(ResearchAPIView):
+    """Create a direct-to-object-storage slot for an outcome attachment."""
+
+    def post(self, request, slug, outcome_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        outcome, error = visible_outcome(request, workspace, outcome_id, action="edit")
+        if error:
+            return error
+        if outcome.status != ResearchOutcome.Status.DRAFT:
+            return research_error(ResearchErrorCode.OUTCOME_INVALID, "Submitted outcomes are read-only.", status.HTTP_409_CONFLICT)
+        file_name = sanitize_filename(str(request.data.get("file_name") or ""))
+        content_type = str(request.data.get("content_type") or "application/octet-stream")
+        try:
+            size = int(request.data.get("size") or 0)
+        except (TypeError, ValueError):
+            size = 0
+        if not file_name.lower().endswith((".pdf", ".md", ".markdown")):
+            return research_error(ResearchErrorCode.FILE_TYPE_NOT_ALLOWED, "Only PDF and Markdown outcome files are allowed.", status.HTTP_422_UNPROCESSABLE_ENTITY)
+        key = f"{workspace.id}/research/outcomes/{outcome.id}/{uuid.uuid4().hex}-{file_name}"
+        presigned = S3Storage(request=request).generate_presigned_post(object_name=key, file_type=content_type, file_size=size)
+        if presigned is None:
+            return research_error(ResearchErrorCode.UPSTREAM_DEGRADED, "Unable to prepare the upload.", status.HTTP_503_SERVICE_UNAVAILABLE)
+        asset = FileAsset.objects.create(attributes={"name": file_name, "type": content_type, "size": size}, asset=key, size=size, workspace=workspace, user=request.user, created_by=request.user, entity_type="RESEARCH_OUTCOME_ATTACHMENT", entity_identifier=str(outcome.id), is_uploaded=False)
+        return Response({"asset_id": str(asset.id), "upload_data": presigned}, status=status.HTTP_200_OK)
 
 
 class ResearchOutcomeLinkEndpoint(ResearchAPIView):

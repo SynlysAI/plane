@@ -1042,6 +1042,14 @@ export type TResearchOutcome = {
   updated_at: string;
 };
 
+export type TResearchOutcomeAttachment = {
+  id: string;
+  file_name: string;
+  content_type: string;
+  file_size: number;
+  asset: string;
+};
+
 export type TIntegrationSystem = "RAGPORTAL" | "WEKNORA" | "SPECLABOS" | "SMARTACCESS" | "POLY_AGENT" | "SPEC_AGENT";
 
 export type TIntegrationConnection = {
