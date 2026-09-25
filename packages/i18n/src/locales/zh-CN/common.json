@@ -1096,7 +1096,10 @@
       "stage_review": "阶段评审待处理",
       "office_approval": "办公审批待处理",
       "manual_backfill": "外部系统降级，请保留人工记录",
-      "external_degraded": "RAGPortal 不可用，待其恢复后再同步。"
+      "external_degraded": "RAGPortal 不可用，待其恢复后再同步。",
+      "pagination": "待办分页",
+      "previous_page": "上一页待办",
+      "next_page": "下一页待办"
     },
     "overview": {
       "description": "本工作区的科研管理：组织架构、科研项目、周期报告与办公审批。",
@@ -1326,7 +1329,13 @@
         "remove": "移除",
         "empty": "该课题还没有成员。"
       },
-      "member_action_failed": "成员操作未完成，请确认用户和权限后重试。"
+      "member_action_failed": "成员操作未完成，请确认用户和权限后重试。",
+      "member_added_title": "成员已添加",
+      "member_added_message": "成员权限已保存并立即生效。",
+      "member_removed_title": "成员已移除",
+      "member_removed_message": "成员已从课题协作范围移除。",
+      "project_identifier": "项目标识",
+      "org_unit": "所属组织"
     },
     "knowledge": {
       "panel_title": "RAGPortal 知识库",
