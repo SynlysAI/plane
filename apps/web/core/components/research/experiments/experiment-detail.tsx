@@ -296,6 +296,7 @@ export const ExperimentDetail = observer(function ExperimentDetail({ workspaceSl
       </ResearchDetailSurface>
 
       <ResearchDetailSurface title={t("research.experiments.assets_title")} collapsible>
+        <p className="mb-3 text-11 text-tertiary">{t("research.experiments.external_asset_hint")}</p>
         {assets.map((asset) => (
           <div
             key={asset.id}

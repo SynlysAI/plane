@@ -201,6 +201,8 @@ from .knowledge import (
 from .analysis import ResearchChainAnalysisListCreateEndpoint
 from .outcomes import (
     ResearchChainExportEndpoint,
+    ResearchOutcomeAttachmentEndpoint,
+    ResearchOutcomeAttachmentPresignEndpoint,
     ResearchOutcomeDetailEndpoint,
     ResearchOutcomeLinkEndpoint,
     ResearchOutcomeListCreateEndpoint,

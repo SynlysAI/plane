@@ -2351,6 +2351,7 @@
       "reject": "拒绝",
       "assets_title": "外部数据资产",
       "no_assets": "暂未关联外部资产。",
+      "external_asset_hint": "实验原始数据保留在来源系统；此处只关联 SpecLabOS 等外部资产。",
       "open_source": "打开源系统",
       "versions_title": "版本历史",
       "no_versions": "暂无版本记录。",
@@ -2446,6 +2447,8 @@
       "doi_placeholder": "DOI 或专利号",
       "export_chain": "导出引用清单（Markdown）",
       "link_hint": "成果可通过接口关联实验与代码制品；导出清单只包含引用信息。",
+      "upload_file": "上传 PDF/Markdown",
+      "uploading": "上传中…",
       "type": {
         "paper": "论文",
         "patent": "专利",

@@ -130,6 +130,7 @@ from .research import (
     ApprovalRequest,
     MentorBinding,
     ResearchOutcome,
+    ResearchOutcomeAttachment,
     ResearchOutcomeLink,
     OrgUnit,
     OrgUnitMember,

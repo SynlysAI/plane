@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { OUTCOME_STATUSES, OUTCOME_STATUS_LABELS, OUTCOME_TYPES, OUTCOME_TYPE_LABELS } from "@plane/constants";
@@ -24,6 +24,9 @@ import {
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { ResearchOutcomeService } from "@/services/research/outcome.service";
+
+const outcomeService = new ResearchOutcomeService();
 
 type Props = {
   workspaceSlug: string;
@@ -40,6 +43,8 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
   const [venue, setVenue] = useState("");
   const [doi, setDoi] = useState("");
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [uploadingOutcomeId, setUploadingOutcomeId] = useState<string | null>(null);
+  const outcomeFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void research.fetchOutcomes(workspaceSlug, projectId).catch((error) => setErrorKey(getResearchErrorKey(error)));
@@ -149,7 +154,22 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
                     {t(OUTCOME_STATUS_LABELS[outcome.status])}
                   </ResearchStatusBadge>
                 </TableCell>
-                <TableCell className="text-right text-tertiary tabular-nums">{outcome.links?.length ?? 0}</TableCell>
+                <TableCell className="text-right text-tertiary tabular-nums">
+                  <button
+                    type="button"
+                    className="mr-3 text-12 text-accent-primary hover:underline disabled:opacity-50"
+                    disabled={outcome.status !== "DRAFT" || uploadingOutcomeId === outcome.id}
+                    onClick={() => {
+                      setUploadingOutcomeId(outcome.id);
+                      outcomeFileRef.current?.click();
+                    }}
+                  >
+                    {uploadingOutcomeId === outcome.id
+                      ? t("research.outcomes.uploading")
+                      : t("research.outcomes.upload_file")}
+                  </button>
+                  {outcome.links?.length ?? 0}
+                </TableCell>
               </TableRow>
             ))}
             {!outcomes.length && (
@@ -162,6 +182,35 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
           </TableBody>
         </Table>
       </ResearchTableSurface>
+      <input
+        ref={outcomeFileRef}
+        type="file"
+        accept=".pdf,.md,.markdown,application/pdf,text/markdown"
+        className="hidden"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          const outcomeId = uploadingOutcomeId;
+          event.target.value = "";
+          if (!file || !outcomeId) return;
+          try {
+            const presigned = await outcomeService.presignOutcomeAttachment(workspaceSlug, outcomeId, {
+              file_name: file.name,
+              content_type: file.type || "application/octet-stream",
+              size: file.size,
+            });
+            const form = new FormData();
+            Object.entries(presigned.upload_data.fields).forEach(([key, value]) => form.append(key, value));
+            form.append("file", file);
+            const response = await fetch(presigned.upload_data.url, { method: "POST", body: form });
+            if (!response.ok) throw new Error("upload_failed");
+            await outcomeService.registerOutcomeAttachment(workspaceSlug, outcomeId, presigned.asset_id);
+          } catch (error) {
+            setErrorKey(getResearchErrorKey(error));
+          } finally {
+            setUploadingOutcomeId(null);
+          }
+        }}
+      />
       <p className="text-11 text-tertiary">{t("research.outcomes.link_hint")}</p>
     </ResearchListSurface>
   );
