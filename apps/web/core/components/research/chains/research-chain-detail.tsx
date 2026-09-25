@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router";
 import { REPORT_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Skeleton } from "@plane/propel/skeleton";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -327,6 +328,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       );
       setMembers(updated);
       setMemberUserId("");
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("research.chains.member_added_title"),
+        message: t("research.chains.member_added_message"),
+      });
     } catch {
       setMemberError(t("research.chains.member_action_failed"));
     } finally {
@@ -341,6 +347,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     try {
       await chainService.removeChainMember(workspaceSlug, chainId, userId);
       setMembers((latestMembers) => latestMembers.filter((member) => member.user_id !== userId));
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("research.chains.member_removed_title"),
+        message: t("research.chains.member_removed_message"),
+      });
     } catch {
       setMemberError(t("research.chains.member_action_failed"));
     } finally {
@@ -501,6 +512,12 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
               <span>
                 {t("research.chains.owner")}: {chain?.owner_name ?? "-"}
+              </span>
+              <span>
+                {t("research.chains.project_identifier")}: {chain?.project_identifier ?? chain?.project ?? "-"}
+              </span>
+              <span>
+                {t("research.chains.org_unit")}: {chain?.org_unit_name ?? "-"}
               </span>
               <span>{chain ? formatResearchDateTime(chain.updated_at, currentLocale) : "-"}</span>
             </div>

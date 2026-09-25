@@ -20,12 +20,13 @@ type Props = {
 };
 
 /** Cross-component to-do index assembled from each source system without local completion. */
-export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null }: Props) {
+export function ResearchTodoIndex({ workspaceSlug, limit = 5, periodDays = null }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const translateRef = useRef(t);
   const [todos, setTodos] = useState<TResearchTodo[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [page, setPage] = useState(0);
   const translate = translateRef.current;
 
   const load = useCallback(async () => {
@@ -41,6 +42,7 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null 
         periodDays,
       });
       setTodos(normalized);
+      setPage(0);
       setState(normalized.length ? "ready" : "empty");
     } catch {
       setTodos([]);
@@ -52,7 +54,8 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null 
     void load();
   }, [load]);
 
-  const visibleTodos = useMemo(() => todos.slice(0, limit), [limit, todos]);
+  const pageCount = Math.max(1, Math.ceil(todos.length / limit));
+  const pagedTodos = useMemo(() => todos.slice(page * limit, (page + 1) * limit), [limit, page, todos]);
 
   return (
     <section className="overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
@@ -64,6 +67,31 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null 
         <Button variant="secondary" size="sm" onClick={() => void load()}>
           {t("research.todo.refresh")}
         </Button>
+        {todos.length > limit && (
+          <div className="flex items-center gap-1" aria-label={t("research.todo.pagination")}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={t("research.todo.previous_page")}
+              disabled={page === 0}
+              onClick={() => setPage((value) => Math.max(0, value - 1))}
+            >
+              ‹
+            </Button>
+            <span className="text-11 tabular-nums" aria-live="polite">
+              {page + 1}/{pageCount}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={t("research.todo.next_page")}
+              disabled={page >= pageCount - 1}
+              onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+            >
+              ›
+            </Button>
+          </div>
+        )}
       </div>
       {state === "loading" && (
         <div className="space-y-2 p-4" role="status" aria-busy="true">
@@ -80,7 +108,7 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 8, periodDays = null 
       {state === "empty" && <p className="p-4 text-12 text-secondary">{t("research.todo.empty")}</p>}
       {state === "ready" && (
         <ul className="divide-y divide-subtle" role="list">
-          {visibleTodos.map((todo) => (
+          {pagedTodos.map((todo) => (
             <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
