@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/research-capabilities.v1.json",
+  "title": "Research resource action capabilities v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "actions"],
+  "properties": {
+    "schema_version": { "const": "research-capabilities.v1" },
+    "actions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["allowed", "reason_code", "reason"],
+        "properties": {
+          "allowed": { "type": "boolean" },
+          "reason_code": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

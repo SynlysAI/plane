@@ -163,6 +163,9 @@ export type TResearchChain = {
   workspace: string;
   owner: string;
   owner_name?: string;
+  project_identifier?: string;
+  org_unit_name?: string | null;
+  capabilities?: TResearchActionCapabilities;
   status: "ACTIVE" | "ARCHIVED" | "COMPLETED";
   visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   created_at: string;
@@ -179,8 +182,20 @@ export type TResearchChainNode = {
   loop_iteration: number;
   status: "DRAFT" | "ACTIVE" | "WAITING_HUMAN" | "NEEDS_REVISION" | "COMPLETED" | "FAILED" | "ARCHIVED";
   assignee: string | null;
+  capabilities?: TResearchActionCapabilities;
   created_at: string;
   updated_at: string;
+};
+
+export type TResearchActionCapability = {
+  allowed: boolean;
+  reason_code: string;
+  reason: string;
+};
+
+export type TResearchActionCapabilities = {
+  schema_version: "research-capabilities.v1";
+  actions: Record<string, TResearchActionCapability>;
 };
 
 export type TResearchChainNodeAction = "START" | "SUBMIT_REVIEW" | "APPROVE" | "RETURN" | "FAIL" | "ARCHIVE";

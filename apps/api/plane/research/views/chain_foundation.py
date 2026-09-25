@@ -39,6 +39,11 @@ def _envelope(*, data, request_id, schema_version):
     return {"success": True, "data": data, "error": None, "request_id": request_id, "schema_version": schema_version}
 
 
+def _serializer_context(request):
+    """Pass the authenticated actor into resource capability serializers."""
+    return {"request": request}
+
+
 def _flag_enabled(workspace):
     """Return whether the workspace opted into Research Chain."""
     return bool(getattr(workspace, "research_setting", None) and workspace.research_setting.research_chain_enabled)
@@ -205,7 +210,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
             "-updated_at"
         )
         rows = [row for row in rows if can_read_project_research_metadata(workspace, request.user, row.project.research_profile)]
-        return Response(_envelope(data=ResearchChainSerializer(rows, many=True).data, request_id=request_id_from(request), schema_version="research-chain.v1"))
+        return Response(_envelope(data=ResearchChainSerializer(rows, many=True, context=_serializer_context(request)).data, request_id=request_id_from(request), schema_version="research-chain.v1"))
 
     def post(self, request, slug):
         workspace, error = self.get_workspace(section="research_chain")
@@ -221,7 +226,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
         if existing:
             if existing.payload_hash != digest:
                 return conflict_response()
-            return Response(_envelope(data=ResearchChainSerializer(existing).data, request_id=request_id, schema_version="research-chain.v1"), status=status.HTTP_200_OK)
+            return Response(_envelope(data=ResearchChainSerializer(existing, context=_serializer_context(request)).data, request_id=request_id, schema_version="research-chain.v1"), status=status.HTTP_200_OK)
         profile = _profile(workspace, request.data.get("project_id"), request.user)
         if profile is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research project not found.")
@@ -251,7 +256,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
                     "created_by": request.user,
                 },
             )
-        return Response(_envelope(data=ResearchChainSerializer(chain).data, request_id=request_id, schema_version="research-chain.v1"), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        return Response(_envelope(data=ResearchChainSerializer(chain, context=_serializer_context(request)).data, request_id=request_id, schema_version="research-chain.v1"), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
 class ResearchChainDetailEndpoint(ResearchAPIView):
@@ -268,7 +273,7 @@ class ResearchChainDetailEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        return Response(_envelope(data=ResearchChainSerializer(chain).data, request_id=request_id_from(request), schema_version="research-chain.v1"))
+        return Response(_envelope(data=ResearchChainSerializer(chain, context=_serializer_context(request)).data, request_id=request_id_from(request), schema_version="research-chain.v1"))
 
 
 class ResearchChainArchiveEndpoint(ResearchAPIView):
@@ -310,7 +315,7 @@ class ResearchChainArchiveEndpoint(ResearchAPIView):
         )
         return Response(
             _envelope(
-                data=ResearchChainSerializer(chain).data,
+                data=ResearchChainSerializer(chain, context=_serializer_context(request)).data,
                 request_id=request_id_from(request),
                 schema_version="research-chain.v1",
             )
@@ -356,7 +361,7 @@ class ResearchChainRestoreEndpoint(ResearchAPIView):
         )
         return Response(
             _envelope(
-                data=ResearchChainSerializer(chain).data,
+                data=ResearchChainSerializer(chain, context=_serializer_context(request)).data,
                 request_id=request_id_from(request),
                 schema_version="research-chain.v1",
             )
@@ -540,7 +545,7 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
         chain, error = self._chain(request, slug, chain_id)
         if error:
             return error
-        return Response(_envelope(data=ResearchChainNodeSerializer(chain.nodes.order_by("created_at"), many=True).data, request_id=request_id_from(request), schema_version="research-node.v1"))
+        return Response(_envelope(data=ResearchChainNodeSerializer(chain.nodes.order_by("created_at"), many=True, context=_serializer_context(request)).data, request_id=request_id_from(request), schema_version="research-node.v1"))
 
     def post(self, request, slug, chain_id):
         chain, error = self._chain(request, slug, chain_id)
@@ -554,7 +559,7 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
         if existing:
             if existing.chain_id != chain.id or existing.payload_hash != digest:
                 return conflict_response()
-            return Response(_envelope(data=ResearchChainNodeSerializer(existing).data, request_id=request_id, schema_version="research-node.v1"))
+            return Response(_envelope(data=ResearchChainNodeSerializer(existing, context=_serializer_context(request)).data, request_id=request_id, schema_version="research-node.v1"))
         lifecycle_error = _chain_readonly_error(chain)
         if lifecycle_error:
             return lifecycle_error
@@ -615,7 +620,7 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
                 )
         except IntegrityError:
             return conflict_response()
-        return Response(_envelope(data=ResearchChainNodeSerializer(node).data, request_id=request_id, schema_version="research-node.v1"), status=status.HTTP_201_CREATED)
+        return Response(_envelope(data=ResearchChainNodeSerializer(node, context=_serializer_context(request)).data, request_id=request_id, schema_version="research-node.v1"), status=status.HTTP_201_CREATED)
 
 
 class ResearchChainNodeDetailEndpoint(ResearchAPIView):
@@ -635,7 +640,7 @@ class ResearchChainNodeDetailEndpoint(ResearchAPIView):
         return Response(
             _envelope(
                 data={
-                    "node": ResearchChainNodeSerializer(node).data,
+                    "node": ResearchChainNodeSerializer(node, context=_serializer_context(request)).data,
                     "events": ResearchChainEventSerializer(
                         node.events.order_by("occurred_at", "event_id"), many=True
                     ).data,
@@ -679,7 +684,7 @@ class ResearchChainNodeTransitionEndpoint(ResearchAPIView):
             return Response(
                 _envelope(
                     data={
-                        "node": ResearchChainNodeSerializer(node).data,
+                        "node": ResearchChainNodeSerializer(node, context=_serializer_context(request)).data,
                         "event": ResearchChainEventSerializer(existing).data,
                     },
                     request_id=request_id,
@@ -724,7 +729,7 @@ class ResearchChainNodeTransitionEndpoint(ResearchAPIView):
         return Response(
             _envelope(
                 data={
-                    "node": ResearchChainNodeSerializer(locked_node).data,
+                    "node": ResearchChainNodeSerializer(locked_node, context=_serializer_context(request)).data,
                     "event": ResearchChainEventSerializer(event).data,
                 },
                 request_id=request_id,
