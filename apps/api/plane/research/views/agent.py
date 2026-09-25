@@ -39,7 +39,12 @@ from plane.research.utils.errors import (
     research_not_found,
 )
 from plane.research.views.base import ResearchAPIView
-from plane.research.views.chain_foundation import _chain_readonly_error, _chain_writer, _node_operator
+from plane.research.views.chain_foundation import (
+    _agent_scope_kind,
+    _chain_readonly_error,
+    _chain_writer,
+    _node_operator,
+)
 from plane.research.views.projects import can_read_project_research_metadata
 
 
@@ -126,7 +131,16 @@ def _session_visible(workspace, user, session):
 
 def _session_operator(workspace, user, session):
     """Return whether the caller may operate or write through an Agent session."""
-    return _chain_writer(workspace, user, session.chain_node.chain)
+    return _chain_writer(workspace, user, session.chain_node.chain) or (
+        session.context_grant.scope_kind == "REVIEW" and session.user_id == user.id
+    )
+
+
+def _session_scope_allows(session, action):
+    """Enforce the REVIEW session's read/comment/draft-only capability boundary."""
+    if session.context_grant.scope_kind != "REVIEW":
+        return True
+    return action in {"message", "events", "draft"}
 
 
 def _guard_session_context(session, *, allow_inactive_context=False):
@@ -295,19 +309,26 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
         readonly_error = _chain_readonly_error(node.chain)
         if readonly_error:
             return readonly_error
-        if not _node_operator(workspace, request.user, node):
+        scope_kind = _agent_scope_kind(workspace, request.user, node.chain)
+        if scope_kind is None:
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
-                "Only chain members can create Agent sessions.",
+                "The current actor has no Agent scope for this research chain.",
                 status.HTTP_403_FORBIDDEN,
             )
         try:
-            orchestrated = create_synlora_session(
-                workspace=workspace,
-                user=request.user,
-                node=node,
-                request_id=request_id,
-            )
+            orchestration_kwargs = {
+                "workspace": workspace,
+                "user": request.user,
+                "node": node,
+                "request_id": request_id,
+            }
+            if scope_kind == "REVIEW":
+                orchestration_kwargs.update(
+                    scope_kind="REVIEW",
+                    scope_source="direct_advisor_or_main_pi",
+                )
+            orchestrated = create_synlora_session(**orchestration_kwargs)
         except SynloraError as exc:
             error_code = (
                 ResearchErrorCode.AGENT_SCOPE_INVALID
@@ -786,6 +807,12 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
         )
         if error:
             return error
+        if session.context_grant.scope_kind == "REVIEW":
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Review Agent sessions cannot approve tool calls.",
+                status.HTTP_403_FORBIDDEN,
+            )
         decision = str(request.data.get("decision") or "").upper()
         if decision not in ("APPROVED", "REJECTED"):
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "decision must be APPROVED or REJECTED.")
@@ -872,6 +899,12 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
         artifact_type = str(request.data.get("artifact_type") or "").upper()
         summary = str(request.data.get("summary") or "").strip()
         confirmed = str(request.data.get("confirmed", "")).lower() in ("1", "true", "yes")
+        if confirmed and not _session_scope_allows(session, "draft"):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Review Agent sessions can save analysis drafts but cannot create immutable artifacts.",
+                status.HTTP_403_FORBIDDEN,
+            )
         if not request_id or artifact_type not in self.ARTIFACT_SNAPSHOT_TYPES or not summary:
             return research_error(
                 ResearchErrorCode.AGENT_SCOPE_INVALID,

@@ -51,6 +51,9 @@ def issue_context_token(
     allowed_plugins=None,
     allowed_tools=None,
     policy_id="",
+    scope_kind="OWNER",
+    scope_source="chain_owner",
+    policy_version="research-agent-policy.v1",
 ):
     """Create a one-time displayed token and its revocable database grant."""
     if not request_id:
@@ -103,6 +106,9 @@ def issue_context_token(
         allowed_tools=allowed_tools,
         policy_id=policy_id,
         policy_hash=policy_hash,
+        scope_kind=scope_kind,
+        scope_source=scope_source,
+        policy_version=policy_version,
         token_hash=hash_context_token(raw_token),
         expires_at=timezone.now() + timedelta(seconds=ttl_seconds),
         request_id=request_id,

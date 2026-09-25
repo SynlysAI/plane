@@ -36,6 +36,9 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
             "synlora_run_id",
             "delegated_subject",
             "assembly",
+            "scope_kind",
+            "scope_source",
+            "policy_version",
             "created_at",
             "updated_at",
         ]
