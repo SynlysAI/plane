@@ -10,7 +10,6 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.db.models import (
-    MentorBinding,
     ProjectMember,
     ResearchChain,
     ResearchChainEvent,
@@ -28,7 +27,7 @@ from plane.research.serializers import (
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
-from plane.research.utils.acl import build_actor_context
+from plane.research.utils.acl import ResearchResource, build_actor_context, check_access, primary_advisor_ids
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.views.base import ResearchAPIView
@@ -151,25 +150,58 @@ def _chain_members(chain):
 
 def _node_operator(workspace, user, node):
     """Return whether the caller can run a node lifecycle action."""
+    if _review_only_actor(workspace, user, node.chain):
+        return False
     return _chain_writer(workspace, user, node.chain) or node.assignee_id == user.id
+
+
+def _chain_resource(chain):
+    """Project a Chain into the ACL shape used by review scope checks."""
+    profile = getattr(chain.project, "research_profile", None)
+    visibility = {"MEMBERS": "UNIT", "ORG": "ANCESTRY"}.get(chain.visibility, chain.visibility)
+    return ResearchResource(
+        kind="research_chain",
+        workspace_id=chain.workspace_id,
+        owner_id=chain.owner_id,
+        org_unit_id=getattr(profile, "org_unit_id", None),
+        visibility=visibility,
+        state=chain.status,
+        project_id=chain.project_id,
+        is_team_content=chain.visibility != "PRIVATE",
+    )
+
+
+def _review_only_actor(workspace, user, chain):
+    """Return whether an actor has review scope without mutable Chain rights."""
+    if chain.owner_id == user.id:
+        return False
+    context = build_actor_context(user, workspace.id)
+    if context.is_main_pi:
+        return True
+    if user.id in primary_advisor_ids(chain.owner_id, workspace.id):
+        return True
+    if _chain_manager(workspace, user, chain):
+        return False
+    return check_access(user, "review", _chain_resource(chain), context=context)
+
+
+def _agent_scope_kind(workspace, user, chain):
+    """Resolve the explicit OWNER or read-only REVIEW Agent scope."""
+    if chain.owner_id == user.id:
+        return "OWNER"
+    if _review_only_actor(workspace, user, chain):
+        return "REVIEW"
+    if _chain_writer(workspace, user, chain):
+        return "OWNER"
+    return None
 
 
 def _chain_writer(workspace, user, chain):
     """Return whether a caller may append mutable Chain data."""
+    if _review_only_actor(workspace, user, chain):
+        return False
     if _chain_manager(workspace, user, chain):
         return True
-    profile = getattr(chain.project, "research_profile", None)
-    if profile is not None:
-        today = timezone.localdate()
-        mentor = MentorBinding.objects.filter(
-            workspace=workspace,
-            mentor=user,
-            mentee_id=profile.owner_id,
-            deleted_at__isnull=True,
-            effective_from__lte=today,
-        ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
-        if mentor.exists():
-            return True
     return ProjectMember.objects.filter(
         project_id=chain.project_id,
         member=user,

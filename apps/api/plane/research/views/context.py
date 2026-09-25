@@ -432,6 +432,9 @@ def _context_payload(grant):
         "allowed_tools": grant.allowed_tools,
         "policy_id": grant.policy_id,
         "policy_hash": grant.policy_hash,
+        "scope_kind": grant.scope_kind,
+        "scope_source": grant.scope_source,
+        "policy_version": grant.policy_version,
     }
 
 
@@ -532,6 +535,9 @@ class ResearchContextTokenEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIV
                     "allowed_tools": grant.allowed_tools,
                     "policy_id": grant.policy_id,
                     "policy_hash": grant.policy_hash,
+                    "scope_kind": grant.scope_kind,
+                    "scope_source": grant.scope_source,
+                    "policy_version": grant.policy_version,
                 },
             },
             status=status.HTTP_201_CREATED,

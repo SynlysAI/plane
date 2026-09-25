@@ -131,6 +131,26 @@ def test_assemble_agent_uses_registry_and_node_policy(env):
     assert assembly.unavailable_reasons == []
 
 
+def test_review_assembly_is_read_only_even_when_registry_exposes_write_tools(env):
+    """Review sessions keep retrieval/read tools and never receive write tools."""
+    assembly = assemble_agent(
+        node=env["node"],
+        manifest={
+            "plugins": [{"id": "rag", "auto_load": True, "health": "OK"}],
+            "tools": [
+                {"name": "knowledge.search"},
+                {"name": "knowledge.list"},
+                {"name": "file.read"},
+                {"name": "file.write"},
+            ],
+        },
+        scope_kind="REVIEW",
+    )
+    assert assembly.scope_kind == "REVIEW"
+    assert set(assembly.allowed_tools) == {"knowledge.search", "knowledge.list", "file.read"}
+    assert "file.write" not in assembly.allowed_tools
+
+
 def test_create_synlora_session_carries_v2_without_tokens(env):
     """The external session receives v2 scope but never a delegated or Context token."""
     client = FakeClient()

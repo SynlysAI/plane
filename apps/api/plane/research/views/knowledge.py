@@ -66,10 +66,12 @@ def _knowledge_request(chain):
 def _require_ready(chain):
     """Return a stable error until an administrator binds an external KB."""
     request = _knowledge_request(chain)
-    # Chains created before the lifecycle projection keep their established
-    # read/upload behaviour until an administrator backfills a request.
     if request is None:
-        return None
+        return research_error(
+            ResearchErrorCode.KB_NOT_READY,
+            "课题知识库申请记录不存在，需由管理员补齐申请后才能上传。",
+            status.HTTP_409_CONFLICT,
+        )
     if request.state != ResearchKnowledgeRequest.State.READY:
         return research_error(
             ResearchErrorCode.KB_NOT_READY,
@@ -120,7 +122,18 @@ class ResearchChainKnowledgeBaseListEndpoint(ResearchAPIView):
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
         request_projection = _knowledge_request(chain)
-        if request_projection is not None and request_projection.state != ResearchKnowledgeRequest.State.READY:
+        if request_projection is None:
+            return Response(
+                {
+                    "items": [],
+                    "chain_id": str(chain.id),
+                    "state": ResearchKnowledgeRequest.State.REQUESTED,
+                    "request_id": None,
+                    "degraded": False,
+                },
+                status=status.HTTP_200_OK,
+            )
+        if request_projection.state != ResearchKnowledgeRequest.State.READY:
             return Response(
                 {
                     "items": [],

@@ -23,6 +23,7 @@ TOOLS_BY_NODE_TYPE = {
     "ANALYSIS": frozenset({"file.read", "file.list", "knowledge.search"}),
 }
 DEFAULT_TOOLS = frozenset({"knowledge.search", "knowledge.list", "file.read"})
+REVIEW_TOOLS = frozenset({"knowledge.search", "knowledge.list", "file.read"})
 
 
 @dataclass
@@ -36,6 +37,9 @@ class AgentAssembly:
     allowed_file_ids: list
     unavailable_reasons: list
     policy_id: str
+    scope_kind: str = "OWNER"
+    scope_source: str = "chain_owner"
+    policy_version: str = "research-agent-policy.v1"
 
 
 def active_synlora_link(user):
@@ -54,7 +58,7 @@ def _tool_policy(node_type):
     return TOOLS_BY_NODE_TYPE.get(str(node_type or "").upper(), DEFAULT_TOOLS)
 
 
-def assemble_agent(*, node, manifest):
+def assemble_agent(*, node, manifest, scope_kind="OWNER", scope_source="chain_owner"):
     """Compute the defensive intersection without user-side scope controls."""
     tools = [
         str(item.get("name") or "")
@@ -64,6 +68,8 @@ def assemble_agent(*, node, manifest):
     registry = set(tools)
     requested = _tool_policy(node.node_type)
     final_tools = sorted(registry & requested)
+    if scope_kind == "REVIEW":
+        final_tools = sorted(set(final_tools) & REVIEW_TOOLS)
     unavailable = []
     if not final_tools:
         unavailable.append("policy_blocked")
@@ -93,6 +99,8 @@ def assemble_agent(*, node, manifest):
         allowed_file_ids=file_ids,
         unavailable_reasons=unavailable,
         policy_id=f"plane-node:{node.id}",
+        scope_kind=scope_kind,
+        scope_source=scope_source,
     )
 
 
@@ -109,6 +117,9 @@ def issue_agent_context(*, workspace, user, profile, node, assembly, request_id)
         allowed_plugins=assembly.enabled_plugins,
         allowed_tools=assembly.allowed_tools,
         policy_id=assembly.policy_id,
+        scope_kind=assembly.scope_kind,
+        scope_source=assembly.scope_source,
+        policy_version=assembly.policy_version,
     )
 
 
@@ -130,10 +141,15 @@ def context_metadata(*, workspace, profile, node, grant, assembly):
         "allowed_tools": grant.allowed_tools,
         "policy_id": grant.policy_id,
         "policy_hash": grant.policy_hash,
+        "scope_kind": grant.scope_kind,
+        "scope_source": grant.scope_source,
+        "policy_version": grant.policy_version,
     }
 
 
-def create_synlora_session(*, workspace, user, node, request_id, client=None):
+def create_synlora_session(
+    *, workspace, user, node, request_id, client=None, scope_kind="OWNER", scope_source="chain_owner"
+):
     """Run the complete fail-closed Synlora session assembly pipeline."""
     link = active_synlora_link(user)
     if link is None:
@@ -144,7 +160,7 @@ def create_synlora_session(*, workspace, user, node, request_id, client=None):
     if not token:
         raise SynloraError("synlora_delegated_auth_failed", "Synlora delegated token exchange failed.", 502)
     manifest = synlora.capabilities(token)
-    assembly = assemble_agent(node=node, manifest=manifest)
+    assembly = assemble_agent(node=node, manifest=manifest, scope_kind=scope_kind, scope_source=scope_source)
     profile = node.chain.project.research_profile
     grant, context_token = issue_agent_context(
         workspace=workspace,

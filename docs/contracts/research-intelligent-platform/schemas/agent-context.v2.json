@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/agent-context.v2.json",
+  "title": "Agent context v2",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "context_id", "scope", "expires_at", "context_hash"],
+  "properties": {
+    "schema_version": { "const": "agent-context.v2" },
+    "context_id": { "type": "string", "minLength": 1 },
+    "context_hash": { "type": "string", "minLength": 1 },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "workspace_id",
+        "research_project_id",
+        "chain_node_id",
+        "visibility_scope",
+        "scope_kind",
+        "scope_source",
+        "policy_version"
+      ],
+      "properties": {
+        "workspace_id": { "type": "string" },
+        "research_project_id": { "type": "string" },
+        "chain_node_id": { "type": "string" },
+        "visibility_scope": { "type": "string" },
+        "scope_kind": { "enum": ["OWNER", "REVIEW"] },
+        "scope_source": { "type": "string", "minLength": 1 },
+        "policy_version": { "type": "string", "minLength": 1 },
+        "allowed_tools": { "type": "array", "items": { "type": "string" } },
+        "allowed_plugins": { "type": "array", "items": { "type": "string" } },
+        "allowed_knowledge_base_ids": { "type": "array", "items": { "type": "string" } },
+        "allowed_file_ids": { "type": "array", "items": { "type": "string" } },
+        "policy_id": { "type": "string" },
+        "policy_hash": { "type": "string" }
+      }
+    }
+  }
+}
