@@ -825,6 +825,8 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/attachments/`,
   outcomeAttachmentPresign: (slug: string, outcomeId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/attachments/presign/`,
+  outcomeAttachment: (slug: string, outcomeId: string, attachmentId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/attachments/${attachmentId}/`,
   outcomeLinks: (slug: string, outcomeId: string) => `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/links/`,
   chainExport: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/chain/export/`,
   // ---- P1 integrations (§5.7) ----

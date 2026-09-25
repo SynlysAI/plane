@@ -36,6 +36,12 @@ def _request_actor(serializer):
     return actor if getattr(actor, "is_authenticated", False) else None
 
 
+def _request_context(serializer, workspace_id):
+    """Reuse a view supplied ACL context to avoid one query set per row."""
+    context = serializer.context.get("actor_context")
+    return context if context is not None and context.workspace_id == workspace_id else None
+
+
 def _chain_resource(obj):
     """Project a Chain into the shared ACL resource shape."""
     profile = getattr(obj.project, "research_profile", None)
@@ -67,7 +73,7 @@ def _capabilities(serializer, obj, *, is_node=False):
     if actor is None:
         return capability_map(NODE_ACTIONS if is_node else CHAIN_ACTIONS, {})
     chain = obj.chain if is_node else obj
-    context = build_actor_context(actor, chain.workspace_id)
+    context = _request_context(serializer, chain.workspace_id) or build_actor_context(actor, chain.workspace_id)
     resource = _node_resource(obj) if is_node else _chain_resource(obj)
     decisions = {action: check_access(actor, action, resource, context=context) for action in ("view", "edit", "review", "accept", "return", "export")}
     if is_node:

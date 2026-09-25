@@ -28,6 +28,7 @@ from plane.research.serializers import (
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
+from plane.research.utils.acl import build_actor_context
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.views.base import ResearchAPIView
@@ -210,7 +211,8 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
             "-updated_at"
         )
         rows = [row for row in rows if can_read_project_research_metadata(workspace, request.user, row.project.research_profile)]
-        return Response(_envelope(data=ResearchChainSerializer(rows, many=True, context=_serializer_context(request)).data, request_id=request_id_from(request), schema_version="research-chain.v1"))
+        context = build_actor_context(request.user, workspace.id)
+        return Response(_envelope(data=ResearchChainSerializer(rows, many=True, context={**_serializer_context(request), "actor_context": context}).data, request_id=request_id_from(request), schema_version="research-chain.v1"))
 
     def post(self, request, slug):
         workspace, error = self.get_workspace(section="research_chain")
