@@ -2,15 +2,18 @@
 
 | 项目         | 内容                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 计划版本     | v1.2                                                                                                                                                                                                                                                                                                                                                  |
+| 计划版本     | v1.3                                                                                                                                                                                                                                                                                                                                                  |
+| 文档类型     | 开发、测试、灰度与回滚执行计划                                                                                                                                                                                                                                                                                                                        |
 | 编制日期     | 2026-09-25                                                                                                                                                                                                                                                                                                                                            |
 | 问题来源     | [`evidence/phase-1.5/issue0925/document.md`](./evidence/phase-1.5/issue0925/document.md) 及 24 张现场截图                                                                                                                                                                                                                                             |
 | 前置手册     | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                                                                                                                                                                |
 | 前置联调计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)                                                                                                                                                                                                            |
 | 执行手册     | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                                                                                                                                                                                                                      |
 | 相关契约     | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md)、[`research-workspace-v3.md`](./research-workspace-v3.md)、[`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)、RAGPortal [`2026-09-24-pi-private-knowledge-space-prd.md`](../../RAGPortal/docs/specs/2026-09-24-pi-private-knowledge-space-prd.md) |
-| 计划状态     | 业务决策已确认，进入实现排期                                                                                                                                                                                                                                                                                                                          |
+| 计划状态     | 业务决策已冻结；本文作为开发、测试、灰度和回滚的执行基线                                                                                                                                                                                                                                                                                              |
 | 目标         | 把现场人工反馈转化为可复现、可开发、可验收的产品优化任务；不重复已完成的跨服务联调修复                                                                                                                                                                                                                                                                |
+
+> **文档使用规则（v1.3）**：实现人员按第 6 节任务卡执行，契约以第 6 节和 `plane/docs/contracts/research-intelligent-platform/` 为准，测试按第 8 节命令和门禁执行，发布/回滚按第 10 节执行。正文中的“已有”表示代码已存在且需要复用，不表示已经满足本计划验收。若代码与本文冲突，先登记契约差异，不得直接修改权限或状态语义。
 
 ## 1. 结论摘要
 
@@ -46,6 +49,13 @@
 - `roles/20260925-L3.6.md` 的 VIS/PER 矩阵证明了当前测试夹具下 API 的基础可见性和写权限，但没有覆盖报告/项目审批的业务人选、主 PI 跨课题 Agent review、课题 KB 生命周期、节点详情可发现性、响应式 workflow 的可操作性。
 - 本计划中的 P15-O 编号是“优化问题”编号，与联调缺陷 P15-001～008 分开，避免在历史证据中混淆。
 
+### 2.3 基线冲突处理
+
+- 账号、密码和 seed 只认 [`research-test-accounts.md`](./research-test-accounts.md) v2.5.1；本文不再复制密码。执行机通过环境变量注入凭证，证据不得保存明文密码。
+- L3.6 中“导师可写 Chain”的历史结果只代表 Phase 1 基线，不代表本计划目标。v1.3 以 §5 的 review-only 规则为准：导师/PI 可以审批、评论和提交分析草稿，不可修改学生正式内容、节点生命周期、上传和引用确认。
+- 执行手册表头“配套计划 v1.1”需同步改为 v1.3；任何引用本计划版本的 runbook、契约和 PR 在发布前必须完成一致性检查。
+- 现有 `plane/apps/api/package.json`、`plane/apps/api/pyproject.toml` 和 `plane/apps/web/package.json` 版本号不在本次文档变更中调整；代码发布时按 AGENTS.md 的语义化版本规则，由各仓库发布负责人统一决定并记录。
+
 ## 3. 问题分级与处理原则
 
 ### 3.1 严重度定义
@@ -69,7 +79,7 @@
 
 | 编号    | 来源              | 现象归纳                                                         | 初步根因                                                                                   | 严重度 | 目标结果                                                                                                                                                                                          |
 | ------- | ----------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P15-O01 | issue 1.1         | workflow 在缩放或窄屏下显示不全                                  | 固定宽度 rail + 标签截断；缺少可见的横向滚动提示和紧凑模式                                 | O2     | 13 个阶段在 1280/1024/390 宽度下均可访问，阶段名/状态不丢失，键盘可操作                                                                                                                           |
+| P15-O01 | issue 1.1         | workflow 在缩放或窄屏下显示不全                                  | 固定宽度 rail + 标签截断；缺少可见的横向滚动提示和紧凑模式                                 | O2     | 13 个研究链节点类型在 1280/1024/390 宽度下均可访问，节点名/状态不丢失，键盘可操作                                                                                                                 |
 | P15-O02 | issue 1.2         | 创建节点后找不到上传和其他操作入口；节点均白底，层级不清         | 节点操作只在选中详情下出现，文件面板只在 references Tab；视觉状态依赖白底卡片              | O1/O2  | 选中节点后出现明确“记录/文件/Agent/生命周期”动作区；阶段、当前节点、已完成、待处理和只读状态可区分                                                                                                |
 | P15-O03 | issue 3/4         | 报告成果、实验记录看起来无法上传                                 | Outcome 只有元数据登记；Experiment 只接受外部资产引用；没有解释上传边界                    | O1     | 报告支持 PDF/Markdown 附件上传/状态/删除权限；实验明确提供 SpecLabOS 外部资产关联 UI 和人工记录入口，禁止上传时有原因与深链                                                                       |
 | P15-O04 | issue 1.5         | 只能选择已有 KB；期望每个课题有独立知识库和生命周期              | 缺少 Chain ↔ KB 申请/绑定、管理员通知、手工建库回填、READY 门禁、成员授权和归档补偿模型    | O0     | 课题创建后自动提交唯一 KB 申请；管理员在 WeKnora 手工建库并回填后才进入 READY；学生、直接导师、产业化负责人、基础研究负责人、唯一 Main PI 及组织架构上级领导按继承规则访问；归档/恢复可追踪       |
@@ -102,7 +112,7 @@
 | 工作区管理员 / ADMIN       | 配置权不等于业务数据权          | 按 ACL           | 按 ACL           | 仅被指定时              | 仅被指定时       | 否                                    | 不因管理员身份自动获得 review            |
 | Guest / NONE               | 无科研菜单或只读 WORKSPACE 例外 | 否               | 否               | 否                      | 否               | 否                                    | 否                                       |
 
-### 5.2 课题私有 KB 可见矩阵（建议）
+### 5.2 课题私有 KB 可见矩阵（已冻结）
 
 | 角色                       | 查看 KB/文档   | 上传           | 确认引用 | 管理成员               | 归档/恢复      |
 | -------------------------- | -------------- | -------------- | -------- | ---------------------- | -------------- |
@@ -228,12 +238,14 @@
 
 **验收标准：**
 
-- [ ] DRAFT/ACTIVE/WAITING_HUMAN/NEEDS_REVISION/COMPLETED/ARCHIVED 每种状态都有明确动作或只读说明。
+- [ ] DRAFT/ACTIVE/WAITING_HUMAN/NEEDS_REVISION/COMPLETED/FAILED/ARCHIVED 每种状态都有明确动作或只读说明。
 - [ ] 点击节点名称、阶段卡和深链都能打开同一个详情；刷新页面后选中态不丢失。
 - [ ] 节点的上传文件、人工记录、报告/实验关联和 Agent 入口在当前节点上下文可发现，或明确指向对应 Tab。
 
 **依赖：** B1。
 **预计范围：** 中。
+
+> **节点类型基线：** 研究链的 13 个节点类型按 `RESEARCH → LITERATURE_REVIEW → TOPIC_EVALUATION → PRE_EXPERIMENT → PLAN → OPENING → EXPERIMENT → ANALYSIS → ITERATION → SUMMARY → PAPER_WRITING → COMPLETION → TRANSFER` 展示；实际创建顺序仍由父节点和状态机校验，不把 UI 顺序当作数据库约束。
 
 #### 任务 C2：报告成果与实验记录入口收敛
 
@@ -250,13 +262,13 @@
 
 #### 任务 C3：研究链与项目关系可视化及项目审批入口
 
-**范围：** 课题页头部和概览显示 Chain ID、Plane Project、owner、组织、可见性和状态；提供项目管理深链；项目审批按 A2 决定复用或新增。
+**范围：** 课题页头部和概览显示 Chain ID、Plane Project、owner、组织、可见性和状态；提供项目管理深链；项目审批固定复用既有 `ApprovalRequest`/Plane Issue。
 
 **验收标准：**
 
 - [ ] 新建 RESEARCH_CHAIN 后页面能看到“一课题一项目一研究链”的关系说明。
 - [ ] 课题归档/恢复和项目状态的展示一致；项目列表能返回研究链上下文。
-- [ ] 若启用项目审批，提交/审批/退回结果能回写 Chain Event，并按角色隐藏不可执行操作。
+- [ ] 项目审批提交/审批/退回结果能回写 Chain Event，并按角色隐藏不可执行操作；不创建第二套审批对象。
 
 **依赖：** A2、B1。
 **预计范围：** 中至大。
@@ -346,6 +358,195 @@
 **依赖：** C1、D2、E1、E2、E3。
 **预计范围：** 中至大。
 
+### 6.1 执行约定与任务卡
+
+#### 6.1.1 仓库、职责和分支
+
+| 代码区    | 责任范围                                      | 默认负责人角色 | 目录                                            | 分支命名                    |
+| --------- | --------------------------------------------- | -------------- | ----------------------------------------------- | --------------------------- |
+| Plane API | 数据模型、迁移、ACL、BFF、报告/项目/Agent API | Plane 后端     | `plane/apps/api/plane/`                         | `phase15/<issue>-plane-api` |
+| Plane Web | 路由、组件、状态、可访问性和视觉              | Plane 前端     | `plane/apps/web/`                               | `phase15/<issue>-plane-web` |
+| RAGPortal | KB 申请、通知、回填、绑定校验、上传门禁       | RAGPortal 后端 | `RAGPortal/backend/app/`                        | `phase15/<issue>-ragportal` |
+| Synlora   | REVIEW context、工具白名单、trace 字段和拒写  | Synlora 后端   | `Synlora/apps/web/backend/app/`                 | `phase15/<issue>-synlora`   |
+| 契约/证据 | JSON Schema、示例、错误码、测试结果和截图     | 跨仓接口维护人 | `plane/docs/contracts/`、`plane/docs/evidence/` | `phase15/<issue>-contract`  |
+
+一个任务可以产生多个仓库分支，但必须先合并契约分支，再合并服务端，最后合并 Web。每个 PR 描述必须包含：问题编号、依赖 PR、迁移编号、测试命令及结果、证据 manifest 路径、回滚开关。禁止把跨仓实现压在一个未评审的“大 PR”中。
+
+#### 6.1.2 统一完成定义（DoD）
+
+任务只有同时满足以下条件才可从“开发中”改为“待验收”：
+
+- [ ] 代码、迁移、契约和测试已在对应仓库提交；跨仓接口的两个消费者均已更新。
+- [ ] 正例、负例、重复请求和降级场景均有自动化测试；O0/O1 用例不得标记 `skip`。
+- [ ] API 返回统一 envelope（成功带 `schema_version`，失败带 `error_code`、`message`、`request_id`）；前端不根据 HTTP 200 推断动作可用。
+- [ ] 页面在 `1440×900`、`1280×800`、`1024×768`、`390×844` 通过键盘和灰度检查；无横向溢出。
+- [ ] 证据 manifest、JUnit/JSON 测试结果、截图或 trace 已归档，且不含密码、token、API key、正文或个人敏感信息。
+- [ ] 已执行旧路由/旧契约兼容回归；确认 feature flag 可关闭写入并保留只读访问。
+
+#### 6.1.3 具体任务卡与产出
+
+下表是每个任务开始前必须复制到 issue/PR 的最小任务卡。路径是当前实现的首选落点，若需改动其他文件必须在 PR 中说明原因。
+
+| 任务 | 实现落点（首选）                                                                      | 必须新增或修改的测试                                                                            | 开发步骤（按顺序）                                                                     | 证据与关闭条件                                              |
+| ---- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| A1   | `plane/research/seed/{scenario,builder,verify}.py`、`docs/evidence/.../reproduction/` | `test_research_phase1_e2e.py`、`test_research_security.py`、seed verify                         | 生成固定对象 → 记录 ID → 复现 O0/O1 → 固定 viewport/服务版本                           | `A1-<fixture>.json` + 脱敏截图；六类账号和 A/B 课题均可重建 |
+| A2   | `plane/research/utils/acl.py`、`capabilities.py`、`contracts/.../schemas/`            | `test_capabilities.py`、`test_research_approvals.py`、JSON Schema 校验                          | 定义 canonical action → 映射角色/范围 → 加负例 → 发布 `research-visibility-actions.v1` | 契约评审记录；普通 WORKSPACE 可读者不能审批                 |
+| A3   | `plane/docs/contracts/...`、RAG/Plane/Synlora 适配器                                  | `test_ragportal_adapter.py`、`test_kb_request_service.py`、context contract                     | 冻结状态机 → 定义幂等键/错误码 → 约定回填校验 → 双侧 contract test                     | 状态机图、请求/响应 fixture、兼容窗口                       |
+| B1   | `plane/research/utils/capabilities.py`、`resource_projections.py`、各 serializer      | Plane unit/contract 全部资源负例                                                                | 统一 capability resolver → 接入列表/详情/导出/下载 → 清理前端猜测逻辑                  | 每动作 allow/deny 均有 `reason_code`；直 ID 不泄露标题      |
+| B2   | `views/reports.py`、`views/approvals.py`、`views/summary.py`、PI 聚合                 | `test_research_reports.py`、`test_research_approvals.py`、`test_research_summary.py`            | 固化必评人 → 过滤待审批队列 → 回写 Chain Event → 做导师/PI/学生矩阵                    | VIS/PER 矩阵全通过；审批列表只显示当前可执行项              |
+| B3   | `views/agent.py`、`services/agent_orchestrator.py`、Synlora context                   | `test_research_agent_plugin.py`、`test_research_context.py`、`test_research_agent_contracts.py` | 增加 `scope_kind` → 计算 review scope → 交集工具白名单 → 撤权复验                      | review 只能读/评论/草稿；写工具 403 且有审计                |
+| B4   | `views/account_links.py`、identity/settings 组件                                      | `test_research_account_links.py`、`test_research_identity.py`、OIDC sandbox                     | 清理空 subject → 增加绑定/解绑审计 → 验证 OIDC 未配置状态 → 回归撤权                   | 每行映射可解释；解绑后下一轮 token 失效                     |
+| C1   | `chain_foundation.py`、`research-chain-detail.tsx`、`research-chain-node-detail.tsx`  | `test_research_chain.py`、`research-chain-detail.test.tsx`、workflow rail test                  | 固定 URL query → 补全状态动作 → 深链/刷新/后退 → 只读原因                              | 六类节点状态（含 FAILED）均可进入详情                       |
+| C2   | `views/attachments.py`、`views/outcomes.py`、`views/experiments.py`、对应组件         | `test_research_attachments.py`、`test_research_outcomes.py`、`test_research_experiments.py`     | 复用 FileAsset → 限制 MIME/大小 → 提交锁定 → 外部资产关联                              | PDF/Markdown 正反例；实验文件不会落 Plane                   |
+| C3   | `views/projects.py`、`views/approvals.py`、chain header                               | `test_research_projects.py`、`test_research_approvals.py`、navigation test                      | 头部展示一对一关系 → 复用 ApprovalRequest/Issue → 回写事件 → 归档回归                  | 无“若启用”分支；项目审批契约固定                            |
+| D1-P | `views/projects.py`、`views/knowledge.py`、新增 `knowledge_requests.py`               | `test_research_chain_knowledge.py`、项目创建 contract                                           | 创建 Chain 同事务写申请 outbox → 重试 → READY 门禁 → 归档/恢复                         | Plane 侧申请 ID 唯一；未 READY 不可上传                     |
+| D1-R | `RAGPortal/app/models/kb_request.py`、`services/kb_request_service.py`、`api/v1/`     | `test_kb_request_service.py`、API contract                                                      | 扩展状态/字段 → 新增回填接口 → 校验 external KB 归属/唯一性 → 保留旧接口               | 旧 `pending/approved/rejected` 可读；回填重复返回 409       |
+| D1-N | RAGPortal 通知适配器、Plane integration call log                                      | 通知失败/重试测试                                                                               | 站内通知为必选 → 邮件/IM 为可选 → SLA 超时转 NEEDS_INFO/FAILED                         | 通知有 request/correlation ID；不阻断人工记录               |
+| D2   | `research-chain-knowledge-panel.tsx`、`views/knowledge.py`                            | `research-chain-knowledge-panel.test.tsx`、knowledge contract                                   | 当前 Chain 自动选 KB → 展示生命周期 → READY 才启用上传 → 失败重试/人工记录             | 跨课题 KB ID 永不出现在选项中                               |
+| E1   | `research-home-summary-card.tsx`、summary API                                         | `research-home-summary-card.test.tsx`、summary contract                                         | ACL 过滤 → 稳定排序 → 键盘切换 → empty/loading/error                                   | 总数、序号和当前节点同步                                    |
+| E2   | `research-todo-index.tsx`、todo collector                                             | `research-todo-index.test.tsx`、PI aggregate test                                               | 定义 `dedupe_key` → 按动作权限过滤 → 最多 5 行 → 深链                                  | 同对象仅一条当前待办；无权对象不计数                        |
+| E3   | `research-project-list.tsx`、platform settings                                        | project/settings component tests                                                                | 类型说明 → 继承来源 → 影响范围 → 长文本和窄屏                                          | 1280/1024/390 无溢出                                        |
+| E4   | workflow rail、节点、Agent、成员组件                                                  | 现有 research component tests + 灰度截图                                                        | 先删装饰 → 合并语义区块 → 排版层级 → 灰度/可访问性检查                                 | 通过 `academic-editorial-ui` 最终清单                       |
+
+#### 6.1.4 D1 跨仓实施顺序
+
+```text
+D1-A3 契约与 schema
+  → D1-P1 Plane 申请 outbox/状态投影
+  → D1-R1 RAG 状态迁移与旧接口兼容
+  → D1-R2 管理员回填/绑定校验
+  → D1-N 通知、SLA、重试
+  → D1-P2 READY 门禁与成员授权
+  → D2 UI 与端到端回归
+```
+
+Plane 只提交申请和消费状态，不调用 WeKnora 建库；RAGPortal 只接受管理员回填的外部 KB ID，不因拥有全局 WeKnora key 而扩大用户权限。任何一步失败，申请保持可重试状态，源文件/人工记录路径继续可用。
+
+#### 6.1.5 里程碑与检查点
+
+使用相对工作日排期，避免把未确认的人员假设写入计划。每个检查点未通过时停止后续开发，只修复当前阶段问题。
+
+| 里程碑        | 完成范围          | 检查点       | 通过条件                                                     |
+| ------------- | ----------------- | ------------ | ------------------------------------------------------------ |
+| M0（D1）      | A1–A3             | 契约冻结     | seed 可重建；权限矩阵、KB 状态机、错误码和 schema 已评审     |
+| M1（D2–D4）   | B1–B4             | 正确性门禁   | O0/O1 API 负例 100% 通过；迁移预检 0 异常；无裸 `detail`     |
+| M2（D5–D7）   | C1–C3             | 核心链路门禁 | 节点深链、报告附件、项目审批端到端闭环；旧路由回归通过       |
+| M3（D8–D11）  | D1-P/D1-R/D1-N/D2 | KB 门禁      | 申请→回填→READY→上传→归档→恢复可重放；跨课题绑定 0 次        |
+| M4（D12–D14） | E1–E4             | 体验门禁     | 多视口、键盘、灰度和可访问性检查通过；待办重复数为 0         |
+| M5（D15）     | 全部              | 发布评审     | §10 灰度、观测和回滚演练完成；manifest 双签；允许扩大 cohort |
+
+每个里程碑结束时提交一份 `checkpoint-Mx.json`，包含测试命令、通过/失败数量、跳过用例、迁移版本、feature flag 值和证据目录。任何 O0 未关闭、O1 有人工绕行、契约测试有 skip、或回滚演练失败，均不得进入下一里程碑。
+
+### 6.2 数据迁移与兼容策略
+
+#### 6.2.1 Plane 迁移清单
+
+按 **expand → backfill → enforce** 执行，迁移必须可重跑；生产不执行 destructive down migration。
+
+| 迁移项            | 建议字段/索引                                                                                                                | 回填规则                                                             | 强制约束                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Chain KB 申请投影 | `kb_request_id`、`kb_state`、`kb_external_id`、`kb_external_name`、`kb_policy_version`、`kb_updated_at`；`chain_id` 唯一索引 | 已有上传按 `knowledge_base_id` 生成 `LEGACY_BOUND`，不自动宣称 READY | 新建 `RESEARCH_CHAIN` 必须有申请投影；一 Chain 最多一个未结束申请 |
+| Capability policy | `policy_version`、`capabilities`（响应投影，不落 token）                                                                     | 旧资源按当前 `research-visibility-actions.v1` 计算                   | 所有资源动作走 resolver                                           |
+| Agent review      | `scope_kind`、`scope_source`、`policy_version`、`revoked_at`                                                                 | 旧 session 统一 `OWNER`；不回溯放宽权限                              | `REVIEW` 禁写工具，下一轮请求复验撤权                             |
+| 审计              | `request_id`、`trace_id`、`policy_version`、`outcome`、`error_code`                                                          | 旧日志保留，不补写敏感字段                                           | 禁止 token/key/正文进入日志                                       |
+
+迁移预检：
+
+```bash
+cd plane/apps/api
+docker compose -f ../../docker-compose-test.yml run --rm api-tests python manage.py makemigrations --check
+docker compose -f ../../docker-compose-test.yml run --rm api-tests python manage.py check
+```
+
+预检还必须统计：重复 `chain_id`、跨 workspace 的 `knowledge_base_id`、空 owner/subject、无效 mentor binding、未闭合 approval request。统计非零时停止迁移并登记 O0 缺陷。
+
+#### 6.2.2 RAGPortal 迁移清单
+
+当前 `kb_requests` 只有 `pending/approved/rejected`，需要追加 `chain_id`、`workspace_slug`、`request_id`、`payload_hash`、`state`、`external_kb_id`、`external_kb_name`、`external_instance`、`external_metadata_hash`、`needs_info_reason`、`last_error_code`、`retry_count`、`archived_at`、`restored_at`，并建立 `(workspace_slug, chain_id)`、`external_kb_id` 唯一索引。旧字段 `approved_kb_id/name` 迁移到新字段后保留只读兼容。
+
+旧状态映射：`pending → PENDING_ADMIN`，`approved 且无 external_kb_id → CREATED_PENDING_BINDING`，`approved 且有 external_kb_id → READY（必须重新跑归属校验）`，`rejected → REJECTED`。映射失败进入 `FAILED`，不得静默进入 READY。
+
+RAGPortal 当前接口保留 30 天兼容窗口：
+
+- 旧：`POST /api/kb-requests`、`GET /api/kb-requests/mine`、`POST /api/admin/kb-requests/{id}/approve|reject`。
+- 新：`POST /api/v1/research/chains/{chain_id}/knowledge-base-requests`、`GET /api/v1/research/chains/{chain_id}/knowledge-base-request`、`POST /api/v1/admin/research/knowledge-base-requests/{id}/bind`、`POST .../{id}/archive`、`POST .../{id}/restore`。
+- 旧 approve 只允许转入 `PENDING_ADMIN`/`CREATED_PENDING_BINDING`，不得再隐式创建或宣称 READY；兼容期结束后返回 `410` 并给出新路径。
+
+### 6.3 失败处理、重试和幂等
+
+所有跨仓写请求同时携带 `X-Request-ID` 和 `Idempotency-Key`；服务端保存 `request_id + payload_hash`。相同 hash 重放返回首次结果，不同 hash 返回 `409 IDEMPOTENCY_CONFLICT`。网络超时只允许客户端重试幂等请求，指数退避 `1s/2s/4s`，最多 3 次；收到 `401/403/409/422` 不自动重试。
+
+| 场景                     | HTTP/错误码                   | 状态变化                                     | 用户可执行动作       |
+| ------------------------ | ----------------------------- | -------------------------------------------- | -------------------- |
+| 申请重复                 | `409 / IDEMPOTENCY_CONFLICT`  | 保留首次申请                                 | 查看原申请           |
+| KB 尚未绑定              | `409 / KB_NOT_READY`          | `PENDING_ADMIN` 或 `CREATED_PENDING_BINDING` | 查看状态、补充信息   |
+| 外部 KB 已被其他课题绑定 | `403 / KB_SCOPE_CONFLICT`     | `FAILED`                                     | 联系管理员重新建库   |
+| WeKnora/RAG 超时         | `503 / UPSTREAM_TIMEOUT`      | 保留当前状态，增加 retry_count               | 稍后重试，不重复上传 |
+| 撤权后旧 Agent token     | `403 / CONTEXT_ACCESS_DENIED` | session 标记 `DEGRADED`                      | 重新打开并重新授权   |
+| 报告已提交后修改         | `409 / REPORT_READ_ONLY`      | 不变                                         | 查看正式版本         |
+
+### 6.4 接口实现对照表与示例
+
+以下接口是本阶段的最小实现面。已有接口保持路径不变，通过新增字段向后兼容；新增接口必须在 OpenAPI/JSON Schema、Plane BFF 和前端 client 同时登记。所有写请求要求认证、`X-Request-ID`、`Idempotency-Key`；请求头中的 key 不写入日志。
+
+| 服务      | 方法与路径                                                                             | 用途                                        | 认证/权限                     | 成功                                                     | 失败                                                |
+| --------- | -------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------- | -------------------------------------------------------- | --------------------------------------------------- |
+| Plane     | `POST /api/research/workspaces/{slug}/chains/`                                         | 创建 `RESEARCH_CHAIN`、Project、KB 申请投影 | Chain create                  | `201`，返回 `chain + project + kb_request_id + kb_state` | `409 IDEMPOTENCY_CONFLICT`、`422 CHAIN_INVALID`     |
+| Plane     | `GET /api/research/workspaces/{slug}/chains/{chain_id}/knowledge-base-request/`        | 查询课题 KB 生命周期                        | Chain view                    | `200 knowledge-base-lifecycle.v1`                        | 无权统一 `404 CHAIN_NOT_FOUND`                      |
+| Plane     | `POST /api/research/workspaces/{slug}/chains/{chain_id}/knowledge-base-request/retry/` | 重试 FAILED/UPSTREAM_TIMEOUT 申请           | owner/指定管理员              | `202`，返回新任务状态                                    | `409 state_conflict`                                |
+| Plane     | 现有 `POST /api/research/workspaces/{slug}/chains/{chain_id}/uploads/`                 | 上传课题资料                                | `knowledge_write` 且 KB READY | `201`，返回 upload receipt                               | `409 KB_NOT_READY`、`403 KB_SCOPE_CONFLICT`         |
+| Plane     | `POST /api/research/workspaces/{slug}/agent/sessions/`                                 | 创建 OWNER/REVIEW session                   | `agent_review` 或 owner write | `201`，返回 `scope_kind/capabilities`                    | `403 AGENT_SCOPE_INVALID`                           |
+| Plane     | 现有报告附件 presign/register/delete/download 路径                                     | 报告 PDF/Markdown 附件                      | report edit/download          | `200/201/204`                                            | `409 REPORT_READ_ONLY`、`422 FILE_TYPE_NOT_ALLOWED` |
+| RAGPortal | `POST /api/v1/research/chains/{chain_id}/knowledge-base-requests`                      | 接收 Plane 幂等申请                         | Plane service token           | `201/200`                                                | `409 IDEMPOTENCY_CONFLICT`                          |
+| RAGPortal | `GET /api/v1/research/chains/{chain_id}/knowledge-base-request`                        | 返回状态与授权投影                          | chain ACL 透传                | `200`                                                    | `404`                                               |
+| RAGPortal | `POST /api/v1/admin/research/knowledge-base-requests/{id}/bind`                        | 回填 WeKnora 手工创建结果                   | RAG admin                     | `200 READY` 或 `202 CREATED_PENDING_BINDING`             | `403 KB_SCOPE_CONFLICT`、`409`                      |
+| RAGPortal | `POST .../{id}/archive` / `restore`                                                    | 归档/恢复绑定                               | RAG admin + Plane chain state | `200`                                                    | `409 state_conflict`                                |
+| Synlora   | 现有 context exchange/agent API，新增 `scope_kind=REVIEW`                              | 执行只读 review                             | delegated service token       | `200` context/trace                                      | `401/403 CONTEXT_ACCESS_DENIED`                     |
+
+创建课题请求/响应示例：
+
+```http
+POST /api/research/workspaces/public/chains/
+X-Request-ID: req-phase15-001
+Idempotency-Key: req-phase15-001
+Content-Type: application/json
+
+{"chain_kind":"RESEARCH_CHAIN","name":"电池材料课题 A","visibility":"PRIVATE","org_unit_id":"unit-redacted"}
+```
+
+```json
+{
+  "schema_version": "research-chain.v1",
+  "data": {
+    "chain_id": "chain-redacted",
+    "project_id": "project-redacted",
+    "kb_request_id": "kbreq-redacted",
+    "kb_state": "PENDING_ADMIN",
+    "capabilities": {
+      "knowledge_write": { "allowed": false, "reason_code": "KB_NOT_READY", "reason": "知识库尚未完成管理员绑定" }
+    }
+  },
+  "request_id": "req-phase15-001"
+}
+```
+
+管理员回填请求示例：
+
+```http
+POST /api/v1/admin/research/knowledge-base-requests/42/bind
+X-Request-ID: req-bind-001
+Idempotency-Key: req-bind-001
+Content-Type: application/json
+
+{"external_kb_id":"weknora-kb-redacted","external_kb_name":"课题 A 私有库","external_instance":"weknora-test","metadata_hash":"sha256:redacted","parameter_summary":{"embedding":"configured","parser":"configured"}}
+```
+
+回填只在 external ID 未绑定其他 `workspace_slug + chain_id`、实例归属可验证、参数摘要完整时进入 `READY`。重复相同 payload 返回首次 `200`；相同 request ID 但 payload 不同返回 `409 IDEMPOTENCY_CONFLICT`。
+
+报告附件复用现有 `FileAsset` + `ReportAttachment`，不新建第二套文件存储：目标类型为 `PDF`/`MARKDOWN`，MIME 与扩展名必须一致，大小使用 workspace research setting（默认上限 100 MiB）；报告为 `DRAFT` 或 `RETURNED` 且当前用户拥有 `edit` 时可上传/删除，提交后只读，下载每次重新检查 `download` ACL。实验复用 `experiments/<record_id>/assets/` 外部资产关联接口，Plane 不接收原始实验数据文件。
+
+`ResearchAPIException`/`research_error` 是 Plane 失败响应唯一出口；新增 `KB_NOT_READY`、`KB_SCOPE_CONFLICT`、`CAPABILITY_DENIED` 等错误码必须同步 `plane/docs/contracts/research-intelligent-platform/error-codes.json`、对应 `examples/error-codes.v1.json` 与前端 `error-messages.ts`，不得返回裸 `detail`。
+
 ## 7. 依赖图与执行顺序
 
 ```mermaid
@@ -389,6 +590,96 @@ flowchart TD
 | Web unit/component      | workflow overflow、节点状态动作、提交后深链、文件选择状态、摘要切换、待办翻页、类型说明、Agent 输出分段                   |
 | E2E API                 | 学生/导师/PI/ADMIN/NONE/Guest 逐格验证 view/edit/review/export/agent/knowledge                                            |
 
+### 8.1.1 可直接执行的命令和通过门禁
+
+命令在仓库根目录执行；需要外部服务的用例先按执行手册 L1 启动，并在证据中记录服务 commit/镜像版本。命令失败或出现 `skip` 时不得进入人工验收。
+
+```bash
+# Plane：迁移预检、能力/适配器单测和本阶段契约
+cd plane
+docker compose -f docker-compose-test.yml run --rm api-tests \
+  python manage.py makemigrations --check
+docker compose -f docker-compose-test.yml run --rm api-tests \
+  pytest -q plane/tests/unit/research/test_capabilities.py \
+  plane/tests/unit/research/test_ragportal_adapter.py \
+  plane/tests/contract/app/test_research_chain_knowledge.py \
+  plane/tests/contract/app/test_research_reports.py \
+  plane/tests/contract/app/test_research_approvals.py \
+  plane/tests/contract/app/test_research_agent_plugin.py \
+  plane/tests/contract/app/test_research_security.py
+
+# Plane Web：研究链组件、类型、格式和构建
+pnpm --filter web test:components -- \
+  tests/components/research-chain-knowledge-panel.test.tsx \
+  tests/components/research-chain-workflow-rail.test.tsx \
+  tests/components/research-chain-detail.test.tsx \
+  tests/components/research-home-summary-card.test.tsx \
+  tests/components/research-todo-index.test.tsx
+pnpm --filter web check:types
+pnpm --filter web check:lint
+pnpm --filter web check:format
+pnpm --filter web build
+
+# RAGPortal：申请状态机、上传元数据和 WeKnora 适配器
+cd ../RAGPortal/backend
+AUTH_SECRET=test-secret AI4MS_BASE_URL=http://ai4ms.test \
+WEKNORA_BASE_URL=http://weknora.test WEKNORA_API_KEY=test-key \
+.venv/bin/pytest -q app/tests/test_kb_request_service.py \
+  app/tests/test_research_metadata.py app/tests/test_backfill_service.py \
+  app/tests/test_weknora_upload.py
+
+# Synlora：review context、工具边界和会话运行时
+cd ../../Synlora/apps/web/backend
+AUTH_SECRET=test-secret .venv/bin/pytest -q \
+  tests/test_research_context.py tests/test_research_agent_contracts.py \
+  tests/test_runtime_assembly.py tests/test_session_runtime.py
+```
+
+通过门禁：Plane API、RAGPortal、Synlora 测试均 0 failed/0 skipped；Web 类型、lint、format、build 全通过；新增 O0/O1 测试必须至少包含一个越权负例和一个幂等重放负例。测试产物保存为 `junit.xml`、`coverage.xml` 或 Vitest JSON，不接受只贴终端摘要。
+
+### 8.1.2 契约与状态机
+
+新增契约文件放在 `plane/docs/contracts/research-intelligent-platform/`，版本只允许追加字段/枚举：
+
+| 契约                               | 必填字段                                                                                                    | 关键约束                                                                                                                                                       |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `research-capabilities.v1.json`    | `schema_version`、`resource`、`actions`、`policy_version`                                                   | action 名称固定为 `view/edit/submit/review/accept/return/export/download/agent_review/knowledge_read/knowledge_write`；每项为 `{allowed, reason_code, reason}` |
+| `agent-context.v2.json`            | `scope_kind`、`scope_source`、`allowed_tools`、`allowed_knowledge_base_ids`、`policy_version`、`expires_at` | `REVIEW` 只允许检索/读证据/评论/草稿；token TTL 默认 600 秒且不得小于 60 秒；每轮请求复验撤权                                                                  |
+| `knowledge-base-lifecycle.v1.json` | `request_id`、`chain_id`、`workspace_slug`、`state`、`external_kb_id`、`policy_version`                     | 状态仅可按下图迁移；跨课题 external ID、重复绑定均拒绝                                                                                                         |
+| `research-todo.v1.json`            | `dedupe_key`、`source`、`resource_id`、`chain_id`、`action`、`assignee_id`、`updated_at`                    | 当前对象同一 action 只出现一次；无权对象不参与计数                                                                                                             |
+
+```mermaid
+stateDiagram-v2
+  [*] --> REQUESTED
+  REQUESTED --> PENDING_ADMIN
+  PENDING_ADMIN --> NEEDS_INFO
+  NEEDS_INFO --> PENDING_ADMIN
+  PENDING_ADMIN --> REJECTED
+  PENDING_ADMIN --> CREATED_PENDING_BINDING
+  CREATED_PENDING_BINDING --> READY
+  CREATED_PENDING_BINDING --> FAILED
+  READY --> ARCHIVED
+  ARCHIVED --> RESTORE_PENDING
+  RESTORE_PENDING --> READY
+  RESTORE_PENDING --> FAILED
+```
+
+Plane 和 RAGPortal 都必须执行 `READY` 门禁：Plane 在上传前检查状态和 chain 绑定，RAGPortal 在上传请求中再次检查 `research_project_id/chain_id/kb_id` 三元组。任何一侧非 READY 均返回 `409 KB_NOT_READY`，不得创建 WeKnora 上传任务。
+
+### 8.1.3 负例覆盖矩阵
+
+每个资源至少验证以下入口：列表、详情、直 ID、导出、下载、Context、Agent、KB 搜索。断言 HTTP 状态、`error_code`、响应不含标题/文件名/正文，并检查审计字段 `actor/resource/action/policy_version/request_id/outcome`。
+
+| 负例                                                                        | 预期                                                                               |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 学生访问管理员 PRIVATE Chain                                                | 列表不出现；详情/直 ID/导出/Agent/KB 返回 404 或 `CHAIN_ACCESS_DENIED`，不泄露标题 |
+| 普通 WORKSPACE 可读者审批报告                                               | 不出现在待我审批；直接 action 返回 `403 approval_action_not_allowed`               |
+| 导师访问未绑定学生课题                                                      | Agent 创建和 Context 资源均 `403/404`；不生成 session                              |
+| REVIEW session 调用节点 transition、upload、reference confirm、正式报告覆盖 | `403`，记录 `agent_review_denied_total` 和审计；评论/分析草稿仍可成功              |
+| 跨课题 KB ID 上传/搜索                                                      | `403 KB_SCOPE_CONFLICT`；RAG/Plane 均不创建 upload/task                            |
+| 过期或撤销 Context 下一轮请求                                               | `401/403 CONTEXT_ACCESS_DENIED`；session 变为 `DEGRADED`                           |
+| PDF/Markdown 以伪造 MIME、超限大小或重复 hash 上传                          | `422 FILE_TYPE_NOT_ALLOWED` / `413 FILE_SIZE_EXCEEDED` / 幂等返回原记录            |
+
 ### 8.2 人工浏览器回归
 
 每个视口至少走一遍：`1440×900`、`1280×800`、`1024×768`、`390×844`。
@@ -398,6 +689,18 @@ flowchart TD
 3. 主 PI：查看课题组聚合 → 打开成员/项目/报告/成果 → review 课题 Agent → 验证不获得配置以外的编辑能力。
 4. 管理员：查看身份映射和平台配置 → 验证配置权与业务数据权分离 → 不应因管理员身份看到 PRIVATE 内容。
 5. 提交后节点：对每种状态刷新/深链/浏览器后退，确认详情和证据保留。
+
+### 8.2.1 路由、状态和可访问性检查表
+
+| 用例     | 路由/组件                                                                                              | 必测状态                                                                    | 键盘与语义断言                                                                | 证据                        |
+| -------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------- |
+| UI-C1    | `/projects/{project}/chains/{chain}?tab=nodes&stage={stage}&node={node}`、`research-chain-node-detail` | DRAFT、ACTIVE、WAITING_HUMAN、NEEDS_REVISION、COMPLETED、FAILED、ARCHIVED   | Tab 顺序进入动作区；按钮有 `aria-label`；只读原因以 `aria-live` 播报          | `chain-ui/P15-O02-*`        |
+| UI-C2    | 报告详情、`report-attachments`、实验详情                                                               | 未选文件、上传中、解析中、失败、成功、提交后锁定                            | 文件名/大小/类型可读；错误与重试按钮可聚焦；原始实验数据上传入口不存在        | `content-entry/P15-O03-*`   |
+| UI-D2    | `research-chain-knowledge-panel`                                                                       | PENDING_ADMIN、NEEDS_INFO、CREATED_PENDING_BINDING、READY、FAILED、ARCHIVED | 非 READY 上传按钮不渲染；状态和原因文本可读；KB 选择只出现当前 chain          | `knowledge-space/P15-O04-*` |
+| UI-E1/E2 | 首页摘要、待办共享区块                                                                                 | 无课题、单课题、多课题、加载、错误、降级                                    | 左右箭头/Home/End 可用；当前序号和总数播报；每条待办深链可聚焦                | `overview/P15-O10-*`        |
+| UI-E4    | workflow rail、成员表格、Agent 消息                                                                    | 窄屏、灰度、长文本、工具错误                                                | 390px 无横向溢出；状态不依赖颜色；结论/依据/引用/工具/错误/下一步语义标题存在 | `visual/P15-O01-*`          |
+
+浏览器证据至少保存截图和 console/network 摘要；若使用 Playwright，保存 trace 与 viewport 配置，禁止保存 Cookie、Authorization header 和文件正文。
 
 ### 8.3 视觉质量门禁
 
@@ -432,21 +735,97 @@ plane/docs/evidence/phase-1.5/optimization/
 4. 自动化回归结果及原始场景复验截图或日志。
 5. 影响范围和回滚方式；跨仓契约变更需记录版本。
 
-## 10. 风险与回滚
+### 9.1 证据 manifest
+
+每个 `P15-Oxx` 至少维护一个 `manifest.json`，文件名为 `P15-Oxx-<run_id>.manifest.json`，模板如下：
+
+```json
+{
+  "issue_id": "P15-O04",
+  "fixture_id": "phase15-kb-chain-a",
+  "actor": { "user_id": "redacted", "role": "RESEARCHER" },
+  "workspace_id": "redacted",
+  "chain_id": "redacted",
+  "node_id": "redacted",
+  "report_id": null,
+  "kb_request_id": "redacted",
+  "environment": {
+    "plane_commit": "<sha>",
+    "ragportal_commit": "<sha>",
+    "synlora_commit": "<sha>",
+    "browser": "Chromium <version>",
+    "viewport": "390x844",
+    "timezone": "Asia/Shanghai"
+  },
+  "commands": ["<exact command>"],
+  "request_ids": ["<redacted>"],
+  "expected": { "http_status": 409, "error_code": "KB_NOT_READY" },
+  "actual": { "http_status": 409, "error_code": "KB_NOT_READY" },
+  "artifacts": [{ "path": ".../P15-O04-kb.png", "sha256": "<sha256>", "kind": "screenshot" }],
+  "reviewer": "<role>",
+  "status": "passed",
+  "recorded_at": "2026-09-25T12:00:00+08:00"
+}
+```
+
+`actual` 与 `expected` 必须同时填写；自动化结果引用 JUnit/coverage/Playwright trace；截图使用 `issue_id + case_id + viewport` 命名。manifest 中的用户、对象和 request ID 使用稳定脱敏值，原始数据只保存在受控测试环境，保留 90 天后清理。任何 O0 越权证据必须由实现人和复核人双签，状态才可改为 `closed`。
+
+### 9.2 观测指标和告警
+
+日志统一携带 `request_id`、`trace_id`、`workspace_id`、`resource_type`、`resource_id`、`policy_version`、`outcome`、`error_code`；禁止记录 token、key、密码和文件正文。至少新增以下指标：
+
+| 指标                                | 维度                            | 告警阈值（灰度 15 分钟窗口）                  |
+| ----------------------------------- | ------------------------------- | --------------------------------------------- |
+| `research_acl_denied_total`         | role/resource/action/error_code | 同一角色误拒绝率 > 5% 或出现跨 workspace 允许 |
+| `agent_review_denied_total`         | scope_kind/tool/action          | REVIEW 写工具允许数 > 0 立即停止              |
+| `kb_request_state_duration_seconds` | state/workspace                 | PENDING_ADMIN p95 > 24h                       |
+| `kb_binding_failure_total`          | error_code                      | 任何 `KB_SCOPE_CONFLICT` 或连续 3 次 FAILED   |
+| `todo_duplicate_total`              | dedupe_key/source               | > 0 即阻止发布 E2                             |
+| `research_upstream_degraded_total`  | source_system/error_code        | 5 分钟内 > 3 次切换人工路径并保留告警         |
+
+查询证据至少包含 Plane `IntegrationCallLog`、RAGPortal 应用日志、Synlora context/trace 和前端 console 错误四类；跨服务用 `request_id` 串联，归档到 `observability/`。
+
+## 10. 发布、灰度与回滚
+
+### 10.1 发布顺序与停止条件
+
+1. **预检**：备份 Plane/RAGPortal 数据库；执行 `makemigrations --check`、契约 schema 校验、seed verify 和 O0/O1 自动化测试。
+2. **兼容发布**：先发布 Plane migration/API（新字段可选、旧状态可读），再发布 RAGPortal API，再发布 Synlora review context，最后发布 Web。任何服务未健康不得切换下一个服务。
+3. **灰度**：仅对 `public` 测试工作区和 6 个 seed 账号开启 `phase15_optimization_enabled`；先只读，再打开报告附件和 KB 申请写入，最后打开 REVIEW Agent。
+4. **观察**：每个阶段至少观察 15 分钟；ACL 越权、review 写工具允许、KB 跨课题绑定、待办重复或 5xx 超阈值立即停止并回滚。
+5. **扩大**：通过人工浏览器回归、L3.6 角色矩阵和 manifest 双签后，才扩大工作区 cohort。
+
+健康检查：Plane `GET /api/research/health/`、RAGPortal `GET /api/health`、Synlora `GET /api/health`；各自返回 200 且日志无连续认证/迁移错误。
+
+### 10.2 回滚步骤
+
+```text
+发现 O0/O1 → 关闭 phase15 写入开关（保留只读）
+  → 导出 IntegrationCallLog、审计、队列和 manifest
+  → 停止新增 KB 申请/回填/Agent REVIEW
+  → 回退 Web → Synlora → RAGPortal → Plane API 到上一个兼容版本
+  → 保留已写入的申请、附件、评论草稿和外部映射，不做破坏性删除
+  → 重新执行健康、ACL 负例、导出 hash 和人工记录回归
+  → 失败项登记并保持写入关闭，修复后从兼容版本再次前滚
+```
+
+迁移只允许向前兼容；不得直接执行 destructive down migration。孤儿 KB 映射进入 `FAILED` 并由补偿任务重试，附件/草稿/评论保留原审计链。目标 RTO：O0 越权 30 分钟内关闭写入并恢复上一版本；目标 RPO：0（不丢失已提交事件、附件元数据、申请和审计）。
+
+## 11. 风险与缓解
 
 | 风险                                   | 影响 | 缓解与回滚                                                                                                                             |
 | -------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 放宽导师/PI scope 造成越权             | 高   | 先落 capability contract 和负例；默认 fail closed；撤销 review scope 即时失效                                                          |
 | 课题 KB 申请、手工建库或回填失败       | 高   | 申请幂等、管理员通知、`PENDING_ADMIN`/`NEEDS_INFO`/`CREATED_PENDING_BINDING` 状态、回填校验和补偿任务；保留人工记录路径；不删除原有 KB |
-| 项目审批与现有 Plane Issue 语义冲突    | 高   | A2 先决策；未确认前只做关系展示，不创建新审批对象                                                                                      |
+| 项目审批与现有 Plane Issue 语义冲突    | 高   | 固定复用 `ApprovalRequest`/Plane Issue；契约测试确保 Chain Event 关联，不创建第二套审批对象                                            |
 | 报告附件与实验原始数据边界混淆         | 中   | 报告走 FileAsset/附件契约；实验只保存外部资产引用；前端明确来源系统                                                                    |
 | 首页聚合暴露无权对象标题               | 高   | 聚合前执行 ACL；无权限对象不参与计数、搜索、导出或链接生成                                                                             |
 | UI 重构破坏 IA v2/旧路由               | 中   | 保留现有路由和页签；每轮跑 SW-05、L3.6 和多视口浏览器回归                                                                              |
 | 浏览器环境缺少 Chrome 导致证据不可复验 | 中   | 在执行机安装固定版本 Chromium/Chrome，记录版本；无法安装时由人工提供截图并标注环境限制                                                 |
 
-## 11. 待用户确认的业务问题
+## 12. 已冻结决策与未决技术问题
 
-以下问题会直接决定数据模型、权限和排期，建议先确认再进入 B/D 阶段：
+业务决策已冻结；以下未决项只允许影响实现细节，不得重新打开已确认的权限边界：
 
 本轮业务决策已确认：
 
@@ -459,10 +838,19 @@ plane/docs/evidence/phase-1.5/optimization/
 - AI4MS ↔ Plane 账号绑定实现真实 OIDC/SSO；Plane/AI4MS 管理员维护 KB 申请通知、SLA、参数清单和回填校验。
 - 首页保留课题摘要与跨组件待办的语义区分，但在一个共享区块内呈现摘要头和待办列表。
 
-## 12. 变更记录
+未决技术问题（进入实现前由接口维护人填写）：
+
+- [ ] 管理员通知渠道：站内通知必选，邮件/IM 是否启用及 SLA 值。
+- [ ] RAGPortal 新旧接口兼容窗口的实际下线日期和调用方清单。
+- [ ] WeKnora 回填时可供校验的实例标识、参数摘要字段和管理员操作审计字段。
+- [ ] 浏览器自动化执行机的 Chromium 版本、登录注入方式和截图存储位置。
+- [ ] Plane 迁移发布窗口、备份位置和回滚审批人。
+
+## 13. 变更记录
 
 | 版本 | 日期       | 变更                                                                                                                                                                                                            |
 | ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v1.3 | 2026-09-25 | 增加任务卡、仓库职责、DoD、D1 跨仓拆分、迁移与兼容策略、状态机、HTTP/错误码、自动化命令、负例矩阵、证据 manifest、观测指标、发布灰度和可执行回滚；收敛现有代码与目标契约的差异                                  |
 | v1.2 | 2026-09-25 | 写入已确认业务决策：课题强制创建 Project/KB 申请、PENDING_ADMIN、主 PI/导师 review Agent 评论与分析草稿、审批范围、唯一 Main PI、组织继承、项目审批复用、成果附件、SpecLabOS 资产关联、真实 OIDC/SSO 和总览布局 |
 | v1.1 | 2026-09-25 | 根据 RAGPortal/WeKnora 现有边界，将课题 KB 方案改为“申请 → 管理员手工建库 → 回填绑定 → READY 门禁”，同步修正任务、验收、风险和开放问题                                                                          |
 | v1.0 | 2026-09-25 | 基于 issue0925 现场问题、现有代码和 Phase 1.5 联调证据，新增问题台账、权限/KB 契约、任务依赖、验收矩阵与待确认业务决策                                                                                          |
