@@ -67,10 +67,13 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageI
 
   return (
     <section
-      className="shrink-0 overflow-x-auto border-b border-subtle bg-canvas px-5 py-3"
+      className="shrink-0 border-b border-subtle bg-canvas px-4 py-3 sm:px-5"
       aria-label={t("research.chains.workflow_title")}
     >
-      <div className="flex min-w-max items-stretch gap-1" role="list">
+      <div
+        className="grid grid-cols-1 gap-1.5 min-[390px]:grid-cols-2 md:flex md:flex-wrap md:items-stretch md:gap-1.5"
+        role="list"
+      >
         {workflow.stages.map((stage, index) => {
           const kind = stepKind(stage);
           const selected = selectedStageId === stage.id;
@@ -89,7 +92,7 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageI
           return (
             <div key={stage.id} className="flex items-stretch" role="listitem">
               {index > 0 && (
-                <span className="flex w-4 items-center text-tertiary" aria-hidden="true">
+                <span className="hidden w-4 items-center text-tertiary md:flex" aria-hidden="true">
                   <ChevronRight className="size-3.5" />
                 </span>
               )}
@@ -99,7 +102,7 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageI
                 aria-current={stage.isCurrent ? "step" : undefined}
                 aria-pressed={selected || undefined}
                 title={stageTitle}
-                className={`flex max-w-36 min-w-28 flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors ${STEP_SURFACE_CLASSES[kind]} ${
+                className={`flex w-full flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors md:w-auto md:max-w-36 md:min-w-28 ${STEP_SURFACE_CLASSES[kind]} ${
                   selected ? "ring-border-strong border-strong ring-1" : ""
                 }`}
               >
@@ -112,14 +115,14 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageI
                     {kind === "current" && <CircleDot className="size-2.5" strokeWidth={3} />}
                     {kind === "attention" && <AlertTriangle className="size-2.5" strokeWidth={3} />}
                   </span>
-                  <span className={`truncate text-12 ${STEP_TITLE_CLASSES[kind]}`}>{t(stage.labelKey)}</span>
+                  <span className={`text-12 break-words ${STEP_TITLE_CLASSES[kind]}`}>{t(stage.labelKey)}</span>
                 </span>
-                <span className="truncate text-11 text-secondary">{statusLabel}</span>
+                <span className="text-11 break-words text-secondary">{statusLabel}</span>
                 {stage.shared && (
-                  <span className="truncate text-10 text-tertiary">{t("research.chains.workflow.shared")}</span>
+                  <span className="text-10 break-words text-tertiary">{t("research.chains.workflow.shared")}</span>
                 )}
                 {stage.associatedNodeIds.length > 0 && (
-                  <span className="truncate text-10 text-tertiary">{t("research.chains.workflow.preparation")}</span>
+                  <span className="text-10 break-words text-tertiary">{t("research.chains.workflow.preparation")}</span>
                 )}
               </button>
             </div>

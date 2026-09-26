@@ -17,6 +17,7 @@ from plane.db.models import (
     ResearchAgentSession,
     ResearchChainEvent,
     ResearchChainSnapshot,
+    ResearchKnowledgeRequest,
     ResearchProjectProfile,
     ResearchUserProfile,
 )
@@ -95,7 +96,9 @@ def env(db, settings, monkeypatch):
     project_a, profile_a = _profile(workspace, student, "Public", "WORKSPACE")
     project_b, profile_b = _profile(workspace, student, "Private", "PRIVATE")
 
-    def fake_create_synlora_session(*, workspace, user, node, request_id, client=None):
+    def fake_create_synlora_session(
+        *, workspace, user, node, request_id, client=None, scope_kind="OWNER", scope_source="chain_owner"
+    ):
         assembly = AgentAssembly(
             persona="research-general",
             enabled_plugins=[],
@@ -104,6 +107,8 @@ def env(db, settings, monkeypatch):
             allowed_file_ids=[],
             unavailable_reasons=[],
             policy_id=f"policy-{node.id}",
+            scope_kind=scope_kind,
+            scope_source=scope_source,
         )
         grant, _token = issue_agent_context(
             workspace=workspace,
@@ -166,19 +171,37 @@ def env(db, settings, monkeypatch):
 
 
 def _create_chain(env, project):
-    return env["student_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/chains/",
-        {"request_id": f"chain-{uuid4().hex}", "project_id": str(project.id)},
-        format="json",
-    ).json()["data"]
+    return (
+        env["student_client"]
+        .post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/",
+            {"request_id": f"chain-{uuid4().hex}", "project_id": str(project.id)},
+            format="json",
+        )
+        .json()["data"]
+    )
+
+
+def _mark_knowledge_ready(env, chain_id, kb_id="kb-1"):
+    """Promote the automatically created KB request to the test-ready state."""
+    request = ResearchKnowledgeRequest.objects.get(chain_id=chain_id)
+    request.state = ResearchKnowledgeRequest.State.READY
+    request.external_kb_id = kb_id
+    request.external_kb_name = f"Ready {kb_id}"
+    request.save(update_fields=["state", "external_kb_id", "external_kb_name", "updated_at"])
+    return request
 
 
 def _create_node(env, chain_id, node_type, title):
-    return env["student_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/nodes/",
-        {"request_id": f"node-{uuid4().hex}", "node_type": node_type, "title": title},
-        format="json",
-    ).json()["data"]
+    return (
+        env["student_client"]
+        .post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/nodes/",
+            {"request_id": f"node-{uuid4().hex}", "node_type": node_type, "title": title},
+            format="json",
+        )
+        .json()["data"]
+    )
 
 
 def test_phase1_student_research_loop_and_guardrails(env):
@@ -186,7 +209,11 @@ def test_phase1_student_research_loop_and_guardrails(env):
     chain_a = _create_chain(env, env["project_a"])
     chain_b = _create_chain(env, env["project_b"])
     node_a = _create_node(env, chain_a["id"], "LITERATURE_REVIEW", "课题 A 调研")
-    node_b = _create_node(env, chain_b["id"], "EXPERIMENT", "课题 B 实验")
+    _create_node(env, chain_b["id"], "EXPERIMENT", "课题 B 实验")
+    assert ResearchKnowledgeRequest.objects.filter(
+        chain_id=chain_a["id"], state=ResearchKnowledgeRequest.State.PENDING_ADMIN
+    ).exists()
+    _mark_knowledge_ready(env, chain_a["id"])
 
     visible = env["guest_client"].get(f"/api/research/workspaces/{env['workspace'].slug}/chains/")
     assert visible.status_code == 200
@@ -228,11 +255,15 @@ def test_phase1_student_research_loop_and_guardrails(env):
         )
     assert uploaded.status_code == 201, uploaded.json()
 
-    session = env["student_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/",
-        {"request_id": f"session-{uuid4().hex}", "chain_node_id": node_a["id"]},
-        format="json",
-    ).json()
+    session = (
+        env["student_client"]
+        .post(
+            f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/",
+            {"request_id": f"session-{uuid4().hex}", "chain_node_id": node_a["id"]},
+            format="json",
+        )
+        .json()
+    )
     message = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/{session['session_id']}/messages/",
         {"request_id": f"message-{uuid4().hex}", "content": "summarize polymer literature"},
@@ -240,7 +271,31 @@ def test_phase1_student_research_loop_and_guardrails(env):
     )
     assert message.status_code == 200, message.json()
 
-    plan = env["mentor_client"].post(
+    review_session = (
+        env["mentor_client"]
+        .post(
+            f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/",
+            {"request_id": f"review-session-{uuid4().hex}", "chain_node_id": node_a["id"]},
+            format="json",
+        )
+        .json()
+    )
+    assert review_session["scope_kind"] == "REVIEW"
+    review_draft = env["mentor_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/agent/artifacts/",
+        {
+            "request_id": f"review-draft-{uuid4().hex}",
+            "session_id": review_session["session_id"],
+            "artifact_type": "ANALYSIS_SUMMARY",
+            "summary": "Mentor review draft",
+            "confirmed": False,
+        },
+        format="json",
+    )
+    assert review_draft.status_code == 201, review_draft.json()
+    assert review_draft.json()["status"] == "DRAFT"
+
+    plan = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/agent/artifacts/",
         {
             "request_id": f"artifact-{uuid4().hex}",
@@ -253,7 +308,7 @@ def test_phase1_student_research_loop_and_guardrails(env):
     )
     assert plan.status_code == 201, plan.json()
     assert plan.json()["snapshot_type"] == "PAPER_RESEARCH"
-    analysis = env["mentor_client"].post(
+    analysis = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_a['id']}/analyses/",
         {
             "request_id": f"analysis-{uuid4().hex}",
@@ -267,6 +322,19 @@ def test_phase1_student_research_loop_and_guardrails(env):
     )
     assert analysis.status_code == 201, analysis.json()
 
+    denied_review_confirmation = env["mentor_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/agent/artifacts/",
+        {
+            "request_id": f"review-confirmed-{uuid4().hex}",
+            "session_id": review_session["session_id"],
+            "artifact_type": "ANALYSIS_SUMMARY",
+            "summary": "Should stay draft",
+            "confirmed": True,
+        },
+        format="json",
+    )
+    assert denied_review_confirmation.status_code == 403
+
     experiment = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/projects/{env['project_b'].id}/experiments/",
         {
@@ -279,11 +347,16 @@ def test_phase1_student_research_loop_and_guardrails(env):
     )
     assert experiment.status_code == 201, experiment.json()
     record_id = experiment.json()["id"]
-    assert env["student_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/experiments/{record_id}/status/",
-        {"status": "RUNNING"},
-        format="json",
-    ).status_code == 200
+    assert (
+        env["student_client"]
+        .post(
+            f"/api/research/workspaces/{env['workspace'].slug}/experiments/{record_id}/status/",
+            {"status": "RUNNING"},
+            format="json",
+        )
+        .status_code
+        == 200
+    )
     failed = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/experiments/{record_id}/status/",
         {"status": "FAILED", "failure_reason": "instrument unavailable"},

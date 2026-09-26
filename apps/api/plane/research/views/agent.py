@@ -73,21 +73,23 @@ AGENT_MANIFEST = {
     "transport": {"events": "json_poll", "streaming": "reserved", "iframe": "forbidden"},
 }
 
-AGENT_CHAIN_EVENT_TYPES = frozenset({
-    "RESEARCH_NOTE",
-    "COMMUNICATION",
-    "AI_ACTION",
-    "TOOL_CALL",
-    "INTERMEDIATE_ARTIFACT",
-    "VALIDATION",
-    "VALIDATION_PASSED",
-    "VALIDATION_FAILED",
-    "HUMAN_DECISION",
-    "APPROVAL",
-    "DATA_CHANGE",
-    "DEGRADED",
-    "OUTPUT",
-})
+AGENT_CHAIN_EVENT_TYPES = frozenset(
+    {
+        "RESEARCH_NOTE",
+        "COMMUNICATION",
+        "AI_ACTION",
+        "TOOL_CALL",
+        "INTERMEDIATE_ARTIFACT",
+        "VALIDATION",
+        "VALIDATION_PASSED",
+        "VALIDATION_FAILED",
+        "HUMAN_DECISION",
+        "APPROVAL",
+        "DATA_CHANGE",
+        "DEGRADED",
+        "OUTPUT",
+    }
+)
 AGENT_CHAIN_EVENT_WRITE_ACTION = "agent.chain_event.write"
 AGENT_CHAIN_EVENT_RESOURCE_TYPE = "research_chain_event"
 
@@ -110,10 +112,14 @@ def _visible_node(workspace, user, node_id):
         node_id = UUID(str(node_id))
     except (TypeError, ValueError):
         return None
-    node = ResearchChainNode.objects.select_related("chain__project__research_profile").filter(
-        pk=node_id,
-        chain__workspace=workspace,
-    ).first()
+    node = (
+        ResearchChainNode.objects.select_related("chain__project__research_profile")
+        .filter(
+            pk=node_id,
+            chain__workspace=workspace,
+        )
+        .first()
+    )
     if node is None:
         return None
     profile = getattr(node.chain.project, "research_profile", None)
@@ -299,13 +305,25 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
         existing = ResearchAgentSession.objects.filter(request_id=request_id).first()
         if existing:
             if existing.workspace_id != workspace.id or not _session_visible(workspace, request.user, existing):
-                return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id was already used with another payload.", status.HTTP_409_CONFLICT)
+                return research_error(
+                    ResearchErrorCode.IDEMPOTENCY_CONFLICT,
+                    "request_id was already used with another payload.",
+                    status.HTTP_409_CONFLICT,
+                )
             if existing.payload_hash != payload_hash(request.data):
-                return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id was already used with another payload.", status.HTTP_409_CONFLICT)
+                return research_error(
+                    ResearchErrorCode.IDEMPOTENCY_CONFLICT,
+                    "request_id was already used with another payload.",
+                    status.HTTP_409_CONFLICT,
+                )
             return Response(ResearchAgentSessionSerializer(existing).data, status=status.HTTP_200_OK)
         node = _visible_node(workspace, request.user, request.data.get("chain_node_id"))
         if node is None:
-            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "chain_node_id is invalid or not accessible.", status.HTTP_403_FORBIDDEN)
+            return research_error(
+                ResearchErrorCode.AGENT_SCOPE_INVALID,
+                "chain_node_id is invalid or not accessible.",
+                status.HTTP_403_FORBIDDEN,
+            )
         readonly_error = _chain_readonly_error(node.chain)
         if readonly_error:
             return readonly_error
@@ -353,7 +371,11 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
                 created_by=request.user,
             )
         except IntegrityError:
-            return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id was already used with another payload.", status.HTTP_409_CONFLICT)
+            return research_error(
+                ResearchErrorCode.IDEMPOTENCY_CONFLICT,
+                "request_id was already used with another payload.",
+                status.HTTP_409_CONFLICT,
+            )
         event = _append_event(session, "AI_ACTION", {"action": "session.ready"}, f"event:{request_id}")
         record_audit_event(
             workspace=workspace,
@@ -361,11 +383,18 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
             resource_type=ResearchResourceType.AGENT_SESSION,
             resource_id=session.session_id,
             actor=request.user,
-            metadata={"run_id": str(session.run_id), "project_id": str(session.project_id), "chain_node_id": str(node.id)},
+            metadata={
+                "run_id": str(session.run_id),
+                "project_id": str(session.project_id),
+                "chain_node_id": str(node.id),
+            },
             request=request,
         )
         return Response(
-            {**ResearchAgentSessionSerializer(session).data, "initial_event": ResearchAgentRunEventSerializer(event).data},
+            {
+                **ResearchAgentSessionSerializer(session).data,
+                "initial_event": ResearchAgentRunEventSerializer(event).data,
+            },
             status=status.HTTP_201_CREATED,
         )
 
@@ -434,7 +463,12 @@ class ResearchAgentSessionCloseEndpoint(AgentPluginMixin):
             grant.revoked_at = timezone.now()
             grant.updated_by = request.user
             grant.save(update_fields=["revoked_at", "updated_by", "updated_at"])
-        _append_event(session, "HUMAN_DECISION", {"action": "session.close"}, request_id_from(request) or f"close:{session.session_id}")
+        _append_event(
+            session,
+            "HUMAN_DECISION",
+            {"action": "session.close"},
+            request_id_from(request) or f"close:{session.session_id}",
+        )
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.AGENT_SESSION_CLOSE,
@@ -464,7 +498,9 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
         if error:
             return error
         if session.status == ResearchAgentSession.Status.CLOSED:
-            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "Agent session is closed.", status.HTTP_409_CONFLICT)
+            return research_error(
+                ResearchErrorCode.AGENT_SCOPE_INVALID, "Agent session is closed.", status.HTTP_409_CONFLICT
+            )
         request_id = request_id_from(request)
         content = str(request.data.get("content") or "").strip()
         if not request_id or not content:
@@ -615,8 +651,7 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
                         account_link=link, workspace=workspace, user=request.user
                     )
                     remote_after = max(
-                        [int(event.payload.get("remote_seq") or 0) for event in session.run_events.all()]
-                        or [-1]
+                        [int(event.payload.get("remote_seq") or 0) for event in session.run_events.all()] or [-1]
                     )
                     remote_page = client.events(
                         delegated_token=str(delegated.get("token") or ""),
@@ -705,11 +740,7 @@ def _agent_approval_projection(session):
     Returns:
         A JSON-safe dictionary containing only queue and UI context fields.
     """
-    latest_tool = (
-        session.run_events.filter(event_type__in=["TOOL_CALL", "AI_ACTION"])
-        .order_by("-seq")
-        .first()
-    )
+    latest_tool = session.run_events.filter(event_type__in=["TOOL_CALL", "AI_ACTION"]).order_by("-seq").first()
     payload = latest_tool.payload if latest_tool else {}
     tool_call_id = str(payload.get("tool_call_id") or "")
     if not tool_call_id and latest_tool is not None:
@@ -849,7 +880,9 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             {"decision": decision, "tool_call_id": tool_call_id, "reason": reason},
             request_id,
         )
-        session.status = ResearchAgentSession.Status.READY if decision == "APPROVED" else ResearchAgentSession.Status.ERROR
+        session.status = (
+            ResearchAgentSession.Status.READY if decision == "APPROVED" else ResearchAgentSession.Status.ERROR
+        )
         session.updated_by = request.user
         session.save(update_fields=["status", "updated_by", "updated_at"])
         record_audit_event(
@@ -861,7 +894,12 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             metadata={"run_id": str(run_id), "decision": decision, "reason": reason},
             request=request,
         )
-        return Response({"session": ResearchAgentSessionSerializer(session).data, "event": ResearchAgentRunEventSerializer(event).data})
+        return Response(
+            {
+                "session": ResearchAgentSessionSerializer(session).data,
+                "event": ResearchAgentRunEventSerializer(event).data,
+            }
+        )
 
 
 class ResearchAgentArtifactEndpoint(AgentPluginMixin):
@@ -899,7 +937,7 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
         artifact_type = str(request.data.get("artifact_type") or "").upper()
         summary = str(request.data.get("summary") or "").strip()
         confirmed = str(request.data.get("confirmed", "")).lower() in ("1", "true", "yes")
-        if confirmed and not _session_scope_allows(session, "draft"):
+        if confirmed and not _session_scope_allows(session, "artifact"):
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
                 "Review Agent sessions can save analysis drafts but cannot create immutable artifacts.",
@@ -946,9 +984,7 @@ class ResearchAgentArtifactEndpoint(AgentPluginMixin):
 
         with transaction.atomic():
             ResearchChain.objects.select_for_update().get(pk=session.chain_node.chain_id)
-            version = (
-                session.chain_node.snapshots.aggregate(Max("version"))["version__max"] or 0
-            ) + 1
+            version = (session.chain_node.snapshots.aggregate(Max("version"))["version__max"] or 0) + 1
             snapshot = ResearchChainSnapshot.objects.create(
                 chain=session.chain_node.chain,
                 node=session.chain_node,
@@ -1037,7 +1073,11 @@ class ResearchAgentChainEventEndpoint(AgentPluginMixin):
             )
         node = _visible_node(workspace, request.user, request.data.get("chain_node_id"))
         if node is None:
-            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "chain_node_id is invalid or not accessible.", status.HTTP_403_FORBIDDEN)
+            return research_error(
+                ResearchErrorCode.AGENT_SCOPE_INVALID,
+                "chain_node_id is invalid or not accessible.",
+                status.HTTP_403_FORBIDDEN,
+            )
         readonly_error = _chain_readonly_error(node.chain)
         if readonly_error:
             return readonly_error
@@ -1081,4 +1121,6 @@ class ResearchAgentChainEventEndpoint(AgentPluginMixin):
             },
             request=request,
         )
-        return Response({"event_id": event.event_id, "schema_version": "research-event.v1"}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"event_id": event.event_id, "schema_version": "research-event.v1"}, status=status.HTTP_201_CREATED
+        )

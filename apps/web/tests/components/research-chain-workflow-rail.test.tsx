@@ -118,3 +118,26 @@ it("selects the clicked stage without deriving it from a node", async () => {
   expect(onSelectStage).toHaveBeenCalledTimes(1);
   expect(onSelectStage.mock.calls[0][0]).toMatchObject({ id: "transfer", preferredNodeId: null });
 });
+
+it("uses a wrapping responsive layout instead of a fixed horizontal rail", async () => {
+  await act(async () => {
+    root.render(
+      <ResearchChainWorkflowRail
+        nodes={[]}
+        currentNodeId={null}
+        selectedStageId={null}
+        onSelectStage={() => undefined}
+      />
+    );
+  });
+  const list = container.querySelector('[role="list"]');
+  expect(list?.className).toContain("grid-cols-1");
+  expect(list?.className).toContain("min-[390px]:grid-cols-2");
+  expect(list?.className).toContain("md:flex-wrap");
+  expect(list?.className).not.toContain("min-w-max");
+  const section = list?.closest("section");
+  expect(section?.className).not.toContain("overflow-x-auto");
+  const buttons = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')];
+  expect(buttons.every((button) => !button.textContent?.includes("…"))).toBe(true);
+  expect(buttons.some((button) => button.className.includes("truncate"))).toBe(false);
+});

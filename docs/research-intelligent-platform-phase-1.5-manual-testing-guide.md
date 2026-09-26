@@ -141,16 +141,18 @@ curl -fsS http://127.0.0.1:8005/api/health && echo
 curl -fsS -o /dev/null -w 'WeKnora HTTP %{http_code}\n' http://10.26.15.93:8000/
 ```
 
-## 4. 登录账号与密码
+## 4. 登录账号与凭据
+
+账号表只描述测试身份和预期视角。实际密码必须通过本机安全凭据、环境变量或密码管理器注入，不得写入文档、截图、日志或命令历史。
 
 | 账号                           | 密码              | 用途              | 预期视角                               |
 | ------------------------------ | ----------------- | ----------------- | -------------------------------------- |
-| `liuyang.phd@ai4ms.local`      | `Research@123456` | 学生 owner 主视角 | 科研总览、研究链；默认无审批中心       |
-| `chenjing.advisor@ai4ms.local` | `Research@123456` | 导师              | 增加审批中心；可写学生课题             |
-| `zhangwei.pi@ai4ms.local`      | `Research@123456` | 课题组 PI         | 可见审批与组织管理视角；业务数据按 ACL |
-| `admin@ai4ms.local`            | `admin123456`     | 工作区管理员      | 可见科研管理；PRIVATE 课题 fail closed |
-| `gaopeng.member@ai4ms.local`   | `Research@123456` | NONE              | 无科研导航；WORKSPACE 课题只读         |
-| `hexue.guest@ai4ms.local`      | `Research@123456` | Guest             | 无科研导航；课题 API 403               |
+| `liuyang.phd@ai4ms.local`      | `<由本机安全凭据注入>` | 学生 owner 主视角 | 科研总览、研究链；默认无审批中心       |
+| `chenjing.advisor@ai4ms.local` | `<由本机安全凭据注入>` | 导师              | 增加审批中心；可写学生课题             |
+| `zhangwei.pi@ai4ms.local`      | `<由本机安全凭据注入>` | 课题组 PI         | 可见审批与组织管理视角；业务数据按 ACL |
+| `admin@ai4ms.local`            | `<由本机安全凭据注入>`     | 工作区管理员      | 可见科研管理；PRIVATE 课题 fail closed |
+| `gaopeng.member@ai4ms.local`   | `<由本机安全凭据注入>` | NONE              | 无科研导航；WORKSPACE 课题只读         |
+| `hexue.guest@ai4ms.local`      | `<由本机安全凭据注入>` | Guest             | 无科研导航；课题 API 403               |
 
 建议使用浏览器的多个 profile 或隐私窗口，避免会话互相覆盖。
 

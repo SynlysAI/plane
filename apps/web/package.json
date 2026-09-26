@@ -1,14 +1,14 @@
 {
   "name": "web",
-  "version": "4.14.1",
+  "version": "4.15.0",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
-    "dev": "react-router build && vite preview --port 3000 --strictPort",
+    "dev": "react-router build && vite preview --outDir build/client --port 3000 --strictPort",
     "dev:hmr": "react-router dev --port 3000",
     "build": "react-router build",
-    "preview": "react-router build && vite preview --port 3000 --strictPort",
+    "preview": "react-router build && vite preview --outDir build/client --port 3000 --strictPort",
     "start": "serve -s build/client -l 3000",
     "test": "node --test tests/*.test.mjs",
     "test:components": "vitest run --config vitest.config.ts",

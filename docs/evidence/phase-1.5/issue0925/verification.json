@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-25T23:05:00+08:00",
+  "code_version": "4.14.2",
+  "branch": "develop",
+  "data_baseline": {
+    "public": {
+      "org_units": 22,
+      "students": 189,
+      "advisors": 14,
+      "primary_mentor_bindings": 152,
+      "primary_relation_gaps": 37,
+      "co_advisor_reference_gaps": 14,
+      "projects": 0,
+      "research_profiles": 0,
+      "research_chains": 0,
+      "knowledge_requests": 0,
+      "main_pi": "洪文晶"
+    },
+    "pi": {
+      "research_rows": 0,
+      "org_units": 0
+    },
+    "identity_mappings": 0
+  },
+  "backup": {
+    "path": ".runtime/backups/pi-lab-20260925T133734Z",
+    "status": "VERIFIED",
+    "restore_drill": "PASSED",
+    "database_sha256": "91fe1d2f7ba89a567f980420809d512afd8f9b76956cac7d5f5e73af33f6aece",
+    "objects_sha256": "0b40eb8eb5ffd7506122990da0532002f7a6ff876e794b5d1cf4e32304d3e4b5",
+    "credential_manifest_mode": "0600"
+  },
+  "tests": {
+    "pi_lab_baseline": "3 passed, 1 conditionally skipped",
+    "user_import_contract": "50 passed",
+    "chain_kb_agent_security": "86 passed",
+    "project_report_resource_contract": "124 passed",
+    "web_research_components": "79 passed",
+    "web_format": "passed",
+    "web_types": "passed",
+    "web_lint": "0 errors within allowed warning budget",
+    "web_admin_build": "passed",
+    "api_full_suite": "1414 passed, 1 environment-conditional skipped",
+    "runtime_baseline_verify": "passed",
+    "web_preview_route": "passed (/ and /public/research returned 200)"
+  },
+  "browser": {
+    "viewports": [
+      {
+        "width": 1440,
+        "horizontal_overflow": false,
+        "console_errors": 0
+      },
+      {
+        "width": 390,
+        "horizontal_overflow": false,
+        "console_errors": 0
+      }
+    ],
+    "evidence": [
+      "rebuilt-public-research-1440.png",
+      "rebuilt-public-research-390.png"
+    ],
+    "notes": [
+      "React hydration fallback rendered identically on server and client.",
+      "Vite preview explicitly serves build/client."
+    ]
+  },
+  "pending": [
+    "First real topic browser evidence for workflow, node actions, member receipt, KB upload, and Agent answer",
+    "AI4MS to Plane OIDC binding after both identities authenticate"
+  ],
+  "services": {
+    "api": "200 OK",
+    "web": "200 OK",
+    "admin": "200 OK"
+  }
+}

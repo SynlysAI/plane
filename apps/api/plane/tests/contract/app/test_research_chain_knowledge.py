@@ -80,6 +80,19 @@ def _result(**kwargs):
     return IntegrationResult(system="RAGPORTAL", operation="upload_document", **kwargs)
 
 
+def _mark_ready(env, kb_id="kb-1"):
+    """Bind one direct-created Chain to an administrator-ready external KB."""
+    return ResearchKnowledgeRequest.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        request_key=f"chain:{env['chain'].id}",
+        state=ResearchKnowledgeRequest.State.READY,
+        external_kb_id=kb_id,
+        external_kb_name=f"Ready {kb_id}",
+        created_by=env["owner"],
+    )
+
+
 @pytest.fixture
 def env(db, settings):
     """Build a private Chain, a collaborator, and an enabled RAG connection."""
@@ -119,6 +132,7 @@ def env(db, settings):
 
 def test_chain_knowledge_bases_use_ragportal_result(env):
     """Knowledge bases are delegated without widening Chain ACL."""
+    _mark_ready(env)
     with patch(
         "plane.research.services.integrations.adapters.RagPortalClient.knowledge_bases",
         return_value=_result(
@@ -164,6 +178,7 @@ def test_chain_knowledge_request_blocks_new_upload_until_admin_binding(env):
 
 
 def test_scoped_upload_is_idempotent_and_creates_reference_event(env):
+    _mark_ready(env)
     """A successful upload writes upload, reference and Chain event once."""
     url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/"
     payload = {
@@ -290,6 +305,7 @@ def test_archived_chain_upload_status_refresh_is_readonly(env):
 
 
 def test_upload_degradation_preserves_manual_path(env):
+    _mark_ready(env)
     """A RAGPortal failure returns an explicit degraded and manual record state."""
     url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/"
     with patch(
@@ -314,6 +330,7 @@ def test_upload_degradation_preserves_manual_path(env):
 
 
 def test_external_rag_switch_stops_upstream_upload_but_preserves_manual_path(env):
+    _mark_ready(env)
     """The Workspace switch, not only the connection, gates external calls."""
     WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(research_external_rag_enabled=False)
     with patch("httpx.Client.request") as upstream_request:
@@ -365,6 +382,7 @@ def test_reference_is_scoped_and_rejects_cross_chain_reuse(env):
 
 
 def test_upload_receipt_cannot_rebind_a_cross_chain_reference(env):
+    _mark_ready(env)
     """RAGPortal receipts carrying an existing knowledge id stay chain-scoped."""
     reference = ResearchExternalReference.objects.create(
         workspace=env["workspace"],

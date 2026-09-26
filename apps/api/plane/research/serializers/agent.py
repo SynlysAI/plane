@@ -12,6 +12,9 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
     context_id = serializers.SerializerMethodField()
     context_hash = serializers.SerializerMethodField()
     context_expires_at = serializers.SerializerMethodField()
+    scope_kind = serializers.SerializerMethodField()
+    scope_source = serializers.SerializerMethodField()
+    policy_version = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
     chain_node_title = serializers.SerializerMethodField()
 
@@ -56,6 +59,18 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
     def get_context_expires_at(self, obj):
         """Return the public Context expiry without exposing its token."""
         return obj.context_grant.expires_at
+
+    def get_scope_kind(self, obj):
+        """Return the explicit owner/review scope stored on the Context grant."""
+        return obj.context_grant.scope_kind
+
+    def get_scope_source(self, obj):
+        """Return the authorization source that produced the Context grant."""
+        return obj.context_grant.scope_source
+
+    def get_policy_version(self, obj):
+        """Return the read-only tool policy version."""
+        return obj.context_grant.policy_version
 
     def get_project_name(self, obj):
         """Return the human-readable topic name for fixed UI context."""

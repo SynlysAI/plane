@@ -156,11 +156,11 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
         </div>
         <div className="flex items-center gap-2 text-11 text-tertiary tabular-nums">
           {summary && summary.chains.length > 1 && (
-            <div className="flex items-center gap-1" aria-label={t("research.home_summary.chain_switcher")}>
+            <div className="flex items-center gap-1" aria-label={t("research.overview.chain_switcher")}>
               <Button
                 variant="secondary"
                 size="sm"
-                aria-label={t("research.home_summary.previous_chain")}
+                aria-label={t("research.overview.previous_chain")}
                 onClick={() => moveChain(-1)}
               >
                 ‹
@@ -171,7 +171,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
               <Button
                 variant="secondary"
                 size="sm"
-                aria-label={t("research.home_summary.next_chain")}
+                aria-label={t("research.overview.next_chain")}
                 onClick={() => moveChain(1)}
               >
                 ›
@@ -207,7 +207,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
               </div>
               {currentChain && summary && summary.chains.length > 1 && (
                 <p className="mt-1 text-11 text-tertiary">
-                  {t("research.home_summary.chain_position", { current: chainIndex + 1, total: summary.chains.length })}
+                  {t("research.overview.chain_position", { current: chainIndex + 1, total: summary.chains.length })}
                 </p>
               )}
               {currentNode && (

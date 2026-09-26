@@ -2,9 +2,9 @@
 
 | 项目     | 内容                                                                                                                                       |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 手册版本 | v1.0（配套计划 v1.3）                                                                                                                      |
+| 手册版本 | v1.1（配套计划 v1.6；当前软件版本 `4.15.0`）                                                                                                                      |
 | 上游计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md) |
-| 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md) v2.5.1                                                                          |
+| 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md)（身份清单；凭据由本机安全注入）                                                      |
 | 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                      |
 | 使用方式 | 每个联调日从 §1 开始逐层勾选；失败项当日登记附录 A，证据按附录 B 归档                                                                      |
 | 人工测试 | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)     |
@@ -13,7 +13,7 @@
 
 - 每个联调日开始先完成 §1 七步自检并填写五服务健康快照，未通过不得进入后续层级。
 - 勾选规则：一个用例的全部验证点通过才勾选；任何失败立即按计划 §7 登记附录 A，再决定继续或修复。
-- 多身份并发测试使用浏览器隐私窗口，避免会话互相覆盖。夹具账号密码统一为 `Research@12345`；`admin@ai4ms.local` 为 `admin123456`。
+- 多身份并发测试使用浏览器隐私窗口，避免会话互相覆盖。账号通过本机安全凭据或环境变量注入；密码不得写入文档、截图、日志或命令历史。
 - 联调工作区固定为 `public`；WeKnora 只使用测试知识库，不触碰生产数据。
 - 证据截图/日志统一存放 `plane/docs/evidence/phase-1.5/`，按 `health/ links/ switches/ roles/ e2e/ degradation/` 分目录，文件名含日期与用例编号（如 `20260925-SW-01.png`）。
 

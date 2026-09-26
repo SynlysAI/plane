@@ -1,89 +1,89 @@
-# PiLab 文档索引
+# PiLab 文档总索引
 
-本目录存放 PiLab 科研管理模块的产品、开发、评审、验收与发布文档。所有文档以仓库 `develop` 分支为准，代码实现与文档口径不一致时以代码为事实来源，并按下文「维护约定」回写文档。
+> 当前代码事实：`develop` 分支，软件版本 `4.15.0`。本文档按代码、测试和运行证据整理，更新时间：2026-09-26。
 
-## 1. 文档清单
+本目录采用分层文档架构。文档不重复争夺同一份“当前状态”，而是分别回答产品为什么做、平台如何协作、代码如何实现、怎样验收和怎样发布。
 
-| 文档                                                                                                                                     | 定位                                                                  | 状态                                     |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
-| [`research-management-prd-roadmap.md`](./research-management-prd-roadmap.md)                                                             | 产品需求、生态边界、权限模型与 P0–P3 分期实施路线图                   | v0.3，P0 / P1 已实施，P2 规划中，P3 暂缓 |
-| [`research-p0-development-prd.md`](./research-p0-development-prd.md)                                                                     | P0 开发规格：需求编号、数据模型、接口契约、阶段与验收清单             | v1.1，已实施（§16 实现回写记录）         |
-| [`research-p0-development-prd-review.md`](./research-p0-development-prd-review.md)                                                       | P0 开发规格评审结论与实现复核                                         | v1.1，复核通过                           |
-| [`research-p0-acceptance-report.md`](./research-p0-acceptance-report.md)                                                                 | P0 验收方法、需求逐条验收与回归安全结论                               | 已验收，89 条需求编号通过                |
-| [`research-p0-release-notes.md`](./research-p0-release-notes.md)                                                                         | P0 发布流程、环境变量、开关、回滚与已知限制                           | `2.0.1 → 2.1.0`                          |
-| [`research-p1-development-prd.md`](./research-p1-development-prd.md)                                                                     | P1 开发规格：阶段流程、评审、文献、实验、代码、集成与时间线           | v1.1，已实施（§16 实现回写记录）         |
-| [`research-p1-development-prd-review.md`](./research-p1-development-prd-review.md)                                                       | P1 开发规格评审结论与实现复核                                         | v1.1，复核通过                           |
-| [`research-p1-release-notes.md`](./research-p1-release-notes.md)                                                                         | P1 发布流程、环境变量、开关、回滚与发布门禁结果                       | `2.1.0 → 2.2.0`                          |
-| [`research-p0-p1-architecture.md`](./research-p0-p1-architecture.md)                                                                     | P0 / P1 功能清单整理与两期技术架构图                                  | v1.0，随实现同步维护                     |
-| [`research-system-management-prd.md`](./research-system-management-prd.md)                                                               | 系统管理改进：双工作区、管理员标签、邀请码、批量导入、主PI看板        | v1.0，已交付（v2.4.0）                   |
-| [`research-system-management-acceptance.md`](./research-system-management-acceptance.md)                                                 | 系统管理改进的验收方法与开发环境跑通记录                              | 已验收                                   |
-| [`research-system-management-testing.md`](./research-system-management-testing.md)                                                       | 系统管理改进测试手册：一键冒烟、自动化测试与界面走查                  | v1.0，已交付（v2.4.0）                   |
-| [`research-navigation-visibility.md`](./research-navigation-visibility.md)                                                               | 科研目录分级可见：四档级别、菜单矩阵、强制点与验收方式                | v1.0，已交付（v2.5.0）                   |
-| [`research-workspace-v3.md`](./research-workspace-v3.md)                                                                                 | v3 权威实现契约：组织、权限、工作空间、项目、报告与 Agent 上下文      | v1.4，对应 `3.0.3`，UI 重构见 4.10.0     |
-| [`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)                                                                     | **UX 设计指南（系列唯一入口）**：三定位、分级方法、组件出口、页面模式 | v1.1，当前有效                           |
-| [`research-workspace-ui-ux-archive.md`](./research-workspace-ui-ux-archive.md)                                                           | UI/UX 过程档案（六合一）：两轮 PRD、双审计、验收与发布说明原文        | 档案（`4.9.1 → 4.11.0`）                 |
-| [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md) | Phase 1.5 人工测试问题分析与优化修复计划                              | v1.3，开发/测试/灰度执行基线             |
+## 1. 权威层级与状态
 
-`ai4ms-plane-integration.png` 与 `ai4ms-plane-enhanced-integration.png` 是生态边界与集成架构的参考图，供产品文档引用。
-`research-p0-architecture.png` 与 `research-p1-architecture.png` 是两期技术架构图的渲染产物，源码见
-[`research-p0-p1-architecture.md`](./research-p0-p1-architecture.md) §2.1 与 §3.1。
+发生冲突时按以下顺序判断：
 
-## 2. 阅读顺序
+1. 当前代码、测试结果和 `docs/evidence/` 中的可复核证据。
+2. `docs/contracts/` 中的接口与数据契约。
+3. 当前发布说明、验收报告和运维 runbook。
+4. 产品 PRD、阶段计划和 UX 设计规范。
+5. 标记为历史或档案的旧版本文档。
 
-按角色选择入口：
+| 状态 | 含义 | 当前文档口径 |
+| --- | --- | --- |
+| 已交付 | 代码、自动化测试和发布/验收证据均已具备 | P0、P1、智能平台 Phase 0、Phase 1、Phase 1.5 代码修复与 `4.15.0` 兼容发布 |
+| 灰度中 | 已实现，但仍有真实环境或跨仓门禁 | 首个真实课题的 workflow、KB、成员和 Agent 证据；真实 OIDC 绑定 |
+| 规划中 | 已定义范围，尚未进入当前交付 | P2、智能平台 Phase 2/3 |
+| 暂缓 | 仅保留产品设计和边界 | P3 AI 结合能力、微信小程序 |
+| 历史冻结 | 保留当时事实，不覆盖当前契约 | P0/P1 旧版本基线、4.10–4.13 UI/UX 过程文档 |
 
-| 角色            | 建议顺序                                                                                                                                                                      |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 新加入的开发者  | 根 [`README.md`](../README.md) → 本索引 → 路线图 §1–§4 → 平台总 PRD §9 → 对应阶段实施计划 → 该期发布说明                                                                      |
-| 参与 v3 开发    | [`research-workspace-v3.md`](./research-workspace-v3.md) → v2.4/v2.5 历史文档 → 对应代码和测试                                                                                |
-| 参与 P0/P1 开发 | 路线图 §5.1 / §5.2 → 开发 PRD 的需求编号与接口契约 → 评审报告的决策项 → PRD §16 实现回写记录 → 验收报告 / 发布门禁结果                                                        |
-| 部署与运维      | [`production-deployment.md`](./production-deployment.md) → 根 README「启用科研模块」→ 各期发布说明的「环境变量清单」「开关层级」「回滚策略」                                  |
-| 手工测试与验收  | [`research-test-accounts.md`](./research-test-accounts.md)（选账号）→ [`research-test-fixtures.md`](./research-test-fixtures.md)（数据与流程）→ 对应期次的开发 PRD 与验收报告 |
-| 产品与业务方    | 平台总 PRD §1–§5（目标、边界、研究链、MVP）→ §9 阶段路线 → 各阶段计划 → 路线图 §6 功能需求和 §11 测试要求                                                                     |
+## 2. 从哪里开始读
 
-## 3. 文档关系
+| 读者 | 推荐顺序 |
+| --- | --- |
+| 新成员 | 根 [`README.md`](../README.md) → 本索引 → 当前契约 → 对应发布说明 |
+| 产品与业务 | [管理路线图](./research-management-prd-roadmap.md) → [平台总 PRD](./research-intelligent-platform-prd.md) → 阶段计划 |
+| Plane 开发 | [Workspace v3 契约](./research-workspace-v3.md) → [跨仓契约](./contracts/research-intelligent-platform/README.md) → 对应代码和测试 |
+| Phase 1.5 联调 | [优化修复计划](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md) → [执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md) → [证据目录](./evidence/phase-1.5/issue0925/) |
+| 部署运维 | [生产部署](./production-deployment.md) → [Phase 0 runbook](./research-intelligent-platform-phase-0-runbook.md) → [π-Lab 基线 runbook](./research-pi-lab-baseline-runbook.md) |
+| 验收测试 | [测试账号](./research-test-accounts.md) → [测试夹具](./research-test-fixtures.md) → 对应验收报告；真实课题证据补录前不得伪造数据 |
 
-```mermaid
-flowchart LR
-    R[research-management-prd-roadmap.md<br/>需求与分期路线图] --> P0[P0 开发 PRD]
-    R --> P1[P1 开发 PRD]
-    P0 --> P0R[P0 评审报告]
-    P1 --> P1R[P1 评审报告]
-    P0 --> P0A[P0 验收报告]
-    P0 --> P0N[P0 发布说明]
-    P1 --> P1N[P1 发布说明]
-    P0 --> ARCH[P0 / P1 技术架构图]
-    P1 --> ARCH
-    R --> V3[科研工作空间 v3 实现契约]
-    P0 --> V3
-    P1 --> V3
-    R --> PLATFORM[科研智能体平台总 PRD]
-    V3 --> PLATFORM
-    PLATFORM --> MVP[研究链+ RAGPortal + Synlora MVP]
-    V3 --> GUIDE[UX 设计指南 · 系列入口]
-    GUIDE --> ARCHIVE[UI/UX 过程档案 · 六合一]
-    GUIDE --> PRD412[4.12 UI/UX PRD]
-    PRD412 --> BASE412[4.12 Phase 0 基线]
-    PRD412 --> ACCEPT412[4.12 验收报告]
-```
+## 3. 产品与平台层
 
-- 路线图定义需求与分期，不直接修改业务代码。
-- 开发 PRD 把路线图中的一期范围拆成可开发、可验收的规格，并登记实现回写记录（当前各期为 §16）。
-- 评审报告记录一致性问题与技术决策的处理结论，并在实现完成后给出复核结论。
-- 验收报告与发布说明记录验证结果、开关层级和回滚方式。
-- `research-workspace-v3.md` 是 `3.0.0` 起组织、权限、双工作空间和只读 Agent 上下文的当前契约；`3.0.1` 收紧 Context 元数据、导入预检与用户档案隔离，`3.0.3` 统一科研前端状态反馈、高风险操作和列表导航体验；v2.4/v2.5 文档保留历史事实，冲突处由 v3 文档取代。
-- `research-intelligent-platform-prd.md` 是跨仓库平台建设目标和分期边界；它复用 v3 的组织、ACL 与 Context 契约，不替换 Plane P0/P1/P2 的已交付规格。涉及 RAGPortal、已部署 WeKnora、Synlora、ScienceDiscovery、SpecLabOS、PolyAgent 和 SpecAgent 的能力，以各仓库代码、服务运行契约与发布契约为准。
-- `research-workspace-ux-guide.md` 是科研工作台 UI/UX 系列的唯一入口与权威规范：整合三定位、信息分级方法、语义组件出口与页面模式，冲突以指南为准。
-- `research-workspace-ui-ux-archive.md` 原文收录 4.10.0 重构 PRD、Phase 1/2 审计、验收报告、发布说明与 4.11.0 信息精炼 PRD 六份文档；内容未删减，仅统一标题层级与内部引用。
-- `research-workspace-ui-ux-4.12-prd.md`、`research-workspace-ui-ux-4.12-phase-0-baseline.md` 与 `research-workspace-ui-ux-4.12-acceptance-report.md` 分别定义 4.12.0 增量、冻结基线和发布验收证据。
-- `research-intelligent-platform-ux-prototype.md` 是当前产品交互确认稿，先确认欢迎页、研究链、通用 Agent 插件和 RAGPortal 入库入口，再进入 UI 开发拆分。
-- `research-intelligent-platform-phase-0-plan.md` 至 `research-intelligent-platform-phase-3-plan.md` 是总 PRD §9 的阶段实施计划，分别定义技术方案、开发任务、依赖、测试验收、发布回滚和风险；计划完成状态不能替代代码验收报告。
+| 文档 | 职责 | 当前状态 |
+| --- | --- | --- |
+| [`research-management-prd-roadmap.md`](./research-management-prd-roadmap.md) | PiLab 产品目标、生态边界、P0–P3 路线 | P0/P1 已交付，P2 规划，P3 暂缓；不覆盖平台 Phase 0/1 的实现细节 |
+| [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) | Plane、Synlora、RAGPortal、WeKnora 与专业系统的跨仓平台总 PRD | Phase 0/1/1.5 已进入实现事实层，跨仓真实绑定和首个真实课题证据仍灰度中 |
+| [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md) | 契约、授权、BFF、安全和观测基础 | 已实施，历史计划保留 |
+| [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md) | UI/UX Ready 工作台和最小闭环 | 已实施，真实课题证据灰度中 |
+| [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md) | 实验运行、Job、数据资产和垂类能力 | 规划中 |
+| [`research-intelligent-platform-phase-3-plan.md`](./research-intelligent-platform-phase-3-plan.md) | 治理、规模化、灾备和开放能力 | 规划中 |
+| [`wechat-mini-program-prd.md`](./wechat-mini-program-prd.md) | 微信小程序独立产品设想 | 暂缓，不计入当前 Plane Web 交付 |
 
-## 4. 维护约定
+## 4. 实现规格与当前契约
 
-1. **实现以代码为准**：PRD 中与实现不一致的描述，先实现收敛、再回写文档，并在开发 PRD 的实现回写记录中登记差异原因。
-2. **变更留痕**：每份文档末尾维护变更记录，注明版本、日期与变更摘要；评审结论变化需在评审报告中补记复核章节。
-3. **版本号口径**：文档版本独立于软件版本；软件版本按语义化版本规则在根 `package.json` 与各应用/包同步，并在发布说明中记录起止版本。
-4. **术语统一**：课题组负责人统一称「课题组主 PI」，禁止在代码、界面和文档中硬编码具体人名。
-5. **边界统一**：知识库、高分子研发、湿实验管理、设备管理和谱学分析由 AI4MS 组织内其他系统提供，Plane 只做集成对接，判定依据见路线图 §1.4。
-6. **文档与开关同步**：新增科研开关、门槛或环境变量时，需同步更新对应期次的发布说明与根 README 的「启用科研模块」。
+| 文档 | 职责 | 当前状态 |
+| --- | --- | --- |
+| [`research-workspace-v3.md`](./research-workspace-v3.md) | 组织、权限、Workspace、Project、报告与 Agent Context 的当前实现契约 | 当前权威 |
+| [`research-p0-development-prd.md`](./research-p0-development-prd.md) | P0 开发规格和需求编号 | 历史开发规格；版本号是 `2.0.1 → 2.1.0` 基线 |
+| [`research-p1-development-prd.md`](./research-p1-development-prd.md) | P1 阶段、评审、文献、实验、代码、成果与集成规格 | 历史开发规格；版本号是 `2.1.0 → 2.2.0` 基线 |
+| [`research-system-management-prd.md`](./research-system-management-prd.md) | 系统管理、导入、管理员和主 PI 能力 | 历史 v2.4 规格；当前取代关系见 Workspace v3 |
+| [`research-navigation-visibility.md`](./research-navigation-visibility.md) | 科研导航能力投影和可见性 | 历史版本保留，当前规则以代码 `capabilities.py` 和 Workspace v3 为准 |
+| [`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md) | UI/UX 系列唯一设计入口 | 当前有效 |
+| [`research-p0-p1-architecture.md`](./research-p0-p1-architecture.md) | P0/P1 功能与技术架构汇总 | 历史架构基线 |
+| [`contracts/research-intelligent-platform/README.md`](./contracts/research-intelligent-platform/README.md) | JSON Schema、示例、错误码和兼容性规则 | 当前跨仓契约；含 `agent-context.v2`、能力投影与 REVIEW scope |
+
+## 5. 验收、发布与运维
+
+| 文档 | 用途 |
+| --- | --- |
+| [`research-p0-acceptance-report.md`](./research-p0-acceptance-report.md)、[`research-p1-release-notes.md`](./research-p1-release-notes.md) | P0/P1 历史验收和发布门禁 |
+| [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) | Phase 1 灰度验收 |
+| [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md) | Phase 1.5 问题、任务、回滚和当前实现回写 |
+| [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md) | Phase 1.5 联调执行步骤 |
+| [`research-pi-lab-baseline-runbook.md`](./research-pi-lab-baseline-runbook.md) | 真实人员组织基线、备份、重建、恢复和验收 |
+| [`evidence/phase-1.5/issue0925/`](./evidence/phase-1.5/issue0925/) | 脱敏问题转录、验收台账、截图和验证 JSON |
+| [`production-deployment.md`](./production-deployment.md) | 当前生产部署、更新、验证与回滚 |
+| [`research-test-accounts.md`](./research-test-accounts.md)、[`research-test-fixtures.md`](./research-test-fixtures.md) | 测试身份、夹具和人工验收约束 |
+
+## 6. 维护约定
+
+1. 实现以代码和测试为准；发现冲突时回写当前契约、发布说明和索引，历史文档只补充取代说明。
+2. 产品 PRD 只定义目标、边界和优先级；开发 PRD 定义实现规格；契约文件定义跨服务交换格式；验收/发布文档记录实际结果。
+3. 版本号与根 `package.json`、各应用/包和 API `pyproject.toml` 同步；当前软件版本为 `4.15.0`，文档版本独立维护。
+4. `public` π-Lab 基线不预造课题；一次性凭据、原始 xlsx、`.runtime/` 备份和 `refer/issue.docx` 不进入 Git。
+5. 真实 OIDC 绑定必须双方完成认证；未完成前只能记录为灰度门禁，不能标记为完全打通。
+6. 首个真实课题创建后，补录 workflow、节点动作、成员回执、KB 上传和 Agent 会话证据；不得为截图向 `public` 写入虚构课题。
+7. 新增开关、错误码、字段或跨仓能力时，同步更新契约、示例、根 README、相关发布说明和本索引。
+
+### 变更记录
+
+| 日期 | 版本 | 变更 |
+| --- | --- | --- |
+| 2026-09-26 | v2.0 | 按 `4.15.0` 当前代码重建文档层级、状态矩阵、阅读入口和真实数据/跨仓验收门禁 |
+| 2026-09-24 | v1.x | 原有 P0/P1、平台、UI/UX 和 Phase 计划索引 |

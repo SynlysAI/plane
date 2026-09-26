@@ -46,13 +46,11 @@ def _rag_client(workspace):
     """Return the enabled RAGPortal client and its connection."""
     setting = getattr(workspace, "research_setting", None)
     external_rag_enabled = bool(setting and setting.research_external_rag_enabled)
-    connection = (
-        ExternalSystemConnection.objects.filter(
-            workspace=workspace,
-            system="RAGPORTAL",
-            deleted_at__isnull=True,
-        ).first()
-    )
+    connection = ExternalSystemConnection.objects.filter(
+        workspace=workspace,
+        system="RAGPORTAL",
+        deleted_at__isnull=True,
+    ).first()
     if not external_rag_enabled:
         connection = None
     return client_for("RAGPORTAL", connection), connection
@@ -179,18 +177,18 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        ready_error = _require_ready(chain)
-        if ready_error:
-            return ready_error
-        readonly_error = _chain_readonly_error(chain)
-        if readonly_error:
-            return readonly_error
         if not _chain_writer(workspace, request.user, chain):
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
                 "Only chain members can upload research files.",
                 status.HTTP_403_FORBIDDEN,
             )
+        ready_error = _require_ready(chain)
+        if ready_error:
+            return ready_error
+        readonly_error = _chain_readonly_error(chain)
+        if readonly_error:
+            return readonly_error
         node = chain.nodes.filter(pk=request.data.get("node_id")).first()
         if node is None:
             return research_error(

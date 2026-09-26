@@ -5,7 +5,7 @@
 | 计划版本 | v1.6                                                                                                 |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10              |
 | 前置计划 | [`research-intelligent-platform-phase-0-plan.md`](./research-intelligent-platform-phase-0-plan.md)   |
-| 计划状态 | MVP 与任务 1.9 UX/UI 完整化已交付；进入灰度验收                                                      |
+| 计划状态 | MVP 与任务 1.9 UX/UI 完整化已交付；首个真实课题证据和 OIDC 绑定仍处灰度验收                                                      |
 | 目标     | 交付 UI/UX Ready 的科研智能体平台工作台，并保持一个学生多课题调研、Agent、计划、实验、分析和沉淀闭环 |
 | 不在范围 | 自动设备执行、完整垂类 Tool Call 生产化、完整治理和社会用户开放                                      |
 
