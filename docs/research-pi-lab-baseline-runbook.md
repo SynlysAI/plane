@@ -4,10 +4,10 @@
 
 本流程只用于本机 `docker-compose-local.yml` 实例，把 `public` 工作区重建为 π-Lab 真实人员与组织基线；`pi` 工作区保持无科研业务数据。流程会删除所有工作区的科研业务数据、研究型 Plane Project、附件、审批、Agent 会话、Context grant、身份映射和科研审计，但保留 Workspace、全局 User、登录凭据、非科研业务数据和部署密钥。
 
-| 数据源 | 行数 | SHA-256 |
-| --- | ---: | --- |
-| `refer/π-Lab学生-导入信息表.xlsx` | 190 | `cda7489f256601179b587d7a5bb7035145854272325e1599c62723f0cf0ecaa0` |
-| `refer/导师信息表.xlsx` | 15 | `ac21aba18ebc147a5b6d5c50ab6f4acdf595aec2b0f3c37a1f0bbb18a8f6e548` |
+| 数据源                            | 行数 | SHA-256                                                            |
+| --------------------------------- | ---: | ------------------------------------------------------------------ |
+| `refer/π-Lab学生-导入信息表.xlsx` |  190 | `cda7489f256601179b587d7a5bb7035145854272325e1599c62723f0cf0ecaa0` |
+| `refer/导师信息表.xlsx`           |   15 | `ac21aba18ebc147a5b6d5c50ab6f4acdf595aec2b0f3c37a1f0bbb18a8f6e548` |
 
 原始 xlsx 和一次性密码不进入 Git。`refer/issue.docx` 含原始明文密码，只作为脱敏转录来源，同样不进入版本库。
 
@@ -58,7 +58,7 @@ dry-run 必须输出：190 行源学生、导入 189 人、剔除 1 人、导师
 - `history/*.jsonl`
 - `credentials.json`（权限 `0600`，一次性初始密码）
 
-不要把备份目录放到 Git 工作树可提交位置；默认 `.runtime/` 已被忽略。
+不要把备份目录放到 Git 工作树可提交位置；默认 `.runtime/` 已被忽略。`credentials.json` 只作为受保护的发放底稿，不进入 Git，也不作为网站下载入口。新建账号时，同一份明文会写入账号来源，供系统管理中的批次报告和「下载全部初始密码」使用。再次重建发现账号已存在时不轮换密码，也不会用空行覆盖已经保存的初始密码。
 
 ## 4. 固定基线
 
@@ -87,3 +87,18 @@ docker compose -f docker-compose-test.yml run --rm api-tests \
 `--verify-only` 会断言 `pi` 为空、组织树为 22 个节点、唯一 PI 为洪文晶、189/14 账号Profile、152 条主导师绑定、37 条主导师缺口、2 个无效学号置空，以及无预造课题/链/KB。
 
 回滚时先停止写入服务，用备份目录中的 `database.dump` 和 `uploads.tar.gz` 恢复原卷，再启动服务。恢复操作必须由维护人复核 `manifest.json` 哈希后在变更窗口执行。
+
+## 6. 初始密码下载与历史回填
+
+系统管理的人员导入区始终提供「下载全部初始密码」。它导出当前 `public` 工作区的活跃成员，不包含已停用账号，也不包含从未加入本工作区的历史 seed。没有发放记录时密码列为空。密码列是最近一次发放的初始密码；哈希不可逆，不能从这里查看用户改密后的当前密码。
+
+若某次基线重建只把明文留在 `credentials.json`、没有写入账号来源，可在确认文件权限为 `0600` 后回填。回填只接受能通过当前密码哈希校验的明文，不修改哈希；来源中已有不同明文时不覆盖，因此可以重复执行。
+
+```bash
+docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml exec api \
+  python manage.py backfill_initial_passwords \
+  --credentials /path/to/credentials.json \
+  --workspace public
+```
+
+命令输出只有计数和未写入邮箱，不打印密码。哈希不一致的账号留空，需要管理员显式重新生成后才能下载新的可登录初始密码。
