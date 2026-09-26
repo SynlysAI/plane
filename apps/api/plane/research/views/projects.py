@@ -20,12 +20,12 @@ from plane.db.models import (
     ProjectIdentifier,
     ProjectMember,
     ResearchChain,
-    ResearchKnowledgeRequest,
     ResearchProjectProfile,
     ResearchUserProfile,
     State,
     WorkspaceMember,
 )
+from plane.research.services.group_knowledge import ensure_group_knowledge_binding
 from plane.research.utils.acl import managing_org_units_for, models_q_expired
 from plane.research.utils.audit import (
     ResearchAuditAction,
@@ -556,13 +556,7 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
                         payload_hash=hashlib.sha256(chain_request_id.encode()).hexdigest(),
                         created_by=request.user,
                     )
-                    ResearchKnowledgeRequest.objects.create(
-                        workspace=workspace,
-                        chain=chain,
-                        request_key=f"chain:{chain.id}",
-                        state=ResearchKnowledgeRequest.State.PENDING_ADMIN,
-                        created_by=request.user,
-                    )
+                    ensure_group_knowledge_binding(chain, request.user)
                 if is_legacy_cultivation:
                     ensure_stage_instances(workspace, profile, request.user)
         except ActiveProjectExists:

@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
+from plane.research.services.group_knowledge import ensure_group_knowledge_binding
 from plane.db.models import (
     DEFAULT_STATES,
     MentorBinding,
@@ -18,6 +19,7 @@ from plane.db.models import (
     ProjectMember,
     ResearchChain,
     ResearchChainNode,
+    ResearchGroupKnowledgeBinding,
     ResearchKnowledgeRequest,
     ResearchProjectProfile,
     ResearchUserProfile,
@@ -148,13 +150,16 @@ class Command(BaseCommand):
             unit = OrgUnit.objects.create(
                 workspace=workspace,
                 name="Phase 1.5 产业化验证单元",
-                unit_type=OrgUnit.UnitType.GROUP,
+                unit_type=OrgUnit.UnitType.TEAM,
                 business_category=OrgUnit.BusinessCategory.INDUSTRIALIZATION,
                 path="",
                 created_by=User.objects.filter(email="admin@ai4ms.local").first(),
             )
             unit.path = f"/{unit.id.hex}/"
-            unit.save(update_fields=["path"])
+            unit.save(update_fields=["path", "unit_type"])
+        elif unit.unit_type != OrgUnit.UnitType.TEAM:
+            unit.unit_type = OrgUnit.UnitType.TEAM
+            unit.save(update_fields=["unit_type", "updated_at"])
         return unit
 
     def _apply(self, workspace, reset_passwords):
@@ -221,6 +226,13 @@ class Command(BaseCommand):
                 user=industry,
                 defaults={"org_role": OrgUnitMember.OrgRole.OWNER, "is_primary": True, "deleted_at": None},
             )
+            OrgUnitMember.objects.update_or_create(
+                workspace=workspace,
+                org_unit=unit,
+                user=student,
+                org_role=OrgUnitMember.OrgRole.REVIEWER,
+                defaults={"deleted_at": None},
+            )
             project_name = f"{FIXTURE_PREFIX}{timezone.localdate():%Y%m%d}"
             project = Project.objects.filter(workspace=workspace, name__startswith=project_name).first()
             if project is None:
@@ -277,13 +289,7 @@ class Command(BaseCommand):
                     payload_hash=hashlib.sha256(str(project.id).encode()).hexdigest(),
                     created_by=student,
                 )
-                request = ResearchKnowledgeRequest.objects.create(
-                    workspace=workspace,
-                    chain=chain,
-                    request_key=f"chain:{chain.id}",
-                    state=ResearchKnowledgeRequest.State.PENDING_ADMIN,
-                    created_by=student,
-                )
+                request = ensure_group_knowledge_binding(chain, student)
                 node = ResearchChainNode.objects.create(
                     chain=chain,
                     node_type="LITERATURE_REVIEW",
@@ -296,7 +302,7 @@ class Command(BaseCommand):
             else:
                 profile = project.research_profile
                 chain = project.research_chain
-                request = chain.knowledge_request
+                request = ensure_group_knowledge_binding(chain, student)
                 node = chain.nodes.order_by("created_at").first()
             role_rows = [
                 ("main_pi", main_pi, None),
@@ -356,6 +362,9 @@ class Command(BaseCommand):
             WorkspaceMember.objects.filter(member__in=users, workspace=workspace).delete()
             ResearchUserProfile.objects.filter(user__in=users).delete()
             User.objects.filter(pk__in=[user.pk for user in users]).delete()
+            ResearchGroupKnowledgeBinding.objects.filter(
+                workspace=workspace, org_unit__name="Phase 1.5 产业化验证单元"
+            ).delete()
             OrgUnit.objects.filter(workspace=workspace, name="Phase 1.5 产业化验证单元").delete()
         return {
             "workspace": workspace.slug,

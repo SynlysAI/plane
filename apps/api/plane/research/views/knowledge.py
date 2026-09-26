@@ -14,7 +14,11 @@ from plane.db.models import (
     ResearchChainEvent,
     ResearchChainUpload,
     ResearchExternalReference,
-    ResearchKnowledgeRequest,
+)
+from plane.research.services.group_knowledge import (
+    SCOPE_GROUP,
+    SCOPE_UNASSIGNED,
+    knowledge_scope_for_chain,
 )
 from plane.research.serializers import (
     ResearchChainUploadSerializer,
@@ -56,27 +60,72 @@ def _rag_client(workspace):
     return client_for("RAGPORTAL", connection), connection
 
 
-def _knowledge_request(chain):
-    """Return the per-chain KB request projection, if one exists."""
-    return ResearchKnowledgeRequest.objects.filter(chain=chain, deleted_at__isnull=True).first()
+def _knowledge_scope(chain, user):
+    """Return the team or legacy knowledge scope for a chain.
+
+    Args:
+        chain: Visible research chain.
+        user: Caller recorded when a team binding is created.
+
+    Returns:
+        Resolved knowledge scope.
+    """
+    return knowledge_scope_for_chain(chain, ensure=True, actor=user)
 
 
-def _require_ready(chain):
-    """Return a stable error until an administrator binds an external KB."""
-    request = _knowledge_request(chain)
-    if request is None:
+def _require_ready(scope):
+    """Return a stable error until the resolved knowledge base is ready.
+
+    Args:
+        scope: Knowledge scope for the current chain.
+
+    Returns:
+        An error response, or ``None`` when uploads may proceed.
+    """
+    if scope.scope == SCOPE_UNASSIGNED:
         return research_error(
-            ResearchErrorCode.KB_NOT_READY,
-            "课题知识库申请记录不存在，需由管理员补齐申请后才能上传。",
+            ResearchErrorCode.KB_GROUP_UNASSIGNED,
+            "当前课题没有小组归属，不能创建个人知识库。",
             status.HTTP_409_CONFLICT,
         )
-    if request.state != ResearchKnowledgeRequest.State.READY:
+    if scope.state != "READY":
         return research_error(
             ResearchErrorCode.KB_NOT_READY,
-            "课题知识库仍在申请或绑定处理中，完成管理员回填后才能上传。",
+            "小组知识库仍在申请或绑定处理中，完成管理员回填后才能上传。",
             status.HTTP_409_CONFLICT,
         )
     return None
+
+
+def _scope_payload(chain, scope):
+    """Serialize one chain's bound knowledge base without listing other libraries.
+
+    Args:
+        chain: Research chain being viewed.
+        scope: Resolved knowledge scope.
+
+    Returns:
+        Knowledge-base list payload.
+    """
+    items = []
+    if scope.state == "READY" and scope.external_kb_id:
+        items.append(
+            {
+                "external_id": scope.external_kb_id,
+                "title": scope.external_kb_name or scope.external_kb_id,
+                "external_parent_id": "",
+            }
+        )
+    return {
+        "items": items,
+        "chain_id": str(chain.id),
+        "state": scope.state,
+        "request_id": scope.request_id or None,
+        "scope": scope.scope,
+        "org_unit_id": scope.org_unit_id or None,
+        "org_unit_name": scope.org_unit_name or None,
+        "degraded": False,
+    }
 
 
 def _event_id(request_id, kind):
@@ -119,33 +168,8 @@ class ResearchChainKnowledgeBaseListEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        request_projection = _knowledge_request(chain)
-        if request_projection is None:
-            return Response(
-                {
-                    "items": [],
-                    "chain_id": str(chain.id),
-                    "state": ResearchKnowledgeRequest.State.REQUESTED,
-                    "request_id": None,
-                    "degraded": False,
-                },
-                status=status.HTTP_200_OK,
-            )
-        if request_projection.state != ResearchKnowledgeRequest.State.READY:
-            return Response(
-                {
-                    "items": [],
-                    "chain_id": str(chain.id),
-                    "state": request_projection.state,
-                    "request_id": str(request_projection.id),
-                    "degraded": False,
-                },
-                status=status.HTTP_200_OK,
-            )
-        client, _connection = _rag_client(workspace)
-        result = client.knowledge_bases(request=request)
-        payload = result.as_payload(chain_id=str(chain.id))
-        return Response(payload, status=status.HTTP_200_OK)
+        scope = _knowledge_scope(chain, request.user)
+        return Response(_scope_payload(chain, scope), status=status.HTTP_200_OK)
 
 
 class ResearchChainUploadEndpoint(ResearchAPIView):
@@ -183,7 +207,8 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                 "Only chain members can upload research files.",
                 status.HTTP_403_FORBIDDEN,
             )
-        ready_error = _require_ready(chain)
+        scope = _knowledge_scope(chain, request.user)
+        ready_error = _require_ready(scope)
         if ready_error:
             return ready_error
         readonly_error = _chain_readonly_error(chain)
@@ -204,11 +229,10 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                 ResearchErrorCode.IDEMPOTENCY_CONFLICT,
                 "request_id, file and kb_id are required.",
             )
-        knowledge_request = _knowledge_request(chain)
-        if knowledge_request is not None and knowledge_request.external_kb_id != knowledge_base_id:
+        if scope.external_kb_id != knowledge_base_id:
             return research_error(
                 ResearchErrorCode.KB_SCOPE_CONFLICT,
-                "kb_id must match the knowledge base bound to this research chain.",
+                "kb_id must match the knowledge base bound to this research team.",
                 status.HTTP_403_FORBIDDEN,
             )
         file_name = os.path.basename(str(uploaded.name or "document"))
@@ -281,25 +305,38 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         upload.file_hash = file_hash
         upload.knowledge_base_id = knowledge_base_id
         upload.error_code = ""
-        upload.metadata = {
+        upload_metadata = {
             "workspace_slug": workspace.slug,
             "research_project_id": str(chain.project_id),
             "chain_id": str(chain.id),
             "chain_node_id": str(node.id),
         }
+        if scope.org_unit_id:
+            upload_metadata["org_unit_id"] = scope.org_unit_id
+            upload_metadata["org_unit_name"] = scope.org_unit_name
+        upload.metadata = upload_metadata
         upload.save()
 
         client, connection = _rag_client(workspace)
+        upstream_metadata = {
+            "workspace_slug": workspace.slug,
+            "research_project_id": str(chain.project_id),
+            "chain_node_id": str(node.id),
+            "file_sha256": file_hash,
+        }
+        if scope.org_unit_id:
+            upstream_metadata.update(
+                {
+                    "org_unit_id": scope.org_unit_id,
+                    "org_unit_name": scope.org_unit_name,
+                    "chain_id": str(chain.id),
+                }
+            )
         result = client.upload(
             file_name=file_name,
             file_content=file_bytes,
             kb_id=knowledge_base_id,
-            metadata={
-                "workspace_slug": workspace.slug,
-                "research_project_id": str(chain.project_id),
-                "chain_node_id": str(node.id),
-                "file_sha256": file_hash,
-            },
+            metadata=upstream_metadata,
             request=request,
         )
         if result.degraded:
@@ -379,6 +416,7 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                     "research_project_id": str(chain.project_id),
                     "chain_id": str(chain.id),
                     "chain_node_id": str(node.id),
+                    **({"org_units": [scope.org_unit_id]} if scope.scope == SCOPE_GROUP and scope.org_unit_id else {}),
                 },
                 "metadata": {
                     **upload.metadata,

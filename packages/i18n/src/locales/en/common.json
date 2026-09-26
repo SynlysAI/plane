@@ -1340,7 +1340,10 @@
       "refresh_status": "Refresh status",
       "confirm_reference": "Confirm reference",
       "action_failed": "The action was not completed. Your records have been preserved.",
-      "no_knowledge_bases": "No knowledge bases are available. Check the RAGPortal configuration or try again later."
+      "no_knowledge_bases": "No knowledge bases are available. Check the RAGPortal configuration or try again later.",
+      "pending_admin": "Group knowledge base status: {state}. Uploads stay closed until an administrator binds the library.",
+      "pending_group": "Group knowledge base ({team}) status: {state}. After one manual binding, later projects in this group can upload directly.",
+      "unassigned": "This project has no team, so a personal knowledge base will not be created. Assign the owner to a team first."
     },
     "agent": {
       "description": "Same-origin agent workbench with server-side context authorization.",

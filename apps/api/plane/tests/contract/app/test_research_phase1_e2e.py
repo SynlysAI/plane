@@ -13,11 +13,13 @@ from plane.db.models import (
     AccountLink,
     ExternalSystemConnection,
     MentorBinding,
+    OrgUnit,
+    OrgUnitMember,
     Project,
     ResearchAgentSession,
     ResearchChainEvent,
     ResearchChainSnapshot,
-    ResearchKnowledgeRequest,
+    ResearchGroupKnowledgeBinding,
     ResearchProjectProfile,
     ResearchUserProfile,
 )
@@ -35,7 +37,30 @@ def _client(user):
     return client
 
 
-def _profile(workspace, owner, name, visibility):
+def _team(workspace, owner):
+    """Create the student's shared team.
+
+    Args:
+        workspace: Workspace that owns the team.
+        owner: Student who belongs to the team.
+
+    Returns:
+        The TEAM org unit.
+    """
+    unit = OrgUnit.objects.create(workspace=workspace, name="电池", unit_type=OrgUnit.UnitType.TEAM, path="")
+    unit.path = f"/{unit.id.hex}/"
+    unit.save(update_fields=["path"])
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=unit,
+        user=owner,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+        is_primary=True,
+    )
+    return unit
+
+
+def _profile(workspace, owner, name, visibility, org_unit):
     suffix = uuid4().hex[:6]
     project = Project.objects.create(
         workspace=workspace,
@@ -48,6 +73,7 @@ def _profile(workspace, owner, name, visibility):
         project=project,
         workspace=workspace,
         owner=owner,
+        org_unit=org_unit,
         chain_kind=ResearchProjectProfile.ChainKind.RESEARCH_CHAIN,
         chain_visibility=visibility,
         created_by=owner,
@@ -93,8 +119,9 @@ def env(db, settings, monkeypatch):
         payload_hash=sha256(b"link").hexdigest(),
         created_by=student,
     )
-    project_a, profile_a = _profile(workspace, student, "Public", "WORKSPACE")
-    project_b, profile_b = _profile(workspace, student, "Private", "PRIVATE")
+    team = _team(workspace, student)
+    project_a, profile_a = _profile(workspace, student, "Public", "WORKSPACE", team)
+    project_b, profile_b = _profile(workspace, student, "Private", "PRIVATE", team)
 
     def fake_create_synlora_session(
         *, workspace, user, node, request_id, client=None, scope_kind="OWNER", scope_source="chain_owner"
@@ -183,13 +210,13 @@ def _create_chain(env, project):
 
 
 def _mark_knowledge_ready(env, chain_id, kb_id="kb-1"):
-    """Promote the automatically created KB request to the test-ready state."""
-    request = ResearchKnowledgeRequest.objects.get(chain_id=chain_id)
-    request.state = ResearchKnowledgeRequest.State.READY
-    request.external_kb_id = kb_id
-    request.external_kb_name = f"Ready {kb_id}"
-    request.save(update_fields=["state", "external_kb_id", "external_kb_name", "updated_at"])
-    return request
+    """Promote the shared team binding to the test-ready state."""
+    binding = ResearchGroupKnowledgeBinding.objects.get(workspace=env["workspace"])
+    binding.state = ResearchGroupKnowledgeBinding.State.READY
+    binding.external_kb_id = kb_id
+    binding.external_kb_name = f"Ready {kb_id}"
+    binding.save(update_fields=["state", "external_kb_id", "external_kb_name", "updated_at"])
+    return binding
 
 
 def _create_node(env, chain_id, node_type, title):
@@ -210,9 +237,9 @@ def test_phase1_student_research_loop_and_guardrails(env):
     chain_b = _create_chain(env, env["project_b"])
     node_a = _create_node(env, chain_a["id"], "LITERATURE_REVIEW", "课题 A 调研")
     _create_node(env, chain_b["id"], "EXPERIMENT", "课题 B 实验")
-    assert ResearchKnowledgeRequest.objects.filter(
-        chain_id=chain_a["id"], state=ResearchKnowledgeRequest.State.PENDING_ADMIN
-    ).exists()
+    assert ResearchGroupKnowledgeBinding.objects.filter(
+        workspace=env["workspace"], state=ResearchGroupKnowledgeBinding.State.PENDING_ADMIN
+    ).count() == 1
     _mark_knowledge_ready(env, chain_a["id"])
 
     visible = env["guest_client"].get(f"/api/research/workspaces/{env['workspace'].slug}/chains/")

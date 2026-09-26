@@ -59,6 +59,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const [degradedReason, setDegradedReason] = useState("");
   const [actionError, setActionError] = useState("");
   const [knowledgeState, setKnowledgeState] = useState(KB_READY_STATE);
+  const [orgUnitName, setOrgUnitName] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -72,6 +73,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       ]);
       setKnowledgeBases(payload.items);
       setKnowledgeState(payload.state ?? KB_READY_STATE);
+      setOrgUnitName(payload.orgUnitName ?? "");
       setKnowledgeBaseId((current) => current || payload.items[0]?.external_id || "");
       setUploads(uploadPayload.data);
       setDegradedReason(payload.degraded_reason ?? "");
@@ -154,11 +156,25 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
           })}
         </p>
       )}
-      {knowledgeState !== KB_READY_STATE && state !== "loading" && state !== "forbidden" && (
+      {knowledgeState === "UNASSIGNED" && state !== "loading" && state !== "forbidden" && (
         <p className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary" role="status">
-          {t("research.knowledge.pending_admin", { state: knowledgeState })}
+          {t("research.knowledge.unassigned")}
         </p>
       )}
+      {knowledgeState !== KB_READY_STATE &&
+        knowledgeState !== "UNASSIGNED" &&
+        state !== "loading" &&
+        state !== "forbidden" && (
+          <p
+            className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary"
+            role="status"
+          >
+            {t(orgUnitName ? "research.knowledge.pending_group" : "research.knowledge.pending_admin", {
+              state: knowledgeState,
+              team: orgUnitName,
+            })}
+          </p>
+        )}
       {actionError && (
         <p className="mt-2 text-11 text-danger-primary" role="alert">
           {actionError}

@@ -277,17 +277,28 @@
 
 ### 阶段 D：课题私有知识库闭环
 
-#### 任务 D1：课题 KB 申请、手工建库回填与成员授权
+#### 2026-09-26 现行口径：小组共享知识库
 
-**范围：** 课题创建时由 Plane/RAGPortal 提交唯一知识库申请并通知管理员；管理员根据 WeKnora 所需完整参数手工建库；管理员将外部 KB ID、名称和参数摘要回填 RAGPortal；RAGPortal 完成校验、绑定和状态推进。RAGPortal 不直接调用 WeKnora 建库接口。
+本段取代下文 D1 里“一课题一库、跨课题禁止复用”的申请规则。历史验收记录不改写。
+
+- 绑定单位是组织树 `TEAM`（多肽、电池、光刻胶、硅基等）。课题按项目组织、负责人主归属、最近上级 `TEAM` 依次归属。
+- 同一小组只有一条 `ResearchGroupKnowledgeBinding`。管理员仍在 WeKnora 手工建库并回填一次，RAGPortal 不调用建库接口。该小组之后的新课题直接进入这个库。
+- 组内全文可检索。上传 metadata 记录小组、课题和节点，但不按课题过滤。`PRIVATE` 课题文件也进入小组库。Plane 上的课题可见性和上传回执仍按课题 ACL；组外协作者不能因此检索整个小组库。
+- 没有小组时课题仍可创建，知识状态为 `UNASSIGNED`，上传返回 `409 KB_GROUP_UNASSIGNED`，不建个人库。
+- 数据迁移只归档非 `READY`、非 `ARCHIVED` 的旧课题申请，并收成小组绑定。已 `READY` 的旧绑定保持原库，不自动并库。
+- 跨小组绑定返回 `409 KB_SCOPE_CONFLICT`，跨小组上传返回 `403 KB_SCOPE_CONFLICT`。知识库列表只返回当前这一条绑定。
+
+#### 任务 D1：小组 KB 绑定、手工建库回填与检索范围
+
+**范围：** 新建课题挂到所属 `TEAM` 的 `ResearchGroupKnowledgeBinding`。管理员在 WeKnora 手工建库后，用 Plane 绑定接口回填一次；RAGPortal 不调用建库接口，也不为学生课题创建个人建库申请。
 
 **验收标准：**
 
-- [ ] `RESEARCH_CHAIN` 课题创建强制创建独立 Plane Project，并生成 `REQUESTED`/`PENDING_ADMIN` 申请；申请幂等且可查看处理人、补充信息和拒绝原因。
-- [ ] 管理员完成 WeKnora 手工建库后可回填，申请先进入 `CREATED_PENDING_BINDING`，通过外部 ID 唯一性、实例归属和参数完整性校验后才进入 `READY`。
-- [ ] 未达到 `READY` 前，上传入口显示“知识库申请处理中/待绑定”，不得创建 WeKnora 上传任务；源文件和人工记录仍可保存。
-- [ ] 重复申请不产生多个未结束申请；跨课题 KB ID 被拒绝。
-- [ ] 学生、直接导师、产业化负责人、基础研究负责人、课题组唯一 Main PI 及组织架构上级领导按继承规则可见；具体动作由 Plane/RAGPortal ACL 决定，与 WeKnora 全局 key 解耦。
+- [ ] `RESEARCH_CHAIN` 课题创建仍创建独立 Plane Project，但只幂等挂接小组绑定；无小组时状态为 `UNASSIGNED`，不建个人库。
+- [ ] 管理员完成 WeKnora 手工建库后回填外部 KB ID。同一小组之后的课题直接复用该库；已 `READY` 的历史课题绑定不自动并库。
+- [ ] 未达到 `READY` 前，上传入口显示小组名称和处理状态，不得创建 WeKnora 上传任务；源文件和人工记录仍可保存。
+- [ ] 跨小组绑定返回 `409 KB_SCOPE_CONFLICT`，跨小组上传返回 `403 KB_SCOPE_CONFLICT`，且不产生上传任务。
+- [ ] 小组成员可检索整个小组库，文档 metadata 只追溯课题、不隔离正文。Plane 课题可见性和上传回执仍按课题 ACL；组外协作者不能因此检索整个小组库。
 
 **依赖：** A3、B1。
 **预计范围：** XL，须拆为 Plane 申请编排、RAGPortal 申请/回填、管理员通知与契约三条子任务。
@@ -404,7 +415,7 @@
 | D1-P | `views/projects.py`、`views/knowledge.py`、新增 `knowledge_requests.py`               | `test_research_chain_knowledge.py`、项目创建 contract                                           | 创建 Chain 同事务写申请 outbox → 重试 → READY 门禁 → 归档/恢复                         | Plane 侧申请 ID 唯一；未 READY 不可上传                     |
 | D1-R | `RAGPortal/app/models/kb_request.py`、`services/kb_request_service.py`、`api/v1/`     | `test_kb_request_service.py`、API contract                                                      | 扩展状态/字段 → 新增回填接口 → 校验 external KB 归属/唯一性 → 保留旧接口               | 旧 `pending/approved/rejected` 可读；回填重复返回 409       |
 | D1-N | RAGPortal 通知适配器、Plane integration call log                                      | 通知失败/重试测试                                                                               | 站内通知为必选 → 邮件/IM 为可选 → SLA 超时转 NEEDS_INFO/FAILED                         | 通知有 request/correlation ID；不阻断人工记录               |
-| D2   | `research-chain-knowledge-panel.tsx`、`views/knowledge.py`                            | `research-chain-knowledge-panel.test.tsx`、knowledge contract                                   | 当前 Chain 自动选 KB → 展示生命周期 → READY 才启用上传 → 失败重试/人工记录             | 跨课题 KB ID 永不出现在选项中                               |
+| D2   | `research-chain-knowledge-panel.tsx`、`views/knowledge.py`                            | `research-chain-knowledge-panel.test.tsx`、knowledge contract                                   | 当前绑定自动选中 → 展示小组状态 → READY 才启用上传 → 失败重试/人工记录                 | 选项只含当前小组库或遗留 READY 绑定                         |
 | E1   | `research-home-summary-card.tsx`、summary API                                         | `research-home-summary-card.test.tsx`、summary contract                                         | ACL 过滤 → 稳定排序 → 键盘切换 → empty/loading/error                                   | 总数、序号和当前节点同步                                    |
 | E2   | `research-todo-index.tsx`、todo collector                                             | `research-todo-index.test.tsx`、PI aggregate test                                               | 定义 `dedupe_key` → 按动作权限过滤 → 最多 5 行 → 深链                                  | 同对象仅一条当前待办；无权对象不计数                        |
 | E3   | `research-project-list.tsx`、platform settings                                        | project/settings component tests                                                                | 类型说明 → 继承来源 → 影响范围 → 长文本和窄屏                                          | 1280/1024/390 无溢出                                        |
@@ -478,14 +489,14 @@ RAGPortal 当前接口保留 30 天兼容窗口：
 
 所有跨仓写请求同时携带 `X-Request-ID` 和 `Idempotency-Key`；服务端保存 `request_id + payload_hash`。相同 hash 重放返回首次结果，不同 hash 返回 `409 IDEMPOTENCY_CONFLICT`。网络超时只允许客户端重试幂等请求，指数退避 `1s/2s/4s`，最多 3 次；收到 `401/403/409/422` 不自动重试。
 
-| 场景                     | HTTP/错误码                   | 状态变化                                     | 用户可执行动作       |
-| ------------------------ | ----------------------------- | -------------------------------------------- | -------------------- |
-| 申请重复                 | `409 / IDEMPOTENCY_CONFLICT`  | 保留首次申请                                 | 查看原申请           |
-| KB 尚未绑定              | `409 / KB_NOT_READY`          | `PENDING_ADMIN` 或 `CREATED_PENDING_BINDING` | 查看状态、补充信息   |
-| 外部 KB 已被其他课题绑定 | `403 / KB_SCOPE_CONFLICT`     | `FAILED`                                     | 联系管理员重新建库   |
-| WeKnora/RAG 超时         | `503 / UPSTREAM_TIMEOUT`      | 保留当前状态，增加 retry_count               | 稍后重试，不重复上传 |
-| 撤权后旧 Agent token     | `403 / CONTEXT_ACCESS_DENIED` | session 标记 `DEGRADED`                      | 重新打开并重新授权   |
-| 报告已提交后修改         | `409 / REPORT_READ_ONLY`      | 不变                                         | 查看正式版本         |
+| 场景                     | HTTP/错误码                                 | 状态变化                                     | 用户可执行动作       |
+| ------------------------ | ------------------------------------------- | -------------------------------------------- | -------------------- |
+| 申请重复                 | `409 / IDEMPOTENCY_CONFLICT`                | 保留首次申请                                 | 查看原申请           |
+| KB 尚未绑定              | `409 / KB_NOT_READY`                        | `PENDING_ADMIN` 或 `CREATED_PENDING_BINDING` | 查看状态、补充信息   |
+| 外部 KB 已被其他小组绑定 | `409` 绑定 / `403` 上传 `KB_SCOPE_CONFLICT` | 不写入新绑定或上传任务                       | 改绑本小组的库       |
+| WeKnora/RAG 超时         | `503 / UPSTREAM_TIMEOUT`                    | 保留当前状态，增加 retry_count               | 稍后重试，不重复上传 |
+| 撤权后旧 Agent token     | `403 / CONTEXT_ACCESS_DENIED`               | session 标记 `DEGRADED`                      | 重新打开并重新授权   |
+| 报告已提交后修改         | `409 / REPORT_READ_ONLY`                    | 不变                                         | 查看正式版本         |
 
 ### 6.4 接口实现对照表与示例
 
@@ -678,7 +689,7 @@ Plane 和 RAGPortal 都必须执行 `READY` 门禁：Plane 在上传前检查状
 | 普通 WORKSPACE 可读者审批报告                                               | 不出现在待我审批；直接 action 返回 `403 approval_action_not_allowed`               |
 | 导师访问未绑定学生课题                                                      | Agent 创建和 Context 资源均 `403/404`；不生成 session                              |
 | REVIEW session 调用节点 transition、upload、reference confirm、正式报告覆盖 | `403`，记录 `agent_review_denied_total` 和审计；评论/分析草稿仍可成功              |
-| 跨课题 KB ID 上传/搜索                                                      | `403 KB_SCOPE_CONFLICT`；RAG/Plane 均不创建 upload/task                            |
+| 跨小组 KB ID 上传/搜索                                                      | `403 KB_SCOPE_CONFLICT`；RAG/Plane 均不创建 upload/task。同一小组复用允许。        |
 | 过期或撤销 Context 下一轮请求                                               | `401/403 CONTEXT_ACCESS_DENIED`；session 变为 `DEGRADED`                           |
 | PDF/Markdown 以伪造 MIME、超限大小或重复 hash 上传                          | `422 FILE_TYPE_NOT_ALLOWED` / `413 FILE_SIZE_EXCEEDED` / 幂等返回原记录            |
 

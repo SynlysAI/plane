@@ -188,7 +188,7 @@ Plane 不复制 Synlora 的工具注册表，也不直接执行用户侧工具�
 - 研究链与 Plane Project 的一对一关系在 Chain 头部显示项目标识、所属组织、负责人、可见性和状态；节点详情提供报告、实验、知识库和 Agent 上下文入口，并保留刷新后的 `tab/stage/node` 深链。
 - Chain/Node 响应增加 `research-capabilities.v1` 能力投影，前端按 `allowed/reason_code/reason` 渲染动作；普通管理员不会因配置权限获得业务内容写权。
 - 首页摘要支持全部可见课题切换；跨组件待办默认最多显示五行并支持键盘/按钮分页，同一来源对象只保留一条当前待办。
-- `RESEARCH_CHAIN` 创建时生成唯一课题知识库申请；管理员回填外部 KB ID 后进入 `READY`，未 READY 时保留已有本地记录读取但禁止新增上传，跨课题 KB ID 返回 `KB_SCOPE_CONFLICT`。
+- 自 2026-09-26 起，新建 `RESEARCH_CHAIN` 不再一题一库，而是挂到负责人所属 `TEAM` 小组的共享知识库。同一小组只申请一次；管理员回填后本组后续课题直接上传。无小组归属返回 `KB_GROUP_UNASSIGNED`，不建个人库。已 `READY` 的历史课题绑定保持原库。跨小组复用外部 KB 仍返回 `KB_SCOPE_CONFLICT`。组内资料全文共享，文档 metadata 只用于追溯。
 - 报告成果支持 PDF/Markdown 两步上传和提交锁定；实验记录只关联 SpecLabOS 等外部资产，不在 Plane 保存实验原始数据文件。
 - 成员增删提供成功回执；界面状态遵循 academic editorial UI 规范，不新增渐变、发光和彩色装饰卡片。
 

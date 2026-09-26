@@ -15,7 +15,6 @@ from plane.db.models import (
     ResearchChainEvent,
     ResearchChainNode,
     ResearchChainSnapshot,
-    ResearchKnowledgeRequest,
     ResearchProjectProfile,
     WorkspaceMember,
 )
@@ -25,6 +24,7 @@ from plane.research.serializers import (
     ResearchChainSerializer,
     ResearchChainSnapshotSerializer,
 )
+from plane.research.services.group_knowledge import ensure_group_knowledge_binding
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
@@ -316,15 +316,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
                     "created_by": request.user,
                 },
             )
-            ResearchKnowledgeRequest.objects.get_or_create(
-                chain=chain,
-                defaults={
-                    "workspace": workspace,
-                    "request_key": f"chain:{chain.id}",
-                    "state": ResearchKnowledgeRequest.State.PENDING_ADMIN,
-                    "created_by": request.user,
-                },
-            )
+            ensure_group_knowledge_binding(chain, request.user)
         return Response(
             _envelope(
                 data=ResearchChainSerializer(chain, context=_serializer_context(request)).data,
