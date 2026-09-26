@@ -114,6 +114,8 @@ class TestResearchIdentityMe:
         payload = response.json()
         assert payload["user"]["is_research_owner"] is True
         assert payload["user"]["org_units"][0]["org_role"] == "PI"
+        assert payload["user"]["role_context"]["roles"] == ["PRINCIPAL"]
+        assert payload["user"]["role_context"]["business_categories"] == []
         assert payload["identity"]["subject"] == "sub-1"
         assert payload["identity"]["employee_id"] == "20230001"
         assert payload["identity"]["configured"] is True

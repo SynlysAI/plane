@@ -1,18 +1,18 @@
 # 科研智能体平台 Phase 1.5 联调与缺陷收敛计划
 
-| 项目     | 内容                                                                                                                                                           |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.2                                                                                                                                                           |
-| 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10                                                                        |
-| 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                                             |
-| 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                                             |
-| 执行手册 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                               |
-| 人工测试 | [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
-| 计划状态 | dev 五服务已启动并完成健康检查；真实课题证据、Tailnet HTTPS Serve 授权和 OIDC 绑定仍待完成，不标记为完全关闭                                                   |
-| 执行模式 | 单人执行；A / B 保留为职责自查分区标签（见 §8）                                                                                                                |
-| 修订记录 | v1.2（2026-09-26）：补充分角色开发/人工测试入口、dev/Tailnet 启动口径和当前健康检查结论；保留真实课题、HTTPS Serve 与 OIDC 灰度门禁                            |
-| 目标     | 在 Phase 1 代码交付基础上拉通开发环境真实联调，完成基础功能验证，收敛跨服务缺陷，为 Phase 2 提供可用的联调环境                                                 |
-| 不在范围 | 新业务功能、垂类工具生产化、生产灰度放量                                                                                                                       |
+| 项目     | 内容                                                                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 计划版本 | v1.3                                                                                                                                                                                           |
+| 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10                                                                                                        |
+| 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                                                                             |
+| 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                                                                             |
+| 执行手册 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                                                               |
+| 人工测试 | [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                 |
+| 计划状态 | dev 五服务已启动并完成健康检查；真实课题证据、Tailnet HTTPS Serve 授权和 OIDC 绑定仍待完成，不标记为完全关闭                                                                                   |
+| 执行模式 | 单人执行；A / B 保留为职责自查分区标签（见 §8）                                                                                                                                                |
+| 修订记录 | v1.3（2026-09-26）：接入 `identity/me.user.role_context` 分角色解析和契约测试；补充分角色开发/人工测试入口、dev/Tailnet 启动口径和当前健康检查结论；保留真实课题、HTTPS Serve 与 OIDC 灰度门禁 |
+| 目标     | 在 Phase 1 代码交付基础上拉通开发环境真实联调，完成基础功能验证，收敛跨服务缺陷，为 Phase 2 提供可用的联调环境                                                                                 |
+| 不在范围 | 新业务功能、垂类工具生产化、生产灰度放量                                                                                                                                                       |
 
 ## 1. 背景与问题定位
 

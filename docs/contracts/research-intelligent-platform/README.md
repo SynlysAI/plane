@@ -1,6 +1,6 @@
 # Research Intelligent Platform 跨仓契约
 
-本目录冻结跨仓库交换契约。当前 Plane 代码版本为 `4.15.1`；Phase 0 的 `*.v1` 契约继续兼容，Phase 1 的 `agent-context.v2`、能力投影和 Agent OWNER/REVIEW scope 已进入当前实现。消费者必须忽略未知字段，新增字段默认可选；枚举只能追加值。删除或重命名字段、改变字段语义或收窄枚举必须发布新的主版本。
+本目录冻结跨仓库交换契约。当前 Plane 代码版本为 `4.15.2`；Phase 0 的 `*.v1` 契约继续兼容，Phase 1 的 `agent-context.v2`、能力投影和 Agent OWNER/REVIEW scope 已进入当前实现。消费者必须忽略未知字段，新增字段默认可选；枚举只能追加值。删除或重命名字段、改变字段语义或收窄枚举必须发布新的主版本。
 
 ## 文件约定
 

@@ -4,7 +4,7 @@
 
 | 项目     | 内容                                                                                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 手册版本 | v1.2（配套分角色计划 v1.1；当前软件版本 `4.15.1`）                                                                                                             |
+| 手册版本 | v1.2（配套分角色计划 v1.1；当前软件版本 `4.15.2`）                                                                                                             |
 | 上游计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)                     |
 | 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md)（身份清单；凭据由本机安全注入）                                                                     |
 | 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                                          |
@@ -12,6 +12,8 @@
 | 人工测试 | [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
 
 ## 当前 dev 状态
+
+当前代码已将分角色解析结果接入 `identity/me.user.role_context`，人工测试先核对该字段再进入 L3.6。
 
 2026-09-26 已验证 Plane Web/API、RAGPortal、Synlora、WeKnora 健康检查和 Docker API/worker/beat；Tailnet HTTP 入口 `http://100.109.35.2:3000/` 可访问。Tailscale Serve 当前等待管理员授权，HTTPS 地址在授权前保持阻塞。启动、健康检查和停止命令以[启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)为准。
 

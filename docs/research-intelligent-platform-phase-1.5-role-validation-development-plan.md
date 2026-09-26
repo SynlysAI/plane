@@ -2,9 +2,9 @@
 
 | 项目       | 内容                                                                                                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本   | v1.1（2026-09-26）                                                                                                                                                        |
+| 文档版本   | v1.2（2026-09-26）                                                                                                                                                        |
 | 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                        |
-| 适用版本   | Plane `4.15.1`，`develop`                                                                                                                                                 |
+| 适用版本   | Plane `4.15.2`，`develop`                                                                                                                                                 |
 | 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md) |
 | 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                       |
 | 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                         |
@@ -82,9 +82,11 @@
 
 #### DEV-A2：冻结角色和权限契约
 
+当前实现已新增 `role_resolution.resolve_role_context`，并由 `identity/me` 返回脱敏 `role_context`；覆盖 ADMIN、PRINCIPAL、INDUSTRIALIZATION_OWNER、MENTOR、RESEARCHER、NONE 和 Guest 的关系解析。
+
 **验收标准：**
 
-- [ ] 七类身份（含 `NONE` 和 Guest）均有解析条件、导航预期和动作矩阵。
+- [x] 七类身份（含 `NONE` 和 Guest）均有解析条件、导航预期和动作矩阵。
 - [ ] 管理员配置权与业务数据 ACL 分离；主 PI/导师 REVIEW scope 不包含节点生命周期、上传、引用确认和正式报告覆盖。
 - [ ] 每个拒绝动作记录 HTTP 状态、稳定错误码、中文原因和 request id。
 

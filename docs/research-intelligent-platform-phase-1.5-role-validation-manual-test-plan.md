@@ -6,7 +6,7 @@
 | 文档状态 | 可执行；测试结果按日期写入 evidence，不把执行结果预先标记为通过                                   |
 | 启动入口 | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)          |
-| 测试环境 | `public` π-Lab 基线 + Plane `4.15.1` + RAGPortal + Synlora + WeKnora                              |
+| 测试环境 | `public` π-Lab 基线 + Plane `4.15.2` + RAGPortal + Synlora + WeKnora                              |
 | 测试 KB  | `plane测试`；不得选择其他知识库，不得绑定第二个课题                                               |
 | 凭据     | 运行时注入；本文件不保存密码                                                                      |
 
@@ -45,7 +45,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 | MT-L2-06 | NONE         | 为 Workspace 成员但无科研组织关系；科研导航不渲染或只读收敛                        |
 | MT-L2-07 | Guest        | role `GUEST` 且无科研组织关系；科研导航隐藏，直链/API fail closed                  |
 
-每个角色记录四入口（科研总览、研究链、审批中心、科研管理）和十项能力：`view/edit/submit/review/accept/return/export/agent_review/knowledge_read/knowledge_write`。
+每个角色先记录 `identity/me.user.role_context`，再记录四入口（科研总览、研究链、审批中心、科研管理）和十项能力：`view/edit/submit/review/accept/return/export/agent_review/knowledge_read/knowledge_write`。
 
 ## 4. L3：主课题、KB 和检索
 
