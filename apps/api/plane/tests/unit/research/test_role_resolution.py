@@ -77,3 +77,4 @@ def test_guest_and_none_are_distinguished():
 
     assert resolve_role_context(none_user, workspace)["roles"] == ["NONE"]
     assert resolve_role_context(guest, workspace)["roles"] == ["Guest"]
+    assert resolve_role_context(guest, workspace)["research_level"] == "NONE"
