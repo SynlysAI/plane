@@ -1,13 +1,15 @@
 # 科研智能体平台 Phase 1.5 联调执行手册
 
-| 项目     | 内容                                                                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 手册版本 | v1.1（配套计划 v1.6；当前软件版本 `4.15.0`）                                                                                                                      |
-| 上游计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md) |
-| 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md)（身份清单；凭据由本机安全注入）                                                      |
-| 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                      |
-| 使用方式 | 每个联调日从 §1 开始逐层勾选；失败项当日登记附录 A，证据按附录 B 归档                                                                      |
-| 人工测试 | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)     |
+> **当前人工测试入口（2026-09-26）**：本手册中的旧 seed 账号和历史课题矩阵只用于复盘证据；当前人工测试必须按 [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) 解析 π-Lab Excel 身份，并使用 `plane测试` 知识库。
+
+| 项目     | 内容                                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 手册版本 | v1.1（配套计划 v1.6；当前软件版本 `4.15.0`）                                                                                                                   |
+| 上游计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)                     |
+| 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md)（身份清单；凭据由本机安全注入）                                                                     |
+| 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                                          |
+| 使用方式 | 每个联调日从 §1 开始逐层勾选；失败项当日登记附录 A，证据按附录 B 归档                                                                                          |
+| 人工测试 | [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
 
 ## 使用说明
 
@@ -96,6 +98,8 @@
 | SW-07 | 恢复总开关后，子开关行为立即恢复（复跑 SW-00 冒烟三项：创建课题 / Agent 会话 / 导出）              | [x]  | `switches/20260925-L3.5.md` |
 
 ## 5. L3.6：分角色功能矩阵
+
+> **历史证据说明**：以下账号、课题 A/B 和矩阵记录对应 2026-09-25 的旧 seed 联调证据，只用于复盘，不代表当前 `public` π-Lab Excel 基线。当前人工测试必须使用 [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) 动态解析角色，并使用 `plane测试` 知识库。
 
 ### 5.1 角色-账号映射
 

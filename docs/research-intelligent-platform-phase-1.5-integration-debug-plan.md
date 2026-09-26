@@ -1,18 +1,18 @@
 # 科研智能体平台 Phase 1.5 联调与缺陷收敛计划
 
-| 项目     | 内容                                                                                                                                   |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.1                                                                                                                                   |
-| 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10                                                |
-| 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                     |
-| 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                     |
-| 执行手册 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)       |
-| 人工测试 | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md) |
-| 计划状态 | 代码与自动化联调已完成；真实课题证据和 OIDC 绑定仍待完成，不标记为完全关闭                                                                                                |
-| 执行模式 | 单人执行；A / B 保留为职责自查分区标签（见 §8）                                                                                        |
-| 修订记录 | v1.1（2026-09-24）：改为单人 5 天模式；新增 L3.5 功能开关矩阵与 L3.6 角色矩阵；降级演练补 WeKnora 失效模拟；缺陷清单落位执行手册附录 A |
-| 目标     | 在 Phase 1 代码交付基础上拉通开发环境真实联调，完成基础功能验证，收敛跨服务缺陷，为 Phase 2 提供可用的联调环境                         |
-| 不在范围 | 新业务功能、垂类工具生产化、生产灰度放量                                                                                               |
+| 项目     | 内容                                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 计划版本 | v1.1                                                                                                                                                           |
+| 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10                                                                        |
+| 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                                             |
+| 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                                             |
+| 执行手册 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                               |
+| 人工测试 | [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
+| 计划状态 | 代码与自动化联调已完成；真实课题证据和 OIDC 绑定仍待完成，不标记为完全关闭                                                                                     |
+| 执行模式 | 单人执行；A / B 保留为职责自查分区标签（见 §8）                                                                                                                |
+| 修订记录 | v1.1（2026-09-24）：改为单人 5 天模式；新增 L3.5 功能开关矩阵与 L3.6 角色矩阵；降级演练补 WeKnora 失效模拟；缺陷清单落位执行手册附录 A                         |
+| 目标     | 在 Phase 1 代码交付基础上拉通开发环境真实联调，完成基础功能验证，收敛跨服务缺陷，为 Phase 2 提供可用的联调环境                                                 |
+| 不在范围 | 新业务功能、垂类工具生产化、生产灰度放量                                                                                                                       |
 
 ## 1. 背景与问题定位
 
@@ -190,7 +190,7 @@ cd RAGPortal/backend && AUTH_SECRET=test-secret \
 
 ### 5.3.6 L3.6：角色矩阵
 
-复用 [`research-test-accounts.md`](./research-test-accounts.md)（v2.5.1）的 seed 账号，覆盖 ResearchLevel 五档（ADMIN / PRINCIPAL / MENTOR / RESEARCHER / NONE）与 Guest 负例，逐格验证四入口导航渲染、课题 A(WORKSPACE)/B(PRIVATE) 可见性与写权限、审批中心队列、Agent 会话、知识上传与引用、AccountLink 绑定、快照导出。完整账号映射、逐格矩阵与负例三则见执行手册 L3.6。
+按当前 `public` π-Lab Excel 基线动态解析主 PI、产业化负责人、直接导师、学生、管理员和访客；不再复用旧 seed 账号。主课题绑定 WeKnora/RAGPortal 测试知识库 `plane测试`，逐格验证四入口导航、WORKSPACE/PRIVATE 可见性、审批、Agent、KB 上传与引用、AccountLink 和导出。完整角色解析、mock 课题、逐格矩阵与负例见 [分角色开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) 和 [人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)。
 
 ### 5.4 L4：端到端闭环（Phase 1 出口场景）
 
