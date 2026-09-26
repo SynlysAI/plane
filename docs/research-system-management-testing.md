@@ -17,12 +17,12 @@
 
 | 账号                                                                                                        | 密码             | 角色与用途                                    |
 | ----------------------------------------------------------------------------------------------------------- | ---------------- | --------------------------------------------- |
-| `admin@ai4ms.local`                                                                                         | `admin123456`    | 实例管理员（唯一可授予标签）+ 两工作区管理员  |
-| `dev.admin@ai4ms.local`                                                                                     | `Research@12345` | `DEV_ADMIN` 标签：全域配置权                  |
-| `ops.admin@ai4ms.local`                                                                                     | `Research@12345` | `OPS_ADMIN` 标签                              |
-| `mainpi@ai4ms.local`                                                                                        | `Research@12345` | `MAIN_PI` 标签                                |
-| `test.pi@ai4ms.local` / `test.advisor@ai4ms.local` / `test.owner@ai4ms.local` / `test.reviewer@ai4ms.local` | `Research@12345` | 测试组：主PI / 直接导师 / 科研责任人 / 评审人 |
-| `gaopeng.member@ai4ms.local`、`hexue.guest@ai4ms.local`                                                     | `Research@12345` | 反向用例：无组织关系成员 / 访客               |
+| `admin@ai4ms.local`                                                                                         | `<由本机安全凭据注入>`    | 实例管理员（唯一可授予标签）+ 两工作区管理员  |
+| `dev.admin@ai4ms.local`                                                                                     | `<由本机安全凭据注入>` | `DEV_ADMIN` 标签：全域配置权                  |
+| `ops.admin@ai4ms.local`                                                                                     | `<由本机安全凭据注入>` | `OPS_ADMIN` 标签                              |
+| `mainpi@ai4ms.local`                                                                                        | `<由本机安全凭据注入>` | `MAIN_PI` 标签                                |
+| `test.pi@ai4ms.local` / `test.advisor@ai4ms.local` / `test.owner@ai4ms.local` / `test.reviewer@ai4ms.local` | `<由本机安全凭据注入>` | 测试组：主PI / 直接导师 / 科研责任人 / 评审人 |
+| `gaopeng.member@ai4ms.local`、`hexue.guest@ai4ms.local`                                                     | `<由本机安全凭据注入>` | 反向用例：无组织关系成员 / 访客               |
 
 ## 2. 路线 A：一键冒烟（约 5 秒，8 项检查）
 
@@ -81,9 +81,9 @@ pnpm --filter=web build && pnpm --filter=admin build
 
 ### 4.1 管理员标签（约 2 分钟）
 
-1. 打开 <http://192.168.3.245:3001>，用 `admin@ai4ms.local / admin123456` 登录。
+1. 打开 <http://192.168.3.245:3001>，用 `admin@ai4ms.local / <由本机安全凭据注入>` 登录。
 2. 左侧「用户与角色」→ 找到 `test.owner@ai4ms.local` → 点「运维管理员」按钮。
-3. 回到工作区 <http://192.168.3.245:3000/public/research/settings/system>，用 `test.owner@ai4ms.local / Research@12345` 登录：
+3. 回到工作区 <http://192.168.3.245:3000/public/research/settings/system>，用 `test.owner@ai4ms.local / <由本机安全凭据注入>` 登录：
    - 能看到「系统管理」页（配置权已生效）；
    - 顶部「当前账号的管理员标签」显示“运维管理员”；
    - `pi` 工作区出现在工作区切换菜单里。

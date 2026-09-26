@@ -44,14 +44,12 @@ class AgentAssembly:
 
 def active_synlora_link(user):
     """Return the user's active Synlora AccountLink or ``None``."""
-    return (
-        AccountLink.objects.filter(
-            local_user=user,
-            provider=SYNLORA_PROVIDER,
-            status=AccountLink.Status.ACTIVE,
-            deleted_at__isnull=True,
-        ).first()
-    )
+    return AccountLink.objects.filter(
+        local_user=user,
+        provider=SYNLORA_PROVIDER,
+        status=AccountLink.Status.ACTIVE,
+        deleted_at__isnull=True,
+    ).first()
 
 
 def _tool_policy(node_type):
@@ -61,15 +59,11 @@ def _tool_policy(node_type):
 def assemble_agent(*, node, manifest, scope_kind="OWNER", scope_source="chain_owner"):
     """Compute the defensive intersection without user-side scope controls."""
     tools = [
-        str(item.get("name") or "")
-        for item in (manifest.get("tools") or [])
-        if str(item.get("name") or "").strip()
+        str(item.get("name") or "") for item in (manifest.get("tools") or []) if str(item.get("name") or "").strip()
     ]
     registry = set(tools)
-    requested = _tool_policy(node.node_type)
+    requested = REVIEW_TOOLS if scope_kind == "REVIEW" else _tool_policy(node.node_type)
     final_tools = sorted(registry & requested)
-    if scope_kind == "REVIEW":
-        final_tools = sorted(set(final_tools) & REVIEW_TOOLS)
     unavailable = []
     if not final_tools:
         unavailable.append("policy_blocked")

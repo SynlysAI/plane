@@ -18,7 +18,7 @@
 | 科研模块   | `public` 工作区下 <http://127.0.0.1:3000/public/research/>          |
 | 主PI看板   | `pi` 工作区下 <http://127.0.0.1:3000/pi/research/dashboard>         |
 | 数据库     | 容器 `plane-plane-db-1`，库 `plane`，用户 `plane`                   |
-| 密码口径   | 夹具账号统一 `Research@12345`；`admin@ai4ms.local` 为 `admin123456` |
+| 密码口径   | 夹具账号统一 `<由本机安全凭据注入>`；`admin@ai4ms.local` 为 `<由本机安全凭据注入>` |
 
 登录即「账号 + 密码」，实例未配置 SMTP / OIDC，因此开发环境全部走本地密码登录。
 并发测试多个身份时用浏览器隐私窗口，避免会话互相覆盖。
@@ -29,11 +29,11 @@
 
 | 身份                 | 账号                    | 密码             | 权限来源与范围                                                                  |
 | -------------------- | ----------------------- | ---------------- | ------------------------------------------------------------------------------- |
-| 系统管理员           | `admin@ai4ms.local`     | `admin123456`    | 实例管理员；`public` / `pi` 两个工作区管理员（role 20）；可进入 `:3001` 管理端  |
+| 系统管理员           | `admin@ai4ms.local`     | `<由本机安全凭据注入>`    | 实例管理员；`public` / `pi` 两个工作区管理员（role 20）；可进入 `:3001` 管理端  |
 | 系统管理员（本人号） | `fangyikaii@163.com`    | 你原有密码       | 实例管理员；学院主 PI（`材料科学与工程学院` `PI`）+ `AI4MS 计算材料课题组` `PI` |
-| 标签 · 开发管理员    | `dev.admin@ai4ms.local` | `Research@12345` | `DEV_ADMIN`：组织、模板、身份、平台、审计、账号全域配置权                       |
-| 标签 · 运维管理员    | `ops.admin@ai4ms.local` | `Research@12345` | `OPS_ADMIN`：同上；业务数据仍按组织架构收敛                                     |
-| 标签 · 主PI管理员    | `mainpi@ai4ms.local`    | `Research@12345` | `MAIN_PI`：同上，并进入 `pi` 工作区                                             |
+| 标签 · 开发管理员    | `dev.admin@ai4ms.local` | `<由本机安全凭据注入>` | `DEV_ADMIN`：组织、模板、身份、平台、审计、账号全域配置权                       |
+| 标签 · 运维管理员    | `ops.admin@ai4ms.local` | `<由本机安全凭据注入>` | `OPS_ADMIN`：同上；业务数据仍按组织架构收敛                                     |
+| 标签 · 主PI管理员    | `mainpi@ai4ms.local`    | `<由本机安全凭据注入>` | `MAIN_PI`：同上，并进入 `pi` 工作区                                             |
 
 > 管理员标签只扩大**配置权**，不扩大**数据可见范围**：标签持有者的报告、项目、阶段可见性
 > 仍由组织架构 ACL 决定（见 §3）。标签的授予与撤销只有实例管理员可以做（`admin@ai4ms.local`
@@ -43,20 +43,20 @@
 
 | 身份                     | 账号                            | 密码             | 组织位置与角色                                                                | 登录后先看什么                                                             |
 | ------------------------ | ------------------------------- | ---------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Unit Admin               | `zhaoqiang.admin@ai4ms.local`   | `Research@12345` | `材料科学与工程学院` `UNIT_ADMIN`（学院节点）                                 | 组织架构管理入口；学院范围的 `UNIT` / `DIRECT_ADVISOR` 记录；待我评审 1 条 |
-| 主PI                     | `zhangwei.pi@ai4ms.local`       | `Research@12345` | `张伟课题组` `PI`（primary）                                                  | 本课题组全部报告/阶段/审批；自己的预开题正在待评                           |
-| 主PI（上级节点）         | `liming.pi@ai4ms.local`         | `Research@12345` | `李明课题组` `PI`（primary）                                                  | 实验室层 `ANCESTRY` 级记录，看不到兄弟课题组的 `PRIVATE`                   |
-| 主PI（节点负责人）       | `wangfang.lab@ai4ms.local`      | `Research@12345` | `能源材料实验室` `OWNER`（primary）+ `王芳课题组` `PI`                        | 上级节点主 PI 视角：下级节点 `ANCESTRY` 级记录                             |
-| 主PI（测试组）           | `test.pi@ai4ms.local`           | `Research@12345` | `测试组` `PI`（primary）；同时是 `test.owner` 的导师；`pi` 工作区成员         | 测试组报告与阶段；主PI工作区入口（测试组阶段已通过，无待评审）             |
-| 直接导师                 | `chenjing.advisor@ai4ms.local`  | `Research@12345` | `张伟课题组` `ADVISOR`；绑定刘洋、孙浩、周敏（MentorBinding）                 | 三名被绑定学生的报告；阶段必评人（3 条指派已评完）                         |
-| 直接导师（测试组）       | `test.advisor@ai4ms.local`      | `Research@12345` | `测试组` `ADVISOR`；绑定 `test.owner`                                         | 测试组学生报告与阶段                                                       |
-| Reviewer                 | `zhengkai.reviewer@ai4ms.local` | `Research@12345` | `张伟课题组` `REVIEWER` + `石墨负极小组` `OWNER`                              | 被指派的阶段评审（待我评审 1 条）；本小组记录                              |
-| Reviewer（测试组）       | `test.reviewer@ai4ms.local`     | `Research@12345` | `测试组` `REVIEWER`                                                           | 多人评审场景                                                               |
-| Research Owner           | `liuyang.phd@ai4ms.local`       | `Research@12345` | 博士生，`张伟课题组` `REVIEWER`（学籍席位）；项目「石墨负极界面调控机理研究」 | 自己项目的全链路数据；6 种可见级别的报告（ACL 矩阵所有者）                 |
-| Research Owner           | `sunhao.postdoc@ai4ms.local`    | `Research@12345` | 博士后，`张伟课题组` `REVIEWER`；项目「固态电解质界面原位表征方法研究」       | 开题阶段门槛全绿，可现场演示「提交评审」                                   |
-| Research Owner           | `zhoumin.master@ai4ms.local`    | `Research@12345` | 硕士生，`张伟课题组` `REVIEWER`；项目「高熵合金涂层耐蚀性优化」               | 唯一持有 `CUSTOM` 报告授权的账号；材料不齐/文献不达标的红项                |
-| Research Owner           | `wuting.project@ai4ms.local`    | `Research@12345` | 科研项目人员，`AI4MS 计算材料课题组` `REVIEWER`；导师为 `fangyikaii@163.com`  | 预开题被退回（带退回原因）；报告直接导师是 `fangyikaii@163.com`            |
-| Research Owner（测试组） | `test.owner@ai4ms.local`        | `Research@12345` | 科研责任人，`测试组` `REVIEWER`；项目「验收科研项目」                         | 测试组主 PI 与导师都绑定在他身上，用于多人评审用例                         |
+| Unit Admin               | `zhaoqiang.admin@ai4ms.local`   | `<由本机安全凭据注入>` | `材料科学与工程学院` `UNIT_ADMIN`（学院节点）                                 | 组织架构管理入口；学院范围的 `UNIT` / `DIRECT_ADVISOR` 记录；待我评审 1 条 |
+| 主PI                     | `zhangwei.pi@ai4ms.local`       | `<由本机安全凭据注入>` | `张伟课题组` `PI`（primary）                                                  | 本课题组全部报告/阶段/审批；自己的预开题正在待评                           |
+| 主PI（上级节点）         | `liming.pi@ai4ms.local`         | `<由本机安全凭据注入>` | `李明课题组` `PI`（primary）                                                  | 实验室层 `ANCESTRY` 级记录，看不到兄弟课题组的 `PRIVATE`                   |
+| 主PI（节点负责人）       | `wangfang.lab@ai4ms.local`      | `<由本机安全凭据注入>` | `能源材料实验室` `OWNER`（primary）+ `王芳课题组` `PI`                        | 上级节点主 PI 视角：下级节点 `ANCESTRY` 级记录                             |
+| 主PI（测试组）           | `test.pi@ai4ms.local`           | `<由本机安全凭据注入>` | `测试组` `PI`（primary）；同时是 `test.owner` 的导师；`pi` 工作区成员         | 测试组报告与阶段；主PI工作区入口（测试组阶段已通过，无待评审）             |
+| 直接导师                 | `chenjing.advisor@ai4ms.local`  | `<由本机安全凭据注入>` | `张伟课题组` `ADVISOR`；绑定刘洋、孙浩、周敏（MentorBinding）                 | 三名被绑定学生的报告；阶段必评人（3 条指派已评完）                         |
+| 直接导师（测试组）       | `test.advisor@ai4ms.local`      | `<由本机安全凭据注入>` | `测试组` `ADVISOR`；绑定 `test.owner`                                         | 测试组学生报告与阶段                                                       |
+| Reviewer                 | `zhengkai.reviewer@ai4ms.local` | `<由本机安全凭据注入>` | `张伟课题组` `REVIEWER` + `石墨负极小组` `OWNER`                              | 被指派的阶段评审（待我评审 1 条）；本小组记录                              |
+| Reviewer（测试组）       | `test.reviewer@ai4ms.local`     | `<由本机安全凭据注入>` | `测试组` `REVIEWER`                                                           | 多人评审场景                                                               |
+| Research Owner           | `liuyang.phd@ai4ms.local`       | `<由本机安全凭据注入>` | 博士生，`张伟课题组` `REVIEWER`（学籍席位）；项目「石墨负极界面调控机理研究」 | 自己项目的全链路数据；6 种可见级别的报告（ACL 矩阵所有者）                 |
+| Research Owner           | `sunhao.postdoc@ai4ms.local`    | `<由本机安全凭据注入>` | 博士后，`张伟课题组` `REVIEWER`；项目「固态电解质界面原位表征方法研究」       | 开题阶段门槛全绿，可现场演示「提交评审」                                   |
+| Research Owner           | `zhoumin.master@ai4ms.local`    | `<由本机安全凭据注入>` | 硕士生，`张伟课题组` `REVIEWER`；项目「高熵合金涂层耐蚀性优化」               | 唯一持有 `CUSTOM` 报告授权的账号；材料不齐/文献不达标的红项                |
+| Research Owner           | `wuting.project@ai4ms.local`    | `<由本机安全凭据注入>` | 科研项目人员，`AI4MS 计算材料课题组` `REVIEWER`；导师为 `fangyikaii@163.com`  | 预开题被退回（带退回原因）；报告直接导师是 `fangyikaii@163.com`            |
+| Research Owner（测试组） | `test.owner@ai4ms.local`        | `<由本机安全凭据注入>` | 科研责任人，`测试组` `REVIEWER`；项目「验收科研项目」                         | 测试组主 PI 与导师都绑定在他身上，用于多人评审用例                         |
 
 > 学生/博士后/科研项目人员在组织里的角色是 `REVIEWER`：这是唯一不授予节点管理权的角色，
 > 因此学籍成员「看得到但不能管」。平台意义上的 **Research Owner** 指的是拥有个人科研项目的
@@ -66,8 +66,8 @@
 
 | 身份                         | 账号                         | 密码             | 预期结果                                            |
 | ---------------------------- | ---------------------------- | ---------------- | --------------------------------------------------- |
-| 工作区成员（无科研组织关系） | `gaopeng.member@ai4ms.local` | `Research@12345` | 只能看到 `WORKSPACE` 级报告；科研菜单按 `NONE` 收敛 |
-| 访客（Guest）                | `hexue.guest@ai4ms.local`    | `Research@12345` | 可登录，但科研接口 403、导航不渲染科研分组          |
+| 工作区成员（无科研组织关系） | `gaopeng.member@ai4ms.local` | `<由本机安全凭据注入>` | 只能看到 `WORKSPACE` 级报告；科研菜单按 `NONE` 收敛 |
+| 访客（Guest）                | `hexue.guest@ai4ms.local`    | `<由本机安全凭据注入>` | 可登录，但科研接口 403、导航不渲染科研分组          |
 
 ## 3. 每个身份应该看到什么
 
@@ -179,7 +179,7 @@ docker compose -f docker-compose-local.yml exec api python manage.py accept_syst
 
 | 复核项       | 结果                                                                         |
 | ------------ | ---------------------------------------------------------------------------- |
-| 密码哈希校验 | 20 / 20 通过（`Research@12345`；`admin@ai4ms.local` 为 `admin123456`）       |
+| 密码哈希校验 | 20 / 20 通过（`<由本机安全凭据注入>`；`admin@ai4ms.local` 为 `<由本机安全凭据注入>`）       |
 | 真实登录     | 20 / 20 通过（302 且无 `error_code`，跳转 `http://192.168.3.245:3000`）      |
 | 密码错误对照 | 错误密码登录 `test.pi@ai4ms.local` 返回 `5065 AUTHENTICATION_FAILED_SIGN_IN` |
 | 未复核       | `fangyikaii@163.com`（本人账号，不在夹具密码口径内）                         |

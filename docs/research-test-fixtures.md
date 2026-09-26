@@ -34,7 +34,7 @@ docker compose -f docker-compose-local.yml exec api python manage.py seed_resear
 ```
 
 工作区：`public`（<http://192.168.3.245:3000/public/research/>）。夹具账号统一初始密码
-**`Research@12345`**，邮箱域名 `@ai4ms.local`，仅用于本地无 SMTP / 无 OIDC 的测试环境。
+**`<由本机安全凭据注入>`**，邮箱域名 `@ai4ms.local`，仅用于本地无 SMTP / 无 OIDC 的测试环境。
 
 > v2.4.0 起旧工作区 `fangyikai` 已退役，夹具数据落在双工作区模型的 `public` 里；
 > 账号与身份的最新实测速查（含登录排错与实况差异）见

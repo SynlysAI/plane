@@ -109,7 +109,8 @@ build/
 build/
 .react-router/
 temp/
-scripts/
+scripts/*
+!scripts/rebuild-pi-lab-baseline.sh
 !packages/i18n/scripts/
 
 # i18n auto-generated types (regenerated on every build)
@@ -123,3 +124,7 @@ packages/i18n/src/types/keys.generated.ts
 
 # Local miscellaneous files
 /others/
+
+# Local verified rebuild backups and one-time credentials
+.runtime/
+refer/issue.docx

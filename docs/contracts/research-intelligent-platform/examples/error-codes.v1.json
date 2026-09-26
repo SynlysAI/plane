@@ -43,6 +43,24 @@
       "http_status": 503,
       "retryable": true,
       "description": "Upstream service is degraded."
+    },
+    {
+      "code": "KB_NOT_READY",
+      "http_status": 409,
+      "retryable": false,
+      "description": "The research chain knowledge base has not reached READY state."
+    },
+    {
+      "code": "KB_SCOPE_CONFLICT",
+      "http_status": 409,
+      "retryable": false,
+      "description": "The knowledge base is already bound to another research chain."
+    },
+    {
+      "code": "AGENT_SCOPE_INVALID",
+      "http_status": 403,
+      "retryable": false,
+      "description": "The requested Agent scope is not allowed by the current policy."
     }
   ]
 }

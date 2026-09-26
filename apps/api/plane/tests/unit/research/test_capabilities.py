@@ -255,7 +255,7 @@ def test_student_seat_is_researcher(env):
     capabilities = build_research_capabilities(student, env["workspace"])
 
     assert capabilities["level"] == ResearchLevel.RESEARCHER
-    assert capabilities["nav"] == [NAV_OVERVIEW, NAV_REPORTS, NAV_PROJECTS, NAV_APPROVALS]
+    assert capabilities["nav"] == [NAV_OVERVIEW, NAV_REPORTS, NAV_PROJECTS]
 
 
 def test_research_profile_alone_is_researcher(env):

@@ -2,18 +2,19 @@
 
 | 项目         | 内容                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 计划版本     | v1.4                                                                                                                                                                                                                                                                                                                                                  |
+| 计划版本     | v1.6                                                                                                                                                                                                                                                                                                                                                  |
 | 文档类型     | 开发、测试、灰度与回滚执行计划                                                                                                                                                                                                                                                                                                                        |
 | 编制日期     | 2026-09-25                                                                                                                                                                                                                                                                                                                                            |
-| 问题来源     | [`evidence/phase-1.5/issue0925/document.md`](./evidence/phase-1.5/issue0925/document.md) 及 24 张现场截图                                                                                                                                                                                                                                             |
+| 问题来源     | [`evidence/phase-1.5/issue0925/document.md`](./evidence/phase-1.5/issue0925/document.md) 及 21 张现场截图                                                                                                                                                                                                                                             |
 | 前置手册     | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                                                                                                                                                                |
 | 前置联调计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)                                                                                                                                                                                                            |
 | 执行手册     | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                                                                                                                                                                                                                      |
+| 当前代码基线 | `develop` / `4.15.0`；历史 `4.14.2` 只作为问题复现版本保留 |
 | 相关契约     | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md)、[`research-workspace-v3.md`](./research-workspace-v3.md)、[`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)、RAGPortal [`2026-09-24-pi-private-knowledge-space-prd.md`](../../RAGPortal/docs/specs/2026-09-24-pi-private-knowledge-space-prd.md) |
 | 计划状态     | 业务决策已冻结；本轮完成 Plane/Synlora review scope 与 KB READY 门禁收紧，跨仓 OIDC/通知能力按依赖清单待联调                                                                                                                                                                                                                                          |
 | 目标         | 把现场人工反馈转化为可复现、可开发、可验收的产品优化任务；不重复已完成的跨服务联调修复                                                                                                                                                                                                                                                                |
 
-> **文档使用规则（v1.4）**：实现人员按第 6 节任务卡执行，契约以第 6 节和 `plane/docs/contracts/research-intelligent-platform/` 为准，测试按第 8 节命令和门禁执行，发布/回滚按第 10 节执行。正文中的“已有”表示代码已存在且需要复用，不表示已经满足本计划验收。若代码与本文冲突，先登记契约差异，不得直接修改权限或状态语义。
+> **文档使用规则（v1.6）**：实现人员按第 6 节任务卡执行，契约以第 6 节和 `plane/docs/contracts/research-intelligent-platform/` 为准，测试按第 8 节命令和门禁执行，发布/回滚按第 10 节执行。正文中的“已有”表示代码已存在且需要复用，不表示已经满足本计划验收。若代码与本文冲突，先登记契约差异，不得直接修改权限或状态语义。
 
 ## 1. 结论摘要
 
@@ -51,7 +52,8 @@
 
 ### 2.3 基线冲突处理
 
-- 账号、密码和 seed 只认 [`research-test-accounts.md`](./research-test-accounts.md) v2.5.1；本文不再复制密码。执行机通过环境变量注入凭证，证据不得保存明文密码。
+- 真实数据基线只认 [`research-pi-lab-baseline-runbook.md`](./research-pi-lab-baseline-runbook.md) 和两份锁定 SHA-256 的 xlsx；`seed_research_demo` 仅保留给自动化测试，不得再用于 `public` 验收环境。
+- 旧版测试账号手册仅作为历史测试资料；执行机通过环境变量注入凭证，证据不得保存明文密码。
 - L3.6 中“导师可写 Chain”的历史结果只代表 Phase 1 基线，不代表本计划目标。v1.3 以 §5 的 review-only 规则为准：导师/PI 可以审批、评论和提交分析草稿，不可修改学生正式内容、节点生命周期、上传和引用确认。
 - 执行手册表头“配套计划 v1.1”需同步改为 v1.3；任何引用本计划版本的 runbook、契约和 PR 在发布前必须完成一致性检查。
 - 现有 `plane/apps/api/package.json`、`plane/apps/api/pyproject.toml` 和 `plane/apps/web/package.json` 版本号不在本次文档变更中调整；代码发布时按 AGENTS.md 的语义化版本规则，由各仓库发布负责人统一决定并记录。
@@ -837,6 +839,7 @@ plane/docs/evidence/phase-1.5/optimization/
 - 报告成果上传 PDF/Markdown 附件；实验原始数据不落 Plane，实验记录通过 UI 关联 SpecLabOS 外部资产。
 - AI4MS ↔ Plane 账号绑定实现真实 OIDC/SSO；Plane/AI4MS 管理员维护 KB 申请通知、SLA、参数清单和回填校验。
 - 首页保留课题摘要与跨组件待办的语义区分，但在一个共享区块内呈现摘要头和待办列表。
+- `public` 初始基线仅导入 π-Lab 真实人员和组织，不预造课题；洪文晶是唯一 Main PI。
 
 未决技术问题（进入实现前由接口维护人填写）：
 
@@ -850,6 +853,7 @@ plane/docs/evidence/phase-1.5/optimization/
 
 | 版本 | 日期       | 变更                                                                                                                                                                                                                                                 |
 | ---- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v1.6 | 2026-09-25 | 以当前 `refer/issue.docx` 重新转录 21 张截图；新增 π-Lab 真实数据基线、备份恢复演练、唯一 Main PI、189 名学生 / 14 位导师 / 21 个小组和不预造课题约束；修复 workflow 自动换行与门户多课题切换 |
 | v1.3 | 2026-09-25 | 增加任务卡、仓库职责、DoD、D1 跨仓拆分、迁移与兼容策略、状态机、HTTP/错误码、自动化命令、负例矩阵、证据 manifest、观测指标、发布灰度和可执行回滚；收敛现有代码与目标契约的差异                                                                       |
 | v1.4 | 2026-09-25 | 回写本轮 Plane 实现与验证：统一 Chain/Node 能力投影、节点上下文入口、多课题摘要和待办分页、课题 KB 申请/READY 门禁、成果附件、实验外部资产入口、项目/课题上下文和成员成功回执；记录 Synlora REVIEW scope、真实 OIDC/SSO、跨仓通知/SLA 仍需联调的边界 |
 | v1.5 | 2026-09-25 | 进一步 review 实现：review Agent 明确隔离为只读 scope，工具与 Context/Trace 携带 scope/policy 版本；课题 KB 缺少申请记录时统一阻断上传并返回 KB_NOT_READY；补充迁移、跨仓 Context v2 契约和测试环境阻塞记录                                          |

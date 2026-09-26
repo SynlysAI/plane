@@ -27,13 +27,20 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 | 项目             | 内容                                                                                                                                                                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 当前版本         | `4.14.0`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步；API pyproject 同步）                                                                                                                                                                               |
+| 当前版本         | `4.15.0`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步；API pyproject 同步）                                                                                                                                                                               |
 | 上游基线         | Plane `1.4.x`                                                                                                                                                                                                                                                            |
-| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研智能平台 Phase 0/Phase 1、研究链单 Workflow 与 Tailnet HTTPS（`4.13.1`）、Phase 1.5 优化修复（`4.14.0`）：能力投影、节点上下文入口、多课题摘要/待办分页、课题 KB 申请与 READY 门禁、成果附件和实验外部资产入口 |
-| 未交付           | P2 扩展与治理、科研智能平台 Phase 2 专业能力填充、Phase 3 治理与开放能力                                                                                                                                                                                                 |
+| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研智能平台 Phase 0/Phase 1、研究链单 Workflow 与 Tailnet HTTPS（`4.13.1`）、Phase 1.5 优化修复（`4.14.2`）：能力投影、节点上下文入口、多课题摘要/待办分页、课题 KB 申请与 READY 门禁、成果附件、实验外部资产入口、Agent review scope、workflow 自动换行、门户多课题切换与 π-Lab 真实数据基线；本次 `4.15.0` 纳入兼容性发布与基线重建工具 |
+| 待真实数据验收   | 首个真实课题的 workflow、节点动作、成员回执、KB 上传和 Agent 会话截图；AI4MS ↔ Plane OIDC 绑定                                                                                                                                                                           |
+| 规划中           | P2 扩展与治理、科研智能平台 Phase 2 专业能力填充、Phase 3 治理与开放能力                                                                                                                                                                                               |
 | 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                                                                                                                                     |
 
-本仓库以 Plane `1.4.x` 为基线完成第一轮私有化改造：替换为 AI4MS 品牌、移除付费套餐与云注册遥测、改用私有 OpenAI 兼容网关，并在此基础上叠加「科研管理模块」。**科研模块是纯增量实现**：开关关闭时不渲染科研导航，Workspace / Project / Work Item / Page / Cycle / Module 仍按上游 Plane 行为工作。
+本仓库以 Plane `1.4.x` 为基线完成第一轮私有化改造：替换为 AI4MS 品牌、移除付费套餐与云注册遥测、改用私有 OpenAI 兼容网关，并在此基础上叠加「科研管理模块」。**科研模块是纯增量实现**：开关关闭时不渲染科研导航，Workspace / Project / Work Item / Page / Cycle / Module 仍按上游 Plane 行为工作。当前代码与测试基线为 `4.15.0`；历史发布号只在对应验收和发布文档中保留。
+
+### 当前事实与文档权威
+
+`develop` 分支是当前交付分支。文档按“实现事实优先、规划分层、历史可追溯”维护：代码与测试证据高于契约和发布说明，契约高于 PRD 计划，旧版本文档不覆盖当前实现。完整阅读顺序、状态矩阵和文档关系见 [`docs/README.md`](docs/README.md)。
+
+当前仍有两类发布门禁：真实课题创建后补录 Phase 1.5 浏览器证据，以及完成双方认证后的 AI4MS ↔ Plane OIDC 绑定；这两项完成前，不把跨仓灰度标记为完全结束。
 
 ### 已交付：P0 科研管理（`2.1.0`）
 
@@ -303,6 +310,58 @@ pnpm --filter web dev:hmr
 - Web 应用：<http://localhost:3000>
 - 实例管理端：<http://localhost:3001/god-mode/>
 
+### 代码更新后的重新构建与部署
+
+本地 Tailnet 访问使用的是 Web 的 Vite Preview。`3000` 端口读取
+`apps/web/build/client` 中已经生成的静态文件，因此只修改源码、重启 API 或刷新浏览器都不会自动更新页面；
+管理端也应同步重建，避免 Web 中的管理入口与 `3001` 端页面版本不一致。
+
+在 Plane 仓库根目录执行以下流程：
+
+```bash
+cd /home/fangyikai/code/_AI4MS/plane
+
+# 如果代码来自远端，先更新源码；本地已有未提交修改时不要直接执行 git pull
+git pull --ff-only
+pnpm install --frozen-lockfile
+
+# 确保 API、Worker 和基础设施仍在运行
+docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d
+
+# Web 和 Admin 必须一起构建；构建时会读取各自的 apps/*/.env
+pnpm turbo run build --filter=web --filter=admin
+```
+
+然后重启前端进程。若前端由当前终端中的 `pnpm dev` 启动，回到该终端按 `Ctrl-C`，再执行：
+
+```bash
+pnpm dev
+```
+
+如果原启动终端已经关闭，可以先释放旧的前端端口，再后台启动：
+
+```bash
+fuser -k 3000/tcp 3001/tcp 2>/dev/null || true
+nohup pnpm dev >/tmp/plane-dev.log 2>&1 &
+```
+
+确认新产物和服务已生效：
+
+```bash
+stat -c '%y %n' apps/web/build/client/index.html apps/admin/build/client/index.html
+curl -fsS -o /dev/null -w 'web=%{http_code}\n' http://127.0.0.1:3000/
+curl -fsS -o /dev/null -w 'admin=%{http_code}\n' http://127.0.0.1:3001/god-mode/
+curl -fsS http://127.0.0.1:8001/
+```
+
+Web 应返回 `200`，管理端通常返回 `200` 或重定向到 `/god-mode/`，API 应返回 `{"status": "OK"}`。
+Tailnet 访问地址为 <http://100.109.35.2:3000>；启用 Tailscale Serve 后使用
+<https://fangyikai-pc.tail1b4cb7.ts.net/>。
+
+若构建时间已经更新但浏览器仍显示旧页面，执行一次强制刷新（Windows/Linux：`Ctrl+Shift+R`，macOS：
+`Cmd+Shift+R`）。仍未更新时，在浏览器开发者工具的 Application / 存储面板中清除该站点数据并注销旧
+Service Worker，再重新打开页面。不要只重启 Docker API 容器，也不要只执行普通浏览器刷新。
+
 ### 启用科研模块
 
 科研模块默认关闭，需要按“部署级开关 → Workspace 开关 → 子开关 → 外部系统连接”的顺序逐层打开。变量模板见 [`apps/api/.env.example`](apps/api/.env.example)。
@@ -364,6 +423,7 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest -m unit
 | [`research-p1-release-notes.md`](docs/research-p1-release-notes.md)                   | P1 发布、开关、环境变量与回滚说明      |
 | [`research-workspace-ux-guide.md`](docs/research-workspace-ux-guide.md)               | 科研工作台 UX 设计指南（系列入口）     |
 | [`research-workspace-ui-ux-archive.md`](docs/research-workspace-ui-ux-archive.md)     | UI/UX 两轮 PRD / 审计 / 验收过程档案   |
+| [`research-pi-lab-baseline-runbook.md`](docs/research-pi-lab-baseline-runbook.md)     | π-Lab 真实名单备份、重建、验收与回滚 |
 | [`production-deployment.md`](docs/production-deployment.md)                           | 当前生产环境架构、更新、验证与回滚流程 |
 | [`linting.md`](docs/linting.md)                                                       | 代码风格与静态检查约定                 |
 

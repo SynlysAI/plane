@@ -2,17 +2,16 @@
 
 | 项目     | 内容                                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------------------------- |
-| 文档状态 | 已评审 / 分期实施中：P0 与 P1 已交付，P2 待启动，P3 暂缓                                                       |
+| 文档状态 | 产品路线权威；P0/P1 已交付，智能平台 Phase 0/1/1.5 已进入实现事实层，P2/Phase 2 规划中，P3 暂缓                                                       |
 | 文档版本 | v0.3                                                                                                           |
 | 日期     | 2026-09-16                                                                                                     |
-| 定位调整 | 由“科研功能全量规划”调整为“系统管理与项目管理优先，AI 结合功能暂缓”                                            |
+| 定位调整 | 产品路线仍以系统管理、项目管理和专业系统集成为主；已交付的 Agent 工作台属于平台 Phase 0/1，P3 仅指尚未排期的 AI 增强能力                                            |
 | 生态边界 | 已有系统（RAGPortal / Poly_Agent / SpecLabOS / SmartAccess / Spec_Agent / AI4MS）只做集成，不重复开发，见 §1.4 |
 | 适用范围 | Plane 科研管理增强模块                                                                                         |
 | 变更范围 | 本文档只定义产品需求、分期计划、兼容基线与验收标准，不直接修改业务代码、数据库或配置                           |
 | 命名原则 | 课题组负责人统一使用 **课题组主 PI**，禁止硬编码任何具体人名或固定昵称                                         |
 
-各期实施状态以 §5 为准：P0 见 [research-p0-release-notes.md](./research-p0-release-notes.md)，
-P1 见 [research-p1-release-notes.md](./research-p1-release-notes.md)，文档清单见 [docs/README.md](./README.md)。
+各期实施状态以 §5 和 [文档总索引](./README.md) 为准：P0/P1 已完成；智能平台 Phase 0/1/1.5 的实现状态以平台 PRD、当前契约和证据目录为准。旧版本号仅表示历史发布基线，不覆盖当前 `4.15.0` 代码。
 系统管理改进（P2 第一批：双工作区、管理员标签、邀请码、批量导入）见
 [research-system-management-prd.md](./research-system-management-prd.md) 与
 [research-system-management-acceptance.md](./research-system-management-acceptance.md)。

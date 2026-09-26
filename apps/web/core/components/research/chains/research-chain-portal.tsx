@@ -12,6 +12,7 @@ import { ResearchChainService } from "@/services/research/chain.service";
 import { ResearchIntegrationService } from "@/services/research/integration.service";
 import type { TResearchChain } from "@plane/types";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
+import { pickCurrentChain } from "@/components/research/chains/research-selection";
 
 const chainService = new ResearchChainService();
 const integrationService = new ResearchIntegrationService();
@@ -27,6 +28,7 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [chains, setChains] = useState<TResearchChain[]>([]);
+  const [chainIndex, setChainIndex] = useState(0);
   const [connections, setConnections] = useState<TIntegrationConnection[]>([]);
   const [state, setState] = useState<TPortalState>("loading");
 
@@ -35,6 +37,7 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
     try {
       const visibleChains = await chainService.getChains(workspaceSlug);
       setChains(visibleChains);
+      setChainIndex((index) => Math.min(index, Math.max(visibleChains.length - 1, 0)));
       setState(visibleChains.length ? "ready" : "empty");
       const integrationPayload = await integrationService.getConnections(workspaceSlug).catch(() => null);
       setConnections(integrationPayload?.results ?? []);
@@ -48,7 +51,14 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
     void load();
   }, [load]);
 
-  const currentChain = chains[0];
+  const currentChain = chains[chainIndex] ?? pickCurrentChain(chains);
+  const moveChain = useCallback(
+    (direction: number) => {
+      if (!chains.length) return;
+      setChainIndex((index) => (index + direction + chains.length) % chains.length);
+    },
+    [chains.length]
+  );
   const activeCount = chains.filter((chain) => chain.status === "ACTIVE").length;
   const ragportal = connections.find((connection) => connection.system === "RAGPORTAL");
   const ragStatus = ragportal?.is_enabled ? (ragportal.health_status ?? "UNKNOWN") : ("UNKNOWN" as const);
@@ -59,8 +69,13 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
     <section className="mb-6 space-y-3" aria-label={t("research.portal.title")}>
       <div className="rounded-lg border border-subtle bg-surface-1 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-13 font-medium text-primary">{t("research.portal.current_chain")}</h3>
+            {state === "ready" && currentChain && (
+              <p className="mt-1 truncate text-14 font-medium text-primary">
+                {currentChain.project_name ?? currentChain.project}
+              </p>
+            )}
             <p className="mt-1 text-11 text-tertiary">
               {state === "loading" && t("research.portal.loading")}
               {state === "forbidden" && t("research.common.permission_denied")}
@@ -77,7 +92,36 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
               )}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {state === "ready" && chains.length > 1 && (
+              <div
+                className="flex items-center gap-1 text-11 text-tertiary tabular-nums"
+                aria-label={t("research.overview.chain_switcher")}
+              >
+                <button
+                  type="button"
+                  onClick={() => moveChain(-1)}
+                  aria-label={t("research.overview.previous_chain")}
+                  className="rounded-md border border-subtle px-3 py-2 text-12 text-secondary hover:bg-surface-2"
+                >
+                  ‹
+                </button>
+                <span aria-live="polite">
+                  {t("research.overview.chain_position", {
+                    current: chainIndex + 1,
+                    total: chains.length,
+                  })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => moveChain(1)}
+                  aria-label={t("research.overview.next_chain")}
+                  className="rounded-md border border-subtle px-3 py-2 text-12 text-secondary hover:bg-surface-2"
+                >
+                  ›
+                </button>
+              </div>
+            )}
             {state === "error" && (
               <button
                 type="button"

@@ -37,7 +37,7 @@ def env(db, settings):
 
 
 def test_security_denials_are_audited_and_observable(env):
-    denied = env["outsider_client"].get(f"/api/research/workspaces/{env['workspace'].slug}/chains/")
+    denied = env["outsider_client"].get(f"/api/research/workspaces/{env['workspace'].slug}/projects/")
     assert denied.status_code == 403
     assert ResearchAuditEvent.objects.filter(
         workspace=env["workspace"],
