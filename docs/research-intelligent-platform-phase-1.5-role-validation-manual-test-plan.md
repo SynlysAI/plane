@@ -39,15 +39,16 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 ## 4. L2：角色解析、导航与能力
 
-| 编号     | 角色         | 登录后必须确认                                                                     |
-| -------- | ------------ | ---------------------------------------------------------------------------------- |
-| MT-L2-01 | 主 PI        | `identity/me`、Profile 和组织汇总范围一致；可进入审批和 REVIEW Agent               |
-| MT-L2-02 | 产业化负责人 | `business_category=INDUSTRIALIZATION` 且 `org_role=OWNER/PI`；只能操作所属业务节点 |
-| MT-L2-03 | 直接导师     | `category=ADVISOR`、`org_role=ADVISOR`，对目标学生有有效 MentorBinding             |
-| MT-L2-04 | 学生         | `category=STUDENT`、`org_role=REVIEWER`，具备创建 mock 课题和 OWNER Agent 能力     |
-| MT-L2-05 | 管理员       | 可配置、管理成员和审计；不能因 role `20` 绕过 PRIVATE ACL                          |
-| MT-L2-06 | NONE         | 为 Workspace 成员但无科研组织关系；科研导航不渲染或只读收敛                        |
-| MT-L2-07 | Guest        | role `GUEST` 且无科研组织关系；科研导航隐藏，直链/API fail closed                  |
+| 编号     | 角色           | 登录后必须确认                                                                                              |
+| -------- | -------------- | ----------------------------------------------------------------------------------------------------------- |
+| MT-L2-01 | 主 PI          | `identity/me`、Profile 和组织汇总范围一致；可进入审批和 REVIEW Agent                                        |
+| MT-L2-02 | 产业化负责人   | `business_category=INDUSTRIALIZATION` 且 `org_role=OWNER/PI`；只能操作所属业务节点                          |
+| MT-L2-03 | 直接导师       | `category=ADVISOR`、`org_role=ADVISOR`，对目标学生有有效 MentorBinding                                      |
+| MT-L2-04 | 学生           | `category=STUDENT`、`org_role=REVIEWER`，具备创建 mock 课题和 OWNER Agent 能力                              |
+| MT-L2-05 | 管理员         | 可配置、管理成员和审计；不能因 role `20` 绕过 PRIVATE ACL                                                   |
+| MT-L2-06 | NONE           | 为 Workspace 成员但无科研组织关系；科研导航不渲染或只读收敛                                                 |
+| MT-L2-07 | Guest          | role `GUEST` 且无科研组织关系；科研导航隐藏，直链/API fail closed                                           |
+| MT-L2-08 | 基础研究负责人 | `business_category=BASIC_RESEARCH` 且 `org_role=OWNER`；`role_context.roles` 为 `PRINCIPAL`，不含产业化标记 |
 
 每个角色先记录 `identity/me.user.role_context`，再记录四入口（科研总览、研究链、审批中心、科研管理）和十项能力：`view/edit/submit/review/accept/return/export/agent_review/knowledge_read/knowledge_write`。
 

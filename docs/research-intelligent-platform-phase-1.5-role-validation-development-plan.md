@@ -2,9 +2,9 @@
 
 | 项目       | 内容                                                                                                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本   | v1.3（2026-09-26）                                                                                                                                                        |
+| 文档版本   | v1.4（2026-09-26）                                                                                                                                                        |
 | 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                        |
-| 适用版本   | Plane `4.16.0`，`develop`                                                                                                                                                 |
+| 适用版本   | Plane `4.18.1`，`develop`                                                                                                                                                 |
 | 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md) |
 | 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                       |
 | 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                         |
@@ -14,7 +14,7 @@
 
 ## 1. 目标、范围与当前结论
 
-本计划把 Phase 1.5 的分角色验证拆成可复核的准备、实现检查、人工执行和清理门禁，覆盖主 PI、产业化负责人、直接导师、学生、管理员、NONE 和访客。验证范围包括科研导航、课题与 Project 一对一关系、节点和报告动作、审批、Agent OWNER/REVIEW scope、知识库 READY 门禁、降级、审计和导出完整性。
+本计划把 Phase 1.5 的分角色验证拆成可复核的准备、实现检查、人工执行和清理门禁，覆盖主 PI、产业化负责人、基础研究负责人、直接导师、学生、管理员、NONE 和访客。验证范围包括科研导航、课题与 Project 一对一关系、节点和报告动作、审批、Agent OWNER/REVIEW scope、知识库 READY 门禁、降级、审计和导出完整性。
 
 当前 dev 环境已完成启动检查：Plane Web `3000`、Plane API `8001`、RAGPortal `8004`、Synlora `8005` 和 WeKnora 均可达，Docker API/worker/beat 容器处于运行状态；Tailscale 直连入口 `http://100.109.35.2:3000/` 可访问。Tailscale Serve 尚未获管理员授权，HTTPS 入口在授权前保持阻塞，不能把该项标记为通过。
 
@@ -24,15 +24,16 @@
 
 测试前从 `public` 工作区实时读取身份。角色记录写入受控证据，仅保存 `user_id`、邮箱哈希、脱敏显示名、Profile category、组织角色、组织单元、业务分类和能力摘要。
 
-| 角色                      | 解析条件                                                                             | 主要验证职责                                       |
-| ------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------- |
-| `PRINCIPAL`               | `WorkspaceResearchSetting.main_pi`；当前基线应为洪文晶                               | 组织汇总、评审、审批、Agent REVIEW                 |
-| `INDUSTRIALIZATION_OWNER` | `business_category=INDUSTRIALIZATION` 单元内有效成员，`org_role=OWNER` 或 `PI`       | 产业化节点、成果和业务流程                         |
-| `MENTOR`                  | `profile.category=ADVISOR`、`org_role=ADVISOR`，且对目标学生存在有效 `MentorBinding` | 绑定学生课题 REVIEW、报告审批                      |
-| `RESEARCHER`              | `profile.category=STUDENT`、`org_role=REVIEWER`，有有效组织归属                      | 创建 mock 课题、节点写入、KB 上传、OWNER Agent     |
-| `ADMIN`                   | InstanceAdmin 或 `public` Workspace role `20`                                        | 配置、成员、集成和审计；不因管理员身份绕过业务 ACL |
-| `NONE`                    | Workspace 成员但无科研组织关系                                                       | WORKSPACE 只读和导航收敛                           |
-| `Guest`                   | Workspace role `GUEST` 且无科研组织关系                                              | 403/404、导航隐藏和 fail-closed 负例               |
+| 角色                      | 解析条件                                                                                           | 主要验证职责                                       |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `PRINCIPAL`               | `WorkspaceResearchSetting.main_pi`；当前基线应为洪文晶                                             | 组织汇总、评审、审批、Agent REVIEW                 |
+| `INDUSTRIALIZATION_OWNER` | `business_category=INDUSTRIALIZATION` 单元内有效成员，`org_role=OWNER` 或 `PI`                     | 产业化节点、成果和业务流程                         |
+| 基础研究负责人            | `business_category=BASIC_RESEARCH` 单元内 `org_role=OWNER`；解析结果为 `PRINCIPAL`，不带产业化标记 | 基础研究节点和继承范围内的课题                     |
+| `MENTOR`                  | `profile.category=ADVISOR`、`org_role=ADVISOR`，且对目标学生存在有效 `MentorBinding`               | 绑定学生课题 REVIEW、报告审批                      |
+| `RESEARCHER`              | `profile.category=STUDENT`、`org_role=REVIEWER`，有有效组织归属                                    | 创建 mock 课题、节点写入、KB 上传、OWNER Agent     |
+| `ADMIN`                   | InstanceAdmin 或 `public` Workspace role `20`                                                      | 配置、成员、集成和审计；不因管理员身份绕过业务 ACL |
+| `NONE`                    | Workspace 成员但无科研组织关系                                                                     | WORKSPACE 只读和导航收敛                           |
+| `Guest`                   | Workspace role `GUEST` 且无科研组织关系                                                            | 403/404、导航隐藏和 fail-closed 负例               |
 
 角色解析必须交叉核对 `identity/me`、Profile、组织成员、`business_category`、MentorBinding 和 Workspace 成员。缺少任何角色时登记前置阻塞，不使用旧账号替代。
 
@@ -169,34 +170,33 @@
 
 ## 7. 已执行夹具与测试账号（2026-09-26）
 
-开发环境已执行角色夹具命令：
+重新创建角色账号时不要加 `--reset-passwords`，否则会轮换下表密码，包括已经改过的管理员密码。只补账号和验证单元用：
 
 ```bash
 docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml run --rm api \
-  python manage.py prepare_phase15_role_validation --workspace public --apply --reset-passwords --json
+  python manage.py prepare_phase15_role_validation --workspace public --apply --json
 ```
 
-| 对象            | 值                                                           |
-| --------------- | ------------------------------------------------------------ |
-| Project         | `1549e1ba-37a4-45c3-8651-b4fe23cd4fef`                       |
-| ResearchProfile | `389643e7-81bb-4b8c-aaf4-c7e68db91178`                       |
-| Chain           | `14c64584-f169-49fc-9276-7167c7df8463`                       |
-| 首节点          | `c7ec4771-35a1-4d0d-a9a7-fb0c8754481c`                       |
-| KB request      | `d7bdbfa0-7f8c-4016-8cd9-0102121c3edc`，状态 `PENDING_ADMIN` |
-| MentorBinding   | `f09c7fe9-c565-4904-9598-54e39e1f5c39`                       |
+| 对象          | 值                                                                  |
+| ------------- | ------------------------------------------------------------------- |
+| MentorBinding | `f09c7fe9-c565-4904-9598-54e39e1f5c39`，刘俊扬 → 邱智鑫，当前仍有效 |
+| mock Project  | 当前库中没有；按人工计划 L3 新建，不沿用已删除的旧 ID               |
+
+2026-09-26 17:01 的初始密码导出覆盖了三名基线账号的密码。开发库已把这三名账号恢复为下表密码，并重新创建产业化负责人、基础研究负责人和访客。管理员密码已由本人修改，下表中的管理员密码不再有效。
 
 本轮测试账号和明文密码（仅限当前 dev 测试环境）：
 
 | 角色                    | 账号                                 | 密码                     |
 | ----------------------- | ------------------------------------ | ------------------------ |
-| ADMIN                   | `admin@ai4ms.local`                  | `P15!rwL6vBLgqx5w0fH3zJ` |
+| ADMIN                   | `admin@ai4ms.local`                  | 已改为个人密码           |
 | PRINCIPAL / MENTOR      | `whong@xmu.edu.cn`                   | `P15!Dp4oexY8F1gIZn51js` |
 | MENTOR                  | `jyliu@xmu.edu.cn`                   | `P15!muRa0cCV3PY5yGkLKF` |
 | RESEARCHER              | `qiuzhixin@stu.xmu.edu.cn`           | `P15!HvMLgY8YwxJ5q9j8T3` |
 | INDUSTRIALIZATION_OWNER | `phase15.industry.owner@ai4ms.local` | `P15!0GBdxQAfI4N7qfH8Wn` |
+| 基础研究负责人          | `phase15.basic.owner@ai4ms.local`    | `P15!RfExPSKRHfgAdQPnJn` |
 | Guest                   | `phase15.guest@ai4ms.local`          | `P15!8Qx2w0wpnmL9gEvaOH` |
 
-角色核验结果：ADMIN→`ADMIN`，洪文晶→`PRINCIPAL + MENTOR`，刘俊扬→`MENTOR`，邱智鑫→`RESEARCHER`，产业化负责人→`PRINCIPAL + INDUSTRIALIZATION_OWNER`，访客→`Guest/NONE`。所有账号首次登录后会要求设置个人密码。
+角色核验结果：洪文晶→`PRINCIPAL + MENTOR`，刘俊扬→`MENTOR`，邱智鑫→`RESEARCHER`，产业化负责人→`PRINCIPAL + INDUSTRIALIZATION_OWNER`，基础研究负责人→`PRINCIPAL` 且 `business_category=BASIC_RESEARCH`，访客→`Guest`。除管理员外，这些账号首次登录后会要求设置个人密码。
 
 清理命令：
 
