@@ -2,12 +2,12 @@
 
 | 项目     | 内容                                                                                                |
 | -------- | --------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.1（2026-09-26）                                                                                  |
+| 文档版本 | v1.2（2026-09-26）                                                                                  |
 | 文档定位 | 启动 dev 环境、通过 Tailnet 访问、执行每日健康检查和处置常见故障                                    |
 | 详细用例 | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
 | 开发计划 | [分角色验证开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)            |
-| 环境     | `public` π-Lab 基线、Plane `4.15.2`、RAGPortal、Synlora、WeKnora                                    |
+| 环境     | `public` π-Lab 基线、Plane `4.16.0`、RAGPortal、Synlora、WeKnora                                    |
 | 测试 KB  | 只使用 `plane测试`；不得跨课题复用                                                                  |
 
 ## 1. 使用规则
@@ -83,7 +83,13 @@ docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml 
 
 每轮记录以下字段到 `docs/evidence/phase-1.5/health/{YYYYMMDD}-startup.md`：时间、Plane commit、版本、五服务状态、Tailnet 入口、容器状态和阻塞项。不要记录环境变量值。
 
-## 4. 测试前数据与身份检查
+## 4. 创建 Phase 1.5 mock 课题和测试角色
+
+当前 dev 已执行角色夹具命令，账号、密码、Project/Chain/KB request ID 和清理命令见[分角色验证开发计划 §7](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md#7-已执行夹具与测试账号2026-09-26)。登录入口为 <http://100.109.35.2:3000/>。
+
+管理员在科研管理中打开该 Chain 的 KB request，绑定测试知识库 `plane测试` 后，状态由 `PENDING_ADMIN` 变为 `READY`，再执行上传和检索测试。
+
+## 5. 测试前数据与身份检查
 
 ```bash
 cd /home/fangyikai/code/_AI4MS/plane
@@ -94,7 +100,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 在 `identity/me` 的 `user.role_context` 中核对实际解析标签，然后打开[详细人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)，按 L2 解析主 PI、产业化负责人、直接导师、学生、管理员、NONE 和 Guest。角色缺失时停止，不得用历史账号代替。
 
-## 5. 测试执行与证据
+## 6. 测试执行与证据
 
 1. L1 健康和真实基线。
 2. L2 角色解析、四入口导航和能力摘要。
@@ -106,7 +112,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 证据命名示例：`role-resolution-20260926.md`、`L3.6-role-matrix-20260926.md`、`L4-e2e-20260926.md`。证据不得保存密码、Token、API Key、完整邮箱、原始正文或未脱敏截图。
 
-## 6. 故障处置
+## 7. 故障处置
 
 | 现象                      | 处理                                                                                 |
 | ------------------------- | ------------------------------------------------------------------------------------ |
@@ -118,7 +124,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 | 上传一直解析中            | 在 WeKnora 核对任务状态，回到 RAGPortal 手动刷新；不要重复上传                       |
 | Tailscale HTTPS 拒绝连接  | 执行 `tailscale serve status`；若显示未启用，先由管理员批准 Serve 链接               |
 
-## 7. 停止与恢复
+## 8. 停止与恢复
 
 ```bash
 # 停止 Web/Admin（在启动 pnpm dev 的终端按 Ctrl-C）

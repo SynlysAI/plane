@@ -8,7 +8,7 @@
 | 日期         | 2026-09-15                                                                                                             |
 | 上游依据     | [`research-management-prd-roadmap.md`](./research-management-prd-roadmap.md) §5.2（P1 范围）、§6.4–§6.10、§7 Phase 5–6 |
 | 前置文档     | [`research-p0-development-prd.md`](./research-p0-development-prd.md) v1.1（P0 已实现）                                 |
-| 历史代码基线 | `develop` / `2.1.0` / migration `0130`；仅用于 P1 复盘，当前代码基线见 [`docs/README.md`](./README.md)（`4.15.2`）     |
+| 历史代码基线 | `develop` / `2.1.0` / migration `0130`；仅用于 P1 复盘，当前代码基线见 [`docs/README.md`](./README.md)（`4.16.0`）     |
 | 文档定位     | 把路线图 P1 范围拆解为可排期、可开发、可验收的开发规格                                                                 |
 | 变更范围     | 本轮仅新增本文档，不修改业务代码、数据库结构与部署配置                                                                 |
 | 术语约束     | 课题组负责人统一写作 **课题组主 PI**，禁止硬编码任何具体人名                                                           |

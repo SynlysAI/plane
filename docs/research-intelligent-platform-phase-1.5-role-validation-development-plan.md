@@ -2,9 +2,9 @@
 
 | 项目       | 内容                                                                                                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本   | v1.2（2026-09-26）                                                                                                                                                        |
+| 文档版本   | v1.3（2026-09-26）                                                                                                                                                        |
 | 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                        |
-| 适用版本   | Plane `4.15.2`，`develop`                                                                                                                                                 |
+| 适用版本   | Plane `4.16.0`，`develop`                                                                                                                                                 |
 | 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md) |
 | 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                       |
 | 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                         |
@@ -167,7 +167,45 @@
 - **Checkpoint B（DEV-B1～B4）**：七类身份矩阵无未解释差异。
 - **Checkpoint C（阶段 C）**：开关、降级和清理全部恢复，真实基线复核通过。
 
-## 7. 当前执行顺序
+## 7. 已执行夹具与测试账号（2026-09-26）
+
+开发环境已执行角色夹具命令：
+
+```bash
+docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml run --rm api \
+  python manage.py prepare_phase15_role_validation --workspace public --apply --reset-passwords --json
+```
+
+| 对象            | 值                                                           |
+| --------------- | ------------------------------------------------------------ |
+| Project         | `1549e1ba-37a4-45c3-8651-b4fe23cd4fef`                       |
+| ResearchProfile | `389643e7-81bb-4b8c-aaf4-c7e68db91178`                       |
+| Chain           | `14c64584-f169-49fc-9276-7167c7df8463`                       |
+| 首节点          | `c7ec4771-35a1-4d0d-a9a7-fb0c8754481c`                       |
+| KB request      | `d7bdbfa0-7f8c-4016-8cd9-0102121c3edc`，状态 `PENDING_ADMIN` |
+| MentorBinding   | `f09c7fe9-c565-4904-9598-54e39e1f5c39`                       |
+
+本轮测试账号和明文密码（仅限当前 dev 测试环境）：
+
+| 角色                    | 账号                                 | 密码                     |
+| ----------------------- | ------------------------------------ | ------------------------ |
+| ADMIN                   | `admin@ai4ms.local`                  | `P15!rwL6vBLgqx5w0fH3zJ` |
+| PRINCIPAL / MENTOR      | `whong@xmu.edu.cn`                   | `P15!Dp4oexY8F1gIZn51js` |
+| MENTOR                  | `jyliu@xmu.edu.cn`                   | `P15!muRa0cCV3PY5yGkLKF` |
+| RESEARCHER              | `qiuzhixin@stu.xmu.edu.cn`           | `P15!HvMLgY8YwxJ5q9j8T3` |
+| INDUSTRIALIZATION_OWNER | `phase15.industry.owner@ai4ms.local` | `P15!0GBdxQAfI4N7qfH8Wn` |
+| Guest                   | `phase15.guest@ai4ms.local`          | `P15!8Qx2w0wpnmL9gEvaOH` |
+
+角色核验结果：ADMIN→`ADMIN`，洪文晶→`PRINCIPAL + MENTOR`，刘俊扬→`MENTOR`，邱智鑫→`RESEARCHER`，产业化负责人→`PRINCIPAL + INDUSTRIALIZATION_OWNER`，访客→`Guest/NONE`。所有账号首次登录后会要求设置个人密码。
+
+清理命令：
+
+```bash
+docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml run --rm api \
+  python manage.py prepare_phase15_role_validation --workspace public --cleanup --json
+```
+
+## 8. 当前执行顺序
 
 1. 按[启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)从 L1 健康快照开始。
 2. 按[人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)解析角色，先完成 L2，再创建 mock 课题。

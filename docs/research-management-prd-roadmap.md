@@ -11,7 +11,7 @@
 | 变更范围 | 本文档只定义产品需求、分期计划、兼容基线与验收标准，不直接修改业务代码、数据库或配置                                     |
 | 命名原则 | 课题组负责人统一使用 **课题组主 PI**，禁止硬编码任何具体人名或固定昵称                                                   |
 
-各期实施状态以 §5 和 [文档总索引](./README.md) 为准：P0/P1 已完成；智能平台 Phase 0/1/1.5 的实现状态以平台 PRD、当前契约和证据目录为准。旧版本号仅表示历史发布基线，不覆盖当前 `4.15.2` 代码。
+各期实施状态以 §5 和 [文档总索引](./README.md) 为准：P0/P1 已完成；智能平台 Phase 0/1/1.5 的实现状态以平台 PRD、当前契约和证据目录为准。旧版本号仅表示历史发布基线，不覆盖当前 `4.16.0` 代码。
 系统管理改进（P2 第一批：双工作区、管理员标签、邀请码、批量导入）见
 [research-system-management-prd.md](./research-system-management-prd.md) 与
 [research-system-management-acceptance.md](./research-system-management-acceptance.md)。
