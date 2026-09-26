@@ -92,8 +92,9 @@ def resolve_role_context(user, workspace, on_date=None):
     if not roles:
         roles.add("Guest" if membership.role == 5 else "NONE")
 
+    resolved_level = "NONE" if membership.role == 5 and not memberships else signals.level
     return {
-        "research_level": signals.level,
+        "research_level": resolved_level,
         "roles": [role for role in ROLE_ORDER if role in roles],
         "org_units": [
             {
