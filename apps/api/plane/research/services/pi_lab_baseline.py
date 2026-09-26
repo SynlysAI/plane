@@ -9,12 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from django.contrib.auth.hashers import make_password
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import connection
 from django.utils import timezone
@@ -26,6 +24,7 @@ from plane.db.models import (
     OrgUnitMember,
     Project,
     ResearchChain,
+    ResearchGroupKnowledgeBinding,
     ResearchKnowledgeRequest,
     ResearchProjectProfile,
     ResearchUserProfile,
@@ -398,16 +397,16 @@ def _ensure_user(name: str, email: str, actor: User, category: str) -> tuple[Use
     user = User.objects.filter(email__iexact=email).first()
     credential = None
     if user is None:
-        password = secrets.token_urlsafe(12)
+        from plane.research.services.user_import import apply_initial_password
+
         user = User(
             email=email,
             username=email,
             first_name=name,
             display_name=name,
             is_active=True,
-            is_password_reset_required=True,
         )
-        user.password = make_password(password)
+        password = apply_initial_password(user, save=False)
         user.save()
         credential = PiLabCredentialRecord(name, email, password, category)
     else:
@@ -635,6 +634,7 @@ def build_pi_lab_baseline(workspace: Workspace, actor: User, plan: PiLabPlan) ->
 
     advisor_teams: dict[str, list[OrgUnit]] = {}
     pending_rows = 0
+    student_rows: dict[str, UserImportRow] = {}
     for item in plan.students:
         row = item.row
         user, credential = _ensure_user(row.name, row.email, actor, ResearchUserProfile.Category.STUDENT)
@@ -677,7 +677,7 @@ def build_pi_lab_baseline(workspace: Workspace, actor: User, plan: PiLabPlan) ->
         has_invalid_student_no = row.student_no == INVALID_STUDENT_NO
         is_pending = bool(item.relation_gaps or has_invalid_student_no)
         pending_rows += int(is_pending)
-        UserImportRow.objects.create(
+        import_row = UserImportRow.objects.create(
             batch=batch,
             row_number=row.row_number,
             raw=row.raw,
@@ -706,7 +706,9 @@ def build_pi_lab_baseline(workspace: Workspace, actor: User, plan: PiLabPlan) ->
             co_advisor_2_email=item.co_advisor_2_email,
             user=user,
             org_unit=unit,
+            initial_password=credential.password if credential else "",
         )
+        student_rows[row.email.lower()] = import_row
 
     for email, teams in advisor_teams.items():
         advisor = advisor_users[email]
@@ -723,6 +725,22 @@ def build_pi_lab_baseline(workspace: Workspace, actor: User, plan: PiLabPlan) ->
             )
     for email in plan.advisor_mapping.values():
         _ensure_profile(advisor_users[email], category=ResearchUserProfile.Category.ADVISOR, batch=batch)
+
+    from plane.research.services.user_import import record_issued_password
+
+    for credential in credentials:
+        account = User.objects.filter(email__iexact=credential.email).first()
+        if account is None:
+            continue
+        kind = "ADVISOR" if credential.category == ResearchUserProfile.Category.ADVISOR else "ROSTER"
+        record_issued_password(
+            account,
+            credential.password,
+            batch=batch,
+            actor=actor,
+            row=student_rows.get(credential.email.lower()),
+            kind=kind,
+        )
 
     batch.rows_ok = len(plan.students) - pending_rows
     batch.rows_pending = pending_rows
@@ -832,6 +850,7 @@ def verify_pi_lab_baseline(workspace: Workspace, plan: PiLabPlan) -> dict[str, i
         ResearchProjectProfile.objects.count()
         or ResearchChain.objects.count()
         or ResearchKnowledgeRequest.objects.count()
+        or ResearchGroupKnowledgeBinding.objects.count()
     ):
         raise PiLabBaselineError("重建后不得预造科研课题、研究链或 KB 申请。")
 

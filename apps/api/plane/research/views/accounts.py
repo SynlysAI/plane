@@ -42,6 +42,7 @@ from plane.research.services.user_import import (
     bulk_exclude_review_rows,
     bulk_update_review_rows,
     create_review_batch,
+    iter_account_initial_passwords,
     parse_advisors,
     parse_students,
     reject_review_batch,
@@ -733,14 +734,26 @@ class ResearchUserImportReportEndpoint(ResearchAPIView):
                     row.initial_password,
                 ]
             )
-        for source in batch.created_accounts.select_related("user").filter(
-            kind="ADVISOR"
-        ).order_by("created_at"):
+        snapshots = (batch.options or {}).get("advisor_password_snapshots")
+        if isinstance(snapshots, dict):
+            advisor_lines = []
+            for email, password in sorted(snapshots.items()):
+                account = User.objects.filter(email__iexact=email).first()
+                if account is not None:
+                    advisor_lines.append((account.display_name, account.email, password))
+        else:
+            advisor_lines = [
+                (source.user.display_name, source.user.email, source.initial_password)
+                for source in batch.created_accounts.select_related("user").filter(kind="ADVISOR").order_by(
+                    "created_at"
+                )
+            ]
+        for display_name, email, password in advisor_lines:
             writer.writerow(
                 [
                     "导师表",
-                    source.user.display_name,
-                    source.user.email,
+                    display_name,
+                    email,
                     "",
                     "",
                     "",
@@ -752,7 +765,36 @@ class ResearchUserImportReportEndpoint(ResearchAPIView):
                     "",
                     "OK",
                     "导师账号",
-                    source.initial_password,
+                    password,
+                ]
+            )
+        return response
+
+
+class ResearchAccountInitialPasswordsEndpoint(ResearchAPIView):
+    """``GET /api/research/workspaces/<slug>/account-initial-passwords/``
+
+    下载当前工作区活跃成员最近一次发放的初始密码。未发放过的密码列为空。
+    """
+
+    def get(self, request, slug):
+        workspace, error = _guard(self, request)
+        if error:
+            return error
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="account-initial-passwords.csv"'
+        response.write("\ufeff")
+        writer = csv.writer(response)
+        writer.writerow(["姓名", "邮箱", "人员类别", "初始密码", "仍须修改密码", "来源批次"])
+        for record in iter_account_initial_passwords(workspace):
+            writer.writerow(
+                [
+                    record["name"],
+                    record["email"],
+                    record["category"],
+                    record["initial_password"],
+                    record["reset_required"],
+                    record["batch"],
                 ]
             )
         return response

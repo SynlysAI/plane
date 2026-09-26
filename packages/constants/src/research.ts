@@ -747,6 +747,7 @@ export const researchEndpoints = {
   userImportReject: (slug: string, batchId: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${batchId}/reject/`,
   userImport: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${id}/`,
   userImportReport: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${id}/report/`,
+  accountInitialPasswords: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/account-initial-passwords/`,
   userProfiles: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/user-profiles/`,
   piAggregate: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/aggregate/`,
   // ---- P1 stage workflow (§5.2) ----

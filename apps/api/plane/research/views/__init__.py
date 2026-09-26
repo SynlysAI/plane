@@ -17,6 +17,7 @@ from .accounts import (
     ResearchUserImportRejectEndpoint,
     ResearchUserImportRelationsEndpoint,
     ResearchUserImportReportEndpoint,
+    ResearchAccountInitialPasswordsEndpoint,
     ResearchUserImportRowEndpoint,
     ResearchUserImportSingleEndpoint,
     ResearchUserProfileListEndpoint,
@@ -54,7 +55,10 @@ from .attachments import (
     ResearchReportAttachmentPresignEndpoint,
     ResearchReportMarkdownImportEndpoint,
 )
-from .knowledge_requests import ResearchKnowledgeRequestDetailEndpoint
+from .knowledge_requests import (
+    ResearchGroupKnowledgeBindingDetailEndpoint,
+    ResearchKnowledgeRequestDetailEndpoint,
+)
 from .approvals import (
     ResearchApprovalFlowDetailEndpoint,
     ResearchApprovalFlowListCreateEndpoint,
