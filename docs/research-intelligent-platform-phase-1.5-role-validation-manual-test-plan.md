@@ -11,7 +11,7 @@
 
 ## 1. 测试前说明
 
-当前 `public` 已按 π-Lab Excel 清理并重建：189 名学生、14 名导师、唯一 Main PI 洪文晶、0 个预造课题/Project/Chain/KB request。旧版 `liuyang`、`chenjing`、`zhangwei`、`test.*` 账号和旧课题来自历史 seed，不代表当前人工测试环境，不能直接照抄旧矩阵。
+当前 `public` 已按 π-Lab Excel 清理并重建：189 名学生、14 名导师、唯一 Main PI 洪文晶、0 个预造课题/Project/Chain/KB request。历史 seed 账号和旧课题来自旧版联调，不代表当前人工测试环境，不能直接照抄旧矩阵。
 
 本次人工测试的账号由当前运行库实时解析：
 

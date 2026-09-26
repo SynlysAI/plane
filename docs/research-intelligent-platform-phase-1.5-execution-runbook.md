@@ -31,7 +31,7 @@
 | 4   | 更新 Plane env 并重建容器              | `docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d --force-recreate --no-deps api worker beat-worker`；`docker ps` 确认容器 Up | [x]  | `health/20260924-L1.md`              |
 | 5   | 容器内验证两个上游服务                 | 容器内 Python urllib 访问 `http://172.19.0.1:8004/api/health` 与 `:8005/api/health` 均通（API 镜像不含 curl）                                                      | [x]  | `health/20260924-L1.md`              |
 | 6   | 录入 RAGPortal 集成连接并启用          | 科研管理 / 集成界面连接测试返回 success，非 `not_configured`                                                                                                       | [x]  | `links/20260924-L1-RAGPortal-BFF.md` |
-| 7   | 开四个 research 开关并绑定 AccountLink | 试点学生账号（`liuyang.phd@ai4ms.local`）AccountLink 状态 ACTIVE                                                                                                   | [x]  | `health/20260924-L1.md`              |
+| 7   | 开四个 research 开关并绑定 AccountLink | 按当前 `public` 基线解析出的学生 AccountLink 状态 ACTIVE                                                                                                           | [x]  | `health/20260924-L1.md`              |
 
 ### 五服务健康快照（每轮联调开始时记录）
 
@@ -70,13 +70,13 @@
 
 前置：五个开关全部开启。基线不通过时先修复再进入逐开关验证。
 
-| #      | 验证点                                                       | 结果 | 证据                          |
-| ------ | ------------------------------------------------------------ | ---- | ----------------------------- |
-| SW-00a | `liuyang.phd` 创建课题 A（WORKSPACE）与课题 B（PRIVATE）各一 | [x]  | `switches/20260925-L3.5.md`   |
-| SW-00b | 课题节点上传一份测试 PDF 并确认引用                          | [x]  | `switches/20260925-L3.5.md`   |
-| SW-00c | 创建一次 Agent 会话并收到事件投影                            | [x]  | `switches/20260925-L3.5.md`   |
-| SW-00d | 审批中心处理一条等待项                                       | [x]  | `switches/20260925-L3.5.md`   |
-| SW-00e | 导出 Markdown 并核对 `X-Research-Chain-SHA256`               | [x]  | `switches/20260925-SW-00B.md` |
+| #      | 验证点                                                               | 结果 | 证据                          |
+| ------ | -------------------------------------------------------------------- | ---- | ----------------------------- |
+| SW-00a | 当前解析学生创建主 mock 课题（WORKSPACE）和可选 PRIVATE 对照课题各一 | [x]  | `switches/20260925-L3.5.md`   |
+| SW-00b | 课题节点上传一份测试 PDF 并确认引用                                  | [x]  | `switches/20260925-L3.5.md`   |
+| SW-00c | 创建一次 Agent 会话并收到事件投影                                    | [x]  | `switches/20260925-L3.5.md`   |
+| SW-00d | 审批中心处理一条等待项                                               | [x]  | `switches/20260925-L3.5.md`   |
+| SW-00e | 导出 Markdown 并核对 `X-Research-Chain-SHA256`                       | [x]  | `switches/20260925-SW-00B.md` |
 
 ### 4.1 逐开关 OFF 验证表
 
@@ -99,81 +99,74 @@
 
 ## 5. L3.6：分角色功能矩阵
 
-> **历史证据说明**：以下账号、课题 A/B 和矩阵记录对应 2026-09-25 的旧 seed 联调证据，只用于复盘，不代表当前 `public` π-Lab Excel 基线。当前人工测试必须使用 [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) 动态解析角色，并使用 `plane测试` 知识库。
+> 当前执行口径：所有身份从 `public` π-Lab Excel 基线动态解析。旧 seed 邮箱、旧课题和旧组织名只存在于历史 evidence，不在本矩阵中复用。测试 KB 固定为 `plane测试`。
 
-### 5.1 角色-账号映射
+### 5.1 角色解析
 
-| ResearchLevel | 账号                                             | 组织位置 / 角色                        | 用途                                   |
-| ------------- | ------------------------------------------------ | -------------------------------------- | -------------------------------------- |
-| ADMIN         | `admin@ai4ms.local`                              | 实例管理员 + 双工作区管理员            | 全量管理视角 / B 课题 fail-closed 负例 |
-| PRINCIPAL     | `zhangwei.pi@ai4ms.local`                        | 张伟课题组 PI                          | 课题组管理链视角                       |
-| PRINCIPAL     | `zhaoqiang.admin@ai4ms.local`                    | 材料科学与工程学院 UNIT_ADMIN          | 学院节点管理链视角                     |
-| PRINCIPAL     | `liming.pi@ai4ms.local`                          | 李明课题组 PI（上级节点）              | 兄弟课题组隔离负例                     |
-| PRINCIPAL     | `wangfang.lab@ai4ms.local`                       | 能源材料实验室 OWNER + 王芳课题组 PI   | 上级节点主 PI 视角                     |
-| MENTOR        | `chenjing.advisor@ai4ms.local`                   | 张伟课题组 ADVISOR，绑定刘洋/孙浩/周敏 | 导师读写与审批视角                     |
-| MENTOR        | `zhengkai.reviewer@ai4ms.local`                  | REVIEWER + 石墨负极小组 OWNER          | 阶段评审视角                           |
-| RESEARCHER    | `liuyang.phd@ai4ms.local`                        | 博士生，课题 A/B owner                 | 学生 owner 主视角                      |
-| RESEARCHER    | `sunhao.postdoc@ai4ms.local`                     | 博士后，同课题组对照                   | 同组学生对照                           |
-| NONE          | `gaopeng.member@ai4ms.local`                     | 工作区成员，无科研组织关系             | 菜单收敛 + WORKSPACE 只读              |
-| Guest         | `hexue.guest@ai4ms.local`                        | 访客                                   | 403 负例                               |
-| 管理员标签    | `dev.admin` / `ops.admin` / `mainpi@ai4ms.local` | DEV_ADMIN / OPS_ADMIN / MAIN_PI        | 配置权标签补充行                       |
+| ResearchLevel           | 当前解析条件                                                                   | 测试职责                                        |
+| ----------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------- |
+| ADMIN                   | InstanceAdmin 或 `public` Workspace role `20`                                  | 配置、组织、账号、审计；业务数据仍遵守 ACL      |
+| PRINCIPAL               | `WorkspaceResearchSetting.main_pi`，当前为洪文晶；或有效 `OWNER/PI/UNIT_ADMIN` | 组织汇总、审批和 REVIEW Agent                   |
+| INDUSTRIALIZATION_OWNER | `business_category=INDUSTRIALIZATION` 单元内有效 `OWNER/PI`                    | 产业化节点、成果和课题业务流程                  |
+| MENTOR                  | `category=ADVISOR`、`org_role=ADVISOR`，并有有效 `MentorBinding`               | 绑定学生课题 REVIEW、报告审批和 REVIEW Agent    |
+| RESEARCHER              | `category=STUDENT`、`org_role=REVIEWER`                                        | 创建 mock 课题、节点写入、KB 上传和 OWNER Agent |
+| NONE                    | Workspace 成员但无科研组织关系                                                 | WORKSPACE 只读和导航收敛                        |
+| Guest                   | Workspace role `GUEST` 且无科研组织关系                                        | 403、导航隐藏和 fail-closed 负例                |
 
-### 5.2 四入口导航渲染矩阵（编号 NAV）
+角色清单必须同时核对 `identity/me`、Profile、组织成员、业务分类、MentorBinding 和 Workspace 成员。角色缺失时登记前置阻塞，不得用历史账号代替。
 
-预期依据：Phase 1 验收手册 §3.1——学生不可见科研管理，导师/PI 按评审能力显示审批中心，管理员可见科研管理；NONE 与 Guest 不渲染科研导航分组。
+### 5.2 四入口导航矩阵
 
-| #     | 账号（角色）                 | 科研总览       | 研究链 | 审批中心   | 科研管理 | 结果 | 证据                     |
-| ----- | ---------------------------- | -------------- | ------ | ---------- | -------- | ---- | ------------------------ |
-| NAV-1 | `liuyang.phd`（RESEARCHER）  | ✅             | ✅     | ❌（按人） | ❌       | [x]  | `roles/20260925-L3.6.md` |
-| NAV-2 | `chenjing.advisor`（MENTOR） | ✅             | ✅     | ✅         | ❌       | [x]  | `roles/20260925-L3.6.md` |
-| NAV-3 | `zhangwei.pi`（PRINCIPAL）   | ✅             | ✅     | ✅         | ❌       | [x]  | `roles/20260925-L3.6.md` |
-| NAV-4 | `admin`（ADMIN）             | ✅             | ✅     | ✅         | ✅       | [x]  | `roles/20260925-L3.6.md` |
-| NAV-5 | `gaopeng.member`（NONE）     | 不渲染科研分组 | 不渲染 | 不渲染     | 不渲染   | [x]  | `roles/20260925-L3.6.md` |
-| NAV-6 | `hexue.guest`（Guest）       | 不渲染科研分组 | 不渲染 | 不渲染     | 不渲染   | [x]  | `roles/20260925-L3.6.md` |
+| 编号  | 当前角色                | 科研总览       | 研究链 | 审批中心 | 科研管理 |
+| ----- | ----------------------- | -------------- | ------ | -------- | -------- |
+| NAV-1 | RESEARCHER              | ✅             | ✅     | 按指派   | ❌       |
+| NAV-2 | MENTOR                  | ✅             | ✅     | ✅       | ❌       |
+| NAV-3 | PRINCIPAL               | ✅             | ✅     | ✅       | 按配置   |
+| NAV-4 | INDUSTRIALIZATION_OWNER | ✅             | ✅     | 按指派   | ❌       |
+| NAV-5 | ADMIN                   | ✅             | ✅     | ✅       | ✅       |
+| NAV-6 | NONE                    | 不渲染科研分组 | 不渲染 | 不渲染   | 不渲染   |
+| NAV-7 | Guest                   | 不渲染科研分组 | 不渲染 | 不渲染   | 不渲染   |
 
-### 5.3 课题可见性矩阵（编号 VIS）
+### 5.3 课题可见性与写权限矩阵
 
-课题 A = `liuyang.phd` 创建的 WORKSPACE 课题；课题 B = 同 owner 的 PRIVATE 课题（SW-00a 已建）。读 = 详情/时间线/导出可见；写 = 可追加节点/事件/上传。判定依据为项目级研究 ACL（owner / 项目协作者 / 有效导师绑定 / 组织管理链 / WORKSPACE 可见即工作区成员 / 配置主PI），Guest 无席位则 fail closed。
+主 mock 课题由当前解析学生创建，类型为 `RESEARCH_CHAIN`、可见性 `WORKSPACE`，组织为 `INDUSTRIALIZATION` 单元；可选 PRIVATE 对照课题不绑定 KB。管理员只绑定 `plane测试`，READY 前不得上传。
 
-| #     | 账号（角色）                    | 课题 A（WORKSPACE） | 课题 B（PRIVATE）         | 写权限预期                          | 结果 | 证据                             |
-| ----- | ------------------------------- | ------------------- | ------------------------- | ----------------------------------- | ---- | -------------------------------- |
-| VIS-1 | `liuyang.phd`（owner）          | 读 ✅               | 读 ✅                     | A/B 均可写、可导出、可加协作者      | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-2 | `sunhao.postdoc`（同组学生）    | 读 ✅（工作区成员） | 403/不可见                | A 只读                              | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-3 | `chenjing.advisor`（导师）      | 读 ✅               | 读 ✅（有效导师绑定）     | A/B 可写（导师为有效 chain writer） | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-4 | `zhangwei.pi`（课题组 PI）      | 读 ✅               | 读 ✅（组织管理链）       | 默认只读（除非被加为项目协作者）    | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-5 | `liming.pi`（兄弟课题组 PI）    | 读 ✅（工作区成员） | 403/不可见                | A 只读                              | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-6 | `zhaoqiang.admin`（学院管理员） | 读 ✅               | 按组织管理链实测记录      | 默认只读                            | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-7 | `admin`（工作区管理员）         | 读 ✅（工作区成员） | 403/不可见（fail closed） | A 只读（管理权不等于数据可见权）    | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-8 | `gaopeng.member`（NONE）        | 读 ✅（工作区成员） | 403/不可见                | A 只读                              | [x]  | `roles/20260925-VIS-matrix.json` |
-| VIS-9 | `hexue.guest`（Guest）          | 403                 | 403                       | 均不可写                            | [x]  | `roles/20260925-VIS-matrix.json` |
+| 编号  | 当前角色                | WORKSPACE 主课题           | PRIVATE 对照课题   | 写权限预期                                           |
+| ----- | ----------------------- | -------------------------- | ------------------ | ---------------------------------------------------- |
+| VIS-1 | RESEARCHER owner        | 读写                       | 读写               | 可创建节点、人工记录、上传和导出                     |
+| VIS-2 | MENTOR                  | 按有效 MentorBinding 可见  | 未绑定则 403/404   | REVIEW scope；不可改节点生命周期、上传或覆盖正式内容 |
+| VIS-3 | PRINCIPAL               | 组织范围可见               | 按组织 ACL         | 默认只读；可审批、评论和分析草稿                     |
+| VIS-4 | INDUSTRIALIZATION_OWNER | 所属业务单元可见           | 跨单元按 ACL       | 仅拥有写权限的业务节点可写                           |
+| VIS-5 | ADMIN                   | 按 ACL                     | 不因管理权自动可见 | 配置权与业务数据权分离                               |
+| VIS-6 | NONE                    | WORKSPACE 只读或按当前 ACL | 403/不可见         | 不可写                                               |
+| VIS-7 | Guest                   | 403/404                    | 403/404            | 不可写                                               |
 
-每个 VIS 用例的验证三要素：页面入口或列表可见性、API 直接访问（含 ID 直闯）返回码、导出入口是否出现。三类口径必须一致，任一不一致即为缺陷。
+### 5.4 功能权限矩阵
 
-### 5.4 功能权限矩阵（编号 PER）
+| 功能          | 通过条件                                                                |
+| ------------- | ----------------------------------------------------------------------- |
+| 报告/阶段审批 | 直接导师、主 PI 或明确指派人可审；普通可读者不可审                      |
+| Agent OWNER   | 当前课题 owner 在 AccountLink ACTIVE 且具备节点写权限                   |
+| Agent REVIEW  | 直接导师、主 PI 或明确 review scope；只读证据、评论、分析草稿           |
+| 知识读取      | 按课题 ACL 和 `allowed_knowledge_base_ids`；只允许 `plane测试`          |
+| 知识写入      | 课题 KB 为 `READY` 且调用者有节点写权限；否则 `KB_NOT_READY` 或权限错误 |
+| AccountLink   | 本人绑定/解绑，或管理员操作；不接收密码                                 |
+| 导出          | 仅能导出当前角色可见的 Chain、事件、快照和引用                          |
 
-| #     | 功能               | 预期权限规则                                                                          | 账号与操作                                              | 结果 | 证据                             |
-| ----- | ------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---- | -------------------------------- |
-| PER-1 | 审批中心等待队列   | MENTOR 及以上可见队列；RESEARCHER 仅在被指派评审时看到“待我评审”                      | `chenjing.advisor` 见队列；`liuyang.phd` 默认不见       | [x]  | `roles/20260925-PER-matrix.json` |
-| PER-2 | Agent 会话创建     | 按节点写权限（owner / 有效导师 / 项目协作者 ≥15）+ 操作者自身 AccountLink ACTIVE      | `liuyang.phd` ✅；未绑定的 `sunhao` 得到明确错误        | [x]  | `roles/20260925-PER-matrix.json` |
-| PER-3 | 知识上传与引用确认 | 同节点写权限；读权限者只可见状态与引用                                                | `liuyang.phd` / `chenjing.advisor` 可传；PI 只读        | [x]  | `roles/20260925-PER-matrix.json` |
-| PER-4 | AccountLink 绑定   | 仅本人可绑定/解绑自己的账号，或工作区管理员操作；导师/PI 不可替他人绑定               | `liuyang.phd` 自绑 ✅；`chenjing.advisor` 替绑被拒      | [x]  | `roles/20260925-PER-matrix.json` |
-| PER-5 | 快照导出           | 跟随课题读权限；导出内容与 hash 对读权限一致                                          | VIS 各账号对 A/B 分别导出，与 VIS 矩阵一致              | [x]  | `roles/20260925-VIS-matrix.json` |
-| PER-6 | 管理员标签配置权   | DEV/OPS/MAIN_PI 标签只扩大配置权，不扩大业务数据可见范围（数据仍按组织架构 ACL 收敛） | `mainpi` 进 `pi` 工作区；对 B 课题可见性以 VIS 规则为准 | [x]  | `roles/20260925-L3.6.md`         |
+### 5.5 负例
 
-### 5.5 负例三则（编号 NEG）
-
-| #     | 负例                                        | 预期                                             | 结果 | 证据                             |
-| ----- | ------------------------------------------- | ------------------------------------------------ | ---- | -------------------------------- |
-| NEG-1 | `hexue.guest` 访问课题 A/B 页面与 API       | 页面不渲染入口；API 直闯返回 403；导航无科研分组 | [x]  | `roles/20260925-NEG-1.png`       |
-| NEG-2 | `gaopeng.member` 登录后查看科研菜单         | 菜单收敛为最小集，仅可见 WORKSPACE 级内容        | [x]  | `roles/20260925-NEG-2.png`       |
-| NEG-3 | `liming.pi` 尝试访问张伟课题组 PRIVATE 课题 | 兄弟课题组隔离：课题 B 403/不可见，列表不出现    | [x]  | `roles/20260925-VIS-matrix.json` |
+- 访客直链主课题和 PRIVATE 对照课题，页面和 API 均 fail closed。
+- 管理员访问 PRIVATE 对照课题，不能因 role `20` 绕过 ACL。
+- 导师访问未绑定课题，不能创建 REVIEW Agent。
+- 产业化负责人访问其他业务分类单元，不能写节点或成果。
+- 导师/主 PI 尝试上传、确认外部引用、修改节点生命周期或覆盖正式报告，必须被拒。
 
 ## 6. L4：端到端闭环五场景（编号 E2E）
 
 ### E2E-1 双课题与 ACL
 
-- [x] `liuyang.phd` 创建课题 A（WORKSPACE）与课题 B（PRIVATE）。
-- [x] 页面、API、Context、导出四条路径权限一致；`hexue.guest` 负例生效。
+- [x] 当前解析学生 创建主 mock 课题（WORKSPACE）与PRIVATE 对照课题（PRIVATE）。
+- [x] 页面、API、Context、导出四条路径权限一致；当前解析访客 负例生效。
 - [x] 按 L3.6 矩阵复验 VIS-1 至 VIS-9 全格。
 
 ### E2E-2 上传入库引用
@@ -235,7 +228,7 @@
 | P15-002 | 2026-09-25 | L3-4    | P0     | Synlora integration   | Synlora `PlaneResearchClient` 写入 Plane `agent/chain-events/` | 事件写入成功                         | Plane 返回 401，Synlora 归一为 502            | Synlora 使用 Bearer；Plane Agent 事件端点未启用 API Key 认证                              | 80f854e + e6b261de1 | Synlora 19 passed / 6 skipped；Plane 20 passed；真实事件写入成功  | 已关闭 |
 | P15-003 | 2026-09-25 | L3-2    | P2     | RAGPortal integration | Plane BFF 上传后检查 RAGPortal 回执                            | `knowledge_id/kb_id/task_id` 齐返    | `task_id` 为空                                | 部署版 WeKnora 上传响应省略独立 parse task ID                                             | 0a55fbd             | 单测 31 passed；真实二次上传三标识齐返并轮询 SUCCESS              | 已关闭 |
 | P15-004 | 2026-09-25 | L3.5    | P1     | Plane Web IA          | 关闭 IA v2 后访问旧项目路由并携带 query/hash                   | query 与 hash 均保留                 | `#projects` 保留，`source=sw05` 丢失          | 项目路由归一化/跳转时未透传 search                                                        | 1d81a468b           | 五条旧路由 query/hash 均保留；组件 82 passed                      | 已关闭 |
-| P15-005 | 2026-09-25 | L3.6    | P1     | Plane capabilities    | `liuyang.phd` 无评审指派时查看导航与 identity                  | 审批中心不渲染                       | identity nav 含 `approvals`，侧栏渲染审批中心 | RESEARCHER 级别默认 nav 集合包含审批入口                                                  | 1d81a468b           | identity nav 不含 approvals；浏览器 NAV-1 不渲染审批中心          | 已关闭 |
+| P15-005 | 2026-09-25 | L3.6    | P1     | Plane capabilities    | 当前解析学生 无评审指派时查看导航与 identity                   | 审批中心不渲染                       | identity nav 含 `approvals`，侧栏渲染审批中心 | RESEARCHER 级别默认 nav 集合包含审批入口                                                  | 1d81a468b           | identity nav 不含 approvals；浏览器 NAV-1 不渲染审批中心          | 已关闭 |
 | P15-006 | 2026-09-25 | L3.6    | P1     | Plane research ACL    | VIS-7 管理员写 A；VIS-8 NONE 读 A                              | 管理员只读；NONE 可读 WORKSPACE 课题 | 管理员事件写入 201；NONE Chain API 403        | Chain manager 误包含工作区管理员；Chain 读接口被 nav 能力提前拦截                         | 1d81a468b           | 相关后端 51 passed；VIS-7 写 403，VIS-8 A 页面/API/导出可读       | 已关闭 |
 | P15-007 | 2026-09-25 | DEG-1   | P1     | Plane Web Agent       | 停止 Synlora 后打开 Agent 页面                                 | 显示中文降级原因与人工路径           | 显示“没有访问当前科研对象的权限”              | 会话创建失败被前端统一映射为 forbidden                                                    | cb4178931           | 组件 85 passed；浏览器显示中文降级与人工路径                      | 已关闭 |
 | P15-008 | 2026-09-25 | DEG-2/3 | P1     | RAGPortal UI/API      | 停 RAGPortal 或 WeKnora key 失效后上传                         | 中文降级、上传入口与人工路径可用     | key 失效返回 500；上传面板未挂载              | WeknoraError 未在 KB 校验层捕获；ResearchChainKnowledgePanel 未接入外部引用页             | 5efbe91 + cb4178931 | RAGPortal 33 passed；DEG-2/3 页面中文降级、人工路径与恢复回归通过 | 已关闭 |
@@ -256,7 +249,7 @@
 | L3.6    | 角色矩阵         | NAV / VIS / PER / NEG                | Markdown + JSON + 截图         | `docs/evidence/phase-1.5/roles/20260925-L3.6.md`             | 全部通过                  |
 | P15-004 | L3.5 缺陷回归    | 旧路由 query/hash                    | Markdown 记录                  | `docs/evidence/phase-1.5/switches/20260925-L3.5.md`          | 五条路由完整保留          |
 | P15-005 | L3.6 缺陷回归    | RESEARCHER 审批入口                  | Markdown + 截图                | `docs/evidence/phase-1.5/roles/20260925-L3.6.md`             | 默认不渲染审批中心        |
-| P15-006 | L3.6 缺陷回归    | WORKSPACE 课题 ACL                   | Markdown + JSON                | `docs/evidence/phase-1.5/roles/20260925-VIS-matrix.json`     | 管理员/NONE 只读          |
+| P15-006 | L3.6 缺陷回归    | WORKSPACE 主 mock 课题CL             | Markdown + JSON                | `docs/evidence/phase-1.5/roles/20260925-VIS-matrix.json`     | 管理员/NONE 只读          |
 | L4      | 端到端闭环       | E2E-1 至 E2E-5                       | Markdown + 导出文件            | `docs/evidence/phase-1.5/e2e/20260925-L4.md`                 | 五场景全部通过            |
 | DEG     | 降级演练         | DEG-1 至 DEG-3                       | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 三项全部通过并恢复        |
 | P15-007 | DEG-1 缺陷回归   | Synlora 停机页面提示                 | Markdown + 截图                | `docs/evidence/phase-1.5/degradation/20260925-DEG.md`        | 中文原因 / 人工路径       |
