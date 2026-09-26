@@ -32,9 +32,9 @@ SUBJECTS = ["owner", "advisor", "unit_member", "ancestor_pi", "admin", "stranger
 EXPECTED = {
     "PRIVATE": {
         "owner": True,
-        "advisor": False,
+        "advisor": True,
         "unit_member": False,
-        "ancestor_pi": False,
+        "ancestor_pi": True,
         "admin": False,
         "stranger": False,
     },
@@ -56,7 +56,7 @@ EXPECTED = {
     },
     "ANCESTRY": {
         "owner": True,
-        "advisor": False,
+        "advisor": True,
         "unit_member": False,
         "ancestor_pi": True,
         "admin": False,
@@ -72,7 +72,7 @@ EXPECTED = {
     },
     "CUSTOM": {
         "owner": True,
-        "advisor": False,
+        "advisor": True,
         "unit_member": True,
         "ancestor_pi": True,
         "admin": False,
@@ -261,3 +261,50 @@ class TestVisibilityNarrowing:
     def test_unknown_levels_are_treated_as_narrowest(self):
         assert can_narrow("UNIT", "UNKNOWN") is True
         assert can_narrow("UNKNOWN", "WORKSPACE") is False
+
+
+@pytest.mark.django_db
+def test_main_pi_and_mentor_can_view_private_student_topic(db, settings):
+    """Main PI and the direct mentor can view a student PRIVATE research topic."""
+    settings.RESEARCH_MODULE_ENABLED = True
+    admin = make_user(first_name="Admin")
+    workspace = make_workspace(admin)
+    setting = enable_research(workspace)
+    main_pi = make_user(first_name="MainPI")
+    mentor = make_user(first_name="Mentor")
+    student = make_user(first_name="Student")
+    for user in (main_pi, mentor, student):
+        add_workspace_member(workspace, user)
+    setting.main_pi = main_pi
+    setting.save(update_fields=["main_pi"])
+    root = ensure_root_org_unit(workspace)
+    group = OrgUnit.objects.create(
+        workspace=workspace,
+        name="Device",
+        parent=root,
+        unit_type=OrgUnit.UnitType.GROUP,
+        depth=1,
+        path="",
+    )
+    group.path = build_path(group.id, root.path)
+    group.save(update_fields=["path"])
+    OrgUnitMember.objects.create(
+        workspace=workspace, org_unit=group, user=student, org_role=OrgUnitMember.OrgRole.REVIEWER
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace, org_unit=group, user=mentor, org_role=OrgUnitMember.OrgRole.ADVISOR
+    )
+    MentorBinding.objects.create(workspace=workspace, mentee=student, mentor=mentor, org_unit=group)
+
+    resource = ResearchResource(
+        kind="research_chain",
+        workspace_id=workspace.id,
+        owner_id=student.id,
+        org_unit_id=group.id,
+        visibility="PRIVATE",
+        project_id=None,
+        is_team_content=False,
+    )
+    assert visibility_allows(build_actor_context(main_pi, workspace.id), resource) is True
+    assert visibility_allows(build_actor_context(mentor, workspace.id), resource) is True
+    assert visibility_allows(build_actor_context(admin, workspace.id), resource) is False
