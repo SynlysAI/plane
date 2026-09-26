@@ -7,7 +7,7 @@
 | 详细用例 | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
 | 开发计划 | [分角色验证开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)            |
-| 环境     | `public` π-Lab 基线、Plane `4.15.1`、RAGPortal、Synlora、WeKnora                                    |
+| 环境     | `public` π-Lab 基线、Plane `4.15.2`、RAGPortal、Synlora、WeKnora                                    |
 | 测试 KB  | 只使用 `plane测试`；不得跨课题复用                                                                  |
 
 ## 1. 使用规则
@@ -92,7 +92,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 通过条件：22 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶，`projects/research_profiles/research_chains/knowledge_requests=0`；验证命令只读。
 
-随后打开[详细人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)，按 L2 解析主 PI、产业化负责人、直接导师、学生、管理员、NONE 和 Guest。角色缺失时停止，不得用历史账号代替。
+在 `identity/me` 的 `user.role_context` 中核对实际解析标签，然后打开[详细人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)，按 L2 解析主 PI、产业化负责人、直接导师、学生、管理员、NONE 和 Guest。角色缺失时停止，不得用历史账号代替。
 
 ## 5. 测试执行与证据
 

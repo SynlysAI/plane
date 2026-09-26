@@ -5,7 +5,7 @@
 | 文档状态     | v3 实现契约（v1.4）                                                                                                                                    |
 | 文档版本     | v1.4                                                                                                                                                   |
 | 日期         | 2026-09-18                                                                                                                                             |
-| 历史对应版本 | `3.0.3`；当前代码版本 `4.15.1`，本文仍是组织、权限和 Context 的当前契约                                                                                |
+| 历史对应版本 | `3.0.3`；当前代码版本 `4.15.2`，本文仍是组织、权限和 Context 的当前契约                                                                                |
 | 适用范围     | 组织关系、科研权限、公共科研概览、主 PI 私有空间、周期报告与只读 Agent 上下文                                                                          |
 | 历史文档     | [`research-system-management-prd.md`](./research-system-management-prd.md)、[`research-navigation-visibility.md`](./research-navigation-visibility.md) |
 

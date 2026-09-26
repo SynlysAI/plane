@@ -28,6 +28,7 @@ from plane.research.utils.settings import (
     workspace_research_enabled,
     workspace_research_sections,
 )
+from plane.research.utils.role_resolution import resolve_role_context
 from plane.research.views.base import ResearchAPIView, resolve_user
 from plane.utils.workspace_access import filter_workspaces_for_private_access
 
@@ -69,6 +70,7 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
         roles_held = admin_roles(request.user)
         profile = getattr(request.user, "research_profile", None)
         capabilities = build_research_capabilities(request.user, workspace)
+        role_context = resolve_role_context(request.user, workspace)
         workspace_settings = get_workspace_research_settings(workspace)
         workspace_queryset = Workspace.objects.filter(
                 workspace_member__member=request.user,
@@ -102,6 +104,7 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
                     "profile": profile.category if profile is not None else None,
                     "student_no": profile.student_no if profile is not None else None,
                     "org_units": org_units,
+                    "role_context": role_context,
                     "mentor_ids": [str(user_id) for user_id in effective_mentor_ids(request.user, workspace.id)],
                     "mentee_ids": [str(user_id) for user_id in effective_mentee_ids(request.user, workspace.id)],
                 },
