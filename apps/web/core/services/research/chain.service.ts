@@ -47,7 +47,10 @@ export type TResearchKnowledgeRequestState =
   | "READY"
   | "FAILED"
   | "ARCHIVED"
-  | "RESTORE_PENDING";
+  | "RESTORE_PENDING"
+  | "UNASSIGNED";
+
+export type TResearchKnowledgeScope = "GROUP" | "LEGACY_CHAIN" | "UNASSIGNED";
 
 export type TResearchChainUpload = {
   id: string;
@@ -217,6 +220,9 @@ export class ResearchChainService extends APIService {
               degraded_reason?: string;
               state?: TResearchKnowledgeRequestState;
               request_id?: string;
+              scope?: TResearchKnowledgeScope;
+              org_unit_id?: string | null;
+              org_unit_name?: string | null;
             }
           | undefined;
         return {
@@ -225,6 +231,9 @@ export class ResearchChainService extends APIService {
           degraded_reason: payload?.degraded_reason ?? "",
           state: payload?.state ?? "READY",
           request_id: payload?.request_id ?? "",
+          scope: payload?.scope ?? "LEGACY_CHAIN",
+          orgUnitId: payload?.org_unit_id ?? "",
+          orgUnitName: payload?.org_unit_name ?? "",
         };
       })
       .catch((err) => {

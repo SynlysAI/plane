@@ -263,6 +263,32 @@ class ResearchSystemSearchEndpoint(ResearchAPIView):
     system = None
     operation = None
 
+    def prepare_items(self, items, request, workspace):
+        """Adjust items before the source ACL filter.
+
+        Args:
+            items: Raw search items.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items ready for the source ACL filter.
+        """
+        return items
+
+    def filter_items(self, items, request, workspace):
+        """Apply an extra visibility rule after the source ACL filter.
+
+        Args:
+            items: Items already accepted by the source ACL.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items the caller may read.
+        """
+        return items
+
     def get(self, request, slug):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
@@ -285,7 +311,9 @@ class ResearchSystemSearchEndpoint(ResearchAPIView):
                 request=request,
                 operation=self.operation,
             )
-            items = filter_source_items(result.items, request.user, workspace.id)
+            items = self.prepare_items(result.items, request, workspace)
+            items = filter_source_items(items, request.user, workspace.id)
+            items = self.filter_items(items, request, workspace)
             payload = result.as_payload(items=items, count=len(items))
             payload["filtered_out"] = len(result.items) - len(items)
             cached = set_cached(key, payload, degraded=result.degraded)
@@ -295,6 +323,36 @@ class ResearchSystemSearchEndpoint(ResearchAPIView):
 class ResearchKnowledgeSearchEndpoint(ResearchSystemSearchEndpoint):
     system = "RAGPORTAL"
     operation = "fetch_knowledge_entries"
+
+    def prepare_items(self, items, request, workspace):
+        """Grant team members retrieval of their whole shared library.
+
+        Args:
+            items: Raw knowledge search items.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items whose team library ACL includes the caller.
+        """
+        from plane.research.services.group_knowledge import grant_group_library_access
+
+        return grant_group_library_access(items, request.user, workspace)
+
+    def filter_items(self, items, request, workspace):
+        """Hide another team's shared library from chain collaborators.
+
+        Args:
+            items: Knowledge items accepted by the source ACL.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items whose group library the caller belongs to.
+        """
+        from plane.research.services.group_knowledge import filter_group_library_items
+
+        return filter_group_library_items(items, request.user, workspace)
 
 
 class ResearchLabRunSearchEndpoint(ResearchSystemSearchEndpoint):

@@ -8,7 +8,7 @@
 | 开发计划 | [分角色验证开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)            |
 | 环境     | `public` π-Lab 基线、Plane `4.16.0`、RAGPortal、Synlora、WeKnora                                    |
-| 测试 KB  | 只使用 `plane测试`；不得跨课题复用                                                                  |
+| 测试 KB  | 只使用 `plane测试`；同一小组可复用，不得跨小组复用                                                  |
 
 ## 1. 使用规则
 

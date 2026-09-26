@@ -48,13 +48,19 @@
       "code": "KB_NOT_READY",
       "http_status": 409,
       "retryable": false,
-      "description": "The research chain knowledge base has not reached READY state."
+      "description": "The team knowledge base has not reached READY state."
+    },
+    {
+      "code": "KB_GROUP_UNASSIGNED",
+      "http_status": 409,
+      "retryable": false,
+      "description": "The research chain has no team, so no personal knowledge base is created."
     },
     {
       "code": "KB_SCOPE_CONFLICT",
       "http_status": 409,
       "retryable": false,
-      "description": "The knowledge base is already bound to another research chain."
+      "description": "The knowledge base belongs to another research team. Binding returns 409 and upload returns 403."
     },
     {
       "code": "AGENT_SCOPE_INVALID",

@@ -54,13 +54,13 @@
 
 ### 3.2 可选 PRIVATE 对照课题
 
-仅在需要验证 PRIVATE fail-closed 时创建 `P15-MOCK-PRIVATE-隔离-{YYYYMMDD}`。它由同一学生拥有、可见性为 `PRIVATE`、不绑定 KB、不上传文件，测试结束后优先归档或删除。`plane测试` 不得绑定到第二个课题。
+仅在需要验证 PRIVATE fail-closed 时创建 `P15-MOCK-PRIVATE-隔离-{YYYYMMDD}`。它由同一学生拥有、可见性为 `PRIVATE`、不绑定 KB、不上传文件，测试结束后优先归档或删除。`plane测试` 可以复用给同一小组的后续课题，不得绑定到另一个小组。
 
 ### 3.3 创建、幂等与回滚
 
 - 优先通过 Web 创建；使用 API 时保存 request id、Project/Chain/KB request id 和状态变化。
 - KB 未达到 `READY` 时上传必须被门禁拦截，预期为 `409 KB_NOT_READY`。
-- 跨课题复用 `plane测试` 必须返回 `KB_SCOPE_CONFLICT`，不得产生 WeKnora 上传任务。
+- 同一小组的多个课题复用 `plane测试`；只有绑到另一个小组时才返回 `KB_SCOPE_CONFLICT`，且不得产生 WeKnora 上传任务。
 - 清理顺序为：删除测试文件和引用 → 归档/删除 mock 课题 → 清理临时访客和 AccountLink → 复核 `public` 基线。
 - 清理失败不得强删生产对象；登记对象 ID、状态和补偿动作，保留可回滚证据。
 
@@ -96,9 +96,9 @@
 
 **验收标准：**
 
-- [ ] 创建请求可安全重试，最多对应一个未结束申请和一个课题 KB 绑定。
+- [ ] 创建请求可安全重试，同一 `TEAM` 最多一条未结束的小组知识库绑定。
 - [ ] `PENDING_ADMIN`、`READY`、失败、归档和恢复状态可追踪。
-- [ ] KB 映射按课题归属和唯一性校验，不把 WeKnora 全局 API key 当作业务授权。
+- [ ] KB 映射按小组归属和唯一性校验，不把 WeKnora 全局 API key 当作业务授权。已 `READY` 的历史课题绑定保持原库。
 
 **依赖：** DEV-A2。
 
@@ -108,7 +108,7 @@
 
 学生创建主课题、节点、人工记录、分析草稿，等待管理员完成 KB 回填后上传测试文档，执行引用确认、`knowledge.search` 和 Chain 导出。
 
-**通过条件：** Project—Profile—Chain—KB request 一对一；事件游标单调；导出 hash 与响应头一致；不能自审自己的正式报告。
+**通过条件：** Project—Profile—Chain 一一对应，同一 `TEAM` 共享一条 KB 绑定；事件游标单调；导出 hash 与响应头一致；不能自审自己的正式报告。
 
 #### DEV-B2：导师和主 PI REVIEW 路径
 
@@ -140,8 +140,8 @@
 | ------ | ------------ | ----------------------------------------------------------------- | ---------------------------- |
 | DEV-01 | dev 启动     | 五服务健康、Docker 容器 Up、Tailnet 入口可达                      | `health/{date}-startup.md`   |
 | DEV-02 | 真实身份解析 | 角色来自当前 `public`，无旧 seed                                  | `role-resolution-{date}.md`  |
-| DEV-03 | 关系一致性   | Project、ResearchProfile、Chain、KB request 一对一                | `mock-topic-{date}.md`       |
-| DEV-04 | KB 门禁      | 仅 `plane测试`；READY 前阻断；跨课题返回 `KB_SCOPE_CONFLICT`      | `L3-kb-{date}.md`            |
+| DEV-03 | 关系一致性   | Project、ResearchProfile、Chain 一一对应；同一 TEAM 一条 KB 绑定  | `mock-topic-{date}.md`       |
+| DEV-04 | KB 门禁      | 仅 `plane测试`；READY 前阻断；跨小组返回 `KB_SCOPE_CONFLICT`      | `L3-kb-{date}.md`            |
 | DEV-05 | 权限一致     | 页面、列表、详情、直 ID、导出、Agent、KB 七条路径一致             | `L3.6-role-matrix-{date}.md` |
 | DEV-06 | REVIEW 隔离  | 导师/主 PI 可读、评论、审批、分析草稿；拒绝所有写入正式内容的动作 | `review-scope-{date}.md`     |
 | DEV-07 | 开关与降级   | 五开关逐项恢复，三类外部服务降级可回退                            | `switches/`、`degradation/`  |

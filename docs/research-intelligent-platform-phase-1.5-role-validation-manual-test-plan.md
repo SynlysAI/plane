@@ -7,7 +7,7 @@
 | 启动入口 | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)          |
 | 测试环境 | `public` π-Lab 基线 + Plane `4.16.0` + RAGPortal + Synlora + WeKnora                              |
-| 测试 KB  | `plane测试`；不得选择其他知识库，不得绑定第二个课题                                               |
+| 测试 KB  | `plane测试`；不得选择其他知识库，不得绑定到另一个小组；同一小组的课题复用该库                     |
 | 凭据     | 运行时注入；本文件不保存密码                                                                      |
 
 ## 1. 测试前说明
@@ -76,7 +76,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 ### MT-L3-04 KB 负例
 
 - `READY` 前上传：`409 KB_NOT_READY`。
-- 将 `plane测试` 绑定到第二个课题：`KB_SCOPE_CONFLICT`，不创建上传任务。
+- 将 `plane测试` 绑定到另一个小组：`KB_SCOPE_CONFLICT`，不创建上传任务。同一小组的第二个课题复用该库。
 - 无权角色查看/搜索：403/404，不能泄露 KB 名称、文件名或正文。
 
 ## 6. L3.5：开关矩阵

@@ -12,8 +12,8 @@
 
 1. 使用 `scripts/rebuild-pi-lab-baseline.sh --verify-only` 校验当前 `public` 基线。
 2. 从运行库动态解析主 PI、产业化负责人、直接导师、学生、管理员和访客。
-3. 在 `public` 创建带日期的 mock `RESEARCH_CHAIN` 课题，检查 Project—Profile—Chain—KB request 一对一关系。
-4. 管理员只绑定 WeKnora/RAGPortal 的 `plane测试` 知识库，状态必须从 `PENDING_ADMIN` 变为 `READY`。
+3. 在 `public` 创建带日期的 mock `RESEARCH_CHAIN` 课题，检查 Project—Profile—Chain 一一对应，且同一 `TEAM` 只有一条 KB 绑定。
+4. 管理员只把 WeKnora/RAGPortal 的 `plane测试` 回填到该小组绑定，状态必须从 `PENDING_ADMIN` 变为 `READY`；同组后续课题复用该库。
 5. 按 Phase 1.5 L3.6 矩阵验证查看、编辑、审批、Agent review、知识读取和知识写入。
 6. 删除 mock 课题、测试文件和临时访客，再复核真实基线。
 

@@ -1358,7 +1358,9 @@
       "confirm_reference": "确认引用",
       "action_failed": "操作未完成，当前记录已保留。",
       "no_knowledge_bases": "暂无可用知识库，请检查 RAGPortal 配置或稍后重试。",
-      "pending_admin": "课题知识库状态：{state}。管理员完成手工建库并回填后才能上传。"
+      "pending_admin": "小组知识库状态：{state}。管理员完成手工建库并回填后才能上传。",
+      "pending_group": "小组知识库（{team}）状态：{state}。管理员完成该小组的一次手工建库并回填后，本组后续课题可直接上传。",
+      "unassigned": "当前课题没有小组归属，不能创建个人知识库，请先把负责人归入小组。"
     },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",
