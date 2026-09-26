@@ -2,11 +2,11 @@
 
 | 项目     | 内容                                                                                              |
 | -------- | ------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.1（2026-09-26）                                                                                |
+| 文档版本 | v1.2（2026-09-26）                                                                                |
 | 文档状态 | 可执行；测试结果按日期写入 evidence，不把执行结果预先标记为通过                                   |
 | 启动入口 | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)          |
-| 测试环境 | `public` π-Lab 基线 + Plane `4.15.2` + RAGPortal + Synlora + WeKnora                              |
+| 测试环境 | `public` π-Lab 基线 + Plane `4.16.0` + RAGPortal + Synlora + WeKnora                              |
 | 测试 KB  | `plane测试`；不得选择其他知识库，不得绑定第二个课题                                               |
 | 凭据     | 运行时注入；本文件不保存密码                                                                      |
 
@@ -16,7 +16,11 @@
 
 每个身份使用独立浏览器 Profile。开始前先完成启动指南 §3 健康快照和 `--verify-only`，再从运行库解析实际身份。测试记录只保存脱敏身份、对象 ID、状态码、错误码和 request id。
 
-## 2. L1：环境与基线
+## 2. 已执行 mock 夹具
+
+当前测试直接使用开发计划 §7 记录的 mock Project、Chain、首节点和 `PENDING_ADMIN` KB request。账号密码同一节提供；创建/清理统一使用 `prepare_phase15_role_validation` 管理命令。
+
+## 3. L1：环境与基线
 
 ### MT-L1-01 服务健康
 
@@ -33,7 +37,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 通过条件：组织节点 22、学生 189、导师 14、Main PI 唯一且为洪文晶，`projects/research_profiles/research_chains/knowledge_requests=0`。
 
-## 3. L2：角色解析、导航与能力
+## 4. L2：角色解析、导航与能力
 
 | 编号     | 角色         | 登录后必须确认                                                                     |
 | -------- | ------------ | ---------------------------------------------------------------------------------- |
@@ -47,7 +51,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 每个角色先记录 `identity/me.user.role_context`，再记录四入口（科研总览、研究链、审批中心、科研管理）和十项能力：`view/edit/submit/review/accept/return/export/agent_review/knowledge_read/knowledge_write`。
 
-## 4. L3：主课题、KB 和检索
+## 5. L3：主课题、KB 和检索
 
 ### MT-L3-01 创建主课题
 
@@ -75,7 +79,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 - 将 `plane测试` 绑定到第二个课题：`KB_SCOPE_CONFLICT`，不创建上传任务。
 - 无权角色查看/搜索：403/404，不能泄露 KB 名称、文件名或正文。
 
-## 5. L3.5：开关矩阵
+## 6. L3.5：开关矩阵
 
 每次只关闭一个开关，验证后立即恢复并重跑基线冒烟：
 
@@ -89,7 +93,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 每项记录入口、API 状态码/错误码、既有数据安全、恢复时间和回归结果。
 
-## 6. L3.6：分角色权限矩阵
+## 7. L3.6：分角色权限矩阵
 
 主课题为 `WORKSPACE`，PRIVATE 对照课题可选且不绑定 KB。每个单元都用真实解析身份执行，并分别记录页面、列表、详情、直 ID、导出、Agent 和 KB API。
 
@@ -105,7 +109,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 重点负例：导师访问未绑定课题、主 PI/管理员访问 PRIVATE、产业化负责人访问其他业务单元、导师/PI 上传或覆盖正式报告、Guest 直链课题。
 
-## 7. L4：端到端闭环
+## 8. L4：端到端闭环
 
 1. 学生创建主课题和第一个节点。
 2. 管理员绑定 `plane测试`，学生上传、轮询并确认引用。
@@ -116,7 +120,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 7. 管理员查看配置、成员和审计；NONE/Guest 验证导航和直链 fail closed。
 8. 导出 Chain，核对 `X-Research-Chain-SHA256` 与本地文件 hash。
 
-## 8. L5：降级、清理与恢复
+## 9. L5：降级、清理与恢复
 
 ### MT-L5-01 Synlora 降级
 
@@ -130,7 +134,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 删除测试文件和引用，归档/删除 mock 课题及 PRIVATE 对照，清理临时 Guest 和 AccountLink；再次执行 `--verify-only`，确认 Excel 基线不变且 `pi` 工作区为空。
 
-## 9. 证据与通过标准
+## 10. 证据与通过标准
 
 证据目录：`docs/evidence/phase-1.5/role-validation/`。
 
