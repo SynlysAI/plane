@@ -1,3 +1,5 @@
+> **当前基线提示（2026-09-26）**：本文记录历史 seed/自动化测试夹具，不代表当前 `public` π-Lab Excel 基线。Phase 1.5 人工测试必须使用 [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) 动态解析的真实身份；不得把本文账号、旧课题或旧 KB 写入 `public`。
+
 # PiLab 科研测试夹具（P0 + P1）
 
 面向手工测试的账号与数据速查表。夹具由管理命令 `seed_research_demo` 生成，覆盖
