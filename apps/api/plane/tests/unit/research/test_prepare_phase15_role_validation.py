@@ -19,9 +19,12 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.db.management.commands.prepare_phase15_role_validation import (
+    BASIC_EMAIL,
+    BASIC_UNIT_NAME,
     FIXTURE_PREFIX,
     GUEST_EMAIL,
     INDUSTRY_EMAIL,
+    INDUSTRY_UNIT_NAME,
 )
 from plane.research.utils.org import build_path
 from plane.research.utils.role_resolution import resolve_role_context
@@ -116,6 +119,7 @@ def test_apply_creates_fixture_accounts_and_mock_project(phase15_baseline):
     assert result["workspace"] == "public"
     assert result["knowledge_request_state"] == ResearchKnowledgeRequest.State.PENDING_ADMIN
     assert User.objects.filter(email=INDUSTRY_EMAIL).exists()
+    assert User.objects.filter(email=BASIC_EMAIL).exists()
     assert User.objects.filter(email=GUEST_EMAIL).exists()
     assert Project.objects.filter(workspace=workspace, name__startswith=FIXTURE_PREFIX).exists()
     assert ResearchChain.objects.filter(pk=result["chain_id"]).exists()
@@ -130,9 +134,18 @@ def test_apply_creates_fixture_accounts_and_mock_project(phase15_baseline):
     assert "INDUSTRIALIZATION_OWNER" in industry_context["roles"]
     assert industry_context["research_level"] == "PRINCIPAL"
 
+    basic = User.objects.get(email=BASIC_EMAIL)
+    basic_context = resolve_role_context(basic, workspace)
+    assert basic_context["roles"] == ["PRINCIPAL"]
+    assert basic_context["research_level"] == "PRINCIPAL"
+    assert basic_context["business_categories"] == ["BASIC_RESEARCH"]
+    assert "INDUSTRIALIZATION_OWNER" not in basic_context["roles"]
+
     assert result["roles"]["admin"]["password"]
+    assert result["roles"]["basic_research_owner"]["password"].startswith("P15!")
     assert result["roles"]["guest"]["password"].startswith("P15!")
     assert guest.is_password_reset_required is True
+    assert basic.is_password_reset_required is True
 
 
 def test_apply_is_idempotent_for_existing_fixture(phase15_baseline):
@@ -175,10 +188,10 @@ def test_cleanup_removes_fixture_users_and_projects(phase15_baseline):
 
     assert cleaned["status"] == "cleaned"
     assert cleaned["removed_projects"] == 1
-    assert cleaned["removed_users"] == 2
-    assert not User.objects.filter(email__in=[INDUSTRY_EMAIL, GUEST_EMAIL]).exists()
+    assert cleaned["removed_users"] == 3
+    assert not User.objects.filter(email__in=[INDUSTRY_EMAIL, BASIC_EMAIL, GUEST_EMAIL]).exists()
     assert not Project.objects.filter(workspace=workspace, name__startswith=FIXTURE_PREFIX).exists()
-    assert not OrgUnit.objects.filter(workspace=workspace, name="Phase 1.5 产业化验证单元").exists()
+    assert not OrgUnit.objects.filter(workspace=workspace, name__in=[INDUSTRY_UNIT_NAME, BASIC_UNIT_NAME]).exists()
     assert WorkspaceMember.objects.filter(workspace=workspace, member=phase15_baseline["student"]).exists()
 
 

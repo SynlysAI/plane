@@ -32,7 +32,10 @@ from plane.db.models import (
 
 FIXTURE_PREFIX = "P15-MOCK-"
 INDUSTRY_EMAIL = "phase15.industry.owner@ai4ms.local"
+BASIC_EMAIL = "phase15.basic.owner@ai4ms.local"
 GUEST_EMAIL = "phase15.guest@ai4ms.local"
+INDUSTRY_UNIT_NAME = "Phase 1.5 产业化验证单元"
+BASIC_UNIT_NAME = "Phase 1.5 基础研究验证单元"
 PASSWORD_LENGTH = 18
 
 
@@ -136,30 +139,33 @@ class Command(BaseCommand):
             defaults={"role": role, "is_active": True, "deleted_at": None},
         )[0]
 
-    def _unit(self, workspace):
-        """Get or create the industrialization org unit used by the fixture.
+    def _unit(self, workspace, name, business_category):
+        """Get or create a fixture team for one business category.
 
         Args:
             workspace: Target workspace.
+            name: Stable fixture unit name.
+            business_category: Business category stored on the team.
 
         Returns:
-            The industrialization OrgUnit row.
+            The fixture OrgUnit row.
         """
-        unit = OrgUnit.objects.filter(workspace=workspace, name="Phase 1.5 产业化验证单元").first()
+        unit = OrgUnit.objects.filter(workspace=workspace, name=name).first()
         if unit is None:
             unit = OrgUnit.objects.create(
                 workspace=workspace,
-                name="Phase 1.5 产业化验证单元",
+                name=name,
                 unit_type=OrgUnit.UnitType.TEAM,
-                business_category=OrgUnit.BusinessCategory.INDUSTRIALIZATION,
+                business_category=business_category,
                 path="",
                 created_by=User.objects.filter(email="admin@ai4ms.local").first(),
             )
             unit.path = f"/{unit.id.hex}/"
-            unit.save(update_fields=["path", "unit_type"])
-        elif unit.unit_type != OrgUnit.UnitType.TEAM:
+            unit.save(update_fields=["path", "unit_type", "business_category"])
+        else:
             unit.unit_type = OrgUnit.UnitType.TEAM
-            unit.save(update_fields=["unit_type", "updated_at"])
+            unit.business_category = business_category
+            unit.save(update_fields=["unit_type", "business_category", "updated_at"])
         return unit
 
     def _apply(self, workspace, reset_passwords):
@@ -211,6 +217,12 @@ class Command(BaseCommand):
                 ResearchUserProfile.Category.PI,
                 reset_password=reset_passwords,
             )
+            basic, basic_password, basic_created = self._user(
+                BASIC_EMAIL,
+                "Phase 1.5 基础研究负责人",
+                ResearchUserProfile.Category.PI,
+                reset_password=reset_passwords,
+            )
             guest, guest_password, guest_created = self._user(
                 GUEST_EMAIL,
                 "Phase 1.5 访客",
@@ -218,12 +230,28 @@ class Command(BaseCommand):
                 reset_password=reset_passwords,
             )
             self._member(workspace, industry, 15)
+            self._member(workspace, basic, 15)
             self._member(workspace, guest, 5)
-            unit = self._unit(workspace)
+            unit = self._unit(
+                workspace,
+                INDUSTRY_UNIT_NAME,
+                OrgUnit.BusinessCategory.INDUSTRIALIZATION,
+            )
+            basic_unit = self._unit(
+                workspace,
+                BASIC_UNIT_NAME,
+                OrgUnit.BusinessCategory.BASIC_RESEARCH,
+            )
             OrgUnitMember.objects.update_or_create(
                 workspace=workspace,
                 org_unit=unit,
                 user=industry,
+                defaults={"org_role": OrgUnitMember.OrgRole.OWNER, "is_primary": True, "deleted_at": None},
+            )
+            OrgUnitMember.objects.update_or_create(
+                workspace=workspace,
+                org_unit=basic_unit,
+                user=basic,
                 defaults={"org_role": OrgUnitMember.OrgRole.OWNER, "is_primary": True, "deleted_at": None},
             )
             OrgUnitMember.objects.update_or_create(
@@ -310,6 +338,7 @@ class Command(BaseCommand):
                 ("student", student, None),
                 ("admin", admin, None),
                 ("industry_owner", industry, industry_password),
+                ("basic_research_owner", basic, basic_password),
                 ("guest", guest, guest_password),
             ]
             return {
@@ -330,13 +359,14 @@ class Command(BaseCommand):
                 },
                 "created": {
                     "industry_owner": industry_created,
+                    "basic_research_owner": basic_created,
                     "guest": guest_created,
                 },
                 "mentor_binding_id": str(mentor_binding.id),
             }
 
     def _cleanup(self, workspace):
-        """Remove fixture projects and generated industry/guest accounts.
+        """Remove fixture projects and generated role accounts.
 
         Args:
             workspace: Target workspace.
@@ -345,7 +375,7 @@ class Command(BaseCommand):
             A JSON-serializable cleanup summary.
         """
         projects = list(Project.objects.filter(workspace=workspace, name__startswith=FIXTURE_PREFIX))
-        users = list(User.objects.filter(email__in=[INDUSTRY_EMAIL, GUEST_EMAIL]))
+        users = list(User.objects.filter(email__in=[INDUSTRY_EMAIL, BASIC_EMAIL, GUEST_EMAIL]))
         with transaction.atomic():
             for project in projects:
                 chain = ResearchChain.objects.filter(project=project).first()
@@ -363,9 +393,13 @@ class Command(BaseCommand):
             ResearchUserProfile.objects.filter(user__in=users).delete()
             User.objects.filter(pk__in=[user.pk for user in users]).delete()
             ResearchGroupKnowledgeBinding.objects.filter(
-                workspace=workspace, org_unit__name="Phase 1.5 产业化验证单元"
+                workspace=workspace,
+                org_unit__name__in=[INDUSTRY_UNIT_NAME, BASIC_UNIT_NAME],
             ).delete()
-            OrgUnit.objects.filter(workspace=workspace, name="Phase 1.5 产业化验证单元").delete()
+            OrgUnit.objects.filter(
+                workspace=workspace,
+                name__in=[INDUSTRY_UNIT_NAME, BASIC_UNIT_NAME],
+            ).delete()
         return {
             "workspace": workspace.slug,
             "removed_projects": len(projects),
