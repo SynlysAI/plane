@@ -2,21 +2,21 @@
 
 | 项目     | 内容                                                                                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.1                                                                                                                                                           |
+| 计划版本 | v1.2                                                                                                                                                           |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10                                                                        |
 | 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                                             |
 | 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                                             |
 | 执行手册 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                               |
 | 人工测试 | [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
-| 计划状态 | 代码与自动化联调已完成；真实课题证据和 OIDC 绑定仍待完成，不标记为完全关闭                                                                                     |
+| 计划状态 | dev 五服务已启动并完成健康检查；真实课题证据、Tailnet HTTPS Serve 授权和 OIDC 绑定仍待完成，不标记为完全关闭                                                   |
 | 执行模式 | 单人执行；A / B 保留为职责自查分区标签（见 §8）                                                                                                                |
-| 修订记录 | v1.1（2026-09-24）：改为单人 5 天模式；新增 L3.5 功能开关矩阵与 L3.6 角色矩阵；降级演练补 WeKnora 失效模拟；缺陷清单落位执行手册附录 A                         |
+| 修订记录 | v1.2（2026-09-26）：补充分角色开发/人工测试入口、dev/Tailnet 启动口径和当前健康检查结论；保留真实课题、HTTPS Serve 与 OIDC 灰度门禁                            |
 | 目标     | 在 Phase 1 代码交付基础上拉通开发环境真实联调，完成基础功能验证，收敛跨服务缺陷，为 Phase 2 提供可用的联调环境                                                 |
 | 不在范围 | 新业务功能、垂类工具生产化、生产灰度放量                                                                                                                       |
 
 ## 1. 背景与问题定位
 
-Phase 1 的 Chain、RAGPortal BFF、Synlora MVP 与四入口 IA 均已按验收手册完成本地验证，但当前开发环境只运行了 Plane 栈（API / worker / beat / web / 依赖容器），Synlora 与 RAGPortal 均未启动服务，导致以下链路无法在真实组合下验证：
+Phase 1 的 Chain、RAGPortal BFF、Synlora MVP 与四入口 IA 均已按验收手册完成本地验证。2026-09-26 已按本计划拉起 Plane 栈（API / worker / beat / web / 依赖容器）、Synlora、RAGPortal，并确认 WeKnora 内网实例可达；以下链路进入当前 dev 环境的分角色人工验证：
 
 - Plane → Synlora 的 delegated token、capability manifest、`agent-context.v2` 与事件投影。
 - Plane → RAGPortal 的上传转发、状态轮询与引用确认。
@@ -51,15 +51,15 @@ Phase 1.5 的定位：**不新增业务功能**，只做三件事——拉通开
 
 ### 3.1 服务与端口矩阵
 
-| 服务           | 进程形态                                       | 监听地址                    | 健康检查             | 负责人 |
-| -------------- | ---------------------------------------------- | --------------------------- | -------------------- | ------ |
-| Plane Web      | 既有开发栈                                     | `http://192.168.3.245:3000` | 页面可登录           | A      |
-| Plane API      | Docker `plane-api-1`，宿主机 8001 → 容器 8000  | `http://127.0.0.1:8001`     | 登录 / 科研接口可用  | A      |
-| Plane 异步     | Docker `plane-worker-1`、`plane-beat-worker-1` | 容器内                      | `docker ps` 状态正常 | A      |
-| Synlora        | 宿主机 `python run_uvicorn.py`                 | `0.0.0.0:8005`              | `GET /api/health`    | B      |
-| RAGPortal      | 宿主机 uvicorn                                 | `0.0.0.0:8004`              | `GET /api/health`    | B      |
-| RAGPortal 前端 | 宿主机 Vite（可选，人工核对入库状态用）        | `http://localhost:3002`     | 页面可打开           | B      |
-| WeKnora        | 已部署内网服务，不自建                         | `http://10.26.15.93:8000/`  | HTTP 可达（已实测）  | B 对接 |
+| 服务           | 进程形态                                       | 监听地址                                                                      | 健康检查             | 负责人 |
+| -------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- | -------------------- | ------ |
+| Plane Web      | 既有开发栈                                     | `http://100.109.35.2:3000`（Tailnet） / `http://192.168.3.245:3000`（局域网） | 页面可登录           | A      |
+| Plane API      | Docker `plane-api-1`，宿主机 8001 → 容器 8000  | `http://127.0.0.1:8001`                                                       | 登录 / 科研接口可用  | A      |
+| Plane 异步     | Docker `plane-worker-1`、`plane-beat-worker-1` | 容器内                                                                        | `docker ps` 状态正常 | A      |
+| Synlora        | 宿主机 `python run_uvicorn.py`                 | `0.0.0.0:8005`                                                                | `GET /api/health`    | B      |
+| RAGPortal      | 宿主机 uvicorn                                 | `0.0.0.0:8004`                                                                | `GET /api/health`    | B      |
+| RAGPortal 前端 | 宿主机 Vite（可选，人工核对入库状态用）        | `http://localhost:3002`                                                       | 页面可打开           | B      |
+| WeKnora        | 已部署内网服务，不自建                         | `http://10.26.15.93:8000/`                                                    | HTTP 可达（已实测）  | B 对接 |
 
 ### 3.2 网络连通矩阵
 

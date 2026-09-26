@@ -1,6 +1,6 @@
 # PiLab 文档总索引
 
-> 当前代码事实：`develop` 分支，软件版本 `4.15.0`。本文档按代码、测试和运行证据整理，更新时间：2026-09-26。
+> 当前代码事实：`develop` 分支，软件版本 `4.15.1`。本文档按代码、测试和运行证据整理，更新时间：2026-09-26。
 
 本目录采用分层文档架构。文档不重复争夺同一份“当前状态”，而是分别回答产品为什么做、平台如何协作、代码如何实现、怎样验收和怎样发布。
 
@@ -16,7 +16,7 @@
 
 | 状态     | 含义                                    | 当前文档口径                                                              |
 | -------- | --------------------------------------- | ------------------------------------------------------------------------- |
-| 已交付   | 代码、自动化测试和发布/验收证据均已具备 | P0、P1、智能平台 Phase 0、Phase 1、Phase 1.5 代码修复与 `4.15.0` 兼容发布 |
+| 已交付   | 代码、自动化测试和发布/验收证据均已具备 | P0、P1、智能平台 Phase 0、Phase 1、Phase 1.5 代码修复与 `4.15.1` 兼容发布 |
 | 灰度中   | 已实现，但仍有真实环境或跨仓门禁        | 首个真实课题的 workflow、KB、成员和 Agent 证据；真实 OIDC 绑定            |
 | 规划中   | 已定义范围，尚未进入当前交付            | P2、智能平台 Phase 2/3                                                    |
 | 暂缓     | 仅保留产品设计和边界                    | P3 AI 结合能力、微信小程序                                                |
@@ -24,14 +24,14 @@
 
 ## 2. 从哪里开始读
 
-| 读者           | 推荐顺序                                                                                                                                                                                                      |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 新成员         | 根 [`README.md`](../README.md) → 本索引 → 当前契约 → 对应发布说明                                                                                                                                             |
-| 产品与业务     | [管理路线图](./research-management-prd-roadmap.md) → [平台总 PRD](./research-intelligent-platform-prd.md) → 阶段计划                                                                                          |
-| Plane 开发     | [Workspace v3 契约](./research-workspace-v3.md) → [跨仓契约](./contracts/research-intelligent-platform/README.md) → 对应代码和测试                                                                            |
-| Phase 1.5 联调 | [优化修复计划](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md) → [执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md) → [证据目录](./evidence/phase-1.5/issue0925/) |
-| 部署运维       | [生产部署](./production-deployment.md) → [Phase 0 runbook](./research-intelligent-platform-phase-0-runbook.md) → [π-Lab 基线 runbook](./research-pi-lab-baseline-runbook.md)                                  |
-| 验收测试       | [测试账号](./research-test-accounts.md) → [测试夹具](./research-test-fixtures.md) → 对应验收报告；真实课题证据补录前不得伪造数据                                                                              |
+| 读者           | 推荐顺序                                                                                                                                                                                                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 新成员         | 根 [`README.md`](../README.md) → 本索引 → 当前契约 → 对应发布说明                                                                                                                                                                                                                                                          |
+| 产品与业务     | [管理路线图](./research-management-prd-roadmap.md) → [平台总 PRD](./research-intelligent-platform-prd.md) → 阶段计划                                                                                                                                                                                                       |
+| Plane 开发     | [Workspace v3 契约](./research-workspace-v3.md) → [跨仓契约](./contracts/research-intelligent-platform/README.md) → 对应代码和测试                                                                                                                                                                                         |
+| Phase 1.5 联调 | [分角色验证开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) → [启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md) → [执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md) → [证据目录](./evidence/phase-1.5/role-validation/) |
+| 部署运维       | [生产部署](./production-deployment.md) → [Phase 0 runbook](./research-intelligent-platform-phase-0-runbook.md) → [π-Lab 基线 runbook](./research-pi-lab-baseline-runbook.md)                                                                                                                                               |
+| 验收测试       | [测试账号](./research-test-accounts.md) → [测试夹具](./research-test-fixtures.md) → 对应验收报告；真实课题证据补录前不得伪造数据                                                                                                                                                                                           |
 
 ## 3. 产品与平台层
 
@@ -60,24 +60,25 @@
 
 ## 5. 验收、发布与运维
 
-| 文档                                                                                                                                                           | 用途                                             |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| [`research-p0-acceptance-report.md`](./research-p0-acceptance-report.md)、[`research-p1-release-notes.md`](./research-p1-release-notes.md)                     | P0/P1 历史验收和发布门禁                         |
-| [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md)                                             | Phase 1 灰度验收                                 |
-| [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md)                       | Phase 1.5 问题、任务、回滚和当前实现回写         |
-| [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                               | Phase 1.5 联调执行步骤                           |
-| [`research-intelligent-platform-phase-1.5-role-validation-development-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) | Phase 1.5 分角色验证开发计划（当前执行入口）     |
-| [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) | Phase 1.5 分角色人工测试计划（当前人工测试入口） |
-| [`research-pi-lab-baseline-runbook.md`](./research-pi-lab-baseline-runbook.md)                                                                                 | 真实人员组织基线、备份、重建、恢复和验收         |
-| [`evidence/phase-1.5/issue0925/`](./evidence/phase-1.5/issue0925/)                                                                                             | 脱敏问题转录、验收台账、截图和验证 JSON          |
-| [`production-deployment.md`](./production-deployment.md)                                                                                                       | 当前生产部署、更新、验证与回滚                   |
-| [`research-test-accounts.md`](./research-test-accounts.md)、[`research-test-fixtures.md`](./research-test-fixtures.md)                                         | 测试身份、夹具和人工验收约束                     |
+| 文档                                                                                                                                                           | 用途                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [`research-p0-acceptance-report.md`](./research-p0-acceptance-report.md)、[`research-p1-release-notes.md`](./research-p1-release-notes.md)                     | P0/P1 历史验收和发布门禁                                                           |
+| [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md)                                             | Phase 1 灰度验收                                                                   |
+| [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md)                       | Phase 1.5 问题、任务、回滚和当前实现回写                                           |
+| [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                               | Phase 1.5 联调执行步骤                                                             |
+| [`research-intelligent-platform-phase-1.5-role-validation-development-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) | Phase 1.5 分角色验证开发计划（开发验证入口）                                       |
+| [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) | Phase 1.5 分角色人工测试计划（逐格用例入口）                                       |
+| [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                         | Phase 1.5 dev 启动、Tailnet 访问与健康检查                                         |
+| [`research-pi-lab-baseline-runbook.md`](./research-pi-lab-baseline-runbook.md)                                                                                 | 真实人员组织基线、备份、重建、恢复和验收                                           |
+| [`evidence/phase-1.5/role-validation/`](./evidence/phase-1.5/role-validation/)                                                                                 | 当前分角色验证证据；历史问题转录见 [`issue0925/`](./evidence/phase-1.5/issue0925/) |
+| [`production-deployment.md`](./production-deployment.md)                                                                                                       | 当前生产部署、更新、验证与回滚                                                     |
+| [`research-test-accounts.md`](./research-test-accounts.md)、[`research-test-fixtures.md`](./research-test-fixtures.md)                                         | 测试身份、夹具和人工验收约束                                                       |
 
 ## 6. 维护约定
 
 1. 实现以代码和测试为准；发现冲突时回写当前契约、发布说明和索引，历史文档只补充取代说明。
 2. 产品 PRD 只定义目标、边界和优先级；开发 PRD 定义实现规格；契约文件定义跨服务交换格式；验收/发布文档记录实际结果。
-3. 版本号与根 `package.json`、各应用/包和 API `pyproject.toml` 同步；当前软件版本为 `4.15.0`，文档版本独立维护。
+3. 版本号与根 `package.json`、各应用/包和 API `pyproject.toml` 同步；当前软件版本为 `4.15.1`，文档版本独立维护。
 4. `public` π-Lab 基线不预造课题；一次性凭据、原始 xlsx、`.runtime/` 备份和 `refer/issue.docx` 不进入 Git。
 5. 真实 OIDC 绑定必须双方完成认证；未完成前只能记录为灰度门禁，不能标记为完全打通。
 6. 首个真实课题创建后，补录 workflow、节点动作、成员回执、KB 上传和 Agent 会话证据；不得为截图向 `public` 写入虚构课题。
@@ -87,5 +88,5 @@
 
 | 日期       | 版本 | 变更                                                                        |
 | ---------- | ---- | --------------------------------------------------------------------------- |
-| 2026-09-26 | v2.0 | 按 `4.15.0` 当前代码重建文档层级、状态矩阵、阅读入口和真实数据/跨仓验收门禁 |
+| 2026-09-26 | v2.0 | 按 `4.15.1` 当前代码重建文档层级、状态矩阵、阅读入口和真实数据/跨仓验收门禁 |
 | 2026-09-24 | v1.x | 原有 P0/P1、平台、UI/UX 和 Phase 计划索引                                   |

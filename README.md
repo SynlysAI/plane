@@ -25,22 +25,22 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 ## 当前状态
 
-| 项目             | 内容                                                                                                                                                                                                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 当前版本         | `4.15.0`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步；API pyproject 同步）                                                                                                                                                                               |
-| 上游基线         | Plane `1.4.x`                                                                                                                                                                                                                                                            |
-| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研智能平台 Phase 0/Phase 1、研究链单 Workflow 与 Tailnet HTTPS（`4.13.1`）、Phase 1.5 优化修复（`4.14.2`）：能力投影、节点上下文入口、多课题摘要/待办分页、课题 KB 申请与 READY 门禁、成果附件、实验外部资产入口、Agent review scope、workflow 自动换行、门户多课题切换与 π-Lab 真实数据基线；本次 `4.15.0` 纳入兼容性发布与基线重建工具 |
-| 待真实数据验收   | 首个真实课题的 workflow、节点动作、成员回执、KB 上传和 Agent 会话截图；AI4MS ↔ Plane OIDC 绑定                                                                                                                                                                           |
-| 规划中           | P2 扩展与治理、科研智能平台 Phase 2 专业能力填充、Phase 3 治理与开放能力                                                                                                                                                                                               |
-| 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                                                                                                                                     |
+| 项目             | 内容                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 当前版本         | `4.15.1`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步；API pyproject 同步）                                                                                                                                                                                                                                                                                                                                |
+| 上游基线         | Plane `1.4.x`                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研智能平台 Phase 0/Phase 1、研究链单 Workflow 与 Tailnet HTTPS（`4.13.1`）、Phase 1.5 优化修复（`4.14.2`）：能力投影、节点上下文入口、多课题摘要/待办分页、课题 KB 申请与 READY 门禁、成果附件、实验外部资产入口、Agent review scope、workflow 自动换行、门户多课题切换与 π-Lab 真实数据基线；本次 `4.15.1` 纳入兼容性发布、分角色验证文档和 dev/Tailnet 启动口径 |
+| 待真实数据验收   | 首个真实课题的 workflow、节点动作、成员回执、KB 上传和 Agent 会话截图；AI4MS ↔ Plane OIDC 绑定                                                                                                                                                                                                                                                                                                                            |
+| 规划中           | P2 扩展与治理、科研智能平台 Phase 2 专业能力填充、Phase 3 治理与开放能力                                                                                                                                                                                                                                                                                                                                                  |
+| 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                                                                                                                                                                                                                                                                                      |
 
-本仓库以 Plane `1.4.x` 为基线完成第一轮私有化改造：替换为 AI4MS 品牌、移除付费套餐与云注册遥测、改用私有 OpenAI 兼容网关，并在此基础上叠加「科研管理模块」。**科研模块是纯增量实现**：开关关闭时不渲染科研导航，Workspace / Project / Work Item / Page / Cycle / Module 仍按上游 Plane 行为工作。当前代码与测试基线为 `4.15.0`；历史发布号只在对应验收和发布文档中保留。
+本仓库以 Plane `1.4.x` 为基线完成第一轮私有化改造：替换为 AI4MS 品牌、移除付费套餐与云注册遥测、改用私有 OpenAI 兼容网关，并在此基础上叠加「科研管理模块」。**科研模块是纯增量实现**：开关关闭时不渲染科研导航，Workspace / Project / Work Item / Page / Cycle / Module 仍按上游 Plane 行为工作。当前代码与测试基线为 `4.15.1`；历史发布号只在对应验收和发布文档中保留。
 
 ### 当前事实与文档权威
 
 `develop` 分支是当前交付分支。文档按“实现事实优先、规划分层、历史可追溯”维护：代码与测试证据高于契约和发布说明，契约高于 PRD 计划，旧版本文档不覆盖当前实现。完整阅读顺序、状态矩阵和文档关系见 [`docs/README.md`](docs/README.md)。
 
-当前仍有两类发布门禁：真实课题创建后补录 Phase 1.5 浏览器证据，以及完成双方认证后的 AI4MS ↔ Plane OIDC 绑定；这两项完成前，不把跨仓灰度标记为完全结束。
+当前仍有两类发布门禁：真实课题创建后补录 Phase 1.5 浏览器证据，以及完成双方认证后的 AI4MS ↔ Plane OIDC 绑定；这两项完成前，不把跨仓灰度标记为完全结束。 当前 dev 环境已启动，Tailnet HTTP 入口为 `http://100.109.35.2:3000/`；HTTPS Serve 需 Tailnet 管理员授权后启用。
 
 ### 已交付：P0 科研管理（`2.1.0`）
 
@@ -423,7 +423,7 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest -m unit
 | [`research-p1-release-notes.md`](docs/research-p1-release-notes.md)                   | P1 发布、开关、环境变量与回滚说明      |
 | [`research-workspace-ux-guide.md`](docs/research-workspace-ux-guide.md)               | 科研工作台 UX 设计指南（系列入口）     |
 | [`research-workspace-ui-ux-archive.md`](docs/research-workspace-ui-ux-archive.md)     | UI/UX 两轮 PRD / 审计 / 验收过程档案   |
-| [`research-pi-lab-baseline-runbook.md`](docs/research-pi-lab-baseline-runbook.md)     | π-Lab 真实名单备份、重建、验收与回滚 |
+| [`research-pi-lab-baseline-runbook.md`](docs/research-pi-lab-baseline-runbook.md)     | π-Lab 真实名单备份、重建、验收与回滚   |
 | [`production-deployment.md`](docs/production-deployment.md)                           | 当前生产环境架构、更新、验证与回滚流程 |
 | [`linting.md`](docs/linting.md)                                                       | 代码风格与静态检查约定                 |
 
