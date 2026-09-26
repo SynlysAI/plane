@@ -1,5 +1,7 @@
 # 科研目录分级可见（历史 v2.5.0 / 当前能力投影说明）
 
+> **当前 public 基线说明（2026-09-26）**：本文的能力矩阵是实现契约；其中 seed 账号和旧数据只用于自动化/历史复盘。当前人工角色与数据按 Phase 1.5 分角色计划动态解析。
+
 面向「科研目录为什么对不同的人显示不一样的菜单」这一问题的实现说明。规则只有一份，写在后端
 `apps/api/plane/research/utils/capabilities.py`，前端与接口都读它。
 
@@ -85,7 +87,7 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest plane/tests/
 docker compose -f docker-compose-test.yml run --rm api-tests pytest plane/tests/contract/app/test_research_nav_capabilities.py
 ```
 
-手工走查可用 `manage.py seed_research_demo` 生成的多身份账号（管理员 / 主PI / 导师 / 学生）：逐档登录后确认侧栏项与文档矩阵一致，并直连 `/research/settings/org`、`/research/reports/summary`、`/research/dashboard` 验证会被跳回工作区首页。
+当前人工走查不得在 `public` 执行 `seed_research_demo`。请按 [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) 从 π-Lab Excel 基线动态解析角色，再确认侧栏、直链和 API 矩阵；`seed_research_demo` 仅用于隔离自动化测试数据库。
 
 ## 8. 变更记录
 
