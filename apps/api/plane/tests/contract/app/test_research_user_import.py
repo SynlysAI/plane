@@ -4,6 +4,7 @@
 
 """Strict member roster import: profiles, TEAM membership and advisors."""
 
+import csv
 import io
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -18,8 +19,9 @@ from plane.db.models import (
     OrgUnitMember,
     ResearchUserProfile,
     User,
-    UserImportBatch,
     UserImportAccountSource,
+    UserImportBatch,
+    UserImportRow,
 )
 from plane.tests.research_fixtures import (
     add_workspace_member,
@@ -134,10 +136,11 @@ def roster_row(
     return f"{name},{student_no},{email},{phone},{grade},{category},{business},{team},{primary},{co1},{co2}\n"
 
 
-def post_import(env, row=None, *, advisors=None, dry_run=False):
+def post_import(env, row=None, *, advisors=None, dry_run=False, reset_passwords=False):
     payload = {
         "students": upload("roster.csv", ROSTER_HEADER + (row or roster_row())),
         "dry_run": "true" if dry_run else "false",
+        "reset_passwords": "true" if reset_passwords else "false",
     }
     if advisors is not None:
         payload["advisors"] = upload("advisors.csv", advisors)
@@ -624,3 +627,179 @@ def test_user_profiles_are_scoped_to_active_workspace_members(env):
     response = client_for(env["admin"]).get(f"/api/research/workspaces/{env['workspace'].slug}/user-profiles/")
     assert response.status_code == 200
     assert foreign_profile.id not in {item["id"] for item in response.data["results"]}
+
+
+def table(response):
+    assert response.status_code == 200, response.content
+    return list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
+
+
+def include_and_approve(env, uploaded):
+    client = client_for(env["admin"])
+    batch_id = uploaded.data["id"]
+    row_id = uploaded.data["rows"][0]["id"]
+    included = client.patch(
+        user_imports_url(env["workspace"], f"{batch_id}/rows/{row_id}/"),
+        {"review_decision": "INCLUDED"},
+        format="json",
+    )
+    assert included.status_code == 200, included.data
+    approved = client.post(
+        user_imports_url(env["workspace"], f"{batch_id}/approve/"),
+        {"preview_token": approval_token(env, batch_id)},
+        format="json",
+    )
+    assert approved.status_code == 200, approved.data
+    return batch_id
+
+
+def password_row(client, env, email):
+    response = client.get(f"/api/research/workspaces/{env['workspace'].slug}/account-initial-passwords/")
+    return next(item for item in table(response) if item["邮箱"] == email)
+
+
+def test_initial_password_downloads_follow_issuance_not_later_changes(env):
+    advisors = advisor_table("刘俊扬", "陈志昕", "白杰")
+    client = client_for(env["admin"])
+    first_id = include_and_approve(env, post_import(env, advisors=advisors))
+    student = User.objects.get(email="student@example.com")
+    issued = UserImportAccountSource.objects.get(user=student).initial_password
+    assert issued
+    assert student.check_password(issued)
+    assert student.is_password_reset_required is True
+    assert student.is_password_autoset is False
+    first_report = table(client.get(user_imports_url(env["workspace"], f"{first_id}/report/")))
+    assert next(item for item in first_report if item["邮箱"] == student.email)["初始密码"] == issued
+    assert password_row(client, env, student.email)["初始密码"] == issued
+    assert password_row(client, env, student.email)["仍须修改密码"] == "是"
+    assert password_row(client, env, student.email)["人员类别"] == "学生"
+
+    member = make_user(email="plain-member@example.com")
+    add_workspace_member(env["workspace"], member)
+    denied = client_for(member).get(
+        f"/api/research/workspaces/{env['workspace'].slug}/account-initial-passwords/"
+    )
+    assert denied.status_code == 403
+
+    student.is_password_reset_required = False
+    student.save(update_fields=["is_password_reset_required", "updated_at"])
+    original_hash = student.password
+    second = post_import(env, advisors=advisors)
+    assert second.status_code == 201, second.data
+    assert second.data["rows"][0]["status"] == "ERROR"
+    student.refresh_from_db()
+    assert student.password == original_hash
+    unchanged = password_row(client, env, student.email)
+    assert unchanged["初始密码"] == issued
+    assert unchanged["仍须修改密码"] == "否"
+
+    third_id = include_and_approve(env, post_import(env, advisors=advisors, reset_passwords=True))
+    student.refresh_from_db()
+    rotated = UserImportAccountSource.objects.get(user=student).initial_password
+    assert student.password != original_hash
+    assert rotated != issued
+    assert student.check_password(rotated)
+    assert student.is_password_reset_required is True
+    third_report = table(client.get(user_imports_url(env["workspace"], f"{third_id}/report/")))
+    assert next(item for item in third_report if item["邮箱"] == student.email)["初始密码"] == rotated
+    assert password_row(client, env, student.email)["初始密码"] == rotated
+    assert password_row(client, env, student.email)["仍须修改密码"] == "是"
+    preserved = table(client.get(user_imports_url(env["workspace"], f"{first_id}/report/")))
+    assert next(item for item in preserved if item["邮箱"] == student.email)["初始密码"] == issued
+
+
+def test_backfill_initial_passwords_is_idempotent_and_does_not_change_hashes(env):
+    from plane.research.services.user_import import backfill_initial_passwords
+
+    user = make_user(email="backfill@example.com", first_name="回填")
+    add_workspace_member(env["workspace"], user)
+    ResearchUserProfile.objects.create(user=user, category="STUDENT")
+    batch = UserImportBatch.objects.create(
+        workspace=env["workspace"],
+        source_filename="baseline.xlsx",
+        status="IMPORTED",
+        created_by=env["admin"],
+    )
+    UserImportRow.objects.create(
+        batch=batch,
+        row_number=2,
+        display_name="回填",
+        email=user.email,
+        status="OK",
+        user=user,
+    )
+    before = user.password
+    accounts = [{"email": user.email, "password": "test-password", "category": "STUDENT"}]
+    first = backfill_initial_passwords(env["workspace"], accounts, actor=env["admin"])
+    user.refresh_from_db()
+    assert user.password == before
+    assert first["updated"] == 1
+    source = UserImportAccountSource.objects.get(user=user)
+    assert source.initial_password == "test-password"
+    assert UserImportRow.objects.get(user=user).initial_password == "test-password"
+    second = backfill_initial_passwords(env["workspace"], accounts, actor=env["admin"])
+    assert second["updated"] == 0
+    assert second["unchanged"] == 1
+    user.refresh_from_db()
+    assert user.password == before
+
+    source.initial_password = "different-secret"
+    source.save(update_fields=["initial_password", "updated_at"])
+    third = backfill_initial_passwords(env["workspace"], accounts, actor=env["admin"])
+    source.refresh_from_db()
+    assert third["skipped_existing_password"] == 1
+    assert source.initial_password == "different-secret"
+
+    mismatch = make_user(email="mismatch@example.com")
+    add_workspace_member(env["workspace"], mismatch)
+    mismatched = backfill_initial_passwords(
+        env["workspace"],
+        [{"email": mismatch.email, "password": "not-the-password", "category": "STUDENT"}],
+    )
+    assert mismatched["skipped_mismatch"] == 1
+    assert not UserImportAccountSource.objects.filter(user=mismatch).exists()
+
+
+def test_direct_import_rotates_existing_passwords_only_when_requested(env):
+    from plane.research.services.accounts import AccountError
+    from plane.research.services.user_import import StudentRow, run_import
+
+    row = StudentRow(
+        row_number=2,
+        name="新成员",
+        email="direct-student@example.com",
+        student_no="DIRECT-1",
+        phone="17700000000",
+        grade="2026",
+        group="石墨负极小组",
+        category="STUDENT",
+        business_category="BASIC_RESEARCH",
+        primary_advisor_name="刘俊扬",
+    )
+    advisor_map = {"刘俊扬": "primary@example.com"}
+    created = run_import(
+        env["workspace"], env["admin"], [row], advisor_map=advisor_map, source_filename="direct.csv"
+    )
+    student = User.objects.get(email=row.email)
+    issued = UserImportRow.objects.get(batch=created, email=row.email).initial_password
+    assert student.check_password(issued)
+    assert UserImportAccountSource.objects.get(user=student).initial_password == issued
+    before = student.password
+    with pytest.raises(AccountError):
+        run_import(env["workspace"], env["admin"], [row], advisor_map=advisor_map, source_filename="again.csv")
+    student.refresh_from_db()
+    assert student.password == before
+    rotated = run_import(
+        env["workspace"],
+        env["admin"],
+        [row],
+        advisor_map=advisor_map,
+        source_filename="rotate.csv",
+        reset_passwords=True,
+    )
+    student.refresh_from_db()
+    new_password = UserImportRow.objects.get(batch=rotated, email=row.email).initial_password
+    assert student.password != before
+    assert student.check_password(new_password)
+    assert UserImportAccountSource.objects.get(user=student).initial_password == new_password
+    assert student.is_password_reset_required is True

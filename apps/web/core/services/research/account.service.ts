@@ -239,6 +239,10 @@ export class ResearchAccountService extends APIService {
     return researchEndpoints.userImportReport(workspaceSlug, batchId);
   }
 
+  getAccountInitialPasswordsUrl(workspaceSlug: string) {
+    return researchEndpoints.accountInitialPasswords(workspaceSlug);
+  }
+
   async getUserProfiles(workspaceSlug: string, params: Record<string, string> = {}) {
     return this.get(researchEndpoints.userProfiles(workspaceSlug), { params })
       .then((res) => res?.data as { results: TResearchUserProfile[]; count: number })

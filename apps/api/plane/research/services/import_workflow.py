@@ -148,7 +148,7 @@ def create_single(workspace, actor, payload):
     return batch
 
 
-def import_advisor_row(workspace, actor, row, batch, *, dry_run=False):
+def import_advisor_row(workspace, actor, row, batch, *, dry_run=False, reset_passwords=False):
     unit = None
     if row.raw.get("org_unit_id"):
         unit = get_unit(workspace, row.raw["org_unit_id"])
@@ -168,7 +168,7 @@ def import_advisor_row(workspace, actor, row, batch, *, dry_run=False):
             return {"status": "PENDING", "message": "已有其他主归属，请在成员管理中处理。", "unit": unit}
     if dry_run:
         return {"status": "OK", "message": "校验通过（未创建账号和关系）", "unit": unit}
-    user, _, password = imports._upsert_user(row)
+    user, _, password = imports._upsert_user(row, reset_passwords=reset_passwords)
     imports.ensure_workspace_membership(workspace, user, actor)
     imports._upsert_profile(user, row, unit.name, batch, actor)
     membership = ensure_advisor_membership(workspace, unit, user, actor)

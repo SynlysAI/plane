@@ -13,6 +13,8 @@ from plane.db.models import (
     ResearchKnowledgeRequest,
     ResearchProjectProfile,
     ResearchUserProfile,
+    User,
+    UserImportAccountSource,
     UserImportRow,
     WorkspaceResearchSetting,
 )
@@ -163,7 +165,13 @@ def test_rebuild_purges_research_and_creates_unique_main_pi(db, synthetic_plan, 
     assert ResearchUserProfile.objects.filter(category="STUDENT", student_no="").count() == 1
     assert WorkspaceResearchSetting.objects.get(workspace=public).main_pi.display_name == "洪文晶"
     assert WorkspaceResearchSetting.objects.get(workspace=private).main_pi.display_name == "洪文晶"
-    assert not UserImportRow.objects.exclude(initial_password="").exists()
+    assert UserImportRow.objects.exclude(initial_password="").count() == 2
+    assert UserImportAccountSource.objects.filter(kind="ROSTER").exclude(initial_password="").count() == 2
+    assert UserImportAccountSource.objects.filter(kind="ADVISOR").exclude(initial_password="").count() == 2
+    for source in UserImportAccountSource.objects.select_related("user"):
+        assert source.user.check_password(source.initial_password)
+        assert source.user.is_password_reset_required is True
+    password_hashes = dict(User.objects.values_list("email", "password"))
 
     service.purge_instance_research_data()
     second = service.build_pi_lab_baseline(public, admin, synthetic_plan)
@@ -173,6 +181,8 @@ def test_rebuild_purges_research_and_creates_unique_main_pi(db, synthetic_plan, 
     assert OrgUnitMember.objects.filter(org_role=OrgUnitMember.OrgRole.PI).count() == 1
     assert MentorBinding.objects.filter(is_primary_advisor=True).count() == 1
     assert UserImportRow.objects.count() == 2
+    assert not UserImportRow.objects.exclude(initial_password="").exists()
+    assert dict(User.objects.values_list("email", "password")) == password_hashes
 
 
 def test_write_credential_manifest_is_protected_and_atomic(db, tmp_path, synthetic_plan):

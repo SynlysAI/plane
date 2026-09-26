@@ -159,6 +159,7 @@ from plane.research.views import (
     ResearchUserImportRejectEndpoint,
     ResearchUserImportRelationsEndpoint,
     ResearchUserImportReportEndpoint,
+    ResearchAccountInitialPasswordsEndpoint,
     ResearchUserImportRowEndpoint,
     ResearchUserImportSingleEndpoint,
     ResearchUserImportPreviewEndpoint,
@@ -175,6 +176,7 @@ from plane.research.views import (
     ResearchChainEventListCreateEndpoint,
     ResearchChainSnapshotCreateEndpoint,
     ResearchChainKnowledgeBaseListEndpoint,
+    ResearchGroupKnowledgeBindingDetailEndpoint,
     ResearchKnowledgeRequestDetailEndpoint,
     ResearchChainUploadEndpoint,
     ResearchChainUploadDetailEndpoint,
@@ -247,6 +249,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/knowledge-requests/<uuid:request_id>/",
         ResearchKnowledgeRequestDetailEndpoint.as_view(),
         name="research-knowledge-request-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/group-knowledge-bindings/<uuid:binding_id>/",
+        ResearchGroupKnowledgeBindingDetailEndpoint.as_view(),
+        name="research-group-knowledge-binding-detail",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/",
@@ -1048,6 +1055,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/user-imports/<uuid:pk>/report/",
         ResearchUserImportReportEndpoint.as_view(),
         name="research-user-import-report",
+    ),
+    path(
+        "research/workspaces/<str:slug>/account-initial-passwords/",
+        ResearchAccountInitialPasswordsEndpoint.as_view(),
+        name="research-account-initial-passwords",
     ),
     path(
         "research/workspaces/<str:slug>/user-profiles/",

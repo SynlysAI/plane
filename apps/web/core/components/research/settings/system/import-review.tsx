@@ -397,7 +397,7 @@ export function ImportReview({
       {batch.status === "IMPORTED" && (
         <div className="flex gap-3 text-12">
           <a className="text-accent-primary" href={service.getUserImportReportUrl(workspaceSlug, batch.id!)}>
-            下载导入报告（含新账号初始密码）
+            下载本批次导入报告（含本次发放的初始密码）
           </a>
           <button
             disabled={busy}

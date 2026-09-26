@@ -161,6 +161,13 @@ class UserImportBatchSerializer(serializers.ModelSerializer):
             for decision in ("PENDING", "INCLUDED", "EXCLUDED")
         }
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        options = dict(data.get("options") or {})
+        options.pop("advisor_password_snapshots", None)
+        data["options"] = options
+        return data
+
 
 class UserImportBatchSummarySerializer(serializers.ModelSerializer):
     review_counts = serializers.SerializerMethodField()

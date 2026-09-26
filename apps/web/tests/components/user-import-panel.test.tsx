@@ -16,6 +16,7 @@ const service = vi.hoisted(() => ({
   bulkExcludeUserImportRows: vi.fn(),
   getUserImport: vi.fn(),
   getUserImportReportUrl: vi.fn().mockReturnValue("/report.csv"),
+  getAccountInitialPasswordsUrl: vi.fn().mockReturnValue("/passwords.csv"),
   createSingleImport: vi.fn(),
 }));
 vi.mock("@/services/research/account.service", () => ({
@@ -31,6 +32,7 @@ vi.mock("@/services/research/account.service", () => ({
     bulkExcludeUserImportRows = service.bulkExcludeUserImportRows;
     getUserImport = service.getUserImport;
     getUserImportReportUrl = service.getUserImportReportUrl;
+    getAccountInitialPasswordsUrl = service.getAccountInitialPasswordsUrl;
     createSingleImport = service.createSingleImport;
   },
 }));
@@ -70,6 +72,7 @@ beforeEach(() => {
   service.getUserImports.mockResolvedValue({ results: [] });
   service.getAccountProvisioningOptions.mockResolvedValue({ org_units: [], advisors: [], profile_categories: [] });
   service.getUserImportReportUrl.mockReturnValue("/report.csv");
+  service.getAccountInitialPasswordsUrl.mockReturnValue("/passwords.csv");
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -458,5 +461,19 @@ describe("member import errors", () => {
     service.importUsers.mockRejectedValueOnce({ error_code: "unexpected_error" });
     await upload();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("导入失败。");
+  });
+
+  it("downloads all initial passwords and regenerates existing ones only when requested", async () => {
+    service.importUsers.mockResolvedValueOnce(batch);
+    await upload();
+    expect(container.querySelector('a[href="/passwords.csv"]')?.textContent).toContain("下载全部初始密码");
+    expect(service.importUsers).toHaveBeenCalledWith("lab", expect.objectContaining({ reset_passwords: false }));
+    const checkbox = container.querySelector('[aria-label="为已有账号重新生成初始密码"]') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    await act(async () => checkbox.click());
+    expect(checkbox.checked).toBe(true);
+    service.importUsers.mockResolvedValueOnce(batch);
+    await act(async () => button("上传并预览").click());
+    expect(service.importUsers).toHaveBeenLastCalledWith("lab", expect.objectContaining({ reset_passwords: true }));
   });
 });
