@@ -2577,5 +2577,12 @@
         "external_reference": "外部引用"
       }
     }
+  },
+  "page_offline_save": {
+    "action": "保存正文",
+    "hint": "协作已断开，正文不会自动写回。",
+    "unchanged": "与服务器一致，未写入。",
+    "saved": "正文已保存。",
+    "failed": "正文没有保存。"
   }
 }

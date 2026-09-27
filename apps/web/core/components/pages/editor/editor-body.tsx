@@ -41,6 +41,7 @@ import { useEditorFlagging } from "@/hooks/use-editor-flagging";
 // store
 import type { TPageInstance } from "@/store/pages/base-page";
 // local imports
+import { nextPageSyncStatus } from "@/lib/page-sync-status";
 import { PageContentLoader } from "../loaders/page-content-loader";
 import { PageEditorHeaderRoot } from "./header";
 import { PageContentBrowser } from "./summary";
@@ -143,8 +144,11 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
     handlers,
   });
 
+  const offlineLatchedRef = useRef(false);
+
   // Set syncing status when page changes and reset collaboration state
   useEffect(() => {
+    offlineLatchedRef.current = false;
     setSyncingStatus("syncing");
     onCollaborationStateChange?.({
       stage: { kind: "connecting" },
@@ -169,19 +173,23 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
   const serverHandler: TServerHandler = useMemo(
     () => ({
       onStateChange: (state) => {
-        // Pass full state to parent
-        onCollaborationStateChange?.(state);
-
-        // Map collaboration stage to UI syncing status
-        // Stage → UI mapping: disconnected → error | synced → synced | all others → syncing
-        if (state.stage.kind === "disconnected") {
-          setSyncingStatus("error");
-        } else if (state.stage.kind === "synced") {
-          setSyncingStatus("synced");
-        } else {
-          // initial, connecting, awaiting-sync, reconnecting → show as syncing
-          setSyncingStatus("syncing");
-        }
+        const decision = nextPageSyncStatus(offlineLatchedRef.current, state.stage.kind);
+        offlineLatchedRef.current = decision.latchedOffline;
+        const reported = decision.reportDisconnected
+          ? {
+              stage:
+                state.stage.kind === "disconnected"
+                  ? state.stage
+                  : {
+                      kind: "disconnected" as const,
+                      error: { type: "network-error" as const, message: "Connection lost" },
+                    },
+              isServerSynced: false,
+              isServerDisconnected: true,
+            }
+          : state;
+        onCollaborationStateChange?.(reported);
+        setSyncingStatus(decision.syncStatus);
       },
     }),
     [setSyncingStatus, onCollaborationStateChange]

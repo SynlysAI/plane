@@ -2553,5 +2553,12 @@
         "external_reference": "External reference"
       }
     }
+  },
+  "page_offline_save": {
+    "action": "Save body",
+    "hint": "Collaboration is offline. The body is not written automatically.",
+    "unchanged": "Same as the server. Nothing was written.",
+    "saved": "Body saved.",
+    "failed": "The body was not saved."
   }
 }

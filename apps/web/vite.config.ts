@@ -144,5 +144,10 @@ export default defineConfig(() => ({
     allowedHosts,
     proxy,
   },
+  preview: {
+    host: process.env.HOST || "127.0.0.1",
+    allowedHosts,
+    proxy,
+  },
   // No SSR-specific overrides needed; alias resolves to ESM build
 }));
