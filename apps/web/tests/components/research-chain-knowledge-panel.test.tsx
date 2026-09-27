@@ -196,7 +196,9 @@ it("blocks uploads while the chain knowledge request awaits administrator bindin
   });
   await act(async () => undefined);
 
-  expect(container.textContent).toContain("管理员完成手工建库并回填后才能上传");
+  expect(container.textContent).toContain("等待管理员从候选库确认");
+  expect(container.textContent).not.toContain("请检查 RAGPortal 配置");
+  expect(container.textContent).not.toContain("手工建库");
   expect(container.querySelector('input[type="file"]')?.hasAttribute("disabled")).toBe(true);
   expect(
     [...container.querySelectorAll("button")]

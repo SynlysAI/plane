@@ -6,12 +6,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from plane.db.models import (
+    ExternalSystemConnection,
     OrgUnit,
     OrgUnitMember,
     ResearchChain,
     ResearchGroupKnowledgeBinding,
     ResearchKnowledgeRequest,
 )
+from plane.research.services.integrations import client_for
+from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.org import active_membership_q
 from plane.research.utils.roles import is_research_admin
 def _primary_membership(workspace, owner):
@@ -385,3 +388,122 @@ def migrate_pending_chain_requests():
             row.save(update_fields=["state", "parameter_summary", "updated_at"])
             archived += 1
     return archived
+
+
+
+class GroupKnowledgeConfirmError(Exception):
+    """确认小组知识库失败，且没有写入绑定。"""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def describe_ragportal_candidates(workspace):
+    """只读列出 RAGPortal 候选库，不创建上传任务。
+
+    Args:
+        workspace: 工作区。
+
+    Returns:
+        连接状态和候选。列出候选不会改源库文档。
+    """
+    connection = ExternalSystemConnection.objects.filter(
+        workspace=workspace,
+        system="RAGPORTAL",
+        deleted_at__isnull=True,
+        is_enabled=True,
+    ).first()
+    if connection is None:
+        return {"connection_status": "not_connected", "candidates": [], "degraded_reason": "not_configured"}
+    result = client_for("RAGPORTAL", connection).knowledge_bases()
+    if result.degraded:
+        return {
+            "connection_status": "degraded",
+            "candidates": [],
+            "degraded_reason": result.degraded_reason or "http_error",
+        }
+    seen_at = timezone.now().isoformat()
+    candidates = [
+        {
+            "name": str(item.get("title") or ""),
+            "external_id": str(item.get("external_id") or ""),
+            "source": "RAGPORTAL",
+            "seen_at": seen_at,
+        }
+        for item in result.items
+        if item.get("external_id")
+    ]
+    return {"connection_status": "connected", "candidates": candidates, "degraded_reason": ""}
+
+
+def confirm_group_binding(workspace, team, external_id, external_name, actor, *, source="RAGPORTAL", seen_at=""):
+    """在一个事务里把唯一候选库确认到小组。
+
+    Args:
+        workspace: 工作区。
+        team: 小组节点。
+        external_id: 外部库 ID。
+        external_name: 候选库名称。
+        actor: 确认人。
+        source: 候选来源。
+        seen_at: 最近一次可见时间。
+
+    Returns:
+        已就绪的小组绑定。冲突或失败时不改变原状态。
+    """
+    external_id = str(external_id or "").strip()
+    external_name = str(external_name or "").strip()
+    if not external_id or not external_name:
+        raise GroupKnowledgeConfirmError("invalid", "候选库名称和外部库 ID 都不能为空。")
+    if external_kb_conflicts(external_id, team):
+        raise GroupKnowledgeConfirmError("KB_SCOPE_CONFLICT", "这个外部库已经属于另一个小组。")
+    with transaction.atomic():
+        binding = (
+            ResearchGroupKnowledgeBinding.objects.select_for_update()
+            .filter(workspace=workspace, org_unit=team, deleted_at__isnull=True)
+            .first()
+        )
+        if binding is None:
+            binding = ResearchGroupKnowledgeBinding.objects.create(
+                workspace=workspace,
+                org_unit=team,
+                request_key=f"team:{team.id}",
+                state=ResearchGroupKnowledgeBinding.State.PENDING_ADMIN,
+                created_by=actor,
+            )
+        if external_kb_conflicts(external_id, team):
+            raise GroupKnowledgeConfirmError("KB_SCOPE_CONFLICT", "这个外部库已经属于另一个小组。")
+        binding.external_kb_id = external_id
+        binding.external_kb_name = external_name
+        binding.state = ResearchGroupKnowledgeBinding.State.READY
+        binding.processed_by = actor
+        binding.processed_at = timezone.now()
+        binding.last_error = ""
+        summary = dict(binding.parameter_summary or {})
+        summary["source"] = source
+        summary["seen_at"] = seen_at or timezone.now().isoformat()
+        binding.parameter_summary = summary
+        binding.save(
+            update_fields=[
+                "external_kb_id",
+                "external_kb_name",
+                "state",
+                "processed_by",
+                "processed_at",
+                "last_error",
+                "parameter_summary",
+                "updated_at",
+            ]
+        )
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.INTEGRATION_CONNECTION_UPDATE,
+            resource_type=ResearchResourceType.INTEGRATION,
+            resource_id=binding.id,
+            actor=actor,
+            org_unit=team,
+            metadata={"command": "confirm_group_knowledge", "team": team.name, "source": source},
+        )
+    return binding

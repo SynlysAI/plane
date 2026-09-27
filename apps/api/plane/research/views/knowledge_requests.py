@@ -6,7 +6,12 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.db.models import OrgUnitMember, ResearchGroupKnowledgeBinding, ResearchKnowledgeRequest
-from plane.research.services.group_knowledge import external_kb_conflicts, resolve_team_org_unit
+from plane.research.services.group_knowledge import (
+    GroupKnowledgeConfirmError,
+    confirm_group_binding,
+    external_kb_conflicts,
+    resolve_team_org_unit,
+)
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.utils.org import active_membership_q
@@ -211,30 +216,21 @@ class ResearchGroupKnowledgeBindingDetailEndpoint(ResearchAPIView):
                 "The knowledge request is not awaiting binding.",
                 status.HTTP_409_CONFLICT,
             )
-        if external_kb_conflicts(external_id, row.org_unit):
-            return research_error(
-                ResearchErrorCode.KB_SCOPE_CONFLICT,
-                "This external knowledge base is already bound to another research team.",
-                status.HTTP_409_CONFLICT,
+        try:
+            row = confirm_group_binding(
+                workspace,
+                row.org_unit,
+                external_id,
+                str(request.data.get("external_kb_name") or external_id).strip(),
+                request.user,
+                seen_at=str((request.data.get("parameter_summary") or {}).get("seen_at") or ""),
             )
-        with transaction.atomic():
-            row.external_kb_id = external_id
-            row.external_kb_name = str(request.data.get("external_kb_name") or external_id).strip()
-            row.parameter_summary = dict(request.data.get("parameter_summary") or {})
-            row.state = ResearchGroupKnowledgeBinding.State.READY
-            row.processed_by = request.user
-            row.processed_at = timezone.now()
-            row.last_error = ""
-            row.save(
-                update_fields=[
-                    "external_kb_id",
-                    "external_kb_name",
-                    "parameter_summary",
-                    "state",
-                    "processed_by",
-                    "processed_at",
-                    "last_error",
-                    "updated_at",
-                ]
+        except GroupKnowledgeConfirmError as error:
+            code = (
+                ResearchErrorCode.KB_SCOPE_CONFLICT
+                if error.code == "KB_SCOPE_CONFLICT"
+                else ResearchErrorCode.KB_BINDING_CONFLICT
             )
+            http_status = status.HTTP_409_CONFLICT if error.code == "KB_SCOPE_CONFLICT" else status.HTTP_422_UNPROCESSABLE_ENTITY
+            return research_error(code, error.message, http_status)
         return Response(_serialize_group(row), status=status.HTTP_200_OK)
