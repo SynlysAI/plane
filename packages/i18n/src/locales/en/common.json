@@ -1161,13 +1161,22 @@
       "description": "Research Chain projections with node, event and snapshot metadata.",
       "tabs": {
         "label": "Research Chain page sections",
-        "overview": "Topic",
+        "overview": "Overview",
         "nodes": "Nodes",
         "reports": "Reports and outcomes",
         "experiments": "Experiment records",
         "references": "External references",
+        "materials": "Topic materials",
         "members": "Members",
         "replay": "Replay"
+      },
+      "materials": {
+        "node_filter": "Source node",
+        "all_nodes": "All nodes",
+        "files": "Materials",
+        "files_hint": "Choose a source node to see its materials.",
+        "experiments": "Experiment records",
+        "references": "External references"
       },
       "chain_status": {
         "active": "Active",
@@ -1216,7 +1225,7 @@
       "open": "Open chain",
       "nodes_empty": "This chain has no nodes yet.",
       "node": "Node",
-      "open_agent": "Open agent",
+      "open_agent": "Ask the agent to analyze",
       "create_node_title": "Create research node",
       "node_type": "Node type",
       "node_title": "Title",
@@ -1258,7 +1267,7 @@
         "human_decision_hint": "Researcher confirmation, return or blocking reasons.",
         "output": "Output",
         "output_hint": "Versioned results confirmed into the chain.",
-        "empty": "No record in this section yet."
+        "empty": "No records yet."
       },
       "overview": {
         "meta": "Topic information",
@@ -1298,7 +1307,7 @@
         "stage_empty": "No node has been created for this stage yet.",
         "stage_snapshot": "Stage snapshot",
         "snapshot_version": "Version {version}",
-        "stage_snapshot_empty": "No confirmed snapshot exists for this stage yet.",
+        "stage_snapshot_empty": "A version is created after this node is submitted and confirmed. It cannot be uploaded on its own.",
         "trace_title": "Trace log",
         "trace_id": "Trace {id}",
         "trace_id_empty": "Trace not recorded",
