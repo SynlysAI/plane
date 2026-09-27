@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { SyntheticEvent } from "react";
 import type { Placement } from "@popperjs/core";
 import { useParams } from "next/navigation";
 import { usePopper } from "react-popper";
@@ -43,6 +44,12 @@ export interface ILabelDropdownProps {
   fullWidth?: boolean;
   fullHeight?: boolean;
   label: React.ReactNode;
+}
+
+/** 标签菜单内部点击不冒泡到工作项卡片。 */
+function stopLabelDropdownEvent(event: SyntheticEvent) {
+  event.stopPropagation();
+  event.preventDefault();
 }
 
 export function LabelDropdown(props: ILabelDropdownProps) {
@@ -98,18 +105,18 @@ export function LabelDropdown(props: ILabelDropdownProps) {
 
   const options = useMemo(
     () =>
-      projectLabels.map((label) => ({
-        value: label?.id,
-        query: label?.name,
+      projectLabels.map((projectLabel) => ({
+        value: projectLabel?.id,
+        query: projectLabel?.name,
         content: (
           <div className="flex items-center justify-start gap-2 overflow-hidden">
             <span
               className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
               style={{
-                backgroundColor: label?.color,
+                backgroundColor: projectLabel?.color,
               }}
             />
-            <div className="line-clamp-1 inline-block truncate">{label?.name}</div>
+            <div className="line-clamp-1 inline-block truncate">{projectLabel?.name}</div>
           </div>
         ),
       })),
@@ -162,8 +169,8 @@ export function LabelDropdown(props: ILabelDropdownProps) {
   const handleAddLabel = async (labelName: string) => {
     if (!projectId) return;
     setSubmitting(true);
-    const label = await createLabel(workspaceSlug, projectId, { name: labelName, color: getRandomLabelColor() });
-    onChange([...value, label.id]);
+    const createdLabel = await createLabel(workspaceSlug, projectId, { name: labelName, color: getRandomLabelColor() });
+    onChange([...value, createdLabel.id]);
     setQuery("");
     setSubmitting(false);
   };
@@ -231,15 +238,16 @@ export function LabelDropdown(props: ILabelDropdownProps) {
     ]
   );
 
-  const preventPropagation = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-
   return (
-    <div className={`${fullHeight ? "h-full" : "h-5"}`} onClick={preventPropagation}>
+    <div
+      role="presentation"
+      className={`${fullHeight ? "h-full" : "h-5"}`}
+      onClick={stopLabelDropdownEvent}
+      onKeyDown={stopLabelDropdownEvent}
+    >
       <ComboDropDown
         as="div"
+        role="group"
         ref={dropdownRef}
         className={`h-full w-auto max-w-full flex-shrink-0 text-left ${className}`}
         value={value}
@@ -252,8 +260,11 @@ export function LabelDropdown(props: ILabelDropdownProps) {
       >
         {isOpen && (
           <Combobox.Options
+            modal={false}
+            portal
+            data-prevent-outside-click
             as="ul"
-            className="fixed z-10"
+            className="fixed z-40"
             static
             ref={setPopperElement}
             style={styles.popper}
@@ -312,7 +323,8 @@ export function LabelDropdown(props: ILabelDropdownProps) {
                 ) : submitting ? (
                   <LoadingOutline className="h-3.5 w-3.5 animate-spin" />
                 ) : canCreateLabel ? (
-                  <p
+                  <button
+                    type="button"
                     onClick={() => {
                       if (!query.length) return;
                       handleAddLabel(query);
@@ -327,7 +339,7 @@ export function LabelDropdown(props: ILabelDropdownProps) {
                     ) : (
                       t("label.create.type")
                     )}
-                  </p>
+                  </button>
                 ) : (
                   <p className="text-left text-secondary">{t("common.search.no_matching_results")}</p>
                 )}

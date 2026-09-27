@@ -429,6 +429,7 @@ export function PriorityDropdown(props: Props) {
   return (
     <ComboDropDown
       as="div"
+      role="group"
       ref={dropdownRef}
       className={cn(
         "h-full",
@@ -446,8 +447,11 @@ export function PriorityDropdown(props: Props) {
     >
       {isOpen && (
         <Combobox.Options
+          modal={false}
+          portal
+          data-prevent-outside-click
           as="ul"
-          className="fixed z-10"
+          className="fixed z-40"
           static
           ref={setPopperElement}
           style={styles.popper}
