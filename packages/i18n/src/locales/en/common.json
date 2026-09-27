@@ -2343,6 +2343,7 @@
       "description": "Register experiments, lock the facts and amend them through review.",
       "create": "Register",
       "empty": "No experiment registered yet.",
+      "phase_boundary": "Manual records can be created in this phase. SpecLabOS is not enabled, so run records cannot be synced.",
       "select_hint": "Select an experiment to see its details.",
       "structured_value": "Structured value",
       "title_placeholder": "Experiment title",
