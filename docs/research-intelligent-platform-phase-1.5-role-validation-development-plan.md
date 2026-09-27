@@ -2,7 +2,7 @@
 
 | 项目       | 内容                                                                                                                                                                              |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本   | v1.4（2026-09-26）                                                                                                                                                                |
+| 文档版本   | v1.5（2026-09-27）                                                                                                                                                                |
 | 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                                |
 | 适用版本   | Plane `4.19.0`，`develop`                                                                                                                                                         |
 | 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)         |
@@ -17,6 +17,8 @@
 本计划把 Phase 1.5 的分角色验证拆成可复核的准备、实现检查、人工执行和清理门禁，覆盖主 PI、产业化负责人、基础研究负责人、直接导师、学生、管理员、NONE 和访客。验证范围包括科研导航、课题与 Project 一对一关系、节点和报告动作、审批、Agent OWNER/REVIEW scope、知识库 READY 门禁、降级、审计和导出完整性。
 
 当前 dev 环境已完成启动检查：Plane Web `3000`、Plane API `8001`、RAGPortal `8004`、Synlora `8005` 和 WeKnora 均可达，Docker API/worker/beat 容器处于运行状态；Tailscale 直连入口 `http://100.109.35.2:3000/` 可访问。Tailscale Serve 尚未获管理员授权，HTTPS 入口在授权前保持阻塞，不能把该项标记为通过。
+
+0926 人工复核后的未关闭项不在本节重复。当前 `public` 仍处于迁移前的 22 节点形态；学生课题已经存在，数据基线里的「验证前课题为 0」只描述重建前的目标，不描述这次复核时的库。
 
 本计划不修改 `public` 基线、不执行历史 `seed_research_demo`，不把旧 seed 账号、旧课题或旧证据当作当前人工结果。自动化测试数据库仍可独立使用历史夹具。
 
@@ -170,7 +172,7 @@
 
 ## 7. 已执行夹具与测试账号（2026-09-26）
 
-重新创建角色账号时不要加 `--reset-passwords`，否则会轮换下表密码，包括已经改过的管理员密码。只补账号和验证单元用：
+重新创建角色账号时不要加 `--reset-passwords`，否则会轮换下表密码，包括已经改过的管理员密码。2026-09-27 起不要用下面的命令补「验证单元」：当前库的方向层级改由 [0926 后续修复计划](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md) R12 增量迁移，不能靠全量重建或再造悬空验证单元。只在确实缺少角色账号时使用：
 
 ```bash
 docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml run --rm api \
