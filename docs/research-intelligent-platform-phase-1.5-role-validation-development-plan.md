@@ -4,7 +4,7 @@
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 文档版本   | v1.5（2026-09-27）                                                                                                                                                                 |
 | 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                                 |
-| 适用版本   | Plane `4.19.0`，`develop`                                                                                                                                                          |
+| 适用版本   | Plane `4.19.1`，`develop`                                                                                                                                                          |
 | 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)          |
 | 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                                |
 | 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                                  |

@@ -24,6 +24,7 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import allow_permission, ROLE
+from plane.research.utils.project_review import project_member_filters
 from plane.app.serializers import IssueViewSerializer, ViewIssueListSerializer
 from plane.db.models import (
     Issue,
@@ -280,9 +281,12 @@ class IssueViewViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
+                **project_member_filters(
+                    self.request.user,
+                    self.kwargs.get("slug"),
+                    self.kwargs.get("project_id"),
+                ),
             )
             .filter(Q(owned_by=self.request.user) | Q(access=1))
             .select_related("project")
@@ -292,7 +296,7 @@ class IssueViewViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset()
         project = Project.objects.get(id=project_id)

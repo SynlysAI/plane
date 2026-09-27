@@ -114,18 +114,23 @@ export class BaseUserPermissionStore implements IBaseUserPermissionStore {
   );
 
   /**
-   * @description Returns the project membership permission
-   * @param { string } workspaceSlug
-   * @param { string } projectId
-   * @returns { EUserPermissions | undefined }
+   * 工作区管理员只有真实项目成员身份时才提升为项目管理员。
+   * 研究链只读壳写入的访客角色保持只读；项目详情还没返回时也不提前提升。
    */
+  roleForWorkspaceAdmin(projectId: string, projectRole: EUserPermissions): EUserPermissions {
+    if (projectRole !== EUserPermissions.GUEST) return EUserPermissions.ADMIN;
+    const project = this.store.projectRoot.project.getProjectById(projectId);
+    if (project?.member_role) return EUserPermissions.ADMIN;
+    return projectRole;
+  }
+
   protected getProjectRole = computedFn((workspaceSlug: string, projectId?: string): EUserPermissions | undefined => {
     if (!workspaceSlug || !projectId) return undefined;
     const projectRole = this.workspaceProjectsPermissions?.[workspaceSlug]?.[projectId];
     if (!projectRole) return undefined;
     const workspaceRole = this.workspaceUserInfo?.[workspaceSlug]?.role;
-    if (workspaceRole === EUserWorkspaceRoles.ADMIN) return EUserPermissions.ADMIN;
-    else return projectRole;
+    if (workspaceRole === EUserWorkspaceRoles.ADMIN) return this.roleForWorkspaceAdmin(projectId, projectRole);
+    return projectRole;
   });
 
   /**

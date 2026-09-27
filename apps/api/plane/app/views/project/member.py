@@ -22,6 +22,7 @@ from plane.db.models import Project, ProjectMember, ProjectUserProperty, Workspa
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
 from plane.app.permissions.base import allow_permission, ROLE
+from plane.research.utils.project_review import research_review_project_ids_for_slug, user_can_review_research_project
 
 
 class ProjectMemberViewSet(BaseViewSet):
@@ -153,7 +154,7 @@ class ProjectMemberViewSet(BaseViewSet):
         # Return the serialized data
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
         # Get the list of project members for the project
         project_members = ProjectMember.objects.filter(
@@ -351,12 +352,31 @@ class ProjectMemberViewSet(BaseViewSet):
 
 class ProjectMemberUserEndpoint(BaseAPIView):
     def get(self, request, slug, project_id):
-        project_member = ProjectMember.objects.get(
+        project_member = ProjectMember.objects.filter(
             project_id=project_id,
             workspace__slug=slug,
             member=request.user,
             is_active=True,
-        )
+        ).first()
+        if project_member is None and user_can_review_research_project(request.user, slug, project_id):
+            return Response(
+                {
+                    "id": None,
+                    "member": str(request.user.id),
+                    "role": ROLE.GUEST.value,
+                    "original_role": None,
+                    "created_at": None,
+                    "project": str(project_id),
+                },
+                status=status.HTTP_200_OK,
+            )
+        if project_member is None:
+            project_member = ProjectMember.objects.get(
+                project_id=project_id,
+                workspace__slug=slug,
+                member=request.user,
+                is_active=True,
+            )
         serializer = ProjectMemberSerializer(project_member)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -376,6 +396,8 @@ class UserProjectRolesEndpoint(BaseAPIView):
         ).values("project_id", "role")
 
         project_members = {str(member["project_id"]): member["role"] for member in project_members}
+        for project_id in research_review_project_ids_for_slug(request.user, slug):
+            project_members.setdefault(str(project_id), ROLE.GUEST.value)
         return Response(project_members, status=status.HTTP_200_OK)
 
 

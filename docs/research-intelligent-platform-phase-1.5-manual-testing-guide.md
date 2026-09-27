@@ -7,7 +7,7 @@
 | 详细用例 | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
 | 开发计划 | [分角色验证开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)            |
-| 环境     | `public` π-Lab 基线、Plane `4.19.0`、RAGPortal、Synlora、WeKnora                                    |
+| 环境     | `public` π-Lab 基线、Plane `4.19.1`、RAGPortal、Synlora、WeKnora                                    |
 | 测试 KB  | 原固定库 `plane测试` 已删除；按成员所属小组解析候选并由管理员确认，同组复用、跨组拒绝               |
 
 ## 1. 使用规则

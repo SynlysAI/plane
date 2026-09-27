@@ -105,8 +105,11 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
         role=ROLE.GUEST.value,
     ).exists():
         return queryset.filter(
-            project_projectmember__member=user,
-            project_projectmember__is_active=True,
+            Q(
+                project_projectmember__member=user,
+                project_projectmember__is_active=True,
+            )
+            | Q(id__in=review_ids)
         )
     if WorkspaceMember.objects.filter(
         member=user,

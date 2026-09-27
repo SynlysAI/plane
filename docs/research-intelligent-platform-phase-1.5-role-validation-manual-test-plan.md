@@ -6,7 +6,7 @@
 | 文档状态 | 可执行；测试结果按日期写入 evidence，不把执行结果预先标记为通过                                               |
 | 启动入口 | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)             |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)                      |
-| 测试环境 | `public` π-Lab 基线 + Plane `4.19.0` + RAGPortal + Synlora + WeKnora                                          |
+| 测试环境 | `public` π-Lab 基线 + Plane `4.19.1` + RAGPortal + Synlora + WeKnora                                          |
 | 测试 KB  | 原固定库 `plane测试` 已删除；按课题成员所属 `TEAM` 小组解析候选库，管理员确认后由同组课题复用；不得跨小组绑定 |
 | 凭据     | 运行时注入；本文件不保存密码                                                                                  |
 

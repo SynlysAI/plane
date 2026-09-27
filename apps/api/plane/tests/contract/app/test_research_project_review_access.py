@@ -7,6 +7,8 @@ from rest_framework.test import APIClient
 
 from plane.db.models import (
     Issue,
+    IssueLink,
+    IssueReaction,
     MentorBinding,
     OrgUnit,
     OrgUnitMember,
@@ -14,6 +16,7 @@ from plane.db.models import (
     Project,
     ProjectMember,
     ProjectPage,
+    WorkspaceMember,
     ResearchProjectProfile,
     State,
     WorkspaceResearchSetting,
@@ -245,3 +248,99 @@ class TestResearchProjectReviewAccess:
         )
         assert patched.status_code == 200
         assert patched.json()["name"] == "Renamed project"
+
+    def test_reviewer_can_open_the_work_item_shell_without_membership(self, env):
+        before = ProjectMember.objects.filter(project=env["project"]).count()
+        client = client_for(env["mentor"])
+        slug = env["workspace"].slug
+        project_id = env["project"].id
+        base = f"/api/workspaces/{slug}/projects/{project_id}"
+
+        roles = client.get(f"/api/users/me/workspaces/{slug}/project-roles/")
+        assert roles.status_code == 200
+        assert roles.json()[str(project_id)] == 5
+        peer_roles = client_for(env["peer"]).get(f"/api/users/me/workspaces/{slug}/project-roles/")
+        assert str(project_id) not in peer_roles.json()
+
+        me = client.get(f"{base}/project-members/me/")
+        assert me.status_code == 200
+        assert me.json()["role"] == 5
+        assert me.json()["id"] is None
+
+        states = client.get(f"{base}/states/")
+        assert states.status_code == 200
+        assert any(item["name"] == "Backlog" for item in states.json())
+        assert client_for(env["peer"]).get(f"{base}/states/").status_code == 403
+
+        assert client.get(f"{base}/issue-labels/").status_code == 200
+        members = client.get(f"{base}/members/")
+        assert members.status_code == 200
+        assert str(env["student"].id) in {item["member"] for item in members.json()}
+        assert str(env["mentor"].id) not in {item["member"] for item in members.json()}
+        assert client.get(f"{base}/cycles/").status_code == 200
+        assert client.get(f"{base}/modules/").status_code == 200
+        assert client.get(f"{base}/views/").status_code == 200
+        assert client.get(f"{base}/estimates/").status_code == 200
+        assert client.get(f"{base}/user-properties/").status_code == 200
+        assert client.patch(f"{base}/user-properties/", {"display_filters": {}}, format="json").status_code == 403
+        intake = client.get(f"{base}/intake-state/")
+        assert intake.status_code in (200, 404)
+
+        issues = client.get(f"{base}/issues/")
+        assert issues.status_code == 200
+        assert "Student task" in issues.content.decode()
+        history = client.get(f"{base}/issues/{env['issue'].id}/history/")
+        assert history.status_code == 200
+        comments = client.get(f"{base}/issues/{env['issue'].id}/comments/")
+        assert comments.status_code == 200
+        rejected = client.post(
+            f"{base}/issues/{env['issue'].id}/comments/",
+            {"comment_html": "<p>no</p>"},
+            format="json",
+        )
+        assert rejected.status_code == 403
+
+        IssueReaction.objects.create(
+            issue=env["issue"],
+            project=env["project"],
+            workspace=env["workspace"],
+            actor=env["student"],
+            reaction="128077",
+        )
+        IssueLink.objects.create(
+            issue=env["issue"],
+            project=env["project"],
+            workspace=env["workspace"],
+            url="https://example.test/qzx",
+            created_by=env["student"],
+        )
+        reactions = client.get(f"{base}/issues/{env['issue'].id}/reactions/")
+        assert reactions.status_code == 200
+        assert any(item["reaction"] == "128077" for item in reactions.json())
+        links = client.get(f"{base}/issues/{env['issue'].id}/issue-links/")
+        assert links.status_code == 200
+        assert any(item["url"] == "https://example.test/qzx" for item in links.json())
+        peer = client_for(env["peer"])
+        peer_reactions = peer.get(f"{base}/issues/{env['issue'].id}/reactions/")
+        assert peer_reactions.status_code == 200
+        assert all(item["reaction"] != "128077" for item in peer_reactions.json())
+
+        identifier = f"{env['project'].identifier}-{env['issue'].sequence_id}"
+        opened = client.get(f"/api/workspaces/{slug}/work-items/{identifier}/")
+        assert opened.status_code == 200
+        assert opened.json()["id"] == str(env["issue"].id)
+        assert peer.get(f"/api/workspaces/{slug}/work-items/{identifier}/").status_code == 403
+        assert client.get(f"{base}/issues/{env['issue'].id}/meta/").status_code == 200
+        assert client.get(f"{base}/issues/{env['issue'].id}/issue-attachments/").status_code == 200
+        assert client.get(f"{base}/work-items/{env['issue'].id}/description-versions/").status_code == 200
+        assert client.get(f"{base}/issues/{env['issue'].id}/subscribe/").status_code == 200
+        assert peer.get(f"{base}/issues/{env['issue'].id}/issue-attachments/").status_code == 403
+        assert ProjectMember.objects.filter(project=env["project"]).count() == before
+
+    def test_workspace_guest_mentor_still_lists_the_private_project(self, env):
+        WorkspaceMember.objects.filter(workspace=env["workspace"], member=env["mentor"]).update(role=5)
+        client = client_for(env["mentor"])
+        row = _row(_listed(client, env["workspace"]), env["project"].id)
+        assert row is not None
+        assert row["research_access"] == "review"
+        assert row["member_role"] is None

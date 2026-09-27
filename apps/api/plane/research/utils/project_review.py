@@ -91,6 +91,29 @@ def research_review_profiles(workspace, user, on_date=None):
     return profiles.filter(Q(owner_id__in=mentee_ids) | Q(org_unit_id__in=unit_ids)).distinct()
 
 
+REVIEW_READER_ROLE = 5
+
+
+def project_member_filters(user, slug, project_id, prefix="project__project_projectmember__"):
+    """返回项目成员过滤条件。研究链只读读者不套用成员条件。
+
+    Args:
+        user: 当前查看者。
+        slug: 工作区别名。
+        project_id: Plane 项目主键。
+        prefix: ``ProjectMember`` 关系查询前缀。
+
+    Returns:
+        只读读者返回空字典。其他人返回有效成员条件。
+    """
+    if user_can_review_research_project(user, slug, project_id):
+        return {}
+    return {
+        f"{prefix}member": user,
+        f"{prefix}is_active": True,
+    }
+
+
 def research_review_project_ids_for_slug(user, workspace_slug, on_date=None):
     """按工作区别名返回只读科研项目主键。
 
