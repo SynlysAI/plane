@@ -18,6 +18,7 @@ from plane.db.models import (
 from plane.research.services.group_knowledge import (
     SCOPE_GROUP,
     SCOPE_UNASSIGNED,
+    describe_ragportal_candidates,
     knowledge_scope_for_chain,
 )
 from plane.research.serializers import (
@@ -91,7 +92,7 @@ def _require_ready(scope):
     if scope.state != "READY":
         return research_error(
             ResearchErrorCode.KB_NOT_READY,
-            "小组知识库仍在申请或绑定处理中，完成管理员回填后才能上传。",
+            "小组知识库仍在等待管理员从候选库确认，确认后才能上传。",
             status.HTTP_409_CONFLICT,
         )
     return None
@@ -124,8 +125,24 @@ def _scope_payload(chain, scope):
         "scope": scope.scope,
         "org_unit_id": scope.org_unit_id or None,
         "org_unit_name": scope.org_unit_name or None,
+        "binding_state": scope.state,
         "degraded": False,
     }
+
+
+def _knowledge_base_payload(chain, scope, workspace):
+    """附上只读候选，不把候选写成上传目标。"""
+    payload = _scope_payload(chain, scope)
+    described = describe_ragportal_candidates(workspace)
+    payload.update(
+        {
+            "connection_status": described["connection_status"],
+            "candidates": described["candidates"],
+            "degraded_reason": described["degraded_reason"],
+            "degraded": described["connection_status"] == "degraded",
+        }
+    )
+    return payload
 
 
 def _event_id(request_id, kind):
@@ -169,7 +186,7 @@ class ResearchChainKnowledgeBaseListEndpoint(ResearchAPIView):
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
         scope = _knowledge_scope(chain, request.user)
-        return Response(_scope_payload(chain, scope), status=status.HTTP_200_OK)
+        return Response(_knowledge_base_payload(chain, scope, workspace), status=status.HTTP_200_OK)
 
 
 class ResearchChainUploadEndpoint(ResearchAPIView):

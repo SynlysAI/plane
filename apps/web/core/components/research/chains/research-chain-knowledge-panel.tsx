@@ -11,6 +11,7 @@ import {
   ResearchChainService,
   type TResearchChainUpload,
   type TResearchKnowledgeBase,
+  type TResearchKnowledgeCandidate,
 } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
@@ -60,6 +61,8 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const [actionError, setActionError] = useState("");
   const [knowledgeState, setKnowledgeState] = useState(KB_READY_STATE);
   const [orgUnitName, setOrgUnitName] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState("");
+  const [candidates, setCandidates] = useState<TResearchKnowledgeCandidate[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -74,6 +77,8 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       setKnowledgeBases(payload.items);
       setKnowledgeState(payload.state ?? KB_READY_STATE);
       setOrgUnitName(payload.orgUnitName ?? "");
+      setConnectionStatus(payload.connectionStatus ?? "");
+      setCandidates(payload.candidates ?? []);
       setKnowledgeBaseId((current) => current || payload.items[0]?.external_id || "");
       setUploads(uploadPayload.data);
       setDegradedReason(payload.degraded_reason ?? "");
@@ -175,6 +180,40 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
             })}
           </p>
         )}
+      {state !== "loading" && state !== "forbidden" && (
+        <dl className="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-11">
+          <dt className="text-tertiary">{t("research.knowledge.candidate_team")}</dt>
+          <dd className="truncate text-secondary">{orgUnitName || "—"}</dd>
+          <dt className="text-tertiary">{t("research.knowledge.candidate_state")}</dt>
+          <dd className="text-secondary">{knowledgeState}</dd>
+        </dl>
+      )}
+      {connectionStatus === "not_connected" && state !== "loading" && state !== "forbidden" && (
+        <p className="mt-2 text-11 text-tertiary" role="status">
+          {t("research.knowledge.ragportal_not_connected")}
+        </p>
+      )}
+      {connectionStatus === "connected" && candidates.length === 0 && state !== "loading" && state !== "forbidden" && (
+        <p className="mt-2 text-11 text-tertiary" role="status">
+          {t("research.knowledge.ragportal_no_candidates")}
+        </p>
+      )}
+      {candidates.length > 0 && state !== "loading" && state !== "forbidden" && (
+        <ul className="mt-2 space-y-2" role="list">
+          {candidates.map((candidate) => (
+            <li key={candidate.external_id} className="text-11 text-secondary">
+              <span className="text-tertiary">{t("research.knowledge.candidate_name")} </span>
+              {candidate.name}
+              <span className="text-tertiary"> {t("research.knowledge.candidate_id")} </span>
+              {candidate.external_id}
+              <span className="text-tertiary"> {t("research.knowledge.candidate_source")} </span>
+              {candidate.source}
+              <span className="text-tertiary"> {t("research.knowledge.candidate_seen")} </span>
+              {candidate.seen_at}
+            </li>
+          ))}
+        </ul>
+      )}
       {actionError && (
         <p className="mt-2 text-11 text-danger-primary" role="alert">
           {actionError}
@@ -197,11 +236,13 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                 ))}
               </select>
             </label>
-            {knowledgeBases.length === 0 && (
-              <p className="text-11 text-tertiary" role="status">
-                {t("research.knowledge.no_knowledge_bases")}
-              </p>
-            )}
+            {knowledgeBases.length === 0 &&
+              connectionStatus !== "not_connected" &&
+              connectionStatus !== "connected" && (
+                <p className="text-11 text-tertiary" role="status">
+                  {t("research.knowledge.no_knowledge_bases")}
+                </p>
+              )}
             <label className="flex flex-col gap-1 text-11 text-secondary">
               {t("research.knowledge.file_label")}
               <input

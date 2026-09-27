@@ -38,6 +38,13 @@ export type TResearchKnowledgeBase = {
   summary?: string;
 };
 
+export type TResearchKnowledgeCandidate = {
+  name: string;
+  external_id: string;
+  source: string;
+  seen_at: string;
+};
+
 export type TResearchKnowledgeRequestState =
   | "REQUESTED"
   | "PENDING_ADMIN"
@@ -223,6 +230,8 @@ export class ResearchChainService extends APIService {
               scope?: TResearchKnowledgeScope;
               org_unit_id?: string | null;
               org_unit_name?: string | null;
+              connection_status?: "not_connected" | "connected" | "degraded";
+              candidates?: TResearchKnowledgeCandidate[];
             }
           | undefined;
         return {
@@ -234,6 +243,8 @@ export class ResearchChainService extends APIService {
           scope: payload?.scope ?? "LEGACY_CHAIN",
           orgUnitId: payload?.org_unit_id ?? "",
           orgUnitName: payload?.org_unit_name ?? "",
+          connectionStatus: payload?.connection_status ?? "",
+          candidates: payload?.candidates ?? [],
         };
       })
       .catch((err) => {
