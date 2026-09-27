@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 计划版本 | v1.3                                                                                                                                                                                           |
+| 计划版本 | v1.4（2026-09-27：补充当前工作区连接仍未登记的复核）                                                                                                                                           |
 | 上游 PRD | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md) §4–§10                                                                                                        |
 | 前置计划 | [`research-intelligent-platform-phase-1-plan.md`](./research-intelligent-platform-phase-1-plan.md)                                                                                             |
 | 后续计划 | [`research-intelligent-platform-phase-2-plan.md`](./research-intelligent-platform-phase-2-plan.md)                                                                                             |
@@ -120,6 +120,8 @@ FRONTEND_ORIGIN="http://localhost:3002"
 #### Plane 侧 RAGPortal 集成连接
 
 Plane 调用 RAGPortal 不走环境变量 base URL，而是通过 `ExternalSystemConnection` 记录：A 在科研管理 / 集成界面录入 `base_url=http://172.19.0.1:8004`，`credential_ref=RAGPORTAL_AUTH_SECRET`，并启用连接。
+
+2026-09-27 复核时，该记录在正在测试的 `public` 工作区不存在，Synlora 同样显示未登记。服务健康不能代替这条记录。下一轮用 [0926 后续修复计划](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md) R4 的幂等命令写入并做健康检查；写入前不要把 Phase 2 系统改成可配置。
 
 #### 工作区开关矩阵
 

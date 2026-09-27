@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                |
 | -------- | --------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.2（2026-09-26）                                                                                  |
+| 文档版本 | v1.3（2026-09-27）                                                                                  |
 | 文档定位 | 启动 dev 环境、通过 Tailnet 访问、执行每日健康检查和处置常见故障                                    |
 | 详细用例 | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
 | 开发计划 | [分角色验证开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) |
@@ -17,6 +17,7 @@
 - 工作区固定为 `public`，旧 seed 只允许出现在隔离自动化测试数据库。
 - 证据放在 `docs/evidence/phase-1.5/`，文件只保留脱敏身份、对象 ID、状态码、错误码和结论。
 - 具体角色动作、正负例和清理顺序以详细人工测试计划为准。
+- 0926 已复核项的下一轮看 [后续修复计划](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md)，不把第一轮实施状态里的「已落地」当成通过。
 
 ## 2. dev 环境启动与 Tailnet 访问
 
