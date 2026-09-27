@@ -2504,6 +2504,13 @@
         "links": "关联"
       }
     },
+    "topic_materials": {
+      "upload": "上传课题资料",
+      "type_rejected": "只允许上传 PDF 和 Markdown。",
+      "project": "所属课题",
+      "empty": "还没有课题资料。",
+      "choose_project": "选择课题"
+    },
     "integrations": {
       "description": "对接 PiLab 生态：知识库、湿实验、设备与研发平台系统。",
       "connections_title": "连接配置",

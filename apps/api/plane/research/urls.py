@@ -131,6 +131,8 @@ from plane.research.views import (
     ResearchOutcomeAttachmentPresignEndpoint,
     ResearchOutcomeLinkEndpoint,
     ResearchOutcomeListCreateEndpoint,
+    ResearchTopicMaterialListCreateEndpoint,
+    ResearchTopicMaterialPresignEndpoint,
     ResearchProjectChainEndpoint,
     ResearchProjectTimelineEndpoint,
     ResearchDeviceExecutionSearchEndpoint,
@@ -579,6 +581,16 @@ urlpatterns = [
     # ------------------------------------------------------------------
     # P1 outcomes and the exported reference list (§5.8)
     # ------------------------------------------------------------------
+    path(
+        "research/workspaces/<str:slug>/projects/<uuid:project_id>/materials/",
+        ResearchTopicMaterialListCreateEndpoint.as_view(),
+        name="research-topic-materials",
+    ),
+    path(
+        "research/workspaces/<str:slug>/projects/<uuid:project_id>/materials/presign/",
+        ResearchTopicMaterialPresignEndpoint.as_view(),
+        name="research-topic-material-presign",
+    ),
     path(
         "research/workspaces/<str:slug>/projects/<uuid:project_id>/outcomes/",
         ResearchOutcomeListCreateEndpoint.as_view(),

@@ -212,6 +212,10 @@ from .outcomes import (
     ResearchOutcomeLinkEndpoint,
     ResearchOutcomeListCreateEndpoint,
 )
+from .topic_materials import (
+    ResearchTopicMaterialListCreateEndpoint,
+    ResearchTopicMaterialPresignEndpoint,
+)
 
 __all__ = [
     "ResearchHealthEndpoint",
@@ -270,6 +274,8 @@ __all__ = [
     "ResearchOutcomeDetailEndpoint",
     "ResearchOutcomeLinkEndpoint",
     "ResearchOutcomeListCreateEndpoint",
+    "ResearchTopicMaterialListCreateEndpoint",
+    "ResearchTopicMaterialPresignEndpoint",
     "ResearchProjectChainEndpoint",
     "ResearchProjectTimelineEndpoint",
     "ResearchChainListCreateEndpoint",
