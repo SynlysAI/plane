@@ -83,10 +83,18 @@ export class UserService extends APIService {
    * @throws {Error} If the API request fails
    */
   async adminDetails(): Promise<IUser> {
-    return this.get("/api/instances/admins/me/")
+    const path = "/api/instances/admins/me/";
+    return this.get(path, {}, { timeout: 8000 })
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        const failure = new Error("admin session request failed");
+        const status = error?.response?.status;
+        Object.assign(failure, {
+          status: typeof status === "number" ? status : null,
+          path,
+          code: error?.code ?? null,
+        });
+        throw failure;
       });
   }
 }
