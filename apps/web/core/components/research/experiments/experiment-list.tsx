@@ -124,7 +124,7 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
               </span>
             </button>
           ))}
-          {!records.length && <p className="text-12 text-tertiary">{t("research.experiments.empty")}</p>}
+          {!records.length && <p className="text-12 text-tertiary">{t("research.experiments.phase_boundary")}</p>}
         </div>
       </div>
       <div className="flex-1 overflow-hidden">
@@ -136,7 +136,9 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
             currentUserId={currentUser?.id}
           />
         ) : (
-          <p className="p-5 text-13 text-tertiary">{t("research.experiments.select_hint")}</p>
+          <p className="p-5 text-13 text-tertiary">
+            {records.length ? t("research.experiments.select_hint") : t("research.experiments.phase_boundary")}
+          </p>
         )}
       </div>
     </div>

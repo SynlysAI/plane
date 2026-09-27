@@ -2363,6 +2363,7 @@
       "description": "逐条登记实验，锁定关键事实，修改须走修订审批。",
       "create": "登记实验",
       "empty": "还没有登记实验。",
+      "phase_boundary": "本阶段可以新建人工记录。SpecLabOS 未启用，不能同步运行记录。",
       "select_hint": "选择一条实验查看详情。",
       "structured_value": "结构化值",
       "title_placeholder": "实验标题",
