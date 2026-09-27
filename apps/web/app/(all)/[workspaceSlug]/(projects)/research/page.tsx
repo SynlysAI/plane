@@ -15,6 +15,7 @@ import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigati
 import type { TResearchChain } from "@plane/types";
 // components
 import { ResearchHomeSummaryCard } from "@/components/research/common/research-home-summary-card";
+import { chainOwnerLabel, selectResearchOverviewChains } from "@/components/research/common/research-overview-rows";
 import { ResearchTodoIndex } from "@/components/research/common/research-todo-index";
 import { formatResearchDate, formatResearchTime } from "@/components/research/common/research-format";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
@@ -90,6 +91,8 @@ function WorkspaceResearchOverviewPage() {
   const periodStart = periodDays ? Date.now() - periodDays * 86400000 : 0;
   const visibleChains = chains.filter((chain) => new Date(chain.updated_at).getTime() >= periodStart);
   const currentChain = pickCurrentChain(visibleChains);
+  const overview = selectResearchOverviewChains(research.identity, visibleChains);
+  const summaryChains = overview.mode === "stacked" ? overview.rows : currentChain ? [currentChain] : [];
 
   if (workspaceSlug && view === "report_submission" && research.canSee("summary")) {
     return (
@@ -158,10 +161,6 @@ function WorkspaceResearchOverviewPage() {
             <ResearchHomeSummaryCard workspaceSlug={workspaceSlug} />
           )}
 
-          <div className="mt-5">
-            {workspaceSlug && <ResearchTodoIndex workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />}
-          </div>
-
           <section className="mt-5 overflow-hidden rounded-xl bg-surface-2">
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div>
@@ -182,30 +181,38 @@ function WorkspaceResearchOverviewPage() {
                 <p className="p-4 text-12 text-secondary" role="alert">
                   {t("research.portal.load_failed")}
                 </p>
-              ) : visibleChains.length ? (
+              ) : summaryChains.length ? (
                 <ul className="divide-y divide-subtle" role="list">
-                  {visibleChains.slice(0, 6).map((chain) => (
-                    <li key={chain.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-1">
-                      <Link
-                        href={`/${workspaceSlug}/research/chains/${chain.id}`}
-                        className="min-w-0 flex-1 truncate text-13 text-primary hover:text-accent-primary"
-                      >
-                        {chain.project_name ?? chain.project}
-                      </Link>
-                      <ResearchStatusBadge status={chain.status} size="sm">
-                        {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
-                      </ResearchStatusBadge>
-                      <span className="w-24 shrink-0 text-right text-11 text-tertiary tabular-nums">
-                        {formatResearchDate(chain.updated_at, currentLocale)}
-                      </span>
-                    </li>
-                  ))}
+                  {summaryChains.map((chain) => {
+                    const ownerLabel = chainOwnerLabel(research.identity, chain);
+                    return (
+                      <li key={chain.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-1">
+                        <Link
+                          href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                          className="min-w-0 flex-1 truncate text-13 text-primary hover:text-accent-primary"
+                        >
+                          {chain.project_name ?? chain.project}
+                        </Link>
+                        {ownerLabel && <span className="shrink-0 text-12 text-tertiary">{ownerLabel}</span>}
+                        <ResearchStatusBadge status={chain.status} size="sm">
+                          {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
+                        </ResearchStatusBadge>
+                        <span className="w-24 shrink-0 text-right text-11 text-tertiary tabular-nums">
+                          {formatResearchDate(chain.updated_at, currentLocale)}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="p-4 text-12 text-secondary">{t("research.chains.empty")}</p>
               )}
             </div>
           </section>
+
+          <div className="mt-5">
+            {workspaceSlug && <ResearchTodoIndex workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />}
+          </div>
 
           {workspaceSlug && !research.isIaV2Enabled && research.canSee("research_chain") && (
             <div className="mt-5">
