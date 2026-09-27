@@ -12,11 +12,11 @@
 
 ## 1. 测试前说明
 
-当前 `public` 基线由 π-Lab Excel 重建：22 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶，验证前没有预造课题、Project、Chain 或 KB request。组织层级迁移完成后，节点基线应为 24（1 个根、2 个方向、21 个小组）。历史 seed 账号和旧课题只用于自动化测试和历史复盘。
+当前 `public` 基线由 π-Lab Excel 重建后再做方向迁移：活动组织节点 24（1 个根、2 个方向、21 个小组），另有 2 个已停用的验证单元；189 名学生、14 名导师、唯一 Main PI 洪文晶。0926 人工课题保留，因此当前运行库不再满足「没有预造课题」。历史 seed 账号和旧课题只用于自动化测试和历史复盘。
 
 每个身份使用独立浏览器 Profile。开始前先完成启动指南 §3 健康快照和 `--verify-only`，再从运行库解析实际身份。测试记录只保存脱敏身份、对象 ID、状态码、错误码和 request id。
 
-0926 复核后的未关闭项、新增的学生项目可见性和回归顺序，以 [0926 后续修复计划](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md) 第 7 节为准。当前库在方向节点迁移命令成功前仍按 22 个组织节点核对；迁移成功后再改为 24。不要用全量基线重建代替这次迁移。
+0926 复核后的回归顺序，以 [0926 后续修复计划](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md) 第 7 节为准。方向迁移已经完成，活动节点按 24 核对。不要用全量基线重建代替这次迁移。
 
 ## 2. 已执行 mock 夹具
 
@@ -37,7 +37,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 ./scripts/rebuild-pi-lab-baseline.sh --verify-only
 ```
 
-通过条件：组织节点 22、学生 189、导师 14、Main PI 唯一且为洪文晶，`projects/research_profiles/research_chains/knowledge_requests=0`。
+通过条件：全量重建时期望组织节点 24、学生 189、导师 14、Main PI 唯一且为洪文晶，且没有预造课题。当前运行库已保留人工课题，组织层级改用 `migrate_pi_lab_direction_nodes --workspace public --verify`，活动节点应为 24。
 
 ## 4. L2：角色解析、导航与能力
 

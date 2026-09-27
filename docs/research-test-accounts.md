@@ -8,7 +8,8 @@
 
 当前 `public` 工作区由 π-Lab Excel 重建：
 
-- 22 个组织节点、189 名学生、14 名导师。
+- 全量重建验收为 24 个组织节点（1 个根、2 个方向、21 个小组）、189 名学生、14 名导师。
+- 2026-09-27 方向迁移后的运行库是 24 个活动节点，另有 2 个已停用验证单元；人工课题保留，不按「课题数为 0」复验。
 - 唯一 Main PI：洪文晶。
 - 152 条主导师绑定，37 条主导师缺口，14 条联合导师引用缺口。
 - `projects`、`research_profiles`、`research_chains`、`knowledge_requests` 初始均为 0。
@@ -34,7 +35,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 ./scripts/rebuild-pi-lab-baseline.sh --verify-only
 ```
 
-通过条件：22 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶，且 `public` 没有预造课题、Project、Chain、KB request。
+通过条件：全量重建为 24 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶，且 `public` 没有预造课题、Project、Chain、KB request。已经完成方向迁移的运行库改看 `migrate_pi_lab_direction_nodes --verify`，活动节点为 24。
 
 ## 历史 seed 说明
 

@@ -46,19 +46,38 @@ from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_orde
 
 
 
-def _research_access_expression(user, slug):
+def _cached_research_review_ids(request, slug):
+    """同一请求内只计算一次研究链只读项目。
+
+    Args:
+        request: 当前请求。
+        slug: 工作区别名。
+
+    Returns:
+        项目主键列表。工作区不存在时为空列表。
+    """
+    cache = getattr(request, "_research_review_project_ids", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        request._research_review_project_ids = cache
+    if slug not in cache:
+        from plane.research.utils.project_review import research_review_project_ids_for_slug
+
+        cache[slug] = research_review_project_ids_for_slug(request.user, slug)
+    return cache[slug]
+
+
+def _research_access_expression(request, slug):
     """生成非成员研究链读者的 ``research_access`` 注解。
 
     Args:
-        user: 当前查看者。
+        request: 当前请求。
         slug: 工作区别名。
 
     Returns:
         可放进 queryset.annotate 的 Case 表达式。
     """
-    from plane.research.utils.project_review import research_review_project_ids_for_slug
-
-    review_ids = research_review_project_ids_for_slug(user, slug)
+    review_ids = _cached_research_review_ids(request, slug)
     return Case(
         When(Q(id__in=review_ids) & Q(member_role__isnull=True), then=Value("review")),
         default=Value(None),
@@ -66,20 +85,19 @@ def _research_access_expression(user, slug):
     )
 
 
-def _restrict_workspace_project_visibility(queryset, user, slug):
+def _restrict_workspace_project_visibility(queryset, request, slug):
     """保留原有成员和公开网络规则，并并入研究链只读项目。
 
     Args:
         queryset: 工作区项目查询集。
-        user: 当前查看者。
+        request: 当前请求。
         slug: 工作区别名。
 
     Returns:
         过滤后的查询集。工作区管理员保持原样，可以看到全部项目。
     """
-    from plane.research.utils.project_review import research_review_project_ids_for_slug
-
-    review_ids = research_review_project_ids_for_slug(user, slug)
+    user = request.user
+    review_ids = _cached_research_review_ids(request, slug)
     if WorkspaceMember.objects.filter(
         member=user,
         workspace__slug=slug,
@@ -142,7 +160,7 @@ class ProjectViewSet(BaseViewSet):
                 ).values("role")
             )
             .annotate(
-                research_access=_research_access_expression(self.request.user, self.kwargs.get("slug"))
+                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
             )
             .annotate(
                 anchor=DeployBoard.objects.filter(
@@ -172,7 +190,7 @@ class ProjectViewSet(BaseViewSet):
     def list_detail(self, request, slug):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         projects = self.get_queryset().order_by("sort_order", "name")
-        projects = _restrict_workspace_project_visibility(projects, request.user, slug)
+        projects = _restrict_workspace_project_visibility(projects, request, slug)
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(
@@ -208,7 +226,7 @@ class ProjectViewSet(BaseViewSet):
                 ).values("role")
             )
             .annotate(
-                research_access=_research_access_expression(self.request.user, self.kwargs.get("slug"))
+                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
             )
             .annotate(
                 intake_count=Count(
@@ -251,7 +269,7 @@ class ProjectViewSet(BaseViewSet):
             "updated_by",
         )
 
-        projects = _restrict_workspace_project_visibility(projects, request.user, slug)
+        projects = _restrict_workspace_project_visibility(projects, request, slug)
         return Response(projects, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")

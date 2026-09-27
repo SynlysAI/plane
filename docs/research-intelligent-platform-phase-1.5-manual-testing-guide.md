@@ -97,7 +97,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 ./scripts/rebuild-pi-lab-baseline.sh --verify-only
 ```
 
-通过条件：迁移前为 22 个组织节点；组织迁移完成后为 24 个节点（1 根、2 方向、21 小组），189 名学生、14 名导师、唯一 Main PI 洪文晶，`projects/research_profiles/research_chains/knowledge_requests=0`；验证命令只读。
+通过条件：全量重建为 24 个组织节点（1 根、2 方向、21 小组），189 名学生、14 名导师、唯一 Main PI 洪文晶，且没有预造课题。2026-09-27 方向迁移已经完成；当前运行库保留人工课题，组织层级用 `migrate_pi_lab_direction_nodes --verify` 核对 24 个活动节点。验证命令只读。
 
 在 `identity/me` 的 `user.role_context` 中核对实际解析标签，然后打开[详细人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)，按 L2 解析主 PI、产业化负责人、直接导师、学生、管理员、NONE 和 Guest。角色缺失时停止，不得用历史账号代替。
 

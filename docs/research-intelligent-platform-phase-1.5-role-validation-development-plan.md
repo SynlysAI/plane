@@ -1,16 +1,16 @@
 # 科研智能平台 Phase 1.5 分角色验证开发计划
 
-| 项目       | 内容                                                                                                                                                                              |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本   | v1.5（2026-09-27）                                                                                                                                                                |
-| 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                                |
-| 适用版本   | Plane `4.19.0`，`develop`                                                                                                                                                         |
-| 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)         |
-| 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                               |
-| 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                                 |
-| 数据基线   | `public` π-Lab Excel 基线：迁移前 22 个组织节点，迁移后 24 个（1 根、2 方向、21 小组）、189 名学生、14 名导师、唯一 Main PI 洪文晶；验证前课题、Project、Chain、KB request 均为 0 |
-| 测试知识库 | 原固定库 `plane测试` 已删除；不固定库名，按课题成员所属 `TEAM` 小组发现候选，由管理员确认后同组复用；不得跨小组绑定                                                               |
-| 凭据规则   | 运行时从本机安全存储注入；Git、截图、日志和证据不得保存密码、Token、API Key 或完整邮箱                                                                                            |
+| 项目       | 内容                                                                                                                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 文档版本   | v1.5（2026-09-27）                                                                                                                                                                 |
+| 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                                 |
+| 适用版本   | Plane `4.19.0`，`develop`                                                                                                                                                          |
+| 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)          |
+| 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                                |
+| 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                                  |
+| 数据基线   | `public` π-Lab Excel 基线：方向迁移后 24 个活动组织节点（1 根、2 方向、21 小组）、189 名学生、14 名导师、唯一 Main PI 洪文晶；全量重建时期望课题为 0，当前运行库保留 0926 人工课题 |
+| 测试知识库 | 原固定库 `plane测试` 已删除；不固定库名，按课题成员所属 `TEAM` 小组发现候选，由管理员确认后同组复用；不得跨小组绑定                                                                |
+| 凭据规则   | 运行时从本机安全存储注入；Git、截图、日志和证据不得保存密码、Token、API Key 或完整邮箱                                                                                             |
 
 ## 1. 目标、范围与当前结论
 

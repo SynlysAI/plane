@@ -67,7 +67,7 @@
 | [`research-intelligent-platform-phase-1.5-optimization-fix-plan.md`](./research-intelligent-platform-phase-1.5-optimization-fix-plan.md)                       | Phase 1.5 问题、任务、回滚和当前实现回写                                           |
 | [`research-intelligent-platform-phase-1.5-issue-0926-resolution-plan.md`](./research-intelligent-platform-phase-1.5-issue-0926-resolution-plan.md)             | 0926 第一轮诊断；第 9 节是人工复核结论                                             |
 | [`research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md`](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md)                 | 0926 复核后的当前修复任务、顺序和回归                                              |
-| [`research-intelligent-platform-phase-1.5-issue-0926-implementation-status.md`](./research-intelligent-platform-phase-1.5-issue-0926-implementation-status.md) | 0926 复核项的代码关闭状态；R1–R12 已有实现，人工点击仍按计划第 7 节                |
+| [`research-intelligent-platform-phase-1.5-issue-0926-implementation-status.md`](./research-intelligent-platform-phase-1.5-issue-0926-implementation-status.md) | 0926 复核项的代码关闭状态；R1–R12 已有实现和证据，人工点击仍按计划第 7 节          |
 | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                               | Phase 1.5 联调执行步骤                                                             |
 | [`research-intelligent-platform-phase-1.5-role-validation-development-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) | Phase 1.5 分角色验证开发计划（开发验证入口）                                       |
 | [`research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md`](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) | Phase 1.5 分角色人工测试计划（逐格用例入口）                                       |
@@ -91,6 +91,7 @@
 
 | 日期       | 版本 | 变更                                                                        |
 | ---------- | ---- | --------------------------------------------------------------------------- |
+| 2026-09-27 | v2.3 | 补齐 R1、R3、R9 证据，并把方向迁移后的组织节点验收从 22 改为 24             |
 | 2026-09-27 | v2.2 | 回写 0926 后续修复 R1–R12 的代码关闭状态，并链到证据目录                    |
 | 2026-09-27 | v2.1 | 接入 0926 人工复核后的后续修复计划，并修正第一轮实施状态口径                |
 | 2026-09-26 | v2.0 | 按 `4.16.0` 当前代码重建文档层级、状态矩阵、阅读入口和真实数据/跨仓验收门禁 |

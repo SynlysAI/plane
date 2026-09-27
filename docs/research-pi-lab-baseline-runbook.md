@@ -84,7 +84,7 @@ docker compose -f docker-compose-test.yml run --rm api-tests \
 ./scripts/rebuild-pi-lab-baseline.sh --verify-only
 ```
 
-`--verify-only` 会断言 `pi` 为空、组织树为 22 个节点、唯一 PI 为洪文晶、189/14 账号Profile、152 条主导师绑定、37 条主导师缺口、2 个无效学号置空，以及无预造课题/链/KB。
+`--verify-only` 会断言 `pi` 为空、组织树为 24 个节点（1 个根、2 个方向、21 个小组）、唯一 PI 为洪文晶、189/14 账号 Profile、152 条主导师绑定、37 条主导师缺口、2 个无效学号置空，以及无预造课题/链/KB。2026-09-27 方向迁移后的运行库另有 2 个已停用验证单元，并保留了人工课题，不能用这条「课题数为 0」的验收判断迁移结果；运行库改用 `migrate_pi_lab_direction_nodes --verify`，活动节点应为 24。
 
 回滚时先停止写入服务，用备份目录中的 `database.dump` 和 `uploads.tar.gz` 恢复原卷，再启动服务。恢复操作必须由维护人复核 `manifest.json` 哈希后在变更窗口执行。
 
