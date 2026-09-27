@@ -828,6 +828,9 @@ export const researchEndpoints = {
   projectProgress: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/progress/`,
   // ---- P1 outcomes (§5.8) ----
   outcomes: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/outcomes/`,
+  topicMaterials: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/materials/`,
+  topicMaterialPresign: (slug: string, projectId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/materials/presign/`,
   outcome: (slug: string, outcomeId: string) => `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/`,
   outcomeAttachments: (slug: string, outcomeId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/attachments/`,

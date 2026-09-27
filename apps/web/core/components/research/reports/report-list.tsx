@@ -26,6 +26,7 @@ import {
   ResearchTableSurface,
 } from "@/components/research/common/research-data-surface";
 import { ResearchListState } from "@/components/research/common/research-list-state";
+import { ResearchTopicMaterialActions } from "@/components/research/materials/topic-material-actions";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
@@ -357,6 +358,13 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
           activeLabel={t("research.list_state.active_filters")}
           clearLabel={t("research.list_state.clear_filters")}
           onClear={clearFilters}
+        />
+      )}
+
+      {variant === "default" && (
+        <ResearchTopicMaterialActions
+          workspaceSlug={workspaceSlug}
+          projects={teamProjects.map((project) => ({ id: project.id, name: project.name }))}
         />
       )}
 

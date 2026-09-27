@@ -2480,6 +2480,13 @@
         "links": "Links"
       }
     },
+    "topic_materials": {
+      "upload": "Upload topic materials",
+      "type_rejected": "Only PDF and Markdown files can be uploaded.",
+      "project": "Project",
+      "empty": "No topic materials yet.",
+      "choose_project": "Choose a project"
+    },
     "integrations": {
       "description": "Connections to the PiLab ecosystem: knowledge, lab, device and R&D systems.",
       "connections_title": "Connections",
