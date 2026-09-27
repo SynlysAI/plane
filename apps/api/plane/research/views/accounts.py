@@ -480,8 +480,30 @@ class ResearchUserImportDetailEndpoint(ResearchAPIView):
                 ResearchErrorCode.IMPORT_BATCH_NOT_FOUND,
                 "Import batch not found.",
             )
-        batch.prefetched_rows = list(batch.rows.select_related("user").all())
-        return Response(UserImportBatchSerializer(batch).data, status=status.HTTP_200_OK)
+        try:
+            page = max(1, int(request.GET.get("page", 1)))
+            page_size = min(50, max(1, int(request.GET.get("page_size", 50))))
+        except (TypeError, ValueError):
+            return research_error(ResearchErrorCode.IMPORT_ROW_INVALID, "分页参数无效。")
+        rows = batch.rows.select_related("user").order_by("row_number")
+        start = (page - 1) * page_size
+        batch.prefetched_rows = list(rows[start : start + page_size])
+        batch.import_rows_total = rows.count()
+        batch.review_counts_override = {
+            "pending": rows.filter(review_decision="PENDING").count(),
+            "included": rows.filter(review_decision="INCLUDED").count(),
+            "excluded": rows.filter(review_decision="EXCLUDED").count(),
+        }
+        batch.import_rows_page = page
+        batch.import_rows_page_size = page_size
+        payload = UserImportBatchSerializer(batch).data
+        payload["rows_pagination"] = {
+            "page": page,
+            "page_size": page_size,
+            "total": batch.import_rows_total,
+            "has_next": start + page_size < batch.import_rows_total,
+        }
+        return Response(payload, status=status.HTTP_200_OK)
 
     def _batch(self, workspace, pk):
         return UserImportBatch.objects.filter(workspace=workspace, pk=pk).first()

@@ -57,6 +57,9 @@ export const usePageFallback = (args: TArgs) => {
         );
       }
 
+      // A Yjs update is a merge operation. The editor helper replaces both
+      // shared fragments before applying the server snapshot, so reconnects
+      // cannot append the same paragraphs on every autosave cycle.
       editor.setProviderDocument(latestDecodedDescription);
       const { binary, html, json } = editor.getDocument();
       if (!binary || !json) return;
