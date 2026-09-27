@@ -21,12 +21,11 @@ import { ResearchOrgService } from "@/services/research/org.service";
 // local imports
 import { ResearchMentorBindings } from "./mentor-bindings";
 import { ResearchOrgMemberTable } from "./org-member-table";
+import { buildOrgTree, type OrgTreeNode } from "./org-tree";
 
 type Props = {
   workspaceSlug: string;
 };
-
-type OrgTreeNode = TOrgUnit & { children: OrgTreeNode[] };
 
 const orgService = new ResearchOrgService();
 
@@ -35,19 +34,6 @@ const BUSINESS_CATEGORIES: Array<{ value: TOrgBusinessCategory; label: string }>
   { value: "INDUSTRIALIZATION", label: "产业化" },
   { value: "MENTOR_GROUP", label: "导师组" },
 ];
-
-const buildTree = (units: TOrgUnit[]): OrgTreeNode[] => {
-  const nodes = new Map<string, OrgTreeNode>();
-  units.forEach((unit) => nodes.set(unit.id, { ...unit, children: [] }));
-  const roots: OrgTreeNode[] = [];
-  units.forEach((unit) => {
-    const node = nodes.get(unit.id);
-    if (!node) return;
-    if (unit.parent && nodes.has(unit.parent)) nodes.get(unit.parent)?.children.push(node);
-    else roots.push(node);
-  });
-  return roots;
-};
 
 type TreeNodeRowProps = {
   node: OrgTreeNode;
@@ -132,7 +118,7 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
   const [creating, setCreating] = useState(false);
 
   const units = research.getOrgUnits(workspaceSlug);
-  const tree = useMemo(() => buildTree(units), [units]);
+  const tree = useMemo(() => buildOrgTree(units), [units]);
   const selectedUnit = units.find((unit) => unit.id === selectedUnitId) ?? null;
   const refreshIncomplete = useCallback(async () => {
     setIncomplete(await orgService.getIncomplete(workspaceSlug));

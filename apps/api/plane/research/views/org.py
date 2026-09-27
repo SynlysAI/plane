@@ -42,6 +42,7 @@ from plane.research.utils.org import (
     ensure_root_org_unit,
     is_descendant_of,
     move_subtree,
+    order_org_units_for_tree,
     managing_unit_ids,
     user_can_manage_org_unit,
 )
@@ -240,7 +241,7 @@ class ResearchOrgUnitListCreateEndpoint(ResearchAPIView):
         units = OrgUnit.objects.filter(workspace=workspace)
         if not truthy(request.GET.get("include_inactive")):
             units = units.filter(is_active=True)
-        units = units.order_by("path", "sort_order")
+        units = order_org_units_for_tree(units)
         return Response(_serialize_units(list(units)), status=status.HTTP_200_OK)
 
     def post(self, request, slug):
