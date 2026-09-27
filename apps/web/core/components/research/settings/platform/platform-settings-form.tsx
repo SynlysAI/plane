@@ -170,7 +170,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
         title={t("research.platform.reporting_scope")}
         hint={t("research.platform.reporting_scope_hint")}
       >
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {REPORTER_CATEGORIES.map((category) => (
             <label key={category} className="flex items-center gap-2 text-12 text-secondary">
               <input
@@ -194,7 +194,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
       {research.identity?.user.is_system_admin && (
         <ResearchDetailSurface title={t("research.platform.main_pi")} hint={t("research.platform.main_pi_hint")}>
           <Input
-            className="mt-3"
+            className="mt-3 w-full min-w-0"
             value={draft.main_pi ?? ""}
             placeholder={t("research.platform.main_pi_placeholder")}
             onChange={(event) => setDraft({ ...draft, main_pi: event.target.value.trim() || null })}
@@ -203,7 +203,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
       )}
 
       <ResearchDetailSurface title={t("research.platform.limits")}>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {LIMITS.map((item) => (
             <label key={item.field} className="flex flex-col gap-1 text-12 text-secondary">
               <span>{t(item.labelKey)}</span>

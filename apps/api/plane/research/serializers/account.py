@@ -117,6 +117,15 @@ class UserImportRowSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def to_representation(self, instance):
+        """Hide one-time credentials and raw password columns from JSON."""
+        data = super().to_representation(instance)
+        raw = dict(data.get("raw") or {})
+        for key in ("initial_password", "password", "初始密码", "密码"):
+            raw.pop(key, None)
+        data["raw"] = raw
+        return data
+
 
 class UserImportBatchSerializer(serializers.ModelSerializer):
     review_counts = serializers.SerializerMethodField()
@@ -151,10 +160,13 @@ class UserImportBatchSerializer(serializers.ModelSerializer):
     def get_rows(self, obj):
         rows = getattr(obj, "prefetched_rows", None)
         if rows is None:
-            rows = obj.rows.all()
+            rows = obj.rows.order_by("row_number").all()[:50]
         return UserImportRowSerializer(rows, many=True).data
 
     def get_review_counts(self, obj):
+        override = getattr(obj, "review_counts_override", None)
+        if override is not None:
+            return override
         rows = list(getattr(obj, "prefetched_rows", obj.rows.all()))
         return {
             decision.lower(): sum(row.review_decision == decision for row in rows)
