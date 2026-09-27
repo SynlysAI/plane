@@ -1082,6 +1082,8 @@ export type TIntegrationConnection = {
   last_health_at?: string | null;
   last_success_at?: string | null;
   last_error?: string;
+  registration_status?: "CONNECTED" | "REGISTERED_DISABLED" | "NOT_REGISTERED" | "PHASE_NOT_ENABLED" | "PROXY";
+  proxy_system?: TIntegrationSystem;
 };
 
 export type TIntegrationCallLog = {

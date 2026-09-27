@@ -2494,6 +2494,10 @@
         "ok": "Normal",
         "degraded": "Degraded",
         "phase_not_enabled": "Not enabled in this phase",
+        "not_registered": "Not registered",
+        "registered_disabled": "Registered but disabled",
+        "proxy": "Proxied by {system}",
+        "proxy_detail": "Plane does not keep a separate WeKnora connection; check the RAGPortal proxy path.",
         "down": "Unavailable"
       },
       "external_type": {

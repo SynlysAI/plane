@@ -1,16 +1,16 @@
 # 科研智能平台 Phase 1.5 分角色验证开发计划
 
-| 项目       | 内容                                                                                                                                                                      |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本   | v1.4（2026-09-26）                                                                                                                                                        |
-| 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                        |
-| 适用版本   | Plane `4.18.1`，`develop`                                                                                                                                                 |
-| 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md) |
-| 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                       |
-| 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                         |
-| 数据基线   | `public` π-Lab Excel 基线：22 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶；验证前课题、Project、Chain、KB request 均为 0                                       |
-| 测试知识库 | 只使用 WeKnora/RAGPortal 现成知识库 `plane测试`                                                                                                                           |
-| 凭据规则   | 运行时从本机安全存储注入；Git、截图、日志和证据不得保存密码、Token、API Key 或完整邮箱                                                                                    |
+| 项目       | 内容                                                                                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 文档版本   | v1.4（2026-09-26）                                                                                                                                                                |
+| 文档状态   | 可执行；dev 五服务已启动，真实身份和 mock 课题由人工测试时动态解析                                                                                                                |
+| 适用版本   | Plane `4.19.0`，`develop`                                                                                                                                                         |
+| 上游文档   | [联调与缺陷收敛计划](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)、[联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)         |
+| 人工入口   | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)                                                                               |
+| 快速启动   | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                                 |
+| 数据基线   | `public` π-Lab Excel 基线：迁移前 22 个组织节点，迁移后 24 个（1 根、2 方向、21 小组）、189 名学生、14 名导师、唯一 Main PI 洪文晶；验证前课题、Project、Chain、KB request 均为 0 |
+| 测试知识库 | 原固定库 `plane测试` 已删除；不固定库名，按课题成员所属 `TEAM` 小组发现候选，由管理员确认后同组复用；不得跨小组绑定                                                               |
+| 凭据规则   | 运行时从本机安全存储注入；Git、截图、日志和证据不得保存密码、Token、API Key 或完整邮箱                                                                                            |
 
 ## 1. 目标、范围与当前结论
 
@@ -50,18 +50,18 @@
 | Owner     | 解析出的 `RESEARCHER`                                                                      |
 | 直接导师  | 目标学生的有效 `MentorBinding`                                                             |
 | 可见性    | `WORKSPACE`                                                                                |
-| KB        | 管理员将现成 `plane测试` 回填到该课题；状态必须从 `PENDING_ADMIN` 变为 `READY`             |
+| KB        | 按课题成员所属小组展示候选库，由管理员确认并回填；状态必须从 `PENDING_ADMIN` 变为 `READY`  |
 | 测试文档  | 只包含 `P15-ROLE-MOCK-{YYYYMMDD}-{随机短码}` 的脱敏 TXT/Markdown                           |
 
 ### 3.2 可选 PRIVATE 对照课题
 
-仅在需要验证 PRIVATE fail-closed 时创建 `P15-MOCK-PRIVATE-隔离-{YYYYMMDD}`。它由同一学生拥有、可见性为 `PRIVATE`、不绑定 KB、不上传文件，测试结束后优先归档或删除。`plane测试` 可以复用给同一小组的后续课题，不得绑定到另一个小组。
+仅在需要验证 PRIVATE fail-closed 时创建 `P15-MOCK-PRIVATE-隔离-{YYYYMMDD}`。它由同一学生拥有、可见性为 `PRIVATE`、不绑定 KB、不上传文件，测试结束后优先归档或删除。确认后的目标库可以复用给同一小组的后续课题，不得绑定到另一个小组；成员属于哪个小组，课题就只能使用哪个小组的绑定。
 
 ### 3.3 创建、幂等与回滚
 
 - 优先通过 Web 创建；使用 API 时保存 request id、Project/Chain/KB request id 和状态变化。
 - KB 未达到 `READY` 时上传必须被门禁拦截，预期为 `409 KB_NOT_READY`。
-- 同一小组的多个课题复用 `plane测试`；只有绑到另一个小组时才返回 `KB_SCOPE_CONFLICT`，且不得产生 WeKnora 上传任务。
+- 同一小组的多个课题复用已确认绑定；只有绑到另一个小组时才返回 `KB_SCOPE_CONFLICT`，且不得产生 WeKnora 上传任务。
 - 清理顺序为：删除测试文件和引用 → 归档/删除 mock 课题 → 清理临时访客和 AccountLink → 复核 `public` 基线。
 - 清理失败不得强删生产对象；登记对象 ID、状态和补偿动作，保留可回滚证据。
 
@@ -137,17 +137,17 @@
 
 ## 5. 开发验收矩阵
 
-| 编号   | 目标         | 通过条件                                                          | 证据                         |
-| ------ | ------------ | ----------------------------------------------------------------- | ---------------------------- |
-| DEV-01 | dev 启动     | 五服务健康、Docker 容器 Up、Tailnet 入口可达                      | `health/{date}-startup.md`   |
-| DEV-02 | 真实身份解析 | 角色来自当前 `public`，无旧 seed                                  | `role-resolution-{date}.md`  |
-| DEV-03 | 关系一致性   | Project、ResearchProfile、Chain 一一对应；同一 TEAM 一条 KB 绑定  | `mock-topic-{date}.md`       |
-| DEV-04 | KB 门禁      | 仅 `plane测试`；READY 前阻断；跨小组返回 `KB_SCOPE_CONFLICT`      | `L3-kb-{date}.md`            |
-| DEV-05 | 权限一致     | 页面、列表、详情、直 ID、导出、Agent、KB 七条路径一致             | `L3.6-role-matrix-{date}.md` |
-| DEV-06 | REVIEW 隔离  | 导师/主 PI 可读、评论、审批、分析草稿；拒绝所有写入正式内容的动作 | `review-scope-{date}.md`     |
-| DEV-07 | 开关与降级   | 五开关逐项恢复，三类外部服务降级可回退                            | `switches/`、`degradation/`  |
-| DEV-08 | 清理可回滚   | mock 数据、临时访客、AccountLink 和测试文件清理；真实基线不变     | `L5-cleanup-{date}.md`       |
-| DEV-09 | 证据安全     | 无密码、Token、API Key、完整邮箱、原始正文和未脱敏截图            | 证据抽查记录                 |
+| 编号   | 目标         | 通过条件                                                                     | 证据                         |
+| ------ | ------------ | ---------------------------------------------------------------------------- | ---------------------------- |
+| DEV-01 | dev 启动     | 五服务健康、Docker 容器 Up、Tailnet 入口可达                                 | `health/{date}-startup.md`   |
+| DEV-02 | 真实身份解析 | 角色来自当前 `public`，无旧 seed                                             | `role-resolution-{date}.md`  |
+| DEV-03 | 关系一致性   | Project、ResearchProfile、Chain 一一对应；同一 TEAM 一条 KB 绑定             | `mock-topic-{date}.md`       |
+| DEV-04 | KB 门禁      | 按成员小组发现并确认；READY 前阻断；同组复用；跨小组返回 `KB_SCOPE_CONFLICT` | `L3-kb-{date}.md`            |
+| DEV-05 | 权限一致     | 页面、列表、详情、直 ID、导出、Agent、KB 七条路径一致                        | `L3.6-role-matrix-{date}.md` |
+| DEV-06 | REVIEW 隔离  | 导师/主 PI 可读、评论、审批、分析草稿；拒绝所有写入正式内容的动作            | `review-scope-{date}.md`     |
+| DEV-07 | 开关与降级   | 五开关逐项恢复，三类外部服务降级可回退                                       | `switches/`、`degradation/`  |
+| DEV-08 | 清理可回滚   | mock 数据、临时访客、AccountLink 和测试文件清理；真实基线不变                | `L5-cleanup-{date}.md`       |
+| DEV-09 | 证据安全     | 无密码、Token、API Key、完整邮箱、原始正文和未脱敏截图                       | 证据抽查记录                 |
 
 任何 P0（越权、数据丢失、五服务不可用、闭环阻断）或未解释的权限差异都会阻断 Phase 1.5 出口；P1 必须在重新开放人工测试前完成回归。
 
@@ -182,21 +182,21 @@ docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml 
 | MentorBinding | `f09c7fe9-c565-4904-9598-54e39e1f5c39`，刘俊扬 → 邱智鑫，当前仍有效 |
 | mock Project  | 当前库中没有；按人工计划 L3 新建，不沿用已删除的旧 ID               |
 
-2026-09-26 17:01 的初始密码导出覆盖了三名基线账号的密码。开发库已把这三名账号恢复为下表密码，并重新创建产业化负责人、基础研究负责人和访客。管理员密码已由本人修改，下表中的管理员密码不再有效。
+2026-09-26 17:01 的初始密码导出覆盖了三名基线账号的密码。随后所有本轮测试账号均已完成首次登录并改为个人密码；管理员密码也已由本人修改。为避免继续传播已失效的初始凭据，本节只记录密码状态，不保存明文密码。
 
-本轮测试账号和明文密码（仅限当前 dev 测试环境）：
+本轮测试账号密码状态（仅限当前 dev 测试环境）：
 
-| 角色                    | 账号                                 | 密码                     |
-| ----------------------- | ------------------------------------ | ------------------------ |
-| ADMIN                   | `admin@ai4ms.local`                  | 已改为个人密码           |
-| PRINCIPAL / MENTOR      | `whong@xmu.edu.cn`                   | `P15!Dp4oexY8F1gIZn51js` |
-| MENTOR                  | `jyliu@xmu.edu.cn`                   | `P15!muRa0cCV3PY5yGkLKF` |
-| RESEARCHER              | `qiuzhixin@stu.xmu.edu.cn`           | `P15!HvMLgY8YwxJ5q9j8T3` |
-| INDUSTRIALIZATION_OWNER | `phase15.industry.owner@ai4ms.local` | `P15!0GBdxQAfI4N7qfH8Wn` |
-| 基础研究负责人          | `phase15.basic.owner@ai4ms.local`    | `P15!RfExPSKRHfgAdQPnJn` |
-| Guest                   | `phase15.guest@ai4ms.local`          | `P15!8Qx2w0wpnmL9gEvaOH` |
+| 角色                    | 账号                                 | 密码           |
+| ----------------------- | ------------------------------------ | -------------- |
+| ADMIN                   | `admin@ai4ms.local`                  | 已改为个人密码 |
+| PRINCIPAL / MENTOR      | `whong@xmu.edu.cn`                   | 已改为个人密码 |
+| MENTOR                  | `jyliu@xmu.edu.cn`                   | 已改为个人密码 |
+| RESEARCHER              | `qiuzhixin@stu.xmu.edu.cn`           | 已改为个人密码 |
+| INDUSTRIALIZATION_OWNER | `phase15.industry.owner@ai4ms.local` | 已改为个人密码 |
+| 基础研究负责人          | `phase15.basic.owner@ai4ms.local`    | 已改为个人密码 |
+| Guest                   | `phase15.guest@ai4ms.local`          | 已改为个人密码 |
 
-角色核验结果：洪文晶→`PRINCIPAL + MENTOR`，刘俊扬→`MENTOR`，邱智鑫→`RESEARCHER`，产业化负责人→`PRINCIPAL + INDUSTRIALIZATION_OWNER`，基础研究负责人→`PRINCIPAL` 且 `business_category=BASIC_RESEARCH`，访客→`Guest`。除管理员外，这些账号首次登录后会要求设置个人密码。
+角色核验结果：洪文晶→`PRINCIPAL + MENTOR`，刘俊扬→`MENTOR`，邱智鑫→`RESEARCHER`，产业化负责人→`PRINCIPAL + INDUSTRIALIZATION_OWNER`，基础研究负责人→`PRINCIPAL` 且 `business_category=BASIC_RESEARCH`，访客→`Guest`。上述账号均已完成首次登录改密，当前不应再出现“请设置你自己的密码”弹窗；后续测试凭据必须从运行时安全存储注入。
 
 清理命令：
 

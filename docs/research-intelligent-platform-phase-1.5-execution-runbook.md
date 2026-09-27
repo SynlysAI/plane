@@ -1,10 +1,10 @@
 # 科研智能体平台 Phase 1.5 联调执行手册
 
-> **当前人工测试入口（2026-09-26）**：本手册中的旧 seed 账号和历史课题矩阵只用于复盘证据；当前人工测试必须按 [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) 解析 π-Lab Excel 身份，并使用 `plane测试` 知识库。
+> **当前人工测试入口（2026-09-27）**：本手册中的旧 seed 账号和历史课题矩阵只用于复盘证据；固定库 `plane测试` 已删除，当前人工测试必须按 [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) 解析 π-Lab Excel 身份，并按成员所属小组发现、确认和复用知识库。
 
 | 项目     | 内容                                                                                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 手册版本 | v1.2（配套分角色计划 v1.1；当前软件版本 `4.16.0`）                                                                                                             |
+| 手册版本 | v1.2（配套分角色计划 v1.1；当前软件版本 `4.19.0`）                                                                                                             |
 | 上游计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)                     |
 | 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md)（身份清单；凭据由本机安全注入）                                                                     |
 | 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                                          |
@@ -22,7 +22,7 @@
 - 每个联调日开始先完成 §1 七步自检并填写五服务健康快照，未通过不得进入后续层级。
 - 勾选规则：一个用例的全部验证点通过才勾选；任何失败立即按计划 §7 登记附录 A，再决定继续或修复。
 - 多身份并发测试使用浏览器隐私窗口，避免会话互相覆盖。账号通过本机安全凭据或环境变量注入；密码不得写入文档、截图、日志或命令历史。
-- 联调工作区固定为 `public`；WeKnora 只使用测试知识库，不触碰生产数据。
+- 联调工作区固定为 `public`；知识库候选按成员所属小组解析，测试只写入 Plane 测试工作区；未经管理员确认不触碰生产库数据。
 - 证据截图/日志统一存放 `plane/docs/evidence/phase-1.5/`，按 `health/ links/ switches/ roles/ e2e/ degradation/` 分目录，文件名含日期与用例编号（如 `20260925-SW-01.png`）。
 
 ## 1. L1：环境七步自检
@@ -105,7 +105,7 @@
 
 ## 5. L3.6：分角色功能矩阵
 
-> 当前执行口径：所有身份从 `public` π-Lab Excel 基线动态解析。旧 seed 邮箱、旧课题和旧组织名只存在于历史 evidence，不在本矩阵中复用。测试 KB 固定为 `plane测试`。
+> 当前执行口径：所有身份从 `public` π-Lab Excel 基线动态解析。旧 seed 邮箱、旧课题和旧组织名只存在于历史 evidence，不在本矩阵中复用。知识库按成员所属小组发现候选，由管理员确认后同组复用，跨组拒绝。
 
 ### 5.1 角色解析
 
@@ -135,7 +135,7 @@
 
 ### 5.3 课题可见性与写权限矩阵
 
-主 mock 课题由当前解析学生创建，类型为 `RESEARCH_CHAIN`、可见性 `WORKSPACE`，组织为 `INDUSTRIALIZATION` 单元；可选 PRIVATE 对照课题不绑定 KB。管理员只绑定 `plane测试`，READY 前不得上传。
+主 mock 课题由当前解析学生创建，类型为 `RESEARCH_CHAIN`、可见性 `WORKSPACE`，组织为成员所属小组；可选 PRIVATE 对照课题不绑定 KB。管理员确认该小组的目标库，READY 前不得上传。
 
 | 编号  | 当前角色                | WORKSPACE 主课题           | PRIVATE 对照课题   | 写权限预期                                           |
 | ----- | ----------------------- | -------------------------- | ------------------ | ---------------------------------------------------- |
@@ -149,15 +149,15 @@
 
 ### 5.4 功能权限矩阵
 
-| 功能          | 通过条件                                                                |
-| ------------- | ----------------------------------------------------------------------- |
-| 报告/阶段审批 | 直接导师、主 PI 或明确指派人可审；普通可读者不可审                      |
-| Agent OWNER   | 当前课题 owner 在 AccountLink ACTIVE 且具备节点写权限                   |
-| Agent REVIEW  | 直接导师、主 PI 或明确 review scope；只读证据、评论、分析草稿           |
-| 知识读取      | 按课题 ACL 和 `allowed_knowledge_base_ids`；只允许 `plane测试`          |
-| 知识写入      | 课题 KB 为 `READY` 且调用者有节点写权限；否则 `KB_NOT_READY` 或权限错误 |
-| AccountLink   | 本人绑定/解绑，或管理员操作；不接收密码                                 |
-| 导出          | 仅能导出当前角色可见的 Chain、事件、快照和引用                          |
+| 功能          | 通过条件                                                                          |
+| ------------- | --------------------------------------------------------------------------------- |
+| 报告/阶段审批 | 直接导师、主 PI 或明确指派人可审；普通可读者不可审                                |
+| Agent OWNER   | 当前课题 owner 在 AccountLink ACTIVE 且具备节点写权限                             |
+| Agent REVIEW  | 直接导师、主 PI 或明确 review scope；只读证据、评论、分析草稿                     |
+| 知识读取      | 按课题 ACL、成员所属小组和 `allowed_knowledge_base_ids`；只允许当前小组已确认绑定 |
+| 知识写入      | 课题 KB 为 `READY` 且调用者有节点写权限；否则 `KB_NOT_READY` 或权限错误           |
+| AccountLink   | 本人绑定/解绑，或管理员操作；不接收密码                                           |
+| 导出          | 仅能导出当前角色可见的 Chain、事件、快照和引用                                    |
 
 ### 5.5 负例
 

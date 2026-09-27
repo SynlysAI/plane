@@ -40,11 +40,11 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 本文原有的 `admin@ai4ms.local`、`liuyang.phd@ai4ms.local`、`chenjing.advisor@ai4ms.local`、`zhangwei.pi@ai4ms.local`、`test.*` 等账号，以及旧课题、报告和待办数量，均属于历史 seed 快照。它们保留在 Git 历史中，不得重新写入当前 `public` 验收环境。
 
-自动化测试数据库可以继续使用 `seed_research_demo`，但人工测试、浏览器截图、Phase 1.5 evidence 和 `plane测试` KB 验收不得引用这些历史账号。
+自动化测试数据库可以继续使用 `seed_research_demo`，但人工测试、浏览器截图和 Phase 1.5 evidence 不得引用这些历史账号；当前测试不依赖已删除的固定知识库。
 
 ## 安全规则
 
 - 密码、Token、API Key 只通过运行时安全凭据注入。
 - 证据只保留脱敏角色和对象 ID，不保存完整邮箱、密码或原始正文。
-- WeKnora/RAGPortal 人工测试固定使用 `plane测试` 知识库。
+- WeKnora/RAGPortal 人工测试不固定库名；成员属于哪个小组，就按哪个小组的候选和绑定执行。测试只在 Plane 测试工作区写入，未经管理员确认不写入生产库。
 - 清理 mock 课题、测试文件、临时访客和 AccountLink 后，再运行 `--verify-only` 复核基线。

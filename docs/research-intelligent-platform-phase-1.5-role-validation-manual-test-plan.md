@@ -1,18 +1,18 @@
 # 科研智能平台 Phase 1.5 分角色人工测试计划
 
-| 项目     | 内容                                                                                              |
-| -------- | ------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.2（2026-09-26）                                                                                |
-| 文档状态 | 可执行；测试结果按日期写入 evidence，不把执行结果预先标记为通过                                   |
-| 启动入口 | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md) |
-| 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)          |
-| 测试环境 | `public` π-Lab 基线 + Plane `4.16.0` + RAGPortal + Synlora + WeKnora                              |
-| 测试 KB  | `plane测试`；不得选择其他知识库，不得绑定到另一个小组；同一小组的课题复用该库                     |
-| 凭据     | 运行时注入；本文件不保存密码                                                                      |
+| 项目     | 内容                                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------- |
+| 文档版本 | v1.2（2026-09-26）                                                                                            |
+| 文档状态 | 可执行；测试结果按日期写入 evidence，不把执行结果预先标记为通过                                               |
+| 启动入口 | [分角色人工测试启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)             |
+| 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)                      |
+| 测试环境 | `public` π-Lab 基线 + Plane `4.19.0` + RAGPortal + Synlora + WeKnora                                          |
+| 测试 KB  | 原固定库 `plane测试` 已删除；按课题成员所属 `TEAM` 小组解析候选库，管理员确认后由同组课题复用；不得跨小组绑定 |
+| 凭据     | 运行时注入；本文件不保存密码                                                                                  |
 
 ## 1. 测试前说明
 
-当前 `public` 基线由 π-Lab Excel 重建：22 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶，验证前没有预造课题、Project、Chain 或 KB request。历史 seed 账号和旧课题只用于自动化测试和历史复盘。
+当前 `public` 基线由 π-Lab Excel 重建：22 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶，验证前没有预造课题、Project、Chain 或 KB request。组织层级迁移完成后，节点基线应为 24（1 个根、2 个方向、21 个小组）。历史 seed 账号和旧课题只用于自动化测试和历史复盘。
 
 每个身份使用独立浏览器 Profile。开始前先完成启动指南 §3 健康快照和 `--verify-only`，再从运行库解析实际身份。测试记录只保存脱敏身份、对象 ID、状态码、错误码和 request id。
 
@@ -66,9 +66,9 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 验收：一对一 Project、ResearchProfile、Chain 和 KB request 自动生成；KB 为 `PENDING_ADMIN` 时上传按钮和 API 均被门禁拦截。
 
-### MT-L3-02 管理员绑定 `plane测试`
+### MT-L3-02 管理员确认小组知识库
 
-管理员在 RAGPortal/WeKnora 选择现成 `plane测试` 并回填当前 KB request。验收：状态变为 `READY`，绑定只指向当前 `chain_id`，没有跨 workspace 信息。
+管理员在 RAGPortal/WeKnora 查看当前课题成员所属小组的候选库，核对小组、外部 `kb_id` 和匹配依据后确认并回填当前小组绑定。验收：状态变为 `READY`，同组后续课题复用该绑定，绑定只指向当前小组且没有跨 workspace 信息。
 
 ### MT-L3-03 上传、引用和检索
 
@@ -77,7 +77,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 ### MT-L3-04 KB 负例
 
 - `READY` 前上传：`409 KB_NOT_READY`。
-- 将 `plane测试` 绑定到另一个小组：`KB_SCOPE_CONFLICT`，不创建上传任务。同一小组的第二个课题复用该库。
+- 将已确认的小组库绑定到另一个小组：`KB_SCOPE_CONFLICT`，不创建上传任务。同一小组的第二个课题复用原绑定；成员属于哪个小组，上传就只能走哪个小组的绑定。
 - 无权角色查看/搜索：403/404，不能泄露 KB 名称、文件名或正文。
 
 ## 6. L3.5：开关矩阵
@@ -113,7 +113,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 ## 8. L4：端到端闭环
 
 1. 学生创建主课题和第一个节点。
-2. 管理员绑定 `plane测试`，学生上传、轮询并确认引用。
+2. 管理员确认成员所属小组的目标库，学生上传、轮询并确认引用。
 3. 学生添加人工记录、提交阶段材料和分析草稿。
 4. 导师打开 REVIEW Agent，读取证据、评论并提交审批意见；上传和改节点必须被拒。
 5. 主 PI 查看组织聚合、审批待办和 Chain 回放；覆盖学生正式内容必须被拒。
@@ -147,4 +147,4 @@ cd /home/fangyikai/code/_AI4MS/plane
 | `L4-e2e-{date}.md`           | 主课题闭环、事件游标和导出 hash     |
 | `L5-cleanup-{date}.md`       | 降级恢复、清理和基线复核            |
 
-通过条件：L1 健康和基线通过；七类身份均由当前运行库解析；关系一对一；`plane测试` READY/上传/引用/检索通过；角色矩阵无未解释差异；至少完成一次开关恢复和一次降级恢复；清理后基线不变；证据脱敏可追溯。
+通过条件：L1 健康和基线通过；七类身份均由当前运行库解析；关系一对一；成员小组候选发现、管理员确认、同组复用、跨组拒绝和上传/引用/检索均通过；角色矩阵无未解释差异；至少完成一次开关恢复和一次降级恢复；清理后基线不变；证据脱敏可追溯。

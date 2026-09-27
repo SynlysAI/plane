@@ -412,6 +412,11 @@ export const INTEGRATION_SYSTEMS = [
   "SPEC_AGENT",
 ] as const satisfies readonly TIntegrationSystem[];
 
+/** Systems that may be configured directly in Plane's connection settings. */
+export const DIRECT_INTEGRATION_SYSTEMS = INTEGRATION_SYSTEMS.filter(
+  (system) => system !== "WEKNORA"
+) as readonly Exclude<TIntegrationSystem, "WEKNORA">[];
+
 export const INTEGRATION_SYSTEM_LABELS: Record<TIntegrationSystem, string> = {
   RAGPORTAL: "research.integrations.system.ragportal",
   WEKNORA: "research.integrations.system.weknora",
