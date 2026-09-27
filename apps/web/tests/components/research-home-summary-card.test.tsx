@@ -71,6 +71,12 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
+  mocks.research.identity = {
+    module_enabled: true,
+    workspace_enabled: true,
+    sections: { research_chain: true },
+    user: { id: "user-1", mentee_ids: [], org_units: [] },
+  };
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -141,4 +147,79 @@ it("renders the loading and empty states with stable accessibility semantics", a
   await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" key="empty" />));
   expect(container.textContent).toContain("当前还没有可见研究链。");
   expect(container.textContent).not.toContain("NaN");
+});
+
+it("shows each supervised chain and the other owner's name", async () => {
+  mocks.research.identity = {
+    module_enabled: true,
+    workspace_enabled: true,
+    sections: { research_chain: true },
+    capabilities: { is_mentor: true },
+    user: { id: "mentor-1", mentee_ids: ["student-1"], org_units: [{ org_role: "ADVISOR" }] },
+  };
+  mocks.getChains.mockResolvedValue([
+    {
+      id: "chain-1",
+      project: "课题一",
+      project_name: "课题一",
+      owner: "student-1",
+      owner_name: "学生甲",
+      status: "ACTIVE",
+      updated_at: "2026-09-23T00:00:00Z",
+    },
+    {
+      id: "chain-2",
+      project: "课题二",
+      project_name: "课题二",
+      owner: "student-1",
+      owner_name: "学生甲",
+      status: "ACTIVE",
+      updated_at: "2026-09-22T00:00:00Z",
+    },
+  ]);
+  mocks.getChainNodes.mockResolvedValue([]);
+
+  await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" />));
+
+  expect(container.textContent).toContain("课题一");
+  expect(container.textContent).toContain("课题二");
+  expect(container.textContent).toContain("学生甲");
+  expect(container.querySelector("[aria-label]")).not.toBeNull();
+  expect(container.textContent).not.toContain("1/2");
+});
+
+it("keeps a student on one row and hides their own name", async () => {
+  mocks.research.identity = {
+    module_enabled: true,
+    workspace_enabled: true,
+    sections: { research_chain: true },
+    user: { id: "student-1", mentee_ids: [], org_units: [{ org_role: "REVIEWER" }] },
+  };
+  mocks.getChains.mockResolvedValue([
+    {
+      id: "chain-1",
+      project: "自己的课题",
+      project_name: "自己的课题",
+      owner: "student-1",
+      owner_name: "学生甲",
+      status: "ACTIVE",
+      updated_at: "2026-09-23T00:00:00Z",
+    },
+    {
+      id: "chain-2",
+      project: "另一条自己的课题",
+      project_name: "另一条自己的课题",
+      owner: "student-1",
+      owner_name: "学生甲",
+      status: "ACTIVE",
+      updated_at: "2026-09-22T00:00:00Z",
+    },
+  ]);
+  mocks.getChainNodes.mockResolvedValue([]);
+
+  await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" />));
+
+  expect(container.textContent).toContain("自己的课题");
+  expect(container.textContent).not.toContain("另一条自己的课题");
+  expect(container.textContent).not.toContain("学生甲");
 });

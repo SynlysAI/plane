@@ -9,6 +9,7 @@ import { Button, getButtonStyling } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
 import type { TResearchChain, TResearchChainNode, TResearchChainSnapshot } from "@plane/types";
 // components
+import { chainOwnerLabel, selectResearchOverviewChains } from "@/components/research/common/research-overview-rows";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { collectResearchTodos } from "@/components/research/common/research-todo-source";
 import { pickCurrentChain, pickCurrentNode } from "@/components/research/chains/research-selection";
@@ -125,19 +126,9 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
 
   const activeCount = summary?.chains.filter((chain) => chain.status === "ACTIVE").length ?? 0;
   const todoCount = summary?.todoCount ?? 0;
+  const overview = selectResearchOverviewChains(research.identity, summary?.chains ?? []);
   const currentChain = summary?.chains[chainIndex] ?? pickCurrentChain(summary?.chains ?? []);
-  const selectedDetails = summary?.chainDetails.find((item) => item.chainId === currentChain?.id);
-  const currentNode = selectedDetails?.currentNode ?? null;
-  const latestSnapshot = selectedDetails?.latestSnapshot ?? null;
-  const nodeNeedsAction = Boolean(currentNode && NODE_ACTION_STATUSES.has(currentNode.status));
-  const primaryHref = currentChain
-    ? nodeNeedsAction && currentNode
-      ? `/${workspaceSlug}/research/chains/${currentChain.id}?node=${currentNode.id}`
-      : `/${workspaceSlug}/research/chains/${currentChain.id}`
-    : null;
-  const primaryLabel = nodeNeedsAction
-    ? t("research.home_summary.handle_current_node")
-    : t("research.home_summary.open_chain");
+  const displayedChains = overview.mode === "stacked" ? overview.rows : currentChain ? [currentChain] : [];
 
   const moveChain = (direction: -1 | 1) => {
     if (!summary?.chains.length) return;
@@ -155,7 +146,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
           <p className="mt-0.5 text-11 text-tertiary">{t("research.home_summary.snapshot")}</p>
         </div>
         <div className="flex items-center gap-2 text-11 text-tertiary tabular-nums">
-          {summary && summary.chains.length > 1 && (
+          {overview.mode === "single" && summary && summary.chains.length > 1 && (
             <div className="flex items-center gap-1" aria-label={t("research.overview.chain_switcher")}>
               <Button
                 variant="secondary"
@@ -190,49 +181,69 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
         </div>
       </div>
 
-      {state === "ready" && currentChain ? (
-        <div className="px-4 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
-                  className="truncate text-18 font-semibold text-primary hover:text-accent-primary"
-                >
-                  {currentChain.project_name ?? currentChain.project}
-                </Link>
-                <ResearchStatusBadge status={currentChain.status}>
-                  {t(`research.chains.chain_status.${currentChain.status.toLowerCase()}`)}
-                </ResearchStatusBadge>
-              </div>
-              {currentChain && summary && summary.chains.length > 1 && (
-                <p className="mt-1 text-11 text-tertiary">
-                  {t("research.overview.chain_position", { current: chainIndex + 1, total: summary.chains.length })}
-                </p>
-              )}
-              {currentNode && (
-                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
-                  <span className="text-11 text-tertiary">{t("research.chains.current_node")}</span>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="truncate text-13 font-medium text-primary">{currentNode.title}</span>
-                    <ResearchStatusBadge status={currentNode.status} size="sm">
-                      {t(`research.chains.node_status.${currentNode.status.toLowerCase()}`)}
-                    </ResearchStatusBadge>
+      {state === "ready" && displayedChains.length > 0 ? (
+        <div className="divide-y divide-subtle">
+          {displayedChains.map((chain) => {
+            const details = summary?.chainDetails.find((item) => item.chainId === chain.id);
+            const currentNode = details?.currentNode ?? null;
+            const latestSnapshot = details?.latestSnapshot ?? null;
+            const nodeNeedsAction = Boolean(currentNode && NODE_ACTION_STATUSES.has(currentNode.status));
+            const primaryHref =
+              nodeNeedsAction && currentNode
+                ? `/${workspaceSlug}/research/chains/${chain.id}?node=${currentNode.id}`
+                : `/${workspaceSlug}/research/chains/${chain.id}`;
+            const primaryLabel = nodeNeedsAction
+              ? t("research.home_summary.handle_current_node")
+              : t("research.home_summary.open_chain");
+            const ownerLabel = chainOwnerLabel(research.identity, chain);
+            return (
+              <div key={chain.id} className="px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                      <Link
+                        href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                        className="truncate text-18 font-semibold text-primary hover:text-accent-primary"
+                      >
+                        {chain.project_name ?? chain.project}
+                      </Link>
+                      {ownerLabel && <span className="shrink-0 text-12 text-tertiary">{ownerLabel}</span>}
+                      <ResearchStatusBadge status={chain.status}>
+                        {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
+                      </ResearchStatusBadge>
+                    </div>
+                    {overview.mode === "single" && summary && summary.chains.length > 1 && (
+                      <p className="mt-1 text-11 text-tertiary">
+                        {t("research.overview.chain_position", {
+                          current: chainIndex + 1,
+                          total: summary.chains.length,
+                        })}
+                      </p>
+                    )}
+                    {currentNode && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
+                        <span className="text-11 text-tertiary">{t("research.chains.current_node")}</span>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="truncate text-13 font-medium text-primary">{currentNode.title}</span>
+                          <ResearchStatusBadge status={currentNode.status} size="sm">
+                            {t(`research.chains.node_status.${currentNode.status.toLowerCase()}`)}
+                          </ResearchStatusBadge>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Link href={primaryHref} className={getButtonStyling("primary", "base")}>
+                      {primaryLabel}
+                    </Link>
                   </div>
                 </div>
-              )}
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              {primaryHref && (
-                <Link href={primaryHref} className={getButtonStyling("primary", "base")}>
-                  {primaryLabel}
-                </Link>
-              )}
-            </div>
-          </div>
-          <p className="mt-3 line-clamp-2 text-12 text-secondary">
-            {latestSnapshot?.summary ?? t("research.home_summary.snapshot_empty")}
-          </p>
+                <p className="mt-3 line-clamp-2 text-12 text-secondary">
+                  {latestSnapshot?.summary ?? t("research.home_summary.snapshot_empty")}
+                </p>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="px-4 py-4" role="status" aria-busy={state === "loading"}>
