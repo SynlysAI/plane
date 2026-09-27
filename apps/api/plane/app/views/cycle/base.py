@@ -35,6 +35,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from rest_framework import status
 from rest_framework.response import Response
 from plane.app.permissions import allow_permission, ROLE
+from plane.research.utils.project_review import project_member_filters
 from plane.app.serializers import (
     CycleSerializer,
     CycleUserPropertiesSerializer,
@@ -93,8 +94,11 @@ class CycleViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                **project_member_filters(
+                    self.request.user,
+                    self.kwargs.get("slug"),
+                    self.kwargs.get("project_id"),
+                )
             )
             .filter(project__archived_at__isnull=True)
             .select_related("project", "workspace", "owned_by")
@@ -180,7 +184,7 @@ class CycleViewSet(BaseViewSet):
             .distinct()
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
         queryset = self.get_queryset().filter(archived_at__isnull=True)
         cycle_view = request.GET.get("cycle_view", "all")

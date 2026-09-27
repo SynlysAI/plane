@@ -4,7 +4,7 @@
 
 | 项目     | 内容                                                                                                                                                           |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 手册版本 | v1.3（2026-09-27 复核：连接登记以 0926 后续计划 R4 为准；当前软件版本 `4.19.0`）                                                                               |
+| 手册版本 | v1.4（2026-09-27 复核：连接登记以 0926 后续计划 R4 为准；当前软件版本 `4.19.1`）                                                                               |
 | 上游计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)                     |
 | 账号来源 | [`research-test-accounts.md`](./research-test-accounts.md)（身份清单；凭据由本机安全注入）                                                                     |
 | 灰度手册 | [`research-intelligent-platform-phase-1-verification.md`](./research-intelligent-platform-phase-1-verification.md) §3                                          |

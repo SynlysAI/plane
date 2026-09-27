@@ -768,7 +768,7 @@ class ProjectUserDisplayPropertyEndpoint(BaseAPIView):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id):
         issue_property, _ = ProjectUserProperty.objects.get_or_create(user=request.user, project_id=project_id)
         serializer = ProjectUserPropertySerializer(issue_property)
@@ -1192,7 +1192,7 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
 
 
 class IssueMetaEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="PROJECT")
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="PROJECT", research_review_read=True)
     def get(self, request, slug, project_id, issue_id):
         issue = Issue.issue_objects.only("sequence_id", "project__identifier").get(
             id=issue_id, project_id=project_id, workspace__slug=slug
@@ -1225,17 +1225,21 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
         # Fetch the project
         project = Project.objects.get(identifier__iexact=project_identifier, workspace__slug=slug)
 
-        # Check if the user is a member of the project
-        if not ProjectMember.objects.filter(
+        # 项目成员按原规则阅读。研究链上级不是成员，但可以按编号只读打开。
+        is_project_member = ProjectMember.objects.filter(
             workspace__slug=slug,
             project_id=project.id,
             member=request.user,
             is_active=True,
-        ).exists():
-            return Response(
-                {"error": "You are not allowed to view this issue"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        ).exists()
+        if not is_project_member:
+            from plane.research.utils.project_review import user_can_review_research_project
+
+            if not user_can_review_research_project(request.user, slug, project.id):
+                return Response(
+                    {"error": "You are not allowed to view this issue"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         # Fetch the issue
         issue = (

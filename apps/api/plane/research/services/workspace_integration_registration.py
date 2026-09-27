@@ -74,11 +74,9 @@ def register_workspace_integrations(
     planned = [_plan_row(system, spec, base_urls, environ) for system, spec in REGISTERABLE_SYSTEMS.items()]
     if dry_run:
         return {"mode": "dry-run", "results": planned}
-    results = []
     with transaction.atomic():
-        for row in planned:
-            connection = _upsert(workspace, row)
-            results.append(_probe(connection))
+        connections = [_upsert(workspace, row) for row in planned]
+    results = [_probe(connection) for connection in connections]
     healthy = all(row["status"] == ExternalSystemConnection.HealthStatus.OK for row in results)
     return {"mode": "apply", "continue_r8": healthy, "results": results}
 
