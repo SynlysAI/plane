@@ -16,6 +16,18 @@ from .experiment import (
     ExperimentRecordVersion,
 )
 from .identity import IdentityMapping
+from .account_link import AccountLink
+from .chain import (
+    ResearchChain,
+    ResearchChainEvent,
+    ResearchChainNode,
+    ResearchChainSnapshot,
+    ResearchChainUpload,
+    ResearchAnalysisResult,
+    ResearchReflectionLog,
+)
+from .context import ResearchContextGrant
+from .agent import ResearchAgentRunEvent, ResearchAgentSession
 from .integration import (
     ExternalReferenceLink,
     ExternalSystemConnection,
@@ -23,6 +35,8 @@ from .integration import (
     IntegrationSystem,
     ResearchExternalReference,
 )
+from .group_knowledge import ResearchGroupKnowledgeBinding
+from .knowledge_request import ResearchKnowledgeRequest
 from .literature import LiteratureEntry
 from .membership import (
     ResearchInviteCode,
@@ -32,7 +46,7 @@ from .membership import (
     UserImportRow,
 )
 from .org import MentorBinding, OrgUnit, OrgUnitMember
-from .outcome import ResearchOutcome, ResearchOutcomeLink
+from .outcome import ResearchOutcome, ResearchOutcomeAttachment, ResearchOutcomeLink
 from .project import ResearchProjectProfile
 from .report import (
     PeriodicReport,
@@ -68,6 +82,17 @@ from .template import ReportTemplate
 
 __all__ = [
     "IdentityMapping",
+    "AccountLink",
+    "ResearchChain",
+    "ResearchChainNode",
+    "ResearchChainEvent",
+    "ResearchChainSnapshot",
+    "ResearchChainUpload",
+    "ResearchAnalysisResult",
+    "ResearchReflectionLog",
+    "ResearchContextGrant",
+    "ResearchAgentSession",
+    "ResearchAgentRunEvent",
     "CodeArtifact",
     "ProjectCodeRepository",
     "LiteratureEntry",
@@ -81,6 +106,8 @@ __all__ = [
     "IntegrationCallLog",
     "IntegrationSystem",
     "ResearchExternalReference",
+    "ResearchGroupKnowledgeBinding",
+    "ResearchKnowledgeRequest",
     "AMENDABLE_FIELDS",
     "LOCKED_FIELDS",
     "ExperimentAmendment",
@@ -112,6 +139,7 @@ __all__ = [
     "ResearchWorkspaceAccessGrant",
     "MentorBinding",
     "ResearchOutcome",
+    "ResearchOutcomeAttachment",
     "ResearchOutcomeLink",
     "OrgUnit",
     "OrgUnitMember",

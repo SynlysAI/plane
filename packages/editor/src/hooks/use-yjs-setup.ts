@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { HocuspocusProvider } from "@hocuspocus/provider";
+import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 // react
 import { useCallback, useEffect, useRef, useState } from "react";
 // indexeddb
@@ -32,6 +32,7 @@ type UseYjsSetupArgs = {
 };
 
 const DEFAULT_MAX_RETRIES = 3;
+const OFFLINE_DEADLINE_MS = 8000;
 
 export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseYjsSetupArgs) => {
   // Current collaboration stage
@@ -50,6 +51,8 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
   const isDisposedRef = useRef(false);
   const stageRef = useRef<CollabStage>({ kind: "initial" });
   const lastReconnectTimeRef = useRef(0);
+  const offlineLockedRef = useRef(false);
+  const failureStartedAtRef = useRef<number | null>(null);
 
   // Create/destroy provider in effect (not during render)
   useEffect(() => {
@@ -57,26 +60,48 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
     retryCountRef.current = 0;
     isDisposedRef.current = false;
     forcedCloseSignalRef.current = false;
+    offlineLockedRef.current = false;
+    failureStartedAtRef.current = null;
     stageRef.current = { kind: "initial" };
 
+    const websocketProvider = new HocuspocusProviderWebsocket({
+      url: serverUrl,
+      connect: true,
+      delay: 1000,
+      initialDelay: 0,
+      factor: 1,
+      maxAttempts: 2,
+      minDelay: 1000,
+      maxDelay: 1000,
+      jitter: false,
+      timeout: OFFLINE_DEADLINE_MS,
+    });
     const provider = new HocuspocusProvider({
       name: docId,
       token: authToken,
-      url: serverUrl,
+      websocketProvider,
       onAuthenticationFailed: () => {
         if (isDisposedRef.current) return;
+        offlineLockedRef.current = true;
         const error: CollaborationError = { type: "auth-failed", message: "Authentication failed" };
         const newStage = { kind: "disconnected" as const, error };
         stageRef.current = newStage;
         setStage(newStage);
+        queueMicrotask(() => {
+          if (!isDisposedRef.current) pauseProvider();
+        });
       },
       onConnect: () => {
         if (isDisposedRef.current) {
           provider?.disconnect();
           return;
         }
-        retryCountRef.current = 0;
-        // After successful connection, transition to awaiting-sync (onSynced will move to synced)
+        if (offlineLockedRef.current || failureStartedAtRef.current != null) {
+          const retrying = { kind: "reconnecting" as const, attempt: retryCountRef.current };
+          stageRef.current = retrying;
+          setStage(retrying);
+          return;
+        }
         const newStage = { kind: "awaiting-sync" as const };
         stageRef.current = newStage;
         setStage(newStage);
@@ -84,13 +109,22 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
       onStatus: ({ status: providerStatus }) => {
         if (isDisposedRef.current) return;
         if (providerStatus === "connecting") {
-          // Derive whether this is initial connect or reconnection from retry count
-          const isReconnecting = retryCountRef.current > 0;
-          setStage(isReconnecting ? { kind: "reconnecting", attempt: retryCountRef.current } : { kind: "connecting" });
+          if (offlineLockedRef.current) {
+            queueMicrotask(() => {
+              if (!isDisposedRef.current) pauseProvider();
+            });
+            return;
+          }
+          const isReconnecting = retryCountRef.current > 0 || failureStartedAtRef.current != null;
+          const newStage = isReconnecting
+            ? { kind: "reconnecting" as const, attempt: retryCountRef.current }
+            : { kind: "connecting" as const };
+          stageRef.current = newStage;
+          setStage(newStage);
         } else if (providerStatus === "disconnected") {
           // Do not transition here; let handleClose decide the final stage
         } else if (providerStatus === "connected") {
-          // Connection succeeded, move to awaiting-sync
+          if (offlineLockedRef.current || failureStartedAtRef.current != null) return;
           const newStage = { kind: "awaiting-sync" as const };
           stageRef.current = newStage;
           setStage(newStage);
@@ -99,12 +133,21 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
       onSynced: () => {
         if (isDisposedRef.current) return;
         retryCountRef.current = 0;
-        // Document sync complete
+        failureStartedAtRef.current = null;
+        offlineLockedRef.current = false;
+        clearOfflineTimer();
         const newStage = { kind: "synced" as const };
         stageRef.current = newStage;
         setStage(newStage);
       },
     });
+
+    let offlineTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearOfflineTimer = () => {
+      if (!offlineTimer) return;
+      clearTimeout(offlineTimer);
+      offlineTimer = null;
+    };
 
     const pauseProvider = () => {
       const wsProvider = provider.configuration.websocketProvider;
@@ -138,8 +181,37 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
       }
     };
 
+    const enterStableOffline = (error: CollaborationError) => {
+      const alreadyOffline = offlineLockedRef.current && stageRef.current.kind === "disconnected";
+      offlineLockedRef.current = true;
+      failureStartedAtRef.current = null;
+      clearOfflineTimer();
+      pauseProvider();
+      try {
+        provider.configuration.websocketProvider.cancelWebsocketRetry?.();
+      } catch (cancelError) {
+        console.error("Error cancelling websocket retry:", cancelError);
+      }
+      if (alreadyOffline) return;
+      const newStage = { kind: "disconnected" as const, error };
+      stageRef.current = newStage;
+      setStage(newStage);
+    };
+
+    const armOfflineDeadline = () => {
+      if (failureStartedAtRef.current != null) return;
+      failureStartedAtRef.current = Date.now();
+      offlineTimer = setTimeout(() => {
+        enterStableOffline({ type: "max-retries", message: "Connection stayed offline" });
+      }, OFFLINE_DEADLINE_MS);
+    };
+
     const handleClose = (closeEvent: { event?: { code?: number; reason?: string } }) => {
       if (isDisposedRef.current) return;
+      if (offlineLockedRef.current) {
+        pauseProvider();
+        return;
+      }
 
       const closeCode = closeEvent.event?.code;
       const wsProvider = provider.configuration.websocketProvider;
@@ -147,109 +219,76 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
       const isForcedClose = isForcedCloseCode(closeCode) || forcedCloseSignalRef.current || shouldConnect === false;
 
       if (isForcedClose) {
-        // Determine if this is a manual disconnect or a permanent error
         const isManualDisconnect = shouldConnect === false;
-
         const error: CollaborationError = {
           type: "forced-close",
           code: closeCode || 0,
           message: isManualDisconnect ? "Manually disconnected" : "Server forced connection close",
         };
-        const newStage = { kind: "disconnected" as const, error };
-        stageRef.current = newStage;
-        setStage(newStage);
-
-        retryCountRef.current = 0;
         forcedCloseSignalRef.current = false;
-
-        // Only pause if it's a real forced close (not manual disconnect)
-        // Manual disconnect leaves it as is (shouldConnect=false already set if manual)
-        if (!isManualDisconnect) {
-          pauseProvider();
-        }
-      } else {
-        // Transient connection loss: attempt reconnection
-        retryCountRef.current++;
-
-        if (retryCountRef.current >= DEFAULT_MAX_RETRIES) {
-          // Exceeded max retry attempts
-          const error: CollaborationError = {
-            type: "max-retries",
-            message: `Failed to connect after ${DEFAULT_MAX_RETRIES} attempts`,
-          };
-          const newStage = { kind: "disconnected" as const, error };
-          stageRef.current = newStage;
-          setStage(newStage);
-
-          pauseProvider();
-        } else {
-          // Still have retries left, move to reconnecting
-          const newStage = { kind: "reconnecting" as const, attempt: retryCountRef.current };
-          stageRef.current = newStage;
-          setStage(newStage);
-        }
+        enterStableOffline(error);
+        return;
       }
+
+      armOfflineDeadline();
+      retryCountRef.current += 1;
+      const elapsed = Date.now() - (failureStartedAtRef.current ?? Date.now());
+      if (retryCountRef.current >= DEFAULT_MAX_RETRIES || elapsed >= OFFLINE_DEADLINE_MS) {
+        enterStableOffline({
+          type: "max-retries",
+          message: `Failed to connect after ${DEFAULT_MAX_RETRIES} attempts`,
+        });
+        return;
+      }
+      const newStage = { kind: "reconnecting" as const, attempt: retryCountRef.current };
+      stageRef.current = newStage;
+      setStage(newStage);
     };
 
     provider.on("close", handleClose);
 
     setYjsSession({ provider, ydoc: provider.document });
 
-    // Handle page visibility changes (sleep/wake, tab switching)
-    const handleVisibilityChange = (event?: Event) => {
-      if (isDisposedRef.current) return;
-
-      const isVisible = document.visibilityState === "visible";
-      const isFocus = event?.type === "focus";
-
-      if (isVisible || isFocus) {
-        // Throttle reconnection attempts to avoid double-firing (visibility + focus)
-        const now = Date.now();
-        if (now - lastReconnectTimeRef.current < 1000) {
-          return;
-        }
-
-        const wsProvider = provider.configuration.websocketProvider;
-        if (!wsProvider) return;
-
-        const ws = wsProvider.webSocket;
-        const isStale = ws?.readyState === WebSocket.CLOSED || ws?.readyState === WebSocket.CLOSING;
-
-        // If disconnected or stale, re-enable reconnection and force reconnect
-        if (isStale || stageRef.current.kind === "disconnected") {
-          lastReconnectTimeRef.current = now;
-
-          // Re-enable connection on tab focus (even if manually disconnected before sleep)
-          wsProvider.shouldConnect = true;
-
-          // Reset retry count for fresh reconnection attempt
-          retryCountRef.current = 0;
-
-          // Move to connecting state
-          const newStage = { kind: "connecting" as const };
-          stageRef.current = newStage;
-          setStage(newStage);
-
-          wsProvider.disconnect();
-          wsProvider.connect();
-        }
-      }
+    const releaseOfflineLock = () => {
+      offlineLockedRef.current = false;
+      failureStartedAtRef.current = null;
+      retryCountRef.current = 0;
+      clearOfflineTimer();
     };
 
-    // Handle online/offline events
+    const handleVisibilityChange = () => {
+      if (isDisposedRef.current || document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastReconnectTimeRef.current < 1000) return;
+      const wsProvider = provider.configuration.websocketProvider;
+      if (!wsProvider) return;
+      const ws = wsProvider.webSocket;
+      const isStale = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+      if (!isStale && stageRef.current.kind !== "disconnected") return;
+      lastReconnectTimeRef.current = now;
+      releaseOfflineLock();
+      wsProvider.shouldConnect = true;
+      const newStage = { kind: "connecting" as const };
+      stageRef.current = newStage;
+      setStage(newStage);
+      wsProvider.disconnect();
+      wsProvider.connect();
+    };
+
     const handleOnline = () => {
       if (isDisposedRef.current) return;
-
       const wsProvider = provider.configuration.websocketProvider;
-      if (wsProvider) {
-        wsProvider.shouldConnect = true;
-        wsProvider.disconnect();
-        wsProvider.connect();
-      }
+      if (!wsProvider) return;
+      releaseOfflineLock();
+      wsProvider.shouldConnect = true;
+      const newStage = { kind: "connecting" as const };
+      stageRef.current = newStage;
+      setStage(newStage);
+      wsProvider.disconnect();
+      wsProvider.connect();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleVisibilityChange);
     window.addEventListener("online", handleOnline);
 
     return () => {
@@ -259,8 +298,8 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
         console.error(`Error unregistering close handler:`, error);
       }
 
+      clearOfflineTimer();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
 
       permanentlyStopProvider();

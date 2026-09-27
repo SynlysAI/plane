@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import hashlib
 import re
 import uuid
 
@@ -18,11 +19,13 @@ from plane.db.models import (
     Project,
     ProjectIdentifier,
     ProjectMember,
+    ResearchChain,
     ResearchProjectProfile,
     ResearchUserProfile,
     State,
     WorkspaceMember,
 )
+from plane.research.services.group_knowledge import ensure_group_knowledge_binding
 from plane.research.utils.acl import managing_org_units_for, models_q_expired
 from plane.research.utils.audit import (
     ResearchAuditAction,
@@ -37,7 +40,7 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.org import active_membership_q, is_workspace_admin
+from plane.research.utils.org import active_membership_q, is_workspace_admin, is_workspace_member
 from plane.research.utils.roles import configured_main_pi_id
 from plane.research.services.stage_service import ensure_stage_instances
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user
@@ -62,9 +65,11 @@ def is_cultivation_project(research_type):
 
 
 def active_cultivation_projects(workspace, owner, *, exclude_profile_id=None):
+    """Return active legacy cultivation projects that own the historical limit."""
     queryset = ResearchProjectProfile.objects.filter(
         workspace=workspace,
         owner=owner,
+        chain_kind=ResearchProjectProfile.ChainKind.LEGACY_TRAINING,
         research_type__in=CULTIVATION_PROJECT_TYPES,
         is_active=True,
         workflow_status=ResearchProjectProfile.WorkflowStatus.ACTIVE,
@@ -72,6 +77,30 @@ def active_cultivation_projects(workspace, owner, *, exclude_profile_id=None):
     if exclude_profile_id is not None:
         queryset = queryset.exclude(pk=exclude_profile_id)
     return queryset
+
+
+def sync_chain_lifecycle(profile, *, owner_changed=False):
+    """Keep a research chain projection aligned with its authoritative profile.
+
+    Args:
+        profile: Locked research project profile containing the new state.
+        owner_changed: Whether the profile owner was changed in this request.
+    """
+    if profile.chain_kind != ResearchProjectProfile.ChainKind.RESEARCH_CHAIN:
+        return
+    chain = ResearchChain.objects.select_for_update().filter(project=profile.project).first()
+    if chain is None:
+        return
+
+    update_fields = []
+    if owner_changed and chain.owner_id != profile.owner_id:
+        chain.owner = profile.owner
+        update_fields.append("owner")
+    if chain.status != profile.workflow_status:
+        chain.status = profile.workflow_status
+        update_fields.append("status")
+    if update_fields:
+        chain.save(update_fields=[*update_fields, "updated_at"])
 
 
 def lock_cultivation_owner(workspace, owner):
@@ -108,7 +137,7 @@ def unique_project_name(workspace, base):
 def profile_queryset(workspace):
     return (
         ResearchProjectProfile.objects.filter(workspace=workspace)
-        .select_related("project", "owner", "org_unit")
+        .select_related("project", "project__research_chain", "owner", "org_unit")
         .prefetch_related("project__project_projectmember")
         .order_by("-created_at")
     )
@@ -136,6 +165,19 @@ def visible_profile_queryset(workspace, user):
         | Q(owner_id__in=advised_owner_ids)
         | Q(org_unit_id__in=managed_unit_ids)
     )
+    if is_workspace_member(user, workspace.id):
+        visibility |= Q(chain_visibility=ResearchProjectProfile.ChainVisibility.WORKSPACE)
+        visibility |= Q(
+            chain_visibility=ResearchProjectProfile.ChainVisibility.ORG,
+            org_unit__is_active=True,
+            org_unit__deleted_at__isnull=True,
+            org_unit__members__user=user,
+            org_unit__members__deleted_at__isnull=True,
+            org_unit__members__effective_from__lte=today,
+        ) & (
+            Q(org_unit__members__effective_to__isnull=True)
+            | Q(org_unit__members__effective_to__gte=today)
+        )
     if is_main_pi:
         return profile_queryset(workspace)
     return profile_queryset(workspace).filter(visibility).distinct()
@@ -168,6 +210,16 @@ def can_read_project_research_metadata(workspace, user, profile):
         return True
     if profile.org_unit_id in managing_org_units_for(user, workspace.id, today):
         return True
+    if profile.chain_visibility == ResearchProjectProfile.ChainVisibility.WORKSPACE:
+        return is_workspace_member(user, workspace.id)
+    if profile.chain_visibility == ResearchProjectProfile.ChainVisibility.ORG and profile.org_unit_id:
+        return OrgUnitMember.objects.filter(
+            active_membership_q(today),
+            org_unit_id=profile.org_unit_id,
+            workspace=workspace,
+            user=user,
+            deleted_at__isnull=True,
+        ).exists()
     return configured_main_pi_id(workspace) == user.id
 
 
@@ -200,6 +252,7 @@ def validate_project_org_unit(workspace, owner, requested_unit, *, can_override=
 
 def serialize_profile(profile):
     project = profile.project
+    chain = getattr(project, "research_chain", None)
     prefetched_members = getattr(project, "_prefetched_objects_cache", {}).get(
         "project_projectmember"
     )
@@ -242,6 +295,9 @@ def serialize_profile(profile):
             },
             "org_unit": str(profile.org_unit_id) if profile.org_unit_id else None,
             "research_type": profile.research_type,
+            "chain_kind": profile.chain_kind,
+            "chain_visibility": profile.chain_visibility,
+            "chain_id": str(chain.id) if chain is not None else None,
             "workflow_status": profile.workflow_status,
             "started_at": profile.started_at,
             "expected_end_at": profile.expected_end_at,
@@ -344,6 +400,28 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
         research_type = str(request.data.get("research_type") or "RESEARCH_PROJECT").strip().upper()
         if research_type not in ResearchProjectProfile.ResearchType.values:
             return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown research type.")
+        default_chain_kind = (
+            ResearchProjectProfile.ChainKind.RESEARCH_CHAIN
+            if research_type == ResearchProjectProfile.ResearchType.RESEARCH_PROJECT
+            else ResearchProjectProfile.ChainKind.LEGACY_TRAINING
+        )
+        chain_kind = str(request.data.get("chain_kind") or default_chain_kind).upper()
+        if chain_kind not in ResearchProjectProfile.ChainKind.values:
+            return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown chain kind.")
+        if (
+            chain_kind == ResearchProjectProfile.ChainKind.RESEARCH_CHAIN
+            and not getattr(getattr(workspace, "research_setting", None), "research_chain_enabled", False)
+        ):
+            return research_error(
+                ResearchErrorCode.SUBMODULE_DISABLED,
+                "Research Chain is disabled for this workspace.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        chain_visibility = str(
+            request.data.get("chain_visibility") or ResearchProjectProfile.ChainVisibility.PRIVATE
+        ).upper()
+        if chain_visibility not in ResearchProjectProfile.ChainVisibility.values:
+            return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown chain visibility.")
         raw_collaborators = request.data.get("collaborator_ids") or []
         if not isinstance(raw_collaborators, list):
             return research_error(
@@ -357,7 +435,11 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
                 ResearchErrorCode.USER_NOT_FOUND,
                 "One or more collaborators were not found.",
             )
-        if collaborator_ids and is_cultivation_project(research_type):
+        is_legacy_cultivation = (
+            chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
+            and is_cultivation_project(research_type)
+        )
+        if collaborator_ids and is_legacy_cultivation:
             return research_error(
                 ResearchErrorCode.PROJECT_NOT_FOUND,
                 "Collaborators can only be added to team research projects.",
@@ -396,10 +478,10 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
             with transaction.atomic():
                 # lock the owner's profiles so two concurrent requests cannot
                 # both pass the "one active project per owner" check (P0-PRJ-02)
-                if is_cultivation_project(research_type):
+                if is_legacy_cultivation:
                     lock_cultivation_owner(workspace, owner)
                 existing = active_cultivation_projects(workspace, owner).select_for_update().first()
-                if is_cultivation_project(research_type) and existing is not None:
+                if is_legacy_cultivation and existing is not None:
                     raise ActiveProjectExists()
                 project = Project.objects.create(
                     workspace=workspace,
@@ -462,11 +544,25 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
                     owner=owner,
                     org_unit=org_unit,
                     research_type=research_type,
+                    chain_kind=chain_kind,
+                    chain_visibility=chain_visibility,
                     started_at=started_at or timezone.localdate(),
                     expected_end_at=expected_end_at,
                     created_by=request.user,
                 )
-                if is_cultivation_project(research_type):
+                if chain_kind == ResearchProjectProfile.ChainKind.RESEARCH_CHAIN:
+                    chain_request_id = f"project:{project.id}"
+                    chain = ResearchChain.objects.create(
+                        project=project,
+                        workspace=workspace,
+                        owner=owner,
+                        visibility=chain_visibility,
+                        request_id=chain_request_id,
+                        payload_hash=hashlib.sha256(chain_request_id.encode()).hexdigest(),
+                        created_by=request.user,
+                    )
+                    ensure_group_knowledge_binding(chain, request.user)
+                if is_legacy_cultivation:
                     ensure_stage_instances(workspace, profile, request.user)
         except ActiveProjectExists:
             return research_conflict(
@@ -532,7 +628,10 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                 workspace=workspace,
             )
             requested_owner = profile.owner
-            was_cultivation_project = is_cultivation_project(profile.research_type)
+            was_cultivation_project = (
+                profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
+                and is_cultivation_project(profile.research_type)
+            )
             requested_type = profile.research_type
             requested_status = profile.workflow_status
             if "owner" in request.data:
@@ -557,6 +656,7 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                     return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown workflow status.")
             if (
                 requested_status == ResearchProjectProfile.WorkflowStatus.ACTIVE
+                and profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
                 and is_cultivation_project(requested_type)
             ):
                 lock_cultivation_owner(workspace, requested_owner)
@@ -623,7 +723,12 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
 
             if fields:
                 profile.save(update_fields=[*fields, "updated_at"])
-            if is_cultivation_project(profile.research_type) and not was_cultivation_project:
+            sync_chain_lifecycle(profile, owner_changed="owner" in request.data)
+            if (
+                profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
+                and is_cultivation_project(profile.research_type)
+                and not was_cultivation_project
+            ):
                 ensure_stage_instances(workspace, profile, request.user)
         return Response(serialize_profile(profile), status=status.HTTP_200_OK)
 
@@ -644,9 +749,12 @@ class ResearchProjectArchiveEndpoint(ResearchAPIView):
         if not is_admin and profile.owner_id != request.user.id:
             return research_permission_denied()
 
-        profile.workflow_status = ResearchProjectProfile.WorkflowStatus.ARCHIVED
-        profile.is_active = False
-        profile.save(update_fields=["workflow_status", "is_active", "updated_at"])
+        with transaction.atomic():
+            profile = ResearchProjectProfile.objects.select_for_update().get(pk=profile.pk)
+            profile.workflow_status = ResearchProjectProfile.WorkflowStatus.ARCHIVED
+            profile.is_active = False
+            profile.save(update_fields=["workflow_status", "is_active", "updated_at"])
+            sync_chain_lifecycle(profile)
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.PROJECT_ARCHIVE,
@@ -678,7 +786,10 @@ class ResearchProjectRestoreEndpoint(ResearchAPIView):
 
         with transaction.atomic():
             profile = ResearchProjectProfile.objects.select_for_update().get(pk=profile.pk)
-            if is_cultivation_project(profile.research_type):
+            if (
+                profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
+                and is_cultivation_project(profile.research_type)
+            ):
                 lock_cultivation_owner(workspace, profile.owner)
                 conflict = active_cultivation_projects(
                     workspace,
@@ -694,6 +805,7 @@ class ResearchProjectRestoreEndpoint(ResearchAPIView):
             profile.workflow_status = ResearchProjectProfile.WorkflowStatus.ACTIVE
             profile.is_active = True
             profile.save(update_fields=["workflow_status", "is_active", "updated_at"])
+            sync_chain_lifecycle(profile)
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.PROJECT_RESTORE,

@@ -11,6 +11,9 @@ import Link from "next/link";
 import { STAGE_MATERIAL_STATUS_LABELS, STAGE_MATERIAL_TYPES, stageMaterialLabelKey } from "@plane/constants";
 import type { TStageMaterialStatus } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+// components
+import { ResearchDetailSurface } from "@/components/research/common/research-data-surface";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 
 type Props = {
   workspaceSlug: string;
@@ -26,13 +29,6 @@ type Props = {
   }>;
   canEdit: boolean;
   onCreate: (materialType: string) => Promise<void>;
-};
-
-const STATUS_TONES: Record<TStageMaterialStatus, string> = {
-  DRAFT: "bg-surface-2 text-tertiary",
-  SUBMITTED: "bg-warning-subtle text-warning-primary",
-  ACCEPTED: "bg-success-subtle text-success-primary",
-  REJECTED: "bg-danger-subtle text-danger-primary",
 };
 
 /**
@@ -65,25 +61,22 @@ export const StageMaterialList = observer(function StageMaterialList({
   );
 
   return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-13 font-medium text-primary">{t("research.stages.materials.title")}</h3>
+    <ResearchDetailSurface title={t("research.stages.materials.title")}>
       <div className="flex flex-col gap-1">
         {requiredTypes.map((materialType) => {
           const material = byType.get(materialType);
           return (
             <div
               key={materialType}
-              className="flex items-center justify-between gap-2 rounded border border-subtle px-2 py-1.5 text-12"
+              className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-2 py-1.5 text-12"
             >
               <span className="text-primary">{t(stageMaterialLabelKey(materialType))}</span>
               <span className="flex items-center gap-2">
                 {material ? (
                   <>
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-11 ${STATUS_TONES[material.status] ?? "bg-surface-2"}`}
-                    >
+                    <ResearchStatusBadge status={material.status} size="sm">
                       {t(STAGE_MATERIAL_STATUS_LABELS[material.status])}
-                    </span>
+                    </ResearchStatusBadge>
                     <span className="text-11 text-tertiary">v{material.last_version_no}</span>
                     <Link
                       className="text-11 text-accent-primary hover:underline"
@@ -109,6 +102,6 @@ export const StageMaterialList = observer(function StageMaterialList({
           );
         })}
       </div>
-    </div>
+    </ResearchDetailSurface>
   );
 });

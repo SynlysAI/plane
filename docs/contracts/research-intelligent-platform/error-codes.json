@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/error-codes.v1.json",
+  "title": "Research Intelligent Platform error codes",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "codes"],
+  "properties": {
+    "schema_version": { "const": "error-codes.v1" },
+    "codes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "http_status", "retryable", "description"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+          "http_status": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "retryable": { "type": "boolean" },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

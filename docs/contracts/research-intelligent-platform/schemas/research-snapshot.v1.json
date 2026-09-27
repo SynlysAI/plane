@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/research-snapshot.v1.json",
+  "title": "Research Chain snapshot v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "snapshot_id", "node_id", "source_versions", "summary", "created_by", "immutable"],
+  "properties": {
+    "schema_version": { "const": "research-snapshot.v1" },
+    "snapshot_id": { "type": "string", "minLength": 1 },
+    "node_id": { "type": "string", "minLength": 1 },
+    "source_versions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "summary": { "type": "string" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "immutable": { "const": true },
+    "content_hash": { "type": ["string", "null"] }
+  }
+}

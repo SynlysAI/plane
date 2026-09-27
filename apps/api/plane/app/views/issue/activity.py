@@ -18,6 +18,7 @@ from rest_framework import status
 from .. import BaseAPIView
 from plane.app.serializers import IssueActivitySerializer, IssueCommentSerializer
 from plane.app.permissions import ProjectEntityPermission, allow_permission, ROLE
+from plane.research.utils.project_review import project_member_filters
 from plane.db.models import IssueActivity, IssueComment, CommentReaction, IntakeIssue
 
 
@@ -26,20 +27,20 @@ class IssueActivityEndpoint(BaseAPIView):
     use_read_replica = True
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id, issue_id):
         filters = {}
         if request.GET.get("created_at__gt", None) is not None:
             filters = {"created_at__gt": request.GET.get("created_at__gt")}
+        member_filters = project_member_filters(request.user, slug, project_id)
 
         issue_activities = (
             IssueActivity.objects.filter(issue_id=issue_id)
             .filter(
                 ~Q(field__in=["comment", "vote", "reaction", "draft"]),
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
                 workspace__slug=slug,
+                **member_filters,
             )
             .filter(**filters)
             .select_related("actor", "workspace", "issue", "project")
@@ -47,10 +48,9 @@ class IssueActivityEndpoint(BaseAPIView):
         issue_comments = (
             IssueComment.objects.filter(issue_id=issue_id)
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
                 workspace__slug=slug,
+                **member_filters,
             )
             .filter(**filters)
             .order_by("created_at")

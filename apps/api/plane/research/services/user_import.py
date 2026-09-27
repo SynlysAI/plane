@@ -18,7 +18,6 @@ import re
 import secrets
 from dataclasses import dataclass, field
 
-from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, models, transaction
@@ -63,6 +62,15 @@ ADVISOR_HEADERS = {
     # The supplied advisor workbook uses “导师姓名”.
     "name": ("姓名", "导师", "导师姓名"),
     "email": ("邮箱", "邮件"),
+}
+
+CATEGORY_EXPORT_LABELS = {
+    ResearchUserProfile.Category.STUDENT: "学生",
+    ResearchUserProfile.Category.POSTDOC: "博士后",
+    ResearchUserProfile.Category.ADVISOR: "导师",
+    ResearchUserProfile.Category.PI: "PI",
+    ResearchUserProfile.Category.STAFF: "员工",
+    ResearchUserProfile.Category.OTHER: "其他",
 }
 
 CATEGORY_ALIASES = {
@@ -411,6 +419,265 @@ def generate_password():
     return secrets.token_urlsafe(9)
 
 
+def apply_initial_password(user, password=None, *, save=None):
+    """写入最近一次发放的初始密码，并要求下次登录修改。
+
+    Args:
+        user: 接收密码的账号，可以尚未保存。
+        password: 显式明文；省略时生成随机密码。
+        save: 是否立即保存。默认仅在账号已经存在时保存。
+
+    Returns:
+        本次发放的明文初始密码。
+    """
+    issued = password or generate_password()
+    user.set_password(issued)
+    user.is_password_reset_required = True
+    user.is_password_autoset = False
+    should_save = user.pk is not None if save is None else save
+    if should_save:
+        user.save(
+            update_fields=["password", "is_password_reset_required", "is_password_autoset", "updated_at"]
+        )
+    return issued
+
+
+def _remember_advisor_snapshot(batch, email, password):
+    """把导师初始密码快照进批次选项，供本批次报告重复下载。"""
+    if batch is None or not email or not password:
+        return
+    options = dict(batch.options or {})
+    snapshots = dict(options.get("advisor_password_snapshots") or {})
+    snapshots[str(email).strip().lower()] = password
+    options["advisor_password_snapshots"] = snapshots
+    batch.options = options
+
+
+def record_issued_password(user, password, *, batch, actor, row=None, kind=None):
+    """记录最近一次发放的初始密码。
+
+    空密码不会覆盖已有凭据。再次发放只更新明文，不改变账号来源的首次批次。
+
+    Args:
+        user: 已保存的账号。
+        password: 本次发放的明文。
+        batch: 发放该密码的导入批次。
+        actor: 操作人。
+        row: 需要写入快照的导入行。
+        kind: 新建来源时的类别。
+
+    Returns:
+        账号来源；没有明文或账号尚未保存时返回 None。
+    """
+    if not password or user is None or not getattr(user, "pk", None) or batch is None:
+        return None
+    if row is not None:
+        row.initial_password = password
+        if row.pk:
+            row.save(update_fields=["initial_password", "updated_at"])
+    resolved_kind = kind or (
+        UserImportAccountSource.Kind.ROSTER if row is not None else UserImportAccountSource.Kind.ADVISOR
+    )
+    source = UserImportAccountSource.objects.filter(user=user).first()
+    if source is None:
+        source = UserImportAccountSource.objects.create(
+            user=user,
+            batch=batch,
+            row=row,
+            kind=resolved_kind,
+            initial_password=password,
+            created_by=actor,
+        )
+    else:
+        source.initial_password = password
+        update_fields = ["initial_password", "updated_at"]
+        if row is not None and source.row_id != row.id:
+            source.row = row
+            update_fields.append("row")
+        source.save(update_fields=update_fields)
+    if resolved_kind == UserImportAccountSource.Kind.ADVISOR:
+        _remember_advisor_snapshot(batch, user.email, password)
+    return source
+
+
+def iter_account_initial_passwords(workspace):
+    """列出当前工作区活跃成员最近一次发放的初始密码。
+
+    Args:
+        workspace: 目标工作区。
+
+    Returns:
+        按姓名和邮箱排序的导出记录。未发放过的初始密码为空。
+    """
+    memberships = WorkspaceMember.objects.filter(
+        workspace=workspace,
+        is_active=True,
+        deleted_at__isnull=True,
+        member__is_active=True,
+    ).select_related("member")
+    users = [membership.member for membership in memberships]
+    user_ids = [user.id for user in users]
+    profiles = {
+        profile.user_id: profile
+        for profile in ResearchUserProfile.objects.filter(user_id__in=user_ids)
+    }
+    sources = {
+        source.user_id: source
+        for source in UserImportAccountSource.objects.select_related("batch").filter(user_id__in=user_ids)
+    }
+    records = []
+    for user in users:
+        profile = profiles.get(user.id)
+        source = sources.get(user.id)
+        category = profile.category if profile is not None else ""
+        records.append(
+            {
+                "name": user.display_name or user.first_name or user.email,
+                "email": user.email,
+                "category": CATEGORY_EXPORT_LABELS.get(category, category),
+                "initial_password": source.initial_password if source is not None else "",
+                "reset_required": "是" if user.is_password_reset_required else "否",
+                "batch": source.batch.source_filename if source is not None and source.batch_id else "",
+            }
+        )
+    return sorted(records, key=lambda item: (item["name"], item["email"]))
+
+
+def _credential_batch_for_user(workspace, user):
+    """选择回填初始密码时挂接的导入批次和最早导入行。"""
+    row = (
+        UserImportRow.objects.filter(batch__workspace=workspace, user=user)
+        .select_related("batch")
+        .order_by("created_at")
+        .first()
+    )
+    if row is None:
+        row = (
+            UserImportRow.objects.filter(batch__workspace=workspace, email__iexact=user.email)
+            .select_related("batch")
+            .order_by("created_at")
+            .first()
+        )
+    if row is not None:
+        return row.batch, row
+    batch = (
+        UserImportBatch.objects.filter(
+            workspace=workspace,
+            status=UserImportBatch.Status.IMPORTED,
+            options__source="rebuild_pi_lab_baseline",
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if batch is None:
+        batch = (
+            UserImportBatch.objects.filter(workspace=workspace, status=UserImportBatch.Status.IMPORTED)
+            .order_by("-created_at")
+            .first()
+        )
+    return batch, None
+
+
+def backfill_initial_passwords(workspace, accounts, *, actor=None, dry_run=False):
+    """把已核对的初始密码写入账号来源，不修改密码哈希。
+
+    只有明文能通过当前哈希校验，且来源里还没有另一条明文时才写入。
+
+    Args:
+        workspace: 账号必须已经加入的工作区。
+        accounts: 含 email、password，以及可选 category 的记录。
+        actor: 新建来源时记录的操作人。
+        dry_run: 为真时只统计，不写库。
+
+    Returns:
+        计数和未写入邮箱。结果中不包含明文密码。
+    """
+    counts = {
+        "updated": 0,
+        "unchanged": 0,
+        "skipped_mismatch": 0,
+        "skipped_missing_user": 0,
+        "skipped_not_member": 0,
+        "skipped_existing_password": 0,
+        "skipped_no_batch": 0,
+        "skipped_inactive": 0,
+    }
+    skipped = {key: [] for key in counts if key.startswith("skipped_")}
+    touched_batches = {}
+    batch_cache = {}
+    for account in accounts:
+        email = _identity_email(account.get("email"))
+        password = str(account.get("password") or "")
+        if not email or not password:
+            counts["skipped_missing_user"] += 1
+            continue
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            counts["skipped_missing_user"] += 1
+            skipped["skipped_missing_user"].append(email)
+            continue
+        if not user.is_active:
+            counts["skipped_inactive"] += 1
+            skipped["skipped_inactive"].append(email)
+            continue
+        is_member = WorkspaceMember.objects.filter(
+            workspace=workspace,
+            member=user,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).exists()
+        if not is_member:
+            counts["skipped_not_member"] += 1
+            skipped["skipped_not_member"].append(email)
+            continue
+        if not user.check_password(password):
+            counts["skipped_mismatch"] += 1
+            skipped["skipped_mismatch"].append(email)
+            continue
+        source = UserImportAccountSource.objects.filter(user=user).first()
+        if source is not None and source.initial_password:
+            if source.initial_password == password:
+                counts["unchanged"] += 1
+            else:
+                counts["skipped_existing_password"] += 1
+                skipped["skipped_existing_password"].append(email)
+            continue
+        batch, row = _credential_batch_for_user(workspace, user)
+        if batch is not None:
+            batch = batch_cache.setdefault(batch.id, batch)
+        if batch is None:
+            counts["skipped_no_batch"] += 1
+            skipped["skipped_no_batch"].append(email)
+            continue
+        if dry_run:
+            counts["updated"] += 1
+            continue
+        profile = ResearchUserProfile.objects.filter(user=user).first()
+        category = str(account.get("category") or (profile.category if profile is not None else "")).upper()
+        kind = (
+            UserImportAccountSource.Kind.ADVISOR
+            if category == ResearchUserProfile.Category.ADVISOR
+            else UserImportAccountSource.Kind.ROSTER
+        )
+        snapshot_row = row if row is not None and not row.initial_password else None
+        record_issued_password(
+            user,
+            password,
+            batch=batch,
+            actor=actor,
+            row=snapshot_row,
+            kind=kind,
+        )
+        if kind == UserImportAccountSource.Kind.ADVISOR:
+            touched_batches[batch.id] = batch
+        counts["updated"] += 1
+    if not dry_run:
+        for batch in touched_batches.values():
+            batch.save(update_fields=["options", "updated_at"])
+    counts["skipped_emails"] = skipped
+    return counts
+
+
 def _valid_email(value):
     try:
         validate_email(value)
@@ -514,7 +781,9 @@ def resolve_row_advisors(workspace, row, advisor_map, *, allow_unprovisioned=Fal
     return primary_advisor, co_advisors, reasons
 
 
-def _upsert_import_advisor(workspace, actor, name, email, batch=None, *, return_details=False):
+def _upsert_import_advisor(
+    workspace, actor, name, email, batch=None, *, return_details=False, reset_passwords=False
+):
     """Create the account and workspace seat represented by an advisor row.
 
     Advisor spreadsheets are the source of truth for the people referenced by
@@ -526,17 +795,17 @@ def _upsert_import_advisor(workspace, actor, name, email, batch=None, *, return_
     created = user is None
     password = ""
     if user is None:
-        password = generate_password()
         user = User(
             email=email,
             username=email,
             first_name=name,
             display_name=name,
             is_active=True,
-            is_password_reset_required=True,
         )
-        user.set_password(password)
+        password = apply_initial_password(user, save=False)
         user.save()
+    elif reset_passwords:
+        password = apply_initial_password(user)
 
     ensure_workspace_membership(workspace, user, actor)
     ResearchUserProfile.objects.get_or_create(
@@ -552,11 +821,28 @@ def _upsert_import_advisor(workspace, actor, name, email, batch=None, *, return_
     return user
 
 
-def provision_import_advisors(workspace, actor, advisor_map, batch=None):
+def provision_import_advisors(workspace, actor, advisor_map, batch=None, *, reset_passwords=False):
     """Provision every valid advisor row, even if no student references it yet."""
     for name, email in advisor_map.items():
-        if name and _valid_email(email):
-            _upsert_import_advisor(workspace, actor, name, email, batch=batch)
+        if not name or not _valid_email(email):
+            continue
+        user, _created, password = _upsert_import_advisor(
+            workspace,
+            actor,
+            name,
+            email,
+            batch=batch,
+            return_details=True,
+            reset_passwords=reset_passwords,
+        )
+        if password and batch is not None:
+            record_issued_password(
+                user,
+                password,
+                batch=batch,
+                actor=actor,
+                kind=UserImportAccountSource.Kind.ADVISOR,
+            )
 
 
 def _student_row_from_import_row(row):
@@ -615,8 +901,12 @@ def validate_review_row(workspace, row):
 
 
 def review_identity_error(workspace, row):
-    if WorkspaceMember.objects.filter(workspace=workspace, member__email__iexact=row.email).exists():
-        return "该邮箱已是当前工作区成员，请通过成员管理维护。"
+    reset_passwords = bool((row.batch.options or {}).get("reset_passwords")) if row.batch_id else False
+    if (
+        not reset_passwords
+        and WorkspaceMember.objects.filter(workspace=workspace, member__email__iexact=row.email).exists()
+    ):
+        return "该邮箱已是当前工作区成员，请通过成员管理维护。如需重新发放初始密码，请在上传时勾选重新生成。"
     existing_user = find_user_for_row(_student_row_from_import_row(row))
     if existing_user:
         profile = ResearchUserProfile.objects.filter(user=existing_user).first()
@@ -666,7 +956,7 @@ def create_review_batch(
         source_filename=str(source_filename or "")[:255],
         dry_run=False,
         status=UserImportBatch.Status.PENDING_REVIEW,
-        options={"advisor_mapping_size": len(advisor_map), "reset_passwords": False},
+        options={"advisor_mapping_size": len(advisor_map), "reset_passwords": bool(reset_passwords)},
         advisor_mapping=advisor_map,
         created_by=actor,
     )
@@ -822,26 +1112,28 @@ def _refresh_batch_counts(batch):
     batch.save(update_fields=["rows_total", "rows_ok", "rows_pending", "rows_error", "updated_at"])
 
 
-def _provision_review_advisors(workspace, actor, batch, advisor_map):
+def _provision_review_advisors(workspace, actor, batch, advisor_map, *, reset_passwords=False):
+    """发放导师账号，并只在新建或显式重新生成时记录初始密码。"""
     credentials = 0
     for name, email in advisor_map.items():
         if not name or not _valid_email(email):
             continue
-        user, created, password = _upsert_import_advisor(
+        user, _created, password = _upsert_import_advisor(
             workspace,
             actor,
             name,
             email,
             batch=batch,
             return_details=True,
+            reset_passwords=reset_passwords,
         )
-        if created:
-            UserImportAccountSource.objects.create(
-                user=user,
+        if password:
+            record_issued_password(
+                user,
+                password,
                 batch=batch,
+                actor=actor,
                 kind=UserImportAccountSource.Kind.ADVISOR,
-                initial_password=password,
-                created_by=actor,
             )
             credentials += 1
     return credentials
@@ -891,20 +1183,22 @@ def approve_review_batch(workspace, actor, batch_id, *, request=None, preview_to
             ResearchErrorCode.IMPORT_ROW_INVALID,
             f"Inactive accounts must be reactivated in God-mode first: {', '.join(sorted(inactive_emails))}",
         )
+    reset_passwords = bool((batch.options or {}).get("reset_passwords"))
     credentials = 0
     for email, name in advisor_map.items():
-        credentials += _provision_review_advisors(workspace, actor, batch, {name: email})
+        credentials += _provision_review_advisors(
+            workspace, actor, batch, {name: email}, reset_passwords=reset_passwords
+        )
     imported = 0
     for row in included:
         student = _student_row_from_import_row(row)
-        existed = find_user_for_row(student) is not None
         outcome = _import_row(
             workspace,
             actor,
             student,
             batch,
             advisor_map,
-            reset_passwords=False,
+            reset_passwords=reset_passwords,
         )
         if outcome["status"] != UserImportRow.Status.OK:
             raise AccountError(ResearchErrorCode.IMPORT_ROW_INVALID, outcome.get("message") or "Import failed.")
@@ -914,16 +1208,19 @@ def approve_review_batch(workspace, actor, batch_id, *, request=None, preview_to
         row.org_unit = outcome.get("unit")
         row.initial_password = outcome.get("password", "")
         row.save()
-        if not existed and row.user_id:
-            UserImportAccountSource.objects.get_or_create(
-                user_id=row.user_id,
-                defaults={
-                    "batch": batch,
-                    "row": row,
-                    "kind": UserImportAccountSource.Kind.ROSTER,
-                    "initial_password": row.initial_password,
-                    "created_by": actor,
-                },
+        if row.initial_password and row.user_id:
+            kind = (
+                UserImportAccountSource.Kind.ADVISOR
+                if row.category == ResearchUserProfile.Category.ADVISOR
+                else UserImportAccountSource.Kind.ROSTER
+            )
+            record_issued_password(
+                row.user,
+                row.initial_password,
+                batch=batch,
+                actor=actor,
+                row=row,
+                kind=kind,
             )
             credentials += 1
         imported += 1
@@ -1129,7 +1426,6 @@ def _upsert_user(row, reset_passwords=False):
     """Create or update the account; returns ``(user, created, password)``."""
     user = find_user_for_row(row)
     if user is None:
-        password = generate_password()
         user = User(
             email=row.email,
             username=row.email,
@@ -1137,11 +1433,12 @@ def _upsert_user(row, reset_passwords=False):
             display_name=row.name,
             is_active=True,
         )
-        user.password = make_password(password)
-        user.is_password_reset_required = True
+        password = apply_initial_password(user, save=False)
         user.save()
         return user, True, password
 
+    if reset_passwords:
+        return user, False, apply_initial_password(user)
     # An existing instance account retains its identity and credentials.
     return user, False, ""
 
@@ -1269,7 +1566,7 @@ def run_import(
 ):
     """Import ``rows`` and return the persisted :class:`UserImportBatch`."""
     advisor_map = {_normalise_header(key): value for key, value in (advisor_map or {}).items()}
-    validate_import_identities(workspace, rows, advisor_map)
+    validate_import_identities(workspace, rows, advisor_map, allow_existing=bool(reset_passwords))
     if dry_run:
         return preview_import(
             workspace,
@@ -1281,7 +1578,7 @@ def run_import(
     _acquire_import_lock(workspace)
     # Re-check after taking the workspace lock so a concurrent import cannot
     # slip through the initial read and create a partial batch.
-    validate_import_identities(workspace, rows, advisor_map)
+    validate_import_identities(workspace, rows, advisor_map, allow_existing=bool(reset_passwords))
     batch = UserImportBatch.objects.create(
         workspace=workspace,
         source_filename=str(source_filename or "")[:255],
@@ -1293,7 +1590,7 @@ def run_import(
     # The advisor workbook is an import source, not only a lookup table. Make
     # every valid mapped advisor an idempotent workspace member before rows are
     # resolved, otherwise every student would be reported as missing a mentor.
-    provision_import_advisors(workspace, actor, advisor_map, batch=batch)
+    provision_import_advisors(workspace, actor, advisor_map, batch=batch, reset_passwords=reset_passwords)
 
     counts = {"ok": 0, "pending": 0, "error": 0}
     groups = set()
@@ -1312,9 +1609,10 @@ def run_import(
         counts[outcome["status"].lower()] += 1
         if outcome.get("group"):
             groups.add(outcome["group"])
-        if outcome.get("password"):
+        password = outcome.get("password", "")
+        if password:
             credentials += 1
-        UserImportRow.objects.create(
+        import_row = UserImportRow.objects.create(
             batch=batch,
             row_number=row.row_number,
             raw=row.raw,
@@ -1327,9 +1625,22 @@ def run_import(
             advisor_name=row.primary_advisor_name,
             user=outcome.get("user"),
             org_unit=outcome.get("unit"),
-            initial_password=outcome.get("password", ""),
+            initial_password=password,
             created_by=actor,
         )
+        if password and outcome.get("user") is not None:
+            record_issued_password(
+                outcome["user"],
+                password,
+                batch=batch,
+                actor=actor,
+                row=import_row,
+                kind=(
+                    UserImportAccountSource.Kind.ADVISOR
+                    if row.category == ResearchUserProfile.Category.ADVISOR
+                    else UserImportAccountSource.Kind.ROSTER
+                ),
+            )
 
     batch.rows_total = len(rows)
     batch.rows_ok = counts["ok"]
@@ -1418,7 +1729,9 @@ def _import_row(workspace, actor, row, batch, advisor_map, *, dry_run=False, res
         return {"status": ROW_ERROR, "message": message}
     if row.category == ResearchUserProfile.Category.ADVISOR:
         from plane.research.services.import_workflow import import_advisor_row
-        return import_advisor_row(workspace, actor, row, batch, dry_run=dry_run)
+        return import_advisor_row(
+            workspace, actor, row, batch, dry_run=dry_run, reset_passwords=reset_passwords
+        )
 
     return _import_roster_row(
         workspace,

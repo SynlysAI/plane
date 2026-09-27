@@ -27,6 +27,23 @@ def get_redirection_path(user):
             workspace_member__member_id=user.id,
             workspace_member__is_active=True,
         ).first()
+        if workspace is not None and workspace.slug == "pi":
+            from plane.db.models import WorkspaceResearchSetting
+
+            private_setting = WorkspaceResearchSetting.objects.filter(
+                workspace=workspace,
+                purpose=WorkspaceResearchSetting.Purpose.PI_PRIVATE,
+                main_pi=user,
+                deleted_at__isnull=True,
+            ).first()
+            if private_setting is not None:
+                public_workspace = Workspace.objects.filter(
+                    slug="public",
+                    workspace_member__member_id=user.id,
+                    workspace_member__is_active=True,
+                ).first()
+                if public_workspace is not None:
+                    return public_workspace.slug
         return f"{workspace.slug}"
 
     fallback_workspace = (

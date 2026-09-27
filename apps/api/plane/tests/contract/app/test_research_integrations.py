@@ -112,10 +112,18 @@ class TestConnectionConfiguration:
     def test_lists_every_system_even_when_unconfigured(self, env):
         payload = env["admin_client"].get(integrations_url(env)).json()
         systems = {item["system"] for item in payload["results"]}
-        assert systems == {"RAGPORTAL", "WEKNORA", "SPECLABOS", "SMARTACCESS", "POLY_AGENT", "SPEC_AGENT"}
+        assert systems == {"RAGPORTAL", "WEKNORA", "SYNLORA", "SPECLABOS", "SMARTACCESS", "POLY_AGENT", "SPEC_AGENT"}
         ragportal = next(item for item in payload["results"] if item["system"] == "RAGPORTAL")
         assert ragportal["configured"] is False
         assert ragportal["is_enabled"] is False
+        assert ragportal["registration_status"] == "NOT_REGISTERED"
+
+        weknora = next(item for item in payload["results"] if item["system"] == "WEKNORA")
+        assert weknora["registration_status"] == "PROXY"
+        assert weknora["proxy_system"] == "RAGPORTAL"
+
+        phase_two = next(item for item in payload["results"] if item["system"] == "SPEC_AGENT")
+        assert phase_two["registration_status"] == "PHASE_NOT_ENABLED"
 
     def test_admin_configures_a_connection_without_echoing_credentials(self, env):
         response = env["admin_client"].patch(
@@ -152,11 +160,39 @@ class TestConnectionConfiguration:
         )
         assert response.status_code == 403
 
+    def test_weknora_cannot_be_registered_directly(self, env):
+        response = env["admin_client"].patch(
+            integrations_url(env),
+            {"items": [{"system": "WEKNORA", "base_url": "https://weknora.example.com", "is_enabled": True}]},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json()["error_code"] == "integration_invalid"
+
     def test_health_reports_unconfigured_systems(self, env):
         payload = env["admin_client"].get(integrations_url(env, "health/")).json()
         ragportal = next(item for item in payload["results"] if item["system"] == "RAGPORTAL")
         assert ragportal["configured"] is False
         assert ragportal["degraded_reason"] == "not_configured"
+        assert ragportal["registration_status"] == "NOT_REGISTERED"
+
+        weknora = next(item for item in payload["results"] if item["system"] == "WEKNORA")
+        assert weknora["registration_status"] == "PROXY"
+        assert weknora["proxy_system"] == "RAGPORTAL"
+
+    def test_registered_disabled_connection_has_distinct_status(self, env):
+        ExternalSystemConnection.objects.create(
+            workspace=env["workspace"],
+            system="SYNLORA",
+            display_name="Synlora",
+            base_url="https://synlora.example.com",
+            auth_mode="BEARER",
+            is_enabled=False,
+        )
+        payload = env["admin_client"].get(integrations_url(env)).json()
+        synlora = next(item for item in payload["results"] if item["system"] == "SYNLORA")
+        assert synlora["configured"] is True
+        assert synlora["registration_status"] == "REGISTERED_DISABLED"
 
 
 @pytest.mark.django_db

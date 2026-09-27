@@ -407,3 +407,47 @@ class TestChainExport:
         add_workspace_member(env["workspace"], member)
         body = client_for(member).get(export_url(env)).content.decode("utf-8")
         assert "Private run" not in body
+
+
+def test_topic_materials_keep_pdf_and_markdown_on_the_project(env):
+    from unittest import mock
+
+    from plane.db.models import FileAsset, ResearchOutcome
+
+    base = f"/api/research/workspaces/{env['workspace'].slug}/projects/{env['project_id']}/materials/"
+    storage = mock.Mock()
+    storage.generate_presigned_post.return_value = {"url": "https://upload.example", "fields": {"key": "k"}}
+    storage.get_object_metadata.return_value = {"size": 8}
+    with mock.patch("plane.research.views.topic_materials.S3Storage", return_value=storage):
+        rejected = env["owner_client"].post(
+            f"{base}presign/",
+            {"file_name": "notes.txt", "content_type": "text/plain", "size": 4},
+            format="json",
+        )
+        assert rejected.status_code == 422
+
+        confirmed_names = []
+        for name, content_type in (("opening.pdf", "application/pdf"), ("notes.md", "text/markdown")):
+            presign = env["owner_client"].post(
+                f"{base}presign/",
+                {"file_name": name, "content_type": content_type, "size": 8},
+                format="json",
+            )
+            assert presign.status_code == 200
+            confirmed = env["owner_client"].post(base, {"asset_id": presign.json()["asset_id"]}, format="json")
+            assert confirmed.status_code == 201
+            assert confirmed.json()["file_name"] == name
+            assert confirmed.json()["project"] == env["project_id"]
+            assert confirmed.json()["project_name"]
+            confirmed_names.append(name)
+
+        listed = env["owner_client"].get(base)
+        assert listed.status_code == 200
+        assert {item["file_name"] for item in listed.json()["results"]} == set(confirmed_names)
+        assert all(item["project"] == env["project_id"] for item in listed.json()["results"])
+        assert ResearchOutcome.objects.filter(project_id=env["project_id"]).count() == 0
+        assert not FileAsset.objects.filter(project_id=env["project_id"], entity_type="REPORT_ATTACHMENT").exists()
+
+        stranger = make_user(first_name="Stranger")
+        add_workspace_member(env["workspace"], stranger)
+        assert client_for(stranger).get(base).status_code == 404

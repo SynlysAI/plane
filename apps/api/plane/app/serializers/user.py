@@ -114,6 +114,26 @@ class UserMeSettingsSerializer(BaseSerializer):
                 workspace_member__member=obj.id,
                 workspace_member__is_active=True,
             ).first()
+            # The private PI workspace is a read-only shell. Keep the main PI
+            # landing page on the public research authority unless the user
+            # explicitly switches workspaces.
+            if workspace is not None and workspace.slug == "pi":
+                from plane.db.models import WorkspaceResearchSetting
+
+                private_setting = WorkspaceResearchSetting.objects.filter(
+                    workspace=workspace,
+                    purpose=WorkspaceResearchSetting.Purpose.PI_PRIVATE,
+                    main_pi=obj,
+                    deleted_at__isnull=True,
+                ).first()
+                if private_setting is not None:
+                    public_workspace = Workspace.objects.filter(
+                        slug="public",
+                        workspace_member__member=obj.id,
+                        workspace_member__is_active=True,
+                    ).first()
+                    if public_workspace is not None:
+                        workspace = public_workspace
             logo_asset_url = workspace.logo_asset.asset_url if workspace.logo_asset is not None else ""
             return {
                 "last_workspace_id": profile.last_workspace_id,

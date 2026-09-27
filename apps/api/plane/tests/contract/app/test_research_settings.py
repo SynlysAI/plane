@@ -10,6 +10,7 @@ from plane.research.utils.settings import workspace_research_enabled
 from plane.tests.research_fixtures import (
     add_workspace_member,
     enable_research,
+    make_instance_admin,
     make_user,
     make_workspace,
     org_units_url,
@@ -67,8 +68,11 @@ class TestResearchSettingsEndpoint:
         assert payload["pdf_max_mb"] == 100
         assert payload["markdown_max_mb"] == 5
         assert payload["audit_retention_days"] == 0
+        assert payload["research_ia_v2"] is True
         assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
-        assert env["member_client"].get(env["identity_url"]).json()["workspace_enabled"] is True
+        identity = env["member_client"].get(env["identity_url"]).json()
+        assert identity["workspace_enabled"] is True
+        assert identity["research_ia_v2"] is True
 
     def test_workspace_without_row_renders_research_by_default(self, env):
         assert not WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
@@ -82,6 +86,8 @@ class TestResearchSettingsEndpoint:
             "experiments": True,
             "code": True,
             "integrations": True,
+            "research_chain": False,
+            "research_agent": False,
         }
         assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
 
@@ -91,9 +97,24 @@ class TestResearchSettingsEndpoint:
         assert env["member_client"].get(env["identity_url"]).status_code == 404
 
     def test_workspace_member_cannot_patch_settings(self, env):
-        response = env["member_client"].patch(env["url"], {"module_enabled": True}, format="json")
+        response = env["member_client"].patch(
+            env["url"], {"module_enabled": True, "research_ia_v2": True}, format="json"
+        )
         assert response.status_code == 403
         assert response.json()["error_code"] == "research_permission_denied"
+
+    def test_admin_can_toggle_research_ia_v2_without_changing_api_semantics(self, env):
+        response = env["admin_client"].patch(env["url"], {"research_ia_v2": True}, format="json")
+
+        assert response.status_code == 200
+        assert response.json()["research_ia_v2"] is True
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_ia_v2 is True
+        assert env["member_client"].get(env["identity_url"]).json()["research_ia_v2"] is True
+        assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
+
+        rollback = env["admin_client"].patch(env["url"], {"research_ia_v2": False}, format="json")
+        assert rollback.status_code == 200
+        assert rollback.json()["research_ia_v2"] is False
 
     def test_admin_can_toggle_switches_and_limits(self, env):
         response = env["admin_client"].patch(
@@ -175,6 +196,8 @@ class TestResearchSettingsEndpoint:
             "experiments": False,
             "code": False,
             "integrations": False,
+            "research_chain": False,
+            "research_agent": False,
         }
 
         blocked = env["member_client"].get(org_units_url(env["workspace"]))
@@ -192,6 +215,8 @@ class TestResearchSettingsEndpoint:
             "experiments": True,
             "code": True,
             "integrations": True,
+            "research_chain": False,
+            "research_agent": False,
         }
         assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
 
@@ -202,3 +227,45 @@ class TestResearchSettingsEndpoint:
         assert response.status_code == 404
         assert response.json()["error_code"] == "research_module_disabled"
         assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
+
+    def test_settings_return_the_main_pi_display_name(self, env):
+        make_instance_admin(env["admin"])
+        principal = make_user(email="configured-main-pi@example.com")
+        principal.display_name = "邱智鑫"
+        principal.save(update_fields=["display_name"])
+        enable_research(env["workspace"], purpose="PUBLIC_RESEARCH", main_pi=principal)
+
+        response = env["admin_client"].get(env["url"])
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["main_pi"] == str(principal.id)
+        assert payload["main_pi_name"] == "邱智鑫"
+        assert payload["main_pi_name"] != payload["main_pi"]
+
+    def test_system_admin_lookup_returns_a_name_or_not_found(self, env):
+        make_instance_admin(env["admin"])
+        candidate = make_user(email="candidate-main-pi@example.com")
+        candidate.display_name = "候选老师"
+        candidate.save(update_fields=["display_name"])
+
+        found = env["admin_client"].get(env["url"], {"lookup_user": str(candidate.id)})
+        assert found.status_code == 200
+        assert found.json()["lookup_user_found"] is True
+        assert found.json()["lookup_user_name"] == "候选老师"
+
+        missing = env["admin_client"].get(env["url"], {"lookup_user": "missing-user"})
+        assert missing.status_code == 200
+        assert missing.json()["lookup_user_found"] is False
+        assert missing.json()["lookup_user_name"] is None
+
+    def test_only_system_admin_can_lookup_or_appoint_the_main_pi(self, env):
+        lookup = env["admin_client"].get(env["url"], {"lookup_user": str(env["member"].id)})
+        assert lookup.status_code == 403
+        assert lookup.json()["error_code"] == "research_permission_denied"
+
+        appoint = env["admin_client"].patch(env["url"], {"main_pi": str(env["member"].id)}, format="json")
+        assert appoint.status_code == 403
+        assert appoint.json()["error_code"] == "research_permission_denied"
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).main_pi_id is None
+

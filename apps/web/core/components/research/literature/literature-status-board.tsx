@@ -33,8 +33,10 @@ export const LiteratureStatusBoard = observer(function LiteratureStatusBoard({ c
           key={status}
           type="button"
           onClick={() => onSelect(active === status ? "" : status)}
-          className={`flex items-center gap-1 rounded border px-2 py-1 text-12 ${
-            active === status ? "border-accent-strong bg-surface-2 text-primary" : "border-subtle text-secondary"
+          className={`flex items-center gap-1 rounded-md border px-2 py-1 text-12 transition-colors ${
+            active === status
+              ? "border-accent-strong bg-surface-1 text-primary"
+              : "border-transparent text-secondary hover:bg-surface-1"
           }`}
         >
           {t(LITERATURE_STATUS_LABELS[status])}

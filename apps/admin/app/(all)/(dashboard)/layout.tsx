@@ -11,6 +11,7 @@ import { Outlet } from "react-router";
 // components
 import { AdminHeader } from "@/components/common/header";
 import { LogoSpinner } from "@/components/common/logo-spinner";
+import { InstanceFailureView } from "@/components/instance/failure";
 import { NewUserPopup } from "@/components/common/new-user-popup";
 // hooks
 import { useUser } from "@/hooks/store";
@@ -22,15 +23,19 @@ function AdminLayout(_props: Route.ComponentProps) {
   // router
   const { replace } = useRouter();
   // store hooks
-  const { isUserLoggedIn } = useUser();
+  const { isUserLoggedIn, sessionFailure } = useUser();
 
   useEffect(() => {
     if (isUserLoggedIn === false) replace("/");
   }, [replace, isUserLoggedIn]);
 
+  if (sessionFailure) {
+    return <InstanceFailureView path={sessionFailure.path} status={sessionFailure.status} />;
+  }
+
   if (isUserLoggedIn === undefined) {
     return (
-      <div className="relative flex h-screen w-full items-center justify-center">
+      <div className="relative flex h-screen w-full items-center justify-center" data-testid="admin-logo-spinner">
         <LogoSpinner />
       </div>
     );

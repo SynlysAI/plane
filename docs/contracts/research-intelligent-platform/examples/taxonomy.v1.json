@@ -1,0 +1,27 @@
+{
+  "schema_version": "taxonomy.v1",
+  "node_types": ["LITERATURE_REVIEW", "RESEARCH_PLAN", "EXPERIMENT", "ANALYSIS", "REFLECTION", "GENERAL_RESEARCH"],
+  "node_statuses": ["PENDING", "IN_PROGRESS", "BLOCKED", "SUCCEEDED", "FAILED", "CANCELLED"],
+  "event_types": [
+    "RESEARCH_NOTE",
+    "COMMUNICATION",
+    "AI_ACTION",
+    "TOOL_CALL",
+    "VALIDATION",
+    "HUMAN_DECISION",
+    "APPROVAL",
+    "DATA_CHANGE",
+    "DEGRADED"
+  ],
+  "snapshot_types": [
+    "LITERATURE_REVIEW",
+    "EXPERIMENT_EXECUTION",
+    "EXPERIMENT_DATA",
+    "ANALYSIS_RESULT",
+    "PAPER_REVIEW",
+    "GENERAL_RESEARCH"
+  ],
+  "todo_sources": ["RAGPORTAL", "SYNLORA", "PLANE", "SPECLABOS", "POLY_AGENT", "SPEC_AGENT"],
+  "todo_statuses": ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE", "CANCELLED", "DEGRADED"],
+  "degraded_modes": ["LINK_ONLY", "HIDDEN"]
+}

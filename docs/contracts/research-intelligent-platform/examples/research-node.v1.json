@@ -1,0 +1,11 @@
+{
+  "schema_version": "research-node.v1",
+  "node_id": "node-01",
+  "chain_id": "chain-01",
+  "node_type": "LITERATURE_REVIEW",
+  "title": "初步文献调研",
+  "parent_node_id": null,
+  "loop_iteration": 0,
+  "status": "IN_PROGRESS",
+  "assignee_id": "user-01"
+}

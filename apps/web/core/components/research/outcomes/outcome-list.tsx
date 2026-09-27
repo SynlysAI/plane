@@ -4,29 +4,34 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { OUTCOME_STATUSES, OUTCOME_STATUS_LABELS, OUTCOME_TYPES, OUTCOME_TYPE_LABELS } from "@plane/constants";
-import type { TOutcomeStatus, TOutcomeType } from "@plane/constants";
+import type { TOutcomeType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { ResearchTopicMaterialActions } from "@/components/research/materials/topic-material-actions";
+import { ResearchOutcomeService } from "@/services/research/outcome.service";
+
+const outcomeService = new ResearchOutcomeService();
 
 type Props = {
   workspaceSlug: string;
   projectId: string;
-};
-
-const STATUS_TONES: Record<TOutcomeStatus, string> = {
-  DRAFT: "bg-surface-2 text-tertiary",
-  SUBMITTED: "bg-accent-subtle text-accent-primary",
-  ACCEPTED: "bg-success-subtle text-success-primary",
-  PUBLISHED: "bg-success-subtle text-success-primary",
 };
 
 /** Outcomes page: register results and link them back into the chain (P1-FIN-02). */
@@ -39,6 +44,8 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
   const [venue, setVenue] = useState("");
   const [doi, setDoi] = useState("");
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [uploadingOutcomeId, setUploadingOutcomeId] = useState<string | null>(null);
+  const outcomeFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void research.fetchOutcomes(workspaceSlug, projectId).catch((error) => setErrorKey(getResearchErrorKey(error)));
@@ -46,8 +53,8 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
   }, [workspaceSlug, projectId]);
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-5">
-      <div className="flex flex-wrap items-center gap-2">
+    <ResearchListSurface>
+      <ResearchFilterToolbar>
         <Input
           className="!w-64"
           value={title}
@@ -107,59 +114,126 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
         >
           {t("research.outcomes.export_chain")}
         </a>
-      </div>
+      </ResearchFilterToolbar>
+      <ResearchTopicMaterialActions workspaceSlug={workspaceSlug} projectId={projectId} showRegister={false} />
 
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.outcomes.columns.title")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.type")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.venue")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.status")}</th>
-            <th className="font-normal py-2">{t("research.outcomes.columns.links")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {outcomes.map((outcome) => (
-            <tr key={outcome.id} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">{outcome.title}</td>
-              <td className="py-2 text-tertiary">{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</td>
-              <td className="py-2 text-tertiary">{outcome.venue || outcome.doi || "-"}</td>
-              <td className="py-2">
-                <select
-                  className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
-                  value={outcome.status}
-                  onChange={(event) =>
-                    void research
-                      .updateOutcome(workspaceSlug, outcome.id, { status: event.target.value })
-                      .catch(() => undefined)
-                  }
-                >
-                  {OUTCOME_STATUSES.map((value) => (
-                    <option key={value} value={value}>
-                      {t(OUTCOME_STATUS_LABELS[value])}
-                    </option>
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("research.outcomes.columns.title")}</TableHead>
+              <TableHead>{t("research.outcomes.columns.type")}</TableHead>
+              <TableHead>{t("research.outcomes.columns.venue")}</TableHead>
+              <TableHead>{t("research.outcomes.columns.status")}</TableHead>
+              <TableHead className="text-right">{t("research.outcomes.columns.links")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {outcomes.map((outcome) => (
+              <TableRow key={outcome.id} className="hover:bg-surface-2">
+                <TableCell className="font-medium text-primary">{outcome.title}</TableCell>
+                <TableCell className="text-tertiary">{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</TableCell>
+                <TableCell className="text-tertiary">{outcome.venue || outcome.doi || "-"}</TableCell>
+                <TableCell>
+                  <select
+                    className="rounded border border-subtle bg-surface-1 px-1 py-0.5 text-11 text-secondary"
+                    value={outcome.status}
+                    onChange={(event) =>
+                      void research
+                        .updateOutcome(workspaceSlug, outcome.id, { status: event.target.value })
+                        .catch(() => undefined)
+                    }
+                  >
+                    {OUTCOME_STATUSES.map((value) => (
+                      <option key={value} value={value}>
+                        {t(OUTCOME_STATUS_LABELS[value])}
+                      </option>
+                    ))}
+                  </select>
+                  <ResearchStatusBadge status={outcome.status} size="sm" className="ml-2">
+                    {t(OUTCOME_STATUS_LABELS[outcome.status])}
+                  </ResearchStatusBadge>
+                </TableCell>
+                <TableCell className="text-right text-tertiary tabular-nums">
+                  <button
+                    type="button"
+                    className="mr-3 text-12 text-accent-primary hover:underline disabled:opacity-50"
+                    disabled={outcome.status !== "DRAFT" || uploadingOutcomeId === outcome.id}
+                    onClick={() => {
+                      setUploadingOutcomeId(outcome.id);
+                      outcomeFileRef.current?.click();
+                    }}
+                  >
+                    {uploadingOutcomeId === outcome.id
+                      ? t("research.outcomes.uploading")
+                      : t("research.outcomes.upload_file")}
+                  </button>
+                  {outcome.links?.length ?? 0}
+                  {outcome.attachments?.map((attachment) => (
+                    <span key={attachment.id} className="ml-2 inline-flex items-center gap-1">
+                      <a className="text-12 text-accent-primary hover:underline" href={attachment.download_url}>
+                        {attachment.file_name}
+                      </a>
+                      {outcome.status === "DRAFT" && (
+                        <button
+                          type="button"
+                          className="text-11 text-danger-primary hover:underline"
+                          onClick={() =>
+                            void outcomeService
+                              .deleteOutcomeAttachment(workspaceSlug, outcome.id, attachment.id)
+                              .then(() => research.fetchOutcomes(workspaceSlug, projectId))
+                          }
+                        >
+                          {t("research.outcomes.remove_file")}
+                        </button>
+                      )}
+                    </span>
                   ))}
-                </select>
-                <span className={`ml-2 rounded px-1.5 py-0.5 text-11 ${STATUS_TONES[outcome.status]}`}>
-                  {t(OUTCOME_STATUS_LABELS[outcome.status])}
-                </span>
-              </td>
-              <td className="py-2 text-tertiary">{outcome.links?.length ?? 0}</td>
-            </tr>
-          ))}
-          {!outcomes.length && (
-            <tr>
-              <td colSpan={5} className="py-3 text-tertiary">
-                {t("research.outcomes.empty")}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+                </TableCell>
+              </TableRow>
+            ))}
+            {!outcomes.length && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-3 text-tertiary">
+                  {t("research.outcomes.empty")}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
+      <input
+        ref={outcomeFileRef}
+        type="file"
+        accept=".pdf,.md,.markdown,application/pdf,text/markdown"
+        className="hidden"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          const outcomeId = uploadingOutcomeId;
+          event.target.value = "";
+          if (!file || !outcomeId) return;
+          try {
+            const presigned = await outcomeService.presignOutcomeAttachment(workspaceSlug, outcomeId, {
+              file_name: file.name,
+              content_type: file.type || "application/octet-stream",
+              size: file.size,
+            });
+            const form = new FormData();
+            Object.entries(presigned.upload_data.fields).forEach(([key, value]) => form.append(key, value));
+            form.append("file", file);
+            const response = await fetch(presigned.upload_data.url, { method: "POST", body: form });
+            if (!response.ok) throw new Error("upload_failed");
+            await outcomeService.registerOutcomeAttachment(workspaceSlug, outcomeId, presigned.asset_id);
+          } catch (error) {
+            setErrorKey(getResearchErrorKey(error));
+          } finally {
+            setUploadingOutcomeId(null);
+          }
+        }}
+      />
       <p className="text-11 text-tertiary">{t("research.outcomes.link_hint")}</p>
-    </div>
+    </ResearchListSurface>
   );
 });

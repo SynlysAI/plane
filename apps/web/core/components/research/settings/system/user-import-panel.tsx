@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TAccountProvisioningOptions, TUserImportBatch, TUserImportBatchSummary } from "@plane/types";
 import { Button } from "@plane/propel/button";
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 import { ResearchAccountService } from "@/services/research/account.service";
 import { SingleImportForm } from "./single-import-form";
 import { ImportReview } from "./import-review";
@@ -23,6 +24,7 @@ export function ResearchUserImportPanel({
   onRelationsChanged?: (batch: TUserImportBatch) => Promise<void>;
 }) {
   const [mode, setMode] = useState("bulk");
+  const [resetPasswords, setResetPasswords] = useState(false);
   const [batch, setBatch] = useState<TUserImportBatch | null>(null);
   const [history, setHistory] = useState<TUserImportBatchSummary[]>([]);
   const [options, setOptions] = useState<TAccountProvisioningOptions | null>(null);
@@ -98,22 +100,29 @@ export function ResearchUserImportPanel({
   };
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2" role="tablist" aria-label="人员录入方式">
-        {[
-          ["single", "单条录入"],
-          ["bulk", "批量导入"],
-        ].map(([value, label]) => (
-          <button
-            key={value}
-            role="tab"
-            aria-selected={mode === value}
-            disabled={busy || reviewBusy}
-            className={`rounded px-3 py-2 text-13 ${mode === value ? "bg-surface-2 text-accent-primary" : "text-secondary"}`}
-            onClick={() => setMode(value)}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ResearchFilterToolbar>
+          {[
+            ["single", "单条录入"],
+            ["bulk", "批量导入"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              role="tab"
+              aria-selected={mode === value}
+              disabled={busy || reviewBusy}
+              className={`rounded-md px-3 py-2 text-13 ${
+                mode === value ? "bg-surface-1 text-accent-primary" : "text-secondary"
+              }`}
+              onClick={() => setMode(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </ResearchFilterToolbar>
+        <a className="text-12 text-accent-primary" href={service.getAccountInitialPasswordsUrl(workspaceSlug)}>
+          下载全部初始密码
+        </a>
       </div>
       {mode === "single" ? (
         <fieldset disabled={reviewBusy}>
@@ -121,7 +130,7 @@ export function ResearchUserImportPanel({
         </fieldset>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3 rounded border border-subtle p-3">
+          <div className="flex flex-wrap items-end gap-3 rounded-lg bg-surface-2 p-3">
             <label className="text-12">
               成员名册
               <input className="block" ref={students} type="file" accept=".csv,.xlsx" disabled={busy || reviewBusy} />
@@ -129,6 +138,16 @@ export function ResearchUserImportPanel({
             <label className="text-12">
               导师姓名邮箱表（必传）
               <input className="block" ref={advisors} type="file" accept=".csv,.xlsx" disabled={busy || reviewBusy} />
+            </label>
+            <label className="flex items-center gap-2 text-12 text-secondary">
+              <input
+                aria-label="为已有账号重新生成初始密码"
+                type="checkbox"
+                checked={resetPasswords}
+                disabled={busy || reviewBusy}
+                onChange={(event) => setResetPasswords(event.target.checked)}
+              />
+              为已有账号重新生成初始密码
             </label>
             <Button
               variant="primary"
@@ -142,7 +161,13 @@ export function ResearchUserImportPanel({
                     setError("请先选择成员名册和导师姓名邮箱表。");
                     return;
                   }
-                  accept(await service.importUsers(workspaceSlug, { students: roster, advisors: mapping }));
+                  accept(
+                    await service.importUsers(workspaceSlug, {
+                      students: roster,
+                      advisors: mapping,
+                      reset_passwords: resetPasswords,
+                    })
+                  );
                 })
               }
             >
@@ -150,7 +175,7 @@ export function ResearchUserImportPanel({
             </Button>
           </div>
           <p className="text-11 text-tertiary">
-            已有工作区成员不能重复录入，可引用已有导师。校验、纳入均不会创建账号；确认审批后才创建人员和组织关系。MS、Ph.D
+            默认不覆盖已有账号密码。勾选后，本次会为表中的已有账号重新生成初始密码，并要求下次登录修改。下载到的是最近一次发放的初始密码，不是用户改密后的当前密码。已有成员未勾选时不能再次纳入；可引用已有导师。MS、Ph.D
             按学生导入；电话兼容“手机号”。
           </p>
         </>
@@ -180,7 +205,7 @@ export function ResearchUserImportPanel({
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
             {history.map((item) => (
-              <li key={item.id} className="rounded border border-subtle p-2">
+              <li key={item.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 p-2">
                 <button
                   disabled={busy || reviewBusy}
                   className="text-left text-12"
@@ -190,6 +215,14 @@ export function ResearchUserImportPanel({
                   {item.review_counts &&
                     ` · 待审核 ${item.review_counts.pending} · 已纳入 ${item.review_counts.included} · 已排除 ${item.review_counts.excluded}`}
                 </button>
+                {item.status === "IMPORTED" && (
+                  <a
+                    className="text-12 text-accent-primary"
+                    href={service.getUserImportReportUrl(workspaceSlug, item.id!)}
+                  >
+                    下载导入报告
+                  </a>
+                )}
               </li>
             ))}
           </ul>

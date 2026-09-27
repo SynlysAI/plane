@@ -223,7 +223,12 @@ export class UserStore implements IUserStore {
   ): Promise<IUser | undefined> => {
     try {
       const user = await this.userService.changePassword(csrfToken, payload);
-      if (this.data) set(this.data, ["is_password_autoset"], false);
+      // The endpoint returns a message payload, not a full user object. Clear the
+      // first-login gate locally so the modal dismisses without a full refresh.
+      if (this.data) {
+        set(this.data, ["is_password_autoset"], false);
+        set(this.data, ["is_password_reset_required"], false);
+      }
       return user;
     } catch (error) {
       console.log(error);

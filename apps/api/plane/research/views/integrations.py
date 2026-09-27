@@ -50,6 +50,34 @@ from plane.research.views.base import ResearchAPIView
 
 SECTION = "integrations"
 DEFAULT_SYSTEMS = list(IntegrationSystem.values)
+PHASE_NOT_ENABLED_SYSTEMS = {
+    IntegrationSystem.SPECLABOS,
+    IntegrationSystem.SMARTACCESS,
+    IntegrationSystem.POLY_AGENT,
+    IntegrationSystem.SPEC_AGENT,
+}
+PROXY_SYSTEMS = {IntegrationSystem.WEKNORA}
+
+
+def registration_metadata(system, connection):
+    """Return the user-facing registration state for an integration row.
+
+    Args:
+        system: Integration system identifier.
+        connection: Workspace connection, if one is registered.
+
+    Returns:
+        A mapping that separates registration from health and proxy ownership.
+    """
+    if system in PHASE_NOT_ENABLED_SYSTEMS:
+        return {"registration_status": "PHASE_NOT_ENABLED"}
+    if system == IntegrationSystem.WEKNORA:
+        return {"registration_status": "PROXY", "proxy_system": IntegrationSystem.RAGPORTAL}
+    if connection is None:
+        return {"registration_status": "NOT_REGISTERED"}
+    if connection.is_enabled and bool(connection.base_url):
+        return {"registration_status": "CONNECTED"}
+    return {"registration_status": "REGISTERED_DISABLED"}
 
 
 def integrated_plane_resource(workspace_id, owner_id=None, visibility="DIRECT_ADVISOR"):
@@ -82,20 +110,20 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
         for system in DEFAULT_SYSTEMS:
             connection = existing.get(system)
             if connection is None:
-                payload.append(
-                    {
-                        "system": system,
-                        "display_name": system,
-                        "configured": False,
-                        "is_enabled": False,
-                        "health_status": "UNKNOWN",
-                        "credential_ref": "",
-                        "has_credential": False,
-                    }
-                )
+                payload.append({
+                    "system": system,
+                    "display_name": system,
+                    "configured": False,
+                    "is_enabled": False,
+                    "health_status": "UNKNOWN",
+                    "credential_ref": "",
+                    "has_credential": False,
+                    **registration_metadata(system, connection),
+                })
                 continue
             data = ExternalSystemConnectionSerializer(connection).data
             data["configured"] = True
+            data.update(registration_metadata(system, connection))
             payload.append(data)
         return Response({"results": payload, "count": len(payload)}, status=status.HTTP_200_OK)
 
@@ -114,6 +142,11 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
             system = str(entry.get("system") or "").upper()
             if system not in IntegrationSystem.values:
                 return research_error(ResearchErrorCode.INTEGRATION_INVALID, f"Unknown system {system}.")
+            if system in PROXY_SYSTEMS:
+                return research_error(
+                    ResearchErrorCode.INTEGRATION_INVALID,
+                    "WeKnora is managed through the RAGPortal proxy and cannot be registered directly.",
+                )
             defaults = {
                 "display_name": str(entry.get("display_name") or system),
                 "base_url": str(entry.get("base_url") or ""),
@@ -177,29 +210,27 @@ class ResearchIntegrationHealthEndpoint(ResearchAPIView):
         for system in DEFAULT_SYSTEMS:
             connection = existing.get(system)
             if connection is None:
-                payload.append(
-                    {
-                        "system": system,
-                        "status": "UNKNOWN",
-                        "configured": False,
-                        "enabled": False,
-                        "last_success_at": None,
-                        "degraded_reason": "not_configured",
-                    }
-                )
-                continue
-            payload.append(
-                {
+                payload.append({
                     "system": system,
-                    "status": connection.health_status,
-                    "configured": True,
-                    "enabled": connection.is_enabled,
-                    "last_health_at": connection.last_health_at,
-                    "last_success_at": connection.last_success_at,
-                    "degraded_reason": connection.last_error or ("" if connection.is_enabled else "disabled"),
-                    "degraded_mode": connection.degraded_mode,
-                }
-            )
+                    "status": "UNKNOWN",
+                    "configured": False,
+                    "enabled": False,
+                    "last_success_at": None,
+                    "degraded_reason": "not_configured",
+                    **registration_metadata(system, connection),
+                })
+                continue
+            payload.append({
+                "system": system,
+                "status": connection.health_status,
+                "configured": True,
+                "enabled": connection.is_enabled,
+                "last_health_at": connection.last_health_at,
+                "last_success_at": connection.last_success_at,
+                "degraded_reason": connection.last_error or ("" if connection.is_enabled else "disabled"),
+                "degraded_mode": connection.degraded_mode,
+                **registration_metadata(system, connection),
+            })
         return Response({"results": payload, "count": len(payload)}, status=status.HTTP_200_OK)
 
 
@@ -263,6 +294,32 @@ class ResearchSystemSearchEndpoint(ResearchAPIView):
     system = None
     operation = None
 
+    def prepare_items(self, items, request, workspace):
+        """Adjust items before the source ACL filter.
+
+        Args:
+            items: Raw search items.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items ready for the source ACL filter.
+        """
+        return items
+
+    def filter_items(self, items, request, workspace):
+        """Apply an extra visibility rule after the source ACL filter.
+
+        Args:
+            items: Items already accepted by the source ACL.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items the caller may read.
+        """
+        return items
+
     def get(self, request, slug):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
@@ -285,7 +342,9 @@ class ResearchSystemSearchEndpoint(ResearchAPIView):
                 request=request,
                 operation=self.operation,
             )
-            items = filter_source_items(result.items, request.user, workspace.id)
+            items = self.prepare_items(result.items, request, workspace)
+            items = filter_source_items(items, request.user, workspace.id)
+            items = self.filter_items(items, request, workspace)
             payload = result.as_payload(items=items, count=len(items))
             payload["filtered_out"] = len(result.items) - len(items)
             cached = set_cached(key, payload, degraded=result.degraded)
@@ -295,6 +354,36 @@ class ResearchSystemSearchEndpoint(ResearchAPIView):
 class ResearchKnowledgeSearchEndpoint(ResearchSystemSearchEndpoint):
     system = "RAGPORTAL"
     operation = "fetch_knowledge_entries"
+
+    def prepare_items(self, items, request, workspace):
+        """Grant team members retrieval of their whole shared library.
+
+        Args:
+            items: Raw knowledge search items.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items whose team library ACL includes the caller.
+        """
+        from plane.research.services.group_knowledge import grant_group_library_access
+
+        return grant_group_library_access(items, request.user, workspace)
+
+    def filter_items(self, items, request, workspace):
+        """Hide another team's shared library from chain collaborators.
+
+        Args:
+            items: Knowledge items accepted by the source ACL.
+            request: Current HTTP request.
+            workspace: Workspace being searched.
+
+        Returns:
+            Items whose group library the caller belongs to.
+        """
+        from plane.research.services.group_knowledge import filter_group_library_items
+
+        return filter_group_library_items(items, request.user, workspace)
 
 
 class ResearchLabRunSearchEndpoint(ResearchSystemSearchEndpoint):

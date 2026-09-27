@@ -18,6 +18,7 @@ from .. import BaseViewSet, BaseAPIView
 from plane.app.serializers import StateSerializer
 from plane.app.permissions import ROLE, allow_permission
 from plane.db.models import State, Issue
+from plane.research.utils.project_review import project_member_filters
 from plane.utils.cache import invalidate_cache
 
 
@@ -32,9 +33,12 @@ class StateViewSet(BaseViewSet):
             .filter(workspace__slug=self.kwargs.get("slug"))
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
+                **project_member_filters(
+                    self.request.user,
+                    self.kwargs.get("slug"),
+                    self.kwargs.get("project_id"),
+                ),
             )
             .filter(is_triage=False)
             .select_related("project")
@@ -74,7 +78,7 @@ class StateViewSet(BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
         states = StateSerializer(self.get_queryset(), many=True).data
 
@@ -134,7 +138,7 @@ class StateViewSet(BaseViewSet):
 
 
 class IntakeStateEndpoint(BaseAPIView):
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id):
         state = State.triage_objects.filter(workspace__slug=slug, project_id=project_id).first()
         if not state:

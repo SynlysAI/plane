@@ -294,13 +294,11 @@ def visibility_allows(context: ActorContext, resource: ResearchResource, on_date
     if resource.is_draft:
         return False
 
-    visibility = resource.visibility or "PRIVATE"
-    if visibility == "PRIVATE":
-        return False
-
     # The formal content audience is additive to the author-selected visibility:
-    # the unique main PI, management chain, assigned reviewers, and active team
-    # members always see formal material in their business scope.
+    # the unique main PI, management chain, assigned reviewers, direct advisors,
+    # and active team members always see formal material in their business scope.
+    # This must run before the PRIVATE short-circuit, otherwise PRIVATE topics are
+    # hidden from the lab head and the student's mentor.
     if context.is_main_pi:
         return True
     if resource.org_unit_id in context.managing_unit_ids:
@@ -309,6 +307,12 @@ def visibility_allows(context: ActorContext, resource: ResearchResource, on_date
         return True
     if resource.is_team_content and resource.project_id in context.project_ids:
         return True
+    if owner_id in context.advises:
+        return True
+
+    visibility = resource.visibility or "PRIVATE"
+    if visibility == "PRIVATE":
+        return False
 
     if visibility == "DIRECT_ADVISOR":
         return owner_id in context.advises

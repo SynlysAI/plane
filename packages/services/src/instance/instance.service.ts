@@ -65,10 +65,27 @@ export class InstanceService extends APIService {
    * @remarks This method uses the validateStatus: null option to bypass interceptors for unauthorized errors.
    */
   async admins(): Promise<IInstanceAdmin[]> {
-    return this.get("/api/instances/admins/", { validateStatus: null })
-      .then((response) => response.data)
+    const path = "/api/instances/admins/";
+    return this.get(path, { validateStatus: null }, { timeout: 8000 })
+      .then((response) => {
+        const status = response?.status;
+        if (typeof status === "number" && status >= 400) {
+          const failure = new Error("instance admins request failed");
+          Object.assign(failure, { status, path, code: null });
+          throw failure;
+        }
+        return response.data;
+      })
       .catch((error) => {
-        throw error?.response?.data;
+        if (error?.path === path) throw error;
+        const failure = new Error("instance admins request failed");
+        const status = error?.response?.status ?? error?.status;
+        Object.assign(failure, {
+          status: typeof status === "number" ? status : null,
+          path,
+          code: error?.code ?? null,
+        });
+        throw failure;
       });
   }
 

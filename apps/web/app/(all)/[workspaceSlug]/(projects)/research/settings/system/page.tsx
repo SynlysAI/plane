@@ -10,6 +10,7 @@ import { useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
 import type { TUserImportBatch } from "@plane/types";
 // components
+import { ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchAdminRoleSummary } from "@/components/research/settings/system/admin-role-summary";
 import { ResearchInviteCodeManager } from "@/components/research/settings/system/invite-code-manager";
@@ -45,16 +46,14 @@ function WorkspaceResearchSystemSettingsPage() {
       section="org"
       navKey="system"
     >
-      <div className="flex h-full flex-col gap-6 overflow-y-auto p-5">
+      <div className="flex h-full flex-col gap-4 overflow-y-auto bg-canvas p-5">
         <ResearchAdminRoleSummary />
-        <section className="flex flex-col gap-3">
-          <h3 className="text-13 font-medium text-primary">{t("research.invite_codes.title")}</h3>
+        <ResearchDetailSurface title={t("research.invite_codes.title")}>
           <ResearchInviteCodeManager workspaceSlug={workspaceSlug} />
-        </section>
-        <section className="flex flex-col gap-3">
-          <h3 className="text-13 font-medium text-primary">{t("research.user_import.title")}</h3>
+        </ResearchDetailSurface>
+        <ResearchDetailSurface title={t("research.user_import.title")}>
           <ResearchUserImportPanel workspaceSlug={workspaceSlug} onRelationsChanged={refreshImportRelations} />
-        </section>
+        </ResearchDetailSurface>
       </div>
     </ResearchPageShell>
   );

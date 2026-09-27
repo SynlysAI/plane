@@ -1,0 +1,24 @@
+{
+  "schema_version": "agent-plugin.v1",
+  "plugin_id": "research-agent",
+  "manifest_version": "agent-plugin.v1",
+  "entrypoints": ["workspace_home", "research_chain", "chain_node"],
+  "required_scopes": ["context.read", "agent.session.create"],
+  "capabilities": ["chat", "knowledge.search", "artifact.save"],
+  "ui": { "desktop": "side_panel", "mobile": "stacked_panel" },
+  "feature_flag": "research_agent_enabled",
+  "ui_states": [
+    "initializing",
+    "loading_context",
+    "ready",
+    "streaming",
+    "waiting_approval",
+    "saving",
+    "degraded",
+    "forbidden",
+    "expired",
+    "error",
+    "closed"
+  ],
+  "transport": { "events": "json_poll", "streaming": "reserved", "iframe": "forbidden" }
+}

@@ -10,6 +10,8 @@ from .account import (
     UserImportBatchSummarySerializer,
     UserImportRowSerializer,
 )
+from .account_link import AccountLinkSerializer
+from .agent import ResearchAgentRunEventSerializer, ResearchAgentSessionSerializer
 from .org import (
     IdentityMappingSerializer,
     MentorBindingSerializer,
@@ -56,6 +58,14 @@ from .approval import (
     ApprovalFlowStepSerializer,
     ApprovalRequestSerializer,
 )
+from .chain import (
+    ResearchChainEventSerializer,
+    ResearchChainNodeSerializer,
+    ResearchChainSerializer,
+    ResearchChainSnapshotSerializer,
+    ResearchChainUploadSerializer,
+    ResearchAnalysisResultSerializer,
+)
 
 __all__ = [
     "IdentityMappingSerializer",
@@ -84,6 +94,12 @@ __all__ = [
     "ApprovalFlowSerializer",
     "ApprovalFlowStepSerializer",
     "ApprovalRequestSerializer",
+    "ResearchChainSerializer",
+    "ResearchChainNodeSerializer",
+    "ResearchChainEventSerializer",
+    "ResearchChainSnapshotSerializer",
+    "ResearchChainUploadSerializer",
+    "ResearchAnalysisResultSerializer",
     "ResearchAuditEventSerializer",
     "ResearchUserSerializer",
     "WorkspaceResearchSettingSerializer",
@@ -100,4 +116,7 @@ __all__ = [
     "UserImportBatchSerializer",
     "UserImportBatchSummarySerializer",
     "UserImportRowSerializer",
+    "AccountLinkSerializer",
+    "ResearchAgentSessionSerializer",
+    "ResearchAgentRunEventSerializer",
 ]

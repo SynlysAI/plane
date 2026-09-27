@@ -12,13 +12,21 @@ import { useSearchParams } from "next/navigation";
 import { RESEARCH_PROJECT_STATUS_LABELS, RESEARCH_PROJECT_TYPE_LABELS, RESEARCH_PROJECT_TYPES } from "@plane/constants";
 import type { TResearchProjectType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TResearchProject } from "@/services/research/project.service";
 import { AlertModalCore, Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterChips,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 import { ResearchListState } from "@/components/research/common/research-list-state";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -27,6 +35,49 @@ type Props = {
   currentUserId: string;
 };
 
+type ProjectListQueryFilters = {
+  view: string | null;
+  workflowStatus: string;
+  researchType: string;
+  orgUnit: string;
+  owner: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+const PROJECT_LIST_CONTROLLED_QUERY_KEYS = [
+  "view",
+  "workflow_status",
+  "research_type",
+  "org_unit",
+  "owner",
+  "date_from",
+  "date_to",
+  "cursor",
+] as const;
+
+/** Build project-list query parameters while preserving unrelated legacy query values.
+ *
+ * Args:
+ *   current: Query parameters currently present in the browser URL.
+ *   filters: Project-list filter values controlled by this component.
+ *
+ * Returns:
+ *   Query parameters containing the controlled filters and all unrelated values.
+ */
+export function buildProjectListSearchParams(current: URLSearchParams, filters: ProjectListQueryFilters) {
+  const params = new URLSearchParams(current);
+  PROJECT_LIST_CONTROLLED_QUERY_KEYS.forEach((key) => params.delete(key));
+  if (filters.view) params.set("view", filters.view);
+  if (filters.workflowStatus) params.set("workflow_status", filters.workflowStatus);
+  if (filters.researchType) params.set("research_type", filters.researchType);
+  if (filters.orgUnit) params.set("org_unit", filters.orgUnit);
+  if (filters.owner.trim()) params.set("owner", filters.owner.trim());
+  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters.dateTo) params.set("date_to", filters.dateTo);
+  return params;
+}
+
 /** Personal cultivation and team research projects in the current scope. */
 export const ResearchProjectList = observer(function ResearchProjectList({ workspaceSlug, currentUserId }: Props) {
   const { t } = useTranslation();
@@ -34,6 +85,8 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [researchType, setResearchType] = useState<TResearchProjectType>("RESEARCH_PROJECT");
+  const [chainKind, setChainKind] = useState<"LEGACY_TRAINING" | "RESEARCH_CHAIN">("RESEARCH_CHAIN");
+  const [chainVisibility, setChainVisibility] = useState<"PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE">("PRIVATE");
   const [orgUnit, setOrgUnit] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -49,6 +102,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     action: "archive" | "restore";
   } | null>(null);
   const [isUpdatingProject, setIsUpdatingProject] = useState(false);
+  const researchChainEnabled = Boolean(research.identity?.sections?.research_chain);
 
   const projects = research.getResearchProjects(workspaceSlug);
   const orgUnits = research.getOrgUnits(workspaceSlug);
@@ -73,6 +127,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const isTeamProject = researchType === "RESEARCH_PROJECT";
   const requiresOrgUnit = !isTeamProject || !research.isWorkspaceAdmin;
   const hasActiveFilters = Boolean(typeFilter || orgFilter || ownerFilter.trim() || dateFrom || dateTo || statusFilter);
+
   const filterSummary = useMemo(
     () =>
       [
@@ -111,16 +166,22 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   useEffect(() => setCursor(""), [statusFilter, typeFilter, orgFilter, ownerFilter, dateFrom, dateTo]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (statusFilter) params.set("workflow_status", statusFilter);
-    if (typeFilter) params.set("research_type", typeFilter);
-    if (orgFilter) params.set("org_unit", orgFilter);
-    if (ownerFilter.trim()) params.set("owner", ownerFilter.trim());
-    if (dateFrom) params.set("date_from", dateFrom);
-    if (dateTo) params.set("date_to", dateTo);
+    const params = buildProjectListSearchParams(searchParams, {
+      view: searchParams.get("view"),
+      workflowStatus: statusFilter,
+      researchType: typeFilter,
+      orgUnit: orgFilter,
+      owner: ownerFilter,
+      dateFrom,
+      dateTo,
+    });
     const query = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  }, [dateFrom, dateTo, orgFilter, ownerFilter, statusFilter, typeFilter]);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
+    );
+  }, [dateFrom, dateTo, orgFilter, ownerFilter, searchParams, statusFilter, typeFilter]);
 
   useEffect(() => {
     void research.fetchOrgUnits(workspaceSlug).catch(() => undefined);
@@ -140,6 +201,8 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         owner: currentUserId,
         research_type: researchType,
         org_unit: orgUnit || null,
+        chain_kind: chainKind,
+        ...(chainKind === "RESEARCH_CHAIN" ? { chain_visibility: chainVisibility } : {}),
       });
       setName("");
       setErrorKey(null);
@@ -149,16 +212,29 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         message: t("research.feedback.project_created.message"),
       });
       window.location.assign(
-        researchType === "RESEARCH_PROJECT"
-          ? `/${workspaceSlug}/projects/${project.id}/issues`
-          : `/${workspaceSlug}/research/projects/${project.id}/stages`
+        chainKind === "RESEARCH_CHAIN" && project.research?.chain_id
+          ? `/${workspaceSlug}/research/chains/${project.research.chain_id}`
+          : researchType === "RESEARCH_PROJECT"
+            ? `/${workspaceSlug}/projects/${project.id}/issues`
+            : `/${workspaceSlug}/research/projects/${project.id}/stages`
       );
     } catch (error) {
       setErrorKey(getResearchErrorKey(error));
     } finally {
       setIsCreating(false);
     }
-  }, [currentUserId, name, orgUnit, requiresOrgUnit, research, researchType, t, workspaceSlug]);
+  }, [
+    chainKind,
+    chainVisibility,
+    currentUserId,
+    name,
+    orgUnit,
+    requiresOrgUnit,
+    research,
+    researchType,
+    t,
+    workspaceSlug,
+  ]);
 
   const handleProjectAction = useCallback(async () => {
     if (!pendingProjectAction || isUpdatingProject) return;
@@ -194,7 +270,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   }, []);
 
   return (
-    <div className="flex flex-col gap-3 p-5">
+    <ResearchListSurface>
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
@@ -248,6 +324,37 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                 ))}
               </select>
             </label>
+            {researchChainEnabled && researchType !== "RESEARCH_PROJECT" && (
+              <label className="flex flex-col gap-1 text-12 text-secondary">
+                <span>{t("research.projects.fields.chain_kind")}</span>
+                <select
+                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+                  value={chainKind}
+                  onChange={(event) => setChainKind(event.target.value as "LEGACY_TRAINING" | "RESEARCH_CHAIN")}
+                >
+                  <option value="LEGACY_TRAINING">{t("research.projects.chain_kinds.legacy_training")}</option>
+                  <option value="RESEARCH_CHAIN">{t("research.projects.chain_kinds.research_chain")}</option>
+                </select>
+              </label>
+            )}
+            {researchChainEnabled && chainKind === "RESEARCH_CHAIN" && (
+              <label className="flex flex-col gap-1 text-12 text-secondary">
+                <span>{t("research.projects.fields.chain_visibility")}</span>
+                <select
+                  className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+                  value={chainVisibility}
+                  onChange={(event) =>
+                    setChainVisibility(event.target.value as "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE")
+                  }
+                >
+                  {(["PRIVATE", "MEMBERS", "ORG", "WORKSPACE"] as const).map((visibility) => (
+                    <option key={visibility} value={visibility}>
+                      {t(`research.projects.chain_visibility.${visibility.toLowerCase()}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           {!primaryOrgUnit && requiresOrgUnit && (
             <p className="mt-2 text-11 text-warning-primary">{t("research.projects.missing_primary_org")}</p>
@@ -269,7 +376,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         </section>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2">
+      <ResearchFilterToolbar>
         <select
           aria-label={t("research.projects.fields.type")}
           className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
@@ -327,20 +434,15 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
             </option>
           ))}
         </select>
-      </div>
+      </ResearchFilterToolbar>
 
       {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 text-11 text-tertiary">
-          <span>{t("research.list_state.active_filters")}</span>
-          {filterSummary.map((filter) => (
-            <span key={filter} className="rounded bg-surface-2 px-2 py-0.5 text-secondary">
-              {filter}
-            </span>
-          ))}
-          <button type="button" className="text-accent-primary hover:underline" onClick={clearFilters}>
-            {t("research.list_state.clear_filters")}
-          </button>
-        </div>
+        <ResearchFilterChips
+          filters={filterSummary}
+          activeLabel={t("research.list_state.active_filters")}
+          clearLabel={t("research.list_state.clear_filters")}
+          onClear={clearFilters}
+        />
       )}
 
       {research.projectLoader && projects.length === 0 ? (
@@ -354,46 +456,48 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
           onClearFilters={clearFilters}
         />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[840px] text-12">
-            <thead>
-              <tr className="border-b border-subtle text-left text-tertiary">
-                <th className="font-normal py-2">{t("research.projects.columns.name")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.owner")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.type")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.org_unit")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.status")}</th>
-                <th className="font-normal py-2">{t("research.projects.columns.started_at")}</th>
-                <th className="py-2" />
-              </tr>
-            </thead>
-            <tbody>
+        <ResearchTableSurface>
+          <Table className="min-w-[840px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("research.projects.columns.name")}</TableHead>
+                <TableHead>{t("research.projects.columns.owner")}</TableHead>
+                <TableHead>{t("research.projects.columns.type")}</TableHead>
+                <TableHead>{t("research.projects.columns.org_unit")}</TableHead>
+                <TableHead>{t("research.projects.columns.status")}</TableHead>
+                <TableHead>{t("research.projects.columns.started_at")}</TableHead>
+                <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {projects.map((project) => (
-                <tr key={project.id} className="border-b border-subtle/60">
-                  <td className="py-2 text-secondary">{project.name}</td>
-                  <td className="py-2 text-tertiary">
+                <TableRow key={project.id} className="hover:bg-surface-2">
+                  <TableCell className="font-medium text-primary">{project.name}</TableCell>
+                  <TableCell className="text-secondary">
                     {project.research?.owner_detail?.display_name ||
                       project.research?.owner_detail?.email ||
                       project.research?.owner ||
                       "-"}
-                  </td>
-                  <td className="py-2 text-tertiary">
+                  </TableCell>
+                  <TableCell className="text-tertiary">
                     {project.research
                       ? t(RESEARCH_PROJECT_TYPE_LABELS[project.research.research_type as TResearchProjectType])
                       : "-"}
-                  </td>
-                  <td className="py-2 text-tertiary">{orgUnitName(project.research?.org_unit)}</td>
-                  <td className="py-2 text-tertiary">
-                    {project.research
-                      ? t(
-                          RESEARCH_PROJECT_STATUS_LABELS[
-                            project.research.workflow_status as keyof typeof RESEARCH_PROJECT_STATUS_LABELS
-                          ]
-                        )
-                      : "-"}
-                  </td>
-                  <td className="py-2 text-tertiary">{project.research?.started_at ?? "-"}</td>
-                  <td className="py-2 text-right">
+                  </TableCell>
+                  <TableCell className="text-tertiary">{orgUnitName(project.research?.org_unit)}</TableCell>
+                  <TableCell>
+                    <ResearchStatusBadge status={project.research?.workflow_status ?? "unknown"} size="sm">
+                      {project.research
+                        ? t(
+                            RESEARCH_PROJECT_STATUS_LABELS[
+                              project.research.workflow_status as keyof typeof RESEARCH_PROJECT_STATUS_LABELS
+                            ]
+                          )
+                        : "-"}
+                    </ResearchStatusBadge>
+                  </TableCell>
+                  <TableCell className="text-tertiary tabular-nums">{project.research?.started_at ?? "-"}</TableCell>
+                  <TableCell className="text-right">
                     {project.research?.research_type === "RESEARCH_PROJECT" ? (
                       <Link
                         className="mr-2 text-12 text-accent-primary hover:underline"
@@ -427,12 +531,12 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                           {t("research.projects.restore")}
                         </Button>
                       ))}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </ResearchTableSurface>
       )}
       <div className="flex items-center justify-between gap-2 text-12 text-tertiary">
         <span>{t("research.common.total_results", { count: pagination?.total_results ?? projects.length })}</span>
@@ -474,6 +578,6 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         secondaryButtonText={t("research.common.cancel")}
         variant={pendingProjectAction?.action === "archive" ? "danger" : "primary"}
       />
-    </div>
+    </ResearchListSurface>
   );
 });

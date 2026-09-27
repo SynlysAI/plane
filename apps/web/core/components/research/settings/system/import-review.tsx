@@ -4,6 +4,8 @@ import type { TAccountProvisioningOptions, TUserImportBatch, TUserImportRow } fr
 import { Button } from "@plane/propel/button";
 import { ResearchAccountService } from "@/services/research/account.service";
 import type { ImportApprovalPreview, ImportRelations } from "@/services/research/account.service";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
+import { LayoutErrorBoundary } from "@/components/common/layout-error-boundary";
 
 const service = new ResearchAccountService();
 const inputClass = "rounded border border-subtle bg-surface-1 px-2 py-1 text-12";
@@ -187,119 +189,121 @@ export function ImportReview({
         </select>
       </div>
       <fieldset disabled={busy || !editable || !!editing} className="min-w-0">
-        <div className="max-h-96 overflow-auto rounded border border-subtle">
-          <table className="w-full text-12">
-            <thead className="sticky top-0 z-10 bg-surface-2 text-left">
-              <tr>
-                <th className="p-2">
-                  <label>
-                    <input
-                      ref={allInput}
-                      type="checkbox"
-                      aria-label="全选"
-                      checked={allSelected}
-                      disabled={!ids.length}
-                      onChange={() => setSelected(allSelected ? [] : ids)}
-                    />{" "}
-                    全选筛选结果
-                  </label>
-                </th>
-                <th>姓名 / 邮箱</th>
-                <th>审核决定 / 保存状态</th>
-                <th>校验</th>
-                <th>组织与导师</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((row) => (
-                <tr key={row.id} className="border-t border-subtle align-top">
-                  <td className="p-2">
-                    <input
-                      type="checkbox"
-                      aria-label={`选择第 ${row.row_number} 行`}
-                      checked={!!row.id && selected.includes(row.id)}
-                      onChange={(event) =>
-                        setSelected(
-                          event.target.checked ? [...selected, row.id!] : selected.filter((id) => id !== row.id)
-                        )
-                      }
-                    />{" "}
-                    {row.row_number}
-                  </td>
-                  <td className="p-2">
-                    <strong className="block">{row.display_name}</strong>
-                    <span className="block text-11 break-all text-tertiary">{row.email}</span>
-                    {row.category === "ADVISOR" ? "导师" : "学生"} {row.student_no}
-                  </td>
-                  <td className="p-2">
-                    <span
-                      className={`block font-medium whitespace-nowrap ${row.review_decision === "INCLUDED" ? "text-success-primary" : "text-secondary"}`}
-                    >
-                      {row.review_decision === "EXCLUDED"
-                        ? "已排除"
-                        : batch.status === "IMPORTED"
-                          ? "已导入"
-                          : decisions[row.review_decision]}
-                    </span>
-                    <span aria-live="polite" className="text-11">
-                      {savingRow === row.id ? "保存中…" : feedback[row.id!]}
-                    </span>
-                  </td>
-                  <td className="p-2">
-                    校验：{validation[row.status]}
-                    <p className="max-w-64 text-11 text-danger-primary">{row.status !== "OK" ? row.message : ""}</p>
-                  </td>
-                  <td className="p-2">
-                    <p>{row.group_label}</p>
-                    <p className="text-11">
-                      {row.advisor_name && `主导师：${row.advisor_name} · ${row.primary_advisor_email}`}
-                    </p>
-                    <p className="text-11">
-                      {[row.co_advisor_1_name, row.co_advisor_2_name].filter(Boolean).join("、")}
-                    </p>
-                    {batch.status === "IMPORTED" && row.org_unit && (
-                      <a
-                        className="text-accent-primary"
-                        href={`/${workspaceSlug}/research/settings/org?unit=${row.org_unit}`}
+        <LayoutErrorBoundary>
+          <div className="max-h-96 overflow-auto rounded border border-subtle">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-surface-2">
+                <TableRow>
+                  <TableHead>
+                    <label>
+                      <input
+                        ref={allInput}
+                        type="checkbox"
+                        aria-label="全选"
+                        checked={allSelected}
+                        disabled={!ids.length}
+                        onChange={() => setSelected(allSelected ? [] : ids)}
+                      />{" "}
+                      全选筛选结果
+                    </label>
+                  </TableHead>
+                  <TableHead>姓名 / 邮箱</TableHead>
+                  <TableHead>审核决定 / 保存状态</TableHead>
+                  <TableHead>校验</TableHead>
+                  <TableHead>组织与导师</TableHead>
+                  <TableHead>操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        aria-label={`选择第 ${row.row_number} 行`}
+                        checked={!!row.id && selected.includes(row.id)}
+                        onChange={(event) =>
+                          setSelected(
+                            event.target.checked ? [...selected, row.id!] : selected.filter((id) => id !== row.id)
+                          )
+                        }
+                      />{" "}
+                      {row.row_number}
+                    </TableCell>
+                    <TableCell>
+                      <strong className="block">{row.display_name}</strong>
+                      <span className="block text-11 break-all text-tertiary">{row.email}</span>
+                      {row.category === "ADVISOR" ? "导师" : "学生"} {row.student_no}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`block font-medium whitespace-nowrap ${row.review_decision === "INCLUDED" ? "text-success-primary" : "text-secondary"}`}
                       >
-                        查看组织关系
-                      </a>
-                    )}
-                  </td>
-                  <td className="p-2">
-                    <div className="flex flex-wrap gap-1">
-                      {editable && (
-                        <>
-                          <Button
-                            variant={row.review_decision === "INCLUDED" ? "primary" : "secondary"}
-                            size="sm"
-                            disabled={row.status !== "OK" || row.review_decision === "INCLUDED"}
-                            onClick={() => void update(row, { review_decision: "INCLUDED" })}
-                          >
-                            纳入
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={row.review_decision === "EXCLUDED"}
-                            onClick={() => void update(row, { review_decision: "EXCLUDED" })}
-                          >
-                            排除
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setEditing({ ...row })}>
-                            编辑
-                          </Button>
-                        </>
+                        {row.review_decision === "EXCLUDED"
+                          ? "已排除"
+                          : batch.status === "IMPORTED"
+                            ? "已导入"
+                            : decisions[row.review_decision]}
+                      </span>
+                      <span aria-live="polite" className="text-11">
+                        {savingRow === row.id ? "保存中…" : feedback[row.id!]}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      校验：{validation[row.status]}
+                      <p className="max-w-64 text-11 text-danger-primary">{row.status !== "OK" ? row.message : ""}</p>
+                    </TableCell>
+                    <TableCell>
+                      <p>{row.group_label}</p>
+                      <p className="text-11">
+                        {row.advisor_name && `主导师：${row.advisor_name} · ${row.primary_advisor_email}`}
+                      </p>
+                      <p className="text-11">
+                        {[row.co_advisor_1_name, row.co_advisor_2_name].filter(Boolean).join("、")}
+                      </p>
+                      {batch.status === "IMPORTED" && row.org_unit && (
+                        <a
+                          className="text-accent-primary"
+                          href={`/${workspaceSlug}/research/settings/org?unit=${row.org_unit}`}
+                        >
+                          查看组织关系
+                        </a>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!visible.length && <p className="p-4 text-12">没有符合筛选条件的记录</p>}
-        </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {editable && (
+                          <>
+                            <Button
+                              variant={row.review_decision === "INCLUDED" ? "primary" : "secondary"}
+                              size="sm"
+                              disabled={row.status !== "OK" || row.review_decision === "INCLUDED"}
+                              onClick={() => void update(row, { review_decision: "INCLUDED" })}
+                            >
+                              纳入
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={row.review_decision === "EXCLUDED"}
+                              onClick={() => void update(row, { review_decision: "EXCLUDED" })}
+                            >
+                              排除
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setEditing({ ...row })}>
+                              编辑
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {!visible.length && <p className="p-4 text-12">没有符合筛选条件的记录</p>}
+          </div>
+        </LayoutErrorBoundary>
       </fieldset>
       {editing && (
         <form
@@ -396,7 +400,7 @@ export function ImportReview({
       {batch.status === "IMPORTED" && (
         <div className="flex gap-3 text-12">
           <a className="text-accent-primary" href={service.getUserImportReportUrl(workspaceSlug, batch.id!)}>
-            下载导入报告（含新账号初始密码）
+            下载本批次导入报告（含本次发放的初始密码）
           </a>
           <button
             disabled={busy}

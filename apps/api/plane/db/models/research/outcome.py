@@ -73,6 +73,23 @@ class ResearchOutcome(BaseModel):
         return f"{self.project_id} <{self.output_type}:{self.title[:40]}>"
 
 
+class ResearchOutcomeAttachment(BaseModel):
+    """PDF or Markdown file attached to a research outcome."""
+
+    outcome = models.ForeignKey(ResearchOutcome, on_delete=models.CASCADE, related_name="attachments")
+    asset = models.ForeignKey("db.FileAsset", on_delete=models.CASCADE, related_name="research_outcome_attachments")
+    file_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=128, blank=True, default="")
+    file_size = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        db_table = "research_outcome_attachments"
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(fields=["outcome", "asset"], name="rsch_outcome_attachment_uq"),
+        ]
+
+
 class ResearchOutcomeLink(BaseModel):
     """Link from an outcome to an experiment, artifact, material or report."""
 

@@ -21,12 +21,11 @@ import { ResearchOrgService } from "@/services/research/org.service";
 // local imports
 import { ResearchMentorBindings } from "./mentor-bindings";
 import { ResearchOrgMemberTable } from "./org-member-table";
+import { buildOrgTree, type OrgTreeNode } from "./org-tree";
 
 type Props = {
   workspaceSlug: string;
 };
-
-type OrgTreeNode = TOrgUnit & { children: OrgTreeNode[] };
 
 const orgService = new ResearchOrgService();
 
@@ -35,19 +34,6 @@ const BUSINESS_CATEGORIES: Array<{ value: TOrgBusinessCategory; label: string }>
   { value: "INDUSTRIALIZATION", label: "产业化" },
   { value: "MENTOR_GROUP", label: "导师组" },
 ];
-
-const buildTree = (units: TOrgUnit[]): OrgTreeNode[] => {
-  const nodes = new Map<string, OrgTreeNode>();
-  units.forEach((unit) => nodes.set(unit.id, { ...unit, children: [] }));
-  const roots: OrgTreeNode[] = [];
-  units.forEach((unit) => {
-    const node = nodes.get(unit.id);
-    if (!node) return;
-    if (unit.parent && nodes.has(unit.parent)) nodes.get(unit.parent)?.children.push(node);
-    else roots.push(node);
-  });
-  return roots;
-};
 
 type TreeNodeRowProps = {
   node: OrgTreeNode;
@@ -74,7 +60,7 @@ const TreeNodeRow = observer(function TreeNodeRow({
     <div>
       <div
         className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-13 ${
-          selectedId === node.id ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
+          selectedId === node.id ? "bg-surface-1 text-primary" : "text-secondary hover:bg-surface-1"
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
@@ -84,12 +70,14 @@ const TreeNodeRow = observer(function TreeNodeRow({
         <button type="button" className="flex-1 truncate text-left" onClick={() => onSelect(node)}>
           {node.name}
         </button>
-        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-10 text-tertiary">
+        <span className="rounded bg-surface-1 px-1.5 py-0.5 text-10 text-tertiary">
           {t(ORG_UNIT_TYPE_LABELS[node.unit_type as TOrgUnitType])}
         </span>
-        <button type="button" className="shrink-0 text-10 text-accent-primary" onClick={() => onAddChild(node)}>
-          {addLabel}
-        </button>
+        {selectedId === node.id && (
+          <button type="button" className="shrink-0 text-10 text-accent-primary" onClick={() => onAddChild(node)}>
+            {addLabel}
+          </button>
+        )}
       </div>
       {expanded &&
         node.children.map((child) => (
@@ -130,7 +118,7 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
   const [creating, setCreating] = useState(false);
 
   const units = research.getOrgUnits(workspaceSlug);
-  const tree = useMemo(() => buildTree(units), [units]);
+  const tree = useMemo(() => buildOrgTree(units), [units]);
   const selectedUnit = units.find((unit) => unit.id === selectedUnitId) ?? null;
   const refreshIncomplete = useCallback(async () => {
     setIncomplete(await orgService.getIncomplete(workspaceSlug));
@@ -228,8 +216,8 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
   );
 
   return (
-    <div className="flex h-full w-full gap-4 overflow-hidden p-4">
-      <div className="flex w-80 flex-col gap-2 overflow-hidden rounded-lg border border-subtle bg-surface-1 p-2">
+    <div className="flex h-full w-full gap-4 overflow-hidden bg-canvas p-5">
+      <div className="flex w-80 flex-col gap-2 overflow-hidden rounded-xl bg-surface-2 p-2">
         <div className="flex items-center justify-between gap-2 px-1">
           <span className="text-13 font-medium text-primary">{t("research.org.title")}</span>
           {tree.length === 0 && (
@@ -297,7 +285,7 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 overflow-hidden rounded-lg border border-subtle bg-surface-1 p-4">
+      <div className="flex flex-1 flex-col gap-3 overflow-hidden rounded-xl bg-surface-1 p-4">
         {errorKey && (
           <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
             {t(errorKey)}

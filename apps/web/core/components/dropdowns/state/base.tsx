@@ -215,8 +215,11 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     >
       {isOpen && (
         <Combobox.Options
+          modal={false}
+          portal
+          data-prevent-outside-click
           as="ul"
-          className="fixed z-10"
+          className="fixed z-40"
           static
           ref={setPopperElement}
           style={styles.popper}

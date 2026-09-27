@@ -17,17 +17,47 @@ from .accounts import (
     ResearchUserImportRejectEndpoint,
     ResearchUserImportRelationsEndpoint,
     ResearchUserImportReportEndpoint,
+    ResearchAccountInitialPasswordsEndpoint,
     ResearchUserImportRowEndpoint,
     ResearchUserImportSingleEndpoint,
     ResearchUserProfileListEndpoint,
 )
 from .pi_workspace import ResearchPiAggregateEndpoint
-from .context import ResearchContextEndpoint, ResearchContextResourceEndpoint
+from .context import (
+    ResearchContextEndpoint,
+    ResearchContextResourceEndpoint,
+    ResearchContextTokenEndpoint,
+    ResearchContextTokenRevokeEndpoint,
+)
+from .account_links import (
+    ResearchAccountLinkConflictEndpoint,
+    ResearchAccountLinkConfirmEndpoint,
+    ResearchAccountLinkListCreateEndpoint,
+    ResearchAccountLinkRevokeEndpoint,
+    ResearchAccountLinkUnlinkEndpoint,
+)
+from .agent import (
+    ResearchAgentApprovalEndpoint,
+    ResearchAgentApprovalListEndpoint,
+    ResearchAgentArtifactEndpoint,
+    ResearchAgentChainEventEndpoint,
+    ResearchAgentManifestEndpoint,
+    ResearchAgentMessageEndpoint,
+    ResearchAgentRunEventEndpoint,
+    ResearchAgentRunCancelEndpoint,
+    ResearchAgentSessionCloseEndpoint,
+    ResearchAgentSessionCreateEndpoint,
+    ResearchAgentSessionDetailEndpoint,
+)
 from .attachments import (
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
     ResearchReportMarkdownImportEndpoint,
+)
+from .knowledge_requests import (
+    ResearchGroupKnowledgeBindingDetailEndpoint,
+    ResearchKnowledgeRequestDetailEndpoint,
 )
 from .approvals import (
     ResearchApprovalFlowDetailEndpoint,
@@ -39,6 +69,7 @@ from .approvals import (
 )
 from .health import ResearchHealthEndpoint
 from .settings import ResearchSettingsEndpoint
+from .observability import ResearchExternalHealthProbeEndpoint, ResearchObservabilityEndpoint
 from .summary import ResearchReportSummaryEndpoint
 from .templates import (
     ResearchReportTemplateDetailEndpoint,
@@ -152,11 +183,38 @@ from .integrations import (
     ResearchRdProjectSearchEndpoint,
 )
 from .chain import ResearchProjectChainEndpoint, ResearchProjectTimelineEndpoint
+from .chain_foundation import (
+    ResearchChainArchiveEndpoint,
+    ResearchChainDetailEndpoint,
+    ResearchChainEventListCreateEndpoint,
+    ResearchChainListCreateEndpoint,
+    ResearchChainMemberDetailEndpoint,
+    ResearchChainMemberListCreateEndpoint,
+    ResearchChainNodeDetailEndpoint,
+    ResearchChainNodeListCreateEndpoint,
+    ResearchChainNodeTransitionEndpoint,
+    ResearchChainRestoreEndpoint,
+    ResearchChainSnapshotCreateEndpoint,
+)
+from .knowledge import (
+    ResearchChainKnowledgeBaseListEndpoint,
+    ResearchChainReferenceEndpoint,
+    ResearchChainUploadDetailEndpoint,
+    ResearchChainUploadEndpoint,
+)
+from .analysis import ResearchChainAnalysisListCreateEndpoint
 from .outcomes import (
     ResearchChainExportEndpoint,
+    ResearchOutcomeAttachmentEndpoint,
+    ResearchOutcomeAttachmentDetailEndpoint,
+    ResearchOutcomeAttachmentPresignEndpoint,
     ResearchOutcomeDetailEndpoint,
     ResearchOutcomeLinkEndpoint,
     ResearchOutcomeListCreateEndpoint,
+)
+from .topic_materials import (
+    ResearchTopicMaterialListCreateEndpoint,
+    ResearchTopicMaterialPresignEndpoint,
 )
 
 __all__ = [
@@ -216,8 +274,26 @@ __all__ = [
     "ResearchOutcomeDetailEndpoint",
     "ResearchOutcomeLinkEndpoint",
     "ResearchOutcomeListCreateEndpoint",
+    "ResearchTopicMaterialListCreateEndpoint",
+    "ResearchTopicMaterialPresignEndpoint",
     "ResearchProjectChainEndpoint",
     "ResearchProjectTimelineEndpoint",
+    "ResearchChainListCreateEndpoint",
+    "ResearchChainDetailEndpoint",
+    "ResearchChainArchiveEndpoint",
+    "ResearchChainRestoreEndpoint",
+    "ResearchChainMemberListCreateEndpoint",
+    "ResearchChainMemberDetailEndpoint",
+    "ResearchChainNodeListCreateEndpoint",
+    "ResearchChainNodeDetailEndpoint",
+    "ResearchChainNodeTransitionEndpoint",
+    "ResearchChainEventListCreateEndpoint",
+    "ResearchChainSnapshotCreateEndpoint",
+    "ResearchChainKnowledgeBaseListEndpoint",
+    "ResearchChainUploadEndpoint",
+    "ResearchChainUploadDetailEndpoint",
+    "ResearchChainReferenceEndpoint",
+    "ResearchChainAnalysisListCreateEndpoint",
     "ResearchDeviceExecutionSearchEndpoint",
     "ResearchExternalReferenceDetailEndpoint",
     "ResearchExternalReferenceLinkEndpoint",
@@ -233,6 +309,8 @@ __all__ = [
     "ResearchRdAnalysisSearchEndpoint",
     "ResearchRdProjectSearchEndpoint",
     "ResearchSettingsEndpoint",
+    "ResearchObservabilityEndpoint",
+    "ResearchExternalHealthProbeEndpoint",
     "ResearchReportSummaryEndpoint",
     "ResearchAuditEventListEndpoint",
     "ResearchApprovalFlowDetailEndpoint",
@@ -286,5 +364,23 @@ __all__ = [
     "ResearchUserProfileListEndpoint",
     "ResearchPiAggregateEndpoint",
     "ResearchContextEndpoint",
+    "ResearchContextTokenEndpoint",
+    "ResearchContextTokenRevokeEndpoint",
+    "ResearchAccountLinkListCreateEndpoint",
+    "ResearchAccountLinkConfirmEndpoint",
+    "ResearchAccountLinkUnlinkEndpoint",
+    "ResearchAccountLinkRevokeEndpoint",
+    "ResearchAccountLinkConflictEndpoint",
+    "ResearchAgentManifestEndpoint",
+    "ResearchAgentSessionCreateEndpoint",
+    "ResearchAgentSessionDetailEndpoint",
+    "ResearchAgentSessionCloseEndpoint",
+    "ResearchAgentMessageEndpoint",
+    "ResearchAgentRunEventEndpoint",
+    "ResearchAgentRunCancelEndpoint",
+    "ResearchAgentApprovalEndpoint",
+    "ResearchAgentApprovalListEndpoint",
+    "ResearchAgentArtifactEndpoint",
+    "ResearchAgentChainEventEndpoint",
     "ResearchContextResourceEndpoint",
 ]

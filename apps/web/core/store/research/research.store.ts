@@ -170,6 +170,8 @@ export interface IResearchStore {
   timeline: Record<string, TResearchTimeline>;
   // computed
   isEnabled: boolean;
+  /** Whether the Phase 1 four-entry information architecture is enabled. */
+  isIaV2Enabled: boolean;
   isWorkspaceAdmin: boolean;
   /** Configuration rights: workspace administrator or administrator tag. */
   isResearchAdmin: boolean;
@@ -660,6 +662,7 @@ export class ResearchStore implements IResearchStore {
       timeline: observable,
       // computed
       isEnabled: computed,
+      isIaV2Enabled: computed,
       isWorkspaceAdmin: computed,
       isResearchAdmin: computed,
       researchLevel: computed,
@@ -811,6 +814,10 @@ export class ResearchStore implements IResearchStore {
 
   get isEnabled() {
     return Boolean(this.identity?.module_enabled && this.identity?.workspace_enabled);
+  }
+
+  get isIaV2Enabled() {
+    return Boolean(this.identity?.research_ia_v2);
   }
 
   get isWorkspaceAdmin() {

@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 // plane imports
 import type { CollaborationState, EditorRefApi } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import type { TDocumentPayload, TPage, TPageVersion, TWebhookConnectionQueryParams } from "@plane/types";
 // hooks
 import { usePageFallback } from "@/hooks/use-page-fallback";
@@ -74,13 +75,22 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
     editor: { setEditorRef },
   } = page;
   // page fallback
-  const { isFetchingFallbackBinary } = usePageFallback({
-    editorRef,
-    fetchPageDescription: handlers.fetchDescriptionBinary,
-    page,
-    collaborationState,
-    updatePageDescription: handlers.updateDescription,
-  });
+  const { isFetchingFallbackBinary, isSavingDescription, savePageDescription, saveResult, hasConnectionFailed } =
+    usePageFallback({
+      editorRef,
+      fetchPageDescription: handlers.fetchDescriptionBinary,
+      page,
+      collaborationState,
+      updatePageDescription: handlers.updateDescription,
+    });
+  const offlineSaveMessage =
+    saveResult === "saved"
+      ? t("page_offline_save.saved")
+      : saveResult === "unchanged"
+        ? t("page_offline_save.unchanged")
+        : saveResult === "failed"
+          ? t("page_offline_save.failed")
+          : t("page_offline_save.hint");
 
   const handleEditorReady = useCallback(
     (status: boolean) => {
@@ -170,6 +180,19 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
           isNavigationPaneOpen={isNavigationPaneOpen}
           page={page}
         />
+        {hasConnectionFailed && (
+          <div className="flex items-center justify-between gap-4 border-b border-subtle px-page-x py-2">
+            <p className="text-13 text-tertiary">{offlineSaveMessage}</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={isSavingDescription}
+              onClick={() => void savePageDescription()}
+            >
+              {t("page_offline_save.action")}
+            </Button>
+          </div>
+        )}
         {showContentTooLargeBanner && (
           <Banner
             placement="page"

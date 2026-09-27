@@ -15,6 +15,25 @@ def _passes_workspace_access_gate(request, view):
     return user_can_access_workspace(request.user, workspace_slug=view.workspace_slug)
 
 
+def _is_research_review_reader(request, view) -> bool:
+    """判断当前请求是不是研究链只读读者。
+
+    Args:
+        request: 当前请求。
+        view: 带工作区和项目参数的视图。
+
+    Returns:
+        可以只读打开该科研项目时为 True。写请求不走这里。
+    """
+    project_id = getattr(view, "project_id", None)
+    slug = getattr(view, "workspace_slug", None)
+    if not project_id or not slug:
+        return False
+    from plane.research.utils.project_review import user_can_review_research_project
+
+    return user_can_review_research_project(request.user, slug, project_id)
+
+
 class ProjectBasePermission(BasePermission):
     def has_permission(self, request, view):
         if request.user.is_anonymous:
@@ -101,6 +120,9 @@ class ProjectEntityPermission(BasePermission):
         if not _passes_workspace_access_gate(request, view):
             return False
 
+        if request.method in SAFE_METHODS and _is_research_review_reader(request, view):
+            return True
+
         # Handle requests based on project__identifier
         if hasattr(view, "project_identifier") and view.project_identifier:
             if request.method in SAFE_METHODS:
@@ -152,6 +174,9 @@ class ProjectLitePermission(BasePermission):
             return False
         if not _passes_workspace_access_gate(request, view):
             return False
+
+        if request.method in SAFE_METHODS and _is_research_review_reader(request, view):
+            return True
 
         return ProjectMember.objects.filter(
             workspace__slug=view.workspace_slug,

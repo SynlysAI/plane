@@ -1,0 +1,11 @@
+{
+  "schema_version": "account-link.v1",
+  "canonical_identity": "identity-01",
+  "provider": "ragportal",
+  "external_subject": "external-user-01",
+  "local_user_id": "user-01",
+  "status": "ACTIVE",
+  "verified_at": "2026-09-22T08:20:00Z",
+  "bound_by": "user-01",
+  "audit_event_id": "audit-01"
+}

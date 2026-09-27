@@ -4,7 +4,10 @@
 
 """Outcome endpoints (§5.8) and the frozen reference list export (P1-CHAIN-07)."""
 
-from django.http import HttpResponse
+import hashlib
+import uuid
+
+from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -15,11 +18,13 @@ from plane.db.models import (
     FileAsset,
     PeriodicReport,
     ResearchOutcome,
+    ResearchOutcomeAttachment,
     ResearchOutcomeLink,
     ResearchProjectProfile,
     StageMaterial,
 )
 from plane.research.serializers import ResearchOutcomeSerializer
+from plane.research.services.chain import build_timeline
 from plane.research.services.progress import build_progress
 from plane.research.utils.acl import build_actor_context, check_access
 from plane.research.utils.audit import (
@@ -44,6 +49,8 @@ from plane.research.utils.projects import (
 from plane.research.utils.resource_projections import outcome_resource
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import can_read_project_research_metadata, profile_queryset
+from plane.settings.storage import S3Storage
+from plane.utils.path_validator import sanitize_filename
 
 SECTION = "stages"
 LINK_TARGETS = {
@@ -111,7 +118,7 @@ class ResearchOutcomeListCreateEndpoint(ResearchAPIView):
         ]
         return Response(
             {
-                "results": ResearchOutcomeSerializer(outcomes, many=True).data,
+                "results": ResearchOutcomeSerializer(outcomes, many=True, context={"request": request}).data,
                 "count": len(outcomes),
             },
             status=status.HTTP_200_OK,
@@ -165,7 +172,7 @@ class ResearchOutcomeListCreateEndpoint(ResearchAPIView):
             metadata={"output_type": output_type, "status": outcome_status},
             request=request,
         )
-        return Response(ResearchOutcomeSerializer(outcome).data, status=status.HTTP_201_CREATED)
+        return Response(ResearchOutcomeSerializer(outcome, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class ResearchOutcomeDetailEndpoint(ResearchAPIView):
@@ -178,7 +185,7 @@ class ResearchOutcomeDetailEndpoint(ResearchAPIView):
         outcome, error = visible_outcome(request, workspace, outcome_id)
         if error:
             return error
-        return Response(ResearchOutcomeSerializer(outcome).data, status=status.HTTP_200_OK)
+        return Response(ResearchOutcomeSerializer(outcome, context={"request": request}).data, status=status.HTTP_200_OK)
 
     def patch(self, request, slug, outcome_id):
         workspace, error = self.get_workspace(section=SECTION)
@@ -253,6 +260,116 @@ class ResearchOutcomeDetailEndpoint(ResearchAPIView):
             metadata={"title": outcome.title[:200]},
             request=request,
         )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ResearchOutcomeAttachmentEndpoint(ResearchAPIView):
+    """List or register a PDF/Markdown attachment for a draft outcome."""
+
+    def get(self, request, slug, outcome_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        outcome, error = visible_outcome(request, workspace, outcome_id)
+        if error:
+            return error
+        return Response({"results": [{"id": str(item.id), "file_name": item.file_name, "content_type": item.content_type, "file_size": item.file_size, "asset": str(item.asset_id)} for item in outcome.attachments.filter(deleted_at__isnull=True)]}, status=status.HTTP_200_OK)
+
+    def post(self, request, slug, outcome_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        outcome, error = visible_outcome(request, workspace, outcome_id, action="edit")
+        if error:
+            return error
+        if outcome.status != ResearchOutcome.Status.DRAFT:
+            return research_error(ResearchErrorCode.OUTCOME_INVALID, "Submitted outcomes are read-only.", status.HTTP_409_CONFLICT)
+        asset = FileAsset.objects.filter(pk=request.data.get("asset_id"), workspace=workspace, entity_type="RESEARCH_OUTCOME_ATTACHMENT", entity_identifier=str(outcome.id)).first()
+        if asset is None:
+            return research_not_found(ResearchErrorCode.ATTACHMENT_NOT_FOUND, "The uploaded outcome asset was not found.")
+        if not asset.is_uploaded:
+            try:
+                metadata = S3Storage(request=request).get_object_metadata(object_name=asset.asset.name)
+            except Exception:
+                metadata = None
+            if not metadata:
+                return research_error(ResearchErrorCode.ATTACHMENT_NOT_FOUND, "The upload did not complete. Please retry the upload.", status.HTTP_409_CONFLICT)
+            asset.is_uploaded = True
+            asset.save(update_fields=["is_uploaded", "updated_at"])
+        file_name = str(asset.attributes.get("name") or asset.asset.name)
+        if not file_name.lower().endswith((".pdf", ".md", ".markdown")):
+            return research_error(ResearchErrorCode.FILE_TYPE_NOT_ALLOWED, "Only PDF and Markdown outcome files are allowed.", status.HTTP_422_UNPROCESSABLE_ENTITY)
+        attachment = ResearchOutcomeAttachment.objects.create(outcome=outcome, asset=asset, file_name=file_name, content_type=str(asset.attributes.get("type") or ""), file_size=int(asset.size or 0), created_by=request.user)
+        return Response({"id": str(attachment.id), "file_name": attachment.file_name, "content_type": attachment.content_type, "file_size": attachment.file_size, "asset": str(attachment.asset_id)}, status=status.HTTP_201_CREATED)
+
+
+class ResearchOutcomeAttachmentPresignEndpoint(ResearchAPIView):
+    """Create a direct-to-object-storage slot for an outcome attachment."""
+
+    def post(self, request, slug, outcome_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        outcome, error = visible_outcome(request, workspace, outcome_id, action="edit")
+        if error:
+            return error
+        if outcome.status != ResearchOutcome.Status.DRAFT:
+            return research_error(ResearchErrorCode.OUTCOME_INVALID, "Submitted outcomes are read-only.", status.HTTP_409_CONFLICT)
+        file_name = sanitize_filename(str(request.data.get("file_name") or ""))
+        content_type = str(request.data.get("content_type") or "application/octet-stream")
+        try:
+            size = int(request.data.get("size") or 0)
+        except (TypeError, ValueError):
+            size = 0
+        if not file_name.lower().endswith((".pdf", ".md", ".markdown")):
+            return research_error(ResearchErrorCode.FILE_TYPE_NOT_ALLOWED, "Only PDF and Markdown outcome files are allowed.", status.HTTP_422_UNPROCESSABLE_ENTITY)
+        key = f"{workspace.id}/research/outcomes/{outcome.id}/{uuid.uuid4().hex}-{file_name}"
+        presigned = S3Storage(request=request).generate_presigned_post(object_name=key, file_type=content_type, file_size=size)
+        if presigned is None:
+            return research_error(ResearchErrorCode.UPSTREAM_DEGRADED, "Unable to prepare the upload.", status.HTTP_503_SERVICE_UNAVAILABLE)
+        asset = FileAsset.objects.create(attributes={"name": file_name, "type": content_type, "size": size}, asset=key, size=size, workspace=workspace, user=request.user, created_by=request.user, entity_type="RESEARCH_OUTCOME_ATTACHMENT", entity_identifier=str(outcome.id), is_uploaded=False)
+        return Response({"asset_id": str(asset.id), "upload_data": presigned}, status=status.HTTP_200_OK)
+
+
+class ResearchOutcomeAttachmentDetailEndpoint(ResearchAPIView):
+    """Download or remove one outcome attachment."""
+
+    def _attachment(self, request, workspace, outcome_id, attachment_id, action="view"):
+        outcome, error = visible_outcome(request, workspace, outcome_id, action=action)
+        if error:
+            return None, error
+        attachment = ResearchOutcomeAttachment.objects.filter(
+            pk=attachment_id, outcome=outcome, deleted_at__isnull=True
+        ).select_related("asset").first()
+        if attachment is None:
+            return None, research_not_found(ResearchErrorCode.ATTACHMENT_NOT_FOUND, "Outcome attachment not found.")
+        return attachment, None
+
+    def get(self, request, slug, outcome_id, attachment_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        attachment, error = self._attachment(request, workspace, outcome_id, attachment_id)
+        if error:
+            return error
+        signed_url = S3Storage(request=request).generate_presigned_url(
+            object_name=attachment.asset.asset.name,
+            disposition="attachment",
+            filename=attachment.file_name,
+        )
+        return HttpResponseRedirect(signed_url)
+
+    def delete(self, request, slug, outcome_id, attachment_id):
+        workspace, error = self.get_workspace(section=SECTION)
+        if error:
+            return error
+        attachment, error = self._attachment(request, workspace, outcome_id, attachment_id, action="edit")
+        if error:
+            return error
+        if attachment.outcome.status != ResearchOutcome.Status.DRAFT:
+            return research_error(ResearchErrorCode.OUTCOME_INVALID, "Submitted outcomes are read-only.", status.HTTP_409_CONFLICT)
+        attachment.deleted_at = timezone.now()
+        attachment.save(update_fields=["deleted_at", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -340,13 +457,17 @@ class ResearchChainExportEndpoint(ResearchAPIView):
                 "chain must be thinking or development.",
             )
         progress = build_progress(workspace, project_id, request.user)
+        timeline = build_timeline(workspace, project_id, request.user, chain=chain)
         markdown = build_chain_markdown(
             progress,
             profile.project.name,
             generated_by=getattr(request.user, "display_name", ""),
             chain=chain,
+            timeline=timeline,
         )
         response = HttpResponse(markdown, content_type="text/markdown")
+        content_hash = hashlib.sha256(response.content).hexdigest()
+        response["X-Research-Chain-SHA256"] = content_hash
         suffix = f"-{chain}" if chain else ""
         identifier = profile.project.identifier or project_id
         file_name = f"research-chain{suffix}-{identifier}-{timezone.localdate():%Y%m%d}.md"
@@ -357,7 +478,7 @@ class ResearchChainExportEndpoint(ResearchAPIView):
             resource_type=ResearchResourceType.PROJECT_PROFILE,
             resource_id=project_id,
             actor=request.user,
-            metadata={"file_name": file_name},
+            metadata={"file_name": file_name, "content_hash": content_hash},
             request=request,
         )
         return response

@@ -244,8 +244,22 @@ export const RESEARCH_NAVIGATION_ITEMS = [
   { key: "reports", labelKey: "research.nav.reports", path: "reports", section: "reports" },
   { key: "summary", labelKey: "research.nav.summary", path: "reports/summary", section: "reports" },
   { key: "projects", labelKey: "research.nav.projects", path: "projects", section: "reports" },
+  { key: "research_chain", labelKey: "research.nav.research_chain", path: "chains", section: "research_chain" },
   { key: "reviews", labelKey: "research.nav.reviews", path: "reviews", section: "stages" },
   { key: "approvals", labelKey: "research.nav.approvals", path: "approvals", section: "approvals" },
+] as const;
+
+/** Phase 1 IA v2 renders at most four first-level research destinations. */
+export const RESEARCH_IA_V2_NAVIGATION_ITEMS = [
+  { key: "overview", labelKey: "research.nav.overview", path: "", section: null },
+  {
+    key: "research_chain",
+    labelKey: "research.nav.research_chain_v2",
+    path: "chains",
+    section: "research_chain",
+  },
+  { key: "approvals", labelKey: "research.nav.approvals_v2", path: "approvals", section: "approvals" },
+  { key: "management", labelKey: "research.nav.management", path: "settings", section: "org" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -391,15 +405,22 @@ export const RESEARCH_PROJECT_NAVIGATION_ITEMS = [
 export const INTEGRATION_SYSTEMS = [
   "RAGPORTAL",
   "WEKNORA",
+  "SYNLORA",
   "SPECLABOS",
   "SMARTACCESS",
   "POLY_AGENT",
   "SPEC_AGENT",
 ] as const satisfies readonly TIntegrationSystem[];
 
+/** Systems that may be configured directly in Plane's connection settings. */
+export const DIRECT_INTEGRATION_SYSTEMS = INTEGRATION_SYSTEMS.filter(
+  (system) => system !== "WEKNORA"
+) as readonly Exclude<TIntegrationSystem, "WEKNORA">[];
+
 export const INTEGRATION_SYSTEM_LABELS: Record<TIntegrationSystem, string> = {
   RAGPORTAL: "research.integrations.system.ragportal",
   WEKNORA: "research.integrations.system.weknora",
+  SYNLORA: "research.integrations.system.synlora",
   SPECLABOS: "research.integrations.system.speclabos",
   SMARTACCESS: "research.integrations.system.smartaccess",
   POLY_AGENT: "research.integrations.system.poly_agent",
@@ -645,6 +666,36 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/context/resources/${kind}/${id}/`,
   settings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/settings/`,
   identityMe: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/me/`,
+  chains: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/chains/`,
+  chain: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/`,
+  chainNodes: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/`,
+  chainArchive: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/archive/`,
+  chainRestore: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/restore/`,
+  chainMembers: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/`,
+  chainMember: (slug: string, chainId: string, userId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/${userId}/`,
+  chainNode: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/`,
+  chainNodeTransitions: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/transitions/`,
+  chainNodeEvents: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/events/`,
+  chainNodeSnapshots: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/snapshots/`,
+  chainKnowledgeBases: (slug: string, chainId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/knowledge-bases/`,
+  chainUploads: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/uploads/`,
+  chainUploadDetail: (slug: string, chainId: string, uploadId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/uploads/${uploadId}/`,
+  chainReferences: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/references/`,
+  agentManifest: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/manifest/`,
+  agentSessions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/`,
+  agentSession: (slug: string, sessionId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/`,
+  agentSessionClose: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/close/`,
+  agentMessages: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/messages/`,
+  agentRunEvents: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/events/`,
+  agentRunCancel: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/cancel/`,
+  agentApprovals: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/approvals/`,
+  agentApproval: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/approvals/`,
+  agentArtifacts: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/artifacts/`,
   identityMappings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/`,
   identityMapping: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/${id}/`,
   orgUnits: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/`,
@@ -703,6 +754,7 @@ export const researchEndpoints = {
   userImportReject: (slug: string, batchId: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${batchId}/reject/`,
   userImport: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${id}/`,
   userImportReport: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/user-imports/${id}/report/`,
+  accountInitialPasswords: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/account-initial-passwords/`,
   userProfiles: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/user-profiles/`,
   piAggregate: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/aggregate/`,
   // ---- P1 stage workflow (§5.2) ----
@@ -776,7 +828,16 @@ export const researchEndpoints = {
   projectProgress: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/progress/`,
   // ---- P1 outcomes (§5.8) ----
   outcomes: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/outcomes/`,
+  topicMaterials: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/materials/`,
+  topicMaterialPresign: (slug: string, projectId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/materials/presign/`,
   outcome: (slug: string, outcomeId: string) => `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/`,
+  outcomeAttachments: (slug: string, outcomeId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/attachments/`,
+  outcomeAttachmentPresign: (slug: string, outcomeId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/attachments/presign/`,
+  outcomeAttachment: (slug: string, outcomeId: string, attachmentId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/attachments/${attachmentId}/`,
   outcomeLinks: (slug: string, outcomeId: string) => `${RESEARCH_API_ROOT}/${slug}/outcomes/${outcomeId}/links/`,
   chainExport: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/chain/export/`,
   // ---- P1 integrations (§5.7) ----
