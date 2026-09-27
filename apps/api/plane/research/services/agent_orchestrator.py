@@ -148,7 +148,7 @@ def create_synlora_session(
     link = active_synlora_link(user)
     if link is None:
         raise SynloraError("synlora_account_link_inactive", "An active Synlora account link is required.", 403)
-    synlora = client or SynloraClient()
+    synlora = client or SynloraClient(workspace=workspace)
     delegated = synlora.exchange_delegated_token(account_link=link, workspace=workspace, user=user)
     token = str(delegated.get("token") or "")
     if not token:

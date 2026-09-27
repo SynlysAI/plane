@@ -24,7 +24,7 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
   const statusBySystem = new Map(health.map((entry) => [String(entry.system), entry]));
   const rows = connections.length
     ? connections
-    : (["RAGPORTAL", "WEKNORA", "SPECLABOS", "SMARTACCESS", "POLY_AGENT", "SPEC_AGENT"] as const).map(
+    : (["RAGPORTAL", "WEKNORA", "SYNLORA", "SPECLABOS", "SMARTACCESS", "POLY_AGENT", "SPEC_AGENT"] as const).map(
         (system) =>
           ({ system, is_enabled: false, configured: false, health_status: "UNKNOWN" }) as TIntegrationConnection
       );
@@ -44,6 +44,9 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
           {rows.map((connection) => {
             const entry = statusBySystem.get(String(connection.system)) ?? {};
             const status = String(entry.status ?? connection.health_status ?? "UNKNOWN");
+            const phaseOnly = ["SPECLABOS", "SMARTACCESS", "POLY_AGENT", "SPEC_AGENT"].includes(
+              String(connection.system)
+            );
             return (
               <TableRow key={connection.system}>
                 <TableCell className="text-secondary">
@@ -62,7 +65,9 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
                           : "bg-surface-2 text-tertiary"
                     }`}
                   >
-                    {t(INTEGRATION_HEALTH_LABELS[status] ?? INTEGRATION_HEALTH_LABELS.UNKNOWN)}
+                    {phaseOnly && status !== "OK"
+                      ? t("research.integrations.phase_not_enabled")
+                      : t(INTEGRATION_HEALTH_LABELS[status] ?? INTEGRATION_HEALTH_LABELS.UNKNOWN)}
                   </span>
                 </TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">

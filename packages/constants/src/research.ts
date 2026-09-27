@@ -405,6 +405,7 @@ export const RESEARCH_PROJECT_NAVIGATION_ITEMS = [
 export const INTEGRATION_SYSTEMS = [
   "RAGPORTAL",
   "WEKNORA",
+  "SYNLORA",
   "SPECLABOS",
   "SMARTACCESS",
   "POLY_AGENT",
@@ -414,6 +415,7 @@ export const INTEGRATION_SYSTEMS = [
 export const INTEGRATION_SYSTEM_LABELS: Record<TIntegrationSystem, string> = {
   RAGPORTAL: "research.integrations.system.ragportal",
   WEKNORA: "research.integrations.system.weknora",
+  SYNLORA: "research.integrations.system.synlora",
   SPECLABOS: "research.integrations.system.speclabos",
   SMARTACCESS: "research.integrations.system.smartaccess",
   POLY_AGENT: "research.integrations.system.poly_agent",

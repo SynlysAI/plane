@@ -443,7 +443,7 @@ class ResearchAgentSessionCloseEndpoint(AgentPluginMixin):
             link = active_synlora_link(request.user)
             if link is not None:
                 try:
-                    client = SynloraClient()
+                    client = SynloraClient(workspace=workspace)
                     delegated = client.exchange_delegated_token(
                         account_link=link, workspace=workspace, user=request.user
                     )
@@ -538,7 +538,7 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
             link = active_synlora_link(request.user)
             if link is None:
                 raise SynloraError("synlora_account_link_inactive", "Synlora AccountLink is inactive.", 403)
-            client = SynloraClient()
+            client = SynloraClient(workspace=workspace)
             delegated = client.exchange_delegated_token(account_link=link, workspace=workspace, user=request.user)
             delegated_token = str(delegated.get("token") or "")
             if not delegated_token:
@@ -646,7 +646,7 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
             link = active_synlora_link(request.user)
             if link is not None:
                 try:
-                    client = SynloraClient()
+                    client = SynloraClient(workspace=workspace)
                     delegated = client.exchange_delegated_token(
                         account_link=link, workspace=workspace, user=request.user
                     )
@@ -693,7 +693,7 @@ class ResearchAgentRunCancelEndpoint(AgentPluginMixin):
                 link = active_synlora_link(request.user)
                 if link is not None:
                     try:
-                        client = SynloraClient()
+                        client = SynloraClient(workspace=workspace)
                         delegated = client.exchange_delegated_token(
                             account_link=link, workspace=workspace, user=request.user
                         )

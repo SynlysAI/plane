@@ -122,6 +122,16 @@ class WeKnoraClient(RagPortalClient):
     operation = "fetch_weknora_entries"
 
 
+class SynloraClientAdapter(BaseIntegrationClient):
+    """Health and reference adapter for the shared Agent Runtime."""
+
+    system = "SYNLORA"
+    health_path = "/api/health"
+    search_path = "/api/v1/research/capabilities"
+    external_type = "ANALYSIS_RESULT"
+    operation = "fetch_agent_capabilities"
+
+
 class SpecLabOSClient(BaseIntegrationClient):
     system = "SPECLABOS"
     search_path = "/api/runs/"
@@ -182,6 +192,7 @@ class SpecAgentClient(BaseIntegrationClient):
 ADAPTERS = {
     "RAGPORTAL": RagPortalClient,
     "WEKNORA": WeKnoraClient,
+    "SYNLORA": SynloraClientAdapter,
     "SPECLABOS": SpecLabOSClient,
     "SMARTACCESS": SmartAccessClient,
     "POLY_AGENT": PolyAgentClient,

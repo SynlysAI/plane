@@ -5,6 +5,8 @@ import json
 import httpx
 from django.conf import settings
 
+from plane.db.models import ExternalSystemConnection
+
 
 class SynloraErrorCode:
     NOT_CONFIGURED = "synlora_not_configured"
@@ -29,14 +31,33 @@ class SynloraError(Exception):
 class SynloraClient:
     """Small synchronous client; delegated tokens never cross the browser."""
 
-    def __init__(self):
-        self.base_url = str(getattr(settings, "SYNLORA_BASE_URL", "")).rstrip("/")
-        self.service_token = str(getattr(settings, "SYNLORA_SERVICE_TOKEN", ""))
-        self.timeout = float(getattr(settings, "SYNLORA_TIMEOUT_SECONDS", 5))
+    def __init__(self, workspace=None):
+        connection = (
+            ExternalSystemConnection.objects.filter(
+                workspace=workspace,
+                system="SYNLORA",
+                deleted_at__isnull=True,
+            ).first()
+            if workspace is not None
+            else None
+        )
+        self.connection = connection
+        self.base_url = str(
+            getattr(connection, "base_url", "") or getattr(settings, "SYNLORA_BASE_URL", "")
+        ).rstrip("/")
+        credential_ref = getattr(connection, "credential_ref", "")
+        self.service_token = str(
+            getattr(settings, credential_ref.upper(), "")
+            or getattr(settings, "SYNLORA_SERVICE_TOKEN", "")
+        )
+        self.timeout = float(
+            getattr(connection, "timeout_seconds", 0)
+            or getattr(settings, "SYNLORA_TIMEOUT_SECONDS", 5)
+        )
 
     @property
     def configured(self):
-        return bool(self.base_url and self.service_token)
+        return bool(self.base_url and self.service_token and (self.connection is None or self.connection.is_enabled))
 
     def _service_headers(self):
         return {"Authorization": f"Bearer {self.service_token}"}

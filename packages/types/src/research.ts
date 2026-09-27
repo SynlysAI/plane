@@ -507,6 +507,10 @@ export type TResearchIdentity = {
     mentor_ids: string[];
     mentee_ids: string[];
   };
+  workspace?: {
+    slug: string;
+    purpose: "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
+  };
   identity: {
     provider: string | null;
     subject: string | null;
@@ -1052,7 +1056,14 @@ export type TResearchOutcomeAttachment = {
   download_url?: string;
 };
 
-export type TIntegrationSystem = "RAGPORTAL" | "WEKNORA" | "SPECLABOS" | "SMARTACCESS" | "POLY_AGENT" | "SPEC_AGENT";
+export type TIntegrationSystem =
+  | "RAGPORTAL"
+  | "WEKNORA"
+  | "SYNLORA"
+  | "SPECLABOS"
+  | "SMARTACCESS"
+  | "POLY_AGENT"
+  | "SPEC_AGENT";
 
 export type TIntegrationConnection = {
   id?: string;
