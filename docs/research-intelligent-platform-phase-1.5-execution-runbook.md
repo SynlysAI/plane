@@ -17,7 +17,7 @@
 
 2026-09-26 已验证 Plane Web/API、RAGPortal、Synlora、WeKnora 健康检查和 Docker API/worker/beat；Tailnet HTTP 入口 `http://100.109.35.2:3000/` 可访问。Tailscale Serve 当前等待管理员授权，HTTPS 地址在授权前保持阻塞。启动、健康检查和停止命令以[启动与操作指南](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)为准。
 
-2026-09-27 人工复核确认 Web 入口仍是上述地址，但 §1 第 6 行不能再代表当前 `public` 工作区：系统集成页里 RAGPortal 和 Synlora 仍是未登记。下一轮先按 [0926 后续修复计划](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md) 的 R4 登记连接，再更新本行证据。组织层级、项目可见性和其余未关闭项也以该计划为准，不在本手册重复任务卡。
+2026-09-27 已用 `register_workspace_integrations --workspace public` 登记 RAGPortal 与 Synlora，健康检查均为 OK，不再是未登记。证据见 `docs/evidence/phase-1.5/issue0926/20260927-R4.md`。组织层级已由方向节点迁移命令处理；其余未关闭项仍以 [0926 后续修复计划](./research-intelligent-platform-phase-1.5-issue-0926-followup-plan.md) 为准。
 
 ## 使用说明
 
@@ -31,15 +31,15 @@
 
 前置：WeKnora 已部署于 `http://10.26.15.93:8000/`，不自建；Synlora 必须单实例（`workers=1`）。
 
-| #   | 动作                                   | 自检命令与预期                                                                                                                                                     | 结果 | 证据                                 |
-| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------------------------------ |
-| 1   | 确认 WeKnora 可达                      | `curl -s http://10.26.15.93:8000/` 返回 HTTP 响应（非超时/拒绝）                                                                                                   | [x]  | `health/20260924-L1.md`              |
-| 2   | 启动 RAGPortal                         | `cd RAGPortal/backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8004`；`curl -s http://127.0.0.1:8004/api/health` 正常 JSON                | [x]  | `health/20260924-L1.md`              |
-| 3   | 启动 Synlora（单实例）                 | `cd Synlora/apps/web/backend && .venv/bin/python run_uvicorn.py`；`curl -s http://127.0.0.1:8005/api/health` 正常 JSON                                             | [x]  | `health/20260924-L1.md`              |
-| 4   | 更新 Plane env 并重建容器              | `docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d --force-recreate --no-deps api worker beat-worker`；`docker ps` 确认容器 Up | [x]  | `health/20260924-L1.md`              |
-| 5   | 容器内验证两个上游服务                 | 容器内 Python urllib 访问 `http://172.19.0.1:8004/api/health` 与 `:8005/api/health` 均通（API 镜像不含 curl）                                                      | [x]  | `health/20260924-L1.md`              |
-| 6   | 录入 RAGPortal 集成连接并启用          | 科研管理 / 集成界面连接测试返回 success，非 `not_configured`                                                                                                       | [x]  | `links/20260924-L1-RAGPortal-BFF.md` |
-| 7   | 开四个 research 开关并绑定 AccountLink | 按当前 `public` 基线解析出的学生 AccountLink 状态 ACTIVE                                                                                                           | [x]  | `health/20260924-L1.md`              |
+| #   | 动作                                   | 自检命令与预期                                                                                                                                                     | 结果 | 证据                       |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | -------------------------- |
+| 1   | 确认 WeKnora 可达                      | `curl -s http://10.26.15.93:8000/` 返回 HTTP 响应（非超时/拒绝）                                                                                                   | [x]  | `health/20260924-L1.md`    |
+| 2   | 启动 RAGPortal                         | `cd RAGPortal/backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8004`；`curl -s http://127.0.0.1:8004/api/health` 正常 JSON                | [x]  | `health/20260924-L1.md`    |
+| 3   | 启动 Synlora（单实例）                 | `cd Synlora/apps/web/backend && .venv/bin/python run_uvicorn.py`；`curl -s http://127.0.0.1:8005/api/health` 正常 JSON                                             | [x]  | `health/20260924-L1.md`    |
+| 4   | 更新 Plane env 并重建容器              | `docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d --force-recreate --no-deps api worker beat-worker`；`docker ps` 确认容器 Up | [x]  | `health/20260924-L1.md`    |
+| 5   | 容器内验证两个上游服务                 | 容器内 Python urllib 访问 `http://172.19.0.1:8004/api/health` 与 `:8005/api/health` 均通（API 镜像不含 curl）                                                      | [x]  | `health/20260924-L1.md`    |
+| 6   | 录入 RAGPortal 与 Synlora 并启用       | `register_workspace_integrations --workspace public` 后两者都不是 `not_configured`，探针原因替代未登记                                                             | [x]  | `issue0926/20260927-R4.md` |
+| 7   | 开四个 research 开关并绑定 AccountLink | 按当前 `public` 基线解析出的学生 AccountLink 状态 ACTIVE                                                                                                           | [x]  | `health/20260924-L1.md`    |
 
 ### 五服务健康快照（每轮联调开始时记录）
 

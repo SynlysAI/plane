@@ -63,7 +63,7 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
         <Input
           className="!w-64"
           value={baseUrl}
-          placeholder="https://system.example.com"
+          placeholder={baseUrl ? "" : t("research.integrations.base_url_hint")}
           onChange={(event) => setBaseUrl(event.target.value)}
         />
         <Input
