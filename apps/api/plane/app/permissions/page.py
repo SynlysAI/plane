@@ -101,9 +101,15 @@ class ProjectPagePermission(BasePermission):
         Returns: True (allow), False (deny), None (continue with normal flow)
         """
         role = self._check_project_member_access(request, slug, project_id)
-        if not role:
-            return False, None
-        return True, role
+        if role:
+            return True, role
+        # 研究链只读读者可以读公开页面，但不能获得成员角色或写权限。
+        if request.method in SAFE_METHODS and project_id:
+            from plane.research.utils.project_review import user_can_review_research_project
+
+            if user_can_review_research_project(request.user, slug, project_id):
+                return True, GUEST
+        return False, None
 
     def _has_private_page_action_access(self, request, slug, page, project_id):
         """

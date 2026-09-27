@@ -138,9 +138,19 @@ class ProjectListSerializer(DynamicBaseSerializer):
     next_work_item_sequence = serializers.SerializerMethodField()
     # Additive optional flag: false for every upstream project (P0-PRJ-06)
     is_research_project = serializers.SerializerMethodField()
+    # 研究链上级的只读标记。不是成员时为 "review"，不伪造 member_role。
+    research_access = serializers.SerializerMethodField()
 
     def get_is_research_project(self, obj):
         return resolve_is_research_project(obj)
+
+    def get_research_access(self, obj):
+        """返回研究链只读标记。
+
+        Returns:
+            非成员的研究链读者为 ``review``，其余为 None。
+        """
+        return getattr(obj, "research_access", None)
 
     def get_members(self, obj):
         project_members = getattr(obj, "members_list", None)

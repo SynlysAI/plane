@@ -17,7 +17,7 @@ class ROLE(Enum):
     GUEST = 5
 
 
-def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
+def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None, research_review_read=False):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
@@ -82,6 +82,19 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
                         is_active=True,
                     ).exists()
                 ):
+                    return view_func(instance, request, *args, **kwargs)
+
+            # Research-chain reviewers may read specific project resources without a member row.
+            if (
+                research_review_read
+                and level != "WORKSPACE"
+                and request.method in ("GET", "HEAD", "OPTIONS")
+                and kwargs.get("slug")
+                and kwargs.get("project_id")
+            ):
+                from plane.research.utils.project_review import user_can_review_research_project
+
+                if user_can_review_research_project(request.user, kwargs["slug"], kwargs["project_id"]):
                     return view_func(instance, request, *args, **kwargs)
 
             # Return permission denied if no conditions are met

@@ -23,6 +23,8 @@ export interface IPartialProject {
   sort_order: number | null;
   logo_props: TLogoProps;
   member_role?: TUserPermissions | EUserProjectRoles | null;
+  /** 研究链上级的只读入口。不是项目成员时为 review，不代表 member_role。 */
+  research_access?: "review" | null;
   archived_at: string | null;
   workspace: IWorkspace | string;
   cycle_view: boolean;
