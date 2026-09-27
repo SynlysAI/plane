@@ -400,7 +400,12 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
         research_type = str(request.data.get("research_type") or "RESEARCH_PROJECT").strip().upper()
         if research_type not in ResearchProjectProfile.ResearchType.values:
             return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown research type.")
-        chain_kind = str(request.data.get("chain_kind") or ResearchProjectProfile.ChainKind.LEGACY_TRAINING).upper()
+        default_chain_kind = (
+            ResearchProjectProfile.ChainKind.RESEARCH_CHAIN
+            if research_type == ResearchProjectProfile.ResearchType.RESEARCH_PROJECT
+            else ResearchProjectProfile.ChainKind.LEGACY_TRAINING
+        )
+        chain_kind = str(request.data.get("chain_kind") or default_chain_kind).upper()
         if chain_kind not in ResearchProjectProfile.ChainKind.values:
             return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown chain kind.")
         if (

@@ -85,7 +85,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [researchType, setResearchType] = useState<TResearchProjectType>("RESEARCH_PROJECT");
-  const [chainKind, setChainKind] = useState<"LEGACY_TRAINING" | "RESEARCH_CHAIN">("LEGACY_TRAINING");
+  const [chainKind, setChainKind] = useState<"LEGACY_TRAINING" | "RESEARCH_CHAIN">("RESEARCH_CHAIN");
   const [chainVisibility, setChainVisibility] = useState<"PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE">("PRIVATE");
   const [orgUnit, setOrgUnit] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -324,7 +324,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                 ))}
               </select>
             </label>
-            {researchChainEnabled && (
+            {researchChainEnabled && researchType !== "RESEARCH_PROJECT" && (
               <label className="flex flex-col gap-1 text-12 text-secondary">
                 <span>{t("research.projects.fields.chain_kind")}</span>
                 <select

@@ -39,7 +39,7 @@ def small_team_map(monkeypatch):
     mapping = {
         "电池": OrgUnit.BusinessCategory.BASIC_RESEARCH,
         "器件": OrgUnit.BusinessCategory.BASIC_RESEARCH,
-        "测试": OrgUnit.BusinessCategory.INDUSTRIALIZATION,
+        "测试": OrgUnit.BusinessCategory.BASIC_RESEARCH,
     }
     monkeypatch.setattr(service, "TEAM_BUSINESS_CATEGORIES", mapping)
     return mapping
@@ -151,7 +151,7 @@ def test_rebuild_purges_research_and_creates_unique_main_pi(db, synthetic_plan, 
     first = service.build_pi_lab_baseline(public, admin, synthetic_plan)
     report = service.verify_pi_lab_baseline(public, synthetic_plan)
     assert first.users_created == 4
-    assert report["org_units"] == 4
+    assert report["org_units"] == 6
     assert report["students"] == 2
     assert report["advisors"] == 2
     assert report["primary_mentor_bindings"] == 1
@@ -177,7 +177,7 @@ def test_rebuild_purges_research_and_creates_unique_main_pi(db, synthetic_plan, 
     second = service.build_pi_lab_baseline(public, admin, synthetic_plan)
     service.verify_pi_lab_baseline(public, synthetic_plan)
     assert second.users_created == 0
-    assert OrgUnit.objects.count() == 4
+    assert OrgUnit.objects.count() == 6
     assert OrgUnitMember.objects.filter(org_role=OrgUnitMember.OrgRole.PI).count() == 1
     assert MentorBinding.objects.filter(is_primary_advisor=True).count() == 1
     assert UserImportRow.objects.count() == 2
