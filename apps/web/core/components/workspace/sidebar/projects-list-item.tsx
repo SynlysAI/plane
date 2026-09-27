@@ -171,6 +171,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                     {project && <Logo logo={project?.logo_props} />}
                   </div>
                   <p className="truncate text-secondary">{project?.name}</p>
+                  {project?.research_access === "review" && (
+                    <span className="shrink-0 text-11 text-tertiary">只读</span>
+                  )}
                 </div>
               );
               return () => root.unmount();
@@ -346,6 +349,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                       <Logo logo={project.logo_props} size={16} />
                     </div>
                     <p className="truncate text-13 font-medium text-secondary">{project.name}</p>
+                    {project.research_access === "review" && (
+                      <span className="font-normal shrink-0 text-11 text-tertiary">只读</span>
+                    )}
                   </Disclosure.Button>
                 ) : (
                   <div className="flex w-full flex-grow items-center gap-1.5 text-left select-none">
@@ -353,6 +359,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                       <Logo logo={project.logo_props} size={16} />
                     </div>
                     <p className="truncate text-13 font-medium text-secondary">{project.name}</p>
+                    {project.research_access === "review" && (
+                      <span className="font-normal shrink-0 text-11 text-tertiary">只读</span>
+                    )}
                   </div>
                 )}
               </ControlLink>

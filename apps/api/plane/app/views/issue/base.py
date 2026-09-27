@@ -81,7 +81,7 @@ class IssueListEndpoint(BaseAPIView):
     filter_backends = (ComplexFilterBackend,)
     filterset_class = IssueFilterSet
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id):
         issue_ids = request.GET.get("issues", False)
 
@@ -262,7 +262,7 @@ class IssueViewSet(BaseViewSet):
         return issues
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
         extra_filters = {}
         if request.GET.get("updated_at__gt", None) is not None:
@@ -489,7 +489,12 @@ class IssueViewSet(BaseViewSet):
             return Response(issue, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], creator=True, model=Issue)
+    @allow_permission(
+        allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST],
+        creator=True,
+        model=Issue,
+        research_review_read=True,
+    )
     def retrieve(self, request, slug, project_id, pk=None):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
 
@@ -861,7 +866,7 @@ class IssuePaginatedViewSet(BaseViewSet):
 
         return paginated_data
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
         cursor = request.GET.get("cursor", None)
         is_description_required = request.GET.get("description", "false")
@@ -1024,7 +1029,7 @@ class IssueDetailEndpoint(BaseAPIView):
             )
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id):
         filters = issue_filters(request.query_params, "GET")
 
@@ -1054,10 +1059,13 @@ class IssueDetailEndpoint(BaseAPIView):
             )
             .values("id")
         )
-        # Main issue query
-        issue = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id).filter(
-            Exists(permission_subquery)
-        )
+        # Main issue query. Review readers are not project members, so the
+        # membership subquery would hide every work item they are allowed to read.
+        from plane.research.utils.project_review import user_can_review_research_project
+
+        issue = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id)
+        if not user_can_review_research_project(request.user, slug, project_id):
+            issue = issue.filter(Exists(permission_subquery))
 
         # Add additional prefetch based on expand parameter
         if self.expand:
