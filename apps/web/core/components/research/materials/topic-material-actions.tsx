@@ -39,13 +39,16 @@ function isTopicMaterialFile(fileName: string) {
 export function ResearchTopicMaterialActions({ workspaceSlug, projectId, projects = [], showRegister = true }: Props) {
   const { t } = useTranslation();
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const projectIds = projects.map((project) => project.id).join(",");
   const [selectedProjectId, setSelectedProjectId] = useState(projectId ?? projects[0]?.id ?? "");
   const [materials, setMaterials] = useState<TTopicMaterial[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setSelectedProjectId(projectId ?? projects[0]?.id ?? "");
-  }, [projectId, projects]);
+    const available = projectIds ? projectIds.split(",") : [];
+    const fallback = projectId ?? available[0] ?? "";
+    setSelectedProjectId((current) => (current && available.includes(current) ? current : fallback));
+  }, [projectId, projectIds]);
 
   useEffect(() => {
     if (!selectedProjectId) {

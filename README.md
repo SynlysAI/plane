@@ -40,7 +40,7 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 `develop` 分支是当前交付分支。文档按“实现事实优先、规划分层、历史可追溯”维护：代码与测试证据高于契约和发布说明，契约高于 PRD 计划，旧版本文档不覆盖当前实现。完整阅读顺序、状态矩阵和文档关系见 [`docs/README.md`](docs/README.md)。
 
-当前仍有两类发布门禁：真实课题创建后补录 Phase 1.5 浏览器证据，以及完成双方认证后的 AI4MS ↔ Plane OIDC 绑定；这两项完成前，不把跨仓灰度标记为完全结束。 当前 dev 环境已启动，Tailnet HTTP 入口为 `http://100.109.35.2:3000/`；HTTPS Serve 需 Tailnet 管理员授权后启用。
+当前仍有两类发布门禁：真实课题创建后补录 Phase 1.5 浏览器证据，以及完成双方认证后的 AI4MS ↔ Plane OIDC 绑定；这两项完成前，不把跨仓灰度标记为完全结束。 0926 复核的 R1–R12 已在 `develop` 补齐代码和自动化，状态见 [0926 实施状态](docs/research-intelligent-platform-phase-1.5-issue-0926-implementation-status.md)；指定角色的人工点击仍按该计划第 7 节核对。 当前 dev 环境已启动，Tailnet HTTP 入口为 `http://100.109.35.2:3000/`；HTTPS Serve 需 Tailnet 管理员授权后启用。
 
 ### 已交付：P0 科研管理（`2.1.0`）
 

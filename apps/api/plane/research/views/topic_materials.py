@@ -66,16 +66,18 @@ class ResearchTopicMaterialListCreateEndpoint(ResearchAPIView):
         profile, error = _readable_profile(request, workspace, project_id)
         if error:
             return error
-        assets = FileAsset.objects.filter(
-            workspace=workspace,
-            project_id=project_id,
-            entity_type=TOPIC_MATERIAL,
-            entity_identifier=str(project_id),
-            is_uploaded=True,
-            is_deleted=False,
-        ).order_by("-created_at")
+        assets = list(
+            FileAsset.objects.filter(
+                workspace=workspace,
+                project_id=project_id,
+                entity_type=TOPIC_MATERIAL,
+                entity_identifier=str(project_id),
+                is_uploaded=True,
+                is_deleted=False,
+            ).order_by("-created_at")
+        )
         return Response(
-            {"results": [_serialize(asset, profile.project) for asset in assets], "count": assets.count()},
+            {"results": [_serialize(asset, profile.project) for asset in assets], "count": len(assets)},
             status=status.HTTP_200_OK,
         )
 
