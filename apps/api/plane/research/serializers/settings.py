@@ -8,6 +8,8 @@ from plane.db.models import WorkspaceResearchSetting
 
 
 class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
+    main_pi_name = serializers.SerializerMethodField()
+
     class Meta:
         model = WorkspaceResearchSetting
         fields = [
@@ -15,6 +17,7 @@ class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
             "workspace",
             "purpose",
             "main_pi",
+            "main_pi_name",
             "required_reporter_categories",
             "module_enabled",
             "org_enabled",
@@ -38,4 +41,12 @@ class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "workspace", "purpose", "created_at", "updated_at"]
+        read_only_fields = ["id", "workspace", "purpose", "main_pi_name", "created_at", "updated_at"]
+
+    def get_main_pi_name(self, obj):
+        """返回已任命主 PI 的显示名，不把账号 ID 当作名字。"""
+        user = getattr(obj, "main_pi", None)
+        if user is None:
+            return None
+        name = str(getattr(user, "display_name", "") or "").strip()
+        return name or None

@@ -116,6 +116,7 @@ export type TWorkspaceResearchSetting = {
   workspace?: string;
   purpose: TWorkspaceResearchPurpose;
   main_pi: string | null;
+  main_pi_name?: string | null;
   required_reporter_categories: TResearchProfileCategory[];
   module_enabled: boolean;
   org_enabled: boolean;

@@ -38,6 +38,24 @@ export class ResearchPlatformService extends APIService {
       });
   }
 
+  /**
+   * 按账号 ID 或邮箱查询主 PI 显示名。
+   *
+   * Args:
+   *     workspaceSlug: 工作区标识。
+   *     user: 账号 ID 或邮箱。
+   *
+   * Returns:
+   *     是否找到用户，以及显示名。找不到时名字为空。
+   */
+  async lookupMainPi(workspaceSlug: string, user: string) {
+    return this.get(researchEndpoints.settings(workspaceSlug), { params: { lookup_user: user } })
+      .then((res) => res?.data as { lookup_user_found?: boolean; lookup_user_name?: string | null })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
   async updateSettings(workspaceSlug: string, payload: Partial<TWorkspaceResearchSetting>) {
     return this.patch(researchEndpoints.settings(workspaceSlug), payload)
       .then((res) => res?.data as TWorkspaceResearchSetting)

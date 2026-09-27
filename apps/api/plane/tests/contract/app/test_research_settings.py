@@ -10,6 +10,7 @@ from plane.research.utils.settings import workspace_research_enabled
 from plane.tests.research_fixtures import (
     add_workspace_member,
     enable_research,
+    make_instance_admin,
     make_user,
     make_workspace,
     org_units_url,
@@ -226,3 +227,45 @@ class TestResearchSettingsEndpoint:
         assert response.status_code == 404
         assert response.json()["error_code"] == "research_module_disabled"
         assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
+
+    def test_settings_return_the_main_pi_display_name(self, env):
+        make_instance_admin(env["admin"])
+        principal = make_user(email="configured-main-pi@example.com")
+        principal.display_name = "邱智鑫"
+        principal.save(update_fields=["display_name"])
+        enable_research(env["workspace"], purpose="PUBLIC_RESEARCH", main_pi=principal)
+
+        response = env["admin_client"].get(env["url"])
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["main_pi"] == str(principal.id)
+        assert payload["main_pi_name"] == "邱智鑫"
+        assert payload["main_pi_name"] != payload["main_pi"]
+
+    def test_system_admin_lookup_returns_a_name_or_not_found(self, env):
+        make_instance_admin(env["admin"])
+        candidate = make_user(email="candidate-main-pi@example.com")
+        candidate.display_name = "候选老师"
+        candidate.save(update_fields=["display_name"])
+
+        found = env["admin_client"].get(env["url"], {"lookup_user": str(candidate.id)})
+        assert found.status_code == 200
+        assert found.json()["lookup_user_found"] is True
+        assert found.json()["lookup_user_name"] == "候选老师"
+
+        missing = env["admin_client"].get(env["url"], {"lookup_user": "missing-user"})
+        assert missing.status_code == 200
+        assert missing.json()["lookup_user_found"] is False
+        assert missing.json()["lookup_user_name"] is None
+
+    def test_only_system_admin_can_lookup_or_appoint_the_main_pi(self, env):
+        lookup = env["admin_client"].get(env["url"], {"lookup_user": str(env["member"].id)})
+        assert lookup.status_code == 403
+        assert lookup.json()["error_code"] == "research_permission_denied"
+
+        appoint = env["admin_client"].patch(env["url"], {"main_pi": str(env["member"].id)}, format="json")
+        assert appoint.status_code == 403
+        assert appoint.json()["error_code"] == "research_permission_denied"
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).main_pi_id is None
+

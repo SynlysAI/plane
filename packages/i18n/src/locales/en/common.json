@@ -1939,6 +1939,7 @@
       "main_pi": "Main PI",
       "main_pi_hint": "Only the system administrator can appoint the unique Main PI. Use an account ID or email address.",
       "main_pi_placeholder": "Account ID or email (empty = unassigned)",
+      "main_pi_unresolved": "User not found",
       "limits": "Upload limits (MB)",
       "image_max_mb": "Image limit",
       "pdf_max_mb": "PDF limit",
