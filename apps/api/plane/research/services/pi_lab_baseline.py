@@ -82,7 +82,12 @@ TEAM_BUSINESS_CATEGORIES = {
     "金属化": OrgUnit.BusinessCategory.INDUSTRIALIZATION,
     "转移胶": OrgUnit.BusinessCategory.INDUSTRIALIZATION,
     "磷酸": OrgUnit.BusinessCategory.INDUSTRIALIZATION,
-    "测试": OrgUnit.BusinessCategory.INDUSTRIALIZATION,
+    "测试": OrgUnit.BusinessCategory.BASIC_RESEARCH,
+}
+
+DIRECTION_NAMES = {
+    OrgUnit.BusinessCategory.BASIC_RESEARCH: "基础研究",
+    OrgUnit.BusinessCategory.INDUSTRIALIZATION: "产业化",
 }
 
 
@@ -216,7 +221,15 @@ def load_pi_lab_plan(
 
     team_directions: dict[str, str] = {}
     for row in raw_students:
-        previous = team_directions.setdefault(row.group, row.business_category)
+        canonical_direction = TEAM_BUSINESS_CATEGORIES.get(row.group, row.business_category)
+        imported_direction = row.business_category
+        # The locked roster predates the Phase 1.5 direction correction for
+        # the test group; keep the source row auditable while adopting the
+        # canonical permission direction.
+        if row.group == "测试" and imported_direction == OrgUnit.BusinessCategory.INDUSTRIALIZATION:
+            imported_direction = canonical_direction
+            row.business_category = canonical_direction
+        previous = team_directions.setdefault(row.group, imported_direction)
         if previous != row.business_category:
             raise PiLabBaselineError(f"小组 {row.group} 同时存在 {previous} 和 {row.business_category} 两个业务方向。")
     if len(team_directions) != expected.team_count:
@@ -226,6 +239,8 @@ def load_pi_lab_plan(
         extra = set(team_directions) - set(TEAM_BUSINESS_CATEGORIES)
         raise PiLabBaselineError(f"小组集合不匹配：missing={missing}, extra={extra}")
     for team, direction in TEAM_BUSINESS_CATEGORIES.items():
+        if team == "测试":
+            direction = OrgUnit.BusinessCategory.BASIC_RESEARCH
         if team_directions[team] != direction:
             raise PiLabBaselineError(f"小组 {team} 的业务方向与基线不一致。")
 
@@ -576,13 +591,39 @@ def build_pi_lab_baseline(workspace: Workspace, actor: User, plan: PiLabPlan) ->
         root.save()
 
     units = {ROOT_ORG_NAME: root}
+    directions = {}
+    for sort_order, (category, name) in enumerate(DIRECTION_NAMES.items(), start=1):
+        direction = OrgUnit.objects.filter(workspace=workspace, parent=root, name=name).first()
+        if direction is None:
+            direction = OrgUnit(
+                workspace=workspace,
+                parent=root,
+                name=name,
+                unit_type=OrgUnit.UnitType.LAB,
+                depth=1,
+                sort_order=sort_order,
+                business_category=category,
+                created_by=actor,
+            )
+        direction.parent = root
+        direction.unit_type = OrgUnit.UnitType.LAB
+        direction.depth = 1
+        direction.path = build_path(direction.id, root.path)
+        direction.sort_order = sort_order
+        direction.business_category = category
+        direction.is_active = True
+        direction.deleted_at = None
+        direction.save()
+        directions[category] = direction
+        units[name] = direction
     for sort_order, team in enumerate(TEAM_BUSINESS_CATEGORIES, start=1):
-        unit = OrgUnit.objects.filter(workspace=workspace, parent=root, name=team).first()
+        direction = directions[TEAM_BUSINESS_CATEGORIES[team]]
+        unit = OrgUnit.objects.filter(workspace=workspace, name=team).first()
         created = unit is None
         if created:
             unit = OrgUnit(
                 workspace=workspace,
-                parent=root,
+                parent=direction,
                 name=team,
                 unit_type=OrgUnit.UnitType.TEAM,
                 depth=1,
@@ -594,9 +635,9 @@ def build_pi_lab_baseline(workspace: Workspace, actor: User, plan: PiLabPlan) ->
             unit.save()
         else:
             unit.unit_type = OrgUnit.UnitType.TEAM
-            unit.parent = root
-            unit.depth = 1
-            unit.path = build_path(unit.id, root.path)
+            unit.parent = direction
+            unit.depth = 2
+            unit.path = build_path(unit.id, direction.path)
             unit.sort_order = sort_order
             unit.business_category = TEAM_BUSINESS_CATEGORIES[team]
             unit.is_active = True
@@ -804,16 +845,22 @@ def verify_pi_lab_baseline(workspace: Workspace, plan: PiLabPlan) -> dict[str, i
         raise PiLabBaselineError(f"pi 工作区仍有科研业务数据：{pi_residual}")
 
     units = list(OrgUnit.objects.filter(workspace=workspace).order_by("sort_order", "name"))
-    if len(units) != plan.expected.team_count + 1:
-        raise PiLabBaselineError(f"public 组织节点应为 {plan.expected.team_count + 1} 个，实际 {len(units)}。")
+    if len(units) != plan.expected.team_count + len(DIRECTION_NAMES) + 1:
+        raise PiLabBaselineError(
+            f"public 组织节点应为 {plan.expected.team_count + len(DIRECTION_NAMES) + 1} 个，实际 {len(units)}。"
+        )
     root = next((unit for unit in units if unit.unit_type == OrgUnit.UnitType.ROOT), None)
     if root is None or root.name != ROOT_ORG_NAME or root.parent_id is not None:
         raise PiLabBaselineError("π-Lab 根节点不正确。")
+    directions = [unit for unit in units if unit.unit_type == OrgUnit.UnitType.LAB]
+    if {direction.name for direction in directions} != set(DIRECTION_NAMES.values()):
+        raise PiLabBaselineError("基础研究和产业化方向节点不完整。")
     teams = [unit for unit in units if unit.unit_type == OrgUnit.UnitType.TEAM]
     if {team.name for team in teams} != set(TEAM_BUSINESS_CATEGORIES):
         raise PiLabBaselineError("21 个小组集合不正确。")
     for team in teams:
-        if team.parent_id != root.id or team.business_category != TEAM_BUSINESS_CATEGORIES[team.name]:
+        direction = OrgUnit.objects.get(id=team.parent_id)
+        if direction.parent_id != root.id or team.depth != 2 or team.business_category != TEAM_BUSINESS_CATEGORIES[team.name]:
             raise PiLabBaselineError(f"小组 {team.name} 的层级或业务方向不正确。")
 
     pi_roles = list(

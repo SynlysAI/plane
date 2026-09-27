@@ -53,8 +53,12 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
   );
 
   useEffect(() => {
+    if (research.identity?.workspace?.purpose === "PI_PRIVATE") {
+      setLoading(false);
+      return;
+    }
     void load({});
-  }, [load]);
+  }, [load, research.identity?.workspace?.purpose]);
 
   const applyFilters = () =>
     void load({
@@ -69,6 +73,17 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
       <div className="flex h-full items-center justify-center">
         <Spinner />
       </div>
+    );
+  }
+
+  if (research.identity?.workspace?.purpose === "PI_PRIVATE") {
+    return (
+      <p className="rounded-md border border-dashed border-subtle p-4 text-12 text-tertiary">
+        {t("research.pi.private_workspace_hint")}
+        <Link className="ml-1 text-accent-primary hover:underline" href="/public/research">
+          {t("research.pi.open_public_workspace")}
+        </Link>
+      </p>
     );
   }
 

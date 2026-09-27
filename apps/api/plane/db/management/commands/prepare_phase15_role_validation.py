@@ -140,7 +140,7 @@ class Command(BaseCommand):
         )[0]
 
     def _unit(self, workspace, name, business_category):
-        """Get or create a fixture team for one business category.
+        """Resolve a direction node without creating a second root.
 
         Args:
             workspace: Target workspace.
@@ -150,22 +150,32 @@ class Command(BaseCommand):
         Returns:
             The fixture OrgUnit row.
         """
-        unit = OrgUnit.objects.filter(workspace=workspace, name=name).first()
+        direction_name = "基础研究" if business_category == OrgUnit.BusinessCategory.BASIC_RESEARCH else "产业化"
+        unit = OrgUnit.objects.filter(workspace=workspace, name=direction_name, unit_type=OrgUnit.UnitType.LAB).first()
         if unit is None:
+            root = OrgUnit.objects.filter(
+                workspace=workspace,
+                unit_type=OrgUnit.UnitType.ROOT,
+                parent__isnull=True,
+                deleted_at__isnull=True,
+            ).first()
+            if root is None:
+                raise CommandError("当前工作区缺少 π-Lab 根节点，请先运行基线迁移")
             unit = OrgUnit.objects.create(
                 workspace=workspace,
-                name=name,
-                unit_type=OrgUnit.UnitType.TEAM,
+                name=direction_name,
+                parent=root,
+                unit_type=OrgUnit.UnitType.LAB,
                 business_category=business_category,
                 path="",
                 created_by=User.objects.filter(email="admin@ai4ms.local").first(),
             )
-            unit.path = f"/{unit.id.hex}/"
-            unit.save(update_fields=["path", "unit_type", "business_category"])
+            unit.depth = root.depth + 1
+            unit.path = f"{root.path}{unit.id.hex}/"
+            unit.save(update_fields=["path", "depth", "unit_type", "business_category"])
         else:
-            unit.unit_type = OrgUnit.UnitType.TEAM
             unit.business_category = business_category
-            unit.save(update_fields=["unit_type", "business_category", "updated_at"])
+            unit.save(update_fields=["business_category", "updated_at"])
         return unit
 
     def _apply(self, workspace, reset_passwords):
@@ -392,14 +402,9 @@ class Command(BaseCommand):
             WorkspaceMember.objects.filter(member__in=users, workspace=workspace).delete()
             ResearchUserProfile.objects.filter(user__in=users).delete()
             User.objects.filter(pk__in=[user.pk for user in users]).delete()
-            ResearchGroupKnowledgeBinding.objects.filter(
-                workspace=workspace,
-                org_unit__name__in=[INDUSTRY_UNIT_NAME, BASIC_UNIT_NAME],
-            ).delete()
-            OrgUnit.objects.filter(
-                workspace=workspace,
-                name__in=[INDUSTRY_UNIT_NAME, BASIC_UNIT_NAME],
-            ).delete()
+            direction_names = ["产业化", "基础研究"]
+            ResearchGroupKnowledgeBinding.objects.filter(workspace=workspace, org_unit__name__in=direction_names).delete()
+            OrgUnit.objects.filter(workspace=workspace, name__in=direction_names, unit_type=OrgUnit.UnitType.LAB).delete()
         return {
             "workspace": workspace.slug,
             "removed_projects": len(projects),
