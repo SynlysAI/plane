@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { INTEGRATION_SYSTEM_LABELS, INTEGRATION_SYSTEMS } from "@plane/constants";
+import { DIRECT_INTEGRATION_SYSTEMS, INTEGRATION_SYSTEM_LABELS } from "@plane/constants";
 import type { TIntegrationConnection } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -48,7 +48,7 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
             setEnabled(Boolean(next?.is_enabled));
           }}
         >
-          {INTEGRATION_SYSTEMS.map((value) => (
+          {DIRECT_INTEGRATION_SYSTEMS.map((value) => (
             <option key={value} value={value}>
               {t(INTEGRATION_SYSTEM_LABELS[value])}
             </option>

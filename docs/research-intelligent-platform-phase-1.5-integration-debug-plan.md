@@ -190,7 +190,7 @@ cd RAGPortal/backend && AUTH_SECRET=test-secret \
 
 ### 5.3.6 L3.6：角色矩阵
 
-按当前 `public` π-Lab Excel 基线动态解析主 PI、产业化负责人、直接导师、学生、管理员和访客；不再复用旧 seed 账号。主课题绑定 WeKnora/RAGPortal 测试知识库 `plane测试`，逐格验证四入口导航、WORKSPACE/PRIVATE 可见性、审批、Agent、KB 上传与引用、AccountLink 和导出。完整角色解析、mock 课题、逐格矩阵与负例见 [分角色开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) 和 [人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)。
+按当前 `public` π-Lab Excel 基线动态解析主 PI、产业化负责人、直接导师、学生、管理员和访客；不再复用旧 seed 账号。主课题按成员所属小组发现并确认 WeKnora/RAGPortal 候选库，逐格验证四入口导航、WORKSPACE/PRIVATE 可见性、审批、Agent、KB 上传与引用、AccountLink 和导出。完整角色解析、mock 课题、逐格矩阵与负例见 [分角色开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) 和 [人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)。
 
 ### 5.4 L4：端到端闭环（Phase 1 出口场景）
 
@@ -311,11 +311,11 @@ cd RAGPortal/backend && AUTH_SECRET=test-secret \
 
 ## 11. 风险与对策
 
-| 风险                               | 影响                   | 对策                                                           |
-| ---------------------------------- | ---------------------- | -------------------------------------------------------------- |
-| 宿主机 IP / Docker 网关漂移        | Plane 访问上游服务失败 | 环境变更留痕于执行手册；§4 步骤 5 每次联调开始时复查           |
-| WeKnora key 权限不足或服务策略变更 | 上传入库与检索失败     | 外部服务侧首日优先做 key 与最小权限验证，必要时申请 scoped key |
-| Synlora 单实例被误起多副本         | 插话/回填/取消失效     | 启动命令固定写入手册，每次启动前检查进程数                     |
-| 联调数据混入生产                   | 数据污染               | 只用联调工作区与测试账号；WeKnora 侧使用测试知识库             |
-| 单人跨仓切换遗漏定界线索           | 修复方向错误           | 按 §3.2 / §6.1 日志定界；每条链路按 §8.1 两侧分区各自自查一遍  |
-| 环境状态不可复现                   | 联调结果不可信         | 环境变更留痕于执行手册；每日开工先跑 L1 健康快照               |
+| 风险                               | 影响                   | 对策                                                                           |
+| ---------------------------------- | ---------------------- | ------------------------------------------------------------------------------ |
+| 宿主机 IP / Docker 网关漂移        | Plane 访问上游服务失败 | 环境变更留痕于执行手册；§4 步骤 5 每次联调开始时复查                           |
+| WeKnora key 权限不足或服务策略变更 | 上传入库与检索失败     | 外部服务侧首日优先做 key 与最小权限验证，必要时申请 scoped key                 |
+| Synlora 单实例被误起多副本         | 插话/回填/取消失效     | 启动命令固定写入手册，每次启动前检查进程数                                     |
+| 联调数据混入生产                   | 数据污染               | 只用联调工作区与测试账号；按成员所属小组解析候选，未经管理员确认不向生产库写入 |
+| 单人跨仓切换遗漏定界线索           | 修复方向错误           | 按 §3.2 / §6.1 日志定界；每条链路按 §8.1 两侧分区各自自查一遍                  |
+| 环境状态不可复现                   | 联调结果不可信         | 环境变更留痕于执行手册；每日开工先跑 L1 健康快照                               |

@@ -9,7 +9,7 @@
 | 前置手册     | [`research-intelligent-platform-phase-1.5-manual-testing-guide.md`](./research-intelligent-platform-phase-1.5-manual-testing-guide.md)                                                                                                                                                                                                                |
 | 前置联调计划 | [`research-intelligent-platform-phase-1.5-integration-debug-plan.md`](./research-intelligent-platform-phase-1.5-integration-debug-plan.md)                                                                                                                                                                                                            |
 | 执行手册     | [`research-intelligent-platform-phase-1.5-execution-runbook.md`](./research-intelligent-platform-phase-1.5-execution-runbook.md)                                                                                                                                                                                                                      |
-| 当前代码基线 | `develop` / `4.16.0`；历史 `4.14.2` 只作为问题复现版本保留                                                                                                                                                                                                                                                                                            |
+| 当前代码基线 | `develop` / `4.19.0`；历史 `4.14.2` 只作为问题复现版本保留                                                                                                                                                                                                                                                                                            |
 | 相关契约     | [`research-intelligent-platform-prd.md`](./research-intelligent-platform-prd.md)、[`research-workspace-v3.md`](./research-workspace-v3.md)、[`research-workspace-ux-guide.md`](./research-workspace-ux-guide.md)、RAGPortal [`2026-09-24-pi-private-knowledge-space-prd.md`](../../RAGPortal/docs/specs/2026-09-24-pi-private-knowledge-space-prd.md) |
 | 计划状态     | 业务决策已冻结；本轮完成 Plane/Synlora review scope 与 KB READY 门禁收紧，跨仓 OIDC/通知能力按依赖清单待联调                                                                                                                                                                                                                                          |
 | 目标         | 把现场人工反馈转化为可复现、可开发、可验收的产品优化任务；不重复已完成的跨服务联调修复                                                                                                                                                                                                                                                                |
@@ -141,7 +141,7 @@
 
 - [ ] 每个问题都有最小复现 URL、账号、对象 ID、预期和实际结果。
 - [ ] `issue0925` 中的管理员课题可判断真实 owner、visibility、org unit、成员和缓存来源。
-- [ ] 所有测试对象均位于 `public` 测试工作区，WeKnora 只使用测试 KB。
+- [ ] 所有测试对象均位于 `public` 测试工作区；知识库按成员所属小组发现并由管理员确认，未经确认不向生产库写入。
 
 **验证：** API/数据库快照 + 脱敏截图；浏览器回归环境必须安装 Chrome/Chromium，并记录 viewport。
 **依赖：** 无。
@@ -804,7 +804,7 @@ plane/docs/evidence/phase-1.5/optimization/
 
 1. **预检**：备份 Plane/RAGPortal 数据库；执行 `makemigrations --check`、契约 schema 校验、seed verify 和 O0/O1 自动化测试。
 2. **兼容发布**：先发布 Plane migration/API（新字段可选、旧状态可读），再发布 RAGPortal API，再发布 Synlora review context，最后发布 Web。任何服务未健康不得切换下一个服务。
-3. **灰度**：仅对 `public` 测试工作区和 6 个 seed 账号开启 `phase15_optimization_enabled`；先只读，再打开报告附件和 KB 申请写入，最后打开 REVIEW Agent。
+3. **灰度**：仅对 `public` 测试工作区和当前运行库解析出的角色开启 `phase15_optimization_enabled`；先只读，再打开报告附件和按小组确认后的 KB 写入，最后打开 REVIEW Agent。
 4. **观察**：每个阶段至少观察 15 分钟；ACL 越权、review 写工具允许、KB 跨课题绑定、待办重复或 5xx 超阈值立即停止并回滚。
 5. **扩大**：通过人工浏览器回归、L3.6 角色矩阵和 manifest 双签后，才扩大工作区 cohort。
 

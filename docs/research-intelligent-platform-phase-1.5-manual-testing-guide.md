@@ -7,8 +7,8 @@
 | 详细用例 | [分角色人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md) |
 | 开发计划 | [分角色验证开发计划](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md) |
 | 执行手册 | [Phase 1.5 联调执行手册](./research-intelligent-platform-phase-1.5-execution-runbook.md)            |
-| 环境     | `public` π-Lab 基线、Plane `4.16.0`、RAGPortal、Synlora、WeKnora                                    |
-| 测试 KB  | 只使用 `plane测试`；同一小组可复用，不得跨小组复用                                                  |
+| 环境     | `public` π-Lab 基线、Plane `4.19.0`、RAGPortal、Synlora、WeKnora                                    |
+| 测试 KB  | 原固定库 `plane测试` 已删除；按成员所属小组解析候选并由管理员确认，同组复用、跨组拒绝               |
 
 ## 1. 使用规则
 
@@ -87,7 +87,7 @@ docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml 
 
 当前 dev 已执行角色夹具命令，账号、密码、Project/Chain/KB request ID 和清理命令见[分角色验证开发计划 §7](./research-intelligent-platform-phase-1.5-role-validation-development-plan.md#7-已执行夹具与测试账号2026-09-26)。登录入口为 <http://100.109.35.2:3000/>。
 
-管理员在科研管理中打开该 Chain 的 KB request，绑定测试知识库 `plane测试` 后，状态由 `PENDING_ADMIN` 变为 `READY`，再执行上传和检索测试。
+管理员在科研管理中打开该 Chain 的 KB request，查看成员所属小组的候选库，确认目标库后状态由 `PENDING_ADMIN` 变为 `READY`，再执行上传和检索测试。成员属于哪个小组，课题和上传就只能使用哪个小组的绑定。
 
 ## 5. 测试前数据与身份检查
 
@@ -96,7 +96,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 ./scripts/rebuild-pi-lab-baseline.sh --verify-only
 ```
 
-通过条件：22 个组织节点、189 名学生、14 名导师、唯一 Main PI 洪文晶，`projects/research_profiles/research_chains/knowledge_requests=0`；验证命令只读。
+通过条件：迁移前为 22 个组织节点；组织迁移完成后为 24 个节点（1 根、2 方向、21 小组），189 名学生、14 名导师、唯一 Main PI 洪文晶，`projects/research_profiles/research_chains/knowledge_requests=0`；验证命令只读。
 
 在 `identity/me` 的 `user.role_context` 中核对实际解析标签，然后打开[详细人工测试计划](./research-intelligent-platform-phase-1.5-role-validation-manual-test-plan.md)，按 L2 解析主 PI、产业化负责人、直接导师、学生、管理员、NONE 和 Guest。角色缺失时停止，不得用历史账号代替。
 
@@ -104,7 +104,7 @@ cd /home/fangyikai/code/_AI4MS/plane
 
 1. L1 健康和真实基线。
 2. L2 角色解析、四入口导航和能力摘要。
-3. L3 学生创建主课题、管理员绑定 `plane测试`、上传和检索。
+3. L3 学生创建主课题、管理员确认成员所属小组的目标库、上传和检索。
 4. L3.5 五个开关逐项 OFF/恢复。
 5. L3.6 七类身份正例与负例。
 6. L4 完整闭环、导出 hash 和审批。

@@ -44,14 +44,15 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
           {rows.map((connection) => {
             const entry = statusBySystem.get(String(connection.system)) ?? {};
             const status = String(entry.status ?? connection.health_status ?? "UNKNOWN");
-            const phaseOnly = ["SPECLABOS", "SMARTACCESS", "POLY_AGENT", "SPEC_AGENT"].includes(
-              String(connection.system)
-            );
+            const registrationStatus = String(entry.registration_status ?? connection.registration_status ?? "");
+            const phaseOnly = registrationStatus === "PHASE_NOT_ENABLED";
+            const proxy = registrationStatus === "PROXY";
+            const showDisabled = registrationStatus === "REGISTERED_DISABLED";
             return (
               <TableRow key={connection.system}>
                 <TableCell className="text-secondary">
                   {t(INTEGRATION_SYSTEM_LABELS[connection.system])}
-                  {!connection.is_enabled && (
+                  {showDisabled && (
                     <span className="ml-2 text-11 text-tertiary">{t("research.integrations.disabled")}</span>
                   )}
                 </TableCell>
@@ -65,16 +66,26 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
                           : "bg-surface-2 text-tertiary"
                     }`}
                   >
-                    {phaseOnly && status !== "OK"
-                      ? t("research.integrations.phase_not_enabled")
-                      : t(INTEGRATION_HEALTH_LABELS[status] ?? INTEGRATION_HEALTH_LABELS.UNKNOWN)}
+                    {phaseOnly
+                      ? t("research.integrations.health.phase_not_enabled")
+                      : proxy
+                        ? t("research.integrations.health.proxy", {
+                            system: entry.proxy_system ?? connection.proxy_system ?? "RAGPORTAL",
+                          })
+                        : registrationStatus === "NOT_REGISTERED"
+                          ? t("research.integrations.health.not_registered")
+                          : registrationStatus === "REGISTERED_DISABLED"
+                            ? t("research.integrations.health.registered_disabled")
+                            : t(INTEGRATION_HEALTH_LABELS[status] ?? INTEGRATION_HEALTH_LABELS.UNKNOWN)}
                   </span>
                 </TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">
                   {entry.last_success_at ? formatResearchDateTime(String(entry.last_success_at), currentLocale) : "-"}
                 </TableCell>
                 <TableCell className="text-tertiary">
-                  {String(entry.degraded_reason ?? connection.last_error ?? "") || "-"}
+                  {proxy
+                    ? t("research.integrations.health.proxy_detail")
+                    : String(entry.degraded_reason ?? connection.last_error ?? "") || "-"}
                 </TableCell>
               </TableRow>
             );

@@ -2518,6 +2518,10 @@
         "ok": "正常",
         "degraded": "降级",
         "phase_not_enabled": "本阶段不启用",
+        "not_registered": "未登记",
+        "registered_disabled": "已登记但未启用",
+        "proxy": "由 {system} 代理",
+        "proxy_detail": "Plane 不单独保存 WeKnora 连接；请检查 RAGPortal 代理链路。",
         "down": "不可用"
       },
       "external_type": {
