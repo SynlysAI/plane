@@ -1055,6 +1055,8 @@
       "error": {
         "load": "Could not load the aggregate."
       },
+      "private_workspace_hint": "Research projects live in the public workspace; the PI workspace does not store a second copy.",
+      "open_public_workspace": "Open public overview",
       "overview": "Research overview",
       "show_filters": "Filter scope",
       "hide_filters": "Hide filters"
@@ -2481,6 +2483,7 @@
       "system": {
         "ragportal": "RAGPortal",
         "weknora": "WeKnora",
+        "synlora": "Synlora",
         "speclabos": "SpecLabOS",
         "smartaccess": "SmartAccess",
         "poly_agent": "Poly_Agent",
@@ -2490,6 +2493,7 @@
         "unknown": "Unconfigured",
         "ok": "Normal",
         "degraded": "Degraded",
+        "phase_not_enabled": "Not enabled in this phase",
         "down": "Unavailable"
       },
       "external_type": {

@@ -115,6 +115,10 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
                     "configured": oidc_configured(),
                     "provider_name": config["provider"] if oidc_configured() else None,
                 },
+                "workspace": {
+                    "slug": workspace.slug,
+                    "purpose": workspace_settings["purpose"],
+                },
             },
             status=status.HTTP_200_OK,
         )

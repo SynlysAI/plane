@@ -1055,6 +1055,8 @@
       "error": {
         "load": "汇总加载失败。"
       },
+      "private_workspace_hint": "科研项目保存在公共工作区，主 PI 工作区不保存第二份数据。",
+      "open_public_workspace": "进入公共总览",
       "overview": "科研概况",
       "show_filters": "筛选统计范围",
       "hide_filters": "收起筛选"
@@ -2505,6 +2507,7 @@
       "system": {
         "ragportal": "RAGPortal",
         "weknora": "WeKnora",
+        "synlora": "Synlora",
         "speclabos": "SpecLabOS",
         "smartaccess": "SmartAccess",
         "poly_agent": "Poly_Agent",
@@ -2514,6 +2517,7 @@
         "unknown": "未配置",
         "ok": "正常",
         "degraded": "降级",
+        "phase_not_enabled": "本阶段不启用",
         "down": "不可用"
       },
       "external_type": {
