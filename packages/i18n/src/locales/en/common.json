@@ -2469,6 +2469,7 @@
       "display_name": "Display name",
       "credential_ref": "Credential reference (secret manager)",
       "credential_hint": "Secrets stay in the backend; only the reference name is stored.",
+      "base_url_hint": "Base URL reachable from the plane-api container",
       "credential_configured": "A credential is configured; enter a new reference name to replace it.",
       "enabled": "Enabled",
       "disabled": "disabled",

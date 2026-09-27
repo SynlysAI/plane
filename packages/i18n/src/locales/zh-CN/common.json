@@ -2493,6 +2493,7 @@
       "display_name": "展示名",
       "credential_ref": "凭证引用名（密钥管理）",
       "credential_hint": "凭证只存后端密钥库，配置项仅保存引用名。",
+      "base_url_hint": "填写该服务从 plane-api 容器可达的基地址",
       "credential_configured": "已配置凭证；填写新的引用名即可替换。",
       "enabled": "启用",
       "disabled": "已停用",
