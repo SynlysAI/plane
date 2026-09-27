@@ -402,9 +402,8 @@ class Command(BaseCommand):
             WorkspaceMember.objects.filter(member__in=users, workspace=workspace).delete()
             ResearchUserProfile.objects.filter(user__in=users).delete()
             User.objects.filter(pk__in=[user.pk for user in users]).delete()
-            direction_names = ["产业化", "基础研究"]
-            ResearchGroupKnowledgeBinding.objects.filter(workspace=workspace, org_unit__name__in=direction_names).delete()
-            OrgUnit.objects.filter(workspace=workspace, name__in=direction_names, unit_type=OrgUnit.UnitType.LAB).delete()
+            # Direction nodes belong to the authoritative organization tree;
+            # the fixture only owns its memberships and must leave them intact.
         return {
             "workspace": workspace.slug,
             "removed_projects": len(projects),

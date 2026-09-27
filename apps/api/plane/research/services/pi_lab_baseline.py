@@ -626,12 +626,12 @@ def build_pi_lab_baseline(workspace: Workspace, actor: User, plan: PiLabPlan) ->
                 parent=direction,
                 name=team,
                 unit_type=OrgUnit.UnitType.TEAM,
-                depth=1,
+                depth=2,
                 sort_order=sort_order,
                 business_category=TEAM_BUSINESS_CATEGORIES[team],
                 created_by=actor,
             )
-            unit.path = build_path(unit.id, root.path)
+            unit.path = build_path(unit.id, direction.path)
             unit.save()
         else:
             unit.unit_type = OrgUnit.UnitType.TEAM
