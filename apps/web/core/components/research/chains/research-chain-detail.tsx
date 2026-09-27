@@ -3,16 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 // plane imports
-import { REPORT_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Skeleton } from "@plane/propel/skeleton";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
+import { Table, TableBody, TableCell, TableRow } from "@plane/propel/table";
 import type {
   TExternalReference,
-  TPeriodicReport,
   TResearchChain,
   TResearchChainMember,
   TResearchChainNode,
@@ -36,26 +34,52 @@ import {
   type TResearchChainStageNodeDetail,
 } from "@/components/research/chains/research-chain-workflow-stage-detail";
 import { ExperimentList } from "@/components/research/experiments/experiment-list";
-import { OutcomeList } from "@/components/research/outcomes/outcome-list";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
 import { ResearchIntegrationService } from "@/services/research/integration.service";
-import { ResearchReportService } from "@/services/research/report.service";
-
 const chainService = new ResearchChainService();
 const integrationService = new ResearchIntegrationService();
-const reportService = new ResearchReportService();
 
 type Props = {
   workspaceSlug: string;
   chainId: string;
 };
 
-type TChainTab = "overview" | "nodes" | "reports" | "experiments" | "references" | "members";
-type TRequestedChainTab = TChainTab | "replay";
+type TChainTab = "overview" | "nodes" | "materials" | "members";
+type TRequestedChainTab = TChainTab | "replay" | "reports" | "experiments" | "references";
+
+const MATERIAL_TABS = new Set(["materials", "reports", "experiments", "references"]);
+
+/**
+ * 把旧的报告、实验和外部引用地址收成课题资料。
+ *
+ * Args:
+ *     requested: 地址栏中的 tab 参数。
+ *
+ * Returns:
+ *     课题页实际展示的分区。
+ */
+export function resolveChainTab(requested: string | null): TChainTab {
+  if (requested === "replay") return "nodes";
+  if (requested && MATERIAL_TABS.has(requested)) return "materials";
+  if (requested === "overview" || requested === "nodes" || requested === "members") return requested;
+  return "nodes";
+}
+
+/**
+ * 读取外部引用上可选的来源节点，没有则返回空。
+ */
+function referenceSourceNodeId(reference: TExternalReference): string | null {
+  const metadata = reference.metadata ?? {};
+  for (const key of ["node_id", "chain_node_id", "chain_node"]) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
 
 const ACTIONS_BY_STATUS: Record<TResearchChainNode["status"], TResearchChainNodeAction[]> = {
   DRAFT: ["START", "ARCHIVE"],
@@ -113,7 +137,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") as TRequestedChainTab | null;
   const requestedNodeId = searchParams.get("node");
-  const activeTab: TChainTab = requestedTab === "replay" ? "nodes" : (requestedTab ?? "nodes");
+  const activeTab = resolveChainTab(requestedTab);
   const [chain, setChain] = useState<TResearchChain | null>(null);
   const [nodes, setNodes] = useState<TResearchChainNode[]>([]);
   const [members, setMembers] = useState<TResearchChainMember[]>([]);
@@ -134,7 +158,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [memberRole, setMemberRole] = useState<"15" | "20">("15");
   const [memberBusy, setMemberBusy] = useState(false);
   const [memberError, setMemberError] = useState("");
-  const [contextReports, setContextReports] = useState<TPeriodicReport[] | null>(null);
   const [contextReferences, setContextReferences] = useState<TExternalReference[] | null>(null);
   const [contextError, setContextError] = useState(false);
   const [agentNodeId, setAgentNodeId] = useState<string | null>(null);
@@ -246,19 +269,13 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   }, [memberStore, workspaceSlug]);
 
   useEffect(() => {
-    if (!chain || (activeTab !== "reports" && activeTab !== "references")) return;
+    if (!chain || activeTab !== "materials") return;
     let active = true;
     setContextError(false);
     void (async () => {
       try {
-        const reports = await reportService.getReports(workspaceSlug, { per_page: "100" });
         const references = await integrationService.getReferences(workspaceSlug);
         if (!active) return;
-        setContextReports(
-          reports.results.filter(
-            (report) => report.project === chain.project || report.team_projects?.includes(chain.project)
-          )
-        );
         setContextReferences(
           references.results.filter(
             (reference) =>
@@ -270,7 +287,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       } catch {
         if (active) {
           setContextError(true);
-          setContextReports([]);
           setContextReferences([]);
         }
       }
@@ -374,11 +390,14 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const tabs: Array<{ id: TChainTab; labelKey: string }> = [
     { id: "overview", labelKey: "research.chains.tabs.overview" },
     { id: "nodes", labelKey: "research.chains.tabs.nodes" },
-    { id: "reports", labelKey: "research.chains.tabs.reports" },
-    { id: "experiments", labelKey: "research.chains.tabs.experiments" },
-    { id: "references", labelKey: "research.chains.tabs.references" },
+    { id: "materials", labelKey: "research.chains.tabs.materials" },
     { id: "members", labelKey: "research.chains.tabs.members" },
   ];
+  const materialNode = nodes.find((item) => item.id === requestedNodeId) ?? null;
+  const visibleReferences = (contextReferences ?? []).filter((reference) => {
+    if (!materialNode || activeTab !== "materials") return true;
+    return referenceSourceNodeId(reference) === materialNode.id;
+  });
   const selectedNodeActions = selected ? (
     <div className="flex flex-wrap items-center gap-2 bg-surface-1 px-5 py-3">
       {ACTIONS_BY_STATUS[selected.node.status]
@@ -402,43 +421,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           {selected.node.capabilities.actions.transition.reason}
         </span>
       )}
-      <span className="bg-border-subtle mx-1 h-5 w-px" aria-hidden="true" />
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          const nextParams = new URLSearchParams(searchParams);
-          nextParams.set("tab", "references");
-          nextParams.set("node", selected.node.id);
-          setSearchParams(nextParams);
-        }}
-      >
-        {t("research.chains.open_knowledge")}
-      </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          const nextParams = new URLSearchParams(searchParams);
-          nextParams.set("tab", "reports");
-          nextParams.set("node", selected.node.id);
-          setSearchParams(nextParams);
-        }}
-      >
-        {t("research.chains.open_reports")}
-      </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          const nextParams = new URLSearchParams(searchParams);
-          nextParams.set("tab", "experiments");
-          nextParams.set("node", selected.node.id);
-          setSearchParams(nextParams);
-        }}
-      >
-        {t("research.chains.open_experiments")}
-      </Button>
       {agentEnabled && (
         <Button variant="secondary" size="sm" onClick={() => setAgentNodeId(selected.node.id)}>
           {t("research.chains.open_agent")}
@@ -681,84 +663,80 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           </section>
         )}
 
-        {activeTab === "reports" && chain && (
-          <section className="p-5">
-            <p className="text-11 text-tertiary">{t("research.chains.context_filter")}</p>
-            {contextError && (
-              <p className="mt-3 text-12 text-secondary" role="alert">
-                {t("research.chains.context_load_failed")}
-              </p>
-            )}
-            {contextReports && (
-              <Table className="mt-4">
-                <caption className="sr-only">{t("research.chains.tabs.reports")}</caption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("research.chains.context.report_period")}</TableHead>
-                    <TableHead>{t("research.chains.status")}</TableHead>
-                    <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {contextReports.map((report) => (
-                    <TableRow key={report.id}>
-                      <TableCell className="font-medium text-primary">{report.period_key}</TableCell>
-                      <TableCell className="text-secondary">{t(REPORT_STATUS_LABELS[report.status])}</TableCell>
-                      <TableCell className="text-right text-tertiary tabular-nums">
-                        {formatResearchDateTime(report.updated_at, currentLocale)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!contextReports.length && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="py-3 text-secondary">
-                        {t("research.chains.context.report_empty")}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-            <div className="mt-6">
-              <h4 className="text-13 font-semibold text-primary">{t("research.chains.tabs.reports")}</h4>
-              <OutcomeList workspaceSlug={workspaceSlug} projectId={chain.project} />
-            </div>
-          </section>
-        )}
-
-        {activeTab === "experiments" && chain && (
-          <ExperimentList workspaceSlug={workspaceSlug} projectId={chain.project} />
-        )}
-
-        {activeTab === "references" && (
-          <section className="p-5">
-            <p className="text-11 text-tertiary">{t("research.chains.context.external_hint")}</p>
-            {current && (
-              <div className="mt-4">
-                <ResearchChainKnowledgePanel workspaceSlug={workspaceSlug} chainId={chainId} nodeId={current.id} />
-              </div>
-            )}
-            <ul className="mt-4 divide-y divide-subtle rounded-lg border border-subtle bg-surface-1" role="list">
-              {(contextReferences ?? []).map((reference) => (
-                <li key={reference.id} className="px-4 py-3">
-                  <p className="text-12 font-medium text-primary">{reference.title}</p>
-                  <p className="mt-1 text-11 text-tertiary">{reference.summary || reference.system}</p>
-                  {reference.source_url && (
-                    <a
-                      href={reference.source_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-11 text-accent-primary"
-                    >
-                      {t("research.chains.context.open_source")}
-                    </a>
-                  )}
-                </li>
-              ))}
-              {contextReferences?.length === 0 && (
-                <li className="px-4 py-3 text-12 text-secondary">{t("research.chains.context.external_empty")}</li>
+        {activeTab === "materials" && chain && (
+          <section className="space-y-6 p-5">
+            <label className="flex max-w-sm flex-col gap-1 text-12 text-secondary">
+              <span>{t("research.chains.materials.node_filter")}</span>
+              <select
+                aria-label={t("research.chains.materials.node_filter")}
+                className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
+                value={materialNode?.id ?? ""}
+                onChange={(event) => {
+                  const nextParams = new URLSearchParams(searchParams);
+                  nextParams.set("tab", "materials");
+                  if (event.target.value) nextParams.set("node", event.target.value);
+                  else nextParams.delete("node");
+                  setSearchParams(nextParams);
+                }}
+              >
+                <option value="">{t("research.chains.materials.all_nodes")}</option>
+                {nodes.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div>
+              <h4 className="text-13 font-semibold text-primary">{t("research.chains.materials.files")}</h4>
+              {materialNode ? (
+                <div className="mt-3">
+                  <ResearchChainKnowledgePanel
+                    workspaceSlug={workspaceSlug}
+                    chainId={chainId}
+                    nodeId={materialNode.id}
+                  />
+                </div>
+              ) : (
+                <p className="mt-2 text-12 text-tertiary">{t("research.chains.materials.files_hint")}</p>
               )}
-            </ul>
+            </div>
+            <div>
+              <h4 className="text-13 font-semibold text-primary">{t("research.chains.materials.experiments")}</h4>
+              <div className="mt-3">
+                <ExperimentList workspaceSlug={workspaceSlug} projectId={chain.project} />
+              </div>
+            </div>
+            <div>
+              <h4 className="text-13 font-semibold text-primary">{t("research.chains.materials.references")}</h4>
+              <p className="mt-1 text-11 text-tertiary">{t("research.chains.context.external_hint")}</p>
+              {contextError && (
+                <p className="mt-3 text-12 text-secondary" role="alert">
+                  {t("research.chains.context_load_failed")}
+                </p>
+              )}
+              <ul className="mt-3 divide-y divide-subtle rounded-lg border border-subtle bg-surface-1" role="list">
+                {visibleReferences.map((reference) => (
+                  <li key={reference.id} className="px-4 py-3">
+                    <p className="text-12 font-medium text-primary">{reference.title}</p>
+                    <p className="mt-1 text-11 text-tertiary">{reference.summary || reference.system}</p>
+                    {reference.source_url && (
+                      <a
+                        href={reference.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-block text-11 text-accent-primary"
+                      >
+                        {t("research.chains.context.open_source")}
+                      </a>
+                    )}
+                  </li>
+                ))}
+                {contextReferences && !visibleReferences.length && (
+                  <li className="px-4 py-3 text-12 text-secondary">{t("research.chains.sections.empty")}</li>
+                )}
+              </ul>
+            </div>
           </section>
         )}
 

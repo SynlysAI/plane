@@ -1168,13 +1168,22 @@
       "description": "研究链投影，包含节点、事件与快照元数据。",
       "tabs": {
         "label": "研究链页面分区",
-        "overview": "课题",
+        "overview": "概览",
         "nodes": "节点",
         "reports": "报告与成果",
         "experiments": "实验记录",
         "references": "外部引用",
+        "materials": "课题资料",
         "members": "成员",
         "replay": "回放"
+      },
+      "materials": {
+        "node_filter": "来源节点",
+        "all_nodes": "全部节点",
+        "files": "资料",
+        "files_hint": "选择来源节点后查看该节点的资料。",
+        "experiments": "实验记录",
+        "references": "外部引用"
       },
       "chain_status": {
         "active": "进行中",
@@ -1220,7 +1229,7 @@
         "stage_empty": "该阶段尚未产生实际节点。",
         "stage_snapshot": "阶段快照",
         "snapshot_version": "版本 {version}",
-        "stage_snapshot_empty": "该阶段暂无已确认快照。",
+        "stage_snapshot_empty": "提交并确认本节点后生成版本，不能单独上传。",
         "trace_title": "Trace log",
         "trace_id": "Trace {id}",
         "trace_id_empty": "Trace 未记录",
@@ -1259,7 +1268,7 @@
       "open": "打开研究链",
       "nodes_empty": "该研究链还没有节点。",
       "node": "节点",
-      "open_agent": "打开智能体",
+      "open_agent": "请智能体分析",
       "open_knowledge": "记录与知识库",
       "open_reports": "报告与成果",
       "open_experiments": "实验记录",
@@ -1284,7 +1293,7 @@
       "snapshot_type_process": "过程记录",
       "reason_label": "原因（失败/退回必填）",
       "reason_required": "请先填写原因。",
-      "action_start": "启动",
+      "action_start": "开始",
       "action_submit_review": "提交确认",
       "action_approve": "确认",
       "action_return": "退回",
@@ -1304,7 +1313,7 @@
         "human_decision_hint": "研究者确认、退回或阻断的原因。",
         "output": "输出",
         "output_hint": "确认后进入链路的版本化结果。",
-        "empty": "该分段暂无记录。"
+        "empty": "还没有记录"
       },
       "overview": {
         "meta": "课题信息",
