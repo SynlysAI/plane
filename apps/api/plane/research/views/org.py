@@ -446,7 +446,6 @@ class ResearchOrgUnitDetailEndpoint(ResearchAPIView):
                     if not user_can_manage_org_unit(request.user, workspace, new_parent):
                         return research_permission_denied()
                     move_subtree(unit, new_parent)
-                    unit.refresh_from_db()
                     record_audit_event(
                         workspace=workspace,
                         action=ResearchAuditAction.ORG_UNIT_MOVE,

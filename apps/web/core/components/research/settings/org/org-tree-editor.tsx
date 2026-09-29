@@ -21,7 +21,7 @@ import { ResearchOrgService } from "@/services/research/org.service";
 // local imports
 import { ResearchMentorBindings } from "./mentor-bindings";
 import { ResearchOrgMemberTable } from "./org-member-table";
-import { buildOrgTree, type OrgTreeNode } from "./org-tree";
+import { buildOrgTree, findBusinessCategoryParent, type OrgTreeNode } from "./org-tree";
 
 type Props = {
   workspaceSlug: string;
@@ -176,8 +176,10 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
   const handleBusinessCategory = useCallback(
     async (unit: TOrgUnit, businessCategory: TOrgBusinessCategory | "") => {
       try {
+        const directionId = findBusinessCategoryParent(units, unit, businessCategory || null);
         await research.updateOrgUnit(workspaceSlug, unit.id, {
           business_category: businessCategory || null,
+          ...(directionId && directionId !== unit.parent ? { parent: directionId } : {}),
         });
         setIncomplete(await orgService.getIncomplete(workspaceSlug));
         setErrorKey(null);
@@ -185,7 +187,7 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
         setErrorKey(getResearchErrorKey(error));
       }
     },
-    [research, workspaceSlug]
+    [research, units, workspaceSlug]
   );
 
   const handleRename = useCallback(
