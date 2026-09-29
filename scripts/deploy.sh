@@ -161,8 +161,10 @@ if [[ "$MODE" != "backend" ]]; then
     log "Building Web and Admin"
     pnpm turbo run build --filter=web --filter=admin || fail "frontend build failed"
 
-    log "Creating or updating the Caddy container"
-    "${WEB_COMPOSE[@]}" up -d --build web-prod || fail "Caddy failed to start"
+    # The frontend build replaces build/client, so an existing bind mount can
+    # keep pointing at the previous directory until Caddy is recreated.
+    log "Recreating the Caddy container with the current frontend build"
+    "${WEB_COMPOSE[@]}" up -d --build --force-recreate web-prod || fail "Caddy failed to start"
 fi
 
 if [[ "$MODE" != "web" ]]; then

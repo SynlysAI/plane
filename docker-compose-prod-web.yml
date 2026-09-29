@@ -1,0 +1,20 @@
+services:
+  web-prod:
+    image: plane-caddy:2.11.4-local
+    build:
+      context: ./apps/web/caddy
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    networks:
+      - dev_env
+    volumes:
+      - ./apps/web/build/client:/usr/share/caddy/html:ro
+      - ./apps/admin/build/client:/usr/share/caddy/admin:ro
+      - ./apps/web/caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+    ports:
+      - "${PLANE_WEB_PORT:-3300}:3300"
+
+networks:
+  dev_env:
+    external: true
+    name: plane_dev_env
