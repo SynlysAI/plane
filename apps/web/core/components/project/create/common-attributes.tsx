@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { ChangeEvent } from "react";
+import { useRef, type ChangeEvent } from "react";
 import type { UseFormSetValue } from "react-hook-form";
 import { Controller, useFormContext } from "react-hook-form";
 import { Field } from "@makeplane/propel/components/field";
@@ -18,6 +18,7 @@ import type { TProject } from "@plane/types";
 // ui
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { projectIdentifierSanitizer, getTabIndex } from "@plane/utils";
+import { generateProjectIdentifierFallback, projectIdentifierFromName } from "./project-identifier";
 
 type Props = {
   setValue: UseFormSetValue<TProject>;
@@ -36,6 +37,7 @@ function ProjectCommonAttributes(props: Props) {
 
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
   const { t } = useTranslation();
+  const fallbackIdentifier = useRef(generateProjectIdentifierFallback());
 
   const handleNameChange =
     (onChange: (event: ChangeEvent<HTMLInputElement>) => void) => (e: ChangeEvent<HTMLInputElement>) => {
@@ -43,8 +45,9 @@ function ProjectCommonAttributes(props: Props) {
         onChange(e);
         return;
       }
-      if (e.target.value === "") setValue("identifier", "");
-      else setValue("identifier", projectIdentifierSanitizer(e.target.value).substring(0, 10));
+      setValue("identifier", projectIdentifierFromName(e.target.value, fallbackIdentifier.current), {
+        shouldValidate: true,
+      });
       onChange(e);
       handleFormOnChange?.();
     };
