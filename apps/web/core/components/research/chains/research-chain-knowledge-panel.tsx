@@ -11,7 +11,6 @@ import {
   ResearchChainService,
   type TResearchChainUpload,
   type TResearchKnowledgeBase,
-  type TResearchKnowledgeCandidate,
 } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
@@ -62,7 +61,6 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const [knowledgeState, setKnowledgeState] = useState(KB_READY_STATE);
   const [orgUnitName, setOrgUnitName] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("");
-  const [candidates, setCandidates] = useState<TResearchKnowledgeCandidate[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -78,7 +76,6 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       setKnowledgeState(payload.state ?? KB_READY_STATE);
       setOrgUnitName(payload.orgUnitName ?? "");
       setConnectionStatus(payload.connectionStatus ?? "");
-      setCandidates(payload.candidates ?? []);
       setKnowledgeBaseId((current) => current || payload.items[0]?.external_id || "");
       setUploads(uploadPayload.data);
       setDegradedReason(payload.degraded_reason ?? "");
@@ -193,27 +190,6 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
           {t("research.knowledge.ragportal_not_connected")}
         </p>
       )}
-      {connectionStatus === "connected" && candidates.length === 0 && state !== "loading" && state !== "forbidden" && (
-        <p className="mt-2 text-11 text-tertiary" role="status">
-          {t("research.knowledge.ragportal_no_candidates")}
-        </p>
-      )}
-      {candidates.length > 0 && state !== "loading" && state !== "forbidden" && (
-        <ul className="mt-2 space-y-2" role="list">
-          {candidates.map((candidate) => (
-            <li key={candidate.external_id} className="text-11 text-secondary">
-              <span className="text-tertiary">{t("research.knowledge.candidate_name")} </span>
-              {candidate.name}
-              <span className="text-tertiary"> {t("research.knowledge.candidate_id")} </span>
-              {candidate.external_id}
-              <span className="text-tertiary"> {t("research.knowledge.candidate_source")} </span>
-              {candidate.source}
-              <span className="text-tertiary"> {t("research.knowledge.candidate_seen")} </span>
-              {candidate.seen_at}
-            </li>
-          ))}
-        </ul>
-      )}
       {actionError && (
         <p className="mt-2 text-11 text-danger-primary" role="alert">
           {actionError}
@@ -250,9 +226,22 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                 accept=".pdf,.md,.markdown,.txt,.doc,.docx"
                 ref={fileInputRef}
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                className="text-11 text-secondary disabled:opacity-50"
+                className="hidden"
                 disabled={knowledgeState !== KB_READY_STATE}
               />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={knowledgeState !== KB_READY_STATE}
+                  className="rounded border border-subtle px-3 py-2 text-12 text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t("research.knowledge.select_file")}
+                </button>
+                <span className="truncate text-11 text-tertiary" aria-live="polite">
+                  {file ? file.name : t("research.knowledge.no_file_selected")}
+                </span>
+              </div>
             </label>
             <button
               type="button"
