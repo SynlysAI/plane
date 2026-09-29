@@ -249,6 +249,50 @@ class TestS3StorageMinioPresignedPostURL:
             "AWS_SECRET_ACCESS_KEY": "test-secret",
             "AWS_S3_BUCKET_NAME": "uploads",
             "AWS_REGION": "us-east-1",
+            "USE_MINIO": "1",
+            "MINIO_ENDPOINT_SSL": "0",
+            "WEB_URL": "https://openeva.xmuzc.com",
+        },
+        clear=True,
+    )
+    @patch("plane.settings.storage.boto3")
+    def test_minio_uses_https_for_configured_public_host(self, mock_boto3):
+        request = Mock(scheme="http")
+        request.get_host.return_value = "openeva.xmuzc.com"
+
+        S3Storage(request=request)
+
+        assert mock_boto3.client.call_args.kwargs["endpoint_url"] == "https://openeva.xmuzc.com"
+
+    @patch.dict(
+        os.environ,
+        {
+            "AWS_ACCESS_KEY_ID": "test-key",
+            "AWS_SECRET_ACCESS_KEY": "test-secret",
+            "AWS_S3_BUCKET_NAME": "uploads",
+            "AWS_REGION": "us-east-1",
+            "USE_MINIO": "1",
+            "MINIO_ENDPOINT_SSL": "0",
+            "WEB_URL": "https://openeva.xmuzc.com",
+        },
+        clear=True,
+    )
+    @patch("plane.settings.storage.boto3")
+    def test_minio_keeps_http_for_direct_ip_access(self, mock_boto3):
+        request = Mock(scheme="http")
+        request.get_host.return_value = "10.26.15.93:3300"
+
+        S3Storage(request=request)
+
+        assert mock_boto3.client.call_args.kwargs["endpoint_url"] == "http://10.26.15.93:3300"
+
+    @patch.dict(
+        os.environ,
+        {
+            "AWS_ACCESS_KEY_ID": "test-key",
+            "AWS_SECRET_ACCESS_KEY": "test-secret",
+            "AWS_S3_BUCKET_NAME": "uploads",
+            "AWS_REGION": "us-east-1",
             "USE_MINIO": "0",
         },
         clear=True,

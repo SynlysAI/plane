@@ -9,7 +9,7 @@ import uuid
 # Third party imports
 import boto3
 from botocore.exceptions import ClientError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 # Module imports
 from plane.utils.exception_logger import log_exception
@@ -42,6 +42,10 @@ class S3Storage(S3Boto3Storage):
                 endpoint_protocol = "https"
             else:
                 endpoint_protocol = request.scheme if request else "http"
+                if request:
+                    public_url = urlparse(os.environ.get("WEB_URL", ""))
+                    if public_url.scheme == "https" and request.get_host().lower() == public_url.netloc.lower():
+                        endpoint_protocol = "https"
             # Create an S3 client for MinIO
             self.s3_client = boto3.client(
                 "s3",
