@@ -173,6 +173,13 @@ describe("platform settings main PI field", () => {
     expect(service.lookupMainPi).not.toHaveBeenCalled();
   });
 
+  it("keeps every settings section at its content height inside the scrolling page", async () => {
+    await renderForm();
+    const panels = Array.from(container.querySelectorAll("section"));
+    expect(panels).toHaveLength(5);
+    expect(panels.every((panel) => panel.classList.contains("shrink-0"))).toBe(true);
+  });
+
   it("shows that a changed account was not found and does not use the raw id as a name", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     service.lookupMainPi.mockResolvedValue({ lookup_user_found: false, lookup_user_name: null });

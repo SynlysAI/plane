@@ -76,7 +76,7 @@ export function ResearchFilterChips({ filters, activeLabel, clearLabel, onClear 
 
 /** Primary table surface with bounded horizontal scrolling. */
 export function ResearchTableSurface({ children }: TResearchTableSurfaceProps) {
-  return <div className="overflow-x-auto rounded-lg bg-surface-1">{children}</div>;
+  return <div className="shrink-0 overflow-x-auto rounded-lg bg-surface-1">{children}</div>;
 }
 
 /** Unique detail-page object header; metadata is kept below the title baseline. */
@@ -107,7 +107,7 @@ export function ResearchDetailSurface({
   defaultOpen = false,
   className,
 }: TResearchDetailSurfaceProps) {
-  const surfaceClassName = "overflow-hidden rounded-xl bg-surface-1";
+  const surfaceClassName = "shrink-0 overflow-hidden rounded-xl bg-surface-1";
 
   if (collapsible) {
     return (
