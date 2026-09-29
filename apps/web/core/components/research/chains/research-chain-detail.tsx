@@ -22,7 +22,6 @@ import { ResearchStatusBadge } from "@/components/research/common/research-statu
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { pickCurrentNode } from "@/components/research/chains/research-selection";
-import { ResearchAgentSidePanel } from "@/components/research/agent/research-agent-side-panel";
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
 import { ResearchChainKnowledgePanel } from "@/components/research/chains/research-chain-knowledge-panel";
 import {
@@ -42,6 +41,11 @@ import { ResearchChainService } from "@/services/research/chain.service";
 import { ResearchIntegrationService } from "@/services/research/integration.service";
 const chainService = new ResearchChainService();
 const integrationService = new ResearchIntegrationService();
+const SYNLORA_URL = "https://synlora.xmuzc.com";
+
+function openSynlora() {
+  window.open(SYNLORA_URL, "_blank", "noopener,noreferrer");
+}
 
 type Props = {
   workspaceSlug: string;
@@ -160,7 +164,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [memberError, setMemberError] = useState("");
   const [contextReferences, setContextReferences] = useState<TExternalReference[] | null>(null);
   const [contextError, setContextError] = useState(false);
-  const [agentNodeId, setAgentNodeId] = useState<string | null>(null);
   const agentEnabled = Boolean(research.identity?.sections?.research_agent);
   const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
   const workflow = useMemo(() => buildResearchWorkflow(nodes, current?.id ?? null), [current, nodes]);
@@ -422,7 +425,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         </span>
       )}
       {agentEnabled && (
-        <Button variant="secondary" size="sm" onClick={() => setAgentNodeId(selected.node.id)}>
+        <Button variant="secondary" size="sm" onClick={openSynlora}>
           {t("research.chains.open_agent")}
         </Button>
       )}
@@ -520,7 +523,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               {t("research.chains.refresh")}
             </Button>
             {agentEnabled && research.canSee("research_chain") && current && (
-              <Button variant="primary" size="base" onClick={() => setAgentNodeId(current.id)}>
+              <Button variant="primary" size="base" onClick={openSynlora}>
                 {t("research.chains.open_agent")}
               </Button>
             )}
@@ -554,14 +557,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           ))}
         </TabNavigationList>
       </nav>
-
-      {agentNodeId && (
-        <ResearchAgentSidePanel
-          workspaceSlug={workspaceSlug}
-          chainNodeId={agentNodeId}
-          onClose={() => setAgentNodeId(null)}
-        />
-      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-canvas">
         {actionError && (

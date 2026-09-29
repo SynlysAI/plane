@@ -1363,6 +1363,8 @@
       "degraded": "RAGPortal 当前降级（{reason}），人工记录可继续。",
       "kb_label": "知识库",
       "file_label": "研究文件",
+      "select_file": "选择文件",
+      "no_file_selected": "未选择任何文件",
       "upload": "通过 BFF 上传",
       "uploading": "上传中…",
       "refresh_status": "刷新状态",
