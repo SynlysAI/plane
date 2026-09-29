@@ -7,7 +7,7 @@ services:
     volumes:
       - redisdata:/data
     ports:
-      - "6379:6379"
+      - "${PLANE_REDIS_PORT:-3637}:6379"
 
   plane-mq:
     image: rabbitmq:3.13.6-management-alpine
@@ -24,7 +24,7 @@ services:
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
 
   plane-minio:
-    image: minio/minio
+    image: quay.io/minio/minio:latest
     restart: unless-stopped
     networks:
       - dev_env
@@ -45,8 +45,8 @@ services:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     ports:
-      - "9000:9000"
-      - "9090:9090"
+      - "${PLANE_MINIO_PORT:-3900}:9000"
+      - "${PLANE_MINIO_CONSOLE_PORT:-3909}:9090"
 
   plane-db:
     image: postgres:15.7-alpine
@@ -61,7 +61,7 @@ services:
     environment:
       PGDATA: /var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${PLANE_DB_PORT:-3543}:5432"
 
   api:
     build:
@@ -82,7 +82,7 @@ services:
       - plane-redis
       - plane-mq
     ports:
-      - "8000:8000"
+      - "${PLANE_API_PORT:-3001}:8000"
 
   worker:
     build:
@@ -148,4 +148,5 @@ volumes:
 
 networks:
   dev_env:
+    name: plane_dev_env
     driver: bridge
