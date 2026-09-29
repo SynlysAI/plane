@@ -86,7 +86,7 @@ export function ParentIssuesListModal({
         setIsSearching(false);
         setIsLoading(false);
       });
-  }, [debouncedSearchTerm, isOpen, issueId, projectId, workspaceSlug]);
+  }, [debouncedSearchTerm, isOpen, issueId, projectId, searchEpic, workspaceSlug]);
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
@@ -112,6 +112,8 @@ export function ParentIssuesListModal({
           />
         </div>
         <Combobox.Options
+          modal={false}
+          data-prevent-outside-click
           as="ul"
           static
           className="vertical-scrollbar scrollbar-md max-h-80 scroll-py-2 overflow-y-auto"

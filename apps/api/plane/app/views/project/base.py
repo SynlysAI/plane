@@ -8,7 +8,7 @@ import json
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Exists, F, OuterRef, Prefetch, Q, Subquery, Count
+from django.db.models import Case, CharField, Count, Exists, F, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.utils import timezone
 
 # Third Party imports
@@ -43,6 +43,89 @@ from plane.db.models import (
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
+
+
+
+def _cached_research_review_ids(request, slug):
+    """同一请求内只计算一次研究链只读项目。
+
+    Args:
+        request: 当前请求。
+        slug: 工作区别名。
+
+    Returns:
+        项目主键列表。工作区不存在时为空列表。
+    """
+    cache = getattr(request, "_research_review_project_ids", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        request._research_review_project_ids = cache
+    if slug not in cache:
+        from plane.research.utils.project_review import research_review_project_ids_for_slug
+
+        cache[slug] = research_review_project_ids_for_slug(request.user, slug)
+    return cache[slug]
+
+
+def _research_access_expression(request, slug):
+    """生成非成员研究链读者的 ``research_access`` 注解。
+
+    Args:
+        request: 当前请求。
+        slug: 工作区别名。
+
+    Returns:
+        可放进 queryset.annotate 的 Case 表达式。
+    """
+    review_ids = _cached_research_review_ids(request, slug)
+    return Case(
+        When(Q(id__in=review_ids) & Q(member_role__isnull=True), then=Value("review")),
+        default=Value(None),
+        output_field=CharField(null=True),
+    )
+
+
+def _restrict_workspace_project_visibility(queryset, request, slug):
+    """保留原有成员和公开网络规则，并并入研究链只读项目。
+
+    Args:
+        queryset: 工作区项目查询集。
+        request: 当前请求。
+        slug: 工作区别名。
+
+    Returns:
+        过滤后的查询集。工作区管理员保持原样，可以看到全部项目。
+    """
+    user = request.user
+    review_ids = _cached_research_review_ids(request, slug)
+    if WorkspaceMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        is_active=True,
+        role=ROLE.GUEST.value,
+    ).exists():
+        return queryset.filter(
+            Q(
+                project_projectmember__member=user,
+                project_projectmember__is_active=True,
+            )
+            | Q(id__in=review_ids)
+        )
+    if WorkspaceMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        is_active=True,
+        role=ROLE.MEMBER.value,
+    ).exists():
+        return queryset.filter(
+            Q(
+                project_projectmember__member=user,
+                project_projectmember__is_active=True,
+            )
+            | Q(network=2)
+            | Q(id__in=review_ids)
+        )
+    return queryset
 
 
 class ProjectViewSet(BaseViewSet):
@@ -80,6 +163,9 @@ class ProjectViewSet(BaseViewSet):
                 ).values("role")
             )
             .annotate(
+                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
+            )
+            .annotate(
                 anchor=DeployBoard.objects.filter(
                     entity_name="project",
                     entity_identifier=OuterRef("pk"),
@@ -107,30 +193,7 @@ class ProjectViewSet(BaseViewSet):
     def list_detail(self, request, slug):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         projects = self.get_queryset().order_by("sort_order", "name")
-        if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.GUEST.value,
-        ).exists():
-            projects = projects.filter(
-                project_projectmember__member=self.request.user,
-                project_projectmember__is_active=True,
-            )
-
-        if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.MEMBER.value,
-        ).exists():
-            projects = projects.filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+        projects = _restrict_workspace_project_visibility(projects, request, slug)
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(
@@ -166,6 +229,9 @@ class ProjectViewSet(BaseViewSet):
                 ).values("role")
             )
             .annotate(
+                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
+            )
+            .annotate(
                 intake_count=Count(
                     "project_intakeissue",
                     filter=Q(
@@ -196,6 +262,7 @@ class ProjectViewSet(BaseViewSet):
             "page_view",
             "inbox_view",
             "is_research_project",
+            "research_access",
             "guest_view_all_features",
             "project_lead",
             "network",
@@ -205,30 +272,7 @@ class ProjectViewSet(BaseViewSet):
             "updated_by",
         )
 
-        if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.GUEST.value,
-        ).exists():
-            projects = projects.filter(
-                project_projectmember__member=self.request.user,
-                project_projectmember__is_active=True,
-            )
-
-        if WorkspaceMember.objects.filter(
-            member=request.user,
-            workspace__slug=slug,
-            is_active=True,
-            role=ROLE.MEMBER.value,
-        ).exists():
-            projects = projects.filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+        projects = _restrict_workspace_project_visibility(projects, request, slug)
         return Response(projects, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -240,7 +284,8 @@ class ProjectViewSet(BaseViewSet):
 
         member_ids = [str(project_member.member_id) for project_member in project.members_list]
 
-        if str(request.user.id) not in member_ids:
+        review_reader = getattr(project, "research_access", None) == "review"
+        if str(request.user.id) not in member_ids and not review_reader:
             if project.network == ProjectNetwork.SECRET.value:
                 return Response(
                     {"error": "You do not have permission"},

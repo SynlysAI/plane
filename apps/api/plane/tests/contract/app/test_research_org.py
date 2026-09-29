@@ -165,6 +165,26 @@ class TestResearchOrgTreeApi:
         assert str(moved.parent_id) == lab_b["id"]
         assert moved.path.startswith(OrgUnit.objects.get(pk=lab_b["id"]).path)
 
+    def test_move_and_business_category_update_are_persisted_together(self, env):
+        env.admin_client.get(org_units_url(env.workspace))
+        root = OrgUnit.objects.get(workspace=env.workspace)
+        industrialization = create_unit(env.admin_client, env.workspace, "产业化", root, "LAB").json()
+        basic_research = create_unit(env.admin_client, env.workspace, "基础研究", root, "LAB").json()
+        team = create_unit(env.admin_client, env.workspace, "电氢联储", industrialization["id"], "TEAM").json()
+
+        response = env.admin_client.patch(
+            org_units_url(env.workspace, f"{team['id']}/"),
+            {"parent": basic_research["id"], "business_category": "BASIC_RESEARCH"},
+            format="json",
+        )
+
+        assert response.status_code == 200
+        assert response.json()["parent"] == basic_research["id"]
+        assert response.json()["business_category"] == "BASIC_RESEARCH"
+        moved = OrgUnit.objects.get(pk=team["id"])
+        assert str(moved.parent_id) == basic_research["id"]
+        assert moved.business_category == OrgUnit.BusinessCategory.BASIC_RESEARCH
+
     def test_soft_delete_removes_subtree_from_tree_but_keeps_history(self, env):
         env.admin_client.get(org_units_url(env.workspace))
         root = OrgUnit.objects.get(workspace=env.workspace)

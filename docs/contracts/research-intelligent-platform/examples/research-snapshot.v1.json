@@ -1,0 +1,10 @@
+{
+  "schema_version": "research-snapshot.v1",
+  "snapshot_id": "snapshot-01",
+  "node_id": "node-01",
+  "source_versions": [{ "kind": "literature", "id": "literature-01", "version": "3" }],
+  "summary": "文献调研快照",
+  "created_by": "user-01",
+  "immutable": true,
+  "content_hash": "sha256:example"
+}

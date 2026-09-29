@@ -10,6 +10,9 @@ import { EXTERNAL_TYPE_LABELS, INTEGRATION_SYSTEM_LABELS } from "@plane/constant
 // plane imports
 import type { TExternalReference } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   reference: TExternalReference;
@@ -21,10 +24,10 @@ type Props = {
  * offers an in-Plane edit (P1-KB-06, P1-UI-06).
  */
 export const ExternalReferenceCard = observer(function ExternalReferenceCard({ reference, onRemove }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const degraded = reference.status !== "ACTIVE";
   return (
-    <div className="flex flex-col gap-1 rounded border border-subtle px-3 py-2 text-12">
+    <div className="flex flex-col gap-1 rounded-lg bg-surface-2 px-3 py-2 text-12">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-primary">{reference.title}</span>
         <span className="flex items-center gap-2 text-11">
@@ -35,9 +38,9 @@ export const ExternalReferenceCard = observer(function ExternalReferenceCard({ r
             {t(EXTERNAL_TYPE_LABELS[reference.external_type] ?? reference.external_type)}
           </span>
           {degraded && (
-            <span className="rounded bg-danger-subtle px-1.5 py-0.5 text-danger-primary">
+            <ResearchStatusBadge status={reference.status} size="sm">
               {t("research.integrations.degraded_hint")}
-            </span>
+            </ResearchStatusBadge>
           )}
         </span>
       </div>
@@ -47,7 +50,9 @@ export const ExternalReferenceCard = observer(function ExternalReferenceCard({ r
           {t("research.integrations.open_source")}
         </a>
         <span className="text-tertiary">{t("research.integrations.managed_by", { system: reference.system })}</span>
-        {reference.synced_at && <span className="text-tertiary">{new Date(reference.synced_at).toLocaleString()}</span>}
+        {reference.synced_at && (
+          <span className="text-tertiary">{formatResearchDateTime(reference.synced_at, currentLocale)}</span>
+        )}
         {onRemove && (
           <button type="button" className="text-danger-primary hover:underline" onClick={onRemove}>
             {t("research.common.remove")}

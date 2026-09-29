@@ -14,6 +14,7 @@ import { useHome } from "@/hooks/store/use-home";
 import { useUserProfile, useUser } from "@/hooks/store/user";
 // plane web imports
 import { TourRoot } from "@/components/onboarding/tour/root";
+import { ResearchHomeSummaryCard } from "@/components/research/common/research-home-summary-card";
 // local imports
 import { DashboardWidgets } from "./home-dashboard-widgets";
 import { UserGreetingsView } from "./user-greetings";
@@ -57,6 +58,7 @@ export const WorkspaceHomeView = observer(function WorkspaceHomeView() {
         <ContentWrapper className="mx-auto scrollbar-hide gap-6 bg-surface-1 px-page-x">
           <div className="mx-auto w-full max-w-[800px]">
             {currentUser && <UserGreetingsView user={currentUser} />}
+            {workspaceSlug && <ResearchHomeSummaryCard workspaceSlug={workspaceSlug.toString()} />}
             <DashboardWidgets />
           </div>
         </ContentWrapper>

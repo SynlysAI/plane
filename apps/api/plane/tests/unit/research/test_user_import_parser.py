@@ -147,14 +147,11 @@ def test_advisor_table_is_normalised_and_exact_duplicates_are_allowed():
     }
 
 
-def test_advisor_table_rejects_same_name_with_different_emails():
+def test_advisor_table_marks_same_name_with_different_emails_ambiguous():
     payload = "姓名,邮箱\n刘俊扬,first@example.com\n 刘俊扬 ,second@example.com\n"
 
-    with pytest.raises(AccountError) as error:
-        parse_advisors(payload.encode("utf-8"), "advisors.csv")
-
-    assert error.value.error_code == "user_import_file_invalid"
-    assert "刘俊扬" in error.value.message
+    advisors = parse_advisors(payload.encode("utf-8"), "advisors.csv")
+    assert advisors == {"刘俊扬": ""}
 
 
 def test_advisor_table_rejects_duplicate_headers():

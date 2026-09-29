@@ -8,34 +8,27 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { EXPERIMENT_SOURCE_LABELS, EXPERIMENT_STATUSES, EXPERIMENT_STATUS_LABELS } from "@plane/constants";
-import type { TExperimentStatus } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { ExperimentDetail } from "@/components/research/experiments/experiment-detail";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+// components
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useUser } from "@/hooks/store/user";
+import { formatResearchDate } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
   projectId: string;
 };
 
-const STATUS_TONES: Record<TExperimentStatus, string> = {
-  PLANNED: "bg-surface-2 text-tertiary",
-  RUNNING: "bg-accent-subtle text-accent-primary",
-  COMPLETED: "bg-success-subtle text-success-primary",
-  FAILED: "bg-danger-subtle text-danger-primary",
-  CANCELLED: "bg-surface-2 text-secondary",
-  ARCHIVED: "bg-surface-2 text-tertiary",
-};
-
 /** Experiment list with the per-record detail beside it (§6.2, P1-UI-04). */
 export const ExperimentList = observer(function ExperimentList({ workspaceSlug, projectId }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const { data: currentUser } = useUser();
   const records = research.getExperiments(workspaceSlug, projectId);
@@ -63,8 +56,8 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
   const selected = records.find((record) => record.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <div className="flex w-96 flex-col gap-2 overflow-y-auto border-r border-subtle p-3">
+    <div className="flex h-full overflow-hidden bg-canvas">
+      <div className="flex w-96 flex-col gap-2 overflow-y-auto border-r border-subtle bg-surface-2 p-3">
         <div className="flex items-center gap-2">
           <Input
             className="!w-40"
@@ -108,22 +101,30 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
               key={record.id}
               type="button"
               onClick={() => setSelectedId(record.id)}
-              className={`flex flex-col gap-1 rounded border px-2 py-1.5 text-left ${
-                record.id === selectedId ? "border-accent-strong bg-surface-2" : "border-subtle"
+              className={`flex flex-col gap-1 rounded-md border px-2 py-1.5 text-left transition-colors ${
+                record.id === selectedId ? "border-accent-strong bg-surface-1" : "border-transparent hover:bg-surface-1"
               }`}
             >
               <span className="text-12 text-primary">{`#${record.sequence_no} ${record.title}`}</span>
-              <span className="flex items-center gap-1 text-11">
-                <span className={`rounded px-1.5 py-0.5 ${STATUS_TONES[record.status]}`}>
+              <span className="flex flex-wrap items-center gap-1 text-11">
+                <ResearchStatusBadge status={record.status} size="sm">
                   {t(EXPERIMENT_STATUS_LABELS[record.status])}
-                </span>
+                </ResearchStatusBadge>
                 <span className="rounded bg-surface-2 px-1.5 py-0.5 text-tertiary">
                   {t(EXPERIMENT_SOURCE_LABELS[record.source])}
                 </span>
+                {record.owner_detail?.display_name && (
+                  <span className="text-tertiary">{record.owner_detail.display_name}</span>
+                )}
+                {(record.started_at ?? record.updated_at) && (
+                  <span className="ml-auto text-tertiary tabular-nums">
+                    {formatResearchDate(record.started_at ?? record.updated_at, currentLocale)}
+                  </span>
+                )}
               </span>
             </button>
           ))}
-          {!records.length && <p className="text-12 text-tertiary">{t("research.experiments.empty")}</p>}
+          {!records.length && <p className="text-12 text-tertiary">{t("research.experiments.phase_boundary")}</p>}
         </div>
       </div>
       <div className="flex-1 overflow-hidden">
@@ -135,7 +136,9 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
             currentUserId={currentUser?.id}
           />
         ) : (
-          <p className="p-5 text-13 text-tertiary">{t("research.experiments.select_hint")}</p>
+          <p className="p-5 text-13 text-tertiary">
+            {records.length ? t("research.experiments.select_hint") : t("research.experiments.phase_boundary")}
+          </p>
         )}
       </div>
     </div>

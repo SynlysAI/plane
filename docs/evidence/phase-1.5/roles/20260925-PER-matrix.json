@@ -1,0 +1,63 @@
+{
+  "PER-1": [
+    {
+      "email": "chenjing.advisor@ai4ms.local",
+      "status": 200,
+      "count": 0,
+      "error": null
+    },
+    {
+      "email": "liuyang.phd@ai4ms.local",
+      "status": 403,
+      "count": null,
+      "error": "research_permission_denied"
+    }
+  ],
+  "PER-2": [
+    {
+      "actor": "owner",
+      "status": 201,
+      "error": null
+    },
+    {
+      "actor": "sunhao_unbound",
+      "status": 403,
+      "error": "AGENT_SCOPE_INVALID",
+      "message": "An active Synlora account link is required."
+    }
+  ],
+  "PER-3": [
+    {
+      "actor": "mentor",
+      "status": 201,
+      "upload_id": "968e3d4f-2d27-4215-a95f-77f6f30af265",
+      "error": null
+    },
+    {
+      "actor": "pi",
+      "status": 403,
+      "error": "research_permission_denied"
+    }
+  ],
+  "PER-4": [
+    {
+      "actor": "self",
+      "status": 201
+    },
+    {
+      "actor": "mentor_proxy",
+      "status": 403,
+      "error": "research_permission_denied"
+    }
+  ],
+  "PER-5": {
+    "source": "VIS detail/export/write matrix",
+    "status": "passed"
+  },
+  "PER-6": {
+    "identity_status": 404,
+    "identity_level": null,
+    "settings_status": 404,
+    "private_chain_status": 404
+  }
+}

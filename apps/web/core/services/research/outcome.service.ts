@@ -5,9 +5,18 @@
  */
 
 import { API_BASE_URL, researchEndpoints } from "@plane/constants";
-import type { TResearchOutcome } from "@plane/types";
+import type { TResearchOutcome, TResearchOutcomeAttachment } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
+
+export type TTopicMaterial = {
+  id: string;
+  file_name: string;
+  content_type: string;
+  size: number;
+  project: string;
+  project_name: string;
+};
 
 export type TOutcomePayload = {
   title: string;
@@ -57,6 +66,40 @@ export class ResearchOutcomeService extends APIService {
     });
   }
 
+  async getOutcomeAttachments(workspaceSlug: string, outcomeId: string) {
+    return this.get(researchEndpoints.outcomeAttachments(workspaceSlug, outcomeId))
+      .then((res) => res?.data as { results: TResearchOutcomeAttachment[] })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async presignOutcomeAttachment(
+    workspaceSlug: string,
+    outcomeId: string,
+    payload: { file_name: string; content_type: string; size: number }
+  ) {
+    return this.post(researchEndpoints.outcomeAttachmentPresign(workspaceSlug, outcomeId), payload)
+      .then((res) => res?.data as { asset_id: string; upload_data: { url: string; fields: Record<string, string> } })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async registerOutcomeAttachment(workspaceSlug: string, outcomeId: string, assetId: string) {
+    return this.post(researchEndpoints.outcomeAttachments(workspaceSlug, outcomeId), { asset_id: assetId })
+      .then((res) => res?.data as TResearchOutcomeAttachment)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async deleteOutcomeAttachment(workspaceSlug: string, outcomeId: string, attachmentId: string) {
+    return this.delete(researchEndpoints.outcomeAttachment(workspaceSlug, outcomeId, attachmentId)).catch((err) => {
+      throw err?.response?.data;
+    });
+  }
+
   async linkOutcome(workspaceSlug: string, outcomeId: string, payload: { target_type: string; target_id: string }) {
     return this.post(researchEndpoints.outcomeLinks(workspaceSlug, outcomeId), payload)
       .then((res) => res?.data as TResearchOutcome)
@@ -67,5 +110,42 @@ export class ResearchOutcomeService extends APIService {
 
   exportChainUrl(workspaceSlug: string, projectId: string) {
     return researchEndpoints.chainExport(workspaceSlug, projectId);
+  }
+
+  /**
+   * 列出课题资料。这些文件不属于周期报告，也不要求先登记成果。
+   */
+  async listTopicMaterials(workspaceSlug: string, projectId: string) {
+    return this.get(researchEndpoints.topicMaterials(workspaceSlug, projectId))
+      .then((res) => res?.data as { results: TTopicMaterial[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /**
+   * 为 PDF 或 Markdown 课题资料申请直传地址。
+   */
+  async presignTopicMaterial(
+    workspaceSlug: string,
+    projectId: string,
+    payload: { file_name: string; content_type: string; size: number }
+  ) {
+    return this.post(researchEndpoints.topicMaterialPresign(workspaceSlug, projectId), payload)
+      .then((res) => res?.data as { asset_id: string; upload_data: { url: string; fields: Record<string, string> } })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /**
+   * 确认课题资料已经写入，并返回带课题名的记录。
+   */
+  async confirmTopicMaterial(workspaceSlug: string, projectId: string, assetId: string) {
+    return this.post(researchEndpoints.topicMaterials(workspaceSlug, projectId), { asset_id: assetId })
+      .then((res) => res?.data as TTopicMaterial)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
   }
 }

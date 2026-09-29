@@ -13,6 +13,7 @@ import { Spinner } from "@plane/ui";
 // components
 import { PageHead } from "@/components/core/page-title";
 import { ResearchStatusPanel, type TResearchStatus } from "@/components/research/common/research-status-panel";
+import { ResearchManagementTabs } from "@/components/research/navigation/research-management-tabs";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -20,7 +21,20 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 type Props = {
   titleKey: string;
   descriptionKey?: string;
-  section?: "org" | "reports" | "approvals" | "stages" | "experiments" | "code" | "integrations";
+  /** Optional breadcrumb slot rendered above the page title (required on detail pages). */
+  breadcrumbs?: ReactNode;
+  /** Metadata row kept separate from actions (owner, period, updated time, scope). */
+  metadata?: ReactNode;
+  section?:
+    | "org"
+    | "reports"
+    | "approvals"
+    | "stages"
+    | "experiments"
+    | "code"
+    | "integrations"
+    | "research_chain"
+    | "research_agent";
   /**
    * Navigation key this page belongs to (v2.5.0). The backend publishes the
    * keys the caller may reach, so the page guard and the sidebar entry can
@@ -35,6 +49,8 @@ type Props = {
   children: ReactNode;
 };
 
+const MANAGEMENT_NAV_KEYS = new Set(["org", "system", "templates", "identity", "platform", "audit", "integrations"]);
+
 /**
  * Shared shell for research pages: resolves the caller's research identity once
  * per workspace, renders loading/denied states and the page chrome.
@@ -42,6 +58,8 @@ type Props = {
 export const ResearchPageShell = observer(function ResearchPageShell({
   titleKey,
   descriptionKey,
+  breadcrumbs,
+  metadata,
   section = "reports",
   navKey,
   adminOnly = false,
@@ -98,6 +116,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   if (!workspaceSlug) return null;
 
   const sectionEnabled = identity.sections?.[section] ?? identity.sections?.reports;
+  const showManagementTabs = research.isIaV2Enabled && navKey !== undefined && MANAGEMENT_NAV_KEYS.has(navKey);
 
   // Switch off, disabled section or a level that does not open this surface:
   // fall back to the workspace home (P0-UI-07). Pages that stay reachable while
@@ -120,14 +139,21 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   return (
     <>
       <PageHead title={t(titleKey)} />
-      <div className="flex h-full w-full flex-col overflow-hidden">
-        <div className="flex items-start justify-between gap-4 border-b border-subtle px-5 py-3">
-          <div>
-            <h2 className="text-14 font-medium text-primary">{t(titleKey)}</h2>
-            {descriptionKey && <p className="mt-0.5 text-12 text-tertiary">{t(descriptionKey)}</p>}
+      <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
+        <div className="border-b border-subtle bg-surface-1 px-5 py-3.5">
+          {breadcrumbs && <div className="mb-1 text-12 text-tertiary">{breadcrumbs}</div>}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="text-22 truncate font-semibold text-primary">{t(titleKey)}</h2>
+              {descriptionKey && <p className="mt-0.5 text-13 text-tertiary">{t(descriptionKey)}</p>}
+              {metadata && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">{metadata}</div>
+              )}
+            </div>
+            {actions}
           </div>
-          {actions}
         </div>
+        {showManagementTabs && <ResearchManagementTabs currentKey={navKey} />}
         <div className="flex-1 overflow-hidden">{children}</div>
       </div>
     </>

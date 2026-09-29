@@ -10,10 +10,16 @@ import { observer } from "mobx-react";
 import { REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import {
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -78,14 +84,14 @@ export const ResearchTemplateList = observer(function ResearchTemplateList({ wor
   );
 
   return (
-    <div className="flex flex-col gap-3 p-5">
+    <ResearchListSurface>
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
+      <ResearchFilterToolbar>
         <Input
           className="!w-64"
           placeholder={t("research.templates.name_placeholder")}
@@ -110,45 +116,47 @@ export const ResearchTemplateList = observer(function ResearchTemplateList({ wor
         <Button variant="primary" size="sm" onClick={() => void handleCreate()}>
           {t("research.common.create")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.templates.columns.name")}</th>
-            <th className="font-normal py-2">{t("research.templates.columns.type")}</th>
-            <th className="font-normal py-2">{t("research.templates.columns.default")}</th>
-            <th className="py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {templates.map((template) => (
-            <tr key={template.id} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">{template.name}</td>
-              <td className="py-2 text-secondary">{t(REPORT_TYPE_LABELS[template.report_type])}</td>
-              <td className="py-2">
-                <input
-                  type="checkbox"
-                  checked={template.is_default}
-                  onChange={(event) => void handleToggleDefault(template.id, event.target.checked)}
-                />
-              </td>
-              <td className="py-2 text-right">
-                <Button variant="ghost" size="sm" onClick={() => void handleDelete(template.id)}>
-                  {t("research.common.delete")}
-                </Button>
-              </td>
-            </tr>
-          ))}
-          {templates.length === 0 && (
-            <tr>
-              <td colSpan={4} className="py-3 text-center text-tertiary">
-                {t("research.templates.empty")}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+      <ResearchTableSurface>
+        <Table>
+          <TableHeader>
+            <TableRow className="text-tertiary">
+              <TableHead>{t("research.templates.columns.name")}</TableHead>
+              <TableHead>{t("research.templates.columns.type")}</TableHead>
+              <TableHead>{t("research.templates.columns.default")}</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {templates.map((template) => (
+              <TableRow key={template.id}>
+                <TableCell className="text-secondary">{template.name}</TableCell>
+                <TableCell className="text-secondary">{t(REPORT_TYPE_LABELS[template.report_type])}</TableCell>
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    checked={template.is_default}
+                    onChange={(event) => void handleToggleDefault(template.id, event.target.checked)}
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button variant="ghost" size="sm" onClick={() => void handleDelete(template.id)}>
+                    {t("research.common.delete")}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {templates.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-tertiary">
+                  {t("research.templates.empty")}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ResearchTableSurface>
+    </ResearchListSurface>
   );
 });

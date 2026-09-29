@@ -27,6 +27,7 @@ from plane.research.utils.capabilities import (
     NAV_ORG,
     NAV_OVERVIEW,
     NAV_PROJECTS,
+    NAV_RESEARCH_CHAIN,
     NAV_REPORTS,
     NAV_REVIEWS,
     NAV_SUMMARY,
@@ -254,7 +255,7 @@ def test_student_seat_is_researcher(env):
     capabilities = build_research_capabilities(student, env["workspace"])
 
     assert capabilities["level"] == ResearchLevel.RESEARCHER
-    assert capabilities["nav"] == [NAV_OVERVIEW, NAV_REPORTS, NAV_PROJECTS, NAV_APPROVALS]
+    assert capabilities["nav"] == [NAV_OVERVIEW, NAV_REPORTS, NAV_PROJECTS]
 
 
 def test_research_profile_alone_is_researcher(env):
@@ -311,7 +312,8 @@ def test_administrator_menu_covers_every_key(env):
     capabilities = build_research_capabilities(env["owner"], env["workspace"])
 
     assert capabilities["level"] == ResearchLevel.ADMIN
-    assert set(capabilities["nav"]) == set(NAV_KEYS)
+    assert set(capabilities["nav"]) == set(NAV_KEYS) - {NAV_RESEARCH_CHAIN}
+    assert NAV_RESEARCH_CHAIN not in capabilities["nav"]
 
 
 def test_disabled_sub_switch_removes_its_keys(env):

@@ -192,3 +192,24 @@ def effective_mentee_ids(user, workspace_id, on_date=None):
         .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=on_date))
         .values_list("mentee_id", flat=True)
     )
+
+
+def order_org_units_for_tree(queryset):
+    """把唯一根排在前面，父节点为空的非根节点排到后面。
+
+    Args:
+        queryset: 组织节点查询集。
+
+    Returns:
+        带树排序的查询集。悬空验证单元不再排在根前面。
+    """
+    from django.db.models import Case, IntegerField, Value, When
+
+    return queryset.annotate(
+        tree_rank=Case(
+            When(unit_type=OrgUnit.UnitType.ROOT, then=Value(0)),
+            When(parent__isnull=True, then=Value(2)),
+            default=Value(1),
+            output_field=IntegerField(),
+        )
+    ).order_by("tree_rank", "path", "sort_order", "id")

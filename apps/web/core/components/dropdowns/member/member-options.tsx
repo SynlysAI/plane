@@ -77,11 +77,9 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
   useEffect(() => {
     if (isOpen) {
       onDropdownOpen?.();
-      if (!isMobile) {
-        inputRef.current && inputRef.current.focus();
-      }
+      if (!isMobile) inputRef.current?.focus();
     }
-  }, [isOpen, isMobile]);
+  }, [isOpen, isMobile, onDropdownOpen]);
 
   const searchInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (query !== "" && e.key === "Escape") {
@@ -132,10 +130,11 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
 
   return createPortal(
     <Combobox.Options
+      modal={false}
       as="ul"
       data-prevent-outside-click
       static
-      className="z-30"
+      className="fixed z-40"
       ref={setPopperElement}
       style={styles.popper}
       {...attributes.popper}

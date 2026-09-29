@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+/* eslint-disable no-shadow -- editor ref API names intentionally mirror command types. */
+
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import type { Editor } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
@@ -281,7 +283,13 @@ export const getEditorRefHelpers = (args: TArgs): EditorRefApi => {
     setProviderDocument: (value) => {
       const document = provider?.document;
       if (!document) return;
-      Y.applyUpdate(document, value);
+      document.transact(() => {
+        for (const fragmentName of ["default", "title"]) {
+          const fragment = document.getXmlFragment(fragmentName);
+          fragment.delete(0, fragment.length);
+        }
+        Y.applyUpdate(document, value);
+      });
     },
     undo: () => editor?.commands.undo(),
   };

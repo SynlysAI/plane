@@ -33,7 +33,7 @@ class IssueVersionEndpoint(BaseAPIView):
 
         return paginated_data
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id, issue_id, pk=None):
         if pk:
             issue_version = IssueVersion.objects.get(
@@ -83,7 +83,7 @@ class WorkItemDescriptionVersionEndpoint(BaseAPIView):
 
         return paginated_data
 
-    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id, work_item_id, pk=None):
         project = Project.objects.get(pk=project_id)
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=work_item_id)

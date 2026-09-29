@@ -16,6 +16,7 @@ class ResearchOutcomeLinkSerializer(serializers.ModelSerializer):
 
 class ResearchOutcomeSerializer(serializers.ModelSerializer):
     links = ResearchOutcomeLinkSerializer(many=True, read_only=True)
+    attachments = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchOutcome
@@ -34,7 +35,23 @@ class ResearchOutcomeSerializer(serializers.ModelSerializer):
             "published_at",
             "visibility",
             "links",
+            "attachments",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["id", "workspace", "project", "created_at", "updated_at"]
+
+    def get_attachments(self, obj):
+        """Return attachment metadata and scoped download links."""
+        request = self.context.get("request")
+        slug = getattr(request, "parser_context", {}).get("kwargs", {}).get("slug", "") if request else ""
+        return [
+            {
+                "id": str(item.id),
+                "file_name": item.file_name,
+                "content_type": item.content_type,
+                "file_size": item.file_size,
+                "download_url": f"/api/research/workspaces/{slug}/outcomes/{obj.id}/attachments/{item.id}/",
+            }
+            for item in obj.attachments.filter(deleted_at__isnull=True)
+        ]

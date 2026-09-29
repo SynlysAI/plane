@@ -98,6 +98,10 @@ class ResearchAuditAction:
     OUTCOME_UPDATE = "outcome.update"
     OUTCOME_DELETE = "outcome.delete"
     OUTCOME_LINK = "outcome.link"
+    CHAIN_ARCHIVE = "chain.archive"
+    CHAIN_RESTORE = "chain.restore"
+    CHAIN_MEMBER_ADD = "chain.member.add"
+    CHAIN_MEMBER_REMOVE = "chain.member.remove"
     CHAIN_EXPORT = "chain.export"
     INTEGRATION_CONNECTION_UPDATE = "integration.connection.update"
     INTEGRATION_CALL = "integration.call"
@@ -114,6 +118,19 @@ class ResearchAuditAction:
     USER_IMPORT_REJECT = "account.import.reject"
     USER_PROFILE_UPDATE = "account.profile.update"
     CONTEXT_READ = "context.read"
+    CONTEXT_TOKEN_ISSUE = "context.token.issue"
+    CONTEXT_TOKEN_REVOKE = "context.token.revoke"
+    ACCOUNT_LINK_CREATE = "account.link.create"
+    ACCOUNT_LINK_CONFIRM = "account.link.confirm"
+    ACCOUNT_LINK_UNLINK = "account.link.unlink"
+    ACCOUNT_LINK_REVOKE = "account.link.revoke"
+    AGENT_SESSION_CREATE = "agent.session.create"
+    AGENT_SESSION_READ = "agent.session.read"
+    AGENT_SESSION_CLOSE = "agent.session.close"
+    AGENT_MESSAGE = "agent.message"
+    AGENT_APPROVAL = "agent.approval"
+    AGENT_ARTIFACT_SAVE = "agent.artifact.save"
+    SECURITY_DENIED = "security.denied"
 
 
 class ResearchResourceType:
@@ -141,12 +158,16 @@ class ResearchResourceType:
     CODE_REPOSITORY = "code_repository"
     CODE_ARTIFACT = "code_artifact"
     OUTCOME = "research_outcome"
+    RESEARCH_CHAIN = "research_chain"
     INTEGRATION = "integration"
     EXTERNAL_REFERENCE = "external_reference"
     INVITE_CODE = "invite_code"
     IMPORT_BATCH = "user_import_batch"
     USER_PROFILE = "research_user_profile"
     CONTEXT = "research_context"
+    ACCOUNT_LINK = "research_account_link"
+    AGENT_SESSION = "research_agent_session"
+    RESEARCH_WORKSPACE = "research_workspace"
 
 
 def _client_metadata(request):

@@ -1,25 +1,36 @@
 /**
  * Copyright (c) 2023-present Plane Software, Inc. and contributors
  * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
  */
 
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 // plane imports
+import { ChevronRightOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
+import { getButtonStyling } from "@plane/propel/button";
+import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
+import type { TResearchChain } from "@plane/types";
 // components
+import { ResearchHomeSummaryCard } from "@/components/research/common/research-home-summary-card";
+import { chainOwnerLabel, selectResearchOverviewChains } from "@/components/research/common/research-overview-rows";
+import { ResearchTodoIndex } from "@/components/research/common/research-todo-index";
+import { formatResearchDate, formatResearchTime } from "@/components/research/common/research-format";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchChainPortal } from "@/components/research/chains/research-chain-portal";
+import { pickCurrentChain } from "@/components/research/chains/research-selection";
+import { ResearchReportSummaryBoard } from "@/components/research/reports/report-summary-board";
 import { ResearchPiAggregateBoard } from "@/components/research/pi/pi-aggregate-board";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+// services
+import { ResearchChainService } from "@/services/research/chain.service";
 
-/**
- * Overview cards mirror the sidebar: the same workspace sub switch and the same
- * capability key decide whether a card renders (v2.5.0). Keys match the
- * backend navigation keys so one rule drives both surfaces.
- */
+const chainService = new ResearchChainService();
+
 const BUSINESS_CARDS = [
   { key: "reports", path: "reports", titleKey: "research.nav.reports", section: "reports" },
   { key: "summary", path: "reports/summary", titleKey: "research.nav.summary", section: "reports" },
@@ -36,115 +47,208 @@ const SETTINGS_CARDS = [
   { key: "audit", path: "audit", titleKey: "research.nav.audit", section: "org" },
 ] as const;
 
+const PERIOD_OPTIONS = [
+  { value: "30", labelKey: "research.overview.period_30" },
+  { value: "90", labelKey: "research.overview.period_90" },
+  { value: "all", labelKey: "research.overview.period_all" },
+] as const;
+
+type TPeriod = "30" | "90" | "all";
+
 function WorkspaceResearchOverviewPage() {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const { workspaceSlug } = useParams();
   const research = useResearch();
-  const sections = research.identity?.sections;
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view");
+  const [period, setPeriod] = useState<TPeriod>("30");
+  const [chains, setChains] = useState<TResearchChain[]>([]);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+  const [chainsError, setChainsError] = useState(false);
+
+  const loadChains = useCallback(async () => {
+    if (!workspaceSlug || !research.canSee("research_chain")) return;
+    setChainsError(false);
+    try {
+      setChains(await chainService.getChains(workspaceSlug));
+    } catch {
+      setChainsError(true);
+    } finally {
+      setRefreshedAt(new Date());
+    }
+  }, [research, workspaceSlug]);
+
+  useEffect(() => {
+    void loadChains();
+  }, [loadChains]);
 
   const isCardVisible = (card: { key: string; section: string }) =>
-    Boolean(sections?.[card.section as keyof typeof sections]) && research.canSee(card.key);
-
+    Boolean(research.identity?.sections?.[card.section as keyof typeof research.identity.sections]) &&
+    research.canSee(card.key);
   const businessCards = BUSINESS_CARDS.filter(isCardVisible);
   const settingsCards = SETTINGS_CARDS.filter(isCardVisible);
+  const periodDays = period === "all" ? null : Number(period);
+  const periodStart = periodDays ? Date.now() - periodDays * 86400000 : 0;
+  const visibleChains = chains.filter((chain) => new Date(chain.updated_at).getTime() >= periodStart);
+  const currentChain = pickCurrentChain(visibleChains);
+  const overview = selectResearchOverviewChains(research.identity, visibleChains);
+  const summaryChains = overview.mode === "stacked" ? overview.rows : currentChain ? [currentChain] : [];
+
+  if (workspaceSlug && view === "report_submission" && research.canSee("summary")) {
+    return (
+      <ResearchPageShell
+        titleKey="research.nav.summary"
+        descriptionKey="research.summary.description"
+        section="reports"
+        navKey="summary"
+      >
+        <ResearchReportSummaryBoard workspaceSlug={workspaceSlug} />
+      </ResearchPageShell>
+    );
+  }
+
+  const headerActions =
+    workspaceSlug && research.canSee("research_chain") ? (
+      <Link href={`/${workspaceSlug}/research/chains`} className={getButtonStyling("primary", "base")}>
+        {t("research.overview.open_chain")}
+      </Link>
+    ) : undefined;
+
+  const headerMetadata = refreshedAt ? (
+    <span>{`${t("research.overview.refreshed_at")} ${formatResearchTime(refreshedAt, currentLocale)}`}</span>
+  ) : undefined;
+
+  const compactNavItems = [...businessCards, ...settingsCards];
 
   return (
     <ResearchPageShell
       titleKey="research.nav.overview"
       descriptionKey="research.overview.description"
       navKey="overview"
+      actions={headerActions}
+      metadata={headerMetadata}
     >
-      <div className="h-full overflow-y-auto p-5">
-        {workspaceSlug && research.canSee("dashboard") && (
-          <div className="mb-6 overflow-hidden rounded-lg border border-subtle bg-surface-1">
-            <ResearchPiAggregateBoard workspaceSlug={workspaceSlug} />
-          </div>
-        )}
-        <section className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <div className="rounded-lg border border-subtle bg-surface-1 p-4">
-            <h3 className="text-13 font-medium text-primary">{t("research.overview.pending_title")}</h3>
-            <p className="mt-1 text-11 text-tertiary">{t("research.overview.pending_description")}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {research.canSee("reviews") && (
-                <Link
-                  href={`/${workspaceSlug}/research/reviews`}
-                  className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-                >
-                  {t("research.overview.open_reviews")}
-                </Link>
-              )}
-              {research.canSee("approvals") && (
-                <Link
-                  href={`/${workspaceSlug}/research/approvals`}
-                  className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-                >
-                  {t("research.overview.open_approvals")}
-                </Link>
-              )}
-              {research.canSee("reports") && (
-                <Link
-                  href={`/${workspaceSlug}/research/reports?status=NEEDS_REVISION&mine=true`}
-                  className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-                >
-                  {t("research.overview.open_revisions")}
-                </Link>
-              )}
-            </div>
-          </div>
-          <div className="rounded-lg border border-subtle bg-surface-1 p-4">
-            <h3 className="text-13 font-medium text-primary">{t("research.overview.next_title")}</h3>
-            <p className="mt-1 text-11 text-tertiary">{t("research.overview.next_description")}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {research.canSee("projects") && (
-                <Link
-                  href={`/${workspaceSlug}/research/projects`}
-                  className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color"
-                >
-                  {t("research.overview.open_projects")}
-                </Link>
-              )}
-              {research.canSee("reports") && (
-                <Link
-                  href={`/${workspaceSlug}/research/reports`}
-                  className="rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-                >
-                  {t("research.overview.open_reports")}
-                </Link>
-              )}
-            </div>
-          </div>
-        </section>
-        <h3 className="text-13 font-medium text-primary">{t("research.overview.business_sections")}</h3>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {businessCards.map((card) => (
+      <div className="flex h-full flex-col overflow-hidden">
+        <nav
+          aria-label={t("research.overview.period")}
+          className="flex items-center justify-between gap-3 border-b border-subtle px-5 py-2"
+        >
+          <TabNavigationList>
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setPeriod(option.value)}
+                aria-pressed={period === option.value}
+                className="whitespace-nowrap"
+              >
+                <TabNavigationItem isActive={period === option.value}>{t(option.labelKey)}</TabNavigationItem>
+              </button>
+            ))}
+          </TabNavigationList>
+          {currentChain && (
             <Link
-              key={card.key}
-              href={`/${workspaceSlug}/research/${card.path}`}
-              className="rounded-lg border border-subtle bg-surface-1 p-4 transition-colors hover:bg-surface-2"
+              href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
+              className="text-12 text-accent-primary hover:underline"
             >
-              <p className="text-13 font-medium text-primary">{t(card.titleKey)}</p>
-              <p className="mt-1 text-11 text-tertiary">{t(`research.overview.${card.key}_hint`)}</p>
+              {t("research.home_summary.open_chain")}
             </Link>
-          ))}
-        </div>
+          )}
+        </nav>
 
-        {settingsCards.length > 0 && (
-          <>
-            <h3 className="mt-8 text-13 font-medium text-primary">{t("research.overview.settings_sections")}</h3>
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {settingsCards.map((card) => (
+        <div className="h-full overflow-y-auto bg-canvas p-5">
+          {workspaceSlug && research.canSee("research_chain") && (
+            <ResearchHomeSummaryCard workspaceSlug={workspaceSlug} />
+          )}
+
+          <section className="mt-5 overflow-hidden rounded-xl bg-surface-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <h3 className="text-13 font-semibold text-primary">{t("research.overview.chain_section")}</h3>
+                <p className="mt-0.5 text-11 text-tertiary">{t("research.overview.chain_section_hint")}</p>
+              </div>
+              {workspaceSlug && research.canSee("summary") && (
                 <Link
-                  key={card.key}
-                  href={`/${workspaceSlug}/research/${card.path}`}
-                  className="rounded-lg border border-subtle bg-surface-1 p-4 transition-colors hover:bg-surface-2"
+                  href={`/${workspaceSlug}/research?view=report_submission`}
+                  className="text-12 text-accent-primary hover:underline"
                 >
-                  <p className="text-13 font-medium text-primary">{t(card.titleKey)}</p>
-                  <p className="mt-1 text-11 text-tertiary">{t(`research.overview.${card.key}_hint`)}</p>
+                  {t("research.overview.open_summary")}
                 </Link>
-              ))}
+              )}
             </div>
-          </>
-        )}
+            <div aria-label={t("research.portal.title")}>
+              {chainsError ? (
+                <p className="p-4 text-12 text-secondary" role="alert">
+                  {t("research.portal.load_failed")}
+                </p>
+              ) : summaryChains.length ? (
+                <ul className="divide-y divide-subtle" role="list">
+                  {summaryChains.map((chain) => {
+                    const ownerLabel = chainOwnerLabel(research.identity, chain);
+                    return (
+                      <li key={chain.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-1">
+                        <Link
+                          href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                          className="min-w-0 flex-1 truncate text-13 text-primary hover:text-accent-primary"
+                        >
+                          {chain.project_name ?? chain.project}
+                        </Link>
+                        {ownerLabel && <span className="shrink-0 text-12 text-tertiary">{ownerLabel}</span>}
+                        <ResearchStatusBadge status={chain.status} size="sm">
+                          {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
+                        </ResearchStatusBadge>
+                        <span className="w-24 shrink-0 text-right text-11 text-tertiary tabular-nums">
+                          {formatResearchDate(chain.updated_at, currentLocale)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="p-4 text-12 text-secondary">{t("research.chains.empty")}</p>
+              )}
+            </div>
+          </section>
+
+          <div className="mt-5">
+            {workspaceSlug && <ResearchTodoIndex workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />}
+          </div>
+
+          {workspaceSlug && !research.isIaV2Enabled && research.canSee("research_chain") && (
+            <div className="mt-5">
+              <ResearchChainPortal workspaceSlug={workspaceSlug} />
+            </div>
+          )}
+          {workspaceSlug && research.canSee("dashboard") && (
+            <section className="mt-5" aria-label={t("research.pi.overview")}>
+              <ResearchPiAggregateBoard workspaceSlug={workspaceSlug} />
+            </section>
+          )}
+
+          {!research.isIaV2Enabled && compactNavItems.length > 0 && (
+            <nav className="mt-5" aria-label={t("research.nav.group")}>
+              <h3 className="text-11 font-medium tracking-wide text-tertiary uppercase">{t("research.nav.group")}</h3>
+              <ul className="mt-2 divide-y divide-subtle overflow-hidden rounded-xl bg-surface-2" role="list">
+                {compactNavItems.map((card) => (
+                  <li key={card.key}>
+                    <Link
+                      href={`/${workspaceSlug}/research/${card.path}`}
+                      className="group flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-surface-1"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-13 font-medium text-primary">{t(card.titleKey)}</p>
+                        <p className="mt-0.5 truncate text-11 text-tertiary">
+                          {t(`research.overview.${card.key}_hint`)}
+                        </p>
+                      </div>
+                      <ChevronRightOutline className="size-4 shrink-0 text-tertiary transition-colors group-hover:text-secondary" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
+        </div>
       </div>
     </ResearchPageShell>
   );

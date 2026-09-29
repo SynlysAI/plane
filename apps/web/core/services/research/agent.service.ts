@@ -1,0 +1,141 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+import { API_BASE_URL, researchEndpoints } from "@plane/constants";
+import type { TAgentPluginManifest, TResearchAgentApproval, TResearchAgentSession } from "@plane/types";
+import { APIService } from "@/services/api.service";
+
+export type TAgentRunEvent = {
+  schema_version: "agent-plugin.v1";
+  run_id: string;
+  seq: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+  request_id: string;
+  created_at: string;
+};
+
+export type TAgentMessageResponse = {
+  session: TResearchAgentSession;
+  events: TAgentRunEvent[];
+};
+
+export type TAgentApprovalDecision = "APPROVED" | "REJECTED";
+
+function request_id() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export class ResearchAgentService extends APIService {
+  constructor() {
+    super(API_BASE_URL);
+  }
+
+  async getManifest(workspaceSlug: string) {
+    return this.get(researchEndpoints.agentManifest(workspaceSlug))
+      .then((res) => res?.data as TAgentPluginManifest)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async createSession(workspaceSlug: string, chainNodeId: string) {
+    return this.post(researchEndpoints.agentSessions(workspaceSlug), {
+      request_id: request_id(),
+      chain_node_id: chainNodeId,
+    })
+      .then((res) => res?.data as TResearchAgentSession)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async closeSession(workspaceSlug: string, sessionId: string) {
+    return this.post(researchEndpoints.agentSessionClose(workspaceSlug, sessionId), {})
+      .then((res) => res?.data as TResearchAgentSession)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async cancelRun(workspaceSlug: string, runId: string) {
+    return this.post(researchEndpoints.agentRunCancel(workspaceSlug, runId), {})
+      .then((res) => res?.data as TResearchAgentSession)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async sendMessage(workspaceSlug: string, sessionId: string, content: string) {
+    return this.post(researchEndpoints.agentMessages(workspaceSlug, sessionId), {
+      request_id: request_id(),
+      content,
+    })
+      .then((res) => res?.data as TAgentMessageResponse)
+      .catch((err) => {
+        const data = err?.response?.data as TAgentMessageResponse | undefined;
+        if (data?.session) return data;
+        throw err?.response?.data;
+      });
+  }
+
+  async getEvents(workspaceSlug: string, runId: string, afterSeq = 0) {
+    return this.get(researchEndpoints.agentRunEvents(workspaceSlug, runId), { params: { after_seq: afterSeq } })
+      .then((res) => res?.data as { results: TAgentRunEvent[]; count: number; latest_seq: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async getApprovals(workspaceSlug: string) {
+    return this.get(researchEndpoints.agentApprovals(workspaceSlug))
+      .then((res) => res?.data as { results: TResearchAgentApproval[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async decideApproval(
+    workspaceSlug: string,
+    runId: string,
+    payload: {
+      request_id: string;
+      decision: TAgentApprovalDecision;
+      tool_call_id: string;
+      reason?: string;
+    }
+  ) {
+    return this.post(researchEndpoints.agentApproval(workspaceSlug, runId), payload)
+      .then((res) => res?.data as { session: TResearchAgentSession; event: TAgentRunEvent })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async saveArtifact(
+    workspaceSlug: string,
+    sessionId: string,
+    payload: {
+      artifact_type: string;
+      summary: string;
+      confirmed: boolean;
+      method?: string;
+      metrics?: Record<string, unknown>;
+      conclusion?: string;
+      input_refs?: Array<Record<string, unknown>>;
+      content_hash?: string;
+    }
+  ) {
+    return this.post(researchEndpoints.agentArtifacts(workspaceSlug), {
+      ...payload,
+      session_id: sessionId,
+      request_id: request_id(),
+    })
+      .then((res) => res?.data)
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+}

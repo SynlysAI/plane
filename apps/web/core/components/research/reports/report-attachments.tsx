@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
@@ -147,22 +148,22 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
         <div className="rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 text-secondary">{warning}</div>
       )}
 
-      <table className="w-full text-12">
-        <thead>
-          <tr className="border-b border-subtle text-left text-tertiary">
-            <th className="font-normal py-2">{t("research.attachments.columns.name")}</th>
-            <th className="font-normal py-2">{t("research.attachments.columns.kind")}</th>
-            <th className="font-normal py-2">{t("research.attachments.columns.size")}</th>
-            <th className="py-2" />
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow className="text-tertiary">
+            <TableHead>{t("research.attachments.columns.name")}</TableHead>
+            <TableHead>{t("research.attachments.columns.kind")}</TableHead>
+            <TableHead>{t("research.attachments.columns.size")}</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {attachments.map((attachment) => (
-            <tr key={attachment.id} className="border-b border-subtle/60">
-              <td className="py-2 text-secondary">{attachment.file_name}</td>
-              <td className="py-2 text-tertiary">{attachment.kind}</td>
-              <td className="py-2 text-tertiary">{Math.round(attachment.file_size / 1024)} KB</td>
-              <td className="py-2 text-right">
+            <TableRow key={attachment.id}>
+              <TableCell className="text-secondary">{attachment.file_name}</TableCell>
+              <TableCell className="text-tertiary">{attachment.kind}</TableCell>
+              <TableCell className="text-tertiary">{Math.round(attachment.file_size / 1024)} KB</TableCell>
+              <TableCell className="text-right">
                 <a
                   className="mr-3 text-accent-primary"
                   href={`/api/research/workspaces/${workspaceSlug}/reports/${reportId}/attachments/${attachment.id}/`}
@@ -174,18 +175,18 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
                     {t("research.common.delete")}
                   </Button>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
           {attachments.length === 0 && (
-            <tr>
-              <td colSpan={4} className="py-3 text-center text-tertiary">
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-tertiary">
                 {t("research.attachments.empty")}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
 
       {editable && (
         <div className="flex flex-col gap-2 rounded-md border border-subtle bg-surface-2 p-3">

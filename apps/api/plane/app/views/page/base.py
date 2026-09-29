@@ -87,15 +87,25 @@ class PageViewSet(BaseViewSet):
             entity_identifier=OuterRef("pk"),
             workspace__slug=self.kwargs.get("slug"),
         )
-        return self.filter_queryset(
-            super()
-            .get_queryset()
-            .filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(
+        from plane.research.utils.project_review import user_can_review_research_project
+
+        slug = self.kwargs.get("slug")
+        project_id = self.kwargs.get("project_id")
+        review_reader = bool(project_id and user_can_review_research_project(self.request.user, slug, project_id))
+        project_scope = (
+            Q(projects__id=project_id, projects__archived_at__isnull=True)
+            if review_reader
+            else Q(
                 projects__project_projectmember__member=self.request.user,
                 projects__project_projectmember__is_active=True,
                 projects__archived_at__isnull=True,
             )
+        )
+        return self.filter_queryset(
+            super()
+            .get_queryset()
+            .filter(workspace__slug=slug)
+            .filter(project_scope)
             .filter(parent__isnull=True)
             .filter(Q(owned_by=self.request.user) | Q(access=0))
             .prefetch_related("projects")

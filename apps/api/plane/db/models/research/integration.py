@@ -19,6 +19,7 @@ from .append_only import AppendOnlyModel
 class IntegrationSystem(models.TextChoices):
     RAGPORTAL = "RAGPORTAL", "RAGPortal"
     WEKNORA = "WEKNORA", "WeKnora"
+    SYNLORA = "SYNLORA", "Synlora"
     SPECLABOS = "SPECLABOS", "SpecLabOS"
     SMARTACCESS = "SMARTACCESS", "SmartAccess"
     POLY_AGENT = "POLY_AGENT", "Poly_Agent"

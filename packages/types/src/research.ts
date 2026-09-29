@@ -116,11 +116,18 @@ export type TWorkspaceResearchSetting = {
   workspace?: string;
   purpose: TWorkspaceResearchPurpose;
   main_pi: string | null;
+  main_pi_name?: string | null;
   required_reporter_categories: TResearchProfileCategory[];
   module_enabled: boolean;
   org_enabled: boolean;
   report_enabled: boolean;
   approval_enabled: boolean;
+  research_chain_enabled?: boolean;
+  research_agent_enabled?: boolean;
+  research_trace_enabled?: boolean;
+  research_account_link_enabled?: boolean;
+  research_external_rag_enabled?: boolean;
+  research_ia_v2?: boolean;
   allow_multiple_projects: boolean;
   default_report_visibility: TReportVisibility;
   weekly_default_visibility?: TReportVisibility | null;
@@ -144,6 +151,183 @@ export type TResearchProjectProfile = {
   expected_end_at: string | null;
   completed_at: string | null;
   is_active: boolean;
+  chain_kind?: "LEGACY_TRAINING" | "RESEARCH_CHAIN";
+  chain_visibility?: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  chain_id?: string | null;
+};
+
+export type TResearchChain = {
+  schema_version: "research-chain.v1";
+  id: string;
+  project: string;
+  project_name?: string;
+  workspace: string;
+  owner: string;
+  owner_name?: string;
+  project_identifier?: string;
+  org_unit_name?: string | null;
+  capabilities?: TResearchActionCapabilities;
+  status: "ACTIVE" | "ARCHIVED" | "COMPLETED";
+  visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchChainNode = {
+  schema_version: "research-node.v1";
+  id: string;
+  chain: string;
+  node_type: string;
+  title: string;
+  parent_node: string | null;
+  loop_iteration: number;
+  status: "DRAFT" | "ACTIVE" | "WAITING_HUMAN" | "NEEDS_REVISION" | "COMPLETED" | "FAILED" | "ARCHIVED";
+  assignee: string | null;
+  capabilities?: TResearchActionCapabilities;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchActionCapability = {
+  allowed: boolean;
+  reason_code: string;
+  reason: string;
+};
+
+export type TResearchActionCapabilities = {
+  schema_version: "research-capabilities.v1";
+  actions: Record<string, TResearchActionCapability>;
+};
+
+export type TResearchChainNodeAction = "START" | "SUBMIT_REVIEW" | "APPROVE" | "RETURN" | "FAIL" | "ARCHIVE";
+
+export type TResearchChainEvent = {
+  schema_version: "research-event.v1";
+  id?: string;
+  event_id: string;
+  node: string;
+  actor: string | null;
+  actor_type: string;
+  source_system: string;
+  request_id: string;
+  trace_id: string;
+  event_type: string;
+  occurred_at: string;
+  refs: Array<Record<string, unknown>>;
+  summary: string;
+  content_hash: string;
+};
+
+export type TResearchChainSnapshot = {
+  schema_version: "research-snapshot.v1";
+  snapshot_id: string;
+  snapshot_type:
+    | "LITERATURE_REVIEW"
+    | "EXPERIMENT_EXECUTION"
+    | "EXPERIMENT_DATA"
+    | "ANALYSIS_RESULT"
+    | "PAPER_RESEARCH"
+    | "PROCESS";
+  node: string;
+  version: number;
+  source_versions: Array<Record<string, unknown>>;
+  resources: Array<Record<string, unknown>>;
+  event_range: { first: string; last: string };
+  summary: string;
+  created_by: string | null;
+  content_hash: string;
+  immutable: boolean;
+  created_at: string;
+};
+
+export type TResearchChainMember = {
+  user_id: string;
+  display_name: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  is_owner: boolean;
+};
+
+export type TResearchAnalysisResult = {
+  schema_version: "research-analysis.v1";
+  id: string;
+  chain: string;
+  node: string;
+  method: string;
+  input_refs: Array<Record<string, unknown>>;
+  summary: string;
+  metrics: Record<string, unknown>;
+  quality: Record<string, unknown>;
+  conclusion: string;
+  operator: string | null;
+  tool_version: string;
+  status: "DRAFT" | "ACCEPTED";
+  created_at: string;
+  updated_at: string;
+};
+
+export type TAgentPluginManifest = {
+  schema_version: "agent-plugin.v1";
+  plugin_id: string;
+  manifest_version: "agent-plugin.v1";
+  entrypoints: string[];
+  required_scopes: string[];
+  capabilities: string[];
+  ui: { desktop: string; mobile: string };
+  feature_flag: string;
+  ui_states: string[];
+  transport: { events: string; streaming: string; iframe: string };
+  enabled?: boolean;
+};
+
+export type TResearchAgentSession = {
+  schema_version: "agent-plugin.v1";
+  session_id: string;
+  run_id: string;
+  workspace: string;
+  user: string;
+  project: string;
+  chain_node: string;
+  context_id: string;
+  context_hash: string;
+  context_expires_at?: string;
+  status: "INITIALIZING" | "READY" | "STREAMING" | "WAITING_APPROVAL" | "SAVING" | "DEGRADED" | "ERROR" | "CLOSED";
+  last_error: string;
+  synlora_session_id: string;
+  synlora_run_id: string;
+  delegated_subject: string;
+  assembly: {
+    persona: string;
+    enabled_plugins: string[];
+    allowed_tools: string[];
+    allowed_knowledge_base_ids: string[];
+    allowed_file_ids: string[];
+    unavailable_reasons: string[];
+    policy_id: string;
+  };
+  chain_node_title?: string;
+  project_name?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchAgentApproval = {
+  session_id: string;
+  run_id: string;
+  workspace: string;
+  user: string;
+  user_detail?: TResearchUserLite | null;
+  project: string;
+  project_name?: string;
+  chain: string;
+  chain_node: string;
+  chain_node_title?: string;
+  status: "WAITING_APPROVAL" | "DEGRADED" | "ERROR" | "CLOSED";
+  tool_call_id: string;
+  summary: string;
+  risk_level?: string;
+  capability_scope?: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type TReportOfficialContent = {
@@ -269,6 +453,7 @@ export type TIdentityMapping = {
 export type TResearchIdentity = {
   module_enabled: boolean;
   workspace_enabled: boolean;
+  research_ia_v2?: boolean;
   sections: {
     org: boolean;
     reports: boolean;
@@ -277,6 +462,8 @@ export type TResearchIdentity = {
     experiments?: boolean;
     code?: boolean;
     integrations?: boolean;
+    research_chain?: boolean;
+    research_agent?: boolean;
   };
   /**
    * Which surfaces this caller may reach (v2.5.0). `nav` is already
@@ -320,6 +507,10 @@ export type TResearchIdentity = {
     }[];
     mentor_ids: string[];
     mentee_ids: string[];
+  };
+  workspace?: {
+    slug: string;
+    purpose: "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
   };
   identity: {
     provider: string | null;
@@ -852,11 +1043,28 @@ export type TResearchOutcome = {
   published_at: string | null;
   visibility: TReportVisibility;
   links: TResearchOutcomeLink[];
+  attachments?: TResearchOutcomeAttachment[];
   created_at: string;
   updated_at: string;
 };
 
-export type TIntegrationSystem = "RAGPORTAL" | "WEKNORA" | "SPECLABOS" | "SMARTACCESS" | "POLY_AGENT" | "SPEC_AGENT";
+export type TResearchOutcomeAttachment = {
+  id: string;
+  file_name: string;
+  content_type: string;
+  file_size: number;
+  asset: string;
+  download_url?: string;
+};
+
+export type TIntegrationSystem =
+  | "RAGPORTAL"
+  | "WEKNORA"
+  | "SYNLORA"
+  | "SPECLABOS"
+  | "SMARTACCESS"
+  | "POLY_AGENT"
+  | "SPEC_AGENT";
 
 export type TIntegrationConnection = {
   id?: string;
@@ -875,6 +1083,8 @@ export type TIntegrationConnection = {
   last_health_at?: string | null;
   last_success_at?: string | null;
   last_error?: string;
+  registration_status?: "CONNECTED" | "REGISTERED_DISABLED" | "NOT_REGISTERED" | "PHASE_NOT_ENABLED" | "PROXY";
+  proxy_system?: TIntegrationSystem;
 };
 
 export type TIntegrationCallLog = {

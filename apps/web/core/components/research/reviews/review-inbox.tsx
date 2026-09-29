@@ -13,8 +13,10 @@ import type { TStageReview, TToMeReview } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchFilterToolbar, ResearchListSurface } from "@/components/research/common/research-data-surface";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
@@ -27,7 +29,7 @@ type TScope = "to_me" | "mine";
  * mandatory review is never hidden behind optional ones (P1-REV-09, P1-UI-03).
  */
 export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [scope, setScope] = useState<TScope>("to_me");
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -51,8 +53,8 @@ export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Prop
   const mine: TStageReview[] = research.myReviews;
 
   return (
-    <div className="flex flex-col gap-3 p-5">
-      <div className="flex items-center gap-2">
+    <ResearchListSurface>
+      <ResearchFilterToolbar>
         {(["to_me", "mine"] as const).map((value) => (
           <button
             key={value}
@@ -65,7 +67,7 @@ export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Prop
             {t(`research.reviews.scope_${value}`)}
           </button>
         ))}
-      </div>
+      </ResearchFilterToolbar>
 
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
@@ -74,7 +76,7 @@ export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Prop
           {pending.map((item) => (
             <div
               key={item.assignment_id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded border border-subtle px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-1 px-3 py-2"
             >
               <span className="flex items-center gap-2 text-12 text-primary">
                 {t(STAGE_TYPE_LABELS[item.stage])}
@@ -105,22 +107,19 @@ export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Prop
       {scope === "mine" && (
         <div className="flex flex-col gap-1">
           {mine.map((review) => (
-            <div
-              key={review.id}
-              className="flex items-center justify-between gap-2 rounded border border-subtle px-3 py-2"
-            >
+            <div key={review.id} className="flex items-center justify-between gap-2 rounded-lg bg-surface-1 px-3 py-2">
               <span className="text-12 text-primary">
                 {t(REVIEW_RECOMMENDATION_LABELS[review.recommendation])}
                 {` · v${review.revision_no}`}
               </span>
               <span className="text-11 text-tertiary">
-                {review.submitted_at ? new Date(review.submitted_at).toLocaleString() : ""}
+                {review.submitted_at ? formatResearchDateTime(review.submitted_at, currentLocale) : ""}
               </span>
             </div>
           ))}
           {!mine.length && <p className="text-12 text-tertiary">{t("research.reviews.mine_empty")}</p>}
         </div>
       )}
-    </div>
+    </ResearchListSurface>
   );
 });

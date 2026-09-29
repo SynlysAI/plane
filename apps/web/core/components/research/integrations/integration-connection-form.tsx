@@ -7,13 +7,14 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { INTEGRATION_SYSTEM_LABELS, INTEGRATION_SYSTEMS } from "@plane/constants";
+import { DIRECT_INTEGRATION_SYSTEMS, INTEGRATION_SYSTEM_LABELS } from "@plane/constants";
 import type { TIntegrationConnection } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Input } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 
 type Props = {
   connections: TIntegrationConnection[];
@@ -33,8 +34,8 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
   const existing = connections.find((connection) => connection.system === system);
 
   return (
-    <div className="flex flex-col gap-2 rounded border border-subtle p-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-2">
+      <ResearchFilterToolbar>
         <select
           className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
           value={system}
@@ -47,7 +48,7 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
             setEnabled(Boolean(next?.is_enabled));
           }}
         >
-          {INTEGRATION_SYSTEMS.map((value) => (
+          {DIRECT_INTEGRATION_SYSTEMS.map((value) => (
             <option key={value} value={value}>
               {t(INTEGRATION_SYSTEM_LABELS[value])}
             </option>
@@ -62,7 +63,7 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
         <Input
           className="!w-64"
           value={baseUrl}
-          placeholder="https://system.example.com"
+          placeholder={baseUrl ? "" : t("research.integrations.base_url_hint")}
           onChange={(event) => setBaseUrl(event.target.value)}
         />
         <Input
@@ -99,7 +100,7 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
         >
           {t("research.common.save")}
         </Button>
-      </div>
+      </ResearchFilterToolbar>
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
       <p className="text-11 text-tertiary">
         {existing?.has_credential

@@ -18,6 +18,7 @@ from .. import BaseViewSet
 from plane.app.serializers import IssueLinkSerializer
 from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import IssueLink
+from plane.research.utils.project_review import project_member_filters
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.work_item_link_task import crawl_work_item_link_title
 from plane.utils.host import base_host
@@ -37,9 +38,12 @@ class IssueLinkViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(issue_id=self.kwargs.get("issue_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
                 project__archived_at__isnull=True,
+                **project_member_filters(
+                    self.request.user,
+                    self.kwargs.get("slug"),
+                    self.kwargs.get("project_id"),
+                ),
             )
             .order_by("-created_at")
             .distinct()

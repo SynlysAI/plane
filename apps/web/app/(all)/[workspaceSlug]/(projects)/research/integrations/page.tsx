@@ -8,9 +8,10 @@ import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchIaV2Redirect } from "@/components/research/navigation/research-ia-v2-redirect";
 import { IntegrationSettings } from "@/components/research/integrations/integration-settings";
 
-function WorkspaceResearchIntegrationsPage() {
+function WorkspaceResearchIntegrationsContent() {
   const { workspaceSlug } = useParams();
   if (!workspaceSlug) return null;
 
@@ -24,6 +25,16 @@ function WorkspaceResearchIntegrationsPage() {
     >
       <IntegrationSettings workspaceSlug={workspaceSlug} />
     </ResearchPageShell>
+  );
+}
+
+function WorkspaceResearchIntegrationsPage() {
+  const { workspaceSlug } = useParams();
+  if (!workspaceSlug) return null;
+  return (
+    <ResearchIaV2Redirect to={`/${workspaceSlug}/research/settings/integrations`}>
+      <WorkspaceResearchIntegrationsContent />
+    </ResearchIaV2Redirect>
   );
 }
 

@@ -26,8 +26,8 @@ export const ResearchAdminRoleSummary = observer(function ResearchAdminRoleSumma
   const isWorkspaceAdmin = Boolean(research.identity?.user?.is_workspace_admin);
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-subtle p-3">
-      <h4 className="text-12 font-medium text-primary">{t("research.system.admin_roles_title")}</h4>
+    <div className="flex flex-col gap-2 rounded-xl bg-surface-1 p-4">
+      <h4 className="text-13 font-semibold text-primary">{t("research.system.admin_roles_title")}</h4>
       <div className="flex flex-wrap gap-2">
         {roles.length === 0 ? (
           <span className="text-11 text-tertiary">{t("research.system.admin_roles_empty")}</span>

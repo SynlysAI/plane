@@ -16,6 +16,7 @@ import { Input, Spinner } from "@plane/ui";
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchAccountService } from "@/services/research/account.service";
+import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 const accountService = new ResearchAccountService();
 
@@ -25,7 +26,7 @@ type Props = {
 
 /** Permission-scoped research overview for a PI, direction owner or mentor. */
 export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoard({ workspaceSlug }: Props) {
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const [aggregate, setAggregate] = useState<TPiAggregate | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,8 +53,12 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
   );
 
   useEffect(() => {
+    if (research.identity?.workspace?.purpose === "PI_PRIVATE") {
+      setLoading(false);
+      return;
+    }
     void load({});
-  }, [load]);
+  }, [load, research.identity?.workspace?.purpose]);
 
   const applyFilters = () =>
     void load({
@@ -68,6 +73,17 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
       <div className="flex h-full items-center justify-center">
         <Spinner />
       </div>
+    );
+  }
+
+  if (research.identity?.workspace?.purpose === "PI_PRIVATE") {
+    return (
+      <p className="rounded-md border border-dashed border-subtle p-4 text-12 text-tertiary">
+        {t("research.pi.private_workspace_hint")}
+        <Link className="ml-1 text-accent-primary hover:underline" href="/public/research">
+          {t("research.pi.open_public_workspace")}
+        </Link>
+      </p>
     );
   }
 
@@ -130,93 +146,90 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
   ];
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-5">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-14 font-medium text-primary">{t("research.pi.title")}</h3>
-          <p className="mt-0.5 text-12 text-tertiary">
-            {t("research.pi.scope_summary", {
-              units: aggregate.scope.unit_count,
-              workspace: aggregate.source_workspace.name,
-            })}
-          </p>
-        </div>
+        <h3 className="text-13 font-semibold text-primary">{t("research.pi.overview")}</h3>
         <span className="text-11 text-tertiary">
-          {t("research.pi.generated_at")} {new Date(aggregate.generated_at).toLocaleString()}
+          {t("research.pi.generated_at")} {formatResearchDateTime(aggregate.generated_at, currentLocale)}
         </span>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2 rounded-md border border-subtle p-3">
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          <span>{t("research.pi.filters.org_unit")}</span>
-          <select
-            className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-            value={orgUnit}
-            onChange={(event) => setOrgUnit(event.target.value)}
-          >
-            <option value="">{t("research.pi.filters.all_org_units")}</option>
-            {aggregate.org_units.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          <span>{t("research.pi.filters.owner")}</span>
-          <Input
-            className="!w-48"
-            placeholder={t("research.pi.filters.owner_placeholder")}
-            value={owner}
-            onChange={(event) => setOwner(event.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          <span>{t("research.common.date_from")}</span>
-          <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          <span>{t("research.common.date_to")}</span>
-          <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-        </label>
-        <Button variant="secondary" size="sm" onClick={applyFilters}>
-          {t("research.common.apply_filters")}
-        </Button>
-      </div>
-
       {aggregate.scope.is_empty ? (
-        <p className="rounded-md border border-subtle p-4 text-12 text-tertiary">{t("research.pi.empty_scope")}</p>
+        <p className="rounded-md border border-dashed border-subtle p-4 text-12 text-tertiary">
+          {t("research.pi.empty_scope")}
+        </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {cards.map((card) => {
-            const content = (
-              <>
-                <span className="text-12 text-tertiary">{card.label}</span>
-                <span className="text-20 font-medium text-primary">{card.value}</span>
-                <span className="text-11 text-tertiary">{card.detail}</span>
-              </>
-            );
-            return card.href ? (
+        <div className="flex flex-wrap items-stretch divide-x divide-subtle overflow-x-auto rounded-xl bg-surface-1">
+          {cards.map((card) =>
+            card.href ? (
               <Link
                 key={card.key}
                 href={card.href}
-                className="flex flex-col gap-1 rounded-md border border-subtle p-4 transition-colors hover:bg-surface-2"
+                title={card.detail}
+                className="flex min-w-28 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-surface-2"
               >
-                {content}
+                <span className="text-20 font-semibold text-primary tabular-nums">{card.value}</span>
+                <span className="truncate text-11 text-tertiary">{card.label}</span>
               </Link>
             ) : (
-              <div key={card.key} className="flex flex-col gap-1 rounded-md border border-subtle p-4">
-                {content}
+              <div key={card.key} title={card.detail} className="flex min-w-28 flex-1 flex-col gap-0.5 px-3 py-2.5">
+                <span className="text-20 font-semibold text-primary tabular-nums">{card.value}</span>
+                <span className="truncate text-11 text-tertiary">{card.label}</span>
               </div>
-            );
-          })}
+            )
+          )}
         </div>
       )}
 
+      <details className="rounded-xl bg-surface-1">
+        <summary className="cursor-pointer list-none px-4 py-2 text-12 text-secondary hover:text-primary">
+          {t("research.pi.show_filters")}
+        </summary>
+        <div className="flex flex-wrap items-end gap-2 border-t border-subtle px-4 py-3">
+          <label className="flex flex-col gap-1 text-11 text-tertiary">
+            <span>{t("research.pi.filters.org_unit")}</span>
+            <select
+              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+              value={orgUnit}
+              onChange={(event) => setOrgUnit(event.target.value)}
+            >
+              <option value="">{t("research.pi.filters.all_org_units")}</option>
+              {aggregate.org_units.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-11 text-tertiary">
+            <span>{t("research.pi.filters.owner")}</span>
+            <Input
+              className="!w-48"
+              placeholder={t("research.pi.filters.owner_placeholder")}
+              value={owner}
+              onChange={(event) => setOwner(event.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-11 text-tertiary">
+            <span>{t("research.common.date_from")}</span>
+            <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-11 text-tertiary">
+            <span>{t("research.common.date_to")}</span>
+            <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          </label>
+          <Button variant="secondary" size="sm" onClick={applyFilters}>
+            {t("research.common.apply_filters")}
+          </Button>
+        </div>
+      </details>
+
       {aggregate.org_units.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h4 className="text-12 font-medium text-primary">{t("research.pi.org_units")}</h4>
-          <div className="flex flex-wrap gap-2">
+        <details className="rounded-xl bg-surface-1">
+          <summary className="cursor-pointer list-none px-4 py-2 text-12 text-secondary hover:text-primary">
+            {t("research.pi.org_units")} · {aggregate.org_units.length}
+          </summary>
+          <div className="flex flex-wrap gap-2 border-t border-subtle px-4 py-3">
             {aggregate.org_units.map((unit) => (
               <span
                 key={unit.id}
@@ -227,20 +240,22 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
               </span>
             ))}
           </div>
-        </section>
+        </details>
       )}
       {(aggregate.outcomes?.recent.length ?? 0) > 0 && (
-        <section className="flex flex-col gap-2">
-          <h4 className="text-12 font-medium text-primary">{t("research.pi.recent_outcomes")}</h4>
-          <ul className="flex flex-col divide-y divide-subtle rounded-md border border-subtle px-3">
+        <details className="rounded-xl bg-surface-1" open>
+          <summary className="cursor-pointer list-none px-4 py-2 text-12 text-secondary hover:text-primary">
+            {t("research.pi.recent_outcomes")}
+          </summary>
+          <ul className="flex flex-col divide-y divide-subtle border-t border-subtle px-4">
             {aggregate.outcomes?.recent.map((outcome) => (
               <li key={outcome.id} className="flex items-center justify-between gap-3 py-2 text-12">
                 <span className="truncate text-secondary">{outcome.title}</span>
-                <span className="shrink-0 text-tertiary">{outcome.published_at ?? "-"}</span>
+                <span className="shrink-0 text-tertiary tabular-nums">{outcome.published_at ?? "-"}</span>
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       )}
     </div>
   );

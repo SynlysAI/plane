@@ -9,8 +9,9 @@ import { useParams } from "react-router";
 // components
 import { ResearchAuditEventTable } from "@/components/research/audit/audit-event-table";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchIaV2Redirect } from "@/components/research/navigation/research-ia-v2-redirect";
 
-function WorkspaceResearchAuditPage() {
+function WorkspaceResearchAuditContent() {
   const { workspaceSlug } = useParams();
   if (!workspaceSlug) return null;
 
@@ -25,6 +26,16 @@ function WorkspaceResearchAuditPage() {
     >
       <ResearchAuditEventTable workspaceSlug={workspaceSlug} />
     </ResearchPageShell>
+  );
+}
+
+function WorkspaceResearchAuditPage() {
+  const { workspaceSlug } = useParams();
+  if (!workspaceSlug) return null;
+  return (
+    <ResearchIaV2Redirect to={`/${workspaceSlug}/research/settings/audit`}>
+      <WorkspaceResearchAuditContent />
+    </ResearchIaV2Redirect>
   );
 }
 

@@ -93,8 +93,8 @@ export function Dropdown(props: ISingleSelectDropdown) {
     if (!options) return undefined;
 
     const filteredOptions = queryArray
-      ? (options || []).filter((options) => {
-          const queryString = queryArray.map((query) => options.data[query]).join(" ");
+      ? (options || []).filter((option) => {
+          const queryString = queryArray.map((field) => option.data[field]).join(" ");
           return queryString.toLowerCase().includes(query.toLowerCase());
         })
       : options;
@@ -106,7 +106,7 @@ export function Dropdown(props: ISingleSelectDropdown) {
       (option) => !(value ?? []).includes(option.data[option.value]),
       () => sortByKey && sortByKey.toLowerCase(),
     ]);
-  }, [query, options]);
+  }, [disableSorting, firstItem, options, query, queryArray, sortByKey, value]);
 
   // hooks
   const handleKeyDown = useDropdownKeyPressed(toggleDropdown, handleClose);
@@ -116,6 +116,7 @@ export function Dropdown(props: ISingleSelectDropdown) {
   return (
     <Combobox
       as="div"
+      role="group"
       ref={dropdownRef}
       value={value}
       // Headless UI v2 widens a non-multiple Combobox to `T | null`. v1 never emitted
@@ -143,8 +144,11 @@ export function Dropdown(props: ISingleSelectDropdown) {
       />
       {isOpen && (
         <Combobox.Options
+          modal={false}
+          portal
+          data-prevent-outside-click
           as="ul"
-          className="fixed z-10"
+          className="fixed z-40"
           static
           ref={setPopperElement}
           style={styles.popper}

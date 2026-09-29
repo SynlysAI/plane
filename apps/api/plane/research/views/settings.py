@@ -30,6 +30,12 @@ BOOLEAN_FIELDS = (
     "report_enabled",
     "approval_enabled",
     "allow_multiple_projects",
+    "research_chain_enabled",
+    "research_agent_enabled",
+    "research_trace_enabled",
+    "research_account_link_enabled",
+    "research_external_rag_enabled",
+    "research_ia_v2",
 )
 
 VISIBILITY_FIELDS = (
@@ -69,7 +75,20 @@ class ResearchSettingsEndpoint(ResearchAPIView):
         if error:
             return error
         setting = get_or_create_setting(workspace, actor=request.user)
-        return Response(WorkspaceResearchSettingSerializer(setting).data, status=status.HTTP_200_OK)
+        payload = WorkspaceResearchSettingSerializer(setting).data
+        # 只给系统管理员解析候选显示名。找不到或没有显示名时不回传原始账号 ID。
+        lookup = str(request.GET.get("lookup_user") or "").strip()
+        if lookup:
+            from plane.research.utils.roles import is_system_admin
+            from plane.research.views.base import resolve_user
+
+            if not is_system_admin(request.user):
+                return research_permission_denied()
+            user = resolve_user(lookup)
+            name = str(getattr(user, "display_name", "") or "").strip() if user is not None else ""
+            payload["lookup_user_found"] = bool(name)
+            payload["lookup_user_name"] = name or None
+        return Response(payload, status=status.HTTP_200_OK)
 
     def patch(self, request, slug):
         workspace, error = self.get_workspace(require_enabled=False)

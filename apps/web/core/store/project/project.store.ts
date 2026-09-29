@@ -17,6 +17,7 @@ import { IssueLabelService, IssueService } from "@/services/issue";
 import { ProjectService, ProjectStateService, ProjectArchiveService } from "@/services/project";
 // store
 import type { CoreRootStore } from "../root.store";
+import { projectIsVisibleInSidebar } from "./project-visibility";
 
 type ProjectOverviewCollapsible = "links" | "attachments" | "milestones";
 
@@ -244,7 +245,7 @@ export class ProjectStore implements IProjectStore {
     projects = sortBy(projects, "sort_order");
 
     const projectIds = projects
-      .filter((project) => project.workspace === currentWorkspace.id && !!project.member_role && !project.archived_at)
+      .filter((project) => projectIsVisibleInSidebar(project, currentWorkspace.id))
       .map((project) => project.id);
     return projectIds;
   }
@@ -607,6 +608,7 @@ export class ProjectStore implements IProjectStore {
           set(this.projectMap, [projectId, "archived_at"], response.archived_at);
           this.rootStore.favorite.removeFavoriteFromStore(projectId);
         });
+        return response;
       })
       .catch((error) => {
         console.log("Failed to archive project from project store");
@@ -627,6 +629,7 @@ export class ProjectStore implements IProjectStore {
         runInAction(() => {
           set(this.projectMap, [projectId, "archived_at"], null);
         });
+        return null;
       })
       .catch((error) => {
         console.log("Failed to restore project from project store");
