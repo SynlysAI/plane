@@ -1346,6 +1346,8 @@
       "degraded": "RAGPortal is degraded ({reason}); you can continue with manual records.",
       "kb_label": "Knowledge base",
       "file_label": "Research file",
+      "select_file": "Select file",
+      "no_file_selected": "No file selected",
       "upload": "Upload through BFF",
       "uploading": "Uploading…",
       "refresh_status": "Refresh status",

@@ -73,11 +73,14 @@ it("selects a scoped knowledge base and uploads through the BFF", async () => {
 
   const input = container.querySelector('input[type="file"]');
   expect(input).not.toBeNull();
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "选择文件")).toBe(true);
+  expect(container.textContent).toContain("未选择任何文件");
   const file = new File(["# paper"], "paper.md", { type: "text/markdown" });
   await act(async () => {
     Object.defineProperty(input, "files", { value: [file] });
     input?.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  expect(container.textContent).toContain("paper.md");
   await act(async () => {
     [...container.querySelectorAll("button")].find((button) => button.textContent === "通过 BFF 上传")?.click();
   });
@@ -158,7 +161,7 @@ it("keeps the upload record available when reference confirmation fails", async 
   expect(mocks.confirmKnowledgeReference).toHaveBeenCalled();
   expect(container.textContent).toContain("paper.md");
   expect(container.textContent).toContain("操作未完成，当前记录已保留。");
-  expect(container.querySelector("button")?.textContent).toContain("上传");
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent?.includes("上传"))).toBe(true);
 });
 
 it("keeps validation failures actionable instead of presenting them as upstream degradation", async () => {
