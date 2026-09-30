@@ -15,6 +15,16 @@ import { Input, Spinner } from "@plane/ui";
 import { useUser } from "@/hooks/store/user";
 
 /**
+ * Backend error codes from `ChangePasswordEndpoint` mapped to readable
+ * messages. Unmapped codes fall back to the generic error message.
+ */
+const GATE_ERROR_MESSAGE_KEYS: Record<string, string> = {
+  "5021": "auth.common.password.first_login.errors.too_weak",
+  "5135": "auth.common.password.first_login.errors.incorrect_current",
+  "5138": "auth.common.password.first_login.errors.missing",
+};
+
+/**
  * Imported accounts start with a one-time credential
  * (`is_password_reset_required`). This gate forces the first change before the
  * workspace becomes usable (SYS-IMP-08).
@@ -46,8 +56,12 @@ export const PasswordResetGate = observer(function PasswordResetGate() {
         message: t("auth.common.password.toast.change_password.success.message"),
       });
     } catch (error) {
-      const payload = error as { error_code?: string } | undefined;
-      setErrorKey(payload?.error_code ?? "auth.common.password.toast.change_password.error.message");
+      const payload = error as { error_code?: string | number } | undefined;
+      const code = payload?.error_code !== undefined ? String(payload.error_code) : undefined;
+      setErrorKey(
+        (code !== undefined && GATE_ERROR_MESSAGE_KEYS[code]) ||
+          "auth.common.password.toast.change_password.error.message"
+      );
     } finally {
       setSubmitting(false);
     }
