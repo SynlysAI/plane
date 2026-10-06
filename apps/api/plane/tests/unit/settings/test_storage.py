@@ -309,3 +309,124 @@ class TestS3StorageMinioPresignedPostURL:
         response = S3Storage().generate_presigned_post("avatar.png", "image/png", 1024)
 
         assert response["url"] == "https://uploads.example.com"
+
+
+@pytest.mark.unit
+class TestS3StorageServerSideEndpointRouting:
+    """Server-side object operations must use the internal MinIO endpoint.
+
+    The public host can be unreachable from the API container (e.g. a
+    Cloudflare-fronted deployment on a campus network), which made upload
+    verification fail with 409 even though the object was stored.
+    """
+
+    @patch.dict(
+        os.environ,
+        {
+            "AWS_ACCESS_KEY_ID": "test-key",
+            "AWS_SECRET_ACCESS_KEY": "test-secret",
+            "AWS_S3_BUCKET_NAME": "uploads",
+            "AWS_REGION": "us-east-1",
+            "USE_MINIO": "1",
+            "MINIO_ENDPOINT_SSL": "0",
+            "WEB_URL": "https://openeva.xmuzc.com",
+            "AWS_S3_ENDPOINT_URL": "http://plane-minio:9000",
+        },
+        clear=True,
+    )
+    @patch("plane.settings.storage.boto3")
+    def test_server_side_operations_use_internal_endpoint_client(self, mock_boto3):
+        """HEAD/COPY/PUT/DELETE talk to AWS_S3_ENDPOINT_URL, not the public host."""
+        public_client, internal_client = Mock(), Mock()
+        mock_boto3.client.side_effect = [public_client, internal_client]
+        request = Mock(scheme="http")
+        request.get_host.return_value = "openeva.xmuzc.com"
+
+        storage = S3Storage(request=request)
+
+        endpoint_urls = [call.kwargs["endpoint_url"] for call in mock_boto3.client.call_args_list]
+        assert endpoint_urls == ["https://openeva.xmuzc.com", "http://plane-minio:9000"]
+
+        internal_client.head_object.return_value = {
+            "ContentType": "application/pdf",
+            "ContentLength": 1024,
+            "ETag": '"abc"',
+        }
+        storage.get_object_metadata("ws/reports/id/file.pdf")
+        storage.delete_files(["ws/reports/id/file.pdf"])
+        storage.copy_object("ws/reports/id/file.pdf", "ws/reports/id/copy.pdf")
+        storage.upload_file(Mock(), "ws/reports/id/file.pdf")
+
+        internal_client.head_object.assert_called_once()
+        internal_client.delete_objects.assert_called_once()
+        internal_client.copy_object.assert_called_once()
+        internal_client.upload_fileobj.assert_called_once()
+        public_client.head_object.assert_not_called()
+        public_client.delete_objects.assert_not_called()
+        public_client.copy_object.assert_not_called()
+        public_client.upload_fileobj.assert_not_called()
+
+    @patch.dict(
+        os.environ,
+        {
+            "AWS_ACCESS_KEY_ID": "test-key",
+            "AWS_SECRET_ACCESS_KEY": "test-secret",
+            "AWS_S3_BUCKET_NAME": "uploads",
+            "AWS_REGION": "us-east-1",
+            "USE_MINIO": "1",
+            "MINIO_ENDPOINT_SSL": "0",
+            "WEB_URL": "https://openeva.xmuzc.com",
+            "AWS_S3_ENDPOINT_URL": "http://plane-minio:9000",
+        },
+        clear=True,
+    )
+    @patch("plane.settings.storage.boto3")
+    def test_presigned_urls_keep_using_public_host_client(self, mock_boto3):
+        """Browser-facing presigned POST/GET URLs are still signed for the public host."""
+        public_client, internal_client = Mock(), Mock()
+        public_client.generate_presigned_post.return_value = {
+            "url": "https://openeva.xmuzc.com/uploads",
+            "fields": {"key": "ws/reports/id/file.pdf"},
+        }
+        public_client.generate_presigned_url.return_value = "https://openeva.xmuzc.com/uploads/ws/reports/id/file.pdf?sig"
+        mock_boto3.client.side_effect = [public_client, internal_client]
+        request = Mock(scheme="http")
+        request.get_host.return_value = "openeva.xmuzc.com"
+
+        storage = S3Storage(request=request)
+        post = storage.generate_presigned_post("ws/reports/id/file.pdf", "application/pdf", 1024)
+        url = storage.generate_presigned_url("ws/reports/id/file.pdf")
+
+        assert post["url"] == "https://openeva.xmuzc.com/uploads/"
+        assert url == "https://openeva.xmuzc.com/uploads/ws/reports/id/file.pdf?sig"
+        public_client.generate_presigned_post.assert_called_once()
+        public_client.generate_presigned_url.assert_called_once()
+        internal_client.generate_presigned_post.assert_not_called()
+        internal_client.generate_presigned_url.assert_not_called()
+
+    @patch.dict(
+        os.environ,
+        {
+            "AWS_ACCESS_KEY_ID": "test-key",
+            "AWS_SECRET_ACCESS_KEY": "test-secret",
+            "AWS_S3_BUCKET_NAME": "uploads",
+            "AWS_REGION": "us-east-1",
+            "USE_MINIO": "1",
+            "MINIO_ENDPOINT_SSL": "0",
+            "WEB_URL": "https://openeva.xmuzc.com",
+        },
+        clear=True,
+    )
+    @patch("plane.settings.storage.boto3")
+    def test_without_internal_endpoint_server_ops_share_request_client(self, mock_boto3):
+        """No internal endpoint configured: keep the single request-host client."""
+        public_client = Mock()
+        mock_boto3.client.return_value = public_client
+        request = Mock(scheme="http")
+        request.get_host.return_value = "openeva.xmuzc.com"
+
+        storage = S3Storage(request=request)
+
+        assert mock_boto3.client.call_count == 1
+        storage.get_object_metadata("ws/reports/id/file.pdf")
+        public_client.head_object.assert_called_once()

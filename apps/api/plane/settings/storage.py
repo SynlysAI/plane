@@ -66,6 +66,22 @@ class S3Storage(S3Boto3Storage):
                 config=boto3.session.Config(signature_version="s3v4"),
             )
 
+        # Server-side object operations (HEAD/COPY/PUT/DELETE) must reach MinIO
+        # through the internal endpoint: the public host can be unreachable from
+        # the API container (e.g. Cloudflare-fronted deployments), which made
+        # upload verification fail even though the object was stored. Only
+        # browser-facing presigned URLs need the request-host client.
+        self.server_s3_client = self.s3_client
+        if os.environ.get("USE_MINIO") == "1" and self.aws_s3_endpoint_url:
+            self.server_s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_secret_access_key,
+                region_name=self.aws_region,
+                endpoint_url=self.aws_s3_endpoint_url,
+                config=boto3.session.Config(signature_version="s3v4"),
+            )
+
     def generate_presigned_post(self, object_name, file_type, file_size, expiration=None):
         """Generate a presigned URL to upload an S3 object"""
         if expiration is None:
@@ -155,7 +171,7 @@ class S3Storage(S3Boto3Storage):
     def get_object_metadata(self, object_name):
         """Get the metadata for an S3 object"""
         try:
-            response = self.s3_client.head_object(Bucket=self.aws_storage_bucket_name, Key=object_name)
+            response = self.server_s3_client.head_object(Bucket=self.aws_storage_bucket_name, Key=object_name)
         except ClientError as e:
             log_exception(e)
             return None
@@ -171,7 +187,7 @@ class S3Storage(S3Boto3Storage):
     def copy_object(self, object_name, new_object_name):
         """Copy an S3 object to a new location"""
         try:
-            response = self.s3_client.copy_object(
+            response = self.server_s3_client.copy_object(
                 Bucket=self.aws_storage_bucket_name,
                 CopySource={"Bucket": self.aws_storage_bucket_name, "Key": object_name},
                 Key=new_object_name,
@@ -194,7 +210,7 @@ class S3Storage(S3Boto3Storage):
             if content_type:
                 extra_args["ContentType"] = content_type
 
-            self.s3_client.upload_fileobj(
+            self.server_s3_client.upload_fileobj(
                 file_obj,
                 self.aws_storage_bucket_name,
                 object_name,
@@ -208,7 +224,7 @@ class S3Storage(S3Boto3Storage):
     def delete_files(self, object_names):
         """Delete an S3 object"""
         try:
-            self.s3_client.delete_objects(
+            self.server_s3_client.delete_objects(
                 Bucket=self.aws_storage_bucket_name,
                 Delete={"Objects": [{"Key": object_name} for object_name in object_names]},
             )
