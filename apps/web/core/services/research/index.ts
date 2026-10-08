@@ -18,3 +18,4 @@ export * from "./outcome.service";
 export * from "./integration.service";
 export * from "./timeline.service";
 export * from "./account.service";
+export * from "./feedback.service";
