@@ -57,6 +57,10 @@ def can_download_research_asset(user, asset):
         from plane.research.utils.report_images import can_read_report_image
 
         return can_read_report_image(user, asset)
+    if asset.entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
+        # Feedback screenshots stream exclusively through the feedback route so
+        # authorized browsers never receive a reusable S3 URL.
+        return False
     research_refs = _research_asset_refs(asset)
     if not research_refs:
         return asset.entity_type != FileAsset.EntityTypeContext.REPORT_ATTACHMENT
@@ -100,6 +104,8 @@ def can_mutate_research_asset(user, asset):
     underlying file through Plane's generic asset route.
     """
     if asset.entity_type == FileAsset.EntityTypeContext.REPORT_IMAGE:
+        return False
+    if asset.entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
         return False
     research_refs = _research_asset_refs(asset)
     if not research_refs:
@@ -481,6 +487,14 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 {"error": "Invalid entity type.", "status": False},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
+            return Response(
+                {
+                    "error": "Feedback screenshots must be uploaded through the feedback endpoint.",
+                    "status": False,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # WORKSPACE_LOGO may only be uploaded by workspace admins
         if entity_type == FileAsset.EntityTypeContext.WORKSPACE_LOGO:
@@ -727,6 +741,14 @@ class ProjectAssetEndpoint(BaseAPIView):
                 {"error": "Invalid entity type.", "status": False},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
+            return Response(
+                {
+                    "error": "Feedback screenshots must be uploaded through the feedback endpoint.",
+                    "status": False,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Check if the file type is allowed
         allowed_types = [
@@ -964,6 +986,11 @@ class DuplicateAssetEndpoint(BaseAPIView):
         if not entity_type or entity_type not in FileAsset.EntityTypeContext.values:
             return Response(
                 {"error": "Invalid entity type or entity id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
+            return Response(
+                {"error": "Feedback screenshots must be uploaded through the feedback endpoint."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

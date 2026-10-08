@@ -19,6 +19,7 @@ def _research_asset_allowed(user, asset, *, mutate=False):
     if asset.entity_type not in {
         FileAsset.EntityTypeContext.REPORT_ATTACHMENT,
         FileAsset.EntityTypeContext.REPORT_IMAGE,
+        FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT,
     }:
         return True
     from plane.app.views.asset.v2 import can_download_research_asset, can_mutate_research_asset
@@ -85,7 +86,8 @@ class UserAssetsEndpoint(BaseAPIView):
 
     def get(self, request, asset_key):
         files = FileAsset.objects.filter(asset=asset_key, created_by=request.user)
-        if files.exists():
+        files = [asset for asset in files if _research_asset_allowed(request.user, asset)]
+        if files:
             serializer = FileAssetSerializer(files, context={"request": request})
             return Response({"data": serializer.data, "status": True}, status=status.HTTP_200_OK)
         else:
@@ -103,6 +105,8 @@ class UserAssetsEndpoint(BaseAPIView):
 
     def delete(self, request, asset_key):
         file_asset = FileAsset.objects.get(asset=asset_key, created_by=request.user)
+        if not _research_asset_allowed(request.user, file_asset, mutate=True):
+            return Response({"error": "You don't have access to this asset."}, status=status.HTTP_403_FORBIDDEN)
         file_asset.is_deleted = True
         file_asset.save(update_fields=["is_deleted"])
         return Response(status=status.HTTP_204_NO_CONTENT)
