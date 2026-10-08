@@ -3,10 +3,10 @@
 from django.db.models import Q
 from rest_framework.response import Response
 
-from plane.db.models import ResearchOutcome
+from plane.db.models import ProjectMember, ResearchOutcome
 from plane.research.serializers.outcome import ResearchOutcomeSerializer
 from plane.research.utils.acl import build_actor_context
-from plane.research.utils.projects import can_create_research_content
+from plane.research.utils.projects import TEAM_CONTENT_ROLES
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid
 from plane.research.views.projects import visible_profile_queryset
 
@@ -63,7 +63,7 @@ class ResearchWorkspaceOutcomeEndpoint(ResearchAPIView):
                 return error
             dates[parameter] = value
             if value:
-                queryset = queryset.filter(**{f"created_at__date__{lookup}": value})
+                queryset = queryset.filter(**{f"published_at__{lookup}": value})
         if dates["date_from"] and dates["date_to"] and dates["date_from"] > dates["date_to"]:
             return Response({"error_code": "invalid_date_range"}, status=400)
         for parameter in ("output_type", "status"):
@@ -81,9 +81,19 @@ class ResearchWorkspaceOutcomeEndpoint(ResearchAPIView):
             default_per_page=50,
             max_per_page=100,
         )
+        active_member_project_ids = set(
+            ProjectMember.objects.filter(
+                project_id__in=[profile.project_id for profile in profiles],
+                workspace=workspace,
+                member=request.user,
+                role__in=TEAM_CONTENT_ROLES,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).values_list("project_id", flat=True)
+        )
         response.data["create_projects"] = [
             {"id": str(item.project_id), "name": item.project.name}
             for item in profiles
-            if can_create_research_content(request.user, workspace, item)
+            if item.owner_id == request.user.id or item.project_id in active_member_project_ids
         ]
         return response

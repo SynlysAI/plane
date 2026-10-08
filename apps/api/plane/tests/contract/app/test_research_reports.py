@@ -22,6 +22,7 @@ from plane.db.models import (
     PeriodicReportSnapshot,
     ReportAccessGrant,
     ReportReviewLog,
+    ReportTemplate,
 )
 from plane.tests.research_fixtures import (
     add_workspace_member,
@@ -136,6 +137,28 @@ class TestReportCreation:
         assert payload["visibility"] == "DIRECT_ADVISOR"
         assert payload["is_backfill"] is False
         assert Page.objects.filter(pk=payload["page"]).exists()
+
+    def test_created_report_returns_template_draft_content(self, env):
+        template = ReportTemplate.objects.create(
+            workspace=env["workspace"],
+            report_type="WEEKLY",
+            name="Browser weekly template",
+            content_json={
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": "Browser evidence template"}],
+                    }
+                ],
+            },
+            created_by=env["admin"],
+        )
+
+        response = create_report(env, period_key="2026-W15", template=str(template.id))
+
+        assert response.status_code == 201
+        assert response.json()["draft_content"]["description_json"] == template.content_json
 
     def test_historical_period_is_marked_as_backfill(self, env):
         response = create_report(env, period_key="2026-W10")

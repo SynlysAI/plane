@@ -5,7 +5,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from plane.db.models import ReportTemplate, ResearchAuditEvent
+from plane.db.models import OrgUnit, OrgUnitMember, ReportTemplate, ResearchAuditEvent
 from plane.tests.research_fixtures import (
     add_workspace_member,
     enable_research,
@@ -73,6 +73,38 @@ class TestReportTemplateApi:
             format="json",
         )
         assert response.status_code == 403
+
+    def test_report_author_reads_active_templates_without_management_scope(self, env):
+        env["admin_client"].post(
+            env["templates_url"],
+            {"name": "Active weekly", "report_type": "WEEKLY", "is_active": True},
+            format="json",
+        )
+        inactive = env["admin_client"].post(
+            env["templates_url"],
+            {"name": "Inactive weekly", "report_type": "WEEKLY", "is_active": False},
+            format="json",
+        ).json()
+        root = OrgUnit.objects.create(
+            workspace=env["workspace"], name="Root", unit_type="ROOT", depth=0, path="/"
+        )
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=root,
+            user=env["member"],
+            org_role="REVIEWER",
+            is_primary=True,
+        )
+
+        active = env["member_client"].get(env["templates_url"], {"report_type": "WEEKLY"})
+        with_inactive = env["member_client"].get(
+            env["templates_url"], {"report_type": "WEEKLY", "include_inactive": "true"}
+        )
+
+        assert active.status_code == 200
+        assert [item["name"] for item in active.json()["results"]] == ["Active weekly"]
+        assert with_inactive.status_code == 200
+        assert str(inactive["id"]) not in {item["id"] for item in with_inactive.json()["results"]}
 
     def test_duplicate_template_name_is_rejected(self, env):
         payload = {"name": "Standard", "report_type": "WEEKLY"}

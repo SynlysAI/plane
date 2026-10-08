@@ -23,6 +23,9 @@ const research = vi.hoisted(() => ({
   fetchReports: vi.fn().mockResolvedValue([]),
   fetchOrgUnits: vi.fn().mockResolvedValue([]),
   fetchResearchProjects: vi.fn().mockResolvedValue([]),
+  getReportTemplates: vi.fn(() => []),
+  fetchReportTemplates: vi.fn().mockResolvedValue([]),
+  templatesLoader: false,
   reportLoader: false,
   reportPaginationByWorkspace: {},
   identity: { user: { org_units: [] } },
@@ -40,6 +43,7 @@ vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams()
 vi.mock("react-router", () => ({
   useParams: () => ({}),
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useNavigate: () => vi.fn(),
 }));
 vi.mock("@/hooks/store/use-member", () => ({
   useMember: () => ({

@@ -100,7 +100,7 @@ services:
   api-tests:
     build:
       context: ./apps/api
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile.test
       args:
         DOCKER_BUILDKIT: 1
     networks:
@@ -132,14 +132,14 @@ services:
         condition: service_healthy
       test-minio:
         condition: service_healthy
-    # Install test-only requirements (not in local.txt) then exec pytest.
+    # Test dependencies are baked into Dockerfile.test; only prepare writable
+    # runtime directories before executing the supplied command.
     # Any args passed via `docker compose run api-tests <args>` replace the default command.
     entrypoint:
       - /bin/sh
       - -c
       - |
         set -e
-        pip install --no-cache-dir -r requirements/test.txt
         # STATIC_ROOT must exist or Django's static middleware emits a
         # UserWarning on every request (~100 of the warnings in test runs).
         mkdir -p plane/static-assets/collected-static

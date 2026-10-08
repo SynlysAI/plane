@@ -316,20 +316,17 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                 align="end"
                 disabled={isDragging || isMobile}
               >
-                <button
-                  type="button"
+                <DragHandle
+                  ref={dragHandleRef}
                   className={cn(
-                    "absolute top-1/2 -left-3 hidden -translate-y-1/2 cursor-grab items-center justify-center rounded-sm text-placeholder group-hover/project-item:flex",
+                    "absolute top-1/2 -left-3 hidden -translate-y-1/2 rounded-sm bg-transparent text-placeholder group-hover/project-item:flex",
                     {
                       "cursor-not-allowed opacity-60": project.sort_order === null,
                       "cursor-grabbing": isDragging,
                       flex: isMenuActive || renderInExtendedSidebar,
                     }
                   )}
-                  ref={dragHandleRef}
-                >
-                  <DragHandle className="bg-transparent" />
-                </button>
+                />
               </Tooltip>
             )}
             <>

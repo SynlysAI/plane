@@ -41,7 +41,12 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
   const [project, setProject] = useState("");
   const [title, setTitle] = useState("");
   const [type, setType] = useState("PAPER");
+  const [status, setStatus] = useState("DRAFT");
+  const [publishedAt, setPublishedAt] = useState("");
+  const [venue, setVenue] = useState("");
+  const [doi, setDoi] = useState("");
   const [saving, setSaving] = useState(false);
+  const [dialogError, setDialogError] = useState("");
   const queryString = new URLSearchParams(
     Array.from(query.params).flatMap(([key, value]) => (key.startsWith("outcome_") ? [[key.slice(8), value]] : []))
   ).toString();
@@ -82,6 +87,12 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
           disabled={!page?.create_projects.length}
           onClick={() => {
             setProject(page?.create_projects[0]?.id ?? "");
+            setTitle("");
+            setStatus("DRAFT");
+            setPublishedAt("");
+            setVenue("");
+            setDoi("");
+            setDialogError("");
             setDialog(true);
           }}
         >
@@ -153,7 +164,7 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
                 <th>类型</th>
                 <th>状态</th>
                 <th>期刊/会议</th>
-                <th>日期</th>
+                <th>发表/授权日期</th>
               </tr>
             </thead>
             <tbody>
@@ -167,7 +178,7 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
                   <td>{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</td>
                   <td>{t(OUTCOME_STATUS_LABELS[outcome.status])}</td>
                   <td>{outcome.venue || "—"}</td>
-                  <td>{outcome.created_at.slice(0, 10)}</td>
+                  <td>{outcome.published_at ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -200,13 +211,20 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
             if (saving || !project || !title.trim()) return;
             setSaving(true);
             try {
-              await service.createOutcome(workspaceSlug, project, { title: title.trim(), output_type: type });
+              await service.createOutcome(workspaceSlug, project, {
+                title: title.trim(),
+                output_type: type,
+                status,
+                published_at: publishedAt || null,
+                venue: venue.trim(),
+                doi: doi.trim(),
+              });
               setDialog(false);
               setTitle("");
               setRefresh((value) => value + 1);
               setError("");
             } catch {
-              setError("成果登记失败，请检查项目权限后重试。");
+              setDialogError("成果登记失败，请检查项目权限后重试。");
             } finally {
               setSaving(false);
             }
@@ -249,6 +267,54 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
               ))}
             </select>
           </label>
+          <label>
+            成果状态
+            <select
+              aria-label="成果状态"
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+              className={`${selectStyle} w-full`}
+            >
+              {OUTCOME_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {t(OUTCOME_STATUS_LABELS[value])}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            发表/授权日期
+            <input
+              aria-label="发表/授权日期"
+              type="date"
+              value={publishedAt}
+              onChange={(event) => setPublishedAt(event.target.value)}
+              className={`${selectStyle} w-full`}
+            />
+          </label>
+          <label>
+            期刊/会议
+            <input
+              aria-label="期刊/会议"
+              value={venue}
+              onChange={(event) => setVenue(event.target.value)}
+              className={`${selectStyle} w-full`}
+            />
+          </label>
+          <label>
+            DOI
+            <input
+              aria-label="DOI"
+              value={doi}
+              onChange={(event) => setDoi(event.target.value)}
+              className={`${selectStyle} w-full`}
+            />
+          </label>
+          {dialogError && (
+            <p role="alert" className="text-13 text-danger-primary">
+              {dialogError}
+            </p>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => setDialog(false)}>
               取消

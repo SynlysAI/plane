@@ -1,6 +1,7 @@
 """科研列表组合筛选、分页与权限边界的行为契约。"""
 
 from datetime import date
+from django.db import connection
 from uuid import uuid4
 
 import pytest
@@ -264,10 +265,78 @@ class TestWorkspaceOutcomeBrowse:
         project_list = client.get(f"{env['base']}projects/{project.id}/outcomes/")
         workspace_list = client.get(f"{env['base']}outcomes/")
 
+        expected = {
+            "student": {"DRAFT", "PUBLISHED"},
+            "advisor": {"PUBLISHED"},
+            "pi": {"PUBLISHED"},
+            "admin": {"PUBLISHED"},
+        }[role]
+        if role == "student":
+            expected_visibilities = {"PRIVATE", "DIRECT_ADVISOR", "UNIT", "WORKSPACE"}
+        elif role in {"advisor", "pi"}:
+            expected_visibilities = {"PRIVATE", "DIRECT_ADVISOR", "UNIT", "WORKSPACE"}
+        else:
+            expected_visibilities = {"WORKSPACE"}
+
         assert project_list.status_code == workspace_list.status_code == 200
-        assert {item["id"] for item in workspace_list.json()["results"]} == {
-            item["id"] for item in project_list.json()["results"]
+        project_results = project_list.json()["results"]
+        workspace_results = workspace_list.json()["results"]
+        assert {(item["status"], item["visibility"]) for item in workspace_results} == {
+            (status, visibility)
+            for status in expected
+            for visibility in expected_visibilities
         }
+        assert {item["id"] for item in workspace_results} == {item["id"] for item in project_results}
+
+    @pytest.mark.django_db
+    def test_workspace_outcome_date_filter_uses_publication_date(self, env):
+        project = create_project(env, env["student"], "Publication project", env["group_a"])
+        ResearchOutcome.objects.create(
+            workspace=env["workspace"],
+            project=project,
+            title="Earlier registration",
+            output_type="PAPER",
+            status="PUBLISHED",
+            visibility="WORKSPACE",
+            published_at=date(2026, 9, 1),
+            created_by=env["student"],
+        )
+        later = ResearchOutcome.objects.create(
+            workspace=env["workspace"],
+            project=project,
+            title="Later publication",
+            output_type="PAPER",
+            status="PUBLISHED",
+            visibility="WORKSPACE",
+            published_at=date(2026, 10, 3),
+            created_by=env["student"],
+        )
+
+        response = client_for(env["student"]).get(
+            f"{env['base']}outcomes/", {"date_from": "2026-10-02", "date_to": "2026-10-04"}
+        )
+
+        assert response.status_code == 200
+        assert [item["id"] for item in response.json()["results"]] == [str(later.id)]
+        assert response.json()["results"][0]["published_at"] == "2026-10-03"
+
+    @pytest.mark.django_db
+    def test_create_project_projection_does_not_grow_linearly_with_projects(self, env):
+        def request_count(start, end):
+            for index in range(start, end):
+                create_project(env, env["student"], f"Creation project {index}", env["group_a"])
+            connection.force_debug_cursor = True
+            connection.queries_log.clear()
+            try:
+                response = client_for(env["student"]).get(f"{env['base']}outcomes/")
+                assert response.status_code == 200
+                return len(connection.queries_log)
+            finally:
+                connection.force_debug_cursor = False
+
+        small = request_count(0, 3)
+        large = request_count(3, 10)
+        assert large - small <= 4
 
     @pytest.mark.parametrize("endpoint", ["projects", "reports", "outcomes", "chains"])
     def test_invalid_scope_is_rejected_consistently(self, env, endpoint):

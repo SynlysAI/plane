@@ -7,10 +7,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportStatus, TReportType } from "@plane/constants";
+import type { TReportTemplate } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -41,50 +42,13 @@ type Props = {
   variant?: "default" | "review";
 };
 
-type ReportListQueryFilters = {
-  status: string;
-  reportType: string;
-  periodKey: string;
-  mineOnly: boolean;
-  orgUnit: string;
-  owner: string;
-  dateFrom: string;
-  dateTo: string;
-};
-
-const REPORT_LIST_CONTROLLED_QUERY_KEYS = [
-  "status",
-  "report_type",
-  "period_key",
-  "mine",
-  "org_unit",
-  "owner",
-  "date_from",
-  "date_to",
-  "cursor",
-] as const;
-
-/** Build report-list query parameters without dropping unrelated page context. */
-export function buildReportListSearchParams(current: URLSearchParams, filters: ReportListQueryFilters) {
-  const params = new URLSearchParams(current);
-  REPORT_LIST_CONTROLLED_QUERY_KEYS.forEach((key) => params.delete(key));
-  if (filters.status) params.set("status", filters.status);
-  if (filters.reportType) params.set("report_type", filters.reportType);
-  if (filters.periodKey.trim()) params.set("period_key", filters.periodKey.trim());
-  if (filters.mineOnly) params.set("mine", "true");
-  if (filters.orgUnit) params.set("org_unit", filters.orgUnit);
-  if (filters.owner.trim()) params.set("owner", filters.owner.trim());
-  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
-  if (filters.dateTo) params.set("date_to", filters.dateTo);
-  return params;
-}
-
 /** Report list with period / status / type / owner filters (P0-UI-02). */
 const ReportListContent = observer(function ReportListContent({ workspaceSlug, variant = "default" }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const query = useResearchBrowseQuery();
   const { reportId } = useParams();
+  const navigate = useNavigate();
   const [reportType, setReportType] = useState<TReportType>("WEEKLY");
   const [periodKey, setPeriodKey] = useState("");
   const statusFilter = query.get("status", variant === "review" ? "SUBMITTED" : "");
@@ -107,6 +71,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [templateId, setTemplateId] = useState("");
 
   const reports = research.getReports(workspaceSlug);
   const orgUnits = research.getOrgUnits(workspaceSlug);
@@ -115,6 +80,9 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const teamProjects = research
     .getResearchProjects(workspaceSlug)
     .filter((project) => project.research?.research_type === "RESEARCH_PROJECT");
+  const templates = research
+    .getReportTemplates(workspaceSlug)
+    .filter((template: TReportTemplate) => template.report_type === reportType && template.is_active);
   const hasActiveFilters = Boolean(
     statusFilter ||
     typeFilter ||
@@ -201,6 +169,12 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug]);
 
+  useEffect(() => {
+    if (!isCreateDialogOpen) return;
+    void research.fetchReportTemplates(workspaceSlug, { report_type: reportType }).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreateDialogOpen, reportType, workspaceSlug]);
+
   const handleCreate = useCallback(async () => {
     if (isCreating) return;
     setIsCreating(true);
@@ -209,6 +183,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         report_type: reportType,
         period_key: periodKey.trim() || undefined,
         team_projects: selectedTeamProjects,
+        template: templateId || null,
       });
       setPeriodKey("");
       setSelectedTeamProjects([]);
@@ -219,13 +194,13 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         title: t("research.feedback.report_created.title"),
         message: t("research.feedback.report_created.message"),
       });
-      window.location.assign(`/${workspaceSlug}/research/reports/${report.id}`);
+      navigate(`/${workspaceSlug}/research/reports/${report.id}`);
     } catch (error) {
       setErrorKey(getResearchErrorKey(error));
     } finally {
       setIsCreating(false);
     }
-  }, [isCreating, periodKey, reportType, research, selectedTeamProjects, t, workspaceSlug]);
+  }, [isCreating, navigate, periodKey, reportType, research, selectedTeamProjects, t, templateId, workspaceSlug]);
 
   const clearFilters = () =>
     query.patch({
@@ -438,13 +413,39 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
             <select
               className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
               value={reportType}
-              onChange={(event) => setReportType(event.target.value as TReportType)}
+              onChange={(event) => {
+                setReportType(event.target.value as TReportType);
+                setTemplateId("");
+              }}
             >
               {REPORT_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {t(REPORT_TYPE_LABELS[type])}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-12 text-secondary">
+            <span>{t("research.reports.template")}</span>
+            <select
+              aria-label={t("research.reports.template")}
+              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+              value={templateId}
+              onChange={(event) => setTemplateId(event.target.value)}
+            >
+              <option value="">{t("research.reports.blank_template")}</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+              {!templates.length && (
+                <option value="" disabled>
+                  {research.templatesLoader
+                    ? t("research.reports.template_loading")
+                    : t("research.reports.no_templates")}
+                </option>
+              )}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-12 text-secondary">
@@ -505,15 +506,32 @@ export function ResearchReportList(props: Props) {
   const outcomeView = query.get("view") === "outcomes";
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div role="tablist" aria-label="报告与成果" className="flex shrink-0 gap-4 border-b border-subtle px-5 pt-3">
+      <div
+        role="tablist"
+        aria-label="报告与成果"
+        className="flex shrink-0 gap-4 border-b border-subtle px-5 pt-3"
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          query.patch(
+            {
+              view: (event.key === "ArrowRight") !== outcomeView ? "reports" : "outcomes",
+            },
+            false
+          );
+        }}
+      >
         {[
           ["reports", "报告"],
           ["outcomes", "成果"],
         ].map(([value, label]) => (
           <button
             key={value}
+            id={`research-report-tab-${value}`}
             role="tab"
+            aria-controls="research-report-panel"
             aria-selected={outcomeView === (value === "outcomes")}
+            tabIndex={outcomeView === (value === "outcomes") ? 0 : -1}
             className={`border-b-2 px-1 pb-2 text-14 ${outcomeView === (value === "outcomes") ? "border-primary font-semibold text-primary" : "border-transparent text-secondary"}`}
             onClick={() => query.patch({ view: value }, false)}
           >
@@ -521,7 +539,13 @@ export function ResearchReportList(props: Props) {
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1">
+      <div
+        role="tabpanel"
+        id="research-report-panel"
+        aria-labelledby={`research-report-tab-${outcomeView ? "outcomes" : "reports"}`}
+        tabIndex={-1}
+        className="min-h-0 flex-1"
+      >
         {outcomeView ? <WorkspaceOutcomes workspaceSlug={props.workspaceSlug} /> : <ReportListContent {...props} />}
       </div>
     </div>
