@@ -15,6 +15,7 @@ from .experiment import (
     ExperimentRecord,
     ExperimentRecordVersion,
 )
+from .feedback import ResearchFeedback, ResearchFeedbackScreenshot
 from .identity import IdentityMapping
 from .account_link import AccountLink
 from .chain import (
@@ -114,6 +115,8 @@ __all__ = [
     "ExperimentAssetLink",
     "ExperimentRecord",
     "ExperimentRecordVersion",
+    "ResearchFeedback",
+    "ResearchFeedbackScreenshot",
     "ReportVisibility",
     "ReportTemplate",
     "PeriodicReport",
