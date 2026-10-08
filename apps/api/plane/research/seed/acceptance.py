@@ -5,7 +5,7 @@
 """Scripted acceptance run for the system management baseline (v2.4.0).
 
 The checks below drive the real API of a real (seeded) deployment, so the
-evidence in ``docs/research-system-management-acceptance.md`` can be
+evidence in ``docs/archive/system-management/research-system-management-acceptance.md`` can be
 reproduced on any environment with one command:
 
     python manage.py accept_system_management

@@ -34,6 +34,7 @@ class ResearchOutcomeSerializer(serializers.ModelSerializer):
             "status",
             "published_at",
             "visibility",
+            "created_by",
             "links",
             "attachments",
             "created_at",
