@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   saveArtifact: vi.fn(),
   decideApproval: vi.fn(),
+  getFormalReports: vi.fn(),
 }));
 
 vi.mock("@plane/i18n", () => ({
@@ -36,6 +37,7 @@ vi.mock("@/services/research/agent.service", () => ({
     sendMessage = mocks.sendMessage;
     saveArtifact = mocks.saveArtifact;
     decideApproval = mocks.decideApproval;
+    getFormalReports = mocks.getFormalReports;
   },
 }));
 
@@ -88,6 +90,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   mocks.createSession.mockResolvedValue(session);
+  mocks.getFormalReports.mockResolvedValue({ results: [], association_hint: "无项目报告需先关联当前课题。" });
   mocks.getEvents.mockImplementation(async (_slug: string, _runId: string, afterSeq = 0) => ({
     results:
       afterSeq === 0 ? [event(1, "AI_ACTION"), event(1, "AI_ACTION")] : [event(1, "AI_ACTION"), event(2, "TOOL_CALL")],
@@ -258,7 +261,9 @@ it("keeps reconnection and collapsed runtime reachable in the side-panel layout"
   });
   expect(mocks.getEvents).toHaveBeenLastCalledWith("lab", "run-1", 1);
 
-  const runtimeDetails = container.querySelector("details");
+  const runtimeDetails = [...container.querySelectorAll("details")].find((details) =>
+    details.querySelector("summary")?.textContent?.includes("运行详情")
+  );
   expect(runtimeDetails).not.toBeNull();
   expect(runtimeDetails?.textContent).toContain("运行详情");
   runtimeDetails?.setAttribute("open", "true");

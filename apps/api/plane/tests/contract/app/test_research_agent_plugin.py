@@ -138,6 +138,9 @@ def synlora_orchestration(env, monkeypatch):
         }
 
     class FakeSynloraClient:
+        def __init__(self, **_kwargs):
+            """接受真实客户端初始化参数，保持外部服务边界一致。"""
+
         def exchange_delegated_token(self, **_kwargs):
             return {"token": "delegated-token", "subject": "u_synlora"}
 
@@ -166,11 +169,15 @@ def agent_url(env, suffix=""):
 
 def _create_agent_session(env):
     """Create one scoped Agent session for lifecycle and replay tests."""
-    return env["client"].post(
-        agent_url(env, "sessions/"),
-        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
-        format="json",
-    ).json()
+    return (
+        env["client"]
+        .post(
+            agent_url(env, "sessions/"),
+            {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+            format="json",
+        )
+        .json()
+    )
 
 
 def test_agent_manifest_is_versioned_and_forbids_iframes(env):
@@ -191,7 +198,9 @@ def test_agent_session_hides_exchange_token_and_is_idempotent(env):
     assert session["schema_version"] == "agent-plugin.v1"
     assert "exchange_token" not in session
     assert "token" not in session
-    assert ResearchContextGrant.objects.filter(context_id=session["context_id"], agent_session__session_id=session["session_id"]).exists()
+    assert ResearchContextGrant.objects.filter(
+        context_id=session["context_id"], agent_session__session_id=session["session_id"]
+    ).exists()
 
     replay = env["client"].post(agent_url(env, "sessions/"), payload, format="json")
     assert replay.status_code == 200
@@ -358,9 +367,10 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
     assert projected[0].pk == replayed[0].pk
     assert projected[0].payload["remote_seq"] == 10
     assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"], payload__remote_seq=10).count() == 1
-    assert ResearchChainEvent.objects.filter(
-        request_id=f"chain:synlora:{session_record.synlora_session_id}:10"
-    ).count() == 1
+    assert (
+        ResearchChainEvent.objects.filter(request_id=f"chain:synlora:{session_record.synlora_session_id}:10").count()
+        == 1
+    )
 
     event_request = {
         "request_id": f"event-{uuid4().hex}",
@@ -451,11 +461,15 @@ def test_agent_close_revokes_context_and_expires_session(env):
 
 
 def test_agent_run_cancel_revokes_streaming_scope(env):
-    session = env["client"].post(
-        agent_url(env, "sessions/"),
-        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
-        format="json",
-    ).json()
+    session = (
+        env["client"]
+        .post(
+            agent_url(env, "sessions/"),
+            {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+            format="json",
+        )
+        .json()
+    )
     cancelled = env["client"].post(
         agent_url(env, f"runs/{session['run_id']}/cancel/"),
         {"request_id": f"cancel-{uuid4().hex}"},
@@ -583,21 +597,29 @@ def test_agent_approval_queue_exposes_only_operable_waiting_sessions(env):
 
 
 def test_agent_events_are_isolated_between_old_and_new_sessions(env):
-    first = env["client"].post(
-        agent_url(env, "sessions/"),
-        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
-        format="json",
-    ).json()
+    first = (
+        env["client"]
+        .post(
+            agent_url(env, "sessions/"),
+            {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+            format="json",
+        )
+        .json()
+    )
     env["client"].post(
         agent_url(env, f"sessions/{first['session_id']}/messages/"),
         {"request_id": f"message-{uuid4().hex}", "content": "old session message"},
         format="json",
     )
-    second = env["client"].post(
-        agent_url(env, "sessions/"),
-        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
-        format="json",
-    ).json()
+    second = (
+        env["client"]
+        .post(
+            agent_url(env, "sessions/"),
+            {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+            format="json",
+        )
+        .json()
+    )
 
     second_events = env["client"].get(agent_url(env, f"runs/{second['run_id']}/events/"))
     assert second_events.status_code == 200
@@ -623,11 +645,15 @@ def test_unlinked_synlora_account_blocks_next_message(env):
 
 
 def test_rejected_agent_approval_fails_closed(env):
-    session = env["client"].post(
-        agent_url(env, "sessions/"),
-        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
-        format="json",
-    ).json()
+    session = (
+        env["client"]
+        .post(
+            agent_url(env, "sessions/"),
+            {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+            format="json",
+        )
+        .json()
+    )
     rejected = env["client"].post(
         agent_url(env, f"runs/{session['run_id']}/approvals/"),
         {"request_id": f"approval-{uuid4().hex}", "decision": "REJECTED", "tool_call_id": "tool-1"},
@@ -649,11 +675,16 @@ def test_rejected_agent_approval_fails_closed(env):
 
 def test_agent_manifest_and_session_fail_when_switch_is_off(env):
     WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(research_agent_enabled=False)
-    assert env["client"].post(
-        agent_url(env, "sessions/"),
-        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
-        format="json",
-    ).status_code == 403
+    assert (
+        env["client"]
+        .post(
+            agent_url(env, "sessions/"),
+            {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
+            format="json",
+        )
+        .status_code
+        == 403
+    )
 
 
 def test_agent_chain_event_taxonomy_and_audit_are_enforced(env):

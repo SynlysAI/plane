@@ -505,7 +505,29 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
         content = str(request.data.get("content") or "").strip()
         if not request_id or not content:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "request_id and content are required.")
-        content_hash = payload_hash({"content": content})
+        from plane.research.services.report_context import (
+            selected_report_content,
+            content_for_grant,
+            inject_report_content,
+        )
+
+        selections = request.data.get("reports", session.context_grant.allowed_reports)
+        try:
+            # 已授权版本先逐次检查，不允许消息过程静默换成最新版本。
+            content_for_grant(session.context_grant)
+            report_contents = selected_report_content(
+                workspace=workspace,
+                actor=request.user,
+                project_id=session.project_id,
+                selections=selections,
+            )
+        except SynloraError as failure:
+            return Response({"error_code": failure.code, "message": failure.message}, status=failure.status_code)
+        content_hash = (
+            payload_hash({"content": content, "reports": selections})
+            if selections
+            else payload_hash({"content": content})
+        )
 
         existing = ResearchAgentRunEvent.objects.select_related("session").filter(request_id=request_id).first()
         if existing is not None:
@@ -551,6 +573,7 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
                 node=session.chain_node,
                 assembly=assembly,
                 request_id=f"message:{request_id}",
+                allowed_reports=selections,
             )
             metadata = context_metadata(
                 workspace=workspace,
@@ -564,7 +587,7 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
                 session_id=session.synlora_session_id,
                 context_token=context_token,
                 context_metadata=metadata,
-                content=content,
+                content=inject_report_content(content, report_contents),
                 request_id=request_id,
             )
             session.context_grant = grant

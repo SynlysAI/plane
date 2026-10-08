@@ -9,6 +9,7 @@ import {
   agentPayloadText,
 } from "@/components/research/agent/research-agent-utils";
 import type { TResearchAgentSessionApi } from "@/components/research/agent/use-research-agent-session";
+import { ReportContextSelector } from "./report-context-selector";
 
 type Props = {
   api: TResearchAgentSessionApi;
@@ -59,6 +60,7 @@ export function ResearchAgentConversation({ api }: Props) {
           void api.send();
         }}
       >
+        <ReportContextSelector api={api} />
         <label htmlFor="research-agent-message" className="text-11 font-medium text-secondary">
           {t("research.agent.input_label")}
         </label>

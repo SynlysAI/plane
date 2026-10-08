@@ -98,7 +98,7 @@ def assemble_agent(*, node, manifest, scope_kind="OWNER", scope_source="chain_ow
     )
 
 
-def issue_agent_context(*, workspace, user, profile, node, assembly, request_id):
+def issue_agent_context(*, workspace, user, profile, node, assembly, request_id, allowed_reports=None):
     """Issue a v2 Context grant from the auto assembly result."""
     return issue_context_token(
         workspace=workspace,
@@ -108,6 +108,7 @@ def issue_agent_context(*, workspace, user, profile, node, assembly, request_id)
         request_id=request_id,
         allowed_knowledge_base_ids=assembly.allowed_knowledge_base_ids,
         allowed_file_ids=assembly.allowed_file_ids,
+        allowed_reports=allowed_reports,
         allowed_plugins=assembly.enabled_plugins,
         allowed_tools=assembly.allowed_tools,
         policy_id=assembly.policy_id,
@@ -131,6 +132,7 @@ def context_metadata(*, workspace, profile, node, grant, assembly):
         "expires_at": grant.expires_at.isoformat(),
         "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
         "allowed_file_ids": grant.allowed_file_ids,
+        "allowed_reports": grant.allowed_reports,
         "allowed_plugins": grant.allowed_plugins,
         "allowed_tools": grant.allowed_tools,
         "policy_id": grant.policy_id,

@@ -25,6 +25,7 @@ class ResearchContextGrant(BaseModel):
     context_hash = models.CharField(max_length=64)
     allowed_knowledge_base_ids = models.JSONField(default=list, blank=True)
     allowed_file_ids = models.JSONField(default=list, blank=True)
+    allowed_reports = models.JSONField(default=list, blank=True)
     allowed_plugins = models.JSONField(default=list, blank=True)
     allowed_tools = models.JSONField(default=list, blank=True)
     policy_id = models.CharField(max_length=128, blank=True, default="")

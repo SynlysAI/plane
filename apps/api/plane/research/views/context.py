@@ -32,14 +32,13 @@ from plane.db.models import (
 from plane.research.utils.acl import build_actor_context, check_access
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_PROJECTS
-from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
+from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found, research_permission_denied
 from plane.research.utils.integrations import reference_allowed
 from plane.research.utils.literature import literature_resource
 from plane.research.utils.reports import report_resource
 from plane.research.utils.resource_projections import experiment_resource, outcome_resource, repository_resource
 from plane.research.utils.stages import default_stage_visibility, material_resource, stage_resource
 from plane.research.services.context_tokens import (
-    CONTEXT_TOKEN_HEADER,
     ResearchContextTokenAuthentication,
     issue_context_token,
     revoke_context_grant,
@@ -411,7 +410,9 @@ def _parse_project_id(raw_value):
     try:
         return UUID(str(raw_value)), None
     except (TypeError, ValueError):
-        return None, research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "research_project_id must be a valid UUID.")
+        return None, research_error(
+            ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "research_project_id must be a valid UUID."
+        )
 
 
 def _context_payload(grant):
@@ -444,12 +445,22 @@ def _validate_context_grant(request, workspace):
     if not isinstance(grant, ResearchContextGrant):
         return None
     if grant.workspace_id != workspace.id:
-        return research_error(ResearchErrorCode.CONTEXT_ACCESS_DENIED, "Context token belongs to another workspace.", status.HTTP_403_FORBIDDEN)
+        return research_error(
+            ResearchErrorCode.CONTEXT_ACCESS_DENIED,
+            "Context token belongs to another workspace.",
+            status.HTTP_403_FORBIDDEN,
+        )
     if grant.revoked_at is not None or grant.expires_at <= timezone.now():
-        return research_error(ResearchErrorCode.CONTEXT_TOKEN_INVALID, "Context token is expired or revoked.", status.HTTP_401_UNAUTHORIZED)
+        return research_error(
+            ResearchErrorCode.CONTEXT_TOKEN_INVALID,
+            "Context token is expired or revoked.",
+            status.HTTP_401_UNAUTHORIZED,
+        )
     supplied_hash = request.headers.get("X-Research-Context-Hash") or request.GET.get("context_hash")
     if not supplied_hash:
-        return research_error(ResearchErrorCode.CONTEXT_VERSION_INVALID, "context_hash is required with a context token.")
+        return research_error(
+            ResearchErrorCode.CONTEXT_VERSION_INVALID, "context_hash is required with a context token."
+        )
     if not compare_digest(str(supplied_hash), grant.context_hash):
         return research_error(
             ResearchErrorCode.CONTEXT_ACCESS_DENIED,
@@ -499,13 +510,28 @@ class ResearchContextTokenEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIV
             except (ResearchChainNode.DoesNotExist, TypeError, ValueError):
                 return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "chain_node_id is invalid.")
             if chain_node.chain.workspace_id != workspace.id or chain_node.chain.project_id != profile.project_id:
-                return research_error(ResearchErrorCode.CONTEXT_ACCESS_DENIED, "chain_node_id belongs to another scope.", status.HTTP_403_FORBIDDEN)
+                return research_error(
+                    ResearchErrorCode.CONTEXT_ACCESS_DENIED,
+                    "chain_node_id belongs to another scope.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+        from plane.research.services.report_context import selected_report_content
+        from plane.research.services.synlora import SynloraError
+
+        selections = request.data.get("reports", [])
+        try:
+            selected_report_content(
+                workspace=workspace, actor=request.user, project_id=profile.project_id, selections=selections
+            )
+        except SynloraError as failure:
+            return Response({"error_code": failure.code, "message": str(failure)}, status=failure.status_code)
         grant, raw_token = issue_context_token(
             workspace=workspace,
             user=request.user,
             profile=profile,
             chain_node=chain_node,
             request_id=request_id,
+            allowed_reports=selections,
         )
         record_audit_event(
             workspace=workspace,
@@ -513,7 +539,11 @@ class ResearchContextTokenEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIV
             resource_type=ResearchResourceType.CONTEXT,
             resource_id=grant.context_id,
             actor=request.user,
-            metadata={"project_id": str(profile.project_id), "chain_node_id": str(chain_node.id) if chain_node else None, "expires_at": grant.expires_at.isoformat()},
+            metadata={
+                "project_id": str(profile.project_id),
+                "chain_node_id": str(chain_node.id) if chain_node else None,
+                "expires_at": grant.expires_at.isoformat(),
+            },
             request=request,
         )
         return Response(
@@ -680,9 +710,7 @@ class ResearchContextResourceEndpoint(ContextAuthenticationMixin, ResearchAPIVie
         response = self._resolve(workspace, request.user, context, kind, resource_id, requested_version)
         if response.status_code != status.HTTP_200_OK:
             return response
-        response.data["link"] = (
-            f"/api/research/workspaces/{workspace.slug}/context/resources/{kind}/{resource_id}/"
-        )
+        response.data["link"] = f"/api/research/workspaces/{workspace.slug}/context/resources/{kind}/{resource_id}/"
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.CONTEXT_READ,
@@ -880,9 +908,7 @@ class ResearchContextResourceEndpoint(ContextAuthenticationMixin, ResearchAPIVie
             context=context,
         ):
             return _context_not_found()
-        return _resource_response(
-            "stage_transition", transition.id, None, transition.to_status, transition.created_at
-        )
+        return _resource_response("stage_transition", transition.id, None, transition.to_status, transition.created_at)
 
     def _resolve_stage_review(self, workspace, actor, context, resource_id, version):
         if version != "latest":
