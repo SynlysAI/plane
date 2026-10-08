@@ -4,10 +4,18 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
+type SummaryIdentity = {
+  module_enabled: boolean;
+  workspace_enabled: boolean;
+  sections: { research_chain: boolean };
+  user?: { id: string; mentee_ids: string[]; org_units: Array<{ org_role: string }> };
+  capabilities?: { is_mentor?: boolean };
+};
+
 const mocks = vi.hoisted(() => ({
   research: {
     identityWorkspaceSlug: "lab",
-    identity: { module_enabled: true, workspace_enabled: true, sections: { research_chain: true } },
+    identity: { module_enabled: true, workspace_enabled: true, sections: { research_chain: true } } as SummaryIdentity,
     canSee: (key: string) => key === "research_chain",
     fetchIdentity: vi.fn(),
   },

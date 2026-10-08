@@ -37,7 +37,19 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
-vi.mock("react-router", () => ({ useParams: () => ({}) }));
+vi.mock("react-router", () => ({
+  useParams: () => ({}),
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}));
+vi.mock("@/hooks/store/use-member", () => ({
+  useMember: () => ({
+    workspace: {
+      fetchWorkspaceMembers: async () => undefined,
+      getWorkspaceMemberIds: () => [],
+    },
+    getUserDetails: () => undefined,
+  }),
+}));
 vi.mock("@/services/research/outcome.service", () => ({
   ResearchOutcomeService: class {
     listTopicMaterials = service.listTopicMaterials;
@@ -71,6 +83,11 @@ vi.mock("@plane/propel/button", () => ({
 vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: {}, setToast: vi.fn() }));
 vi.mock("@plane/ui", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+  EModalPosition: { CENTER: "center" },
+  EModalWidth: { LG: "lg" },
+  /** 按弹窗开关渲染内容，保留报告创建入口的真实交互语义。 */
+  ModalCore: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
+    isOpen ? <div role="dialog">{children}</div> : null,
 }));
 vi.mock("@plane/propel/table", () => ({
   Table: ({ children }: { children?: React.ReactNode }) => <table>{children}</table>,

@@ -40,7 +40,7 @@ def research_module_on(settings):
 def env(db):
     owner = make_user(first_name="Owner")
     workspace = make_workspace(owner)
-    enable_research(workspace)
+    enable_research(workspace, research_chain_enabled=True)
     root = OrgUnit.objects.create(
         workspace=workspace,
         name="课题组",
