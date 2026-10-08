@@ -160,6 +160,7 @@ class PeriodicReportSnapshot(AppendOnlyModel):
     description_stripped = models.TextField(blank=True, null=True)
     description_binary = models.BinaryField(null=True, blank=True)
     attachment_manifest = models.JSONField(default=list, blank=True)
+    image_manifest = models.JSONField(default=list, blank=True)
     submitted_by = models.ForeignKey(
         "db.User",
         on_delete=models.SET_NULL,

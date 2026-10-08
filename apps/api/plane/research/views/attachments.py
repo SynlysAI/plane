@@ -24,7 +24,7 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.files import detect_kind, markdown_to_html, validate_attachment
+from plane.research.utils.files import detect_kind, inspect_uploaded_asset, markdown_to_html, validate_attachment
 from plane.utils.path_validator import sanitize_filename
 from plane.research.utils.reports import is_editable, report_resource
 from plane.research.utils.settings import get_workspace_research_settings
@@ -57,9 +57,7 @@ class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
             attachments_query = attachments_query.filter(deleted_at__isnull=True)
         else:
             latest_version = (
-                report.official_snapshots.order_by("-version_no")
-                .values_list("version_no", flat=True)
-                .first()
+                report.official_snapshots.order_by("-version_no").values_list("version_no", flat=True).first()
             )
             attachments_query = attachments_query.filter(official_version_no=latest_version)
         attachments = list(attachments_query)
@@ -115,30 +113,16 @@ class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
         if ReportAttachment.all_objects.filter(asset=asset).exists():
             return research_permission_denied()
 
-        if not asset.is_uploaded:
-            # the object should exist in S3 after the direct upload
-            try:
-                metadata = S3Storage(request=request).get_object_metadata(object_name=asset.asset.name)
-            except Exception:
-                metadata = None
-            if not metadata:
-                return research_error(
-                    ResearchErrorCode.ATTACHMENT_NOT_FOUND,
-                    "The upload did not complete. Please retry the upload.",
-                    status.HTTP_409_CONFLICT,
-                )
-            asset.is_uploaded = True
-            asset.save(update_fields=["is_uploaded", "updated_at"])
-
         file_name = asset.attributes.get("name") or asset.asset.name
-        content_type = asset.attributes.get("type") or ""
         limits = get_workspace_research_settings(workspace)
-        error_code = validate_attachment(
-            file_name=file_name,
-            content_type=content_type,
-            size_bytes=asset.size,
-            limits=limits,
-        )
+        try:
+            error_code, metadata = inspect_uploaded_asset(S3Storage(request=request), asset, limits)
+        except Exception:
+            return research_error(
+                ResearchErrorCode.ATTACHMENT_NOT_FOUND,
+                "无法校验存储对象，请重试。",
+                status.HTTP_409_CONFLICT,
+            )
         if error_code:
             record_audit_event(
                 workspace=workspace,
@@ -150,7 +134,20 @@ class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
                 metadata={"reason": error_code, "file_name": file_name},
                 request=request,
             )
-            return research_error(error_code, "This file is not allowed.", status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return research_error(
+                ResearchErrorCode.ATTACHMENT_NOT_FOUND if error_code == "attachment_not_found" else error_code,
+                "This file is not allowed.",
+                status.HTTP_409_CONFLICT
+                if error_code == "attachment_not_found"
+                else status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        content_type = metadata["ContentType"]
+        asset.size = metadata["ContentLength"]
+        asset.storage_metadata = metadata
+        asset.is_uploaded = True
+        asset.attributes = {**asset.attributes, "type": content_type, "size": asset.size}
+        asset.save(update_fields=["size", "storage_metadata", "is_uploaded", "attributes", "updated_at"])
 
         try:
             attachment = ReportAttachment.objects.create(
@@ -285,9 +282,7 @@ class ResearchReportAttachmentDetailEndpoint(ResearchAPIView):
             .first()
         )
         if attachment is None:
-            return None, research_not_found(
-                ResearchErrorCode.ATTACHMENT_NOT_FOUND, "Attachment not found."
-            )
+            return None, research_not_found(ResearchErrorCode.ATTACHMENT_NOT_FOUND, "Attachment not found.")
         context = build_actor_context(request.user, workspace.id)
         if attachment.report.owner_id != request.user.id:
             latest_version = (
@@ -405,8 +400,19 @@ class ResearchReportMarkdownImportEndpoint(ResearchAPIView):
             return research_error(error_code, "This file is not allowed.", status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         html, local_images = markdown_to_html(content)
+        # HTML 为导入后的唯一初始表示，编辑器打开后重新生成 JSON 与二进制。
+        report.page.description_json = {}
+        report.page.description_binary = None
         report.page.description_html = html
-        report.page.save(update_fields=["description_html", "description_stripped", "updated_at"])
+        report.page.save(
+            update_fields=[
+                "description_json",
+                "description_binary",
+                "description_html",
+                "description_stripped",
+                "updated_at",
+            ]
+        )
 
         record_audit_event(
             workspace=workspace,

@@ -129,6 +129,19 @@ class PageSerializer(BaseSerializer):
 class PageDetailSerializer(PageSerializer):
     description_html = serializers.CharField()
 
+    def validate(self, attrs):
+        """在普通 Page 保存入口应用报告图片归属校验。"""
+        from plane.research.utils.page_guard import get_report_for_page
+        from plane.research.utils.report_images import body_image_ids
+
+        report = get_report_for_page(self.instance)
+        if report:
+            try:
+                body_image_ids(report, attrs)
+            except ValueError as error:
+                raise serializers.ValidationError(str(error)) from error
+        return attrs
+
     class Meta(PageSerializer.Meta):
         fields = PageSerializer.Meta.fields + ["description_html"]
 
@@ -177,10 +190,23 @@ class PageBinaryUpdateSerializer(serializers.Serializer):
     description_html = serializers.CharField(required=False, allow_blank=True)
     description_json = serializers.JSONField(required=False, allow_null=True)
 
+    def validate(self, attrs):
+        """报告正文经通用 Page 路由保存时也校验图片归属。"""
+        from plane.research.utils.page_guard import get_report_for_page
+        from plane.research.utils.report_images import body_image_ids
+
+        report = get_report_for_page(self.instance)
+        if report:
+            try:
+                body_image_ids(report, attrs)
+            except ValueError as error:
+                raise serializers.ValidationError(str(error)) from error
+        return attrs
+
     def validate_description_binary(self, value):
         """Validate the base64-encoded binary data"""
         if not value:
-            return value
+            return None
 
         try:
             # Decode the base64 data

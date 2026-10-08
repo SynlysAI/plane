@@ -53,6 +53,10 @@ def can_download_research_asset(user, asset):
     same ``download`` decision as the research attachment endpoint. An upload
     that has not been registered to a report fails closed.
     """
+    if asset.entity_type == FileAsset.EntityTypeContext.REPORT_IMAGE:
+        from plane.research.utils.report_images import can_read_report_image
+
+        return can_read_report_image(user, asset)
     research_refs = _research_asset_refs(asset)
     if not research_refs:
         return asset.entity_type != FileAsset.EntityTypeContext.REPORT_ATTACHMENT
@@ -67,9 +71,7 @@ def can_download_research_asset(user, asset):
                 return True
             continue
         latest_version = (
-            attachment.report.official_snapshots.order_by("-version_no")
-            .values_list("version_no", flat=True)
-            .first()
+            attachment.report.official_snapshots.order_by("-version_no").values_list("version_no", flat=True).first()
         )
         if attachment.official_version_no == latest_version:
             return True
@@ -97,6 +99,8 @@ def can_mutate_research_asset(user, asset):
     member (or an author editing a frozen formal record) from deleting the
     underlying file through Plane's generic asset route.
     """
+    if asset.entity_type == FileAsset.EntityTypeContext.REPORT_IMAGE:
+        return False
     research_refs = _research_asset_refs(asset)
     if not research_refs:
         if asset.entity_type == FileAsset.EntityTypeContext.REPORT_ATTACHMENT:
@@ -114,8 +118,9 @@ def _research_asset_refs(asset):
         ).select_related("report")
     )
     literature = list(
-        LiteratureEntry.objects.filter(pdf_asset_id=asset.id, workspace_id=asset.workspace_id)
-        .select_related("project__research_profile")
+        LiteratureEntry.objects.filter(pdf_asset_id=asset.id, workspace_id=asset.workspace_id).select_related(
+            "project__research_profile"
+        )
     )
     code = list(
         CodeArtifact.objects.filter(
@@ -124,8 +129,9 @@ def _research_asset_refs(asset):
         ).select_related("repository__project__research_profile")
     )
     outcomes = list(
-        ResearchOutcome.objects.filter(file_asset_id=asset.id, workspace_id=asset.workspace_id)
-        .select_related("project__research_profile")
+        ResearchOutcome.objects.filter(file_asset_id=asset.id, workspace_id=asset.workspace_id).select_related(
+            "project__research_profile"
+        )
     )
     amendments = list(
         ExperimentAmendment.objects.filter(
@@ -651,9 +657,7 @@ class StaticFileAssetEndpoint(BaseAPIView):
         # same-origin XSS when assets are served on the application's origin.
         storage = S3Storage(request=request)
         asset_mime_type = (asset.attributes.get("type") or "").split(";")[0].strip().lower()
-        disposition = (
-            "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
-        )
+        disposition = "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
         # Generate a presigned URL to share an S3 object
         signed_url = storage.generate_presigned_url(
             object_name=asset.asset.name,
