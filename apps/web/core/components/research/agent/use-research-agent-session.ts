@@ -37,6 +37,8 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   const [events, setEvents] = useState<TAgentRunEvent[]>([]);
   const [state, setState] = useState<TResearchAgentPluginState>("loading_context");
   const [message, setMessage] = useState("");
+  const [reports, setReports] = useState<{ report_id: string; version_no: number }[]>([]);
+  const [reportError, setReportError] = useState("");
   const [sending, setSending] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(false);
@@ -181,18 +183,20 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     setSending(true);
     setState("streaming");
     try {
-      const response = await agentService.sendMessage(workspaceSlug, current.session_id, message.trim());
+      const response = await agentService.sendMessage(workspaceSlug, current.session_id, message.trim(), reports);
+      setReportError("");
       sessionRef.current = response.session;
       setSession(response.session);
       setEvents((previous) => mergeAgentEvents(previous, response.events));
       setState(researchAgentSessionState(response.session));
       setMessage("");
-    } catch {
+    } catch (failure) {
+      setReportError((failure as { message?: string })?.message ?? "报告或 Agent 读取失败，请重新选择正式报告后重试。");
       setState("error");
     } finally {
       setSending(false);
     }
-  }, [message, sending, workspaceSlug]);
+  }, [message, sending, workspaceSlug, reports]);
 
   const saveArtifact = useCallback(async () => {
     const current = sessionRef.current;
@@ -267,6 +271,10 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     (session?.assembly.allowed_knowledge_base_ids.length ?? 0) + (session?.assembly.allowed_file_ids.length ?? 0);
 
   return {
+    workspaceSlug,
+    reports,
+    setReports,
+    reportError,
     chainNodeId,
     session,
     events,

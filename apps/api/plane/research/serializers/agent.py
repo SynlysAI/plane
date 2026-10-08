@@ -17,6 +17,7 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
     policy_version = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
     chain_node_title = serializers.SerializerMethodField()
+    report_sources = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchAgentSession
@@ -33,6 +34,7 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
             "context_expires_at",
             "project_name",
             "chain_node_title",
+            "report_sources",
             "status",
             "last_error",
             "synlora_session_id",
@@ -79,6 +81,10 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
     def get_chain_node_title(self, obj):
         """Return the current node title for fixed UI context."""
         return obj.chain_node.title
+
+    def get_report_sources(self, obj):
+        """显示正式报告 ID 与固定版本，不在会话元数据中返回正文。"""
+        return obj.context_grant.allowed_reports
 
 
 class ResearchAgentRunEventSerializer(serializers.ModelSerializer):

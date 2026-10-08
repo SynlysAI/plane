@@ -29,6 +29,18 @@ function request_id() {
 }
 
 export class ResearchAgentService extends APIService {
+  /** 获取当前课题可见的正式报告选择项。 */
+  async getFormalReports(workspaceSlug: string, chainNodeId: string) {
+    return this.get(`/api/research/workspaces/${workspaceSlug}/formal-reports/`, {
+      params: { chain_node_id: chainNodeId },
+    }).then(
+      (response) =>
+        response.data as {
+          results: { report_id: string; version_no: number; title: string; characters: number }[];
+          association_hint: string;
+        }
+    );
+  }
   constructor() {
     super(API_BASE_URL);
   }
@@ -68,10 +80,16 @@ export class ResearchAgentService extends APIService {
       });
   }
 
-  async sendMessage(workspaceSlug: string, sessionId: string, content: string) {
+  async sendMessage(
+    workspaceSlug: string,
+    sessionId: string,
+    content: string,
+    reports?: { report_id: string; version_no: number }[]
+  ) {
     return this.post(researchEndpoints.agentMessages(workspaceSlug, sessionId), {
       request_id: request_id(),
       content,
+      ...(reports ? { reports } : {}),
     })
       .then((res) => res?.data as TAgentMessageResponse)
       .catch((err) => {

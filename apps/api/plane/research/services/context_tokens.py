@@ -34,9 +34,7 @@ def context_hash_for(*, workspace_id, user_id, project_id, chain_node_id, visibi
 
 def context_policy_hash(payload):
     """Hash a v2 capability policy without embedding secrets or tokens."""
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
 def issue_context_token(
@@ -48,6 +46,7 @@ def issue_context_token(
     request_id,
     allowed_knowledge_base_ids=None,
     allowed_file_ids=None,
+    allowed_reports=None,
     allowed_plugins=None,
     allowed_tools=None,
     policy_id="",
@@ -62,12 +61,14 @@ def issue_context_token(
     visibility_scope = profile.chain_visibility
     allowed_knowledge_base_ids = list(allowed_knowledge_base_ids or [])
     allowed_file_ids = list(allowed_file_ids or [])
+    allowed_reports = list(allowed_reports or [])
     allowed_plugins = list(allowed_plugins or [])
     allowed_tools = list(allowed_tools or [])
     policy_hash = context_policy_hash(
         {
             "allowed_knowledge_base_ids": allowed_knowledge_base_ids,
             "allowed_file_ids": allowed_file_ids,
+            "allowed_reports": allowed_reports,
             "allowed_plugins": allowed_plugins,
             "allowed_tools": allowed_tools,
         }
@@ -85,11 +86,12 @@ def issue_context_token(
                 "base_hash": base_hash,
                 "allowed_knowledge_base_ids": allowed_knowledge_base_ids,
                 "allowed_file_ids": allowed_file_ids,
+                "allowed_reports": allowed_reports,
                 "allowed_plugins": allowed_plugins,
                 "allowed_tools": allowed_tools,
             }
         )
-        if any((allowed_knowledge_base_ids, allowed_file_ids, allowed_plugins, allowed_tools))
+        if any((allowed_knowledge_base_ids, allowed_file_ids, allowed_plugins, allowed_tools, allowed_reports))
         else base_hash
     )
     ttl_seconds = max(60, int(getattr(settings, "RESEARCH_CONTEXT_TOKEN_TTL_SECONDS", 600)))
@@ -102,6 +104,7 @@ def issue_context_token(
         context_hash=context_hash,
         allowed_knowledge_base_ids=allowed_knowledge_base_ids,
         allowed_file_ids=allowed_file_ids,
+        allowed_reports=allowed_reports,
         allowed_plugins=allowed_plugins,
         allowed_tools=allowed_tools,
         policy_id=policy_id,
