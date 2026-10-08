@@ -1,29 +1,75 @@
-# AI4MS / Plane 反馈契约 v1
+# Plane 用户反馈契约 v1
 
-AI4MS 保存唯一权威记录和 GridFS 截图；Plane 仅 BFF 代理，无反馈副本。旧 `/api/v1/feedback` 继续接受 Spec_Agent / Poly_Agent 等原平台；Plane 使用专用 `/api/v1/plane-feedback`。
+## 边界
 
-## 认证
+Plane 拥有完整的用户反馈闭环：反馈记录、截图、授权、筛选、状态流转和处置审计均保存在 Plane 内。反馈记录使用 Plane PostgreSQL 研究模型；截图复用 `FileAsset` 与 Plane S3 存储；审计使用 append-only `ResearchAuditEvent`。Plane 不调用 AI4MS Feedback API，AI4MS 也不是 Plane 的反馈后端或数据源。
 
-Plane 后端配置 `AI4MS_FEEDBACK_BASE_URL` 与独立 `AI4MS_FEEDBACK_SECRET`；AI4MS 配置相同 `PLANE_FEEDBACK_SECRET`，至少 32 字符，禁止与门户 `AUTH_SECRET` 共用。凭据不进入浏览器。
+AI4MS 继续独立维护其原有 Spec_Agent、Poly_Agent、SpecLabOS、RAGPortal 反馈体系。两套反馈体系不共享平台标识、身份映射、存储、管理端或发布依赖。
 
-请求头：`X-Plane-Timestamp`、`X-Plane-Nonce`、`X-Plane-Principal`（URL-safe base64 JSON）、`X-Plane-Signature`。
+## 4.21 历史数据切换
 
-签名材料以换行连接：HTTP 方法、路径及编码后查询、时间戳、nonce、完整身份头、实际请求体 SHA-256。HMAC-SHA256 输出 hex。时间差最多 60 秒，MongoDB nonce 唯一索引与 TTL 防重放；重试须重新签发 HMAC，保留反馈幂等标识。
+4.21.0 曾短暂发布 Plane → AI4MS BFF。切换到本契约前必须在 Plane API 容器执行只读预检：
 
-身份字段：`workspace_id`、`user_id`、`username`、`org_unit_id`、`scope=self/org/workspace`、`org_unit_ids`、`permissions=submit/read/manage`。组织归属只从 Plane 有效关系取值；历史记录不推测归属。
+```bash
+python manage.py import_research_feedback_from_ai4ms \
+  --mongo-uri "$AI4MS_MONGO_URI" \
+  --mongo-database "$AI4MS_MONGO_DB" \
+  --workspace-slug "$PLANE_WORKSPACE_SLUG"
+```
 
-## 端点
+- 预检记录数为 0 时，保存 JSON 输出，可直接部署 Plane 本地闭环并发布 AI4MS 2.0.0 清理。
+- 预检记录数大于 0 时，必须备份 Plane PostgreSQL/S3 与 AI4MS MongoDB/GridFS，再追加 `--execute` 执行幂等导入，并按[迁移 runbook](../../operations/research-feedback-ai4ms-migration.md) 核验记录数、截图数、状态历史和权限范围。
+- 导入命令只读 AI4MS 源数据；迁移完成后也不删除或改写 AI4MS MongoDB。切换后新增反馈只能写入 Plane，不得反向同步。
 
-| AI4MS 端点                            | 请求与结果                                                                                                                          |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/plane-feedback`         | multipart：`payload` JSON 和最多 3 个 `screenshots`；正文 1–5000 字，分类 bug/ux/idea/other，path、browser、module、idempotency_key |
-| `GET /api/v1/plane-feedback`          | page/page_size、分类、状态、module、q、date_from/date_to；响应 `data.results/count/page/page_size`                                  |
-| `GET /{feedback_id}/screenshots/{id}` | 同记录范围鉴权，返回图片，private/no-store/nosniff                                                                                  |
-| `PATCH /{feedback_id}/status`         | `status` 与非空 `comment`；原子记录操作者、前后状态、说明、时间                                                                     |
-| `DELETE /{feedback_id}`               | 管理授权显式删除，并清理 GridFS 截图                                                                                                |
+## 数据与隐私
 
-Plane 同源代理位于 `/api/research/workspaces/{slug}/feedback/`，查询 `scope=manage` 使用组织树/工作区管理授权；默认只本人。普通用户不能处置，主 PI 按所属组织树（即使兼任工作区管理员），平台管理员查看当前工作区全部 Plane 反馈。截图读取与状态处置使用同一范围条件。
+| 字段              | 规则                                                            |
+| ----------------- | --------------------------------------------------------------- |
+| `content`         | 1–5000 字，去除首尾空白后不能为空                               |
+| `feedback_type`   | `bug` / `ux` / `idea` / `other`                                 |
+| `path`            | 只保存 `urlsplit(path).path`，去除 query 与 fragment，最长 2048 |
+| `browser`         | 最长 500 字                                                     |
+| `module`          | 最长 100 字，默认 `plane`                                       |
+| `screenshots`     | 每条 0–3 张，PNG/JPEG/WebP，每张 1 Byte–10 MB                   |
+| `idempotency_key` | 16–128 字符；同键同负载返回原记录，同键不同负载返回 409         |
 
-状态保留 `open`（待处理）、`done`（已解决），追加 `in_progress`（处理中）、`closed`（已关闭）。截图每张最多 10 MB，只接受真实 PNG/JPEG/WebP，实际解码校验，不信任客户端 MIME。唯一幂等索引绑定工作区、提交人和幂等 key；相同内容重试复用记录，不同内容返回 409。
+截图必须同时通过扩展名、MIME 与文件头校验。Plane 不采集页面正文、Cookie、Authorization、URL query 或 fragment。反馈正文和截图不写入测试证据或普通日志。
 
-只收集去掉 query/fragment 的路径和浏览器信息，不采集页面正文或认证凭据。上游失败返回受控 503，表单和截图保留供重试。截图长期保留；备份需同时包含 `feedbacks`、`feedback_screenshots.files` 和 `feedback_screenshots.chunks`，并与元数据保持同一时间点。
+## 提交滥用边界
+
+- 每个用户在每个工作区内最多成功提交 5 条反馈/小时；幂等重试命中原记录时不消耗次数。
+- 活动截图存储投影上限为 100 MB/用户，计算范围包含当前用户在本工作区内未软删反馈的活动截图，并计入本次待上传文件。
+- 同一用户同一工作区同时只允许一个反馈提交在途；并发请求返回 `research_feedback_busy`。
+- Django cache 不可用时提交 fail-closed 返回 `research_feedback_storage_unavailable`，不得退化为无锁写入。
+- 超限错误：`research_feedback_rate_limited` 返回 429，`research_feedback_storage_quota_exceeded` 返回 413。
+
+## API
+
+所有路径均位于 Plane 同源 API 下：
+
+| 方法与路径                                                                       | 说明                                                         |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `POST /api/research/workspaces/{slug}/feedback/`                                 | multipart 提交反馈与截图，成功返回 `{code:0,data:record}`    |
+| `GET /api/research/workspaces/{slug}/feedback/`                                  | 本人或管理分页查询，返回 `data.results/count/page/page_size` |
+| `PATCH /api/research/workspaces/{slug}/feedback/{id}/status/`                    | 管理处置，必须提供 1–2000 字说明，返回更新后的完整记录       |
+| `GET /api/research/workspaces/{slug}/feedback/{id}/screenshots/{screenshot_id}/` | 受控读取截图流，`private,no-store` 且 `nosniff`              |
+
+列表筛选支持 `feedback_type`、`status`、`module`、`q`、`date_from`、`date_to`、`page` 和 `page_size`。默认页大小 20，最大 100。反馈和截图 ID 均为 Plane UUID。
+
+## 权限与状态
+
+- 普通工作区成员可提交反馈，并仅能查看本人的反馈和截图。
+- 主 PI 按 `managing_org_units_for` 解析出的组织树查看和处置；即使兼任工作区管理员，也不因此扩大为全工作区。
+- 工作区管理员和平台管理员查看并处置当前工作区反馈。
+
+状态值为 `open`、`in_progress`、`done`、`closed`。每次状态变更在同一数据库事务中锁定反馈行，并追加包含操作者快照、前后状态、处理说明和时间的审计事件。本轮不提供删除接口；反馈和截图按本契约长期保留，未来如需擦除或保留期策略须另立兼容设计。
+
+## 存储与通用资产边界
+
+截图登记为 `FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT`，对象键位于工作区研究命名空间下，并由 `ResearchFeedbackScreenshot` 保存顺序和归属。Plane 通用资产接口（workspace/project/user、legacy file-assets 与 duplicate-assets）不得创建、读取、修改、删除或恢复反馈截图，避免绕过反馈专属路由。
+
+部署备份必须同时覆盖 Plane PostgreSQL 数据库和 S3 bucket。S3 失败或数据库登记失败时，提交返回受控 503，不留下反馈半成品；已上传但未完成登记的新对象会尽最大努力清理，清理失败只记录对象键和异常类型告警。浏览器不接收 S3 签名 URL，截图经 Plane API 流式返回。
+
+`FileAsset.attributes.sha256` 与 `storage_metadata.SHA256` 保存截图内容哈希，仅用于幂等导入与完整性核对；公开截图响应仍只暴露 id、MIME 和大小。列表、幂等命中、配额和截图读取均排除软删反馈/截图登记，避免未来保留期策略复活已删数据。
+
+`FEEDBACK_SCREENSHOT` 对 Plane 通用资产接口完全独占：通用创建/预签名上传、复制、下载、修改、删除和恢复均返回拒绝；唯一读取路径是本文的反馈截图端点。该规则避免伪造反馈资产、孤儿对象和可复用 S3 签名 URL。

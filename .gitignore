@@ -124,7 +124,11 @@ packages/i18n/src/types/keys.generated.ts
 
 # Local miscellaneous files
 /others/
+/apps/api/OleFileIO_PL.py
+/apps/api/olefile/
+/apps/api/olefile-*.dist-info/
 
 # Local verified rebuild backups and one-time credentials
 .runtime/
 refer/issue.docx
+refer/issue/
