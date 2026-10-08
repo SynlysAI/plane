@@ -10,6 +10,14 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.report_images import ResearchReportImageEndpoint
+from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
+from plane.research.views.report_context import ResearchFormalReportContentEndpoint, ResearchFormalReportOptionsEndpoint
+from plane.research.views.feedback import (
+    ResearchFeedbackEndpoint,
+    ResearchFeedbackStatusEndpoint,
+    ResearchFeedbackScreenshotEndpoint,
+)
 
 from plane.research.views import (
     ResearchAccountProvisioningOptionsEndpoint,
@@ -187,6 +195,42 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path("research/workspaces/<str:slug>/feedback/", ResearchFeedbackEndpoint.as_view(), name="research-feedback"),
+    path(
+        "research/workspaces/<str:slug>/feedback/<str:feedback_id>/status/",
+        ResearchFeedbackStatusEndpoint.as_view(),
+        name="research-feedback-status",
+    ),
+    path(
+        "research/workspaces/<str:slug>/feedback/<str:feedback_id>/screenshots/<str:screenshot_id>/",
+        ResearchFeedbackScreenshotEndpoint.as_view(),
+        name="research-feedback-screenshot",
+    ),
+    path(
+        "research/workspaces/<str:slug>/formal-reports/",
+        ResearchFormalReportOptionsEndpoint.as_view(),
+        name="research-formal-report-options",
+    ),
+    path(
+        "research/workspaces/<str:slug>/context/<uuid:context_id>/report-content/",
+        ResearchFormalReportContentEndpoint.as_view(),
+        name="research-formal-report-content",
+    ),
+    path(
+        "research/workspaces/<str:slug>/outcomes/",
+        ResearchWorkspaceOutcomeEndpoint.as_view(),
+        name="research-workspace-outcomes",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/images/",
+        ResearchReportImageEndpoint.as_view(),
+        name="research-report-image-upload",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/images/<uuid:asset_id>/",
+        ResearchReportImageEndpoint.as_view(),
+        name="research-report-image",
+    ),
     path(
         "research/workspaces/<str:slug>/chains/",
         ResearchChainListCreateEndpoint.as_view(),

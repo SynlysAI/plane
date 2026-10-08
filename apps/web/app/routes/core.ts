@@ -176,6 +176,10 @@ export const coreRoutes: RouteConfigEntry[] = [
           "./(all)/[workspaceSlug]/(projects)/research/settings/integrations/page.tsx"
         ),
         route(":workspaceSlug/research/settings", "./(all)/[workspaceSlug]/(projects)/research/settings/page.tsx"),
+        route(
+          ":workspaceSlug/research/settings/feedback",
+          "./(all)/[workspaceSlug]/(projects)/research/settings/feedback/page.tsx"
+        ),
         route(":workspaceSlug/research/audit", "./(all)/[workspaceSlug]/(projects)/research/audit/page.tsx"),
         route(
           ":workspaceSlug/research/projects/:projectId/stages",
