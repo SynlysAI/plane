@@ -39,6 +39,44 @@ type Props = {
   variant?: "default" | "review";
 };
 
+type ReportListQueryFilters = {
+  status: string;
+  reportType: string;
+  periodKey: string;
+  mineOnly: boolean;
+  orgUnit: string;
+  owner: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+const REPORT_LIST_CONTROLLED_QUERY_KEYS = [
+  "status",
+  "report_type",
+  "period_key",
+  "mine",
+  "org_unit",
+  "owner",
+  "date_from",
+  "date_to",
+  "cursor",
+] as const;
+
+/** Build report-list query parameters without dropping unrelated page context. */
+export function buildReportListSearchParams(current: URLSearchParams, filters: ReportListQueryFilters) {
+  const params = new URLSearchParams(current);
+  REPORT_LIST_CONTROLLED_QUERY_KEYS.forEach((key) => params.delete(key));
+  if (filters.status) params.set("status", filters.status);
+  if (filters.reportType) params.set("report_type", filters.reportType);
+  if (filters.periodKey.trim()) params.set("period_key", filters.periodKey.trim());
+  if (filters.mineOnly) params.set("mine", "true");
+  if (filters.orgUnit) params.set("org_unit", filters.orgUnit);
+  if (filters.owner.trim()) params.set("owner", filters.owner.trim());
+  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters.dateTo) params.set("date_to", filters.dateTo);
+  return params;
+}
+
 /** Report list with period / status / type / owner filters (P0-UI-02). */
 export const ResearchReportList = observer(function ResearchReportList({ workspaceSlug, variant = "default" }: Props) {
   const { t, currentLocale } = useTranslation();
@@ -53,11 +91,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
   const [typeFilter, setTypeFilter] = useState(() => searchParams.get("report_type") ?? "");
   const [periodFilter, setPeriodFilter] = useState(() => searchParams.get("period_key") ?? "");
   const [mineOnly, setMineOnly] = useState(() =>
-    searchParams.has("mine")
-      ? searchParams.get("mine") === "true"
-      : variant === "review"
-        ? false
-        : !["org_unit", "owner", "date_from", "date_to"].some((key) => searchParams.has(key))
+    searchParams.has("mine") ? searchParams.get("mine") === "true" : false
   );
   const [orgFilter, setOrgFilter] = useState(() => searchParams.get("org_unit") ?? "");
   const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get("owner") ?? "");
@@ -153,19 +187,16 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
   );
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    const savedView = searchParams.get("view");
-    if (savedView) params.set("view", savedView);
-    const savedTab = searchParams.get("tab");
-    if (savedTab) params.set("tab", savedTab);
-    if (statusFilter) params.set("status", statusFilter);
-    if (typeFilter) params.set("report_type", typeFilter);
-    if (periodFilter.trim()) params.set("period_key", periodFilter.trim());
-    params.set("mine", String(mineOnly));
-    if (orgFilter) params.set("org_unit", orgFilter);
-    if (ownerFilter.trim()) params.set("owner", ownerFilter.trim());
-    if (dateFrom) params.set("date_from", dateFrom);
-    if (dateTo) params.set("date_to", dateTo);
+    const params = buildReportListSearchParams(searchParams, {
+      status: statusFilter,
+      reportType: typeFilter,
+      periodKey: periodFilter,
+      mineOnly,
+      orgUnit: orgFilter,
+      owner: ownerFilter,
+      dateFrom,
+      dateTo,
+    });
     const query = params.toString();
     window.history.replaceState(
       null,
