@@ -44,7 +44,7 @@ def client_for(user):
 def env(db):
     admin = make_user(first_name="Admin")
     workspace = make_workspace(admin)
-    enable_research(workspace)
+    enable_research(workspace, research_chain_enabled=True)
     member = make_user(first_name="Member")
     add_workspace_member(workspace, member)
     root = OrgUnit.objects.create(
@@ -299,6 +299,8 @@ class TestResearchProjectCreation:
         assert legacy.status_code == 201, legacy.json()
 
     def test_research_chain_creation_requires_workspace_switch(self, env):
+        env["workspace"].research_setting.research_chain_enabled = False
+        env["workspace"].research_setting.save(update_fields=["research_chain_enabled"])
         response = env["member_client"].post(
             env["url"],
             {
@@ -519,7 +521,7 @@ class TestResearchProjectLifecycle:
 
     def test_team_project_cannot_be_changed_into_a_second_active_cultivation_project(self, env):
         self._create(env, research_type="PHD")
-        team = self._create(env, research_type="RESEARCH_PROJECT")
+        team = self._create(env, research_type="RESEARCH_PROJECT", chain_kind="LEGACY_TRAINING")
         response = env["admin_client"].patch(
             f"{env['url']}{team['id']}/",
             {"research_type": "MASTER"},
@@ -546,7 +548,7 @@ class TestResearchProjectLifecycle:
         assert research["started_at"] == "2026-09-01"
 
     def test_converting_team_project_to_cultivation_initializes_stages(self, env):
-        team = self._create(env, research_type="RESEARCH_PROJECT")
+        team = self._create(env, research_type="RESEARCH_PROJECT", chain_kind="LEGACY_TRAINING")
 
         response = env["admin_client"].patch(
             f"{env['url']}{team['id']}/",

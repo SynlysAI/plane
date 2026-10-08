@@ -12,7 +12,10 @@ const chains = Array.from({ length: 6 }, (_, index) => ({
  * 用给定角色拼一份最小身份。
  */
 function identity(
-  partial: Partial<TResearchIdentity> & { user?: Partial<TResearchIdentity["user"]> }
+  partial: Omit<Partial<TResearchIdentity>, "user" | "capabilities"> & {
+    user?: Partial<TResearchIdentity["user"]>;
+    capabilities?: Partial<NonNullable<TResearchIdentity["capabilities"]>>;
+  }
 ): TResearchIdentity {
   return partial as TResearchIdentity;
 }
