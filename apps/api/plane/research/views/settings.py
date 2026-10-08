@@ -44,7 +44,13 @@ VISIBILITY_FIELDS = (
     "monthly_default_visibility",
 )
 
-LIMIT_FIELDS = ("image_max_mb", "pdf_max_mb", "markdown_max_mb", "audit_retention_days")
+LIMIT_FIELDS = (
+    "image_max_mb",
+    "pdf_max_mb",
+    "markdown_max_mb",
+    "office_max_mb",
+    "audit_retention_days",
+)
 
 
 def get_or_create_setting(workspace, actor=None):

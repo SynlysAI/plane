@@ -36,6 +36,7 @@ class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
             "image_max_mb",
             "pdf_max_mb",
             "markdown_max_mb",
+            "office_max_mb",
             "timezone",
             "audit_retention_days",
             "created_at",

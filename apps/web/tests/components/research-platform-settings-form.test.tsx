@@ -65,6 +65,7 @@ const settings = {
   image_max_mb: 20,
   pdf_max_mb: 100,
   markdown_max_mb: 5,
+  office_max_mb: 50,
   timezone: "Asia/Shanghai",
   audit_retention_days: 0,
 };
@@ -163,7 +164,7 @@ describe("platform settings main PI field", () => {
     expect(resolvedName()?.textContent).toBe("邱智鑫");
     expect(container.textContent).not.toContain(LONG_ID);
     const numbers = Array.from(container.querySelectorAll('input[type="number"]'));
-    expect(numbers).toHaveLength(4);
+    expect(numbers).toHaveLength(5);
     numbers.forEach((item) => {
       expect(item.className).toContain("h-9");
       expect(item.className).toContain("leading-8");

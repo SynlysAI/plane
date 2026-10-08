@@ -87,7 +87,12 @@ class TestResearchModuleSwitch:
         response = env.admin_client.get("/api/research/health/")
         assert response.status_code == 200
         assert response.json()["module_enabled"] is False
-        assert response.json()["limits"] == {"image_max_mb": 20, "pdf_max_mb": 100, "markdown_max_mb": 5}
+        assert response.json()["limits"] == {
+            "image_max_mb": 20,
+            "pdf_max_mb": 100,
+            "markdown_max_mb": 5,
+            "office_max_mb": 50,
+        }
 
 
 @pytest.mark.django_db

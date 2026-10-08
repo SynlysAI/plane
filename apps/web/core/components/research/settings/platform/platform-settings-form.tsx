@@ -38,6 +38,7 @@ const LIMITS: { field: keyof TWorkspaceResearchSetting; labelKey: string }[] = [
   { field: "image_max_mb", labelKey: "research.platform.image_max_mb" },
   { field: "pdf_max_mb", labelKey: "research.platform.pdf_max_mb" },
   { field: "markdown_max_mb", labelKey: "research.platform.markdown_max_mb" },
+  { field: "office_max_mb", labelKey: "research.platform.office_max_mb" },
   { field: "audit_retention_days", labelKey: "research.platform.audit_retention_days" },
 ];
 
@@ -134,6 +135,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
         image_max_mb: draft.image_max_mb,
         pdf_max_mb: draft.pdf_max_mb,
         markdown_max_mb: draft.markdown_max_mb,
+        office_max_mb: draft.office_max_mb,
         audit_retention_days: draft.audit_retention_days,
         timezone: draft.timezone,
         required_reporter_categories: draft.required_reporter_categories,

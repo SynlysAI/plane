@@ -135,6 +135,7 @@ export type TWorkspaceResearchSetting = {
   image_max_mb: number;
   pdf_max_mb: number;
   markdown_max_mb: number;
+  office_max_mb: number;
   timezone: string | null;
   audit_retention_days: number;
 };
@@ -395,7 +396,7 @@ export type TReportAttachment = {
   file_name: string;
   file_size: number;
   content_type: string;
-  kind: "IMAGE" | "PDF" | "MARKDOWN" | "OTHER";
+  kind: "IMAGE" | "PDF" | "MARKDOWN" | "OFFICE" | "OTHER";
   uploaded_by: string;
   created_at: string;
 };

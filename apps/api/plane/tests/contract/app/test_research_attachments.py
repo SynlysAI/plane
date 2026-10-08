@@ -177,6 +177,23 @@ class TestReportAttachments:
         assert ReportAttachment.objects.filter(report_id=env["report"]["id"]).count() == 1
         assert ResearchAuditEvent.objects.filter(action="report.attachment.add").exists()
 
+    @pytest.mark.parametrize(
+        ("file_name", "content_type"),
+        [
+            ("notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            ("table.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ("slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            ("data.csv", "text/csv"),
+        ],
+    )
+    def test_common_office_files_can_be_registered(self, env, file_name, content_type):
+        asset = make_asset(env["workspace"], env["student"], file_name, content_type, 2 * MB)
+        response = env["student_client"].post(
+            env["attachments_url"], {"asset_id": str(asset.id)}, format="json"
+        )
+        assert response.status_code == 201
+        assert response.json()["kind"] == "OFFICE"
+
     def test_unsupported_type_is_rejected_and_audited(self, env):
         asset = make_asset(env["workspace"], env["student"], "payload.sh", "application/x-sh", 1024)
         response = env["student_client"].post(

@@ -12,7 +12,7 @@ from plane.research.utils.files import (
 
 pytestmark = pytest.mark.unit
 
-LIMITS = {"image_max_mb": 20, "pdf_max_mb": 100, "markdown_max_mb": 5}
+LIMITS = {"image_max_mb": 20, "pdf_max_mb": 100, "markdown_max_mb": 5, "office_max_mb": 50}
 MB = 1024 * 1024
 
 
@@ -99,6 +99,64 @@ class TestFileValidation:
             validate_attachment(
                 file_name="script.sh",
                 content_type="application/x-sh",
+                size_bytes=1024,
+                limits=LIMITS,
+            )
+            == "file_type_not_allowed"
+        )
+
+    @pytest.mark.parametrize(
+        ("file_name", "content_type"),
+        [
+            ("notes.doc", "application/msword"),
+            ("notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            ("table.xls", "application/vnd.ms-excel"),
+            ("table.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ("slides.ppt", "application/vnd.ms-powerpoint"),
+            ("slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            ("data.csv", "text/csv"),
+            ("data.tsv", "text/tab-separated-values"),
+        ],
+    )
+    def test_common_office_files_are_accepted(self, file_name, content_type):
+        assert (
+            validate_attachment(
+                file_name=file_name,
+                content_type=content_type,
+                size_bytes=2 * MB,
+                limits=LIMITS,
+            )
+            is None
+        )
+        assert detect_kind(file_name, content_type) == "OFFICE"
+
+    def test_office_file_requires_matching_extension(self):
+        assert (
+            validate_attachment(
+                file_name="payload.exe",
+                content_type="application/vnd.ms-excel",
+                size_bytes=1024,
+                limits=LIMITS,
+            )
+            == "file_type_not_allowed"
+        )
+
+    def test_office_size_limit_is_enforced(self):
+        assert (
+            validate_attachment(
+                file_name="table.xlsx",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                size_bytes=51 * MB,
+                limits=LIMITS,
+            )
+            == "file_size_exceeded"
+        )
+
+    def test_office_extension_and_mime_must_match(self):
+        assert (
+            validate_attachment(
+                file_name="table.xlsx",
+                content_type="application/msword",
                 size_bytes=1024,
                 limits=LIMITS,
             )

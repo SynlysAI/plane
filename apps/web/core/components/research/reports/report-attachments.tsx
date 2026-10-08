@@ -23,7 +23,7 @@ type Props = {
 };
 
 /**
- * Attachments (PDF) and Markdown body import for a report (P0-FILE-01 ~
+ * Attachments and Markdown body import for a report (P0-FILE-01 ~
  * P0-FILE-07). Uploads go straight to S3 through a presigned POST so the
  * server never buffers the file.
  */
@@ -108,7 +108,7 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
         {editable && (
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
-              {t("research.attachments.upload_pdf")}
+              {t("research.attachments.upload_file")}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => markdownInputRef.current?.click()}>
               {t("research.attachments.pick_markdown")}
@@ -116,7 +116,7 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/pdf"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.tsv,image/*,application/pdf"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
