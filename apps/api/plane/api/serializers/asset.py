@@ -100,6 +100,12 @@ class FileAssetSerializer(BaseSerializer):
 
     asset_url = serializers.CharField(read_only=True)
 
+    def validate_entity_type(self, value):
+        """Reject feedback screenshots outside the dedicated feedback endpoint."""
+        if value == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
+            raise serializers.ValidationError("Feedback screenshots must use the feedback endpoint.")
+        return value
+
     class Meta:
         model = FileAsset
         fields = "__all__"
