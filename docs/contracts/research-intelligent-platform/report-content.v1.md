@@ -5,7 +5,7 @@
 | 接口                                                                       | 语义                                                                                         |
 | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `GET /api/research/workspaces/{slug}/formal-reports/?chain_node_id={id}`   | 列出当前课题关联、调用方可见的正式报告：`report_id`、`version_no`、`title`、`characters`     |
-| `POST /api/research/workspaces/{slug}/context/token/`                      | 原请求追加可选 `reports: [{report_id, version_no}]`；选择纳入 Context 哈希及持久授权         |
+| `POST /api/research/workspaces/{slug}/context/exchange-token/`             | 原请求追加可选 `reports: [{report_id, version_no}]`；选择纳入 Context 哈希及持久授权         |
 | `GET /api/research/workspaces/{slug}/context/{context_id}/report-content/` | 会话或 Context token 鉴权；检查工作区、用户、课题可见性、报告 ACL、撤销/过期、哈希及版本变化 |
 | Agent 消息接口                                                             | 可选 `reports`，Plane BFF 逐次校验后把固定正式文本附来源/版本标记传给既有 Synlora 消息接口   |
 
