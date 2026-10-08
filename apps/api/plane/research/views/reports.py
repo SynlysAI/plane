@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from plane.app.serializers import PageBinaryUpdateSerializer
 from plane.db.models import (
+    MentorBinding,
     Page,
     OrgUnit,
     PeriodicReport,
@@ -113,6 +114,8 @@ def create_report_snapshot(report, actor):
             deleted_at__isnull=True,
         ).order_by("created_at", "id")
     ]
+    from plane.research.utils.report_images import image_manifest
+
     return PeriodicReportSnapshot.objects.create(
         report=report,
         version_no=latest_version + 1,
@@ -122,6 +125,7 @@ def create_report_snapshot(report, actor):
         description_stripped=page.description_stripped,
         description_binary=page.description_binary,
         attachment_manifest=attachment_manifest,
+        image_manifest=image_manifest(report),
         submitted_by=actor,
     )
 
@@ -327,6 +331,34 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
 
         context = build_actor_context(request.user, workspace.id)
         visible_queryset = visible_reports_queryset(queryset, context)
+        keyword = str(request.GET.get("q") or "").strip()[:200]
+        if keyword:
+            visible_queryset = visible_queryset.filter(
+                Q(page__name__icontains=keyword)
+                | Q(period_key__icontains=keyword)
+                | Q(owner__display_name__icontains=keyword)
+                | Q(owner__first_name__icontains=keyword)
+            )
+        scope = request.GET.get("scope", "all")
+        if scope == "mine":
+            visible_queryset = visible_queryset.filter(owner=request.user)
+        elif scope == "review":
+            review_scope = Q(org_unit_id__in=context.managing_unit_ids) | Q(
+                owner_id__in=MentorBinding.objects.filter(
+                    workspace=workspace,
+                    mentor=request.user,
+                    is_primary_advisor=True,
+                    effective_from__lte=timezone.localdate(),
+                    deleted_at__isnull=True,
+                )
+                .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=timezone.localdate()))
+                .values("mentee_id")
+            )
+            visible_queryset = visible_queryset.filter(status="SUBMITTED").exclude(owner=request.user)
+            if not context.is_main_pi:
+                visible_queryset = visible_queryset.filter(review_scope)
+        elif scope != "all":
+            return Response({"error_code": "invalid_scope"}, status=400)
         return self.paginate(
             request=request,
             queryset=visible_queryset,
@@ -556,6 +588,14 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
         body_fields = ("description_json", "description_html", "description_binary")
         body_payload = {field: request.data[field] for field in body_fields if field in request.data}
         if body_payload:
+            from plane.research.utils.report_images import body_image_ids
+
+            try:
+                body_image_ids(report, body_payload)
+            except ValueError as error:
+                return Response({"error_code": "file_type_not_allowed", "message": str(error)}, status=422)
+            if "description_binary" not in body_payload:
+                body_payload["description_binary"] = ""
             page_serializer = PageBinaryUpdateSerializer(report.page, data=body_payload, partial=True)
             if not page_serializer.is_valid():
                 return Response(page_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -607,7 +647,10 @@ class ResearchReportSubmitEndpoint(ResearchAPIView):
                 page_serializer.save()
 
             previous = report.status
-            snapshot = create_report_snapshot(report, request.user)
+            try:
+                snapshot = create_report_snapshot(report, request.user)
+            except ValueError as error:
+                return Response({"error_code": "file_type_not_allowed", "message": str(error)}, status=422)
             ReportAttachment.objects.filter(
                 report=report,
                 deleted_at__isnull=True,

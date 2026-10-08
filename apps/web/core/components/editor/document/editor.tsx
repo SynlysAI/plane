@@ -26,6 +26,8 @@ type DocumentEditorWrapperProps = MakeOptional<
   workspaceSlug: string;
   workspaceId: string;
   projectId?: string;
+  /** 报告等受控文档可覆盖资源路由，统一执行所属文档的权限检查。 */
+  fileHandlerOverrides?: Partial<TFileHandler>;
 } & (
     | {
         editable: false;
@@ -50,6 +52,7 @@ export const DocumentEditor = forwardRef(function DocumentEditor(
     workspaceId,
     projectId,
     disabledExtensions: additionalDisabledExtensions = [],
+    fileHandlerOverrides,
     ...rest
   } = props;
   // store hooks
@@ -78,13 +81,16 @@ export const DocumentEditor = forwardRef(function DocumentEditor(
       disabledExtensions={[...documentEditorExtensions.disabled, ...(additionalDisabledExtensions ?? [])]}
       editable={editable}
       flaggedExtensions={documentEditorExtensions.flagged}
-      fileHandler={getEditorFileHandlers({
-        projectId,
-        uploadFile: editable ? props.uploadFile : async () => "",
-        duplicateFile: editable ? props.duplicateFile : async () => "",
-        workspaceId,
-        workspaceSlug,
-      })}
+      fileHandler={{
+        ...getEditorFileHandlers({
+          projectId,
+          uploadFile: editable ? props.uploadFile : async () => "",
+          duplicateFile: editable ? props.duplicateFile : async () => "",
+          workspaceId,
+          workspaceSlug,
+        }),
+        ...fileHandlerOverrides,
+      }}
       getEditorMetaData={getEditorMetaData}
       mentionHandler={{
         searchCallback: async (query) => {

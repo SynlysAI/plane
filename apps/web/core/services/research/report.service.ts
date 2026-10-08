@@ -17,6 +17,8 @@ import type {
 import { APIService } from "@/services/api.service";
 
 export type TReportListParams = {
+  q?: string;
+  scope?: string;
   period_key?: string;
   status?: string;
   report_type?: string;
@@ -70,7 +72,9 @@ export class ResearchReportService extends APIService {
   async updateReport(
     workspaceSlug: string,
     reportId: string,
-    payload: Partial<TPeriodicReport> | { description_json: object; description_html: string }
+    payload:
+      | Partial<TPeriodicReport>
+      | { description_json: object; description_html: string; description_binary?: string }
   ) {
     return this.patch(researchEndpoints.report(workspaceSlug, reportId), payload)
       .then((res) => res?.data as TPeriodicReport)

@@ -9,10 +9,13 @@ MIME type, extension, size and the file signature (P0-FILE-04, P0-FILE-05).
 """
 
 import html
+import io
 import os
 import re
+import zipfile
 
 import nh3
+import olefile
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 IMAGE_CONTENT_TYPES = {
@@ -67,9 +70,33 @@ IMAGE_SIGNATURES = (
 )
 
 ALLOWED_HTML_TAGS = {
-    "p", "br", "strong", "em", "u", "s", "code", "pre", "blockquote",
-    "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "a", "img",
-    "table", "thead", "tbody", "tr", "th", "td", "hr",
+    "p",
+    "br",
+    "strong",
+    "em",
+    "u",
+    "s",
+    "code",
+    "pre",
+    "blockquote",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "ul",
+    "ol",
+    "li",
+    "a",
+    "img",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "hr",
 }
 
 ALLOWED_ATTRIBUTES = {"a": {"href", "title"}, "img": {"src", "alt", "title"}}
@@ -109,7 +136,17 @@ def validate_attachment(*, file_name, content_type, size_bytes, limits, header_b
         return "file_type_not_allowed"
     if kind == "OFFICE" and extension not in OFFICE_EXTENSIONS:
         return "file_type_not_allowed"
-    if kind == "OFFICE" and normalized_content_type and normalized_content_type not in OFFICE_CONTENT_TYPES_BY_EXTENSION[extension]:
+    if (
+        kind == "OFFICE"
+        and normalized_content_type
+        and normalized_content_type not in OFFICE_CONTENT_TYPES_BY_EXTENSION[extension]
+    ):
+        return "file_type_not_allowed"
+    if kind == "PDF" and normalized_content_type != "application/pdf":
+        return "file_type_not_allowed"
+    if kind == "IMAGE" and normalized_content_type not in IMAGE_CONTENT_TYPES:
+        return "file_type_not_allowed"
+    if kind == "MARKDOWN" and normalized_content_type not in {"text/markdown", "text/x-markdown", "text/plain"}:
         return "file_type_not_allowed"
 
     limit_mb = {
@@ -123,10 +160,12 @@ def validate_attachment(*, file_name, content_type, size_bytes, limits, header_b
     if size_bytes > int(limit_mb) * 1024 * 1024:
         return "file_size_exceeded"
 
-    if header_bytes:
+    if header_bytes is not None:
+        if not header_bytes:
+            return "file_type_not_allowed"
         if kind == "PDF" and not header_bytes.startswith(b"%PDF"):
             return "file_type_not_allowed"
-        if kind == "IMAGE" and not _looks_like_image(header_bytes):
+        if kind == "IMAGE" and not _looks_like_image(header_bytes, normalized_content_type):
             return "file_type_not_allowed"
         if kind == "MARKDOWN" and b"\x00" in header_bytes[:512]:
             return "file_type_not_allowed"
@@ -136,11 +175,114 @@ def validate_attachment(*, file_name, content_type, size_bytes, limits, header_b
     return None
 
 
-def _looks_like_image(header):
-    if any(header.startswith(signature) for signature in IMAGE_SIGNATURES):
-        return True
-    # WEBP is RIFF....WEBP
-    return header.startswith(b"RIFF") and header[8:12] == b"WEBP"
+def validate_office_container(file_name, content):
+    """校验 Office 实际容器与文件扩展名对应的内部结构。
+
+    Args:
+        file_name: 已登记的文件名。
+        content: 通过大小限制校验后读取的对象内容。
+
+    Returns:
+        有效容器返回 True，伪造、加密或损坏容器返回 False。
+    """
+    extension = extension_of(file_name)
+    try:
+        if extension in {".docx", ".xlsx", ".pptx"}:
+            required = {
+                ".docx": "word/document.xml",
+                ".xlsx": "xl/workbook.xml",
+                ".pptx": "ppt/presentation.xml",
+            }[extension]
+            with zipfile.ZipFile(io.BytesIO(content)) as container:
+                names = set(container.namelist())
+                if required not in names or "[Content_Types].xml" not in names:
+                    return False
+                for name in (required, "[Content_Types].xml"):
+                    entry = container.getinfo(name)
+                    if entry.flag_bits & 1 or not 0 < entry.file_size <= 10 * 1024 * 1024:
+                        return False
+                    container.read(name)
+                content_types = container.read("[Content_Types].xml")
+                return {
+                    ".docx": b"wordprocessingml.document.main+xml",
+                    ".xlsx": b"spreadsheetml.sheet.main+xml",
+                    ".pptx": b"presentationml.presentation.main+xml",
+                }[extension] in content_types
+        if extension in {".doc", ".xls", ".ppt"}:
+            with olefile.OleFileIO(io.BytesIO(content)) as container:
+                required = {
+                    ".doc": ("WordDocument",),
+                    ".xls": ("Workbook", "Book"),
+                    ".ppt": ("PowerPoint Document",),
+                }[extension]
+                return any(container.exists(name) for name in required)
+        return b"\x00" not in content[:512]
+    except (OSError, ValueError, KeyError, RuntimeError, zipfile.BadZipFile):
+        return False
+
+
+def inspect_uploaded_asset(storage, asset, limits):
+    """读取存储对象并验证实际大小、MIME、文件头及办公容器。
+
+    Args:
+        storage: 当前请求的 S3 存储实例。
+        asset: 待登记的 FileAsset。
+        limits: 工作区附件大小限制。
+
+    Returns:
+        错误码及实际元数据；成功时错误码为 None。
+    """
+    metadata = storage.get_object_metadata(object_name=asset.asset.name)
+    if not metadata:
+        return "attachment_not_found", None
+    file_name = asset.attributes.get("name") or asset.asset.name
+    content_type = metadata.get("ContentType") or ""
+    size = metadata.get("ContentLength")
+    error = validate_attachment(
+        file_name=file_name,
+        content_type=content_type,
+        size_bytes=size,
+        limits=limits,
+    )
+    if error:
+        return error, metadata
+    response = storage.server_s3_client.get_object(
+        Bucket=storage.aws_storage_bucket_name,
+        Key=asset.asset.name,
+    )
+    body = response["Body"]
+    try:
+        # 元数据先限制大小，读取再限制长度，避免对象替换及伪造响应造成无界读取。
+        content = body.read(int(size) + 1)
+    finally:
+        body.close()
+    if len(content) != size:
+        return "file_size_exceeded", metadata
+    error = validate_attachment(
+        file_name=file_name,
+        content_type=content_type,
+        size_bytes=size,
+        limits=limits,
+        header_bytes=content[:512],
+    )
+    if not error and detect_kind(file_name, content_type) == "OFFICE":
+        if not validate_office_container(file_name, content):
+            error = "file_type_not_allowed"
+    return error, metadata
+
+
+def _looks_like_image(header, content_type):
+    """核对实际图片格式与对象 MIME，拒绝混用文件头。"""
+    signatures = {
+        "image/png": (b"\x89PNG\r\n\x1a\n",),
+        "image/jpeg": (b"\xff\xd8\xff",),
+        "image/jpg": (b"\xff\xd8\xff",),
+        "image/gif": (b"GIF87a", b"GIF89a"),
+        "image/bmp": (b"BM",),
+    }
+    if content_type == "image/webp":
+        return header.startswith(b"RIFF") and header[8:12] == b"WEBP"
+    return any(header.startswith(signature) for signature in signatures.get(content_type, ()))
 
 
 def _looks_like_office(extension, header):
@@ -221,9 +363,7 @@ def markdown_to_html(content):
             if not in_table:
                 html_parts.append("<table><tbody>")
                 in_table = True
-                html_parts.append(
-                    "<tr>" + "".join(f"<th>{_inline(cell)}</th>" for cell in cells) + "</tr>"
-                )
+                html_parts.append("<tr>" + "".join(f"<th>{_inline(cell)}</th>" for cell in cells) + "</tr>")
             else:
                 html_parts.append("<tr>" + "".join(f"<td>{_inline(cell)}</td>" for cell in cells) + "</tr>")
             continue

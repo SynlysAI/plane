@@ -16,15 +16,14 @@ from plane.app.serializers import FileAssetSerializer
 
 
 def _research_asset_allowed(user, asset, *, mutate=False):
-    if asset.entity_type != FileAsset.EntityTypeContext.REPORT_ATTACHMENT:
+    if asset.entity_type not in {
+        FileAsset.EntityTypeContext.REPORT_ATTACHMENT,
+        FileAsset.EntityTypeContext.REPORT_IMAGE,
+    }:
         return True
     from plane.app.views.asset.v2 import can_download_research_asset, can_mutate_research_asset
 
-    return (
-        can_mutate_research_asset(user, asset)
-        if mutate
-        else can_download_research_asset(user, asset)
-    )
+    return can_mutate_research_asset(user, asset) if mutate else can_download_research_asset(user, asset)
 
 
 class FileAssetEndpoint(BaseAPIView):

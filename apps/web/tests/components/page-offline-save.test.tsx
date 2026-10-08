@@ -64,7 +64,7 @@ it("does not write a matching server body or touch the editor document", async (
 });
 
 it("writes the local body once when the server copy differs", async () => {
-  const update = vi.fn(async () => undefined);
+  const update = vi.fn(async (_description: object) => undefined);
   const outcome = await saveDisconnectedDescription({
     getLocal: () => ({ binary: new Uint8Array([1, 2]), html: "<p>local</p>", json: { type: "doc" } }),
     fetchServer: async () => new Uint8Array([3]).buffer,
