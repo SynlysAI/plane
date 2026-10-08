@@ -25,6 +25,8 @@ export type TResearchLevel = "ADMIN" | "PRINCIPAL" | "MENTOR" | "RESEARCHER" | "
 export type TReportType = "WEEKLY" | "MONTHLY";
 export type TReportStatus = "DRAFT" | "SUBMITTED" | "NEEDS_REVISION" | "ACCEPTED";
 export type TReportVisibility = "PRIVATE" | "DIRECT_ADVISOR" | "UNIT" | "ANCESTRY" | "WORKSPACE" | "CUSTOM";
+export type TFeedbackType = "bug" | "ux" | "idea" | "other";
+export type TFeedbackStatus = "open" | "in_progress" | "done" | "closed";
 export type TResearchProjectType = "PHD" | "MASTER" | "POSTDOC" | "RESEARCH_PROJECT";
 export type TResearchProjectStatus = "ACTIVE" | "ARCHIVED" | "COMPLETED";
 export type TApprovalType = "TASK" | "PURCHASE" | "CUSTOM";
@@ -399,6 +401,42 @@ export type TReportAttachment = {
   kind: "IMAGE" | "PDF" | "MARKDOWN" | "OFFICE" | "OTHER";
   uploaded_by: string;
   created_at: string;
+};
+
+export type TResearchFeedbackScreenshot = {
+  id: string;
+  content_type: string;
+  size: number;
+};
+
+export type TResearchFeedbackHistory = {
+  actor_name: string;
+  from_status: TFeedbackStatus;
+  to_status: TFeedbackStatus;
+  comment: string;
+  created_at: string;
+};
+
+export type TResearchFeedback = {
+  feedback_id: string;
+  content: string;
+  feedback_type: TFeedbackType;
+  status: TFeedbackStatus;
+  username: string;
+  path: string;
+  browser: string;
+  module: string;
+  screenshots: TResearchFeedbackScreenshot[];
+  history: TResearchFeedbackHistory[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchFeedbackListResponse = {
+  results: TResearchFeedback[];
+  count: number;
+  page: number;
+  page_size: number;
 };
 
 export type TReportSummaryCounts = {

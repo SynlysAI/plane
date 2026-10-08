@@ -91,6 +91,8 @@ export type {
   TExperimentSource,
   TExperimentStatus,
   TExperimentVersion,
+  TFeedbackStatus,
+  TFeedbackType,
   TCodeArtifact,
   TCodeProvider,
   TCodeRefType,
@@ -109,6 +111,10 @@ export type {
   TTimelineFilters,
   TTimelineItem,
   TTimelineKind,
+  TResearchFeedback,
+  TResearchFeedbackHistory,
+  TResearchFeedbackListResponse,
+  TResearchFeedbackScreenshot,
 } from "@plane/types";
 
 export const ORG_UNIT_TYPES = ["ROOT", "INSTITUTE", "LAB", "GROUP", "TEAM"] as const satisfies readonly TOrgUnitType[];
@@ -666,6 +672,10 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/context/resources/${kind}/${id}/`,
   settings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/settings/`,
   identityMe: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/me/`,
+  feedback: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/`,
+  feedbackStatus: (slug: string, feedbackId: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/status/`,
+  feedbackScreenshot: (slug: string, feedbackId: string, screenshotId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/screenshots/${screenshotId}/`,
   chains: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/chains/`,
   chain: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/`,
   chainNodes: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/`,
