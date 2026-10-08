@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 // plane imports
 import { RESEARCH_PROJECT_STATUS_LABELS, RESEARCH_PROJECT_TYPE_LABELS, RESEARCH_PROJECT_TYPES } from "@plane/constants";
 import type { TResearchProjectType } from "@plane/constants";
@@ -17,6 +16,8 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TResearchProject } from "@/services/research/project.service";
 import { AlertModalCore, EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
+import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
+import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -82,7 +83,7 @@ export function buildProjectListSearchParams(current: URLSearchParams, filters: 
 export const ResearchProjectList = observer(function ResearchProjectList({ workspaceSlug, currentUserId }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
-  const searchParams = useSearchParams();
+  const query = useResearchBrowseQuery();
   const [name, setName] = useState("");
   const [researchType, setResearchType] = useState<TResearchProjectType>("RESEARCH_PROJECT");
   const [chainKind, setChainKind] = useState<"LEGACY_TRAINING" | "RESEARCH_CHAIN">("RESEARCH_CHAIN");
@@ -91,13 +92,19 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const [isCreating, setIsCreating] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("workflow_status") ?? "");
-  const [typeFilter, setTypeFilter] = useState(() => searchParams.get("research_type") ?? "");
-  const [orgFilter, setOrgFilter] = useState(() => searchParams.get("org_unit") ?? "");
-  const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get("owner") ?? "");
-  const [dateFrom, setDateFrom] = useState(() => searchParams.get("date_from") ?? "");
-  const [dateTo, setDateTo] = useState(() => searchParams.get("date_to") ?? "");
-  const [cursor, setCursor] = useState("");
+  const statusFilter = query.get("workflow_status");
+  const setStatusFilter = (value: string) => query.set("workflow_status", value);
+  const typeFilter = query.get("research_type");
+  const setTypeFilter = (value: string) => query.set("research_type", value);
+  const orgFilter = query.get("org_unit");
+  const setOrgFilter = (value: string) => query.set("org_unit", value);
+  const ownerFilter = query.get("owner");
+  const dateFrom = query.get("date_from");
+  const dateTo = query.get("date_to");
+  const keyword = query.get("q");
+  const scope = query.get("scope", "all");
+  const cursor = query.get("cursor");
+  const setCursor = (value: string) => query.set("cursor", value);
   const [pendingProjectAction, setPendingProjectAction] = useState<{
     project: TResearchProject;
     action: "archive" | "restore";
@@ -127,7 +134,16 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   );
   const isTeamProject = researchType === "RESEARCH_PROJECT";
   const requiresOrgUnit = !isTeamProject || !research.isWorkspaceAdmin;
-  const hasActiveFilters = Boolean(typeFilter || orgFilter || ownerFilter.trim() || dateFrom || dateTo || statusFilter);
+  const hasActiveFilters = Boolean(
+    query.get("q") ||
+    query.get("scope") ||
+    typeFilter ||
+    orgFilter ||
+    ownerFilter.trim() ||
+    dateFrom ||
+    dateTo ||
+    statusFilter
+  );
 
   const filterSummary = useMemo(
     () =>
@@ -151,38 +167,32 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
     if (cursor) params.cursor = cursor;
+    if (keyword) params.q = keyword;
+    params.scope = scope;
     try {
       await research.fetchResearchProjects(workspaceSlug, params);
       setErrorKey(null);
     } catch (error) {
       setErrorKey(getResearchErrorKey(error));
     }
-  }, [cursor, dateFrom, dateTo, orgFilter, ownerFilter, research, statusFilter, typeFilter, workspaceSlug]);
+  }, [
+    cursor,
+    dateFrom,
+    dateTo,
+    orgFilter,
+    ownerFilter,
+    research,
+    statusFilter,
+    typeFilter,
+    workspaceSlug,
+    keyword,
+    scope,
+  ]);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceSlug, statusFilter, typeFilter, orgFilter, ownerFilter, dateFrom, dateTo, cursor]);
-
-  useEffect(() => setCursor(""), [statusFilter, typeFilter, orgFilter, ownerFilter, dateFrom, dateTo]);
-
-  useEffect(() => {
-    const params = buildProjectListSearchParams(searchParams, {
-      view: searchParams.get("view"),
-      workflowStatus: statusFilter,
-      researchType: typeFilter,
-      orgUnit: orgFilter,
-      owner: ownerFilter,
-      dateFrom,
-      dateTo,
-    });
-    const query = params.toString();
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
-    );
-  }, [dateFrom, dateTo, orgFilter, ownerFilter, searchParams, statusFilter, typeFilter]);
+  }, [workspaceSlug, statusFilter, typeFilter, orgFilter, ownerFilter, dateFrom, dateTo, cursor, keyword, scope]);
 
   useEffect(() => {
     void research.fetchOrgUnits(workspaceSlug).catch(() => undefined);
@@ -262,14 +272,22 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     }
   }, [isUpdatingProject, load, pendingProjectAction, research, t, workspaceSlug]);
 
-  const clearFilters = useCallback(() => {
-    setStatusFilter("");
-    setTypeFilter("");
-    setOrgFilter("");
-    setOwnerFilter("");
-    setDateFrom("");
-    setDateTo("");
-  }, []);
+  const clearFilters = () =>
+    query.patch({
+      status: "",
+      workflow_status: "",
+      report_type: "",
+      research_type: "",
+      period_key: "",
+      org_unit: "",
+      owner: "",
+      date_from: "",
+      date_to: "",
+      date_preset: "",
+      q: "",
+      scope: "",
+      mine: "",
+    });
 
   return (
     <ResearchListSurface>
@@ -435,25 +453,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
             </option>
           ))}
         </select>
-        <Input
-          aria-label={t("research.projects.columns.owner")}
-          className="!w-48"
-          placeholder={t("research.projects.owner_filter_placeholder")}
-          value={ownerFilter}
-          onChange={(event) => setOwnerFilter(event.target.value)}
-        />
-        <Input
-          aria-label={t("research.common.date_from")}
-          type="date"
-          value={dateFrom}
-          onChange={(event) => setDateFrom(event.target.value)}
-        />
-        <Input
-          aria-label={t("research.common.date_to")}
-          type="date"
-          value={dateTo}
-          onChange={(event) => setDateTo(event.target.value)}
-        />
+        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="projects" />
         <select
           className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
           value={statusFilter}

@@ -3,14 +3,17 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { getButtonStyling } from "@plane/propel/button";
-import { Skeleton } from "@plane/propel/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import type { TResearchChain } from "@plane/types";
+import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
+import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
+import { useResearch } from "@/hooks/store/use-research";
+import { Button } from "@plane/propel/button";
 // components
 import { ResearchListState } from "@/components/research/common/research-list-state";
 import { ResearchListSurface, ResearchTableSurface } from "@/components/research/common/research-data-surface";
@@ -28,90 +31,106 @@ type Props = {
 /** Structured list of research chains: identity, status, owner, freshness and next action. */
 export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }: Props) {
   const { t, currentLocale } = useTranslation();
+  const research = useResearch();
+  const query = useResearchBrowseQuery();
+  const version = useRef(0);
+  const [page, setPage] = useState<{
+    next_cursor: string;
+    prev_cursor: string;
+    next_page_results: boolean;
+    prev_page_results: boolean;
+  } | null>(null);
+  const queryString = query.params.toString();
   const [chains, setChains] = useState<TResearchChain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
 
   const load = useCallback(async () => {
+    const currentVersion = ++version.current;
     setLoading(true);
     setError(null);
     setForbidden(false);
     try {
-      setChains(await chainService.getChains(workspaceSlug));
+      const response = await chainService.getChainPage(
+        workspaceSlug,
+        Object.fromEntries(new URLSearchParams(queryString))
+      );
+      if (version.current !== currentVersion) return;
+      setChains(response.results);
+      setPage(response);
     } catch (caught) {
+      if (version.current !== currentVersion) return;
       if ((caught as { error_code?: string })?.error_code === "research_permission_denied") {
         setForbidden(true);
       }
       setError("load_failed");
     } finally {
-      setLoading(false);
+      if (version.current === currentVersion) setLoading(false);
     }
-  }, [workspaceSlug]);
+  }, [workspaceSlug, queryString]);
 
   useEffect(() => {
     void load();
+    return () => {
+      version.current += 1;
+    };
   }, [load]);
 
-  if (loading) {
-    return (
-      <div className="space-y-2 p-5" role="status" aria-busy="true">
-        {[0, 1, 2].map((row) => (
-          <Skeleton.Item key={row} height="48px" width="100%" />
-        ))}
-      </div>
-    );
-  }
-
-  if (forbidden) {
-    return (
-      <div className="p-5">
-        <ResearchListState
-          kind="forbidden"
-          resource="reports"
-          variant="detailed"
-          config={{
-            titleKey: "research.common.permission_denied",
-            descriptionKey: "research.status.permission_denied.description",
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-5">
-        <ResearchListState
-          kind="error"
-          resource="reports"
-          onRetry={() => void load()}
-          config={{
-            titleKey: "research.status.load_failed.title",
-            descriptionKey: "research.status.load_failed.description",
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (!chains.length) {
-    return (
-      <div className="p-5">
-        <ResearchListState
-          kind="empty"
-          resource="reports"
-          config={{
-            titleKey: "research.chains.empty",
-            descriptionKey: "research.chains.description",
-          }}
-        />
-      </div>
-    );
-  }
+  useEffect(() => {
+    void research.fetchOrgUnits(workspaceSlug).catch(() => undefined);
+  }, [research, workspaceSlug]);
 
   return (
     <ResearchListSurface>
+      <div className="flex flex-wrap items-end gap-3">
+        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="projects" />
+        <select
+          aria-label="课题组"
+          value={query.get("org_unit")}
+          onChange={(event) => query.set("org_unit", event.target.value)}
+          className="rounded-md border border-subtle px-2 py-1.5 text-13"
+        >
+          <option value="">全部课题组</option>
+          {research.getOrgUnits(workspaceSlug).map((unit) => (
+            <option key={unit.id} value={unit.id}>
+              {unit.name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="研究链状态"
+          value={query.get("status")}
+          onChange={(event) => query.set("status", event.target.value)}
+          className="rounded-md border border-subtle px-2 py-1.5 text-13"
+        >
+          <option value="">全部状态</option>
+          <option value="ACTIVE">进行中</option>
+          <option value="ARCHIVED">已归档</option>
+        </select>
+        <select
+          aria-label="项目类型"
+          value={query.get("research_type")}
+          onChange={(event) => query.set("research_type", event.target.value)}
+          className="rounded-md border border-subtle px-2 py-1.5 text-13"
+        >
+          <option value="">全部类型</option>
+          <option value="RESEARCH_PROJECT">科研项目</option>
+          <option value="MASTER">硕士</option>
+          <option value="PHD">博士</option>
+        </select>
+        <Button variant="ghost" size="sm" onClick={() => void load()}>
+          刷新
+        </Button>
+      </div>
+      {loading && <p role="status">加载中</p>}
+      {forbidden ? (
+        <ResearchListState kind="forbidden" resource="reports" />
+      ) : error ? (
+        <ResearchListState kind="error" resource="reports" onRetry={() => void load()} />
+      ) : !loading && !chains.length ? (
+        <ResearchListState kind={queryString ? "no-results" : "empty"} resource="reports" />
+      ) : null}
       <ResearchTableSurface>
         <Table>
           <caption className="sr-only">{t("research.nav.research_chain")}</caption>
@@ -161,6 +180,24 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
           </TableBody>
         </Table>
       </ResearchTableSurface>
+      <div className="flex gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!page?.prev_page_results || loading}
+          onClick={() => query.set("cursor", page?.prev_cursor ?? "")}
+        >
+          上一页
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!page?.next_page_results || loading}
+          onClick={() => query.set("cursor", page?.next_cursor ?? "")}
+        >
+          下一页
+        </Button>
+      </div>
     </ResearchListSurface>
   );
 };

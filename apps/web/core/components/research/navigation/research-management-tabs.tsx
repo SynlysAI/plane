@@ -56,6 +56,13 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
   return (
     <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle bg-surface-1 px-5">
       <TabNavigationList className="py-2">
+        {(research.identity?.user.is_main_pi ||
+          research.identity?.user.is_workspace_admin ||
+          research.identity?.user.is_system_admin) && (
+          <ResearchTabLink href={`/${workspaceSlug}/research/settings/feedback`} isActive={currentKey === "feedback"}>
+            反馈管理
+          </ResearchTabLink>
+        )}
         {visibleTabs.map((item) => {
           const path = TAB_PATHS[item.key] ?? `settings/${item.key}`;
           return (

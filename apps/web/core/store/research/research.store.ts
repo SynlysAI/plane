@@ -92,6 +92,7 @@ import type {
 import type { CoreRootStore } from "../root.store";
 
 export interface IResearchStore {
+  settings: Record<string, TWorkspaceResearchSetting>;
   // loaders
   identityLoader: boolean;
   orgLoader: boolean;
@@ -234,7 +235,7 @@ export interface IResearchStore {
   saveReportDraft: (
     workspaceSlug: string,
     reportId: string,
-    payload: { description_json: object; description_html: string }
+    payload: { description_json: object; description_html: string; description_binary?: string }
   ) => Promise<TPeriodicReport>;
   submitReport: (
     workspaceSlug: string,
@@ -1123,10 +1124,16 @@ export class ResearchStore implements IResearchStore {
   // reports
   // ---------------------------------------------------------------------
 
+  private reportRequestVersions: Record<string, number> = {};
+  private projectRequestVersions: Record<string, number> = {};
+
   fetchReports = async (workspaceSlug: string, params: TReportListParams = {}) => {
+    const requestVersion = (this.reportRequestVersions[workspaceSlug] ?? 0) + 1;
+    this.reportRequestVersions[workspaceSlug] = requestVersion;
     this.reportLoader = true;
     try {
       const response = await this.reportService.getReports(workspaceSlug, params);
+      if (this.reportRequestVersions[workspaceSlug] !== requestVersion) return response.results;
       runInAction(() => {
         response.results.forEach((report) => {
           this.reports[report.id] = report;
@@ -1136,9 +1143,10 @@ export class ResearchStore implements IResearchStore {
       });
       return response.results;
     } finally {
-      runInAction(() => {
-        this.reportLoader = false;
-      });
+      if (this.reportRequestVersions[workspaceSlug] === requestVersion)
+        runInAction(() => {
+          this.reportLoader = false;
+        });
     }
   };
 
@@ -1162,7 +1170,7 @@ export class ResearchStore implements IResearchStore {
   saveReportDraft = async (
     workspaceSlug: string,
     reportId: string,
-    payload: { description_json: object; description_html: string }
+    payload: { description_json: object; description_html: string; description_binary?: string }
   ) => {
     const report = await this.reportService.updateReport(workspaceSlug, reportId, payload);
     runInAction(() => {
@@ -1322,9 +1330,12 @@ export class ResearchStore implements IResearchStore {
   // ---------------------------------------------------------------------
 
   fetchResearchProjects = async (workspaceSlug: string, params: Record<string, string> = {}) => {
+    const requestVersion = (this.projectRequestVersions[workspaceSlug] ?? 0) + 1;
+    this.projectRequestVersions[workspaceSlug] = requestVersion;
     this.projectLoader = true;
     try {
       const response = await this.projectService.getProjects(workspaceSlug, params);
+      if (this.projectRequestVersions[workspaceSlug] !== requestVersion) return response.results;
       runInAction(() => {
         response.results.forEach((project) => {
           this.researchProjects[project.id] = project;
@@ -1334,9 +1345,10 @@ export class ResearchStore implements IResearchStore {
       });
       return response.results;
     } finally {
-      runInAction(() => {
-        this.projectLoader = false;
-      });
+      if (this.projectRequestVersions[workspaceSlug] === requestVersion)
+        runInAction(() => {
+          this.projectLoader = false;
+        });
     }
   };
 

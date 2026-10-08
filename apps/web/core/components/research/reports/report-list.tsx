@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
@@ -17,6 +16,9 @@ import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
+import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
+import { WorkspaceOutcomes } from "@/components/research/outcomes/workspace-outcomes";
+import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -78,26 +80,29 @@ export function buildReportListSearchParams(current: URLSearchParams, filters: R
 }
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
-export const ResearchReportList = observer(function ResearchReportList({ workspaceSlug, variant = "default" }: Props) {
+const ReportListContent = observer(function ReportListContent({ workspaceSlug, variant = "default" }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
-  const searchParams = useSearchParams();
+  const query = useResearchBrowseQuery();
   const { reportId } = useParams();
   const [reportType, setReportType] = useState<TReportType>("WEEKLY");
   const [periodKey, setPeriodKey] = useState("");
-  const [statusFilter, setStatusFilter] = useState(
-    () => searchParams.get("status") ?? (variant === "review" ? "SUBMITTED" : "")
-  );
-  const [typeFilter, setTypeFilter] = useState(() => searchParams.get("report_type") ?? "");
-  const [periodFilter, setPeriodFilter] = useState(() => searchParams.get("period_key") ?? "");
-  const [mineOnly, setMineOnly] = useState(() =>
-    searchParams.has("mine") ? searchParams.get("mine") === "true" : false
-  );
-  const [orgFilter, setOrgFilter] = useState(() => searchParams.get("org_unit") ?? "");
-  const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get("owner") ?? "");
-  const [dateFrom, setDateFrom] = useState(() => searchParams.get("date_from") ?? "");
-  const [dateTo, setDateTo] = useState(() => searchParams.get("date_to") ?? "");
-  const [cursor, setCursor] = useState("");
+  const statusFilter = query.get("status", variant === "review" ? "SUBMITTED" : "");
+  const setStatusFilter = (value: string) => query.set("status", value);
+  const typeFilter = query.get("report_type");
+  const setTypeFilter = (value: string) => query.set("report_type", value);
+  const periodFilter = query.get("period_key");
+  const setPeriodFilter = (value: string) => query.set("period_key", value);
+  const mineOnly = query.get("scope") === "mine" || query.get("mine") === "true";
+  const orgFilter = query.get("org_unit");
+  const setOrgFilter = (value: string) => query.set("org_unit", value);
+  const ownerFilter = query.get("owner");
+  const dateFrom = query.get("date_from");
+  const dateTo = query.get("date_to");
+  const keyword = query.get("q");
+  const scope = query.get("scope", "all");
+  const cursor = query.get("cursor");
+  const setCursor = (value: string) => query.set("cursor", value);
   const [selectedTeamProjects, setSelectedTeamProjects] = useState<string[]>([]);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -115,6 +120,8 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     typeFilter ||
     periodFilter.trim() ||
     mineOnly ||
+    query.get("q") ||
+    query.get("scope") ||
     orgFilter ||
     ownerFilter.trim() ||
     dateFrom ||
@@ -146,6 +153,8 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
     if (cursor) params.cursor = cursor;
+    if (keyword) params.q = keyword;
+    params.scope = scope;
     try {
       await research.fetchReports(workspaceSlug, params);
       setErrorKey(null);
@@ -164,6 +173,8 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     statusFilter,
     typeFilter,
     workspaceSlug,
+    keyword,
+    scope,
   ]);
 
   useEffect(() => {
@@ -180,31 +191,9 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     dateFrom,
     dateTo,
     cursor,
+    keyword,
+    scope,
   ]);
-
-  useEffect(
-    () => setCursor(""),
-    [statusFilter, typeFilter, periodFilter, mineOnly, orgFilter, ownerFilter, dateFrom, dateTo]
-  );
-
-  useEffect(() => {
-    const params = buildReportListSearchParams(searchParams, {
-      status: statusFilter,
-      reportType: typeFilter,
-      periodKey: periodFilter,
-      mineOnly,
-      orgUnit: orgFilter,
-      owner: ownerFilter,
-      dateFrom,
-      dateTo,
-    });
-    const query = params.toString();
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
-    );
-  }, [dateFrom, dateTo, mineOnly, orgFilter, ownerFilter, periodFilter, searchParams, statusFilter, typeFilter]);
 
   useEffect(() => {
     void research.fetchResearchProjects(workspaceSlug, { research_type: "RESEARCH_PROJECT" }).catch(() => undefined);
@@ -238,16 +227,22 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     }
   }, [isCreating, periodKey, reportType, research, selectedTeamProjects, t, workspaceSlug]);
 
-  const clearFilters = useCallback(() => {
-    setStatusFilter(variant === "review" ? "SUBMITTED" : "");
-    setTypeFilter("");
-    setPeriodFilter("");
-    setMineOnly(false);
-    setOrgFilter("");
-    setOwnerFilter("");
-    setDateFrom("");
-    setDateTo("");
-  }, [variant]);
+  const clearFilters = () =>
+    query.patch({
+      status: "",
+      workflow_status: "",
+      report_type: "",
+      research_type: "",
+      period_key: "",
+      org_unit: "",
+      owner: "",
+      date_from: "",
+      date_to: "",
+      date_preset: "",
+      q: "",
+      scope: "",
+      mine: "",
+    });
 
   return (
     <ResearchListSurface>
@@ -309,29 +304,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
             </option>
           ))}
         </select>
-        <Input
-          aria-label={t("research.reports.columns.owner")}
-          className="!w-48"
-          placeholder={t("research.reports.owner_filter_placeholder")}
-          value={ownerFilter}
-          onChange={(event) => setOwnerFilter(event.target.value)}
-        />
-        <Input
-          aria-label={t("research.common.date_from")}
-          type="date"
-          value={dateFrom}
-          onChange={(event) => setDateFrom(event.target.value)}
-        />
-        <Input
-          aria-label={t("research.common.date_to")}
-          type="date"
-          value={dateTo}
-          onChange={(event) => setDateTo(event.target.value)}
-        />
-        <label className="flex items-center gap-1 text-12 text-secondary">
-          <input type="checkbox" checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />
-          {t("research.reports.mine_only")}
-        </label>
+        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="reports" />
       </ResearchFilterToolbar>
 
       {hasActiveFilters && (
@@ -524,3 +497,33 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
     </ResearchListSurface>
   );
 });
+
+/** 保留旧报告与 IA v2 路由，在同一入口切换报告/成果而不新增一级导航。 */
+export function ResearchReportList(props: Props) {
+  const query = useResearchBrowseQuery();
+  if (props.variant === "review") return <ReportListContent {...props} />;
+  const outcomeView = query.get("view") === "outcomes";
+  return (
+    <div className="flex h-full min-w-0 flex-col">
+      <div role="tablist" aria-label="报告与成果" className="flex shrink-0 gap-4 border-b border-subtle px-5 pt-3">
+        {[
+          ["reports", "报告"],
+          ["outcomes", "成果"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            role="tab"
+            aria-selected={outcomeView === (value === "outcomes")}
+            className={`border-b-2 px-1 pb-2 text-14 ${outcomeView === (value === "outcomes") ? "border-primary font-semibold text-primary" : "border-transparent text-secondary"}`}
+            onClick={() => query.patch({ view: value }, false)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1">
+        {outcomeView ? <WorkspaceOutcomes workspaceSlug={props.workspaceSlug} /> : <ReportListContent {...props} />}
+      </div>
+    </div>
+  );
+}

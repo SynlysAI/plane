@@ -73,14 +73,32 @@ export class ResearchChainService extends APIService {
     super(API_BASE_URL);
   }
 
-  async getChains(workspaceSlug: string) {
-    return this.get(researchEndpoints.chains(workspaceSlug))
+  async getChains(workspaceSlug: string, params: Record<string, string> = {}) {
+    return this.get(researchEndpoints.chains(workspaceSlug), { params })
       .then((res) => {
         const payload = res?.data as TResearchEnvelope<TResearchChain[]> | undefined;
         return payload?.data ?? [];
       })
       .catch((err) => {
         throw err?.response?.data;
+      });
+  }
+
+  /** 读取工作区研究链游标分页结果，供列表筛选与 URL 回放。 */
+  async getChainPage(workspaceSlug: string, params: Record<string, string> = {}) {
+    return this.get(researchEndpoints.chains(workspaceSlug), { params })
+      .then(
+        (response) =>
+          response.data as {
+            results: TResearchChain[];
+            next_cursor: string;
+            prev_cursor: string;
+            next_page_results: boolean;
+            prev_page_results: boolean;
+          }
+      )
+      .catch((error) => {
+        throw error?.response?.data;
       });
   }
 

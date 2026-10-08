@@ -13,7 +13,7 @@ Usage (inside the API container):
     python manage.py seed_research_demo --verify
     python manage.py seed_research_demo --no-files
 
-See ``docs/research-test-fixtures.md`` for the account list and the manual
+See ``docs/operations/research-test-fixtures.md`` for the account list and the manual
 walkthrough.
 """
 

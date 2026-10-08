@@ -134,9 +134,7 @@ def identifier_reserved(workspace, candidate):
     """
     return (
         Project.objects.filter(workspace=workspace, identifier=candidate).exists()
-        or ProjectIdentifier.objects.filter(
-            workspace=workspace, name=candidate, deleted_at__isnull=True
-        ).exists()
+        or ProjectIdentifier.objects.filter(workspace=workspace, name=candidate, deleted_at__isnull=True).exists()
     )
 
 
@@ -180,12 +178,16 @@ def visible_profile_queryset(workspace, user):
     """Research metadata visible without granting Plane project write access."""
     today = timezone.localdate()
     managed_unit_ids = managing_org_units_for(user, workspace.id, today)
-    advised_owner_ids = MentorBinding.objects.filter(
-        workspace=workspace,
-        mentor=user,
-        deleted_at__isnull=True,
-        effective_from__lte=today,
-    ).filter(models_q_expired(today)).values_list("mentee_id", flat=True)
+    advised_owner_ids = (
+        MentorBinding.objects.filter(
+            workspace=workspace,
+            mentor=user,
+            deleted_at__isnull=True,
+            effective_from__lte=today,
+        )
+        .filter(models_q_expired(today))
+        .values_list("mentee_id", flat=True)
+    )
     is_main_pi = configured_main_pi_id(workspace) == user.id
 
     visibility = (
@@ -207,10 +209,7 @@ def visible_profile_queryset(workspace, user):
             org_unit__members__user=user,
             org_unit__members__deleted_at__isnull=True,
             org_unit__members__effective_from__lte=today,
-        ) & (
-            Q(org_unit__members__effective_to__isnull=True)
-            | Q(org_unit__members__effective_to__gte=today)
-        )
+        ) & (Q(org_unit__members__effective_to__isnull=True) | Q(org_unit__members__effective_to__gte=today))
     if is_main_pi:
         return profile_queryset(workspace)
     return profile_queryset(workspace).filter(visibility).distinct()
@@ -233,13 +232,17 @@ def can_read_project_research_metadata(workspace, user, profile):
         deleted_at__isnull=True,
     ).exists():
         return True
-    if MentorBinding.objects.filter(
-        workspace=workspace,
-        mentor=user,
-        mentee_id=profile.owner_id,
-        deleted_at__isnull=True,
-        effective_from__lte=today,
-    ).filter(models_q_expired(today)).exists():
+    if (
+        MentorBinding.objects.filter(
+            workspace=workspace,
+            mentor=user,
+            mentee_id=profile.owner_id,
+            deleted_at__isnull=True,
+            effective_from__lte=today,
+        )
+        .filter(models_q_expired(today))
+        .exists()
+    ):
         return True
     if profile.org_unit_id in managing_org_units_for(user, workspace.id, today):
         return True
@@ -286,9 +289,7 @@ def validate_project_org_unit(workspace, owner, requested_unit, *, can_override=
 def serialize_profile(profile):
     project = profile.project
     chain = getattr(project, "research_chain", None)
-    prefetched_members = getattr(project, "_prefetched_objects_cache", {}).get(
-        "project_projectmember"
-    )
+    prefetched_members = getattr(project, "_prefetched_objects_cache", {}).get("project_projectmember")
     if prefetched_members is None:
         collaborators = ProjectMember.objects.filter(
             project=project,
@@ -351,6 +352,11 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
             return error
 
         queryset = visible_profile_queryset(workspace, request.user)
+        from plane.research.utils.browse import filter_profiles
+
+        queryset, error = filter_profiles(queryset, request)
+        if error:
+            return error
         owner_id, error = parse_uuid(request.GET.get("owner"), "owner")
         if error:
             return error
@@ -441,9 +447,8 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
         chain_kind = str(request.data.get("chain_kind") or default_chain_kind).upper()
         if chain_kind not in ResearchProjectProfile.ChainKind.values:
             return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown chain kind.")
-        if (
-            chain_kind == ResearchProjectProfile.ChainKind.RESEARCH_CHAIN
-            and not getattr(getattr(workspace, "research_setting", None), "research_chain_enabled", False)
+        if chain_kind == ResearchProjectProfile.ChainKind.RESEARCH_CHAIN and not getattr(
+            getattr(workspace, "research_setting", None), "research_chain_enabled", False
         ):
             return research_error(
                 ResearchErrorCode.SUBMODULE_DISABLED,
@@ -469,8 +474,7 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
                 "One or more collaborators were not found.",
             )
         is_legacy_cultivation = (
-            chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
-            and is_cultivation_project(research_type)
+            chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING and is_cultivation_project(research_type)
         )
         if collaborator_ids and is_legacy_cultivation:
             return research_error(
@@ -489,9 +493,7 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
             ).select_related("member")
         )
         if len(collaborator_memberships) != len(collaborator_ids):
-            return research_permission_denied(
-                "Every collaborator must be an active workspace member."
-            )
+            return research_permission_denied("Every collaborator must be an active workspace member.")
 
         started_at, error = parse_date(request.data.get("started_at"), "started_at")
         if error:
@@ -694,11 +696,15 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                 and is_cultivation_project(requested_type)
             ):
                 lock_cultivation_owner(workspace, requested_owner)
-                if active_cultivation_projects(
-                    workspace,
-                    requested_owner,
-                    exclude_profile_id=profile.id,
-                ).select_for_update().exists():
+                if (
+                    active_cultivation_projects(
+                        workspace,
+                        requested_owner,
+                        exclude_profile_id=profile.id,
+                    )
+                    .select_for_update()
+                    .exists()
+                ):
                     return research_conflict(
                         ResearchErrorCode.PROJECT_ALREADY_EXISTS,
                         "This research owner already has an active cultivation project.",
@@ -820,9 +826,8 @@ class ResearchProjectRestoreEndpoint(ResearchAPIView):
 
         with transaction.atomic():
             profile = ResearchProjectProfile.objects.select_for_update().get(pk=profile.pk)
-            if (
-                profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
-                and is_cultivation_project(profile.research_type)
+            if profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING and is_cultivation_project(
+                profile.research_type
             ):
                 lock_cultivation_owner(workspace, profile.owner)
                 conflict = active_cultivation_projects(

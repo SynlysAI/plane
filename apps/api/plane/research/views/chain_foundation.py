@@ -246,24 +246,43 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
             return error
         if not _flag_enabled(workspace):
             return _disabled()
-        rows = ResearchChain.objects.filter(workspace=workspace, project__research_profile__isnull=False).order_by(
-            "-updated_at"
+        from plane.research.views.projects import visible_profile_queryset
+        from plane.research.utils.browse import filter_profiles
+
+        profiles, error = filter_profiles(visible_profile_queryset(workspace, request.user), request)
+        if error:
+            return error
+        rows = (
+            ResearchChain.objects.filter(
+                workspace=workspace,
+                project_id__in=profiles.values("project_id"),
+            )
+            .select_related("project__research_profile", "owner")
+            .order_by("-updated_at", "id")
         )
-        rows = [
-            row
-            for row in rows
-            if can_read_project_research_metadata(workspace, request.user, row.project.research_profile)
-        ]
+        if request.GET.get("status"):
+            rows = rows.filter(status=request.GET["status"].upper())
         context = build_actor_context(request.user, workspace.id)
-        return Response(
+        page = self.paginate(
+            request=request,
+            queryset=rows,
+            on_results=lambda results: ResearchChainSerializer(
+                results,
+                many=True,
+                context={**_serializer_context(request), "actor_context": context},
+            ).data,
+            default_per_page=50,
+            max_per_page=100,
+        )
+        # 保留旧调用方读取 data 的契约，同时附加游标分页字段。
+        page.data.update(
             _envelope(
-                data=ResearchChainSerializer(
-                    rows, many=True, context={**_serializer_context(request), "actor_context": context}
-                ).data,
+                data=page.data["results"],
                 request_id=request_id_from(request),
                 schema_version="research-chain.v1",
             )
         )
+        return page
 
     def post(self, request, slug):
         workspace, error = self.get_workspace(section="research_chain")
