@@ -61,6 +61,7 @@ class ResearchErrorCode:
     IDENTITY_CONFLICT = "identity_conflict"
     PROJECT_NOT_FOUND = "research_project_not_found"
     PROJECT_ALREADY_EXISTS = "research_project_exists"
+    PROJECT_IDENTIFIER_CONFLICT = "project_identifier_conflict"
     REPORT_NOT_FOUND = "report_not_found"
     REPORT_PERIOD_CONFLICT = "report_period_conflict"
     REPORT_STATE_CONFLICT = "report_state_conflict"
