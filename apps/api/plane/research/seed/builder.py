@@ -694,9 +694,19 @@ class ResearchSeedBuilder:
             self.count("projects", created)
 
     def _unique_identifier(self, base):
+        def reserved(candidate):
+            # ``project_identifiers`` holds its own workspace-unique constraint
+            # and can drift from ``projects`` after renames; check both.
+            return (
+                Project.objects.filter(workspace=self.workspace, identifier=candidate).exists()
+                or ProjectIdentifier.objects.filter(
+                    workspace=self.workspace, name=candidate, deleted_at__isnull=True
+                ).exists()
+            )
+
         candidate = base
         suffix = 0
-        while Project.objects.filter(workspace=self.workspace, identifier=candidate).exists():
+        while reserved(candidate):
             suffix += 1
             candidate = f"{base[:6]}{suffix}"[:12]
         return candidate

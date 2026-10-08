@@ -3,7 +3,9 @@
 # See the LICENSE file for details.
 
 import hashlib
+import logging
 import re
+import secrets
 import uuid
 
 from django.db import IntegrityError, transaction
@@ -44,6 +46,8 @@ from plane.research.utils.org import active_membership_q, is_workspace_admin, is
 from plane.research.utils.roles import configured_main_pi_id
 from plane.research.services.stage_service import ensure_stage_instances
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user
+
+logger = logging.getLogger("plane.api")
 
 PROJECT_ADMIN_ROLE = 20
 PROJECT_MEMBER_ROLE = 15
@@ -110,15 +114,44 @@ def lock_cultivation_owner(workspace, owner):
     return User.objects.select_for_update().get(pk=owner.pk)
 
 
-def identifier_from(name, fallback="RSP"):
+def identifier_from(name):
+    """ASCII short code derived from a name; empty when nothing to derive."""
     letters = re.sub(r"[^A-Za-z0-9]", "", name or "").upper()
-    return (letters or fallback)[:8] or fallback
+    return letters[:8]
+
+
+def random_identifier():
+    """Random short code for names without ASCII letters or digits."""
+    return f"PRJ{secrets.token_hex(3).upper()}"
+
+
+def identifier_reserved(workspace, candidate):
+    """Whether ``candidate`` is taken in ``projects`` or ``project_identifiers``.
+
+    The two tables can drift (renaming a project identifier only updates the
+    project row), so both must be checked or the ``ProjectIdentifier`` insert
+    violates its workspace-unique constraint.
+    """
+    return (
+        Project.objects.filter(workspace=workspace, identifier=candidate).exists()
+        or ProjectIdentifier.objects.filter(
+            workspace=workspace, name=candidate, deleted_at__isnull=True
+        ).exists()
+    )
 
 
 def unique_identifier(workspace, base):
+    """Return an identifier free in both ``projects`` and ``project_identifiers``."""
+    if not base:
+        # Non-ASCII-only names leave nothing to derive from; a shared constant
+        # fallback would collide workspace-wide, so draw a random short code.
+        while True:
+            candidate = random_identifier()
+            if not identifier_reserved(workspace, candidate):
+                return candidate
     candidate = base
     suffix = 0
-    while Project.objects.filter(workspace=workspace, identifier=candidate).exists():
+    while identifier_reserved(workspace, candidate):
         suffix += 1
         candidate = f"{base[:6]}{suffix}"[:12]
     return candidate
@@ -570,9 +603,10 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
                 "This research owner already has an active research project.",
             )
         except IntegrityError:
+            logger.exception("Research project creation hit a database constraint.")
             return research_conflict(
-                ResearchErrorCode.PROJECT_ALREADY_EXISTS,
-                "This research owner already has an active research project.",
+                ResearchErrorCode.PROJECT_IDENTIFIER_CONFLICT,
+                "Project identifier conflict; please retry with a different name.",
             )
 
         record_audit_event(
