@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TResearchProject } from "@/services/research/project.service";
-import { AlertModalCore, Input } from "@plane/ui";
+import { AlertModalCore, EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -89,6 +89,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const [chainVisibility, setChainVisibility] = useState<"PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE">("PRIVATE");
   const [orgUnit, setOrgUnit] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("workflow_status") ?? "");
   const [typeFilter, setTypeFilter] = useState(() => searchParams.get("research_type") ?? "");
@@ -205,6 +206,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         ...(chainKind === "RESEARCH_CHAIN" ? { chain_visibility: chainVisibility } : {}),
       });
       setName("");
+      setIsCreateDialogOpen(false);
       setErrorKey(null);
       setToast({
         type: TOAST_TYPE.SUCCESS,
@@ -278,10 +280,31 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
       )}
 
       {canCreateProject && (
-        <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-          <h3 className="text-13 font-medium text-primary">{t("research.projects.create_title")}</h3>
-          <p className="mt-1 text-11 text-tertiary">{t("research.projects.create_hint")}</p>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="flex justify-end">
+          <Button variant="primary" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            {t("research.projects.create")}
+          </Button>
+        </div>
+      )}
+
+      <ModalCore
+        isOpen={isCreateDialogOpen}
+        handleClose={() => !isCreating && setIsCreateDialogOpen(false)}
+        position={EModalPosition.CENTER}
+        width={EModalWidth.LG}
+      >
+        <form
+          className="flex flex-col gap-4 p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleCreate();
+          }}
+        >
+          <div>
+            <h2 className="text-16 font-semibold text-primary">{t("research.projects.create_title")}</h2>
+            <p className="mt-1 text-12 text-tertiary">{t("research.projects.create_hint")}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="flex flex-col gap-1 text-12 text-secondary">
               <span>{t("research.projects.fields.name")}</span>
               <Input
@@ -362,19 +385,28 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
           {!orgUnit && isTeamProject && research.isWorkspaceAdmin && (
             <p className="mt-2 text-11 text-tertiary">{t("research.projects.team_org_optional")}</p>
           )}
-          <div className="mt-3 flex justify-end">
+          <div className="flex justify-end gap-2">
             <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={isCreating}
+              onClick={() => setIsCreateDialogOpen(false)}
+            >
+              {t("research.common.cancel")}
+            </Button>
+            <Button
+              type="submit"
               variant="primary"
               size="sm"
               loading={isCreating}
               disabled={!name.trim() || (requiresOrgUnit && !orgUnit) || !currentUserId}
-              onClick={() => void handleCreate()}
             >
               {t("research.projects.create")}
             </Button>
           </div>
-        </section>
-      )}
+        </form>
+      </ModalCore>
 
       <ResearchFilterToolbar>
         <select

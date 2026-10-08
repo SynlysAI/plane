@@ -16,7 +16,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Input } from "@plane/ui";
+import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -101,6 +101,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
   const [selectedTeamProjects, setSelectedTeamProjects] = useState<string[]>([]);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const reports = research.getReports(workspaceSlug);
   const orgUnits = research.getOrgUnits(workspaceSlug);
@@ -222,6 +223,7 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
       });
       setPeriodKey("");
       setSelectedTeamProjects([]);
+      setIsCreateDialogOpen(false);
       setErrorKey(null);
       setToast({
         type: TOAST_TYPE.SUCCESS,
@@ -257,60 +259,9 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
 
       <ResearchFilterToolbar>
         {canCreateReport && variant === "default" && (
-          <>
-            <select
-              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-              value={reportType}
-              onChange={(event) => setReportType(event.target.value as TReportType)}
-            >
-              {REPORT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {t(REPORT_TYPE_LABELS[type])}
-                </option>
-              ))}
-            </select>
-            <Input
-              className="!w-40"
-              placeholder={t("research.reports.period_placeholder")}
-              value={periodKey}
-              onChange={(event) => setPeriodKey(event.target.value)}
-            />
-            <Button
-              variant="primary"
-              size="sm"
-              loading={isCreating}
-              disabled={isCreating}
-              onClick={() => void handleCreate()}
-            >
-              {t("research.reports.create")}
-            </Button>
-
-            {teamProjects.length > 0 && (
-              <details className="relative text-12 text-secondary">
-                <summary className="cursor-pointer rounded-md border border-subtle bg-surface-1 px-2 py-1.5">
-                  {t("research.reports.team_projects", { count: selectedTeamProjects.length })}
-                </summary>
-                <div className="shadow-sm absolute z-10 mt-1 flex max-h-56 min-w-60 flex-col gap-2 overflow-y-auto rounded-md border border-subtle bg-surface-1 p-3">
-                  {teamProjects.map((project) => (
-                    <label key={project.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedTeamProjects.includes(project.id)}
-                        onChange={(event) =>
-                          setSelectedTeamProjects((current) =>
-                            event.target.checked
-                              ? [...current, project.id]
-                              : current.filter((projectId) => projectId !== project.id)
-                          )
-                        }
-                      />
-                      <span className="truncate">{project.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </details>
-            )}
-          </>
+          <Button variant="primary" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            {t("research.reports.create")}
+          </Button>
         )}
 
         <select
@@ -491,6 +442,85 @@ export const ResearchReportList = observer(function ResearchReportList({ workspa
           </Button>
         </div>
       </div>
+
+      <ModalCore
+        isOpen={isCreateDialogOpen}
+        handleClose={() => !isCreating && setIsCreateDialogOpen(false)}
+        position={EModalPosition.CENTER}
+        width={EModalWidth.LG}
+      >
+        <form
+          className="flex flex-col gap-4 p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleCreate();
+          }}
+        >
+          <div>
+            <h2 className="text-16 font-semibold text-primary">{t("research.reports.create_title")}</h2>
+            <p className="mt-1 text-12 text-tertiary">{t("research.reports.create_hint")}</p>
+          </div>
+          <label className="flex flex-col gap-1 text-12 text-secondary">
+            <span>{t("research.reports.columns.type")}</span>
+            <select
+              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
+              value={reportType}
+              onChange={(event) => setReportType(event.target.value as TReportType)}
+            >
+              {REPORT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {t(REPORT_TYPE_LABELS[type])}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-12 text-secondary">
+            <span>{t("research.reports.columns.period")}</span>
+            <Input
+              placeholder={t("research.reports.period_placeholder")}
+              value={periodKey}
+              onChange={(event) => setPeriodKey(event.target.value)}
+            />
+          </label>
+          {teamProjects.length > 0 && (
+            <fieldset className="flex flex-col gap-2 text-12 text-secondary">
+              <legend>{t("research.reports.team_projects", { count: selectedTeamProjects.length })}</legend>
+              <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-md border border-subtle p-3">
+                {teamProjects.map((project) => (
+                  <label key={project.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedTeamProjects.includes(project.id)}
+                      onChange={(event) =>
+                        setSelectedTeamProjects((current) =>
+                          event.target.checked
+                            ? [...current, project.id]
+                            : current.filter((projectId) => projectId !== project.id)
+                        )
+                      }
+                    />
+                    <span className="truncate">{project.name}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={isCreating}
+              onClick={() => setIsCreateDialogOpen(false)}
+            >
+              {t("research.common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" size="sm" loading={isCreating} disabled={isCreating}>
+              {t("research.reports.create")}
+            </Button>
+          </div>
+        </form>
+      </ModalCore>
     </ResearchListSurface>
   );
 });

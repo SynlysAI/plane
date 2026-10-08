@@ -1813,6 +1813,8 @@
       "description": "Weekly and monthly reports with review workflow.",
       "detail_title": "Report",
       "detail_description": "Status, visibility, review history and actions.",
+      "create_title": "Create periodic report",
+      "create_hint": "After creation, continue in the report detail to edit the body, add attachments and submit it for review.",
       "period_placeholder": "Period, e.g. 2026-W38 / 2026-09",
       "create": "Create report",
       "team_projects": "Team projects ({count})",

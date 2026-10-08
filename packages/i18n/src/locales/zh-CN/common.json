@@ -1831,6 +1831,8 @@
       "description": "周报与月报的提交与验收。",
       "detail_title": "报告详情",
       "detail_description": "状态、可见级别、审核历史与操作。",
+      "create_title": "新建周期报告",
+      "create_hint": "创建后将进入报告详情，可继续编辑正文、添加附件并提交审核。",
       "period_placeholder": "周期，例如 2026-W38 / 2026-09",
       "create": "创建报告",
       "team_projects": "关联团队课题（{count}）",
