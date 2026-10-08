@@ -267,7 +267,7 @@ export interface IResearchStore {
     workspaceSlug: string,
     params?: { period_key?: string; report_type?: string; org_unit?: string }
   ) => Promise<TReportSummary>;
-  fetchReportTemplates: (workspaceSlug: string) => Promise<TReportTemplate[]>;
+  fetchReportTemplates: (workspaceSlug: string, params?: { report_type?: string }) => Promise<TReportTemplate[]>;
   createReportTemplate: (
     workspaceSlug: string,
     payload: { name: string; report_type: string; is_default?: boolean }
@@ -1287,10 +1287,10 @@ export class ResearchStore implements IResearchStore {
     return summary;
   };
 
-  fetchReportTemplates = async (workspaceSlug: string) => {
+  fetchReportTemplates = async (workspaceSlug: string, params: { report_type?: string } = {}) => {
     this.templatesLoader = true;
     try {
-      const response = await this.reportService.getTemplates(workspaceSlug);
+      const response = await this.reportService.getTemplates(workspaceSlug, params);
       runInAction(() => {
         response.results.forEach((template) => {
           this.reportTemplates[template.id] = template;

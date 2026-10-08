@@ -531,7 +531,10 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             },
             request=request,
         )
-        return Response(serialize_report(report, request), status=status.HTTP_201_CREATED)
+        return Response(
+            serialize_report(report, request, include_draft_content=True),
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ResearchReportDetailEndpoint(ResearchAPIView):

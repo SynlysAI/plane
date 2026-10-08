@@ -14,7 +14,7 @@ from plane.research.utils.audit import (
     ResearchResourceType,
     record_audit_event,
 )
-from plane.research.utils.capabilities import NAV_TEMPLATES
+from plane.research.utils.capabilities import NAV_REPORTS, NAV_TEMPLATES
 from plane.research.utils.errors import (
     ResearchErrorCode,
     research_error,
@@ -33,13 +33,16 @@ class ResearchReportTemplateListCreateEndpoint(ResearchAPIView):
     nav_capability = NAV_TEMPLATES
 
     def get(self, request, slug):
-        workspace, error = self.get_workspace(section="reports")
+        # Report authors need active templates when creating a report; the
+        # template management menu itself remains administrator-only.
+        workspace, error = self.get_workspace(section="reports", nav=NAV_REPORTS)
         if error:
             return error
+        is_admin = is_research_admin(request.user, workspace.id)
         templates = ReportTemplate.objects.filter(workspace=workspace)
         if request.GET.get("report_type"):
             templates = templates.filter(report_type=str(request.GET["report_type"]).upper())
-        if not truthy(request.GET.get("include_inactive")):
+        if not is_admin or not truthy(request.GET.get("include_inactive")):
             templates = templates.filter(is_active=True)
         data = list(templates.order_by("report_type", "name"))
         return Response(

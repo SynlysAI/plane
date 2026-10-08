@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
+import { useNavigate } from "react-router";
 // plane imports
 import { RESEARCH_PROJECT_STATUS_LABELS, RESEARCH_PROJECT_TYPE_LABELS, RESEARCH_PROJECT_TYPES } from "@plane/constants";
 import type { TResearchProjectType } from "@plane/constants";
@@ -36,54 +37,12 @@ type Props = {
   currentUserId: string;
 };
 
-type ProjectListQueryFilters = {
-  view: string | null;
-  workflowStatus: string;
-  researchType: string;
-  orgUnit: string;
-  owner: string;
-  dateFrom: string;
-  dateTo: string;
-};
-
-const PROJECT_LIST_CONTROLLED_QUERY_KEYS = [
-  "view",
-  "workflow_status",
-  "research_type",
-  "org_unit",
-  "owner",
-  "date_from",
-  "date_to",
-  "cursor",
-] as const;
-
-/** Build project-list query parameters while preserving unrelated legacy query values.
- *
- * Args:
- *   current: Query parameters currently present in the browser URL.
- *   filters: Project-list filter values controlled by this component.
- *
- * Returns:
- *   Query parameters containing the controlled filters and all unrelated values.
- */
-export function buildProjectListSearchParams(current: URLSearchParams, filters: ProjectListQueryFilters) {
-  const params = new URLSearchParams(current);
-  PROJECT_LIST_CONTROLLED_QUERY_KEYS.forEach((key) => params.delete(key));
-  if (filters.view) params.set("view", filters.view);
-  if (filters.workflowStatus) params.set("workflow_status", filters.workflowStatus);
-  if (filters.researchType) params.set("research_type", filters.researchType);
-  if (filters.orgUnit) params.set("org_unit", filters.orgUnit);
-  if (filters.owner.trim()) params.set("owner", filters.owner.trim());
-  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
-  if (filters.dateTo) params.set("date_to", filters.dateTo);
-  return params;
-}
-
 /** Personal cultivation and team research projects in the current scope. */
 export const ResearchProjectList = observer(function ResearchProjectList({ workspaceSlug, currentUserId }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
   const query = useResearchBrowseQuery();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [researchType, setResearchType] = useState<TResearchProjectType>("RESEARCH_PROJECT");
   const [chainKind, setChainKind] = useState<"LEGACY_TRAINING" | "RESEARCH_CHAIN">("RESEARCH_CHAIN");
@@ -223,7 +182,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         title: t("research.feedback.project_created.title"),
         message: t("research.feedback.project_created.message"),
       });
-      window.location.assign(
+      navigate(
         chainKind === "RESEARCH_CHAIN" && project.research?.chain_id
           ? `/${workspaceSlug}/research/chains/${project.research.chain_id}`
           : researchType === "RESEARCH_PROJECT"
@@ -239,6 +198,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     chainKind,
     chainVisibility,
     currentUserId,
+    navigate,
     name,
     orgUnit,
     requiresOrgUnit,

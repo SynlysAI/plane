@@ -22,7 +22,7 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ChainView = "chains" | "projects" | "reports";
+type ChainView = "chains" | "projects" | "reports" | "outcomes";
 
 /**
  * IA v2 Research Chain landing container. Legacy projects and reports remain
@@ -42,7 +42,10 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
     { id: "projects" as const, labelKey: "research.chains.views.projects" },
     { id: "reports" as const, labelKey: "research.chains.views.reports" },
   ];
-  const activeView = requestedView && views.some((view) => view.id === requestedView) ? requestedView : "chains";
+  const activeView =
+    requestedView && (requestedView === "outcomes" || views.some((view) => view.id === requestedView))
+      ? requestedView
+      : "chains";
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -64,7 +67,9 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
         {activeView === "projects" && (
           <ResearchProjectList workspaceSlug={workspaceSlug} currentUserId={currentUser?.id ?? ""} />
         )}
-        {activeView === "reports" && <ResearchReportList workspaceSlug={workspaceSlug} />}
+        {(activeView === "reports" || activeView === "outcomes") && (
+          <ResearchReportList workspaceSlug={workspaceSlug} />
+        )}
       </div>
     </div>
   );

@@ -56,4 +56,6 @@ def filter_profiles(queryset, request):
     for parameter in ("research_type", "workflow_status"):
         if request.GET.get(parameter):
             queryset = queryset.filter(**{parameter: request.GET[parameter].upper()})
+    if str(request.GET.get("mine", "")).lower() in ("1", "true"):
+        queryset = queryset.filter(owner=request.user)
     return queryset.distinct(), None

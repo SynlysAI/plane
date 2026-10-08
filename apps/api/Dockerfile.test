@@ -1,0 +1,17 @@
+FROM python:3.12.5-alpine
+
+# Keep test dependencies in the image so repeated compose runs do not access PyPI.
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apk --no-cache add "gcc" "musl-dev" "libpq-dev"
+
+WORKDIR /code
+
+COPY requirements ./requirements
+RUN pip install --no-cache-dir \
+    -r requirements/local.txt \
+    -r requirements/test.txt
+
+RUN mkdir -p plane/static-assets/collected-static
