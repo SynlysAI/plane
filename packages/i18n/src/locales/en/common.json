@@ -1859,6 +1859,7 @@
     "attachments": {
       "title": "Attachments and body import",
       "upload_pdf": "Upload PDF",
+      "upload_file": "Upload attachment",
       "pick_markdown": "Choose .md",
       "download": "Download",
       "import": "Import into body",
@@ -1957,6 +1958,7 @@
       "image_max_mb": "Image limit",
       "pdf_max_mb": "PDF limit",
       "markdown_max_mb": "Markdown limit",
+      "office_max_mb": "Office file limit",
       "audit_retention_days": "Audit retention (days, 0 = keep forever)",
       "limits_hint": "These limits apply to research uploads only and never change the global FILE_SIZE_LIMIT."
     },

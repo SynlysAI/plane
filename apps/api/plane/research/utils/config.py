@@ -35,6 +35,7 @@ def research_file_limits(defaults=None):
         "image_max_mb": overrides.get("image_max_mb") or _env_int("RESEARCH_IMAGE_MAX_MB", 20),
         "pdf_max_mb": overrides.get("pdf_max_mb") or _env_int("RESEARCH_PDF_MAX_MB", 100),
         "markdown_max_mb": overrides.get("markdown_max_mb") or _env_int("RESEARCH_MARKDOWN_MAX_MB", 5),
+        "office_max_mb": overrides.get("office_max_mb") or _env_int("RESEARCH_OFFICE_MAX_MB", 50),
     }
 
 

@@ -21,6 +21,7 @@ class ReportAttachment(BaseModel):
         IMAGE = "IMAGE", "Image"
         PDF = "PDF", "PDF"
         MARKDOWN = "MARKDOWN", "Markdown"
+        OFFICE = "OFFICE", "Office document"
         OTHER = "OTHER", "Other"
 
     report = models.ForeignKey(

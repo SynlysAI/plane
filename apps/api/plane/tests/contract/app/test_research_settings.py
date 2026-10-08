@@ -67,6 +67,7 @@ class TestResearchSettingsEndpoint:
         assert payload["image_max_mb"] == 20
         assert payload["pdf_max_mb"] == 100
         assert payload["markdown_max_mb"] == 5
+        assert payload["office_max_mb"] == 50
         assert payload["audit_retention_days"] == 0
         assert payload["research_ia_v2"] is True
         assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
@@ -268,4 +269,3 @@ class TestResearchSettingsEndpoint:
         assert appoint.status_code == 403
         assert appoint.json()["error_code"] == "research_permission_denied"
         assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).main_pi_id is None
-

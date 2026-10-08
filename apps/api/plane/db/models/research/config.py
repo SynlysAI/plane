@@ -87,6 +87,7 @@ class WorkspaceResearchSetting(BaseModel):
     image_max_mb = models.PositiveIntegerField(default=20)
     pdf_max_mb = models.PositiveIntegerField(default=100)
     markdown_max_mb = models.PositiveIntegerField(default=5)
+    office_max_mb = models.PositiveIntegerField(default=50)
     timezone = models.CharField(max_length=255, default=DEFAULT_TIMEZONE, null=True, blank=True)
     audit_retention_days = models.PositiveIntegerField(default=0)
     # ------------------------------------------------------------------

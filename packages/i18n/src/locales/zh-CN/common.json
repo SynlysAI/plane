@@ -1877,6 +1877,7 @@
     "attachments": {
       "title": "附件与正文导入",
       "upload_pdf": "上传 PDF",
+      "upload_file": "上传附件",
       "pick_markdown": "选择 .md 文件",
       "download": "下载",
       "import": "导入为正文",
@@ -1975,6 +1976,7 @@
       "image_max_mb": "图片限制",
       "pdf_max_mb": "PDF 限制",
       "markdown_max_mb": "Markdown 限制",
+      "office_max_mb": "办公文件限制",
       "audit_retention_days": "审计保留天数（0 表示永久保留）",
       "limits_hint": "以上限制仅作用于科研上传，不会改变全局 FILE_SIZE_LIMIT。"
     },

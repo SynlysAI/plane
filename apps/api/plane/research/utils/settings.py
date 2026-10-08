@@ -73,6 +73,7 @@ def get_workspace_research_settings(workspace):
         "image_max_mb": setting.image_max_mb,
         "pdf_max_mb": setting.pdf_max_mb,
         "markdown_max_mb": setting.markdown_max_mb,
+        "office_max_mb": setting.office_max_mb,
         "stage_enabled": bool(setting.stage_enabled),
         "experiment_enabled": bool(setting.experiment_enabled),
         "code_enabled": bool(setting.code_enabled),

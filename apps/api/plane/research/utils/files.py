@@ -26,6 +26,37 @@ IMAGE_CONTENT_TYPES = {
 }
 PDF_EXTENSIONS = {".pdf"}
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
+OFFICE_EXTENSIONS = {
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".csv",
+    ".tsv",
+}
+OFFICE_CONTENT_TYPES = {
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/csv",
+    "text/tab-separated-values",
+    "application/csv",
+}
+OFFICE_CONTENT_TYPES_BY_EXTENSION = {
+    ".doc": {"application/msword"},
+    ".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+    ".xls": {"application/vnd.ms-excel"},
+    ".xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    ".ppt": {"application/vnd.ms-powerpoint"},
+    ".pptx": {"application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+    ".csv": {"text/csv", "application/csv"},
+    ".tsv": {"text/tab-separated-values", "text/tsv"},
+}
 
 IMAGE_SIGNATURES = (
     b"\x89PNG\r\n\x1a\n",
@@ -55,6 +86,8 @@ def detect_kind(file_name, content_type):
         return "PDF"
     if extension in MARKDOWN_EXTENSIONS or content_type in ("text/markdown", "text/x-markdown"):
         return "MARKDOWN"
+    if extension in OFFICE_EXTENSIONS or content_type in OFFICE_CONTENT_TYPES:
+        return "OFFICE"
     if extension in IMAGE_EXTENSIONS or content_type in IMAGE_CONTENT_TYPES:
         return "IMAGE"
     return "OTHER"
@@ -73,11 +106,16 @@ def validate_attachment(*, file_name, content_type, size_bytes, limits, header_b
         return "file_type_not_allowed"
     if kind == "MARKDOWN" and extension not in MARKDOWN_EXTENSIONS:
         return "file_type_not_allowed"
+    if kind == "OFFICE" and extension not in OFFICE_EXTENSIONS:
+        return "file_type_not_allowed"
+    if kind == "OFFICE" and content_type and content_type not in OFFICE_CONTENT_TYPES_BY_EXTENSION[extension]:
+        return "file_type_not_allowed"
 
     limit_mb = {
         "IMAGE": limits.get("image_max_mb", 20),
         "PDF": limits.get("pdf_max_mb", 100),
         "MARKDOWN": limits.get("markdown_max_mb", 5),
+        "OFFICE": limits.get("office_max_mb", 50),
     }[kind]
     if size_bytes is None or size_bytes <= 0:
         return "file_size_exceeded"
