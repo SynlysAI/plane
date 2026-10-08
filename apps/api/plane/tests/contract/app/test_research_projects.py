@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import re
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -159,6 +161,71 @@ class TestResearchProjectCreation:
         assert first.status_code == 201
         assert second.status_code == 201
         assert ResearchProjectProfile.objects.filter(workspace=env["workspace"]).count() == 2
+
+    def test_creation_survives_identifier_drift_between_tables(self, env):
+        """A stray ``project_identifiers`` row must not break project creation.
+
+        Renaming a project identifier only updates ``projects``; the
+        ``project_identifiers`` row keeps the old code. Creating another
+        project that derives the old code must pick a free one instead of
+        failing with a misleading owner-conflict 409.
+        """
+        first = env["admin_client"].post(
+            env["url"],
+            {"owner": str(env["member"].id), "research_type": "RESEARCH_PROJECT", "name": "CISS课题"},
+            format="json",
+        )
+        assert first.status_code == 201
+        project = Project.objects.get(pk=first.json()["id"])
+        assert project.identifier == "CISS"
+        # simulate production drift: the project row is renamed directly while
+        # the project_identifiers row keeps the old code
+        project.identifier = "CISSX"
+        project.save(update_fields=["identifier"])
+
+        second = env["admin_client"].post(
+            env["url"],
+            {"owner": str(env["member"].id), "research_type": "RESEARCH_PROJECT", "name": "CISS另一课题"},
+            format="json",
+        )
+        assert second.status_code == 201
+        assert Project.objects.get(pk=second.json()["id"]).identifier != "CISS"
+
+    def test_non_ascii_names_get_random_identifiers(self, env):
+        """Pure non-ASCII names must not share one workspace-wide fallback code."""
+        identifiers = []
+        for name in ("纯中文课题甲", "纯中文课题乙"):
+            response = env["admin_client"].post(
+                env["url"],
+                {"owner": str(env["member"].id), "research_type": "RESEARCH_PROJECT", "name": name},
+                format="json",
+            )
+            assert response.status_code == 201
+            identifiers.append(Project.objects.get(pk=response.json()["id"]).identifier)
+        assert re.fullmatch(r"PRJ[0-9A-F]{6}", identifiers[0])
+        assert re.fullmatch(r"PRJ[0-9A-F]{6}", identifiers[1])
+
+    def test_identifier_conflict_reports_dedicated_error_code(self, env, monkeypatch):
+        """A residual identifier race must not surface as an owner conflict."""
+        from plane.research.views import projects as projects_view
+
+        first = env["admin_client"].post(
+            env["url"],
+            {"owner": str(env["member"].id), "research_type": "RESEARCH_PROJECT", "name": "CLSH课题"},
+            format="json",
+        )
+        assert first.status_code == 201
+        # force the reserved-identifier lookup to return an occupied code,
+        # exercising the database-constraint fallback path
+        monkeypatch.setattr(projects_view, "unique_identifier", lambda workspace, base: "CLSH")
+
+        duplicate = env["admin_client"].post(
+            env["url"],
+            {"owner": str(env["member"].id), "research_type": "RESEARCH_PROJECT", "name": "CLSH再课题"},
+            format="json",
+        )
+        assert duplicate.status_code == 409
+        assert duplicate.json()["error_code"] == "project_identifier_conflict"
 
     def test_research_chain_project_creates_chain_projection(self, env):
         env["workspace"].research_setting.research_chain_enabled = True

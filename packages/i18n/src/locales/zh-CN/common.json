@@ -2045,6 +2045,7 @@
       "report_return_reason_required": "退回报告必须填写原因。",
       "report_visibility_exceeds_default": "可见范围不能大于默认策略。",
       "research_project_exists": "该科研责任人已有进行中的科研项目。",
+      "project_identifier_conflict": "项目标识符冲突，请更换名称后重试。",
       "research_project_not_found": "科研项目不存在。",
       "file_type_not_allowed": "不支持该文件类型。",
       "file_size_exceeded": "文件超过配置的大小限制。",
