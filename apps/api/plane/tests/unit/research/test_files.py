@@ -125,6 +125,7 @@ class TestFileValidation:
                 content_type=content_type,
                 size_bytes=2 * MB,
                 limits=LIMITS,
+                header_bytes=(b"PK\x03\x04" if file_name.endswith("x") else None),
             )
             is None
         )
@@ -159,6 +160,18 @@ class TestFileValidation:
                 content_type="application/msword",
                 size_bytes=1024,
                 limits=LIMITS,
+            )
+            == "file_type_not_allowed"
+        )
+
+    def test_ooxml_office_file_with_wrong_signature_is_rejected(self):
+        assert (
+            validate_attachment(
+                file_name="table.xlsx",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                size_bytes=1024,
+                limits=LIMITS,
+                header_bytes=b"MZ\x90\x00",
             )
             == "file_type_not_allowed"
         )

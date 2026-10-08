@@ -95,7 +95,8 @@ def detect_kind(file_name, content_type):
 
 def validate_attachment(*, file_name, content_type, size_bytes, limits, header_bytes=None):
     """Return an error code for an invalid upload, else ``None``."""
-    kind = detect_kind(file_name, content_type)
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    kind = detect_kind(file_name, normalized_content_type)
     extension = extension_of(file_name)
 
     if kind == "OTHER":
@@ -108,7 +109,7 @@ def validate_attachment(*, file_name, content_type, size_bytes, limits, header_b
         return "file_type_not_allowed"
     if kind == "OFFICE" and extension not in OFFICE_EXTENSIONS:
         return "file_type_not_allowed"
-    if kind == "OFFICE" and content_type and content_type not in OFFICE_CONTENT_TYPES_BY_EXTENSION[extension]:
+    if kind == "OFFICE" and normalized_content_type and normalized_content_type not in OFFICE_CONTENT_TYPES_BY_EXTENSION[extension]:
         return "file_type_not_allowed"
 
     limit_mb = {
@@ -129,6 +130,8 @@ def validate_attachment(*, file_name, content_type, size_bytes, limits, header_b
             return "file_type_not_allowed"
         if kind == "MARKDOWN" and b"\x00" in header_bytes[:512]:
             return "file_type_not_allowed"
+        if kind == "OFFICE" and not _looks_like_office(extension, header_bytes):
+            return "file_type_not_allowed"
 
     return None
 
@@ -138,6 +141,15 @@ def _looks_like_image(header):
         return True
     # WEBP is RIFF....WEBP
     return header.startswith(b"RIFF") and header[8:12] == b"WEBP"
+
+
+def _looks_like_office(extension, header):
+    """Check the lightweight signatures shared by legacy and OOXML Office files."""
+    if extension in {".doc", ".xls", ".ppt"}:
+        return header.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
+    if extension in {".docx", ".xlsx", ".pptx"}:
+        return header.startswith(b"PK\x03\x04")
+    return b"\x00" not in header[:512]
 
 
 def markdown_to_html(content):
