@@ -197,12 +197,12 @@ from plane.research.views import (
 urlpatterns = [
     path("research/workspaces/<str:slug>/feedback/", ResearchFeedbackEndpoint.as_view(), name="research-feedback"),
     path(
-        "research/workspaces/<str:slug>/feedback/<str:feedback_id>/status/",
+        "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/status/",
         ResearchFeedbackStatusEndpoint.as_view(),
         name="research-feedback-status",
     ),
     path(
-        "research/workspaces/<str:slug>/feedback/<str:feedback_id>/screenshots/<str:screenshot_id>/",
+        "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/screenshots/<uuid:screenshot_id>/",
         ResearchFeedbackScreenshotEndpoint.as_view(),
         name="research-feedback-screenshot",
     ),

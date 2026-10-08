@@ -125,6 +125,8 @@ from .research import (
     ExperimentAssetLink,
     ExperimentRecord,
     ExperimentRecordVersion,
+    ResearchFeedback,
+    ResearchFeedbackScreenshot,
     ApprovalAction,
     ApprovalFlow,
     ApprovalFlowStep,
