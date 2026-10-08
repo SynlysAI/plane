@@ -34,6 +34,7 @@ const RESEARCH_ERROR_KEYS: Record<string, string> = {
   report_return_reason_required: "research.errors.report_return_reason_required",
   report_visibility_exceeds_default: "research.errors.report_visibility_exceeds_default",
   research_project_exists: "research.errors.research_project_exists",
+  project_identifier_conflict: "research.errors.project_identifier_conflict",
   research_project_not_found: "research.errors.research_project_not_found",
   file_type_not_allowed: "research.errors.file_type_not_allowed",
   file_size_exceeded: "research.errors.file_size_exceeded",

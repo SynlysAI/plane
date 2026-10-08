@@ -2027,6 +2027,7 @@
       "report_return_reason_required": "A reason is required when returning a report.",
       "report_visibility_exceeds_default": "The visibility cannot be wider than the default policy.",
       "research_project_exists": "This research owner already has an active research project.",
+      "project_identifier_conflict": "A project identifier conflict occurred. Please try a different name.",
       "research_project_not_found": "Research project not found.",
       "file_type_not_allowed": "This file type is not allowed.",
       "file_size_exceeded": "The file exceeds the configured limit.",
