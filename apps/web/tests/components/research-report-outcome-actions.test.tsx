@@ -4,11 +4,6 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
-const service = vi.hoisted(() => ({
-  listTopicMaterials: vi.fn(),
-  presignTopicMaterial: vi.fn(),
-  confirmTopicMaterial: vi.fn(),
-}));
 const research = vi.hoisted(() => ({
   getOutcomes: vi.fn(() => []),
   fetchOutcomes: vi.fn().mockResolvedValue([]),
@@ -28,7 +23,7 @@ const research = vi.hoisted(() => ({
   templatesLoader: false,
   reportLoader: false,
   reportPaginationByWorkspace: {},
-  identity: { user: { org_units: [] } },
+  identity: { user: { org_units: [{ org_unit: "unit-1", is_primary: true }] } },
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -56,9 +51,15 @@ vi.mock("@/hooks/store/use-member", () => ({
 }));
 vi.mock("@/services/research/outcome.service", () => ({
   ResearchOutcomeService: class {
-    listTopicMaterials = service.listTopicMaterials;
-    presignTopicMaterial = service.presignTopicMaterial;
-    confirmTopicMaterial = service.confirmTopicMaterial;
+    getOutcomeAttachments() {
+      return Promise.resolve({ results: [] });
+    }
+    presignOutcomeAttachment() {
+      return Promise.resolve({ asset_id: "", upload_data: { url: "", fields: {} } });
+    }
+    registerOutcomeAttachment() {
+      return Promise.resolve(null);
+    }
   },
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => research }));
@@ -107,25 +108,6 @@ import { ResearchReportList } from "@/components/research/reports/report-list";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
-const saved = [
-  {
-    id: "file-1",
-    file_name: "opening.pdf",
-    content_type: "application/pdf",
-    size: 8,
-    project: "project-1",
-    project_name: "课题甲",
-  },
-  {
-    id: "file-2",
-    file_name: "notes.md",
-    content_type: "text/markdown",
-    size: 4,
-    project: "project-1",
-    project_name: "课题甲",
-  },
-];
-
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
@@ -133,64 +115,35 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  service.listTopicMaterials.mockResolvedValue({ results: saved, count: saved.length });
-  service.presignTopicMaterial.mockResolvedValue({
-    asset_id: "asset-1",
-    upload_data: { url: "https://upload.example", fields: { key: "k" } },
-  });
-  service.confirmTopicMaterial.mockResolvedValue(saved[0]);
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
 });
 
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
-  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
-describe("topic materials on empty report and outcome pages", () => {
-  it("shows upload and outcome registration without requiring an outcome row", async () => {
+describe("separate report and outcome actions", () => {
+  it("keeps outcome registration on the project outcome surface without topic material upload", async () => {
     await act(async () => {
       root.render(<OutcomeList workspaceSlug="lab" projectId="project-1" />);
     });
     await act(async () => undefined);
-    expect(container.textContent).toContain("上传课题资料");
     expect(container.textContent).toContain("登记成果");
-    expect(container.textContent).toContain("opening.pdf");
-    expect(container.textContent).toContain("课题甲");
-    expect(service.listTopicMaterials).toHaveBeenCalledWith("lab", "project-1");
-
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(["# notes"], "notes.md", { type: "text/markdown" });
-    await act(async () => {
-      Object.defineProperty(input, "files", { configurable: true, value: [file] });
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(service.presignTopicMaterial).toHaveBeenCalledWith("lab", "project-1", {
-      file_name: "notes.md",
-      content_type: "text/markdown",
-      size: file.size,
-    });
-    expect(service.confirmTopicMaterial).toHaveBeenCalledWith("lab", "project-1", "asset-1");
+    expect(container.textContent).not.toContain("上传课题资料");
+    expect(container.textContent).not.toContain("opening.pdf");
+    expect(container.textContent).not.toContain("课题资料");
   });
 
-  it("keeps the same two actions on an empty report list and rejects other file types", async () => {
+  it("keeps report creation as the only primary action on an empty report list", async () => {
     await act(async () => {
       root.render(<ResearchReportList workspaceSlug="lab" />);
     });
     await act(async () => undefined);
-    expect(container.textContent).toContain("上传课题资料");
-    expect(container.textContent).toContain("登记成果");
-    expect(container.querySelector('a[href="/lab/research/projects/project-1/outcomes"]')).not.toBeNull();
-
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(["nope"], "notes.txt", { type: "text/plain" });
-    await act(async () => {
-      Object.defineProperty(input, "files", { configurable: true, value: [file] });
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(service.presignTopicMaterial).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("只允许上传 PDF 和 Markdown。");
+    expect(container.textContent).toContain("创建报告");
+    expect(container.textContent).not.toContain("上传课题资料");
+    expect(container.textContent).not.toContain("登记成果");
+    expect(container.querySelector('a[href="/lab/research/projects/project-1/outcomes"]')).toBeNull();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
   });
 });

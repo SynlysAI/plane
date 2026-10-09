@@ -871,7 +871,7 @@
       "summary": "Submission summary",
       "projects": "Research projects",
       "research_chain": "Research Chain",
-      "research_chain_v2": "Research Chain",
+      "research_chain_v2": "Projects & Topics",
       "approvals": "Office approvals",
       "approvals_v2": "Approval center",
       "management": "Research management",
@@ -1158,7 +1158,7 @@
       "status_unknown": "Not configured"
     },
     "chains": {
-      "description": "Research Chain projections with node, event and snapshot metadata.",
+      "description": "Organize research chains, stages, and outcomes by topic and research project.",
       "tabs": {
         "label": "Research Chain page sections",
         "overview": "Overview",
@@ -1211,7 +1211,7 @@
       },
       "workflow_title": "Research workflow",
       "views": {
-        "chains": "Chains",
+        "chains": "Topics",
         "projects": "Project management",
         "reports": "Reports and outcomes"
       },

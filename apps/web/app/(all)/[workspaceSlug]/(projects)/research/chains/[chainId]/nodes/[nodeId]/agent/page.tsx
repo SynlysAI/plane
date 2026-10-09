@@ -7,11 +7,12 @@ import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
 import { ResearchAgentPlugin } from "@/components/research/agent/research-agent-plugin";
+import { ResearchBackLink } from "@/components/research/common/research-back-link";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 
 function WorkspaceResearchAgentPage() {
-  const { workspaceSlug, nodeId } = useParams();
-  if (!workspaceSlug || !nodeId) return null;
+  const { workspaceSlug, chainId, nodeId } = useParams();
+  if (!workspaceSlug || !chainId || !nodeId) return null;
 
   return (
     <ResearchPageShell
@@ -19,6 +20,9 @@ function WorkspaceResearchAgentPage() {
       descriptionKey="research.agent.description"
       section="research_agent"
       navKey="research_chain"
+      breadcrumbs={
+        <ResearchBackLink href={`/${workspaceSlug}/research/chains/${chainId}`}>返回课题详情</ResearchBackLink>
+      }
     >
       <ResearchAgentPlugin workspaceSlug={workspaceSlug} chainNodeId={nodeId} />
     </ResearchPageShell>

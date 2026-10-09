@@ -24,7 +24,6 @@ import {
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
-import { ResearchTopicMaterialActions } from "@/components/research/materials/topic-material-actions";
 import { ResearchOutcomeService } from "@/services/research/outcome.service";
 
 const outcomeService = new ResearchOutcomeService();
@@ -115,8 +114,6 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
           {t("research.outcomes.export_chain")}
         </a>
       </ResearchFilterToolbar>
-      <ResearchTopicMaterialActions workspaceSlug={workspaceSlug} projectId={projectId} showRegister={false} />
-
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
       <ResearchTableSurface>

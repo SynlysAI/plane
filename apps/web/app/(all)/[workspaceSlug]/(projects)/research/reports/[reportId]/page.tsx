@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
+import { ResearchBackLink } from "@/components/research/common/research-back-link";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchReportDetail } from "@/components/research/reports/report-detail";
 
@@ -20,6 +21,7 @@ function WorkspaceResearchReportDetailPage() {
       descriptionKey="research.reports.detail_description"
       section="reports"
       navKey="reports"
+      breadcrumbs={<ResearchBackLink href={`/${workspaceSlug}/research/reports`}>返回报告列表</ResearchBackLink>}
     >
       <ResearchReportDetail workspaceSlug={workspaceSlug} reportId={reportId} />
     </ResearchPageShell>

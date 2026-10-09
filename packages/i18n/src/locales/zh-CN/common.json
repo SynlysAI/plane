@@ -871,7 +871,7 @@
       "summary": "提交汇总",
       "projects": "科研项目",
       "research_chain": "研究链",
-      "research_chain_v2": "研究链",
+      "research_chain_v2": "项目与课题",
       "approvals": "办公审批",
       "approvals_v2": "审批中心",
       "management": "科研管理",
@@ -1165,7 +1165,7 @@
       "status_unknown": "未配置"
     },
     "chains": {
-      "description": "研究链投影，包含节点、事件与快照元数据。",
+      "description": "按课题与科研项目组织研究链、阶段与成果。",
       "tabs": {
         "label": "研究链页面分区",
         "overview": "概览",

@@ -9,15 +9,6 @@ import type { TResearchOutcome, TResearchOutcomeAttachment } from "@plane/types"
 // services
 import { APIService } from "@/services/api.service";
 
-export type TTopicMaterial = {
-  id: string;
-  file_name: string;
-  content_type: string;
-  size: number;
-  project: string;
-  project_name: string;
-};
-
 export type TOutcomePayload = {
   title: string;
   output_type?: string;
@@ -110,42 +101,5 @@ export class ResearchOutcomeService extends APIService {
 
   exportChainUrl(workspaceSlug: string, projectId: string) {
     return researchEndpoints.chainExport(workspaceSlug, projectId);
-  }
-
-  /**
-   * 列出课题资料。这些文件不属于周期报告，也不要求先登记成果。
-   */
-  async listTopicMaterials(workspaceSlug: string, projectId: string) {
-    return this.get(researchEndpoints.topicMaterials(workspaceSlug, projectId))
-      .then((res) => res?.data as { results: TTopicMaterial[]; count: number })
-      .catch((err) => {
-        throw err?.response?.data;
-      });
-  }
-
-  /**
-   * 为 PDF 或 Markdown 课题资料申请直传地址。
-   */
-  async presignTopicMaterial(
-    workspaceSlug: string,
-    projectId: string,
-    payload: { file_name: string; content_type: string; size: number }
-  ) {
-    return this.post(researchEndpoints.topicMaterialPresign(workspaceSlug, projectId), payload)
-      .then((res) => res?.data as { asset_id: string; upload_data: { url: string; fields: Record<string, string> } })
-      .catch((err) => {
-        throw err?.response?.data;
-      });
-  }
-
-  /**
-   * 确认课题资料已经写入，并返回带课题名的记录。
-   */
-  async confirmTopicMaterial(workspaceSlug: string, projectId: string, assetId: string) {
-    return this.post(researchEndpoints.topicMaterials(workspaceSlug, projectId), { asset_id: assetId })
-      .then((res) => res?.data as TTopicMaterial)
-      .catch((err) => {
-        throw err?.response?.data;
-      });
   }
 }
