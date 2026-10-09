@@ -24,6 +24,11 @@ const FEEDBACK_TYPE_LABELS: Record<Feedback["feedback_type"], string> = {
 type Feedback = TResearchFeedback;
 type Shot = { file: File; preview: string };
 
+/** 生成反馈请求幂等键；HTTP/IP 访问时兼容不可用的 Web Crypto API。 */
+export function createIdempotencyKey(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `fallback-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 /** 渲染专属反馈截图链接，并在对象读取失败时保留中性占位。 */
 function ScreenshotLink({ url, index }: { url: string; index: number }) {
   const [failed, setFailed] = useState(false);
@@ -84,7 +89,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const [count, setCount] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [listLoading, setListLoading] = useState(false);
-  const idempotency = useRef(crypto.randomUUID());
+  const idempotency = useRef(createIdempotencyKey());
   const queryVersion = useRef(0);
   const canManage = Boolean(
     identity?.user.is_main_pi || identity?.user.is_workspace_admin || identity?.user.is_system_admin
@@ -183,7 +188,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
       return;
     }
     setShots((current) => [...current, ...next.map((file) => ({ file, preview: URL.createObjectURL(file) }))]);
-    idempotency.current = crypto.randomUUID();
+    idempotency.current = createIdempotencyKey();
     setError("");
   };
 
@@ -208,7 +213,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
       setContent("");
       setShots([]);
       shots.forEach((shot) => URL.revokeObjectURL(shot.preview));
-      idempotency.current = crypto.randomUUID();
+      idempotency.current = createIdempotencyKey();
       setMessage("反馈已提交，可在“我的反馈”查看处理状态。");
     } catch {
       setError("反馈提交失败，表单和截图已保留，请重试。");
@@ -300,7 +305,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                   value={category}
                   onChange={(event) => {
                     setCategory(event.target.value);
-                    idempotency.current = crypto.randomUUID();
+                    idempotency.current = createIdempotencyKey();
                   }}
                 >
                   <option value="bug">缺陷</option>
@@ -319,7 +324,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                   value={content}
                   onChange={(event) => {
                     setContent(event.target.value);
-                    idempotency.current = crypto.randomUUID();
+                    idempotency.current = createIdempotencyKey();
                   }}
                 />
               </label>
@@ -351,7 +356,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                       onClick={() => {
                         URL.revokeObjectURL(shot.preview);
                         setShots((current) => current.filter((item) => item !== shot));
-                        idempotency.current = crypto.randomUUID();
+                        idempotency.current = createIdempotencyKey();
                       }}
                     >
                       移除截图 {index + 1}

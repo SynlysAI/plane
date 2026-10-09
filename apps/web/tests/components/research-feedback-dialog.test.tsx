@@ -36,10 +36,17 @@ vi.mock("@plane/propel/button", () => ({
   ),
 }));
 
-const { FeedbackDialog } = await import("@/components/research/feedback/feedback-dialog");
+const { FeedbackDialog, createIdempotencyKey } = await import("@/components/research/feedback/feedback-dialog");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+
+it("在不安全的 HTTP 来源没有 randomUUID 时仍生成幂等键", () => {
+  const originalCrypto = globalThis.crypto;
+  Object.defineProperty(globalThis, "crypto", { configurable: true, value: {} });
+  expect(createIdempotencyKey()).toMatch(/^fallback-/);
+  Object.defineProperty(globalThis, "crypto", { configurable: true, value: originalCrypto });
+});
 
 /** 通过用户输入事件填写反馈，避免绕过表单状态。 */
 async function describeFeedback(value: string) {
