@@ -144,6 +144,64 @@ def env(db, settings):
 
 @pytest.mark.django_db
 class TestResearchProjectBrowse:
+    def test_four_role_default_scope_and_combined_filters_are_replayable(self, env):
+        """固定四类身份与两个组织单元的项目筛选结果，防止 ACL 被筛选条件绕过。"""
+        own = create_project(env, env["student"], "Alpha graphite", env["group_a"])
+        shared = create_project(
+            env,
+            env["colleague"],
+            "Alpha silicon",
+            env["group_b"],
+            "WORKSPACE",
+            collaborators=(env["student"],),
+        )
+        hidden = create_project(env, env["colleague"], "Alpha secret", env["group_b"])
+        ResearchProjectProfile.objects.filter(project=own).update(started_at=date(2026, 10, 1))
+        ResearchProjectProfile.objects.filter(project=shared).update(started_at=date(2026, 10, 2))
+        ResearchProjectProfile.objects.filter(project=hidden).update(started_at=date(2026, 10, 3))
+
+        url = f"{env['base']}projects/"
+        assert {item["id"] for item in client_for(env["student"]).get(url).json()["results"]} == {
+            str(own.id),
+            str(shared.id),
+        }
+        assert {item["id"] for item in client_for(env["advisor"]).get(url).json()["results"]} == {
+            str(own.id),
+            str(shared.id),
+        }
+        assert {item["id"] for item in client_for(env["pi"]).get(url).json()["results"]} == {
+            str(own.id),
+            str(shared.id),
+            str(hidden.id),
+        }
+        assert {item["id"] for item in client_for(env["admin"]).get(url).json()["results"]} == {str(shared.id)}
+
+        mine = client_for(env["student"]).get(url, {"mine": "true"}).json()
+        assert {item["id"] for item in mine["results"]} == {str(own.id)}
+        filtered = client_for(env["admin"]).get(
+            url,
+            {
+                "org_unit": str(env["group_b"].id),
+                "owner": str(env["colleague"].id),
+                "q": "Alpha",
+                "date_from": "2026-10-02",
+                "date_to": "2026-10-02",
+            },
+        ).json()
+        assert {item["id"] for item in filtered["results"]} == {str(shared.id)}
+
+        pi_filtered = client_for(env["pi"]).get(
+            url,
+            {
+                "org_unit": str(env["group_b"].id),
+                "owner": str(env["colleague"].id),
+                "q": "Alpha",
+                "date_from": "2026-10-02",
+                "date_to": "2026-10-03",
+            },
+        ).json()
+        assert {item["id"] for item in pi_filtered["results"]} == {str(shared.id), str(hidden.id)}
+
     def test_default_scope_and_keyword_scope_combinations_preserve_acl(self, env):
         own = create_project(env, env["student"], "Alpha graphite", env["group_a"])
         shared = create_project(env, env["colleague"], "Alpha silicon", env["group_b"], collaborators=(env["student"],))
@@ -188,6 +246,63 @@ class TestResearchProjectBrowse:
 
 @pytest.mark.django_db
 class TestResearchReportBrowse:
+    def test_four_role_default_scope_and_combined_filters_are_replayable(self, env):
+        """固定报告浏览矩阵，确保默认范围与筛选始终叠加科研 ACL。"""
+        own = create_report(env, env["student"], "2026-W40", "SUBMITTED")
+        shared = create_report(env, env["colleague"], "2026-W41", "SUBMITTED", "WORKSPACE")
+        hidden = create_report(env, env["colleague"], "2026-W42", "SUBMITTED", "PRIVATE")
+        PeriodicReport.objects.filter(pk=own.id).update(
+            period_start=date(2026, 10, 1), period_end=date(2026, 10, 1)
+        )
+        PeriodicReport.objects.filter(pk=shared.id).update(
+            org_unit=env["group_b"], period_start=date(2026, 10, 2), period_end=date(2026, 10, 2)
+        )
+        PeriodicReport.objects.filter(pk=hidden.id).update(
+            org_unit=env["group_b"], period_start=date(2026, 10, 3), period_end=date(2026, 10, 3)
+        )
+
+        url = f"{env['base']}reports/"
+        assert {item["id"] for item in client_for(env["student"]).get(url).json()["results"]} == {
+            str(own.id),
+            str(shared.id),
+        }
+        assert {item["id"] for item in client_for(env["advisor"]).get(url).json()["results"]} == {
+            str(own.id),
+            str(shared.id),
+        }
+        assert {item["id"] for item in client_for(env["pi"]).get(url).json()["results"]} == {
+            str(own.id),
+            str(shared.id),
+            str(hidden.id),
+        }
+        assert {item["id"] for item in client_for(env["admin"]).get(url).json()["results"]} == {str(shared.id)}
+
+        mine = client_for(env["student"]).get(url, {"mine": "true"}).json()
+        assert {item["id"] for item in mine["results"]} == {str(own.id)}
+        filtered = client_for(env["admin"]).get(
+            url,
+            {
+                "org_unit": str(env["group_b"].id),
+                "owner": str(env["colleague"].id),
+                "q": "Student Beta",
+                "date_from": "2026-10-02",
+                "date_to": "2026-10-02",
+            },
+        ).json()
+        assert {item["id"] for item in filtered["results"]} == {str(shared.id)}
+
+        pi_filtered = client_for(env["pi"]).get(
+            url,
+            {
+                "org_unit": str(env["group_b"].id),
+                "owner": str(env["colleague"].id),
+                "q": "Student Beta",
+                "date_from": "2026-10-02",
+                "date_to": "2026-10-03",
+            },
+        ).json()
+        assert {item["id"] for item in pi_filtered["results"]} == {str(shared.id), str(hidden.id)}
+
     def test_mine_keyword_and_review_scopes_use_report_acl(self, env):
         submitted = create_report(env, env["student"], "2026-W40", "SUBMITTED")
         create_report(env, env["student"], "2026-W39", "DRAFT")
