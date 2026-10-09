@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
+import { ResearchBackLink } from "@/components/research/common/research-back-link";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { StageMaterialDetail } from "@/components/research/stages/stage-material-detail";
 
@@ -19,6 +20,11 @@ function WorkspaceResearchStageMaterialPage() {
       titleKey="research.stages.material_title"
       descriptionKey="research.stages.material_description"
       section="stages"
+      breadcrumbs={
+        <ResearchBackLink href={`/${workspaceSlug}/research/projects/${projectId}/stages/${stageCode}`}>
+          返回阶段详情
+        </ResearchBackLink>
+      }
     >
       <StageMaterialDetail
         workspaceSlug={workspaceSlug}

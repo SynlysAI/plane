@@ -23,6 +23,11 @@ const FEEDBACK_TYPE_LABELS: Record<Feedback["feedback_type"], string> = {
 };
 type Feedback = TResearchFeedback;
 type Shot = { file: File; preview: string };
+type DatePreset = "any" | "7" | "30" | "custom";
+
+/** 将日期格式化为服务端反馈筛选使用的本地 YYYY-MM-DD 字符串。 */
+const toLocalDateString = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 /** 生成反馈请求幂等键；HTTP/IP 访问时兼容不可用的 Web Crypto API。 */
 export function createIdempotencyKey(): string {
@@ -85,10 +90,12 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     date_to: "",
   });
   const [filter, setFilter] = useState(filterDraft);
+  const [datePreset, setDatePreset] = useState<DatePreset>("any");
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [listLoading, setListLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const idempotency = useRef(createIdempotencyKey());
   const queryVersion = useRef(0);
   const canManage = Boolean(
@@ -150,6 +157,21 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const updateFilter = (key: keyof typeof filter, value: string) => {
     setFilterDraft((current) => ({ ...current, [key]: value }));
     setFilter((current) => ({ ...current, [key]: value }));
+    setPage(1);
+  };
+  /** 按预设生成日期区间；自定义区间仅展示输入，不隐式修改用户日期。 */
+  const applyDatePreset = (preset: DatePreset) => {
+    setDatePreset(preset);
+    const next = { date_from: "", date_to: "" };
+    if (preset === "7" || preset === "30") {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - (preset === "7" ? 6 : 29));
+      next.date_from = toLocalDateString(start);
+      next.date_to = toLocalDateString(today);
+    }
+    setFilterDraft((current) => ({ ...current, ...next }));
+    setFilter((current) => ({ ...current, ...next }));
     setPage(1);
   };
   const availableTabs = [
@@ -223,43 +245,58 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   };
 
   const body = (
-    <section className="flex max-h-[85vh] min-w-0 flex-col gap-4 overflow-y-auto bg-surface-1 p-5">
-      <h2 className="text-20 font-semibold">反馈</h2>
-      <div
-        role="tablist"
-        aria-label="反馈视图"
-        className="flex gap-4 border-b border-subtle"
-        onKeyDown={(event) => {
-          if (event.key === "ArrowRight") {
-            event.preventDefault();
-            moveTab(1);
-          }
-          if (event.key === "ArrowLeft") {
-            event.preventDefault();
-            moveTab(-1);
-          }
-        }}
-      >
-        {availableTabs.map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            id={`feedback-tab-${value}`}
-            role="tab"
-            aria-selected={view === value}
-            aria-controls="feedback-tab-panel"
-            tabIndex={view === value ? 0 : -1}
-            className={`pb-2 text-13 ${view === value ? "font-semibold text-primary" : "text-secondary"}`}
-            onClick={() => {
-              setView(value);
-              setPage(1);
-              setSelected(null);
+    <section
+      className={
+        managementOnly
+          ? "flex h-full min-w-0 flex-col gap-5 overflow-hidden bg-canvas p-6"
+          : "flex max-h-[85vh] min-w-0 flex-col gap-4 overflow-y-auto bg-surface-1 p-5"
+      }
+    >
+      {managementOnly ? (
+        <header className="shrink-0 border-b border-subtle pb-4">
+          <h1 className="text-22 font-semibold text-primary">反馈管理</h1>
+          <p className="mt-1 text-13 text-tertiary">按状态、分类、模块与时间定位反馈，右侧保留完整提交快照。</p>
+        </header>
+      ) : (
+        <>
+          <h2 className="text-20 font-semibold">反馈</h2>
+          <div
+            role="tablist"
+            aria-label="反馈视图"
+            className="flex gap-4 border-b border-subtle"
+            onKeyDown={(event) => {
+              if (event.key === "ArrowRight") {
+                event.preventDefault();
+                moveTab(1);
+              }
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                moveTab(-1);
+              }
             }}
           >
-            {label}
-          </button>
-        ))}
-      </div>
+            {availableTabs.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                id={`feedback-tab-${value}`}
+                role="tab"
+                aria-selected={view === value}
+                aria-controls="feedback-tab-panel"
+                tabIndex={view === value ? 0 : -1}
+                className={`pb-2 text-13 ${view === value ? "font-semibold text-primary" : "text-secondary"}`}
+                onClick={() => {
+                  setView(value);
+                  setPage(1);
+                  setSelected(null);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {error && (
         <p role="alert" className="text-13 text-danger-primary">
           {error}
@@ -283,11 +320,11 @@ export const FeedbackDialog = observer(function FeedbackDialog({
       )}
       {!managementDenied && (
         <div
-          role="tabpanel"
-          id="feedback-tab-panel"
-          aria-labelledby={`feedback-tab-${view}`}
+          role={managementOnly ? undefined : "tabpanel"}
+          id={managementOnly ? undefined : "feedback-tab-panel"}
+          aria-labelledby={managementOnly ? undefined : `feedback-tab-${view}`}
           tabIndex={-1}
-          className="flex min-h-0 flex-col"
+          className={managementOnly ? "flex min-h-0 flex-1 flex-col" : "flex min-h-0 flex-col"}
         >
           {view === "submit" ? (
             <form
@@ -328,11 +365,18 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                   }}
                 />
               </label>
-              <label className="text-13">
-                截图（最多 3 张，每张 10 MB）
+              <fieldset className="flex flex-col gap-2 border-0 p-0">
+                <legend className="text-13">截图</legend>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="secondary" size="sm" type="button" onClick={() => fileInputRef.current?.click()}>
+                    添加截图（{shots.length}/3）
+                  </Button>
+                  <span className="text-12 text-tertiary">PNG / JPEG / WebP，每张不超过 10 MB</span>
+                </div>
                 <input
+                  ref={fileInputRef}
                   aria-label="反馈截图"
-                  className="mt-2 block text-12"
+                  className="hidden"
                   type="file"
                   multiple
                   accept="image/png,image/jpeg,image/webp"
@@ -341,29 +385,29 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                     event.target.value = "";
                   }}
                 />
-              </label>
-              <div className="flex flex-wrap gap-3">
-                {shots.map((shot, index) => (
-                  <figure key={shot.preview} className="w-28">
-                    <img
-                      src={shot.preview}
-                      alt={`截图 ${index + 1} 预览`}
-                      className="h-20 w-28 rounded object-contain"
-                    />
-                    <button
-                      type="button"
-                      className="text-12 text-secondary"
-                      onClick={() => {
-                        URL.revokeObjectURL(shot.preview);
-                        setShots((current) => current.filter((item) => item !== shot));
-                        idempotency.current = createIdempotencyKey();
-                      }}
-                    >
-                      移除截图 {index + 1}
-                    </button>
-                  </figure>
-                ))}
-              </div>
+                <div className="flex flex-wrap gap-3">
+                  {shots.map((shot, index) => (
+                    <figure key={shot.preview} className="w-28">
+                      <img
+                        src={shot.preview}
+                        alt={`截图 ${index + 1} 预览`}
+                        className="h-20 w-28 rounded object-contain"
+                      />
+                      <button
+                        type="button"
+                        className="text-12 text-secondary"
+                        onClick={() => {
+                          URL.revokeObjectURL(shot.preview);
+                          setShots((current) => current.filter((item) => item !== shot));
+                          idempotency.current = createIdempotencyKey();
+                        }}
+                      >
+                        移除截图 {index + 1}
+                      </button>
+                    </figure>
+                  ))}
+                </div>
+              </fieldset>
               <p className="text-12 text-tertiary">仅提交当前路径和浏览器信息。截图长期保存，可在本人记录中查看。</p>
               <div className="flex justify-end">
                 <Button type="submit" variant="primary" size="sm" disabled={busy || !content.trim()}>
@@ -372,139 +416,176 @@ export const FeedbackDialog = observer(function FeedbackDialog({
               </div>
             </form>
           ) : (
-            <>
-              <div className="flex flex-wrap gap-2">
-                <select
-                  aria-label="筛选状态"
-                  className="rounded-md border border-subtle px-2 py-1 text-12"
-                  value={filter.status}
-                  onChange={(event) => {
-                    updateFilter("status", event.target.value);
-                  }}
-                >
-                  <option value="">全部状态</option>
-                  {Object.entries(STATUS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  aria-label="筛选分类"
-                  className="rounded-md border border-subtle px-2 py-1 text-12"
-                  value={filter.feedback_type}
-                  onChange={(event) => {
-                    updateFilter("feedback_type", event.target.value);
-                  }}
-                >
-                  <option value="">全部分类</option>
-                  <option value="bug">缺陷</option>
-                  <option value="ux">体验</option>
-                  <option value="idea">建议</option>
-                  <option value="other">其他</option>
-                </select>
-                {(["q", "module", "date_from", "date_to"] as const).map((key) => (
-                  <input
-                    key={key}
-                    aria-label={
-                      key === "q"
-                        ? "反馈关键词"
-                        : key === "module"
-                          ? "反馈模块"
-                          : key === "date_from"
-                            ? "反馈开始日期"
-                            : "反馈结束日期"
-                    }
-                    placeholder={key === "q" ? "关键词" : "模块"}
-                    type={key.startsWith("date") ? "date" : "text"}
-                    value={filter[key]}
-                    className="min-w-0 rounded-md border border-subtle px-2 py-1 text-12"
+            <div
+              className={
+                managementOnly
+                  ? "grid min-h-0 flex-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"
+                  : "flex flex-col gap-4"
+              }
+            >
+              <div
+                className={
+                  managementOnly
+                    ? "flex min-h-0 flex-col gap-4 overflow-hidden rounded-xl bg-surface-1 p-4"
+                    : "flex flex-col gap-4"
+                }
+              >
+                <div className={managementOnly ? "rounded-lg bg-surface-2 p-3" : "flex flex-wrap gap-2"}>
+                  <select
+                    aria-label="筛选状态"
+                    className="rounded-md border border-subtle px-2 py-1 text-12"
+                    value={filter.status}
                     onChange={(event) => {
-                      if (key === "q" || key === "module") {
-                        setFilterDraft((current) => ({ ...current, [key]: event.target.value }));
-                        return;
-                      }
-                      updateFilter(key, event.target.value);
+                      updateFilter("status", event.target.value);
                     }}
-                  />
-                ))}
-                <button
-                  type="button"
-                  className="text-12 text-secondary"
-                  onClick={() => setRefresh((value) => value + 1)}
-                >
-                  刷新
-                </button>
-                {view !== "submit" && error && (
+                  >
+                    <option value="">全部状态</option>
+                    {Object.entries(STATUS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="筛选分类"
+                    className="rounded-md border border-subtle px-2 py-1 text-12"
+                    value={filter.feedback_type}
+                    onChange={(event) => {
+                      updateFilter("feedback_type", event.target.value);
+                    }}
+                  >
+                    <option value="">全部分类</option>
+                    <option value="bug">缺陷</option>
+                    <option value="ux">体验</option>
+                    <option value="idea">建议</option>
+                    <option value="other">其他</option>
+                  </select>
+                  {(["q", "module"] as const).map((key) => (
+                    <input
+                      key={key}
+                      aria-label={key === "q" ? "反馈关键词" : "反馈模块"}
+                      placeholder={key === "q" ? "关键词" : "模块"}
+                      type="text"
+                      value={filter[key]}
+                      className="min-w-0 rounded-md border border-subtle px-2 py-1 text-12"
+                      onChange={(event) => {
+                        setFilterDraft((current) => ({ ...current, [key]: event.target.value }));
+                      }}
+                    />
+                  ))}
+                  <select
+                    aria-label="反馈日期范围"
+                    className="rounded-md border border-subtle px-2 py-1 text-12"
+                    value={datePreset}
+                    onChange={(event) => applyDatePreset(event.target.value as DatePreset)}
+                  >
+                    <option value="any">任意</option>
+                    <option value="7">近 7 天</option>
+                    <option value="30">近 30 天</option>
+                    <option value="custom">自定义区间</option>
+                  </select>
+                  {datePreset === "custom" && (
+                    <>
+                      <input
+                        aria-label="反馈开始日期"
+                        type="date"
+                        value={filter.date_from}
+                        className="rounded-md border border-subtle px-2 py-1 text-12"
+                        onChange={(event) => updateFilter("date_from", event.target.value)}
+                      />
+                      <input
+                        aria-label="反馈结束日期"
+                        type="date"
+                        value={filter.date_to}
+                        className="rounded-md border border-subtle px-2 py-1 text-12"
+                        onChange={(event) => updateFilter("date_to", event.target.value)}
+                      />
+                    </>
+                  )}
                   <button
                     type="button"
                     className="text-12 text-secondary"
                     onClick={() => setRefresh((value) => value + 1)}
                   >
-                    重试
+                    刷新
                   </button>
-                )}
-              </div>
-              <div className="max-w-full overflow-x-auto">
-                <table className="w-full min-w-100 text-left text-13" aria-busy={listLoading}>
-                  <thead>
-                    <tr className="text-secondary">
-                      <th className="p-2">描述</th>
-                      <th>状态</th>
-                      <th>提交时间</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((record) => (
-                      <tr key={record.feedback_id} className="border-t border-subtle">
-                        <td className="p-2">
-                          <button
-                            onClick={() => {
-                              setSelected(record);
-                              setComment("");
-                            }}
-                          >
-                            {record.content.slice(0, 60)}
-                          </button>
-                        </td>
-                        <td>{STATUS[record.status]}</td>
-                        <td>{formatResearchDateTime(record.created_at)}</td>
+                  {view !== "submit" && error && (
+                    <button
+                      type="button"
+                      className="text-12 text-secondary"
+                      onClick={() => setRefresh((value) => value + 1)}
+                    >
+                      重试
+                    </button>
+                  )}
+                </div>
+                <div className={managementOnly ? "min-h-0 flex-1 overflow-auto" : "max-w-full overflow-x-auto"}>
+                  <table className="w-full min-w-100 text-left text-13" aria-busy={listLoading}>
+                    <thead>
+                      <tr className="text-secondary">
+                        <th className="p-2">描述</th>
+                        <th>状态</th>
+                        <th>提交时间</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {results.map((record) => (
+                        <tr key={record.feedback_id} className="border-t border-subtle">
+                          <td className="p-2">
+                            <button
+                              onClick={() => {
+                                setSelected(record);
+                                setComment("");
+                              }}
+                            >
+                              {record.content.slice(0, 60)}
+                            </button>
+                          </td>
+                          <td>{STATUS[record.status]}</td>
+                          <td>{formatResearchDateTime(record.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {listLoading && (
+                  <p role="status" className="text-13 text-secondary">
+                    {results.length ? "反馈刷新中…" : "反馈读取中…"}
+                  </p>
+                )}
+                {!listLoading && !error && !results.length && (
+                  <p className="text-13 text-secondary">当前范围内没有反馈记录。</p>
+                )}
+                <div className={`flex items-center gap-3 text-12 ${managementOnly ? "mt-auto" : ""}`}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={page === 1}
+                    onClick={() => setPage((value) => value - 1)}
+                  >
+                    上一页
+                  </Button>
+                  <span>
+                    {page} · 共 {count} 条
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={page * 20 >= count}
+                    onClick={() => setPage((value) => value + 1)}
+                  >
+                    下一页
+                  </Button>
+                </div>
               </div>
-              {listLoading && (
-                <p role="status" className="text-13 text-secondary">
-                  {results.length ? "反馈刷新中…" : "反馈读取中…"}
-                </p>
-              )}
-              {!listLoading && !error && !results.length && (
-                <p className="text-13 text-secondary">当前范围内没有反馈记录。</p>
-              )}
-              <div className="flex items-center gap-3 text-12">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={page === 1}
-                  onClick={() => setPage((value) => value - 1)}
+              {selected ? (
+                <article
+                  className={
+                    managementOnly
+                      ? "min-h-0 overflow-y-auto rounded-xl bg-surface-1 p-5 text-13"
+                      : "border-t border-subtle pt-4 text-13"
+                  }
                 >
-                  上一页
-                </Button>
-                <span>
-                  {page} · 共 {count} 条
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={page * 20 >= count}
-                  onClick={() => setPage((value) => value + 1)}
-                >
-                  下一页
-                </Button>
-              </div>
-              {selected && (
-                <article className="border-t border-subtle pt-4 text-13">
                   <h3 className="font-semibold">
                     {STATUS[selected.status]} · {selected.username}
                   </h3>
@@ -606,8 +687,15 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                     </form>
                   )}
                 </article>
-              )}
-            </>
+              ) : managementOnly ? (
+                <aside className="min-h-0 overflow-y-auto rounded-xl bg-surface-1 p-5 text-13">
+                  <h3 className="font-semibold text-primary">反馈快照</h3>
+                  <p className="mt-2 text-secondary">
+                    选择左侧任意反馈后，这里会完整显示描述、提交上下文、截图与处理历史。
+                  </p>
+                </aside>
+              ) : null}
+            </div>
           )}
         </div>
       )}

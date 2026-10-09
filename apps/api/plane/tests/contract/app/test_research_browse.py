@@ -144,6 +144,24 @@ def env(db, settings):
 
 @pytest.mark.django_db
 class TestResearchProjectBrowse:
+    def test_student_with_primary_org_can_create_project_and_report(self, env):
+        """有主组织归属的学生可直接创建课题投影与周期报告。"""
+        project_response = client_for(env["student"]).post(
+            f"{env['base']}projects/",
+            {"research_type": "RESEARCH_PROJECT", "name": "Student creates topic"},
+            format="json",
+        )
+        assert project_response.status_code == 201
+        assert project_response.json()["research"]["owner"] == str(env["student"].id)
+
+        report_response = client_for(env["student"]).post(
+            f"{env['base']}reports/",
+            {"report_type": "WEEKLY"},
+            format="json",
+        )
+        assert report_response.status_code == 201
+        assert report_response.json()["owner"] == str(env["student"].id)
+
     def test_four_role_default_scope_and_combined_filters_are_replayable(self, env):
         """固定四类身份与两个组织单元的项目筛选结果，防止 ACL 被筛选条件绕过。"""
         own = create_project(env, env["student"], "Alpha graphite", env["group_a"])

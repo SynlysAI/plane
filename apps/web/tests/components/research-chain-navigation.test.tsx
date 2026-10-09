@@ -172,7 +172,7 @@ it("collapses research to four destinations when IA v2 is enabled", async () => 
 
   const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
   expect(links).toEqual(["/lab/research", "/lab/research/chains", "/lab/research/approvals"]);
-  expect(container.textContent).toContain("研究链");
+  expect(container.textContent).toContain("项目与课题");
   expect(container.textContent).toContain("审批中心");
   expect(container.textContent).not.toContain("报告");
   expect(container.textContent).not.toContain("提交汇总");

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   research: {
     identityWorkspaceSlug: "lab",
     identity: {
+      user: { org_units: [] },
       sections: {
         reports: true,
         approvals: true,

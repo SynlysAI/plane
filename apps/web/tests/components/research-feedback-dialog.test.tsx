@@ -68,6 +68,16 @@ async function pick(files: File[]) {
   });
 }
 
+/** Format a local date in the same shape as the feedback preset filter. */
+function localDate(offsetDays: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(
+    2,
+    "0"
+  )}`;
+}
+
 /** 打开反馈弹窗。 */
 async function open() {
   await act(async () => root.render(<FeedbackDialog workspaceSlug="lab" />));
@@ -106,6 +116,10 @@ it("Plane API 故障保留描述和三张截图，重试使用同一幂等键，
   mocks.post.mockRejectedValueOnce(new Error("Plane feedback storage unavailable")).mockResolvedValueOnce({});
   await open();
   await describeFeedback("Upload fails on a weekly report");
+  expect(
+    Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("添加截图"))
+      ?.textContent
+  ).toContain("0/3");
   await pick([
     new File(["PNG"], "one.png", { type: "image/png" }),
     new File(["JPEG"], "two.jpg", { type: "image/jpeg" }),
@@ -197,6 +211,47 @@ it("关键词与模块筛选延迟 300 毫秒后请求", async () => {
   expect(mocks.get).toHaveBeenLastCalledWith(
     "/api/research/workspaces/lab/feedback/",
     expect.objectContaining({ params: expect.objectContaining({ q: "upload" }) })
+  );
+});
+
+it("我的反馈日期筛选支持任意、预设与自定义区间", async () => {
+  await open();
+  await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(2)')?.click());
+  const preset = container.querySelector<HTMLSelectElement>('select[aria-label="反馈日期范围"]');
+  if (!preset) throw new Error("反馈日期范围未显示");
+  expect(container.querySelector('input[aria-label="反馈开始日期"]')).toBeNull();
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(preset, "7");
+    preset.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(mocks.get).toHaveBeenLastCalledWith(
+    "/api/research/workspaces/lab/feedback/",
+    expect.objectContaining({
+      params: expect.objectContaining({ date_from: localDate(-6), date_to: localDate(0), page: "1" }),
+    })
+  );
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(preset, "custom");
+    preset.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const start = container.querySelector<HTMLInputElement>('input[aria-label="反馈开始日期"]');
+  const end = container.querySelector<HTMLInputElement>('input[aria-label="反馈结束日期"]');
+  if (!start || !end) throw new Error("自定义日期区间未显示");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(start, "2026-10-01");
+    start.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(end, "2026-10-08");
+    end.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(mocks.get).toHaveBeenLastCalledWith(
+    "/api/research/workspaces/lab/feedback/",
+    expect.objectContaining({
+      params: expect.objectContaining({ date_from: "2026-10-01", date_to: "2026-10-08" }),
+    })
   );
 });
 
@@ -360,6 +415,9 @@ it("主 PI 进入管理视图，使用管理范围读取并更新状态", async 
     updated_at: "2026-10-08T02:00:00Z",
   });
   await renderManagementPage();
+  expect(container.querySelector("h1")?.textContent).toBe("反馈管理");
+  expect(container.querySelector('[role="tablist"]')).toBeNull();
+  expect(container.textContent).toContain("选择左侧任意反馈后");
   expect(mocks.get).toHaveBeenCalledWith(
     "/api/research/workspaces/lab/feedback/",
     expect.objectContaining({ params: expect.objectContaining({ scope: "manage" }) })

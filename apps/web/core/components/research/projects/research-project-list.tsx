@@ -91,6 +91,14 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const canCreateProject = Boolean(
     currentUserId && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
   );
+  const shouldAutoOpenCreate = query.get("create") === "1";
+  useEffect(() => {
+    if (!shouldAutoOpenCreate) return;
+    if (canCreateProject) setIsCreateDialogOpen(true);
+    query.set("create", "");
+    // The query helper is stable for this URL state and is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCreateProject, shouldAutoOpenCreate]);
   const isTeamProject = researchType === "RESEARCH_PROJECT";
   const requiresOrgUnit = !isTeamProject || !research.isWorkspaceAdmin;
   const hasActiveFilters = Boolean(
@@ -254,14 +262,6 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
           {t(errorKey)}
-        </div>
-      )}
-
-      {canCreateProject && (
-        <div className="flex justify-end">
-          <Button variant="primary" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-            {t("research.projects.create")}
-          </Button>
         </div>
       )}
 

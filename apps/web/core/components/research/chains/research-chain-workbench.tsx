@@ -8,8 +8,10 @@ import { observer } from "mobx-react";
 import { useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
 // components
+import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
 import { ResearchProjectList } from "@/components/research/projects/research-project-list";
@@ -32,6 +34,7 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
   const { t } = useTranslation();
   const research = useResearch();
   const { data: currentUser } = useUser();
+  const query = useResearchBrowseQuery();
   const [searchParams] = useSearchParams();
   const requestedView = searchParams.get("view") as ChainView | null;
 
@@ -46,22 +49,37 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
     requestedView && (requestedView === "outcomes" || views.some((view) => view.id === requestedView))
       ? requestedView
       : "chains";
+  const canCreateProject = Boolean(
+    currentUser?.id && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <nav aria-label={t("research.nav.research_chain_v2")} className="overflow-x-auto border-b border-subtle px-5">
-        <TabNavigationList className="py-2">
-          {views.map((view) => (
-            <ResearchTabLink
-              key={view.id}
-              href={`/${workspaceSlug}/research/chains${view.id === "chains" ? "" : `?view=${view.id}`}`}
-              isActive={view.id === activeView}
-            >
-              {t(view.labelKey)}
-            </ResearchTabLink>
-          ))}
-        </TabNavigationList>
-      </nav>
+      <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-5">
+        <nav aria-label={t("research.nav.research_chain_v2")} className="min-w-0 flex-1 overflow-x-auto">
+          <TabNavigationList className="py-2">
+            {views.map((view) => (
+              <ResearchTabLink
+                key={view.id}
+                href={`/${workspaceSlug}/research/chains${view.id === "chains" ? "" : `?view=${view.id}`}`}
+                isActive={view.id === activeView}
+              >
+                {t(view.labelKey)}
+              </ResearchTabLink>
+            ))}
+          </TabNavigationList>
+        </nav>
+        {canCreateProject && (activeView === "chains" || activeView === "projects") && (
+          <Button
+            variant="primary"
+            size="sm"
+            className="shrink-0"
+            onClick={() => query.patch({ view: "projects", create: "1" }, false)}
+          >
+            {t("research.projects.create")}
+          </Button>
+        )}
+      </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeView === "chains" && <ResearchChainBoard workspaceSlug={workspaceSlug} />}
         {activeView === "projects" && (
