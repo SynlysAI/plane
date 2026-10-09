@@ -151,7 +151,7 @@ Phase 1.6 不推翻现有四入口结构，不改变科研链 Workflow Rail、�
 
 ## 6. HTML 原型要求
 
-Phase 1.6 交付一个自包含静态原型：`docs/product/prototypes/phase-1.6-research-space.html`。
+Phase 1.6 交付一个自包含静态原型：[`phase-1.6-research-space.html`](prototypes/phase-1.6-research-space.html)。
 
 原型必须可直接用浏览器打开，不依赖后端、构建工具或外部网络，并按三大主轴组织：
 
