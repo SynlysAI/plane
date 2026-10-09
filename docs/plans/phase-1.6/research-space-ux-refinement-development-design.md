@@ -2,10 +2,10 @@
 
 | 项目     | 内容                                                                                                                                |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.4                                                                                                                                |
-| 状态     | 设计复核修订版；补齐科研/行政指派下拉、编辑器合同、偏差提醒边界和目标对照验收                                                       |
+| 文档版本 | v1.5                                                                                                                                |
+| 状态     | 设计复核修订版；增加 Tower 式统一待办入口、范围切换和业务状态映射                                                                   |
 | 日期     | 2026-10-10                                                                                                                          |
-| 代码基线 | Plane `develop` / `4.23.2`                                                                                                          |
+| 代码基线 | Plane `develop` / `4.23.3`                                                                                                          |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                    |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 | 视觉规范 | [Research Workspace UX 指南](../../product/research-workspace-ux-guide.md) 与 Academic Editorial UI                                 |
@@ -239,6 +239,25 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 | 论文版本待评审 | Review WAITING_REVIEW 且我可评审          | 论文评审详情 / `PAPER_WRITING` 节点 |
 | 论文修改       | Review NEEDS_REVISION 且我是 owner        | 论文评审详情                        |
 
+### 5.4 统一待办入口
+
+首页“待办与动态”和审批中心的待处理队列消费同一 `research-todo.v2` 投影。原型和后续实现都提供三个范围：`我可处理`、`我发起`、`全部可见`。每行固定展示：来源、标题/上下文、发起人、当前负责人、业务状态、统一处理状态、下一步、截止时间和“打开上下文”动作。
+
+交互遵循 Tower 式任务处理节奏：先明确当前负责人，再打开业务对象处理；不在待办列表内复制正文编辑器或领域表单。对周报，待阅读是一个动作，接受/退回是另一个动作；对任务和论文，重新提交后原待办关闭并生成新的处理待办，使用稳定 `todo.id` 关联历史。
+
+统一列表行的动作来源于服务端 `capabilities`：
+
+| 统一动作 | 领域动作                                                        |
+| -------- | --------------------------------------------------------------- |
+| 查看     | 各对象 detail API                                               |
+| 阅读     | 报告 read receipt                                               |
+| 提交     | 节点任务 submit / 论文版本 submit / 报告 submit                 |
+| 评审     | StageReview / PaperReview / Report review                       |
+| 退回     | task return / report return / paper return / approval reject    |
+| 完成     | task complete / report accept / paper accept / approval approve |
+
+列表只负责导航和刷新。成功后重新拉取投影；冲突时保留原行并显示“状态已变化，请刷新”，不在前端自行推进状态。
+
 ## 6. 编辑器与通知
 
 ### 6.1 编辑器
@@ -284,6 +303,7 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 | `ResearchPaperReviewPanel` | research/chains  | 论文版本、修改说明、评论串和最终确认       |
 | `ResearchReportReadState`  | research/reports | 已读回执和待阅读状态                       |
 | `ResearchAssigneeSelect`   | research/common  | 消费 assignable-users API，不提供全库搜索  |
+| `ResearchTodoEnvelopeList` | research/common  | 统一待办范围、来源、负责人、状态和动作入口 |
 
 必须复用：
 
@@ -989,6 +1009,25 @@ research.todo.urgency.overdue
 research.todo.urgency.today
 research.todo.urgency.soon
 research.todo.urgency.normal
+research.todo.scope.to_me
+research.todo.scope.mine
+research.todo.scope.visible
+research.todo.requester
+research.todo.assignees
+research.todo.business_status
+research.todo.handling_status
+research.todo.next_action
+research.todo.source.chain_task
+research.todo.source.paper_review
+research.todo.source.stage_review
+research.todo.source.agent_approval
+research.todo.source.office_approval
+research.todo.action.read
+research.todo.action.submit
+research.todo.action.review
+research.todo.action.return
+research.todo.action.complete
+research.todo.conflict
 
 workspace.nav.research_projects
 workspace.nav.administrative_projects

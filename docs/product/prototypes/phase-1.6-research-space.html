@@ -1134,6 +1134,14 @@
         color: var(--danger);
       }
 
+      .todo-envelope {
+        margin-bottom: 14px;
+      }
+
+      .todo-envelope tbody tr[data-todo-hidden="true"] {
+        display: none;
+      }
+
       .mobile-overlay {
         display: none;
         position: fixed;
@@ -1507,7 +1515,7 @@
                           <h2 class="surface-title">跨组件待办</h2>
                           <p class="surface-hint">按阻断、待确认、提醒和同步状态排序。</p>
                         </div>
-                        <button class="button" type="button">刷新待办</button>
+                        <button class="button" type="button" data-nav="approvals">打开统一待办</button>
                       </div>
                       <ul class="todo-list" id="overview-todos"></ul>
                     </article>
@@ -2882,6 +2890,90 @@
               </nav>
               <div class="page-content">
                 <div class="content-pad">
+                  <article class="surface todo-envelope" aria-labelledby="todo-envelope-title">
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title" id="todo-envelope-title">统一待办</h2>
+                        <p class="surface-hint">Tower 式处理入口：业务对象保持独立，当前处理人和下一步动作统一展示。</p>
+                      </div>
+                      <div class="page-actions">
+                        <select class="control fixed" id="todo-scope" aria-label="待办范围">
+                          <option value="to_me">我可处理</option>
+                          <option value="mine">我发起</option>
+                          <option value="visible">全部可见</option>
+                        </select>
+                        <button class="button" type="button" id="todo-refresh">刷新</button>
+                      </div>
+                    </div>
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>来源 / 事项</th>
+                            <th>发起人</th>
+                            <th>当前负责人</th>
+                            <th>业务状态</th>
+                            <th>处理状态</th>
+                            <th>下一步</th>
+                            <th>截止</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody id="todo-envelope-rows">
+                          <tr>
+                            <td class="cell-primary">节点任务 · 补充第 3 节对照说明<div class="cell-subtle">分子界面稳定性研究 / 论文写作</div></td>
+                            <td>导师 A</td>
+                            <td>学生 A</td>
+                            <td><span class="badge accent">SUBMITTED</span></td>
+                            <td><span class="badge danger">待处理</span></td>
+                            <td>退回或完成</td>
+                            <td><span class="urgent">今天 18:00</span></td>
+                            <td><button class="button ghost" type="button" data-nav="chain-detail">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">周报 · 2026-W41<div class="cell-subtle">科研项目 / 报告审核</div></td>
+                            <td>学生 B</td>
+                            <td>导师 A</td>
+                            <td><span class="badge accent">SUBMITTED</span></td>
+                            <td><span class="badge danger">待阅读</span></td>
+                            <td>阅读并审阅</td>
+                            <td><span class="urgent">今天 18:00</span></td>
+                            <td><button class="button ghost" type="button" data-nav="report">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">论文评审 · v2<div class="cell-subtle">分子界面稳定性研究 / PAPER_WRITING</div></td>
+                            <td>学生 A</td>
+                            <td>导师 A</td>
+                            <td><span class="badge accent">WAITING_REVIEW</span></td>
+                            <td><span class="badge">待评审</span></td>
+                            <td>评论、退回或接受</td>
+                            <td>明天 12:00</td>
+                            <td><button class="button ghost" type="button" data-nav="chain-detail">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">阶段评审 · 中期检查材料<div class="cell-subtle">导电聚合物界面调控 / MIDTERM</div></td>
+                            <td>学生 B</td>
+                            <td>PI A（必评人）</td>
+                            <td><span class="badge accent">SUBMITTED</span></td>
+                            <td><span class="badge">待确认</span></td>
+                            <td>提交评审意见</td>
+                            <td>10-14</td>
+                            <td><button class="button ghost" type="button" data-approval-tab="stage">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">办公审批 · 实验耗材季度采购<div class="cell-subtle">行政项目 / 报价确认</div></td>
+                            <td>管理员 A</td>
+                            <td>PI A（当前步骤）</td>
+                            <td><span class="badge danger">PENDING</span></td>
+                            <td><span class="badge danger">待审批</span></td>
+                            <td>批准或驳回</td>
+                            <td><span class="urgent">已逾期 1 天</span></td>
+                            <td><button class="button ghost" type="button" data-approval-tab="office">打开上下文</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
                   <div class="filter-bar" aria-label="审批队列筛选">
                     <select class="control fixed" aria-label="队列范围">
                       <option>我可处理</option>
@@ -4013,6 +4105,25 @@
 
       bindAssignmentForm("research-assignment-form", "research-assignment-status", "科研任务责任人已更新");
       bindAssignmentForm("administrative-assignment-form", "administrative-assignment-status", "行政项目负责人已更新");
+
+      const todoScope = document.getElementById("todo-scope");
+      const todoRows = Array.from(document.querySelectorAll("#todo-envelope-rows tr"));
+      const todoRefresh = document.getElementById("todo-refresh");
+      function renderTodoScope() {
+        const scope = todoScope?.value ?? "to_me";
+        todoRows.forEach((row, index) => {
+          const shouldHide = scope === "mine" ? index === 1 || index === 3 || index === 4 : false;
+          row.dataset.todoHidden = String(shouldHide);
+        });
+      }
+      todoScope?.addEventListener("change", renderTodoScope);
+      todoRefresh?.addEventListener("click", () => {
+        if (todoRefresh) todoRefresh.textContent = "已刷新";
+        window.setTimeout(() => {
+          if (todoRefresh) todoRefresh.textContent = "刷新";
+        }, 900);
+      });
+      renderTodoScope();
 
       document.getElementById("menu-button").addEventListener("click", () => {
         const isOpen = document.body.classList.toggle("sidebar-open");

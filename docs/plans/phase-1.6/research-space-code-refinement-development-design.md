@@ -2,10 +2,10 @@
 
 | 项目     | 内容                                                                                                                             |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.1                                                                                                                             |
-| 状态     | 设计复核修订版；补齐目标对照、双指派接口隔离和后续偏差提醒边界                                                                   |
+| 文档版本 | v1.2                                                                                                                             |
+| 状态     | 设计复核修订版；增加统一待办投影边界，避免前端扇出与领域状态机重复实现                                                           |
 | 日期     | 2026-10-09                                                                                                                       |
-| 代码基线 | Plane `develop` / `4.23.2`                                                                                                       |
+| 代码基线 | Plane `develop` / `4.23.3`                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                 |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[UX 精炼设计](research-space-ux-refinement-development-design.md) |
 
@@ -179,6 +179,14 @@ research-paper-review-panel.tsx  # 论文评审
 
 偏差提醒属于后续独立能力：只允许消费课题目标和节点证据生成草稿风险提示，不能把模型输出塞进任务、审批或正式 Chain Event；本阶段只保留类型和路由预留，不提前清理现有 Agent / Trace 入口。
 
+### 3.5 统一待办的代码边界
+
+`collectResearchTodos` 当前是前端跨服务聚合，且会对课题、节点和上传状态产生扇出请求。后续只增加一个服务端只读 `research-todos` 聚合接口和一个前端 `ResearchTodoEnvelopeList`，不新建统一业务任务模型、不把领域状态转换逻辑搬到前端。
+
+聚合器只负责 ACL 过滤、统一字段投影、稳定去重 ID、范围筛选、排序和 cursor。任务、报告、论文、阶段评审、Agent、办公审批各自的动作仍保留在原 service / endpoint；列表点击动作后回到领域页面，成功后刷新投影。`business_status` 必须来自原对象，`handling_status` 只能是展示派生值。
+
+前端替换顺序为：先保留 `collectResearchTodos` 作为降级路径，再接入服务端聚合；服务端稳定后才删除重复的前端扇出。删除前必须保留无网络、部分来源失败和旧路由兼容测试。
+
 ## 4. 清理切片
 
 ### C0：建立可重复引用审计
@@ -265,6 +273,7 @@ research-paper-review-panel.tsx  # 论文评审
 - 不用注释掉的代码保留废弃实现。
 - 不引入新的通用 EventBus、状态管理或配置驱动表单。
 - 不把科研候选人接口改造成行政项目成员接口，也不把行政 ProjectMember 当成科研组织继承的替代来源。
+- 不把统一待办投影当作新的写入口，不在 `ResearchTodoEnvelopeList` 内复制任务、报告或审批状态机。
 - 不一次性格式化无关文件。
 - 不为了通过 lint 而放宽全局 warning 阈值。
 

@@ -2,10 +2,10 @@
 
 | 项目     | 内容                                                                                                                                    |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.1                                                                                                                                    |
-| 状态     | 设计复核修订版；补齐科研/行政双通道指派边界、初始目标闭环和偏差提醒后续合同                                                             |
+| 文档版本 | v1.2                                                                                                                                    |
+| 状态     | 设计复核修订版；增加 Tower 式待办信封映射，保留业务对象独立模型与状态机                                                                 |
 | 日期     | 2026-10-09                                                                                                                              |
-| 代码基线 | Plane `develop` / `4.23.2`                                                                                                              |
+| 代码基线 | Plane `develop` / `4.23.3`                                                                                                              |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                        |
 | 关联设计 | [UX 精炼设计](research-space-ux-refinement-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 
@@ -228,6 +228,22 @@ Agent 契约：
 Workspace Admin 只获得管理和审计入口，不因技术身份自动获得上述科研评审动作。
 
 ## 7. API 设计
+
+### 7.0 统一待办投影（只读）
+
+统一待办不是新的业务写模型，而是对现有任务、报告、论文评审、阶段评审、Agent 审批和办公审批的服务端投影：
+
+```http
+GET /api/research/workspaces/{slug}/research-todos/?scope=to_me|mine|visible&limit=50&cursor=...
+```
+
+响应 `research-todo.v2` 的每条记录至少包含 `id/source/object_id/title/context/requester/assignees/business_status/handling_status/next_action/due_at/href/capabilities/trace_ref/updated_at`。服务端先按各业务对象原有 ACL 和 capability 过滤，再投影；不得由前端角色名称推断候选或动作。
+
+`scope=to_me` 只返回当前用户有可执行动作的事项；`scope=mine` 返回当前用户发起或提交的事项及当前处理人；`scope=visible` 返回 ACL 可见事项。投影只读、无副作用，不产生 Event/Audit/Notification。
+
+映射规则：节点任务使用任务状态和 assignee；周报使用 `PeriodicReport.status`、报告 reviewer capability 和已读回执；论文评审使用 review status/final reviewer；阶段评审使用 `StageReviewerAssignment` + 未完成 `StageReview`；Agent/办公审批分别使用现有 approval 查询。每条映射都保留 `business_status`，`handling_status` 只用于统一展示，不写回业务对象。
+
+动作继续调用领域 API：任务 submit/return/complete、报告 read/return/accept、论文 version/return/accept、阶段 review/revise、Agent approval、办公 ApprovalAction。聚合接口不得成为旁路写入口。
 
 所有新 API 挂在现有 `/api/research/` 命名空间，使用现有成功 / 错误 envelope，并受 `research_chain_enabled` 和现有 nav capability 约束。
 
@@ -895,6 +911,9 @@ Root
 - 行政 `ApprovalRequest` 不生成 Chain Event。
 - 行政 Project 负责人下拉只返回有效 `ProjectMember`；组织祖先成员未加入项目时不可指派；跨组织成员加入项目后才出现；Workspace Admin 未加入项目时不可指派。
 - 科研 `assignable-users` 与行政项目成员接口返回集合不同，前端不会以一个全局成员接口替代二者。
+- `research-todos` 三个 scope 的 ACL、动作 capability、去重 ID、排序和 cursor 稳定；同一业务对象不会因首页/审批中心重复生成不同待办。
+- `requester`、`assignees`、`business_status`、`handling_status` 和 `next_action` 在任务、周报、论文、阶段评审、Agent、办公审批六类样例中均有可审计来源。
+- 待办动作成功、领域状态冲突、权限拒绝和外部降级均返回可恢复的统一 envelope；聚合接口不改变领域状态。
 
 ### 11.9 服务端待办聚合 API
 
