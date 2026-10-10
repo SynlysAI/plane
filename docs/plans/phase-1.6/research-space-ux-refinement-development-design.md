@@ -5,7 +5,7 @@
 | 文档版本 | v1.5                                                                                                                                |
 | 状态     | 设计复核修订版；增加 Tower 式统一待办入口、范围切换和业务状态映射                                                                   |
 | 日期     | 2026-10-10                                                                                                                          |
-| 代码基线 | Plane `develop` / `4.23.3`                                                                                                          |
+| 代码基线 | Plane `develop` / `4.24.0`                                                                                                          |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                    |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 | 视觉规范 | [Research Workspace UX 指南](../../product/research-workspace-ux-guide.md) 与 Academic Editorial UI                                 |
@@ -257,6 +257,14 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 | 完成     | task complete / report accept / paper accept / approval approve |
 
 列表只负责导航和刷新。成功后重新拉取投影；冲突时保留原行并显示“状态已变化，请刷新”，不在前端自行推进状态。
+
+### 5.5 分类导航交互
+
+生产侧栏复用现有 `ResearchSidebarItems` 和 Plane `SidebarNavItem`，在科研项目与行政项目入口下渲染独立 `ResearchProjectTree`。树节点包含入口、分类、子分类、项目和“未分类”区域；每个入口与分类节点使用独立 Disclosure 状态，状态保存于当前用户浏览器的导航偏好键。
+
+科研项目分类树消费 `RESEARCH` scope：组织组别来自真实 `ResearchProjectProfile.org_unit`/组织 API，自定义分类来自导航 API；行政项目树只消费 `ADMINISTRATIVE` scope。树只渲染 API 返回的有权项目，项目链接继续指向现有科研 Chain 或普通 Project 详情。
+
+分类菜单按 capability 显示新建子分类、重命名、排序、移动和删除。删除动作必须打开迁移目标确认；无目标时展示服务端 `navigation_category_not_empty`，不隐藏项目。侧栏容器设置最大高度和内部滚动，长名称截断，展开按钮与项目链接可键盘访问。
 
 ## 6. 编辑器与通知
 

@@ -5,7 +5,7 @@
 | 文档版本 | v1.2                                                                                                                                    |
 | 状态     | 设计复核修订版；增加 Tower 式待办信封映射，保留业务对象独立模型与状态机                                                                 |
 | 日期     | 2026-10-09                                                                                                                              |
-| 代码基线 | Plane `develop` / `4.23.3`                                                                                                              |
+| 代码基线 | Plane `develop` / `4.24.0`                                                                                                              |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                        |
 | 关联设计 | [UX 精炼设计](research-space-ux-refinement-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 
@@ -228,6 +228,22 @@ Agent 契约：
 Workspace Admin 只获得管理和审计入口，不因技术身份自动获得上述科研评审动作。
 
 ## 7. API 设计
+
+### 7.0.1 项目分类导航
+
+新增 `ProjectNavigationCategory` 与 `Project.navigation_category` 仅承载导航关系。`RESEARCH` scope 的项目集合来自现有科研 Profile/ACL，`ADMINISTRATIVE` scope 排除科研 Profile 并沿用普通 Project 可见性。分类写权限由 Workspace Admin 或现有科研管理权限判定；移动项目还需校验目标 scope，分类不改变 ProjectMember 或对象 ACL。
+
+接口：
+
+```text
+GET    /research/workspaces/{slug}/navigation/categories/?scope=RESEARCH|ADMINISTRATIVE
+POST   /research/workspaces/{slug}/navigation/categories/
+PATCH  /research/workspaces/{slug}/navigation/categories/{category_id}/
+DELETE /research/workspaces/{slug}/navigation/categories/{category_id}/?move_to=uncategorized|{category_id}
+POST   /research/workspaces/{slug}/navigation/projects/{project_id}/move/
+```
+
+服务端限制分类最多 3 层，删除非空分类必须指定同 scope 目标；空 category 表示未分类。响应树同时返回 `categories`、`children`、`projects` 和 `uncategorized`，项目使用稳定 ID 和现有详情路由。
 
 ### 7.0 统一待办投影（只读）
 
@@ -914,6 +930,7 @@ Root
 - `research-todos` 三个 scope 的 ACL、动作 capability、去重 ID、排序和 cursor 稳定；同一业务对象不会因首页/审批中心重复生成不同待办。
 - `requester`、`assignees`、`business_status`、`handling_status` 和 `next_action` 在任务、周报、论文、阶段评审、Agent、办公审批六类样例中均有可审计来源。
 - 待办动作成功、领域状态冲突、权限拒绝和外部降级均返回可恢复的统一 envelope；聚合接口不改变领域状态。
+- 分类 API 覆盖：科研/行政 scope 隔离、祖先环路拒绝、深度限制、非空删除迁移、未分类项目、越权写入拒绝和移动后项目 ACL 不变。
 
 ### 11.9 服务端待办聚合 API
 

@@ -288,6 +288,48 @@
         font-size: 12px;
       }
 
+      .nav-category-header {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 26px;
+        padding: 4px 7px 2px 5px;
+        color: var(--secondary);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .nav-category-header.muted {
+        color: var(--tertiary);
+        font-weight: 500;
+      }
+
+      .tree-chevron {
+        width: 10px;
+        color: var(--tertiary);
+        text-align: center;
+      }
+
+      .tree-menu {
+        margin-left: auto;
+        border: 0;
+        background: transparent;
+        color: var(--tertiary);
+        cursor: pointer;
+        opacity: 0;
+      }
+
+      .nav-category-header:hover .tree-menu,
+      .tree-menu:focus-visible {
+        opacity: 1;
+      }
+
+      .nav-category-empty {
+        padding: 2px 8px 5px 20px;
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
       .sidebar-foot {
         display: flex;
         align-items: center;
@@ -1338,6 +1380,7 @@
                   <span class="dot"></span>科研项目
                 </button>
                 <ul class="nav-subgroup" aria-label="科研项目列表">
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>分子材料组</span><button class="tree-menu" type="button" aria-label="管理分子材料组">⋯</button></li>
                   <li>
                     <button
                       class="nav-item"
@@ -1366,6 +1409,11 @@
                       <span class="dot"></span>催化剂界面失活机理研究
                     </button>
                   </li>
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>电池材料组</span><button class="tree-menu" type="button" aria-label="管理电池材料组">⋯</button></li>
+                  <li><button class="nav-item" type="button" data-nav="chains"><span class="dot"></span>电解液体系优化</button></li>
+                  <li class="nav-category-header"><span class="tree-chevron">›</span><span>自定义分类</span><button class="tree-menu" type="button" aria-label="管理自定义分类">⋯</button></li>
+                  <li class="nav-category-empty">暂无展开项目</li>
+                  <li class="nav-category-header muted"><span class="tree-chevron">⌄</span><span>未分类</span></li>
                 </ul>
               </li>
               <li>
@@ -1373,6 +1421,7 @@
                   <span class="dot"></span>行政项目
                 </button>
                 <ul class="nav-subgroup" aria-label="行政项目列表">
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>采购与资产</span><button class="tree-menu" type="button" aria-label="管理采购与资产">⋯</button></li>
                   <li>
                     <button
                       class="nav-item"
@@ -1384,6 +1433,7 @@
                       <span class="dot"></span>设备采购协作
                     </button>
                   </li>
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>财务与报销</span><button class="tree-menu" type="button" aria-label="管理财务与报销">⋯</button></li>
                   <li>
                     <button
                       class="nav-item"
@@ -1395,6 +1445,7 @@
                       <span class="dot"></span>报销与用章流程
                     </button>
                   </li>
+                  <li class="nav-category-header muted"><span class="tree-chevron">⌄</span><span>未分类</span></li>
                 </ul>
               </li>
             </ul>

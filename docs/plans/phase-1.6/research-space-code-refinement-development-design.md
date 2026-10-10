@@ -5,7 +5,7 @@
 | 文档版本 | v1.2                                                                                                                             |
 | 状态     | 设计复核修订版；增加统一待办投影边界，避免前端扇出与领域状态机重复实现                                                           |
 | 日期     | 2026-10-09                                                                                                                       |
-| 代码基线 | Plane `develop` / `4.23.3`                                                                                                       |
+| 代码基线 | Plane `develop` / `4.24.0`                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                 |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[UX 精炼设计](research-space-ux-refinement-development-design.md) |
 
@@ -186,6 +186,12 @@ research-paper-review-panel.tsx  # 论文评审
 聚合器只负责 ACL 过滤、统一字段投影、稳定去重 ID、范围筛选、排序和 cursor。任务、报告、论文、阶段评审、Agent、办公审批各自的动作仍保留在原 service / endpoint；列表点击动作后回到领域页面，成功后刷新投影。`business_status` 必须来自原对象，`handling_status` 只能是展示派生值。
 
 前端替换顺序为：先保留 `collectResearchTodos` 作为降级路径，再接入服务端聚合；服务端稳定后才删除重复的前端扇出。删除前必须保留无网络、部分来源失败和旧路由兼容测试。
+
+### 3.6 分类导航代码边界
+
+分类数据单独放在 research navigation model/service 中，不修改 `OrgUnit` 的权限语义，也不向普通 Project 列表注入科研分类字段。科研与行政分别请求 `scope`，共享树渲染组件但不共享分类数据。分类写 API 统一走服务端 workspace/research admin 判权，前端隐藏按钮只改善体验，不作为安全边界。
+
+实现顺序：迁移与 API → 分类树只读渲染 → 移动/管理菜单 → 分类写入测试 → 删除旧固定项目子项。旧路由、项目详情、ProjectMember 和 `visible_profile_queryset` 必须保留；分类为空或接口降级时回退到未分类/原项目入口。
 
 ## 4. 清理切片
 
