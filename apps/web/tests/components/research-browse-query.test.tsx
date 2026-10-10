@@ -3,7 +3,11 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
+import {
+  researchBrowseRequestParams,
+  researchFilterSummary,
+  useResearchBrowseQuery,
+} from "@/components/research/common/browse-query";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
@@ -113,4 +117,56 @@ it("通过保存 URL 重新挂载页面恢复组合筛选与分页", async () =>
   expect(url().get("org_unit")).toBe("group-a");
   expect(url().get("date_from")).toBe("2026-10-01");
   expect(url().get("date_to")).toBe("2026-10-08");
+});
+
+it("统一组装科研浏览共同请求参数并保留领域参数", () => {
+  expect(
+    researchBrowseRequestParams(
+      {
+        org_unit: "org-1",
+        owner: " user-1 ",
+        date_from: "2026-10-01",
+        date_to: "2026-10-08",
+        q: "graphite",
+        scope: "owned",
+        cursor: "cursor-1",
+      },
+      {
+        workflow_status: "ACTIVE",
+        report_type: undefined,
+      }
+    )
+  ).toEqual({
+    per_page: "50",
+    org_unit: "org-1",
+    owner: "user-1",
+    date_from: "2026-10-01",
+    date_to: "2026-10-08",
+    q: "graphite",
+    scope: "owned",
+    cursor: "cursor-1",
+    workflow_status: "ACTIVE",
+  });
+});
+
+it("科研浏览请求参数兼容 mine 旧链接并区分 scope", () => {
+  expect(researchBrowseRequestParams({ mine: "true" }, {})).toEqual({
+    per_page: "50",
+    mine: "true",
+  });
+  expect(researchBrowseRequestParams({ scope: "mine", mine: "true" }, {})).toEqual({
+    per_page: "50",
+    scope: "mine",
+  });
+  expect(researchBrowseRequestParams({ scope: "all", cursor: "cursor-1" }, {})).toEqual({
+    per_page: "50",
+    cursor: "cursor-1",
+  });
+});
+
+it("筛选摘要剔除空值并保留有效文本", () => {
+  expect(researchFilterSummary(["进行中", false, null, undefined, "", "负责人：用户一"])).toEqual([
+    "进行中",
+    "负责人：用户一",
+  ]);
 });

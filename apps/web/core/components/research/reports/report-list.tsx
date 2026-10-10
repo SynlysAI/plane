@@ -19,7 +19,11 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
 import { WorkspaceOutcomes } from "@/components/research/outcomes/workspace-outcomes";
-import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
+import {
+  researchBrowseRequestParams,
+  researchFilterSummary,
+  useResearchBrowseQuery,
+} from "@/components/research/common/browse-query";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -56,7 +60,8 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const setTypeFilter = (value: string) => query.set("report_type", value);
   const periodFilter = query.get("period_key");
   const setPeriodFilter = (value: string) => query.set("period_key", value);
-  const mineOnly = query.get("scope") === "mine" || query.get("mine") === "true";
+  const mineFilter = query.get("mine");
+  const mineOnly = query.get("scope") === "mine" || mineFilter === "true";
   const orgFilter = query.get("org_unit");
   const setOrgFilter = (value: string) => query.set("org_unit", value);
   const ownerFilter = query.get("owner");
@@ -96,7 +101,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   );
   const filterSummary = useMemo(
     () =>
-      [
+      researchFilterSummary([
         statusFilter && t(REPORT_STATUS_LABELS[statusFilter as TReportStatus]),
         typeFilter && t(REPORT_TYPE_LABELS[typeFilter as TReportType]),
         periodFilter.trim(),
@@ -105,23 +110,28 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         dateFrom && `${t("research.common.date_from")}: ${dateFrom}`,
         dateTo && `${t("research.common.date_to")}: ${dateTo}`,
         mineOnly && t("research.reports.mine_only"),
-      ].filter((filter): filter is string => typeof filter === "string" && filter.length > 0),
+      ]),
     [dateFrom, dateTo, mineOnly, orgFilter, orgUnits, ownerFilter, periodFilter, statusFilter, t, typeFilter]
   );
 
   const load = useCallback(async () => {
-    const params: Record<string, string> = { per_page: "50" };
-    if (statusFilter) params.status = statusFilter;
-    if (typeFilter) params.report_type = typeFilter;
-    if (periodFilter) params.period_key = periodFilter.trim();
-    if (mineOnly) params.mine = "true";
-    if (orgFilter) params.org_unit = orgFilter;
-    if (ownerFilter) params.owner = ownerFilter.trim();
-    if (dateFrom) params.date_from = dateFrom;
-    if (dateTo) params.date_to = dateTo;
-    if (cursor) params.cursor = cursor;
-    if (keyword) params.q = keyword;
-    params.scope = scope;
+    const params = researchBrowseRequestParams(
+      {
+        org_unit: orgFilter,
+        owner: ownerFilter,
+        date_from: dateFrom,
+        date_to: dateTo,
+        q: keyword,
+        scope,
+        mine: mineFilter,
+        cursor,
+      },
+      {
+        status: statusFilter,
+        report_type: typeFilter,
+        period_key: periodFilter.trim(),
+      }
+    );
     try {
       await research.fetchReports(workspaceSlug, params);
       setErrorKey(null);
@@ -132,7 +142,6 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     cursor,
     dateFrom,
     dateTo,
-    mineOnly,
     orgFilter,
     ownerFilter,
     periodFilter,
@@ -141,6 +150,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     typeFilter,
     workspaceSlug,
     keyword,
+    mineFilter,
     scope,
   ]);
 
@@ -159,6 +169,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     dateTo,
     cursor,
     keyword,
+    mineFilter,
     scope,
   ]);
 

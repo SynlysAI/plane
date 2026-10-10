@@ -18,7 +18,11 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TResearchProject } from "@/services/research/project.service";
 import { AlertModalCore, EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
-import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
+import {
+  researchBrowseRequestParams,
+  researchFilterSummary,
+  useResearchBrowseQuery,
+} from "@/components/research/common/browse-query";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -62,6 +66,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const dateTo = query.get("date_to");
   const keyword = query.get("q");
   const scope = query.get("scope", "all");
+  const mineFilter = query.get("mine");
   const cursor = query.get("cursor");
   const setCursor = (value: string) => query.set("cursor", value);
   const [pendingProjectAction, setPendingProjectAction] = useState<{
@@ -114,28 +119,34 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
 
   const filterSummary = useMemo(
     () =>
-      [
+      researchFilterSummary([
         typeFilter && t(RESEARCH_PROJECT_TYPE_LABELS[typeFilter as TResearchProjectType]),
         orgFilter && orgUnits.find((unit) => unit.id === orgFilter)?.name,
         ownerFilter.trim(),
         dateFrom && `${t("research.common.date_from")}: ${dateFrom}`,
         dateTo && `${t("research.common.date_to")}: ${dateTo}`,
         statusFilter && t(RESEARCH_PROJECT_STATUS_LABELS[statusFilter as keyof typeof RESEARCH_PROJECT_STATUS_LABELS]),
-      ].filter((filter): filter is string => typeof filter === "string" && filter.length > 0),
+      ]),
     [dateFrom, dateTo, orgFilter, orgUnits, ownerFilter, statusFilter, t, typeFilter]
   );
 
   const load = useCallback(async () => {
-    const params: Record<string, string> = { per_page: "50" };
-    if (statusFilter) params.workflow_status = statusFilter;
-    if (typeFilter) params.research_type = typeFilter;
-    if (orgFilter) params.org_unit = orgFilter;
-    if (ownerFilter) params.owner = ownerFilter.trim();
-    if (dateFrom) params.date_from = dateFrom;
-    if (dateTo) params.date_to = dateTo;
-    if (cursor) params.cursor = cursor;
-    if (keyword) params.q = keyword;
-    params.scope = scope;
+    const params = researchBrowseRequestParams(
+      {
+        org_unit: orgFilter,
+        owner: ownerFilter,
+        date_from: dateFrom,
+        date_to: dateTo,
+        q: keyword,
+        scope,
+        mine: mineFilter,
+        cursor,
+      },
+      {
+        workflow_status: statusFilter,
+        research_type: typeFilter,
+      }
+    );
     try {
       await research.fetchResearchProjects(workspaceSlug, params);
       setErrorKey(null);
@@ -153,13 +164,26 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     typeFilter,
     workspaceSlug,
     keyword,
+    mineFilter,
     scope,
   ]);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceSlug, statusFilter, typeFilter, orgFilter, ownerFilter, dateFrom, dateTo, cursor, keyword, scope]);
+  }, [
+    workspaceSlug,
+    statusFilter,
+    typeFilter,
+    orgFilter,
+    ownerFilter,
+    dateFrom,
+    dateTo,
+    cursor,
+    keyword,
+    mineFilter,
+    scope,
+  ]);
 
   useEffect(() => {
     void research.fetchOrgUnits(workspaceSlug).catch(() => undefined);

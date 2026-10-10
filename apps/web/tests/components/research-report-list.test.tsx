@@ -91,6 +91,9 @@ vi.mock("@/hooks/store/use-research", () => ({
 const { ResearchReportList } = await import("@/components/research/reports/report-list");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
+/** Render the report list with its default test props. */
+const ReportScopeProbe = () => <ResearchReportList workspaceSlug="lab" />;
+
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
@@ -158,4 +161,61 @@ it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () 
     template: "template-1",
   });
   expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/reports/report-1");
+});
+
+it("报告列表回放 mine 旧链接并只携带报告领域参数", async () => {
+  const search =
+    "?mine=true&owner=uuid&q=graphite&date_from=2026-10-01&date_to=2026-10-08&org_unit=org-1&cursor=cursor-1&status=SUBMITTED&report_type=WEEKLY&period_key=2026-W40";
+  function Probe() {
+    const location = useLocation();
+    return (
+      <>
+        <ResearchReportList workspaceSlug="lab" />
+        <output aria-label="URL">{`${location.pathname}${location.search}`}</output>
+      </>
+    );
+  }
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[`/lab/research/reports${search}`]}>
+        <Probe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
+
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe(`/lab/research/reports${search}`);
+  expect(mocks.fetchReports).toHaveBeenCalledWith("lab", {
+    per_page: "50",
+    mine: "true",
+    owner: "uuid",
+    q: "graphite",
+    date_from: "2026-10-01",
+    date_to: "2026-10-08",
+    org_unit: "org-1",
+    cursor: "cursor-1",
+    status: "SUBMITTED",
+    report_type: "WEEKLY",
+    period_key: "2026-W40",
+  });
+  expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("workflow_status");
+  expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("research_type");
+});
+
+it("报告列表 scope=mine 新链接不再输出 mine 请求参数", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports?scope=mine"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
+
+  expect(mocks.fetchReports).toHaveBeenCalledWith("lab", {
+    per_page: "50",
+    scope: "mine",
+  });
+  expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("mine");
 });
