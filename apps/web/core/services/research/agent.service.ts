@@ -17,7 +17,7 @@ export type TAgentRunEvent = {
   created_at: string;
 };
 
-export type TAgentMessageResponse = {
+type TAgentMessageResponse = {
   session: TResearchAgentSession;
   events: TAgentRunEvent[];
 };

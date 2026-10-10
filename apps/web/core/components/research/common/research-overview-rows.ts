@@ -6,7 +6,7 @@
 
 import type { TResearchIdentity } from "@plane/types";
 
-export const RESEARCH_OVERVIEW_ROW_LIMIT = 5;
+const RESEARCH_OVERVIEW_ROW_LIMIT = 5;
 
 const DIRECTION_ROLES = new Set(["OWNER", "PI"]);
 
@@ -18,7 +18,7 @@ type TOverviewChain = {
 /**
  * 判断查看者是不是直接导师、方向负责人或主 PI。
  */
-export function isResearchOverviewSupervisor(identity: TResearchIdentity | null | undefined): boolean {
+function isResearchOverviewSupervisor(identity: TResearchIdentity | null | undefined): boolean {
   if (!identity) return false;
   if (identity.capabilities?.is_main_pi || identity.user?.is_main_pi) return true;
   if (identity.capabilities?.is_mentor) return true;

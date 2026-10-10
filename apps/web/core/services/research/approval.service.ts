@@ -9,7 +9,7 @@ import type { TApprovalAction, TApprovalFlow, TApprovalFlowStep, TApprovalReques
 // services
 import { APIService } from "@/services/api.service";
 
-export type TApprovalFlowPayload = {
+type TApprovalFlowPayload = {
   name: string;
   approval_type: string;
   org_unit?: string | null;

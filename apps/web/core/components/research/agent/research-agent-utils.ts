@@ -12,11 +12,11 @@ export type TResearchAgentPluginState =
   | "error"
   | "closed";
 
-export type TResearchAgentToolStatus = "READY" | "RUNNING" | "WAITING_APPROVAL" | "COMPLETED" | "FAILED" | "DEGRADED";
-export type TResearchAgentRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
-export type TResearchAgentTranslate = (key: string, params?: Record<string, unknown>) => string;
+type TResearchAgentToolStatus = "READY" | "RUNNING" | "WAITING_APPROVAL" | "COMPLETED" | "FAILED" | "DEGRADED";
+type TResearchAgentRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+type TResearchAgentTranslate = (key: string, params?: Record<string, unknown>) => string;
 
-export const RESEARCH_AGENT_EVENT_TYPE_LABELS: Record<string, string> = {
+const RESEARCH_AGENT_EVENT_TYPE_LABELS: Record<string, string> = {
   AI_ACTION: "research.agent.event_ai_action",
   DATA_CHANGE: "research.agent.event_data_change",
   INTERMEDIATE_ARTIFACT: "research.agent.event_intermediate_artifact",

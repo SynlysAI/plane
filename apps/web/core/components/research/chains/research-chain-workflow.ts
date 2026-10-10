@@ -20,7 +20,7 @@ export const RESEARCH_WORKFLOW_STAGE_DEFINITIONS = [
 
 export type TResearchWorkflowStageId = (typeof RESEARCH_WORKFLOW_STAGE_DEFINITIONS)[number]["id"];
 
-export type TResearchWorkflowStageStatus = TResearchChainNode["status"] | "NOT_STARTED";
+type TResearchWorkflowStageStatus = TResearchChainNode["status"] | "NOT_STARTED";
 
 export type TResearchWorkflowStage = {
   id: TResearchWorkflowStageId;
@@ -38,7 +38,7 @@ export type TResearchWorkflowStage = {
   shared: boolean;
 };
 
-export type TResearchWorkflow = {
+type TResearchWorkflow = {
   stages: TResearchWorkflowStage[];
   /** Nodes that cannot be safely mapped to a fixed stage. */
   unmappedNodes: TResearchChainNode[];

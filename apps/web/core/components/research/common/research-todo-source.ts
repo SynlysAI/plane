@@ -14,8 +14,8 @@ const integrationService = new ResearchIntegrationService();
 const reportService = new ResearchReportService();
 const reviewService = new ResearchReviewService();
 
-export type TResearchTodoKind = "blocking" | "confirmation" | "reminder" | "syncing";
-export type TResearchTodoSource = "report" | "review" | "office" | "upload" | "manual" | "agent";
+type TResearchTodoKind = "blocking" | "confirmation" | "reminder" | "syncing";
+type TResearchTodoSource = "report" | "review" | "office" | "upload" | "manual" | "agent";
 
 export type TResearchTodo = {
   id: string;
@@ -28,14 +28,14 @@ export type TResearchTodo = {
   updatedAt: string;
 };
 
-export type TResearchTodoAccess = {
+type TResearchTodoAccess = {
   /** Capability check from the research identity store. */
   canSee: (key: string) => boolean;
   /** Whether the research agent section is enabled for the workspace. */
   agentEnabled: boolean;
 };
 
-export type TResearchTodoTranslate = (key: string) => string;
+type TResearchTodoTranslate = (key: string) => string;
 
 const KIND_RANK: Record<TResearchTodoKind, number> = {
   blocking: 0,
@@ -45,7 +45,7 @@ const KIND_RANK: Record<TResearchTodoKind, number> = {
 };
 
 /** Convert a timestamp to a stable numeric value even when a backend omits it. */
-export function todoTimeValue(value: string | null | undefined) {
+function todoTimeValue(value: string | null | undefined) {
   if (!value) return 0;
   const parsed = new Date(value).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
@@ -60,7 +60,7 @@ export function todoTimeValue(value: string | null | undefined) {
  * Returns:
  *   Deduplicated todos ordered by severity, due date and recency.
  */
-export function normalizeResearchTodos(todos: TResearchTodo[]) {
+function normalizeResearchTodos(todos: TResearchTodo[]) {
   const byObject = new Map<string, TResearchTodo>();
   for (const todo of todos) {
     const existing = byObject.get(todo.id);

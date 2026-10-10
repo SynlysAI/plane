@@ -38,14 +38,14 @@ export type TResearchKnowledgeBase = {
   summary?: string;
 };
 
-export type TResearchKnowledgeCandidate = {
+type TResearchKnowledgeCandidate = {
   name: string;
   external_id: string;
   source: string;
   seen_at: string;
 };
 
-export type TResearchKnowledgeRequestState =
+type TResearchKnowledgeRequestState =
   | "REQUESTED"
   | "PENDING_ADMIN"
   | "NEEDS_INFO"
@@ -57,7 +57,7 @@ export type TResearchKnowledgeRequestState =
   | "RESTORE_PENDING"
   | "UNASSIGNED";
 
-export type TResearchKnowledgeScope = "GROUP" | "LEGACY_CHAIN" | "UNASSIGNED";
+type TResearchKnowledgeScope = "GROUP" | "LEGACY_CHAIN" | "UNASSIGNED";
 
 export type TResearchChainUpload = {
   id: string;

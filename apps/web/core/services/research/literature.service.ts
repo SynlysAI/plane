@@ -32,7 +32,7 @@ export type TLiteratureCreatePayload = {
   visibility?: string;
 };
 
-export type TLiteratureImportResult = {
+type TLiteratureImportResult = {
   created: string[];
   skipped: { doi: string; reason: string }[];
   failed: { doi: string; reason: string }[];

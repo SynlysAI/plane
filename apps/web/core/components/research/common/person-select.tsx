@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { Combobox } from "@headlessui/react";
 
-export type PersonOption = {
+type PersonOption = {
   id: string;
   display_name?: string;
   email?: string;
