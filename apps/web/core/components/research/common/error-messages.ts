@@ -123,6 +123,3 @@ export const getResearchErrorKey = (error?: unknown): string => {
   if (!errorCode) return RESEARCH_GENERIC_ERROR_KEY;
   return RESEARCH_ERROR_KEYS[errorCode] ?? RESEARCH_GENERIC_ERROR_KEY;
 };
-
-export const getResearchErrorCode = (error?: unknown): string | null =>
-  (error as { error_code?: string } | null | undefined)?.error_code ?? null;
