@@ -408,6 +408,8 @@ export type TResearchTodoSource =
   | "AGENT_APPROVAL"
   | "OFFICE_APPROVAL";
 
+export type TResearchTodoScope = "to_me" | "mine" | "visible";
+
 export type TResearchTodoHandlingStatus = "TODO" | "IN_PROGRESS" | "RETURNED" | "DONE" | "BLOCKED";
 
 export type TResearchTodoNextAction =
@@ -451,6 +453,15 @@ export type TResearchTodoEnvelope = {
   capabilities: TResearchActionCapabilities;
   trace_ref: TResearchTodoTraceRef | null;
   updated_at: string;
+};
+
+export type TResearchTodoEnvelopeList = {
+  schema_version: "research-todo.v2";
+  results: TResearchTodoEnvelope[];
+  count: number;
+  total_count: number;
+  next_cursor: string | null;
+  degraded_sources: TResearchTodoSource[];
 };
 
 export type TResearchAnalysisResult = {

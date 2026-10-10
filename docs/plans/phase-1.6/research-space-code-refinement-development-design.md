@@ -2,8 +2,8 @@
 
 | 项目     | 内容                                                                                                                             |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.3                                                                                                                             |
-| 状态     | 设计复核修订版；C0 引用审计已实施，统一待办与后续清理切片仍待实施                                                                |
+| 文档版本 | v1.4                                                                                                                             |
+| 状态     | 设计复核修订版；C0 引用审计与 C5 待办扇出收敛已实施，后续清理切片仍待实施                                                        |
 | 日期     | 2026-10-10                                                                                                                       |
 | 代码基线 | Plane `develop` / `4.24.0`                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                 |
@@ -251,6 +251,12 @@ research-paper-review-panel.tsx  # 论文评审
 - 上传待办从服务端聚合结果读取。
 - 保留单课题详情中的上传列表请求。
 - 回归 12 课题 / 多节点场景的请求数。
+
+实施状态（2026-10-10）：已完成。`ResearchTodoEnvelopeList` 与首页摘要均消费
+`research-todos` 只读聚合；组件测试断言聚合请求一次、`getKnowledgeUploads` 零调用，
+并覆盖 loading、空态、错误重试与刷新。旧 `collectResearchTodos` 仅保留为回滚路径，
+当前生产代码无消费方。L6 v2 当前冻结为六类领域来源；总览不在前端自行补齐上传或
+集成降级提醒，后续如需展示必须先扩展服务端投影来源。
 
 ### C6：课题详情拆分
 
@@ -661,16 +667,16 @@ ResearchChainDetail
 
 ### 9.7 清理切片执行表
 
-| 切片                | 修改 / 删除                              | 必跑验证                                             | 回滚                             |
-| ------------------- | ---------------------------------------- | ---------------------------------------------------- | -------------------------------- |
-| C0 audit script     | 已实施：新增 script + test               | `pnpm --filter web test -- research-reference-audit` | revert 单个脚本                  |
-| C1 dead code        | 删除 guard、side panel、side panel test  | Agent / navigation tests                             | git revert 删除提交              |
-| C2 agent route      | chain detail + detail test               | route registration + detail test                     | 恢复 Link 为 window.open         |
-| C3 export downgrade | §9.2 表中文件                            | typecheck                                            | 逐文件恢复 export                |
-| C4 browse params    | browse-query + two lists + tests         | browse / project / report tests                      | 回退共同函数，保留领域参数       |
-| C5 todo aggregate   | research-todo API + frontend todo source | todo tests + request spy                             | 前端临时恢复旧扇出，API 保留只读 |
-| C6 detail split     | chain detail + two panels                | detail / task / paper tests                          | 将面板内容内联回容器             |
-| C7 backend helpers  | 只审计，不默认移动                       | 对应现有 tests                                       | 不产生代码变更                   |
+| 切片                | 修改 / 删除                               | 必跑验证                                             | 回滚                             |
+| ------------------- | ----------------------------------------- | ---------------------------------------------------- | -------------------------------- |
+| C0 audit script     | 已实施：新增 script + test                | `pnpm --filter web test -- research-reference-audit` | revert 单个脚本                  |
+| C1 dead code        | 删除 guard、side panel、side panel test   | Agent / navigation tests                             | git revert 删除提交              |
+| C2 agent route      | chain detail + detail test                | route registration + detail test                     | 恢复 Link 为 window.open         |
+| C3 export downgrade | §9.2 表中文件                             | typecheck                                            | 逐文件恢复 export                |
+| C4 browse params    | browse-query + two lists + tests          | browse / project / report tests                      | 回退共同函数，保留领域参数       |
+| C5 todo aggregate   | research-todo API + envelope list service | todo tests + request spy                             | 恢复旧前端聚合调用，API 保留只读 |
+| C6 detail split     | chain detail + two panels                 | detail / task / paper tests                          | 将面板内容内联回容器             |
+| C7 backend helpers  | 只审计，不默认移动                        | 对应现有 tests                                       | 不产生代码变更                   |
 
 ### 9.8 清理完成定义
 

@@ -114,6 +114,10 @@ function uploadTodo(workspaceSlug: string, chainId: string, upload: TResearchCha
 /**
  * Collect cross-component research todos from every source system.
  *
+ * This frontend aggregation is retained only as a short-term rollback path for
+ * ``ResearchTodoEnvelopeList``. Production consumers must use the read-only
+ * server aggregate so chain/node upload status is not fanned out per node.
+ *
  * Args:
  *   options: Workspace slug, visibility access, translator, optional period and
  *     chains already loaded by the caller to avoid a duplicate request.

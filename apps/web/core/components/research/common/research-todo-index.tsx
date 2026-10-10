@@ -1,54 +1,123 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
+import type {
+  TResearchTodoEnvelope,
+  TResearchTodoHandlingStatus,
+  TResearchTodoNextAction,
+  TResearchTodoScope,
+  TResearchTodoSource,
+} from "@plane/types";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { formatResearchDate } from "@/components/research/common/research-format";
-import { collectResearchTodos, type TResearchTodo } from "@/components/research/common/research-todo-source";
-// hooks
-import { useResearch } from "@/hooks/store/use-research";
+// services
+import { ResearchTodoService } from "@/services/research/research-todo.service";
+
+const todoService = new ResearchTodoService();
+const TODO_REQUEST_LIMIT = 100;
+
+const SOURCE_LABEL_KEYS: Record<TResearchTodoSource, string> = {
+  CHAIN_TASK: "research.todo.source_chain_task",
+  REPORT: "research.todo.source_report_v2",
+  PAPER_REVIEW: "research.todo.source_paper_review",
+  STAGE_REVIEW: "research.todo.source_stage_review",
+  AGENT_APPROVAL: "research.todo.source_agent",
+  OFFICE_APPROVAL: "research.todo.source_office",
+};
+
+const HANDLING_LABEL_KEYS: Record<TResearchTodoHandlingStatus, string> = {
+  TODO: "research.todo.handling_todo",
+  IN_PROGRESS: "research.todo.handling_in_progress",
+  RETURNED: "research.todo.handling_returned",
+  DONE: "research.todo.handling_done",
+  BLOCKED: "research.todo.handling_blocked",
+};
+
+const NEXT_ACTION_LABEL_KEYS: Record<TResearchTodoNextAction, string> = {
+  READ: "research.todo.next_read",
+  REVIEW: "research.todo.next_review",
+  SUBMIT: "research.todo.next_submit",
+  RETURN: "research.todo.next_return",
+  ACCEPT: "research.todo.next_accept",
+  WITHDRAW: "research.todo.next_withdraw",
+  COMPLETE: "research.todo.next_complete",
+  CANCEL: "research.todo.next_cancel",
+  APPROVE: "research.todo.next_approve",
+  REJECT: "research.todo.next_reject",
+};
+
+const BUSINESS_STATUS_LABEL_KEYS: Record<string, string> = {
+  ASSIGNED: "research.todo.business_assigned",
+  SUBMITTED: "research.todo.business_submitted",
+  NEEDS_REVISION: "research.todo.business_needs_revision",
+  WAITING_REVIEW: "research.todo.business_waiting_review",
+  WAITING_APPROVAL: "research.todo.business_waiting_approval",
+  FAILED: "research.todo.business_failed",
+};
 
 type Props = {
   workspaceSlug: string;
+  scope?: TResearchTodoScope;
   limit?: number;
   periodDays?: number | null;
 };
 
-/** Cross-component to-do index assembled from each source system without local completion. */
-export function ResearchTodoIndex({ workspaceSlug, limit = 5, periodDays = null }: Props) {
+/** Check whether a server todo belongs to the selected overview period. */
+function withinPeriod(todo: TResearchTodoEnvelope, periodDays: number | null, now: number) {
+  if (!periodDays) return true;
+  const updatedAt = new Date(todo.updated_at).getTime();
+  return !Number.isNaN(updatedAt) && updatedAt >= now - periodDays * 86400000;
+}
+
+/** Build the compact participant and original-status line for one todo row. */
+function todoMetadata(todo: TResearchTodoEnvelope, translate: (key: string) => string) {
+  const requester = todo.requester?.display_name;
+  const assignees = todo.assignees
+    .map((assignee) => assignee.display_name)
+    .filter(Boolean)
+    .join("、");
+  const businessStatus = translate(
+    BUSINESS_STATUS_LABEL_KEYS[todo.business_status] ?? "research.todo.business_unknown"
+  );
+  return [
+    todo.context || translate(SOURCE_LABEL_KEYS[todo.source]),
+    requester ? `${translate("research.todo.requester")}：${requester}` : null,
+    assignees ? `${translate("research.todo.assignees")}：${assignees}` : null,
+    `${translate("research.todo.business_status")}：${businessStatus}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Render the server-authoritative research todo projection without local state transitions. */
+export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit = 5, periodDays = null }: Props) {
   const { t, currentLocale } = useTranslation();
-  const research = useResearch();
-  const translateRef = useRef(t);
-  const [todos, setTodos] = useState<TResearchTodo[]>([]);
+  const [todos, setTodos] = useState<TResearchTodoEnvelope[]>([]);
+  const [degradedSources, setDegradedSources] = useState<TResearchTodoSource[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [page, setPage] = useState(0);
-  const translate = translateRef.current;
 
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const normalized = await collectResearchTodos({
-        workspaceSlug,
-        access: {
-          canSee: research.canSee.bind(research),
-          agentEnabled: Boolean(research.identity?.sections?.research_agent),
-        },
-        translate,
-        periodDays,
-      });
+      const payload = await todoService.getResearchTodos(workspaceSlug, { scope, limit: TODO_REQUEST_LIMIT });
+      const normalized = payload.results.filter((todo) => withinPeriod(todo, periodDays, Date.now()));
       setTodos(normalized);
+      setDegradedSources(payload.degraded_sources);
       setPage(0);
       setState(normalized.length ? "ready" : "empty");
     } catch {
       setTodos([]);
+      setDegradedSources([]);
       setState("error");
     }
-  }, [periodDays, research, translate, workspaceSlug]);
+  }, [periodDays, scope, workspaceSlug]);
 
   useEffect(() => {
     void load();
@@ -62,36 +131,38 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 5, periodDays = null 
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div>
           <h3 className="text-13 font-semibold text-primary">{t("research.todo.title")}</h3>
-          <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description")}</p>
+          <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description_v2")}</p>
         </div>
-        <Button variant="secondary" size="sm" onClick={() => void load()}>
-          {t("research.todo.refresh")}
-        </Button>
-        {todos.length > limit && (
-          <div className="flex items-center gap-1" aria-label={t("research.todo.pagination")}>
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label={t("research.todo.previous_page")}
-              disabled={page === 0}
-              onClick={() => setPage((value) => Math.max(0, value - 1))}
-            >
-              ‹
-            </Button>
-            <span className="text-11 tabular-nums" aria-live="polite">
-              {page + 1}/{pageCount}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label={t("research.todo.next_page")}
-              disabled={page >= pageCount - 1}
-              onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
-            >
-              ›
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => void load()}>
+            {t("research.todo.refresh")}
+          </Button>
+          {todos.length > limit && (
+            <div className="flex items-center gap-1" aria-label={t("research.todo.pagination")}>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={t("research.todo.previous_page")}
+                disabled={page === 0}
+                onClick={() => setPage((value) => Math.max(0, value - 1))}
+              >
+                ‹
+              </Button>
+              <span className="text-11 tabular-nums" aria-live="polite">
+                {page + 1}/{pageCount}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={t("research.todo.next_page")}
+                disabled={page >= pageCount - 1}
+                onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+              >
+                ›
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
       {state === "loading" && (
         <div className="space-y-2 p-4" role="status" aria-busy="true">
@@ -101,31 +172,45 @@ export function ResearchTodoIndex({ workspaceSlug, limit = 5, periodDays = null 
         </div>
       )}
       {state === "error" && (
-        <p className="p-4 text-12 text-secondary" role="alert">
-          {t("research.todo.error")}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4" role="alert">
+          <p className="text-12 text-secondary">{t("research.todo.error_unavailable")}</p>
+          <Button variant="secondary" size="sm" onClick={() => void load()}>
+            {t("research.status.retry")}
+          </Button>
+        </div>
       )}
       {state === "empty" && <p className="p-4 text-12 text-secondary">{t("research.todo.empty")}</p>}
       {state === "ready" && (
-        <ul className="divide-y divide-subtle" role="list">
-          {pagedTodos.map((todo) => (
-            <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <ResearchStatusBadge status={todo.kind}>{t(`research.todo.kind_${todo.kind}`)}</ResearchStatusBadge>
-                  <p className="truncate text-12 font-medium text-primary">{todo.title}</p>
+        <>
+          {degradedSources.length > 0 && (
+            <p className="border-t border-subtle px-4 py-2 text-11 text-tertiary" role="status">
+              {t("research.todo.degraded")}
+            </p>
+          )}
+          <ul className="divide-y divide-subtle" role="list">
+            {pagedTodos.map((todo) => (
+              <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ResearchStatusBadge status={todo.handling_status} size="sm">
+                      {t(HANDLING_LABEL_KEYS[todo.handling_status])}
+                    </ResearchStatusBadge>
+                    <p className="truncate text-12 font-medium text-primary">{todo.title}</p>
+                  </div>
+                  <p className="mt-1 truncate text-11 text-tertiary">{todoMetadata(todo, t)}</p>
+                  {todo.due_at && (
+                    <p className="mt-0.5 text-11 text-tertiary">
+                      {t("research.todo.due_at")}：{formatResearchDate(todo.due_at, currentLocale)}
+                    </p>
+                  )}
                 </div>
-                <p className="mt-1 truncate text-11 text-tertiary">
-                  {todo.context || t(`research.todo.source_${todo.source}`)}
-                  {todo.dueAt && ` · ${formatResearchDate(todo.dueAt, currentLocale)}`}
-                </p>
-              </div>
-              <Link href={todo.href} className="text-12 text-accent-primary transition-colors hover:underline">
-                {t("research.todo.open")}
-              </Link>
-            </li>
-          ))}
-        </ul>
+                <Link href={todo.href} className="text-12 text-accent-primary transition-colors hover:underline">
+                  {t(NEXT_ACTION_LABEL_KEYS[todo.next_action])}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );

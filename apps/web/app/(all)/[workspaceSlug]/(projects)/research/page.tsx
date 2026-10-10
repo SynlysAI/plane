@@ -16,7 +16,7 @@ import type { TResearchChain } from "@plane/types";
 // components
 import { ResearchHomeSummaryCard } from "@/components/research/common/research-home-summary-card";
 import { chainOwnerLabel, selectResearchOverviewChains } from "@/components/research/common/research-overview-rows";
-import { ResearchTodoIndex } from "@/components/research/common/research-todo-index";
+import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
 import { formatResearchDate, formatResearchTime } from "@/components/research/common/research-format";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchChainPortal } from "@/components/research/chains/research-chain-portal";
@@ -211,7 +211,9 @@ function WorkspaceResearchOverviewPage() {
           </section>
 
           <div className="mt-5">
-            {workspaceSlug && <ResearchTodoIndex workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />}
+            {workspaceSlug && (
+              <ResearchTodoEnvelopeList workspaceSlug={workspaceSlug} periodDays={periodDays} limit={12} />
+            )}
           </div>
 
           {workspaceSlug && !research.isIaV2Enabled && research.canSee("research_chain") && (
