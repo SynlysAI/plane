@@ -862,5 +862,23 @@
       "description": "作業項目をJSONファイルにエクスポートします。",
       "short_description": "JSONとしてエクスポート"
     }
+  },
+  "administrative": {
+    "projects": {
+      "title": "プロジェクト",
+      "description": "調達、経費精算、設備協業、事務承認、通常の Plane コラボレーション。",
+      "boundary": "行政プロジェクトは研究プロジェクトではありません。行政タスクは Chain Event に書き込まれません。",
+      "create": "行政プロジェクトを作成",
+      "empty": "行政プロジェクトはありません。"
+    },
+    "views": {
+      "title": "ビュー"
+    },
+    "analytics": {
+      "title": "分析"
+    },
+    "archives": {
+      "title": "アーカイブ"
+    }
   }
 }

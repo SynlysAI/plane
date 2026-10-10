@@ -25,6 +25,8 @@ export interface IPartialProject {
   member_role?: TUserPermissions | EUserProjectRoles | null;
   /** 研究链上级的只读入口。不是项目成员时为 review，不代表 member_role。 */
   research_access?: "review" | null;
+  /** 服务端注解：存在 ResearchProjectProfile 时为 true；字段缺失按普通项目处理。 */
+  is_research_project?: boolean;
   archived_at: string | null;
   workspace: IWorkspace | string;
   cycle_view: boolean;

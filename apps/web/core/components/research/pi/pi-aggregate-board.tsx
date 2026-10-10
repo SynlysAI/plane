@@ -141,7 +141,7 @@ export const ResearchPiAggregateBoard = observer(function ResearchPiAggregateBoa
       label: t("research.pi.cards.approvals"),
       value: aggregate.approvals.pending,
       detail: t("research.pi.cards.pending_only"),
-      href: canSee("approvals") ? `/${source}/research/approvals` : null,
+      href: canSee("approvals") ? `/${source}/research/approvals?tab=office` : null,
     },
   ];
 

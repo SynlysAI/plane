@@ -862,5 +862,23 @@
       "description": "작업 항목을 JSON 파일로 내보냅니다.",
       "short_description": "JSON으로 내보내기"
     }
+  },
+  "administrative": {
+    "projects": {
+      "title": "프로젝트",
+      "description": "구매, 경비 처리, 장비 협업, 사무 승인 및 일반 Plane 협업.",
+      "boundary": "행정 프로젝트는 연구 프로젝트가 아니며 행정 작업은 Chain Event를 기록하지 않습니다.",
+      "create": "행정 프로젝트 만들기",
+      "empty": "행정 프로젝트가 없습니다."
+    },
+    "views": {
+      "title": "보기"
+    },
+    "analytics": {
+      "title": "분석"
+    },
+    "archives": {
+      "title": "보관"
+    }
   }
 }

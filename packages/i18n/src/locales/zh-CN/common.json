@@ -1165,7 +1165,7 @@
       "status_unknown": "未配置"
     },
     "chains": {
-      "description": "按课题与科研项目组织研究链、阶段与成果。",
+      "description": "承载科研主线、课题、周期报告与评审；行政项目不在本通道显示。",
       "tabs": {
         "label": "研究链页面分区",
         "overview": "概览",
@@ -1911,7 +1911,7 @@
       }
     },
     "approvals": {
-      "description": "基于工作项的任务审批与采购审批。",
+      "description": "行政 / 办公审批：基于普通 Plane 工作项，不写入科研 Chain Event。",
       "tabs": {
         "stage_review": "阶段评审",
         "report_review": "报告审核",
@@ -2613,5 +2613,23 @@
     "unchanged": "与服务器一致，未写入。",
     "saved": "正文已保存。",
     "failed": "正文没有保存。"
+  },
+  "administrative": {
+    "projects": {
+      "title": "项目",
+      "description": "采购、报销、设备协作、办公审批与普通 Plane 协作。",
+      "boundary": "行政项目不是科研项目；行政任务不写入 Chain Event。",
+      "create": "创建行政项目",
+      "empty": "暂无行政项目。"
+    },
+    "views": {
+      "title": "视图"
+    },
+    "analytics": {
+      "title": "分析"
+    },
+    "archives": {
+      "title": "归档"
+    }
   }
 }

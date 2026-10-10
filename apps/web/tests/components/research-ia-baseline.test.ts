@@ -52,4 +52,19 @@ describe("research IA baseline", () => {
 
     legacyPaths.forEach((path) => expect(paths.has(path)).toBe(true));
   });
+
+  it("registers every ordinary Plane route reused by the administrative container", () => {
+    const routes = flattenRoutes(coreRoutes);
+    const paths = new Set(routes.map((route) => route.path));
+    const ordinaryPlanePaths = [
+      ":workspaceSlug/projects",
+      ":workspaceSlug/workspace-views",
+      ":workspaceSlug/workspace-views/:globalViewId",
+      ":workspaceSlug/analytics/:tabId",
+      ":workspaceSlug/analytics",
+      ":workspaceSlug/projects/archives",
+    ];
+
+    ordinaryPlanePaths.forEach((path) => expect(paths.has(path)).toBe(true));
+  });
 });

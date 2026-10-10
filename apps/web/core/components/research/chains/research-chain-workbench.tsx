@@ -14,7 +14,6 @@ import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
-import { ResearchProjectList } from "@/components/research/projects/research-project-list";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -24,11 +23,11 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ChainView = "chains" | "projects" | "reports" | "outcomes";
+type ChainView = "chains" | "reports" | "outcomes";
 
 /**
- * IA v2 Research Chain landing container. Legacy projects and reports remain
- * authoritative objects and are embedded as saved views of the chain surface.
+ * IA v2 research container. It only renders research chains (topics), reports,
+ * and the legacy outcomes query; administrative Projects stay out of this channel.
  */
 export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({ workspaceSlug }: Props) {
   const { t } = useTranslation();
@@ -42,13 +41,13 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
 
   const views = [
     { id: "chains" as const, labelKey: "research.chains.views.chains" },
-    { id: "projects" as const, labelKey: "research.chains.views.projects" },
     { id: "reports" as const, labelKey: "research.chains.views.reports" },
   ];
   const activeView =
     requestedView && (requestedView === "outcomes" || views.some((view) => view.id === requestedView))
       ? requestedView
       : "chains";
+  const activeTabId = activeView === "chains" ? "chains" : "reports";
   const canCreateProject = Boolean(
     currentUser?.id && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
   );
@@ -62,29 +61,21 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
               <ResearchTabLink
                 key={view.id}
                 href={`/${workspaceSlug}/research/chains${view.id === "chains" ? "" : `?view=${view.id}`}`}
-                isActive={view.id === activeView}
+                isActive={view.id === activeTabId}
               >
                 {t(view.labelKey)}
               </ResearchTabLink>
             ))}
           </TabNavigationList>
         </nav>
-        {canCreateProject && (activeView === "chains" || activeView === "projects") && (
-          <Button
-            variant="primary"
-            size="sm"
-            className="shrink-0"
-            onClick={() => query.patch({ view: "projects", create: "1" }, false)}
-          >
+        {canCreateProject && activeView === "chains" && (
+          <Button variant="primary" size="sm" className="shrink-0" onClick={() => query.patch({ create: "1" }, false)}>
             {t("research.projects.create")}
           </Button>
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeView === "chains" && <ResearchChainBoard workspaceSlug={workspaceSlug} />}
-        {activeView === "projects" && (
-          <ResearchProjectList workspaceSlug={workspaceSlug} currentUserId={currentUser?.id ?? ""} />
-        )}
         {(activeView === "reports" || activeView === "outcomes") && (
           <ResearchReportList workspaceSlug={workspaceSlug} />
         )}

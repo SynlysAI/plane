@@ -862,5 +862,23 @@
       "description": "將工作事項匯出為 JSON 檔案。",
       "short_description": "匯出為 JSON"
     }
+  },
+  "administrative": {
+    "projects": {
+      "title": "專案",
+      "description": "採購、報銷、設備協作、辦公審批與普通 Plane 協作。",
+      "boundary": "行政專案不是科研專案；行政任務不寫入 Chain Event。",
+      "create": "建立行政專案",
+      "empty": "暫無行政專案。"
+    },
+    "views": {
+      "title": "視圖"
+    },
+    "analytics": {
+      "title": "分析"
+    },
+    "archives": {
+      "title": "封存"
+    }
   }
 }

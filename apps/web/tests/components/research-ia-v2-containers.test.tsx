@@ -49,9 +49,6 @@ vi.mock("@/components/research/reviews/review-inbox", () => ({
 vi.mock("@/components/research/chains/research-chain-board", () => ({
   ResearchChainBoard: () => <div>chain-board</div>,
 }));
-vi.mock("@/components/research/projects/research-project-list", () => ({
-  ResearchProjectList: () => <div>project-list</div>,
-}));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
 vi.mock("@/hooks/store/user", () => ({ useUser: () => ({ data: { id: "user-1" } }) }));
 
@@ -94,12 +91,13 @@ it("keeps the office approval page when IA v2 is disabled", async () => {
   expect(container.textContent).toContain("office-approvals");
 });
 
-it("embeds the legacy project list as a 研究链 saved view", async () => {
+it("falls back the legacy project view to the chain list without embedding Project", async () => {
   mocks.view = "projects";
   await act(async () => root.render(<ResearchChainWorkbench workspaceSlug="lab" />));
 
-  expect(container.textContent).toContain("project-list");
-  expect(container.textContent).not.toContain("chain-board");
+  expect(container.textContent).toContain("chain-board");
+  expect(container.textContent).not.toContain("project-list");
+  expect(container.textContent).not.toContain("research.chains.views.projects");
 
   mocks.research.isIaV2Enabled = false;
   await act(async () => root.render(<ResearchChainWorkbench key="ia-off" workspaceSlug="lab" />));

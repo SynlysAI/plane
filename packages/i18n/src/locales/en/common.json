@@ -1158,7 +1158,7 @@
       "status_unknown": "Not configured"
     },
     "chains": {
-      "description": "Organize research chains, stages, and outcomes by topic and research project.",
+      "description": "Research chains, topics, reports, reviews, and trace; administrative projects are not shown in this channel.",
       "tabs": {
         "label": "Research Chain page sections",
         "overview": "Overview",
@@ -1893,7 +1893,7 @@
       }
     },
     "approvals": {
-      "description": "Task and purchase approvals built on work items.",
+      "description": "Administrative / office approvals built on ordinary Plane work items.",
       "tabs": {
         "stage_review": "Stage reviews",
         "report_review": "Report reviews",
@@ -2589,5 +2589,23 @@
     "unchanged": "Same as the server. Nothing was written.",
     "saved": "Body saved.",
     "failed": "The body was not saved."
+  },
+  "administrative": {
+    "projects": {
+      "title": "Projects",
+      "description": "Procurement, reimbursement, equipment collaboration, office approvals, and ordinary Plane collaboration.",
+      "boundary": "Administrative projects are not research projects; administrative tasks do not write Chain Events.",
+      "create": "Create administrative project",
+      "empty": "No administrative projects."
+    },
+    "views": {
+      "title": "Views"
+    },
+    "analytics": {
+      "title": "Analytics"
+    },
+    "archives": {
+      "title": "Archives"
+    }
   }
 }

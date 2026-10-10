@@ -17,6 +17,7 @@ import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useResearch } from "@/hooks/store/use-research";
 import { useUserPermissions } from "@/hooks/store/user";
 // plane web constants
 // components
@@ -28,6 +29,7 @@ export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
   const { t } = useTranslation();
   // store hooks
   const { toggleCreateProjectModal } = useCommandPalette();
+  const research = useResearch();
   const { allowPermissions } = useUserPermissions();
 
   const pathname = usePathname();
@@ -37,6 +39,9 @@ export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
     EUserPermissionsLevel.WORKSPACE
   );
   const isArchived = pathname.includes("/archives");
+  const usesAdministrativeChannel = research.isEnabled && research.isIaV2Enabled;
+  const titleKey = usesAdministrativeChannel ? "administrative.projects.title" : "workspace_projects.label";
+  const createKey = usesAdministrativeChannel ? "administrative.projects.create" : "workspace_projects.create.label";
 
   return (
     <Header>
@@ -45,7 +50,7 @@ export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label={t("workspace_projects.label", { count: 2 })}
+                label={t(titleKey, { count: 2 })}
                 icon={<ProjectsOutline className="h-4 w-4 text-tertiary" />}
               />
             }
@@ -67,8 +72,8 @@ export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
             }}
             className="items-center gap-1"
           >
-            <span className="hidden sm:inline-block">{t("workspace_projects.create.label")}</span>
-            <span className="inline-block sm:hidden">{t("workspace_projects.label", { count: 1 })}</span>
+            <span className="hidden sm:inline-block">{t(createKey)}</span>
+            <span className="inline-block sm:hidden">{t(createKey)}</span>
           </Button>
         ) : (
           <></>
