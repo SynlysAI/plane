@@ -40,6 +40,7 @@ import {
 // hooks
 import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkspaceDraftIssues } from "@/hooks/store/workspace-draft";
@@ -128,7 +129,10 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   const {
     issue: { getIssueById },
   } = useIssueDetail();
-  const { fetchCycles } = useProjectIssueProperties();
+  const { fetchCycles, fetchMembers } = useProjectIssueProperties();
+  const {
+    project: { getProjectMemberIds },
+  } = useMember();
   const { getStateById } = useProjectState();
 
   // form info
@@ -148,13 +152,15 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   } = methods;
 
   const projectId = watch("project_id");
+  const assignableProjectMemberIds = projectId ? getProjectMemberIds(projectId, false) : null;
+  const hasNoAssignableProjectMembers = assignableProjectMemberIds?.length === 0;
   const activeAdditionalPropertiesLength = getActiveAdditionalPropertiesLength({
     projectId: projectId,
     workspaceSlug: workspaceSlug?.toString(),
     watch: watch,
   });
 
-  const isDisabled = isSubmitting || isApplyingTemplate;
+  const isDisabled = isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers;
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -171,6 +177,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       }
     }
     if (projectId && routeProjectId !== projectId) fetchCycles(workspaceSlug?.toString(), projectId);
+    if (projectId && workspaceSlug) fetchMembers(workspaceSlug.toString(), projectId);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -209,6 +216,8 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   }, [workItemTemplateId]);
 
   const handleFormSubmit = async (formData: Partial<TIssue>, is_draft_issue = false) => {
+    if (hasNoAssignableProjectMembers) return;
+
     // Check if the editor is ready to discard
     if (!editorRef.current?.isEditorReadyToDiscard()) {
       setToast({
@@ -440,6 +449,11 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   setSelectedParentIssue={setSelectedParentIssue}
                 />
               </div>
+              {hasNoAssignableProjectMembers && (
+                <p role="alert" className="px-5 pb-3 text-caption-sm-regular text-tertiary">
+                  {t("research.assignment.empty_administrative")}
+                </p>
+              )}
               {showActionButtons && (
                 <div
                   className="flex items-center justify-end gap-4 border-t-[0.5px] border-subtle pt-6 pb-3"

@@ -898,6 +898,13 @@
       "ops_admin": "运维管理员",
       "main_pi": "主PI"
     },
+    "assignment": {
+      "project_group": "项目成员",
+      "role_admin": "管理员",
+      "role_member": "成员",
+      "role_guest": "访客",
+      "empty_administrative": "当前行政项目暂无可指派成员"
+    },
     "system": {
       "description": "本部署的账号、邀请码与批量导入。",
       "admin_roles_title": "当前账号的管理员标签",

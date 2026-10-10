@@ -11,7 +11,7 @@ from rest_framework import serializers
 import re
 
 # Module imports
-from plane.db.models import Project, ProjectIdentifier, WorkspaceMember, State, Estimate
+from plane.db.models import Project, ProjectIdentifier, ProjectMember, WorkspaceMember, State, Estimate
 
 from plane.utils.content_validator import (
     validate_html_content,
@@ -115,7 +115,18 @@ class ProjectCreateSerializer(BaseSerializer):
             raise serializers.ValidationError("Project identifier cannot contain special characters.")
 
         project_lead = data.get("project_lead")
-        if (
+        if project_lead and self.instance is not None:
+            if not ProjectMember.objects.filter(
+                project_id=self.instance.id,
+                member_id=project_lead.id,
+                role__gte=15,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).exists():
+                raise serializers.ValidationError(
+                    {"project_lead": "The provided user is not an active member of this project."}
+                )
+        elif (
             project_lead
             and not WorkspaceMember.objects.filter(
                 workspace_id=self.context["workspace_id"],
@@ -129,7 +140,19 @@ class ProjectCreateSerializer(BaseSerializer):
             # through and trigger the FK error downstream.
             raise serializers.ValidationError({"project_lead": "The provided user is not a member of this workspace."})
 
-        if data.get("default_assignee", None) is not None:
+        default_assignee = data.get("default_assignee", None)
+        if default_assignee is not None and self.instance is not None:
+            if not ProjectMember.objects.filter(
+                project_id=self.instance.id,
+                member_id=default_assignee.id,
+                role__gte=15,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).exists():
+                raise serializers.ValidationError(
+                    {"default_assignee": "The provided user is not an active member of this project."}
+                )
+        elif data.get("default_assignee", None) is not None:
             # Check if the default assignee is a member of the workspace
             if not WorkspaceMember.objects.filter(
                 workspace_id=self.context["workspace_id"],

@@ -14,6 +14,7 @@ import { MemberDropdownBase } from "./base";
 import type { MemberDropdownProps } from "./types";
 
 type TMemberDropdownProps = {
+  allowClear?: boolean;
   icon?: ComponentType<SVGProps<SVGSVGElement>>;
   memberIds?: string[];
   onClose?: () => void;
@@ -23,7 +24,7 @@ type TMemberDropdownProps = {
 } & MemberDropdownProps;
 
 export const MemberDropdown = observer(function MemberDropdown(props: TMemberDropdownProps) {
-  const { memberIds: propsMemberIds, projectId } = props;
+  const { allowClear = false, memberIds: propsMemberIds, projectId } = props;
   // router params
   const { workspaceSlug } = useParams();
   // store hooks
@@ -46,9 +47,11 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
   return (
     <MemberDropdownBase
       {...props}
+      allowClear={allowClear}
       getUserDetails={getUserDetails}
       memberIds={memberIds ?? []}
       onDropdownOpen={onDropdownOpen}
+      projectId={projectId}
     />
   );
 });

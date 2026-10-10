@@ -16,6 +16,7 @@ import { Avatar } from "@makeplane/propel/components/avatar";
 import { useTranslation } from "@plane/i18n";
 import { DeactivatedUserOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import { EPillSize, EPillVariant, Pill } from "@plane/propel/pill";
+import { EUserProjectRoles } from "@plane/types";
 import type { IUserLite } from "@plane/types";
 import { cn, getFileURL, sortByCurrentUserThenSelected } from "@plane/utils";
 // hooks
@@ -24,25 +25,43 @@ import { useUser } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 interface Props {
+  allowClear?: boolean;
   className?: string;
   getUserDetails: (userId: string) => IUserLite | undefined;
   isOpen: boolean;
   memberIds?: string[];
+  multiple?: boolean;
   onDropdownOpen?: () => void;
   optionsClassName?: string;
   placement: Placement | undefined;
+  projectId?: string;
   referenceElement: HTMLButtonElement | null;
   value?: string[] | string | null;
 }
 
+const PROJECT_ROLE_LABEL_KEYS = {
+  [EUserProjectRoles.ADMIN]: "research.assignment.role_admin",
+  [EUserProjectRoles.MEMBER]: "research.assignment.role_member",
+  [EUserProjectRoles.GUEST]: "research.assignment.role_guest",
+} as const;
+
+/** Resolve the display key for an administrative project role. */
+function getProjectRoleLabelKey(role: unknown) {
+  const projectRole = typeof role === "number" ? role : Number(role);
+  return PROJECT_ROLE_LABEL_KEYS[projectRole as EUserProjectRoles];
+}
+
 export const MemberOptions = observer(function MemberOptions(props: Props) {
   const {
+    allowClear = false,
     getUserDetails,
     isOpen,
     memberIds,
+    multiple,
     onDropdownOpen,
     optionsClassName = "",
     placement,
+    projectId,
     referenceElement,
     value,
   } = props;
@@ -59,6 +78,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
   const { data: currentUser } = useUser();
   const {
     workspace: { isUserSuspended },
+    project: { getProjectMemberDetails },
   } = useMember();
   const { isMobile } = usePlatformOS();
   // popper-js init
@@ -91,6 +111,10 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
   const options = memberIds
     ?.map((userId) => {
       const userDetails = getUserDetails(userId);
+      const projectMemberDetails = projectId ? getProjectMemberDetails(userId, projectId) : null;
+      const projectRoleLabelKey = projectMemberDetails
+        ? getProjectRoleLabelKey(projectMemberDetails.original_role ?? projectMemberDetails.role)
+        : undefined;
       return {
         value: userId,
         query: `${userDetails?.display_name} ${userDetails?.first_name} ${userDetails?.last_name}`,
@@ -116,17 +140,31 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
             >
               {currentUser?.id === userId ? t("you") : userDetails?.display_name}
             </span>
+            {projectRoleLabelKey && (
+              <span className="flex-shrink-0 text-10 text-tertiary">{t(projectRoleLabelKey)}</span>
+            )}
           </div>
         ),
       };
     })
     .filter((o) => !!o);
 
-  const filteredOptions = sortByCurrentUserThenSelected(
+  const sortedOptions = sortByCurrentUserThenSelected(
     query === "" ? options : options?.filter((o) => o?.query.toLowerCase().includes(query.toLowerCase())),
     value,
     currentUser?.id
   );
+  const filteredOptions =
+    allowClear && !multiple
+      ? [
+          ...(sortedOptions ?? []),
+          {
+            value: "",
+            query: "none",
+            content: <span className="text-placeholder">{t("none")}</span>,
+          },
+        ]
+      : sortedOptions;
 
   return createPortal(
     <Combobox.Options
@@ -161,9 +199,14 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
         <div className="mt-2 max-h-48 space-y-1 overflow-y-scroll">
           {filteredOptions ? (
             filteredOptions.length > 0 ? (
-              filteredOptions.map(
-                (option) =>
-                  option && (
+              <>
+                {projectId && (
+                  <li className="px-1.5 pb-1 text-10 font-medium tracking-wide text-tertiary uppercase">
+                    {t("research.assignment.project_group")}
+                  </li>
+                )}
+                {filteredOptions.map((option) =>
+                  option ? (
                     <Combobox.Option
                       as="li"
                       key={option.value}
@@ -192,10 +235,13 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
                         </>
                       )}
                     </Combobox.Option>
-                  )
-              )
+                  ) : null
+                )}
+              </>
             ) : (
-              <p className="px-1.5 py-1 text-placeholder italic">{t("no_matching_results")}</p>
+              <p className="px-1.5 py-1 text-placeholder">
+                {projectId ? t("research.assignment.empty_administrative") : t("no_matching_results")}
+              </p>
             )
           ) : (
             <p className="px-1.5 py-1 text-placeholder italic">{t("loading")}</p>

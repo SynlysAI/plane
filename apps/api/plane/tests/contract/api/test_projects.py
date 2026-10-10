@@ -259,3 +259,37 @@ class TestProjectListCreateAPIEndpoint:
         # The dispatch was attempted but its failure was swallowed by
         # transaction.on_commit(robust=True).
         mocked_activity.delay.assert_called_once()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestProjectAssignmentBoundaryAPIEndpoint:
+    """Project assignment updates must stay inside the active project roster."""
+
+    def test_update_project_lead_requires_active_project_member(
+        self, api_key_client, workspace, create_user, other_workspace_member
+    ):
+        """A workspace member outside the project cannot become project lead."""
+        project = Project.objects.create(
+            name="Boundary Project",
+            identifier="BND",
+            workspace=workspace,
+            created_by=create_user,
+        )
+        ProjectMember.objects.create(
+            workspace=workspace,
+            project=project,
+            member=create_user,
+            role=20,
+            is_active=True,
+        )
+
+        response = api_key_client.patch(
+            f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/",
+            {"project_lead": str(other_workspace_member.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, f"Got {response.status_code}: {response.data!r}"
+        project.refresh_from_db()
+        assert project.project_lead_id is None

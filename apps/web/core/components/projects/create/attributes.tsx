@@ -14,6 +14,9 @@ import { getTabIndex } from "@plane/utils";
 // components
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ProjectNetworkIcon } from "@/components/project/project-network-icon";
+// hooks
+import { useResearch } from "@/hooks/store/use-research";
+import { useUser } from "@/hooks/store/user";
 
 type Props = {
   isMobile?: boolean;
@@ -23,6 +26,8 @@ function ProjectAttributes(props: Props) {
   const { isMobile = false } = props;
   const { t } = useTranslation();
   const { control } = useFormContext<IProject>();
+  const { isEnabled, isIaV2Enabled } = useResearch();
+  const { data: currentUser } = useUser();
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -79,6 +84,7 @@ function ProjectAttributes(props: Props) {
             return (
               <div className="h-7 flex-shrink-0" tabIndex={getIndex("lead")}>
                 <MemberDropdown
+                  memberIds={isEnabled && isIaV2Enabled && currentUser?.id ? [currentUser.id] : undefined}
                   value={value ?? null}
                   onChange={(lead) => onChange(lead === value ? null : lead)}
                   placeholder={t("lead")}

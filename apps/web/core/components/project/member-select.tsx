@@ -4,109 +4,38 @@
  * See the LICENSE file for details.
  */
 
-import React from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { Ban } from "lucide-react";
-import { Avatar } from "@makeplane/propel/components/avatar";
-import { EUserProjectRoles } from "@plane/types";
-// plane ui
-import { CustomSearchSelect } from "@plane/ui";
-// helpers
-import { getFileURL } from "@plane/utils";
+// components
+import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 
 type Props = {
   value: any;
-  onChange: (val: string) => void;
+  onChange: (val: string | null) => void;
   isDisabled?: boolean;
 };
 
 export const MemberSelect = observer(function MemberSelect(props: Props) {
   const { value, onChange, isDisabled = false } = props;
-  // router
   const { projectId } = useParams();
-  // store hooks
   const {
-    project: { projectMemberIds, getProjectMemberDetails },
+    project: { getProjectMemberDetails },
   } = useMember();
 
-  const options = projectMemberIds
-    ?.map((userId) => {
-      const memberDetails = projectId ? getProjectMemberDetails(userId, projectId.toString()) : null;
-
-      if (!memberDetails?.member) return;
-      const isGuest = memberDetails.role === EUserProjectRoles.GUEST;
-      if (isGuest) return;
-
-      return {
-        value: `${memberDetails?.member.id}`,
-        query: `${memberDetails?.member.display_name}`,
-        content: (
-          <div className="flex items-center gap-2">
-            <Avatar
-              alt={memberDetails?.member.display_name}
-              fallback={memberDetails?.member.display_name?.[0]?.toUpperCase()}
-              src={getFileURL(memberDetails?.member.avatar_url)}
-              size="xs"
-            />
-            {memberDetails?.member.display_name}
-          </div>
-        ),
-      };
-    })
-    .filter((option) => !!option) as
-    | {
-        value: string;
-        query: string;
-        content: React.ReactNode;
-      }[]
-    | undefined;
   const selectedOption = projectId ? getProjectMemberDetails(value, projectId.toString()) : null;
 
   return (
-    <CustomSearchSelect
-      value={value}
-      label={
-        <div className="flex h-3.5 items-center gap-2">
-          {selectedOption && (
-            <Avatar
-              alt={selectedOption.member?.display_name}
-              fallback={selectedOption.member?.display_name?.[0]?.toUpperCase()}
-              src={getFileURL(selectedOption.member?.avatar_url)}
-              size="xs"
-            />
-          )}
-          {selectedOption ? (
-            selectedOption.member?.display_name
-          ) : (
-            <div className="flex items-center gap-2">
-              <Ban className="h-3.5 w-3.5 rotate-90 text-placeholder" />
-              <span className="text-13 text-placeholder">None</span>
-            </div>
-          )}
-        </div>
-      }
+    <MemberDropdown
+      allowClear
+      projectId={projectId?.toString()}
+      value={selectedOption ? value : null}
+      onChange={(lead) => onChange(lead === value || !lead ? null : lead)}
+      multiple={false}
+      buttonVariant="border-with-text"
       buttonClassName="!px-3 !py-2 bg-surface-1"
-      options={
-        options &&
-        options && [
-          ...options,
-          {
-            value: "none",
-            query: "none",
-            content: (
-              <div className="flex items-center gap-2">
-                <Ban className="h-3.5 w-3.5 rotate-90 text-placeholder" />
-                <span className="py-0.5 text-13 text-placeholder">None</span>
-              </div>
-            ),
-          },
-        ]
-      }
-      maxHeight="md"
-      onChange={onChange}
+      placeholder="None"
       disabled={isDisabled}
     />
   );
