@@ -4,6 +4,7 @@
 
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
@@ -183,6 +184,59 @@ class PeriodicReportSnapshot(AppendOnlyModel):
 
     def __str__(self):
         return f"{self.report_id} v{self.version_no}"
+
+
+class PeriodicReportReadReceipt(AppendOnlyModel):
+    """An immutable read fact for one official report snapshot."""
+
+    class Source(models.TextChoices):
+        DETAIL_VIEW = "DETAIL_VIEW", "Detail view"
+
+    report = models.ForeignKey(
+        PeriodicReport,
+        on_delete=models.PROTECT,
+        related_name="read_receipts",
+    )
+    reader = models.ForeignKey(
+        "db.User",
+        on_delete=models.PROTECT,
+        related_name="research_periodic_report_read_receipts",
+    )
+    snapshot_version = models.PositiveIntegerField()
+    read_at = models.DateTimeField(auto_now_add=True)
+    source = models.CharField(max_length=24, choices=Source.choices, default=Source.DETAIL_VIEW)
+
+    class Meta:
+        verbose_name = "Periodic Report Read Receipt"
+        verbose_name_plural = "Periodic Report Read Receipts"
+        db_table = "research_periodic_report_read_receipts"
+        ordering = ("-read_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["report", "reader", "snapshot_version"],
+                name="rsch_report_read_uq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["report", "snapshot_version", "read_at"],
+                name="rsch_report_read_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.report_id} v{self.snapshot_version} <{self.reader_id}>"
+
+    def save(self, *args, **kwargs):
+        """Run submission validation before appending a receipt."""
+        self.clean()
+        return super().save(*args, **kwargs)
+
+    def clean(self):
+        """Reject receipts for reports without an official submission."""
+        super().clean()
+        if self.report_id and self.report and not self.report.submitted_at:
+            raise ValidationError({"report": "Read receipts require a submitted report."})
 
 
 class ReportReviewLog(models.Model):
