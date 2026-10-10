@@ -22,7 +22,6 @@ const mocks = vi.hoisted(() => ({
     { key: "integrations", labelKey: "research.nav.integrations", path: "integrations", section: "integrations" },
   ],
   iaV2Items: [
-    { key: "overview", labelKey: "research.nav.overview", path: "", section: null },
     {
       key: "research_chain",
       labelKey: "research.nav.research_chain_v2",
@@ -53,7 +52,23 @@ const mocks = vi.hoisted(() => ({
     isEnabled: true,
     isIaV2Enabled: false,
     researchLevel: "RESEARCHER",
-    visibleNavKeys: ["overview", "reports", "summary", "projects", "research_chain", "reviews", "approvals"],
+    visibleNavKeys: [
+      "overview",
+      "reports",
+      "summary",
+      "projects",
+      "research_chain",
+      "reviews",
+      "approvals",
+      "management",
+      "org",
+      "system",
+      "templates",
+      "identity",
+      "platform",
+      "audit",
+      "integrations",
+    ],
     canSee: (key: string) => mocks.research.visibleNavKeys.includes(key),
     identityLoader: false,
     identityErrorCode: null,
@@ -88,7 +103,48 @@ vi.mock("@/hooks/use-local-storage", () => ({
 }));
 vi.mock("@/services/research/navigation.service", () => ({
   ResearchNavigationService: class {
-    getTree = () => Promise.resolve({ scope: "RESEARCH", can_manage: false, categories: [], uncategorized: [] });
+    getTree = (_workspaceSlug: string, scope: string) =>
+      Promise.resolve(
+        scope === "RESEARCH"
+          ? {
+              scope,
+              can_manage: false,
+              categories: [
+                {
+                  id: "research-category",
+                  name: "重点课题",
+                  kind: "CUSTOM",
+                  scope,
+                  parent: null,
+                  sort_order: 0,
+                  can_manage: false,
+                  org_unit: null,
+                  children: [],
+                  projects: [{ id: "chain-1", name: "新材料课题", kind: "RESEARCH_CHAIN" }],
+                },
+              ],
+              uncategorized: [],
+            }
+          : {
+              scope,
+              can_manage: false,
+              categories: [
+                {
+                  id: "administrative-category",
+                  name: "综合保障",
+                  kind: "CUSTOM",
+                  scope,
+                  parent: null,
+                  sort_order: 0,
+                  can_manage: false,
+                  org_unit: null,
+                  children: [],
+                  projects: [{ id: "admin-1", name: "年度采购", kind: "ADMINISTRATIVE" }],
+                },
+              ],
+              uncategorized: [],
+            }
+      );
   },
 }));
 vi.mock("@headlessui/react", () => {
@@ -185,18 +241,31 @@ it("shows 研究链 only when the workspace chain switch is on", async () => {
   expect(link).not.toBeNull();
 });
 
-it("collapses research to four destinations when IA v2 is enabled", async () => {
+it("collapses research to the IA v2 project channels when IA v2 is enabled", async () => {
   setSwitches(true, false, true);
   await act(async () => root.render(<ResearchSidebarItems />));
+  await act(async () => {});
 
   const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
-  expect(links).toEqual(["/lab/research", "/lab/research/approvals", "/lab/research/chains", "/lab/projects"]);
-  expect(container.textContent).toContain("项目与课题");
+  expect(links).toEqual([
+    "/lab/research/approvals",
+    "/lab/research/settings",
+    "/lab/research/chains",
+    "/lab/research/chains/chain-1",
+    "/lab/projects",
+    "/lab/projects/admin-1/issues",
+  ]);
+  expect(container.textContent).toContain("科研项目");
   expect(container.textContent).toContain("审批中心");
   expect(container.textContent).toContain("行政项目");
+  expect(container.textContent).toContain("重点课题");
+  expect(container.textContent).toContain("综合保障");
+  expect(container.textContent).not.toContain("科研总览");
   expect(container.textContent).not.toContain("报告");
   expect(container.textContent).not.toContain("提交汇总");
   expect(container.textContent).not.toContain("待我评审");
+  expect(container.querySelectorAll("a[href='/lab/research/chains/chain-1']")).toHaveLength(1);
+  expect(container.querySelectorAll("a[href='/lab/projects/admin-1/issues']")).toHaveLength(1);
 });
 
 it("shows the management destination only for callers with a management tab", async () => {

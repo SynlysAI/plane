@@ -3,7 +3,7 @@
 | 项目     | 内容                                                                                                                                |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | 文档版本 | v1.5                                                                                                                                |
-| 状态     | 设计复核修订版；增加 Tower 式统一待办入口、范围切换和业务状态映射                                                                   |
+| 状态     | 设计复核修订版；U0 IA 基线测试已落地，页面重构自 U1 起推进                                                                          |
 | 日期     | 2026-10-10                                                                                                                          |
 | 代码基线 | Plane `develop` / `4.24.0`                                                                                                          |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                    |
@@ -26,18 +26,19 @@ Phase 1.6 的 UX 是**现有 Plane UX 的事实收敛**，不是重画一套界�
 
 ### 2.1 信息架构
 
-`packages/constants/src/research.ts` 中 IA v2 最多四个入口：
+U0 后的导航基线如下：
 
-| 当前实现入口           | 当前路由                          | 说明                            |
-| ---------------------- | --------------------------------- | ------------------------------- |
-| 科研总览               | `/{workspace}/research`           | 跨课题工作台和待办索引          |
-| 项目与课题（当前实现） | `/{workspace}/research/chains`    | 课题 / 项目 / 报告三个保存视图  |
-| 审批中心               | `/{workspace}/research/approvals` | 阶段评审、报告审核、Agent、办公 |
-| 科研管理               | `/{workspace}/research/settings`  | 组织、系统、模板、身份、配置等  |
+| 当前实现入口 | 当前路由                          | 说明                                      |
+| ------------ | --------------------------------- | ----------------------------------------- |
+| 首页         | `/{workspace}`                    | 由 Workspace 侧栏全局提供，且仅此一个入口 |
+| 科研项目     | `/{workspace}/research/chains`    | 课题 / 项目 / 报告三个保存视图            |
+| 审批中心     | `/{workspace}/research/approvals` | 阶段评审、报告审核、Agent、办公           |
+| 管理         | `/{workspace}/research/settings`  | 组织、系统、模板、身份、配置等            |
+| 行政项目     | `/{workspace}/projects`           | 普通 Plane Project 通道                   |
 
-关闭 `research_ia_v2` 时，旧一级导航和旧路由必须完整保留。`research-ia-v2-redirect` 负责旧路径到 IA v2 容器的兼容跳转。
+科研项目与行政项目分别消费 `RESEARCH` / `ADMINISTRATIVE` 分类树，具体项目只出现在所属通道下方；IA v2 打开时，App 侧栏不再并行渲染旧 `SidebarProjectsList`。关闭 `research_ia_v2` 时，旧一级导航、旧项目列表和旧路由完整保留；`research-ia-v2-redirect` 负责开启开关后的旧路径兼容跳转。
 
-以上是当前代码事实，不是 Phase 1.6 目标 IA。目标 IA 在 §3 和 §12 中定义；后续实现必须保留旧路由兼容与 IA v2 回退能力。
+当前只固定导航与回退合同；`/{workspace}/research` 路由本身、首页两列内容和科研项目容器收敛仍按 §10 后续切片推进。
 
 ### 2.2 当前科研项目容器实现
 
@@ -370,6 +371,8 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 - 更新首页、导航、科研项目、行政项目和待办组件测试的期望文案。
 - 固定目标 IA、旧路由兼容和 IA v2 回退断言。
 - 固定单列侧栏、父级可点项目和二级项目树的导航断言。
+
+当前状态：已完成。`research-ia-baseline.test.ts` 固定首页唯一、双项目通道不重复和旧路由注册；`research-chain-navigation.test.tsx` 固定 IA v2 导航、`ResearchProjectTree` 分类展示、科研 / 行政项目去重，以及关闭开关时的旧导航；`research-app-sidebar.test.tsx` 固定 IA v2 关闭旧项目列表、开启后恢复。首页与页面容器重构仍未开始。
 
 ### U1：首页两列工作台
 

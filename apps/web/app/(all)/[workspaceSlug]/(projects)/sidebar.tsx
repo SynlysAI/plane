@@ -18,12 +18,14 @@ import { SidebarMenuItems } from "@/components/workspace/sidebar/sidebar-menu-it
 import { ResearchSidebarItems } from "@/components/research/navigation/research-sidebar-items";
 // hooks
 import { useFavorite } from "@/hooks/store/use-favorite";
+import { useResearch } from "@/hooks/store/use-research";
 import { useUserPermissions } from "@/hooks/store/user";
 
 export const AppSidebar = observer(function AppSidebar() {
   // store hooks
   const { allowPermissions } = useUserPermissions();
   const { groupedFavorites } = useFavorite();
+  const research = useResearch();
 
   // derived values
   const canPerformWorkspaceMemberActions = allowPermissions(
@@ -32,6 +34,8 @@ export const AppSidebar = observer(function AppSidebar() {
   );
 
   const isFavoriteEmpty = isEmpty(groupedFavorites);
+  // IA v2 renders the research and administrative channels through scoped trees.
+  const usesResearchProjectTree = research.isEnabled && research.isIaV2Enabled;
 
   return (
     <SidebarWrapper title="Projects" quickActions={<SidebarQuickActions />}>
@@ -41,7 +45,7 @@ export const AppSidebar = observer(function AppSidebar() {
       {/* Favorites Menu */}
       {canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />}
       {/* Projects List */}
-      <SidebarProjectsList />
+      {!usesResearchProjectTree && <SidebarProjectsList />}
     </SidebarWrapper>
   );
 });

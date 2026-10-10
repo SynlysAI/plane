@@ -255,9 +255,8 @@ export const RESEARCH_NAVIGATION_ITEMS = [
   { key: "approvals", labelKey: "research.nav.approvals", path: "approvals", section: "approvals" },
 ] as const;
 
-/** Phase 1 IA v2 renders at most four first-level research destinations. */
+/** Phase 1.6 IA v2 leaves the workspace home unique and keeps three research destinations. */
 export const RESEARCH_IA_V2_NAVIGATION_ITEMS = [
-  { key: "overview", labelKey: "research.nav.overview", path: "", section: null },
   {
     key: "research_chain",
     labelKey: "research.nav.research_chain_v2",

@@ -86,7 +86,6 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   );
   const visibleIaV2Items = RESEARCH_IA_V2_NAVIGATION_ITEMS.filter((item) => {
     if (item.key === "management") return visibleSettingsItems.length > 0;
-    if (!item.section) return research.canSee(item.key);
     return Boolean(sections?.[item.section]) && research.canSee(item.key);
   });
 
@@ -151,7 +150,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
               <>
                 {visibleIaV2Items
                   .filter((item) => item.key !== "research_chain")
-                  .map((item) => renderItem(item.key, item.labelKey, item.path, item.key === "overview"))}
+                  .map((item) => renderItem(item.key, item.labelKey, item.path))}
                 {research.canSee("research_chain") && (
                   <ResearchProjectTree
                     scope="RESEARCH"
