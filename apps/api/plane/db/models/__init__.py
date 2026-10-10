@@ -139,6 +139,7 @@ from .research import (
     OrgUnit,
     OrgUnitMember,
     PeriodicReport,
+    PeriodicReportReadReceipt,
     PeriodicReportProjectReference,
     PeriodicReportSnapshot,
     ReportAccessGrant,

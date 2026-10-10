@@ -1097,6 +1097,8 @@
       "report_revision": "Report needs revision",
       "stage_review": "Stage review pending",
       "office_approval": "Office approval pending",
+      "report_pending_read": "Weekly report to read",
+      "report_pending_review": "Weekly report awaiting review",
       "manual_backfill": "External system degraded; keep manual records",
       "external_degraded": "RAGPortal is unavailable; sync after it recovers."
     },
@@ -1888,6 +1890,12 @@
       "owner_filter_placeholder": "Author ID",
       "period_filter_placeholder": "Filter by period",
       "backfill": "Backfill",
+      "read": {
+        "waiting": "Waiting for advisor to read",
+        "read_pending_review": "Advisor read · awaiting review",
+        "reviewed": "Reviewed",
+        "at": "Read at"
+      },
       "empty": "No report matches the filters",
       "submit": "Submit",
       "return": "Return",
@@ -1916,6 +1924,7 @@
         "owner": "Owner",
         "org_unit": "Organisation node",
         "status": "Status",
+        "read_state": "Read state",
         "visibility": "Visibility"
       }
     },

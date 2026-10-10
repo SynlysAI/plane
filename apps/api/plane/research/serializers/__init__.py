@@ -23,6 +23,7 @@ from .settings import WorkspaceResearchSettingSerializer
 from .template import ReportTemplateSerializer
 from .report import (
     PeriodicReportSerializer,
+    PeriodicReportReadReceiptSerializer,
     ReportAccessGrantSerializer,
     ReportReviewLogSerializer,
 )
@@ -75,6 +76,7 @@ __all__ = [
     "OrgUnitSerializer",
     "ReportTemplateSerializer",
     "PeriodicReportSerializer",
+    "PeriodicReportReadReceiptSerializer",
     "ReportAccessGrantSerializer",
     "ReportReviewLogSerializer",
     "ReportAttachmentSerializer",

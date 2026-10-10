@@ -21,6 +21,8 @@ export type TResearchTodo = {
   id: string;
   source: TResearchTodoSource;
   kind: TResearchTodoKind;
+  /** Lower values sort first inside the same severity level. */
+  priority?: number;
   title: string;
   context: string;
   href: string;
@@ -64,10 +66,14 @@ function normalizeResearchTodos(todos: TResearchTodo[]) {
   const byObject = new Map<string, TResearchTodo>();
   for (const todo of todos) {
     const existing = byObject.get(todo.id);
+    const todoPriority = todo.priority ?? 0;
+    const existingPriority = existing?.priority ?? 0;
     if (
       !existing ||
       KIND_RANK[todo.kind] < KIND_RANK[existing.kind] ||
+      (KIND_RANK[todo.kind] === KIND_RANK[existing.kind] && todoPriority < existingPriority) ||
       (KIND_RANK[todo.kind] === KIND_RANK[existing.kind] &&
+        todoPriority === existingPriority &&
         todoTimeValue(todo.updatedAt) > todoTimeValue(existing.updatedAt))
     ) {
       byObject.set(todo.id, todo);
@@ -78,6 +84,8 @@ function normalizeResearchTodos(todos: TResearchTodo[]) {
     if (KIND_RANK[left.kind] !== KIND_RANK[right.kind]) return KIND_RANK[left.kind] - KIND_RANK[right.kind];
     const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
     const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    const priorityGap = (left.priority ?? 0) - (right.priority ?? 0);
+    if (priorityGap !== 0) return priorityGap;
     if (leftDue !== rightDue) return leftDue - rightDue;
     return todoTimeValue(right.updatedAt) - todoTimeValue(left.updatedAt);
   });
@@ -148,6 +156,33 @@ export async function collectResearchTodos({
               title: `${translate("research.todo.report_revision")} · ${report.period_key}`,
               context: report.owner_detail?.display_name ?? report.project ?? "",
               href: `/${workspaceSlug}/research/chains?view=reports&status=NEEDS_REVISION&mine=true`,
+              dueAt: report.period_end,
+              updatedAt: report.updated_at,
+            });
+          }
+        }
+      })()
+    );
+    tasks.push(
+      (async () => {
+        const payload = await reportService
+          .getReports(workspaceSlug, { scope: "review", status: "SUBMITTED", per_page: "50" })
+          .catch(() => null);
+        if (payload) {
+          for (const report of payload.results as TPeriodicReport[]) {
+            if (report.status !== "SUBMITTED") continue;
+            if (!withinPeriod(report.updated_at)) continue;
+            const unread = !report.has_read;
+            collected.push({
+              id: `report-review:${report.id}`,
+              source: "report",
+              kind: "confirmation",
+              priority: unread ? 0 : 1,
+              title: `${translate(
+                unread ? "research.todo.report_pending_read" : "research.todo.report_pending_review"
+              )} · ${report.period_key}`,
+              context: report.owner_detail?.display_name ?? report.owner ?? "",
+              href: `/${workspaceSlug}/research/reports/${report.id}`,
               dueAt: report.period_end,
               updatedAt: report.updated_at,
             });

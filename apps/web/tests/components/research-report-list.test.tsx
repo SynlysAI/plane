@@ -6,6 +6,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createReport: vi.fn(),
+  getReports: vi.fn(),
   fetchReportTemplates: vi.fn(),
   fetchReports: vi.fn(),
   fetchResearchProjects: vi.fn(),
@@ -35,6 +36,9 @@ vi.mock("@plane/i18n", () => ({
         "research.reports.template": "模板",
         "research.feedback.report_created.title": "报告已创建",
         "research.feedback.report_created.message": "请继续编辑正文。",
+        "research.reports.columns.read_state": "已读状态",
+        "research.reports.read.waiting": "待阅读",
+        "research.reports.read.read_pending_review": "已读 · 待审阅",
       })[key] ?? key,
     currentLocale: "zh-CN",
   }),
@@ -75,7 +79,7 @@ vi.mock("@/hooks/store/use-research", () => ({
     identity: { user: { org_units: [{ org_unit: "unit-1", is_primary: true }] } },
     reportLoader: false,
     reportPaginationByWorkspace: {},
-    getReports: () => [],
+    getReports: () => mocks.getReports(),
     getOrgUnits: () => [],
     getResearchProjects: () => [],
     getReportTemplates: () => [template],
@@ -116,6 +120,7 @@ beforeEach(() => {
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
   mocks.createReport.mockResolvedValue({ id: "report-1" });
+  mocks.getReports.mockReturnValue([]);
 });
 
 afterEach(async () => {
@@ -218,4 +223,39 @@ it("报告列表 scope=mine 新链接不再输出 mine 请求参数", async () =
     scope: "mine",
   });
   expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("mine");
+});
+
+it("报告审核列表区分待阅读和已读待审阅", async () => {
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-unread",
+      period_key: "2026-W40",
+      status: "SUBMITTED",
+      visibility: "DIRECT_ADVISOR",
+      has_read: false,
+      read_count: 0,
+      latest_read_at: null,
+    },
+    {
+      id: "report-read",
+      period_key: "2026-W39",
+      status: "SUBMITTED",
+      visibility: "DIRECT_ADVISOR",
+      has_read: true,
+      read_count: 1,
+      latest_read_at: "2026-10-10T08:09:00Z",
+    },
+  ]);
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/approvals?tab=report_review"]}>
+        <ResearchReportList workspaceSlug="lab" variant="review" />
+      </MemoryRouter>
+    )
+  );
+
+  const rows = [...container.querySelectorAll("tr")];
+  expect(rows[1]?.textContent).toContain("待阅读");
+  expect(rows[2]?.textContent).toContain("已读 · 待审阅");
 });

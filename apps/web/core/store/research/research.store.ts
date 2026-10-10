@@ -244,6 +244,7 @@ export interface IResearchStore {
   ) => Promise<TPeriodicReport>;
   returnReport: (workspaceSlug: string, reportId: string, comment: string) => Promise<TPeriodicReport>;
   acceptReport: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
+  markReportRead: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
   fetchReportHistory: (workspaceSlug: string, reportId: string) => Promise<TReportReviewLog[]>;
   fetchReportAttachments: (workspaceSlug: string, reportId: string) => Promise<TReportAttachment[]>;
   uploadReportAttachment: (
@@ -694,6 +695,7 @@ export class ResearchStore implements IResearchStore {
       submitReport: action,
       returnReport: action,
       acceptReport: action,
+      markReportRead: action,
       fetchReportHistory: action,
       fetchReportAttachments: action,
       uploadReportAttachment: action,
@@ -1208,6 +1210,21 @@ export class ResearchStore implements IResearchStore {
     });
     await this.fetchReportHistory(workspaceSlug, reportId);
     return report;
+  };
+
+  markReportRead = async (workspaceSlug: string, reportId: string) => {
+    const receipt = await this.reportService.markReportRead(workspaceSlug, reportId);
+    runInAction(() => {
+      const report = this.reports[reportId];
+      if (!report) return;
+      this.reports[reportId] = {
+        ...report,
+        has_read: receipt.has_read,
+        read_count: receipt.read_count,
+        latest_read_at: receipt.latest_read_at,
+      };
+    });
+    return this.reports[reportId];
   };
 
   fetchReportHistory = async (workspaceSlug: string, reportId: string) => {

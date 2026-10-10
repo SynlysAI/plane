@@ -11,7 +11,7 @@ import { useNavigate, useParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportStatus, TReportType } from "@plane/constants";
-import type { TReportTemplate } from "@plane/types";
+import type { TPeriodicReport, TReportTemplate } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -37,13 +37,23 @@ import { ResearchListState } from "@/components/research/common/research-list-st
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
-import { formatResearchDate } from "@/components/research/common/research-format";
+import { formatResearchDate, formatResearchReadAt } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
   /** `review` turns the list into an approval queue without creation controls. */
   variant?: "default" | "review";
 };
+
+type ReportReadState = "waiting" | "read_pending_review" | "reviewed";
+
+/** Derive read state without conflating it with the report review state. */
+function reportReadState(report: TPeriodicReport, isAuthor: boolean): ReportReadState | null {
+  if (report.status === "DRAFT") return null;
+  if (report.status !== "SUBMITTED") return "reviewed";
+  const hasRead = isAuthor ? (report.read_count ?? 0) > 0 : Boolean(report.has_read);
+  return hasRead ? "read_pending_review" : "waiting";
+}
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
 const ReportListContent = observer(function ReportListContent({ workspaceSlug, variant = "default" }: Props) {
@@ -78,6 +88,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const [templateId, setTemplateId] = useState("");
 
   const reports = research.getReports(workspaceSlug);
+  const currentUserId = research.identity?.user.id;
   const orgUnits = research.getOrgUnits(workspaceSlug);
   const pagination = research.reportPaginationByWorkspace[workspaceSlug];
   const canCreateReport = Boolean(research.identity?.user.org_units.length);
@@ -321,6 +332,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                 <TableHead>{t("research.reports.columns.owner")}</TableHead>
                 <TableHead>{t("research.reports.columns.org_unit")}</TableHead>
                 <TableHead>{t("research.reports.columns.status")}</TableHead>
+                <TableHead>{t("research.reports.columns.read_state")}</TableHead>
                 <TableHead>{t("research.reports.columns.visibility")}</TableHead>
                 <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
                 <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
@@ -351,6 +363,22 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                     <ResearchStatusBadge status={report.status} size="sm">
                       {t(REPORT_STATUS_LABELS[report.status])}
                     </ResearchStatusBadge>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const readState = reportReadState(report, report.owner === currentUserId);
+                      if (!readState) return <span className="text-tertiary">-</span>;
+                      return (
+                        <span className="flex flex-col gap-0.5">
+                          <span className="text-12 text-secondary">{t(`research.reports.read.${readState}`)}</span>
+                          {readState === "read_pending_review" && report.latest_read_at && (
+                            <span className="text-11 text-tertiary tabular-nums">
+                              {formatResearchReadAt(report.latest_read_at, currentLocale)}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-tertiary">
                     {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}

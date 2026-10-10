@@ -139,3 +139,37 @@ it("marks a non-success RAG upload as blocking without exposing payload JSON", a
   expect(container.textContent).not.toContain("secret-knowledge");
   expect(container.textContent).not.toContain("http_error");
 });
+
+it("separates unread reports from reports awaiting review", async () => {
+  mocks.reports.mockResolvedValueOnce({ results: [] }).mockResolvedValueOnce({
+    results: [
+      {
+        id: "report-unread",
+        period_key: "2026-W40",
+        period_end: "2026-10-04T00:00:00Z",
+        owner_detail: { display_name: "学生一" },
+        updated_at: "2026-09-30T00:00:00Z",
+        status: "SUBMITTED",
+        has_read: false,
+      },
+      {
+        id: "report-read",
+        period_key: "2026-W39",
+        period_end: "2026-09-27T00:00:00Z",
+        owner_detail: { display_name: "学生二" },
+        updated_at: "2026-09-22T00:00:00Z",
+        status: "SUBMITTED",
+        has_read: true,
+      },
+    ],
+  });
+
+  await act(async () => root.render(<ResearchTodoIndex workspaceSlug="lab" />));
+
+  const text = container.textContent ?? "";
+  expect(text).toContain("周报待阅读 · 2026-W40");
+  expect(text).toContain("周报待审阅 · 2026-W39");
+  expect(text.indexOf("周报待阅读")).toBeLessThan(text.indexOf("周报待审阅"));
+  expect(container.querySelector('a[href="/lab/research/reports/report-unread"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research/reports/report-read"]')).not.toBeNull();
+});

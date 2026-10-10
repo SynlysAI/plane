@@ -1104,6 +1104,8 @@
       "report_revision": "报告需修订",
       "stage_review": "阶段评审待处理",
       "office_approval": "办公审批待处理",
+      "report_pending_read": "周报待阅读",
+      "report_pending_review": "周报待审阅",
       "manual_backfill": "外部系统降级，请保留人工记录",
       "external_degraded": "RAGPortal 不可用，待其恢复后再同步。",
       "pagination": "待办分页",
@@ -1913,6 +1915,12 @@
       "owner_filter_placeholder": "作者 ID",
       "period_filter_placeholder": "筛选周期",
       "backfill": "补交",
+      "read": {
+        "waiting": "待导师阅读",
+        "read_pending_review": "导师已读 · 待审阅",
+        "reviewed": "已审阅",
+        "at": "已读时间"
+      },
       "empty": "没有符合条件的报告",
       "submit": "提交",
       "return": "退回",
@@ -1941,6 +1949,7 @@
         "owner": "作者",
         "org_unit": "组织节点",
         "status": "状态",
+        "read_state": "已读状态",
         "visibility": "可见范围"
       }
     },

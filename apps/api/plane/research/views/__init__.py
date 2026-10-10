@@ -101,6 +101,10 @@ from .navigation import (
     ProjectNavigationMoveProjectEndpoint,
     ProjectNavigationTreeEndpoint,
 )
+from .report_read import (
+    ResearchReportReadEndpoint,
+    ResearchReportReadReceiptListEndpoint,
+)
 from .reports import (
     ResearchReportAcceptEndpoint,
     ResearchReportAccessEndpoint,
@@ -357,6 +361,8 @@ __all__ = [
     "ResearchReportDetailEndpoint",
     "ResearchReportHistoryEndpoint",
     "ResearchReportListCreateEndpoint",
+    "ResearchReportReadEndpoint",
+    "ResearchReportReadReceiptListEndpoint",
     "ResearchReportReturnEndpoint",
     "ResearchReportSubmitEndpoint",
     "ResearchInviteCodeListCreateEndpoint",

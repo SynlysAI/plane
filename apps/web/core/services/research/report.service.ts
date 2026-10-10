@@ -9,6 +9,8 @@ import type {
   TPeriodicReport,
   TPaginationInfo,
   TReportAttachment,
+  TReportReadReceipt,
+  TReportReadResult,
   TReportReviewLog,
   TReportSummary,
   TReportTemplate,
@@ -114,6 +116,22 @@ export class ResearchReportService extends APIService {
   async getReportHistory(workspaceSlug: string, reportId: string) {
     return this.get(researchEndpoints.reportHistory(workspaceSlug, reportId))
       .then((res) => res?.data as { results: TReportReviewLog[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async markReportRead(workspaceSlug: string, reportId: string) {
+    return this.post(researchEndpoints.reportRead(workspaceSlug, reportId), {})
+      .then((res) => res?.data as TReportReadResult)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async getReportReadReceipts(workspaceSlug: string, reportId: string) {
+    return this.get(researchEndpoints.reportReadReceipts(workspaceSlug, reportId))
+      .then((res) => res?.data as { results: TReportReadReceipt[]; count: number })
       .catch((err) => {
         throw err?.response?.data;
       });

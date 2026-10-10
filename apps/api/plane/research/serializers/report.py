@@ -4,7 +4,12 @@
 
 from rest_framework import serializers
 
-from plane.db.models import PeriodicReport, ReportAccessGrant, ReportReviewLog
+from plane.db.models import (
+    PeriodicReport,
+    PeriodicReportReadReceipt,
+    ReportAccessGrant,
+    ReportReviewLog,
+)
 
 from .org import ResearchUserSerializer
 
@@ -44,6 +49,25 @@ class ReportAccessGrantSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "granted_by", "created_at"]
 
 
+class PeriodicReportReadReceiptSerializer(serializers.ModelSerializer):
+    """Append-only read facts returned only to receipt-summary viewers."""
+
+    reader_detail = ResearchUserSerializer(source="reader", read_only=True)
+
+    class Meta:
+        model = PeriodicReportReadReceipt
+        fields = [
+            "id",
+            "report",
+            "reader",
+            "reader_detail",
+            "snapshot_version",
+            "read_at",
+            "source",
+        ]
+        read_only_fields = fields
+
+
 class PeriodicReportSerializer(serializers.ModelSerializer):
     owner_detail = ResearchUserSerializer(source="owner", read_only=True)
     org_unit_detail = serializers.SerializerMethodField()
@@ -52,6 +76,9 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     attachment_count = serializers.SerializerMethodField()
     team_projects = serializers.SerializerMethodField()
     latest_official_version = serializers.SerializerMethodField()
+    has_read = serializers.SerializerMethodField()
+    read_count = serializers.SerializerMethodField()
+    latest_read_at = serializers.SerializerMethodField()
     official_content = serializers.SerializerMethodField()
     draft_content = serializers.SerializerMethodField()
     page_project = serializers.SerializerMethodField()
@@ -86,6 +113,9 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             "can_review",
             "attachment_count",
             "latest_official_version",
+            "has_read",
+            "read_count",
+            "latest_read_at",
             "official_content",
             "draft_content",
         ]
@@ -138,6 +168,29 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     def get_latest_official_version(self, obj):
         snapshot = self._official_snapshot(obj)
         return snapshot.version_no if snapshot else None
+
+    def _latest_read_receipts(self, obj):
+        snapshot = self._official_snapshot(obj)
+        if snapshot is None:
+            return []
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("read_receipts")
+        if prefetched is not None:
+            return [receipt for receipt in prefetched if receipt.snapshot_version == snapshot.version_no]
+        return list(obj.read_receipts.filter(snapshot_version=snapshot.version_no))
+
+    def get_has_read(self, obj):
+        request = self.context.get("request")
+        if request is None or request.user is None or not request.user.is_authenticated:
+            return False
+        receipts = self._latest_read_receipts(obj)
+        return any(receipt.reader_id == request.user.id for receipt in receipts)
+
+    def get_read_count(self, obj):
+        return len(self._latest_read_receipts(obj))
+
+    def get_latest_read_at(self, obj):
+        receipts = self._latest_read_receipts(obj)
+        return max((receipt.read_at for receipt in receipts), default=None)
 
     def get_official_content(self, obj):
         request = self.context.get("request")

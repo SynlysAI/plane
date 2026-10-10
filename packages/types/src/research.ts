@@ -572,10 +572,34 @@ export type TPeriodicReport = {
   can_review?: boolean;
   attachment_count?: number;
   latest_official_version: number | null;
+  /** Whether the current viewer has read the latest official snapshot. */
+  has_read?: boolean;
+  /** Distinct read receipts attached to the latest official snapshot. */
+  read_count?: number;
+  /** Latest read time for the latest official snapshot. */
+  latest_read_at?: string | null;
   /** Frozen submitted body returned to readers other than the author. */
   official_content: TReportOfficialContent | null;
   /** Current mutable Page body, returned only on the author's report detail. */
   draft_content: TReportDraftContent | null;
+};
+
+export type TReportReadResult = {
+  has_read: boolean;
+  read_at: string;
+  snapshot_version: number;
+  read_count: number;
+  latest_read_at: string;
+};
+
+export type TReportReadReceipt = {
+  id: string;
+  report: string;
+  reader: string;
+  reader_detail?: TResearchUserLite;
+  snapshot_version: number;
+  read_at: string;
+  source: "DETAIL_VIEW";
 };
 
 export type TReportReviewLog = {

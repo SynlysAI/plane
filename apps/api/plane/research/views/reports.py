@@ -72,6 +72,7 @@ def report_queryset(workspace):
             "attachments",
             "page__project_pages",
             "official_snapshots",
+            "read_receipts",
             "access_grants",
         )
         .order_by("-period_start", "-created_at")
