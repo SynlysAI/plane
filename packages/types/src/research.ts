@@ -250,6 +250,190 @@ export type TResearchChainMember = {
   is_owner: boolean;
 };
 
+export type TResearchChainNodeTaskStatus =
+  | "DRAFT"
+  | "ASSIGNED"
+  | "SUBMITTED"
+  | "NEEDS_REVISION"
+  | "COMPLETED"
+  | "CANCELLED";
+
+export type TResearchChainNodeTaskResourceType =
+  | "NONE"
+  | "REPORT"
+  | "STAGE_MATERIAL"
+  | "OUTCOME"
+  | "PAPER_REVIEW"
+  | "SNAPSHOT"
+  | "EXTERNAL_REF";
+
+export type TResearchChainNodeTaskAction = "view" | "edit" | "assign" | "submit" | "return" | "complete" | "cancel";
+
+export type TResearchTaskActionCapability = TResearchActionCapability;
+
+export type TResearchChainNodeTaskCapabilities = {
+  schema_version: "research-capabilities.v1";
+  actions: Record<TResearchChainNodeTaskAction, TResearchTaskActionCapability>;
+};
+
+export type TResearchTaskAssignee = TResearchUserLite;
+
+export type TResearchAssignableUserScope = "ORG_SCOPE" | "COLLABORATOR";
+
+export type TResearchAssignableUser = {
+  user_id: string;
+  display_name: string;
+  org_unit_id: string | null;
+  org_unit_name: string | null;
+  org_role: TOrgRole | null;
+  is_primary: boolean;
+  scope: TResearchAssignableUserScope;
+};
+
+export type TResearchChainNodeTask = {
+  schema_version: "research-node-task.v1";
+  id: string;
+  workspace: string;
+  chain: string;
+  node: string;
+  title: string;
+  instruction: string;
+  status: TResearchChainNodeTaskStatus;
+  assignee: string | null;
+  assignee_detail?: TResearchTaskAssignee | null;
+  assigned_by: string | null;
+  assigned_by_detail?: TResearchUserLite | null;
+  due_at: string | null;
+  submitted_at: string | null;
+  completed_at: string | null;
+  resource_type: TResearchChainNodeTaskResourceType;
+  resource_id: string | null;
+  request_id: string;
+  capabilities?: TResearchChainNodeTaskCapabilities;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TPeriodicReportReadReceiptSource = "DETAIL_VIEW";
+
+export type TPeriodicReportReadReceipt = {
+  id: string;
+  report: string;
+  reader: string;
+  reader_detail?: TResearchUserLite | null;
+  snapshot_version: number;
+  read_at: string;
+  source: TPeriodicReportReadReceiptSource;
+};
+
+export type TResearchPaperReviewStatus = "OPEN" | "WAITING_REVIEW" | "NEEDS_REVISION" | "ACCEPTED" | "WITHDRAWN";
+
+export type TResearchPaperReviewAction = "view" | "submit" | "return" | "accept" | "withdraw";
+
+export type TResearchPaperReviewCapabilities = {
+  schema_version: "research-capabilities.v1";
+  actions: Record<TResearchPaperReviewAction, TResearchActionCapability>;
+};
+
+export type TResearchPaperReview = {
+  schema_version: "paper-review.v1";
+  id: string;
+  workspace: string;
+  chain: string;
+  node: string;
+  outcome: string | null;
+  owner: string;
+  owner_detail?: TResearchUserLite;
+  status: TResearchPaperReviewStatus;
+  current_version_no: number;
+  final_reviewer: string | null;
+  final_reviewer_detail?: TResearchUserLite | null;
+  due_at: string | null;
+  capabilities?: TResearchPaperReviewCapabilities;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchPaperReviewVersionStatus = "SUBMITTED" | "SUPERSEDED" | "ACCEPTED";
+
+export type TResearchPaperReviewAssetDetail = {
+  name: string;
+  size: number;
+  type: string;
+};
+
+export type TResearchPaperReviewVersion = {
+  schema_version: "paper-review-version.v1";
+  id: string;
+  review: string;
+  version_no: number;
+  asset: string;
+  asset_detail?: TResearchPaperReviewAssetDetail | null;
+  file_name: string;
+  content_type: string;
+  file_size: number;
+  change_summary: string;
+  status: TResearchPaperReviewVersionStatus;
+  submitted_by: string | null;
+  submitted_by_detail?: TResearchUserLite | null;
+  submitted_at: string;
+  content_hash: string;
+  request_id: string;
+};
+
+export type TResearchTodoSource =
+  | "CHAIN_TASK"
+  | "REPORT"
+  | "PAPER_REVIEW"
+  | "STAGE_REVIEW"
+  | "AGENT_APPROVAL"
+  | "OFFICE_APPROVAL";
+
+export type TResearchTodoHandlingStatus = "TODO" | "IN_PROGRESS" | "RETURNED" | "DONE" | "BLOCKED";
+
+export type TResearchTodoNextAction =
+  | "READ"
+  | "REVIEW"
+  | "SUBMIT"
+  | "RETURN"
+  | "ACCEPT"
+  | "WITHDRAW"
+  | "COMPLETE"
+  | "CANCEL"
+  | "APPROVE"
+  | "REJECT";
+
+export type TResearchTodoParticipant = {
+  id: string;
+  display_name: string;
+};
+
+export type TResearchTodoTraceRef = {
+  resource_type: string;
+  resource_id: string;
+  event_id?: string;
+  trace_id?: string | null;
+};
+
+export type TResearchTodoEnvelope = {
+  schema_version: "research-todo.v2";
+  id: string;
+  source: TResearchTodoSource;
+  object_id: string;
+  title: string;
+  context: string;
+  requester: TResearchTodoParticipant | null;
+  assignees: TResearchTodoParticipant[];
+  business_status: string;
+  handling_status: TResearchTodoHandlingStatus;
+  next_action: TResearchTodoNextAction;
+  due_at: string | null;
+  href: string;
+  capabilities: TResearchActionCapabilities;
+  trace_ref: TResearchTodoTraceRef | null;
+  updated_at: string;
+};
+
 export type TResearchAnalysisResult = {
   schema_version: "research-analysis.v1";
   id: string;
