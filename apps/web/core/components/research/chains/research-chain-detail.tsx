@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
+import { Button, getButtonStyling } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Skeleton } from "@plane/propel/skeleton";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
@@ -41,11 +42,6 @@ import { ResearchChainService } from "@/services/research/chain.service";
 import { ResearchIntegrationService } from "@/services/research/integration.service";
 const chainService = new ResearchChainService();
 const integrationService = new ResearchIntegrationService();
-const SYNLORA_URL = "https://synlora.xmuzc.com";
-
-function openSynlora() {
-  window.open(SYNLORA_URL, "_blank", "noopener,noreferrer");
-}
 
 type Props = {
   workspaceSlug: string;
@@ -425,9 +421,14 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
         </span>
       )}
       {agentEnabled && (
-        <Button variant="secondary" size="sm" onClick={openSynlora}>
+        <Link
+          href={`/${workspaceSlug}/research/chains/${chainId}/nodes/${selected.node.id}/agent`}
+          target="_blank"
+          rel="noreferrer"
+          className={getButtonStyling("secondary", "sm")}
+        >
           {t("research.chains.open_agent")}
-        </Button>
+        </Link>
       )}
       {(selected.node.status === "ACTIVE" || selected.node.status === "WAITING_HUMAN") && (
         <label className="flex flex-1 flex-col gap-1 text-11 text-tertiary">
@@ -523,9 +524,14 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               {t("research.chains.refresh")}
             </Button>
             {agentEnabled && research.canSee("research_chain") && current && (
-              <Button variant="primary" size="base" onClick={openSynlora}>
+              <Link
+                href={`/${workspaceSlug}/research/chains/${chainId}/nodes/${current.id}/agent`}
+                target="_blank"
+                rel="noreferrer"
+                className={getButtonStyling("primary", "base")}
+              >
                 {t("research.chains.open_agent")}
-              </Button>
+              </Link>
             )}
           </div>
         </div>

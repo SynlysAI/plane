@@ -194,6 +194,12 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     "课题资料",
     "成员",
   ]);
+  const agentLinks = Array.from(container.querySelectorAll("a")).filter((item) => item.textContent === "请智能体分析");
+  expect(agentLinks.map((item) => item.getAttribute("href"))).toEqual([
+    "/lab/research/chains/chain-1/nodes/node-1/agent",
+    "/lab/research/chains/chain-1/nodes/node-1/agent",
+  ]);
+  expect(agentLinks.every((item) => item.getAttribute("target") === "_blank")).toBe(true);
   expect(container.textContent).not.toContain("记录与知识库");
   expect(container.textContent).not.toContain("报告与成果");
   expect([...container.querySelectorAll("button")].map((item) => item.textContent)).not.toContain("实验记录");
