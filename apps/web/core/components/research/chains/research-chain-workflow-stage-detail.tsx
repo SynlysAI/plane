@@ -7,6 +7,7 @@ import type { TResearchChainEvent, TResearchChainNode, TResearchChainSnapshot } 
 // components
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
+import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
 import type { TResearchWorkflowStage } from "@/components/research/chains/research-chain-workflow";
 
 export type TResearchChainStageNodeDetail = {
@@ -16,6 +17,7 @@ export type TResearchChainStageNodeDetail = {
 };
 
 type Props = {
+  workspaceSlug: string;
   stage: TResearchWorkflowStage;
   nodes: TResearchChainNode[];
   details: TResearchChainStageNodeDetail[];
@@ -45,6 +47,7 @@ function referenceLabel(reference: Record<string, unknown>) {
 
 /** Render one workflow stage with its nodes, immutable snapshots and trace log. */
 export function ResearchChainWorkflowStageDetail({
+  workspaceSlug,
   stage,
   nodes,
   details,
@@ -218,7 +221,18 @@ export function ResearchChainWorkflowStageDetail({
 
         {actionSlot && <div className="border-b border-subtle">{actionSlot}</div>}
 
-        {selectedDetail && <ResearchChainNodeDetail {...selectedDetail} />}
+        {selectedDetail && (
+          <>
+            <ResearchChainNodeDetail {...selectedDetail} />
+            <div className="border-t border-subtle">
+              <ResearchChainTaskPanel
+                workspaceSlug={workspaceSlug}
+                chainId={selectedDetail.node.chain}
+                nodeId={selectedDetail.node.id}
+              />
+            </div>
+          </>
+        )}
       </div>
     </section>
   );

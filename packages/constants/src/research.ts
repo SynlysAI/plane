@@ -683,6 +683,14 @@ export const researchEndpoints = {
   chainMembers: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/`,
   chainMember: (slug: string, chainId: string, userId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/${userId}/`,
+  chainAssignableUsers: (slug: string, chainId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/assignable-users/`,
+  chainNodeTasks: (slug: string, chainId: string, nodeId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/`,
+  chainNodeTask: (slug: string, chainId: string, nodeId: string, taskId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/${taskId}/`,
+  chainNodeTaskAction: (slug: string, chainId: string, nodeId: string, taskId: string, action: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/${taskId}/${action}/`,
   chainNode: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/`,
   chainNodeTransitions: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/transitions/`,
   chainNodeEvents: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/events/`,

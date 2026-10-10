@@ -611,6 +611,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           <section>
             {selectedStage && (
               <ResearchChainWorkflowStageDetail
+                workspaceSlug={workspaceSlug}
                 stage={selectedStage}
                 nodes={stageNodes}
                 details={stageDetails}

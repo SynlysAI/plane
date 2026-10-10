@@ -19,3 +19,4 @@ export * from "./integration.service";
 export * from "./timeline.service";
 export * from "./account.service";
 export * from "./feedback.service";
+export * from "./chain-task.service";

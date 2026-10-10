@@ -276,7 +276,12 @@ export type TResearchChainNodeTaskCapabilities = {
   actions: Record<TResearchChainNodeTaskAction, TResearchTaskActionCapability>;
 };
 
-export type TResearchTaskAssignee = TResearchUserLite;
+export type TResearchTaskUserSummary = {
+  id: string;
+  display_name: string;
+};
+
+export type TResearchTaskAssignee = TResearchTaskUserSummary;
 
 export type TResearchAssignableUserScope = "ORG_SCOPE" | "COLLABORATOR";
 
@@ -290,6 +295,17 @@ export type TResearchAssignableUser = {
   scope: TResearchAssignableUserScope;
 };
 
+export type TResearchChainNodeTaskCreatePayload = {
+  title: string;
+  instruction?: string;
+  assignee?: string | null;
+  due_at?: string | null;
+  resource_type?: TResearchChainNodeTaskResourceType;
+  resource_id?: string | null;
+};
+
+export type TResearchChainNodeTaskUpdatePayload = Partial<TResearchChainNodeTaskCreatePayload>;
+
 export type TResearchChainNodeTask = {
   schema_version: "research-node-task.v1";
   id: string;
@@ -302,10 +318,11 @@ export type TResearchChainNodeTask = {
   assignee: string | null;
   assignee_detail?: TResearchTaskAssignee | null;
   assigned_by: string | null;
-  assigned_by_detail?: TResearchUserLite | null;
+  assigned_by_detail?: TResearchTaskUserSummary | null;
   due_at: string | null;
   submitted_at: string | null;
   completed_at: string | null;
+  return_reason?: string | null;
   resource_type: TResearchChainNodeTaskResourceType;
   resource_id: string | null;
   request_id: string;

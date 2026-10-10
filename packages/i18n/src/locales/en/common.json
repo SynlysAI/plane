@@ -1332,6 +1332,65 @@
         "not_started_hint": "No node has been created for this stage yet"
       }
     },
+    "chain_tasks": {
+      "panel_title": "Research tasks",
+      "panel_hint": "Tasks stay independent from node workflow while assignees, reviews, and return reasons stay together.",
+      "loading": "Loading research tasks…",
+      "empty": "No research task is attached to this node yet.",
+      "no_permission": "You do not have permission to view or manage tasks for this node.",
+      "load_failed": "Research tasks could not load. Try again later.",
+      "refresh": "Refresh",
+      "create": "Create task",
+      "edit": "Edit",
+      "assign": "Assign",
+      "submit": "Submit",
+      "return": "Return",
+      "complete": "Complete",
+      "cancel": "Cancel task",
+      "confirm": "Confirm",
+      "cancel_edit": "Cancel",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "processing": "Processing…",
+      "title": "Title",
+      "title_required": "Enter a task title first.",
+      "instruction": "Instruction",
+      "assignee": "Assignee",
+      "assignee_required": "An assigned task cannot clear its assignee.",
+      "assignee_no_org": "No organisation",
+      "assigned_by": "Assigned by",
+      "due_at": "Due date",
+      "submitted_at": "Submitted at",
+      "return_reason": "Return reason",
+      "cancel_reason": "Cancellation reason",
+      "reason_required": "Enter a reason first.",
+      "server_rejected": "The server rejected this action. Check the scope and permission, then retry.",
+      "unassigned": "Unassigned",
+      "candidate_no_permission": "Your account cannot manage task candidates; tasks remain read-only.",
+      "candidate_load_failed": "The candidate scope could not load, so creating and assigning are temporarily unavailable.",
+      "candidate_scope_hint": "Candidates come only from this topic's organisation scope and explicit collaborators; there is no workspace-wide search.",
+      "scopes": {
+        "org_scope": "Organisation scope",
+        "collaborator": "Explicit collaborators"
+      },
+      "roles": {
+        "owner": "Owner",
+        "pi": "PI",
+        "advisor": "Advisor",
+        "reviewer": "Reviewer",
+        "unit_admin": "Unit administrator"
+      },
+      "primary_identity": "Primary research identity",
+      "collaborator_identity": "Collaborator identity",
+      "status": {
+        "draft": "Draft",
+        "assigned": "Assigned",
+        "submitted": "Submitted",
+        "needs_revision": "Needs revision",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+      }
+    },
     "knowledge": {
       "panel_title": "RAGPortal knowledge",
       "reasons": {
