@@ -18,9 +18,10 @@ import { Button } from "@plane/propel/button";
 import { ResearchListState } from "@/components/research/common/research-list-state";
 import { ResearchListSurface, ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { formatResearchDate, formatResearchDateTime } from "@/components/research/common/research-format";
+import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
-import { formatResearchDateTime } from "@/components/research/common/research-format";
 
 const chainService = new ResearchChainService();
 
@@ -138,6 +139,9 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
             <TableRow>
               <TableHead>{t("research.chains.project")}</TableHead>
               <TableHead>{t("research.chains.status")}</TableHead>
+              <TableHead>{t("research.chains.current_node")}</TableHead>
+              <TableHead className="text-right">{t("research.chains.open_tasks")}</TableHead>
+              <TableHead>{t("research.chains.next_due_at")}</TableHead>
               <TableHead>{t("research.chains.visibility")}</TableHead>
               <TableHead>{t("research.chains.owner")}</TableHead>
               <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
@@ -159,6 +163,33 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
                   <ResearchStatusBadge status={chain.status} size="sm">
                     {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
                   </ResearchStatusBadge>
+                </TableCell>
+                <TableCell>
+                  {chain.current_node ? (
+                    <div className="min-w-0">
+                      <p className="truncate text-13 text-secondary">{chain.current_node.title}</p>
+                      <ResearchStatusBadge status={chain.current_node.status} size="sm">
+                        {t(`research.chains.node_status.${chain.current_node.status.toLowerCase()}`)}
+                      </ResearchStatusBadge>
+                    </div>
+                  ) : (
+                    <span className="text-tertiary">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right text-secondary tabular-nums">
+                  {t("research.chains.open_task_count", { count: chain.open_task_count ?? 0 })}
+                </TableCell>
+                <TableCell>
+                  {chain.next_due_at ? (
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="text-tertiary tabular-nums">
+                        {formatResearchDate(chain.next_due_at, currentLocale)}
+                      </span>
+                      <ResearchTodoUrgency dueAt={chain.next_due_at} />
+                    </div>
+                  ) : (
+                    <span className="text-tertiary">-</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-secondary">
                   {t(`research.chains.visibility.${chain.visibility.toLowerCase()}`)}

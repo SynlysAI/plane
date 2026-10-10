@@ -1,5 +1,6 @@
 """Serializers for the Research Chain foundation API."""
 
+from django.db.models import Case, Count, Min, Prefetch, Q, Value, When
 from rest_framework import serializers
 
 from plane.db.models import (
@@ -27,6 +28,49 @@ CHAIN_ACTIONS = (
     "restore",
 )
 NODE_ACTIONS = ("view", "edit", "transition", "upload", "agent_review")
+OPEN_NODE_TASK_STATUSES = ("DRAFT", "ASSIGNED", "SUBMITTED", "NEEDS_REVISION")
+
+
+def current_node_order():
+    """Return the database expression that mirrors frontend node priority."""
+    return Case(
+        When(status="WAITING_HUMAN", then=Value(0)),
+        When(status="NEEDS_REVISION", then=Value(1)),
+        When(status="FAILED", then=Value(2)),
+        When(status="ACTIVE", then=Value(3)),
+        When(status="DRAFT", then=Value(4)),
+        When(status="COMPLETED", then=Value(5)),
+        default=Value(6),
+    )
+
+
+def annotate_chain_summaries(queryset):
+    """Annotate chain summaries without issuing one query per list row.
+
+    Args:
+        queryset: A ``ResearchChain`` queryset already constrained to visible rows.
+
+    Returns:
+        The queryset with open-task aggregates and a prefetched current node.
+    """
+    open_tasks = Q(
+        node_tasks__status__in=OPEN_NODE_TASK_STATUSES,
+        node_tasks__deleted_at__isnull=True,
+    )
+    return queryset.annotate(
+        open_task_count=Count("node_tasks", filter=open_tasks, distinct=True),
+        next_due_at=Min("node_tasks__due_at", filter=open_tasks),
+    ).prefetch_related(
+        Prefetch(
+            "nodes",
+            queryset=ResearchChainNode.objects.filter(deleted_at__isnull=True).order_by(
+                current_node_order(),
+                "-updated_at",
+                "id",
+            ),
+            to_attr="summary_nodes",
+        )
+    )
 
 
 def _request_actor(serializer):
@@ -75,7 +119,10 @@ def _capabilities(serializer, obj, *, is_node=False):
     chain = obj.chain if is_node else obj
     context = _request_context(serializer, chain.workspace_id) or build_actor_context(actor, chain.workspace_id)
     resource = _node_resource(obj) if is_node else _chain_resource(obj)
-    decisions = {action: check_access(actor, action, resource, context=context) for action in ("view", "edit", "review", "accept", "return", "export")}
+    decisions = {
+        action: check_access(actor, action, resource, context=context)
+        for action in ("view", "edit", "review", "accept", "return", "export")
+    }
     if is_node:
         from plane.research.views.chain_foundation import _chain_writer, _chain_manager, _node_operator
 
@@ -105,6 +152,9 @@ class ResearchChainSerializer(serializers.ModelSerializer):
     capabilities = serializers.SerializerMethodField()
     project_identifier = serializers.SerializerMethodField()
     org_unit_name = serializers.SerializerMethodField()
+    open_task_count = serializers.SerializerMethodField()
+    next_due_at = serializers.SerializerMethodField()
+    current_node = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChain
@@ -120,6 +170,9 @@ class ResearchChainSerializer(serializers.ModelSerializer):
             "org_unit_name",
             "status",
             "visibility",
+            "open_task_count",
+            "next_due_at",
+            "current_node",
             "capabilities",
             "created_at",
             "updated_at",
@@ -146,6 +199,54 @@ class ResearchChainSerializer(serializers.ModelSerializer):
         unit = getattr(profile, "org_unit", None)
         return unit.name if unit else None
 
+    def get_open_task_count(self, obj):
+        """Return the number of open tasks attached to the chain."""
+        value = getattr(obj, "open_task_count", None)
+        if value is None:
+            value = obj.node_tasks.filter(
+                status__in=OPEN_NODE_TASK_STATUSES,
+                deleted_at__isnull=True,
+            ).count()
+        return value
+
+    def get_next_due_at(self, obj):
+        """Return the earliest open-task due timestamp."""
+        value = getattr(obj, "next_due_at", None)
+        if value is None:
+            value = (
+                obj.node_tasks.filter(
+                    status__in=OPEN_NODE_TASK_STATUSES,
+                    deleted_at__isnull=True,
+                    due_at__isnull=False,
+                )
+                .order_by("due_at")
+                .values_list("due_at", flat=True)
+                .first()
+            )
+        return value.isoformat() if value is not None else None
+
+    def get_current_node(self, obj):
+        """Return the most attention-worthy node projected with the chain."""
+        nodes = getattr(obj, "summary_nodes", None)
+        if nodes is None:
+            nodes = list(
+                obj.nodes.filter(deleted_at__isnull=True).order_by(
+                    current_node_order(),
+                    "-updated_at",
+                    "id",
+                )
+            )
+        node = nodes[0] if nodes else None
+        if node is None:
+            return None
+        return {
+            "id": str(node.id),
+            "title": node.title,
+            "status": node.status,
+            "node_type": node.node_type,
+            "updated_at": node.updated_at.isoformat() if node.updated_at else None,
+        }
+
     def get_capabilities(self, obj):
         """Return explicit action decisions for the current actor."""
         return _capabilities(self, obj)
@@ -159,7 +260,20 @@ class ResearchChainNodeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ResearchChainNode
-        fields = ["schema_version", "id", "chain", "node_type", "title", "parent_node", "loop_iteration", "status", "assignee", "capabilities", "created_at", "updated_at"]
+        fields = [
+            "schema_version",
+            "id",
+            "chain",
+            "node_type",
+            "title",
+            "parent_node",
+            "loop_iteration",
+            "status",
+            "assignee",
+            "capabilities",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_schema_version(self, _obj):
         return "research-node.v1"
@@ -176,7 +290,21 @@ class ResearchChainEventSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ResearchChainEvent
-        fields = ["schema_version", "event_id", "node", "actor", "actor_type", "source_system", "request_id", "trace_id", "event_type", "occurred_at", "refs", "summary", "content_hash"]
+        fields = [
+            "schema_version",
+            "event_id",
+            "node",
+            "actor",
+            "actor_type",
+            "source_system",
+            "request_id",
+            "trace_id",
+            "event_type",
+            "occurred_at",
+            "refs",
+            "summary",
+            "content_hash",
+        ]
 
     def get_schema_version(self, _obj):
         return "research-event.v1"

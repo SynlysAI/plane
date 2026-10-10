@@ -54,6 +54,7 @@ function todoEnvelope(overrides: Partial<TResearchTodoEnvelope> = {}): TResearch
     requester: { id: "student-1", display_name: "学生一" },
     assignees: [{ id: "advisor-1", display_name: "导师一" }],
     business_status: "NEEDS_REVISION",
+    urgency: "NORMAL",
     handling_status: "RETURNED",
     next_action: "SUBMIT",
     due_at: "2026-09-30T00:00:00Z",
@@ -67,6 +68,29 @@ function todoEnvelope(overrides: Partial<TResearchTodoEnvelope> = {}): TResearch
     ...overrides,
   };
 }
+
+it("renders server urgency with an explicit textual label beside the due date", async () => {
+  mocks.getResearchTodos.mockResolvedValue(
+    todoList([
+      todoEnvelope({
+        title: "逾期节点任务",
+        due_at: "2026-10-09T08:00:00Z",
+        urgency: "OVERDUE",
+      }),
+      todoEnvelope({
+        title: "今天截止报告",
+        due_at: "2026-10-10T18:30:00Z",
+        urgency: "DUE_TODAY",
+      }),
+    ])
+  );
+
+  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" limit={12} />));
+
+  expect(container.textContent).toContain("逾期");
+  expect(container.textContent).toContain("今天截止");
+  expect(container.textContent).toContain("截止：");
+});
 
 function todoList(results: TResearchTodoEnvelope[], totalCount = results.length): TResearchTodoEnvelopeList {
   return {

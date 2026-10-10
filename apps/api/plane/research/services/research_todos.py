@@ -10,9 +10,9 @@ common ``research-todo.v2`` envelope.
 """
 
 import logging
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 
-from django.db.models import Q
+from django.db.models import Q, TextChoices
 from django.utils import timezone
 
 from plane.db.models import (
@@ -57,6 +57,23 @@ ACTIONABLE_ACTIONS = frozenset(
 )
 
 
+class ResearchTodoUrgency(TextChoices):
+    """Server-derived due-date urgency for one unified todo."""
+
+    OVERDUE = "OVERDUE", "Overdue"
+    DUE_TODAY = "DUE_TODAY", "Due today"
+    DUE_SOON = "DUE_SOON", "Due soon"
+    NORMAL = "NORMAL", "Normal"
+
+
+URGENCY_RANK = {
+    ResearchTodoUrgency.OVERDUE: 0,
+    ResearchTodoUrgency.DUE_TODAY: 1,
+    ResearchTodoUrgency.DUE_SOON: 2,
+    ResearchTodoUrgency.NORMAL: 3,
+}
+
+
 def _participant(user):
     """Project one user without exposing account contact fields."""
     if user is None:
@@ -79,6 +96,32 @@ def _participants(users):
 def _iso(value):
     """Return a stable API timestamp or date."""
     return value.isoformat() if value is not None else None
+
+
+def research_todo_urgency(due_at, now=None):
+    """Derive textual urgency from a domain due date.
+
+    Args:
+        due_at: Original domain due date, optionally ``None``.
+        now: Current timezone-aware timestamp; defaults to the request time.
+
+    Returns:
+        One of ``OVERDUE``, ``DUE_TODAY``, ``DUE_SOON`` or ``NORMAL``.
+    """
+    if due_at is None:
+        return ResearchTodoUrgency.NORMAL
+    current = now or timezone.now()
+    if isinstance(due_at, date) and not isinstance(due_at, datetime):
+        due_at = datetime.combine(due_at, time.max, tzinfo=timezone.get_current_timezone())
+    if timezone.is_naive(due_at):
+        due_at = timezone.make_aware(due_at, timezone.get_current_timezone())
+    if due_at < current:
+        return ResearchTodoUrgency.OVERDUE
+    if due_at.date() == current.date():
+        return ResearchTodoUrgency.DUE_TODAY
+    if due_at <= current + timedelta(hours=72):
+        return ResearchTodoUrgency.DUE_SOON
+    return ResearchTodoUrgency.NORMAL
 
 
 def _todo(
@@ -119,6 +162,7 @@ def _todo(
     Returns:
         A JSON-serialisable ``research-todo.v2`` record.
     """
+    urgency = research_todo_urgency(due_at)
     return {
         "schema_version": TODO_SCHEMA_VERSION,
         "id": f"{source}:{object_id}",
@@ -132,6 +176,7 @@ def _todo(
         "handling_status": handling_status,
         "next_action": next_action,
         "due_at": _iso(due_at),
+        "urgency": urgency,
         "href": href,
         "capabilities": capabilities,
         "trace_ref": trace_ref,
@@ -664,37 +709,30 @@ def _todo_sort_key(todo, now=None):
     """Return the stable urgency-first ordering key for one todo."""
     now = now or timezone.now()
     due_value = todo.get("due_at")
-    due_date = None
+    due_timestamp = 0.0
+    urgency = ResearchTodoUrgency.NORMAL
     if due_value:
         try:
             parsed = datetime.fromisoformat(due_value)
-            due_date = parsed.date() if timezone.is_aware(parsed) else parsed.date()
+            if "t" not in due_value.lower():
+                parsed = parsed.replace(hour=time.max.hour, minute=time.max.minute, second=time.max.second)
+            if timezone.is_naive(parsed):
+                parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+            due_timestamp = parsed.timestamp()
+            urgency = research_todo_urgency(parsed, now)
         except ValueError:
-            due_date = None
-    if due_date is None:
-        urgency_rank = 3
-        due_key = 0.0
-    elif due_date < now.date():
-        urgency_rank = 0
-        due_key = _date_timestamp(due_date)
-    elif due_date == now.date():
-        urgency_rank = 1
-        due_key = _date_timestamp(due_date)
-    else:
-        urgency_rank = 2
-        due_key = _date_timestamp(due_date)
+            due_timestamp = 0.0
+            urgency = ResearchTodoUrgency.NORMAL
     updated = datetime.fromisoformat(todo["updated_at"])
+    if timezone.is_naive(updated):
+        updated = timezone.make_aware(updated, timezone.get_current_timezone())
     return (
         todo["handling_status"] != "BLOCKED",
-        urgency_rank,
-        due_key,
+        URGENCY_RANK[urgency],
+        due_timestamp,
         -updated.timestamp(),
         todo["id"],
     )
-
-
-def _date_timestamp(value):
-    return datetime.combine(value, datetime.min.time(), tzinfo=timezone.get_current_timezone()).timestamp()
 
 
 def collect_research_todos(workspace, user, scope):

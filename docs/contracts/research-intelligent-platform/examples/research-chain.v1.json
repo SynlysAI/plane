@@ -6,6 +6,15 @@
   "visibility": "PRIVATE",
   "owner_id": "user-01",
   "status": "ACTIVE",
+  "open_task_count": 2,
+  "next_due_at": "2026-09-24T09:00:00Z",
+  "current_node": {
+    "id": "node-01",
+    "title": "Experiment analysis",
+    "status": "WAITING_HUMAN",
+    "node_type": "ANALYSIS",
+    "updated_at": "2026-09-22T07:30:00Z"
+  },
   "created_at": "2026-09-22T08:00:00Z",
   "updated_at": "2026-09-22T08:00:00Z"
 }

@@ -16,6 +16,7 @@ import type {
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { formatResearchDate } from "@/components/research/common/research-format";
+import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
 // services
 import { ResearchTodoService } from "@/services/research/research-todo.service";
 
@@ -199,8 +200,11 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
                   </div>
                   <p className="mt-1 truncate text-11 text-tertiary">{todoMetadata(todo, t)}</p>
                   {todo.due_at && (
-                    <p className="mt-0.5 text-11 text-tertiary">
-                      {t("research.todo.due_at")}：{formatResearchDate(todo.due_at, currentLocale)}
+                    <p className="mt-1 flex flex-wrap items-center gap-2 text-11 text-tertiary">
+                      <span>
+                        {t("research.todo.due_at")}：{formatResearchDate(todo.due_at, currentLocale)}
+                      </span>
+                      <ResearchTodoUrgency dueAt={todo.due_at} urgency={todo.urgency} />
                     </p>
                   )}
                 </div>

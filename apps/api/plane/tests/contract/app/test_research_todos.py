@@ -357,6 +357,16 @@ class TestResearchTodoProjectionContract:
         assert ids.index(f"CHAIN_TASK:{env['submitted_task'].id}") < ids.index(f"CHAIN_TASK:{env['assigned_task'].id}")
         assert len(ids) == len(set(ids))
 
+    def test_urgency_is_projected_and_overdue_is_textually_unambiguous(self, env):
+        payload = _payload(_get(env, "member", "?scope=visible"))
+        items = {item["object_id"]: item for item in _items(payload)}
+        student_payload = _payload(_get(env, "student", "?scope=to_me"))
+        student_items = {item["object_id"]: item for item in _items(student_payload)}
+
+        assert items[str(env["submitted_task"].id)]["urgency"] == "OVERDUE"
+        assert items[str(env["assigned_task"].id)]["urgency"] == "DUE_SOON"
+        assert student_items[str(env["agent_approval"].session_id)]["urgency"] == "NORMAL"
+
     def test_cursor_continues_without_overlap(self, env):
         first = _payload(_get(env, "student", "?scope=visible&limit=2"))
         assert len(_items(first)) == 2

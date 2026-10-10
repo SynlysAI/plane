@@ -24,6 +24,7 @@ from plane.research.serializers import (
     ResearchChainSerializer,
     ResearchChainSnapshotSerializer,
 )
+from plane.research.serializers.chain import annotate_chain_summaries
 from plane.research.services.group_knowledge import ensure_group_knowledge_binding
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
@@ -200,7 +201,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
         profiles, error = filter_profiles(visible_profile_queryset(workspace, request.user), request)
         if error:
             return error
-        rows = (
+        rows = annotate_chain_summaries(
             ResearchChain.objects.filter(
                 workspace=workspace,
                 project_id__in=profiles.values("project_id"),
@@ -305,7 +306,15 @@ class ResearchChainDetailEndpoint(ResearchAPIView):
             return error
         if not _flag_enabled(workspace):
             return _disabled()
-        chain = _visible_chain(workspace, request.user, chain_id)
+        chain = annotate_chain_summaries(
+            ResearchChain.objects.filter(workspace=workspace, pk=chain_id).select_related(
+                "project__research_profile", "project", "owner"
+            )
+        ).first()
+        if chain is not None and not can_read_project_research_metadata(
+            workspace, request.user, chain.project.research_profile
+        ):
+            chain = None
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
         return Response(

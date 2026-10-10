@@ -1084,6 +1084,23 @@
       "snapshot_empty": "暂无已确认快照；打开课题后可查看完整证据链。",
       "handle_current_node": "处理当前节点"
     },
+    "home_workbench": {
+      "title": "首页",
+      "description": "项目状态与当前需要处理的事项。",
+      "research_overview": "科研项目概览",
+      "research_hint": "研究链、当前节点与待办摘要。",
+      "research_empty": "暂无科研项目。",
+      "all_research": "全部科研项目",
+      "open_tasks": "未完成任务",
+      "administrative_overview": "行政项目概览",
+      "administrative_hint": "采购、报销与普通协作项目。",
+      "administrative_empty": "暂无行政项目。",
+      "administrative_error": "行政项目摘要暂时不可用，请稍后重试。",
+      "all_administrative": "全部行政项目",
+      "recent_activity": "最近动态",
+      "report_summary": "报告提交摘要",
+      "report_error": "报告汇总暂不可用，可刷新或直接进入报告视图。"
+    },
     "todo": {
       "title": "跨组件待办",
       "description": "聚合报告、评审、审批、Agent 与外部系统状态。",
@@ -1134,6 +1151,12 @@
       "business_failed": "失败",
       "business_unknown": "未知",
       "due_at": "截止",
+      "urgency": {
+        "overdue": "逾期",
+        "today": "今天截止",
+        "soon": "即将截止",
+        "normal": "正常"
+      },
       "report_revision": "报告需修订",
       "stage_review": "阶段评审待处理",
       "office_approval": "办公审批待处理",
@@ -1305,6 +1328,9 @@
       "project": "课题",
       "owner": "Owner",
       "current_node": "当前节点",
+      "open_tasks": "待办",
+      "open_task_count": "{count} 项待办",
+      "next_due_at": "下一步截止",
       "updated_at": "更新时间",
       "status": "状态",
       "open": "打开研究链",

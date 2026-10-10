@@ -1077,6 +1077,23 @@
       "snapshot_empty": "No confirmed snapshot yet; open a chain to inspect the evidence trail.",
       "handle_current_node": "Handle current node"
     },
+    "home_workbench": {
+      "title": "Home",
+      "description": "Project state and the items that need attention now.",
+      "research_overview": "Research project overview",
+      "research_hint": "Chains, current nodes and open-task summaries.",
+      "research_empty": "No research project yet.",
+      "all_research": "All research projects",
+      "open_tasks": "Open tasks",
+      "administrative_overview": "Administrative project overview",
+      "administrative_hint": "Purchasing, reimbursement and general collaboration projects.",
+      "administrative_empty": "No administrative project yet.",
+      "administrative_error": "The administrative summary is temporarily unavailable. Please retry later.",
+      "all_administrative": "All administrative projects",
+      "recent_activity": "Recent activity",
+      "report_summary": "Report submission summary",
+      "report_error": "The report summary is unavailable. Refresh or open the report view."
+    },
     "todo": {
       "title": "Cross-component to-dos",
       "description": "Reports, reviews, approvals, Agent actions and external systems.",
@@ -1127,6 +1144,12 @@
       "business_failed": "Failed",
       "business_unknown": "Unknown",
       "due_at": "Due",
+      "urgency": {
+        "overdue": "Overdue",
+        "today": "Due today",
+        "soon": "Due soon",
+        "normal": "Normal"
+      },
       "report_revision": "Report needs revision",
       "stage_review": "Stage review pending",
       "office_approval": "Office approval pending",
@@ -1255,6 +1278,9 @@
       "project": "Project",
       "owner": "Owner",
       "current_node": "Current node",
+      "open_tasks": "Open tasks",
+      "open_task_count": "{count} open",
+      "next_due_at": "Next due",
       "updated_at": "Updated",
       "status": "Status",
       "open": "Open chain",

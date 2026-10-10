@@ -382,17 +382,23 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 - 移除快捷入口、我的工作、草稿、便签等通用首页模块。
 - 增加待办紧急程度纯函数测试。
 
+当前状态：已完成。Workspace Home 固定为“项目概览 / 待办动态”两列；左列区分科研项目与行政项目概览，右列承载统一待办、最近动态与报告提交摘要；通用 Home widgets 不再渲染。旧 `/{workspace}/research` 以 replace redirect 兼容到 `/{workspace}/`。`research-home-workbench.test.tsx` 覆盖 IA、两列响应式类、项目通道隔离、报告摘要、刷新与权限空态，`research-legacy-overview-redirect.test.tsx` 覆盖旧路由；`research-home-workbench.fixture` 使用隔离数据在 1440 / 1280 / 390 下验证两列、两列、单列且 `documentElement.scrollWidth` 不超过视口。
+
 ### U2：待办升级
 
 - `collectResearchTodos` 接入主轴一新来源。
 - 增加 `ResearchTodoUrgency`。
 - 更新首页摘要卡和总览待办索引。
 
+当前状态：已完成。`research-todo.v2` 服务端派生并返回 `urgency`，排序按阻断状态、`OVERDUE / DUE_TODAY / DUE_SOON / NORMAL`、截止时间与更新时间稳定排列；`ResearchTodoUrgency` 以文字和倒计时表达紧急状态，颜色仅辅助。后端契约测试覆盖 urgency 与排序，前端组件测试覆盖“逾期 / 今天截止 / 即将截止 / 正常”。
+
 ### U3：课题列表摘要
 
 - 消费 `open_task_count/next_due_at/current_node`。
 - 科研项目页收敛为科研项目 / 报告两个视图。
 - 增加列和窄屏元信息，不做前端 N+1 请求。
+
+当前状态：已完成。Research Chain 列表 API 在服务端聚合 `open_task_count`、`next_due_at` 和 `current_node`，列表查询批量注解并预取当前节点；前端课题表格直接消费字段，不再逐课题请求节点。`research-chain-browse.test.tsx` 固定摘要展示与“不触发节点请求”，后端单测固定聚合值与查询数不随课题行数线性增长。
 
 ### U4：课题详情任务面板
 

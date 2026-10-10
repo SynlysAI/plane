@@ -172,8 +172,19 @@ export type TResearchChain = {
   capabilities?: TResearchActionCapabilities;
   status: "ACTIVE" | "ARCHIVED" | "COMPLETED";
   visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
+  open_task_count?: number;
+  next_due_at?: string | null;
+  current_node?: TResearchChainSummaryNode | null;
   created_at: string;
   updated_at: string;
+};
+
+export type TResearchChainSummaryNode = {
+  id: string;
+  title: string;
+  status: TResearchChainNode["status"];
+  node_type: string;
+  updated_at: string | null;
 };
 
 export type TResearchChainNode = {
@@ -410,6 +421,8 @@ export type TResearchTodoSource =
 
 export type TResearchTodoScope = "to_me" | "mine" | "visible";
 
+export type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
+
 export type TResearchTodoHandlingStatus = "TODO" | "IN_PROGRESS" | "RETURNED" | "DONE" | "BLOCKED";
 
 export type TResearchTodoNextAction =
@@ -449,6 +462,7 @@ export type TResearchTodoEnvelope = {
   handling_status: TResearchTodoHandlingStatus;
   next_action: TResearchTodoNextAction;
   due_at: string | null;
+  urgency: TResearchTodoUrgency;
   href: string;
   capabilities: TResearchActionCapabilities;
   trace_ref: TResearchTodoTraceRef | null;

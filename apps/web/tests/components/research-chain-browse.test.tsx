@@ -11,8 +11,17 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
-    t: (key: string) =>
-      key.split(".").reduce<unknown>((entry, part) => (entry as Record<string, unknown>)?.[part], translations) ?? key,
+    t: (key: string, values?: Record<string, unknown>) => {
+      const literal = key
+        .split(".")
+        .reduce<unknown>((entry, part) => (entry as Record<string, unknown>)?.[part], translations);
+      const text = typeof literal === "string" ? literal : key;
+      if (!values) return text;
+      return Object.entries(values).reduce(
+        (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
+        text
+      );
+    },
     currentLocale: "zh-CN",
   }),
 }));
@@ -69,6 +78,15 @@ function page(name: string, next = false) {
         status: "ACTIVE",
         visibility: "PRIVATE",
         updated_at: "2026-10-08T00:00:00Z",
+        open_task_count: 2,
+        next_due_at: "2026-10-12T09:00:00Z",
+        current_node: {
+          id: "node-1",
+          title: "实验数据分析",
+          status: "WAITING_HUMAN",
+          node_type: "ANALYSIS",
+          updated_at: "2026-10-08T07:00:00Z",
+        },
       },
     ],
     next_cursor: "page-2",
@@ -135,6 +153,16 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.getChainPage.mockResolvedValue(page("Graphite first", true));
   mocks.getChains.mockResolvedValue(page("Legacy first").results);
+});
+
+it("consumes server-side chain summary fields without issuing node requests", async () => {
+  await render("/lab/research/chains");
+
+  expect(container.textContent).toContain("实验数据分析");
+  expect(container.textContent).toContain("等待人工确认");
+  expect(container.textContent).toContain("2 项待办");
+  expect(container.textContent).toContain("2026/10/12");
+  expect(mocks.getChains).not.toHaveBeenCalled();
 });
 afterEach(async () => {
   await act(async () => root.unmount());
