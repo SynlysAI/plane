@@ -718,6 +718,11 @@ export const researchEndpoints = {
   mentors: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/mentors/`,
   mentor: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/mentors/${id}/`,
   projects: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/projects/`,
+  navigationCategories: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/navigation/categories/`,
+  navigationCategory: (slug: string, categoryId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/navigation/categories/${categoryId}/`,
+  navigationProjectMove: (slug: string, projectId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/navigation/projects/${projectId}/move/`,
   project: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/`,
   projectArchive: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/archive/`,
   projectRestore: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/restore/`,

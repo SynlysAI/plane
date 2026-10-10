@@ -24,6 +24,7 @@ import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import useLocalStorage from "@/hooks/use-local-storage";
+import { ResearchProjectTree } from "./research-project-tree";
 
 /** Collapse state of the research group; mirrors the workspace / projects groups. */
 const RESEARCH_MENU_OPEN_KEY = "is_research_menu_open";
@@ -146,13 +147,35 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
       >
         {isMenuOpen && (
           <Disclosure.Panel as="div" className="flex flex-col gap-0.5" static>
-            {research.isIaV2Enabled
-              ? visibleIaV2Items.map((item) => renderItem(item.key, item.labelKey, item.path, item.key === "overview"))
-              : [
-                  ...(research.canSee("overview") ? [renderItem("overview", "research.nav.overview", "", true)] : []),
-                  ...visibleBusinessItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
-                  ...visibleSettingsItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
-                ]}
+            {research.isIaV2Enabled ? (
+              <>
+                {visibleIaV2Items
+                  .filter((item) => item.key !== "research_chain")
+                  .map((item) => renderItem(item.key, item.labelKey, item.path, item.key === "overview"))}
+                {research.canSee("research_chain") && (
+                  <ResearchProjectTree
+                    scope="RESEARCH"
+                    title={t("research.nav.research_chain_v2")}
+                    href={`/${workspaceSlug}/research/chains`}
+                    canManage={research.canSee("management")}
+                  />
+                )}
+                {research.canSee("projects") && (
+                  <ResearchProjectTree
+                    scope="ADMINISTRATIVE"
+                    title="行政项目"
+                    href={`/${workspaceSlug}/projects`}
+                    canManage={research.canSee("management")}
+                  />
+                )}
+              </>
+            ) : (
+              [
+                ...(research.canSee("overview") ? [renderItem("overview", "research.nav.overview", "", true)] : []),
+                ...visibleBusinessItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
+                ...visibleSettingsItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
+              ]
+            )}
           </Disclosure.Panel>
         )}
       </Transition>

@@ -84,7 +84,12 @@ vi.mock("@plane/i18n", () => ({
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => mocks.workspace }));
 vi.mock("@/hooks/use-local-storage", () => ({
-  default: () => [mocks.stored, vi.fn()],
+  default: () => ({ storedValue: mocks.stored, setValue: vi.fn() }),
+}));
+vi.mock("@/services/research/navigation.service", () => ({
+  ResearchNavigationService: class {
+    getTree = () => Promise.resolve({ scope: "RESEARCH", can_manage: false, categories: [], uncategorized: [] });
+  },
 }));
 vi.mock("@headlessui/react", () => {
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- mock factory must create the component locally
@@ -93,7 +98,15 @@ vi.mock("@headlessui/react", () => {
   Disclosure.Panel = ({ children }: { children: React.ReactNode }) => <div>{children}</div>;
   return { Disclosure, Transition: ({ children }: { children: React.ReactNode }) => <div>{children}</div> };
 });
-vi.mock("@makeplane/propel/icons", () => ({ ChevronRightOutline: () => null }));
+vi.mock("@makeplane/propel/icons", () => ({
+  AddOutline: () => null,
+  ChevronRightOutline: () => null,
+  CloseOutline: () => null,
+  InfoOutline: () => null,
+  MoreHorizontalOutline: () => null,
+  TickOutline: () => null,
+  WarningTriangleOutline: () => null,
+}));
 vi.mock("@plane/propel/icon-button", () => ({ IconButton: () => <button type="button" /> }));
 vi.mock("@plane/utils", () => ({
   cn: (...values: Array<string | false | undefined>) => values.filter(Boolean).join(" "),
@@ -102,7 +115,13 @@ vi.mock("@/components/core/page-title", () => ({ PageHead: () => null }));
 vi.mock("@/components/research/common/research-status-panel", () => ({
   ResearchStatusPanel: () => <div>status-panel</div>,
 }));
-vi.mock("@plane/ui", () => ({ Spinner: () => <div>spinner</div> }));
+vi.mock("@plane/ui", () => ({
+  Spinner: () => <div>spinner</div>,
+  EModalWidth: { SM: "sm" },
+  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+  ModalCore: ({ children, isOpen }: { children: React.ReactNode; isOpen: boolean }) =>
+    isOpen ? <div>{children}</div> : null,
+}));
 
 const { ResearchSidebarItems } = await import("@/components/research/navigation/research-sidebar-items");
 const { ResearchPageShell } = await import("@/components/research/common/research-page-shell");
@@ -171,12 +190,12 @@ it("collapses research to four destinations when IA v2 is enabled", async () => 
   await act(async () => root.render(<ResearchSidebarItems />));
 
   const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
-  expect(links).toEqual(["/lab/research", "/lab/research/chains", "/lab/research/approvals"]);
+  expect(links).toEqual(["/lab/research", "/lab/research/approvals", "/lab/research/chains", "/lab/projects"]);
   expect(container.textContent).toContain("项目与课题");
   expect(container.textContent).toContain("审批中心");
+  expect(container.textContent).toContain("行政项目");
   expect(container.textContent).not.toContain("报告");
   expect(container.textContent).not.toContain("提交汇总");
-  expect(container.textContent).not.toContain("科研项目");
   expect(container.textContent).not.toContain("待我评审");
 });
 
