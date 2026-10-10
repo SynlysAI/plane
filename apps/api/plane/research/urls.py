@@ -196,6 +196,9 @@ from plane.research.views import (
     ResearchChainUploadDetailEndpoint,
     ResearchChainReferenceEndpoint,
     ResearchChainAnalysisListCreateEndpoint,
+    ResearchChainNodeTaskActionEndpoint,
+    ResearchChainNodeTaskDetailEndpoint,
+    ResearchChainNodeTaskListCreateEndpoint,
 )
 
 urlpatterns = [
@@ -289,6 +292,21 @@ urlpatterns = [
         "research/workspaces/<str:slug>/nodes/<uuid:node_id>/transitions/",
         ResearchChainNodeTransitionEndpoint.as_view(),
         name="research-chain-node-transitions",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/",
+        ResearchChainNodeTaskListCreateEndpoint.as_view(),
+        name="research-chain-node-tasks",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/",
+        ResearchChainNodeTaskDetailEndpoint.as_view(),
+        name="research-chain-node-task",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/<str:action>/",
+        ResearchChainNodeTaskActionEndpoint.as_view(),
+        name="research-chain-node-task-action",
     ),
     path(
         "research/workspaces/<str:slug>/nodes/<uuid:node_id>/snapshots/",

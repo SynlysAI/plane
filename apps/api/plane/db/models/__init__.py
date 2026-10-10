@@ -102,6 +102,7 @@ from .research import (
     ResearchChain,
     ResearchChainEvent,
     ResearchChainNode,
+    ResearchChainNodeTask,
     ResearchChainSnapshot,
     ResearchChainUpload,
     ResearchGroupKnowledgeBinding,

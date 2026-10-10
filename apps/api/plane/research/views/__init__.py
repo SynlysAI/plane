@@ -202,6 +202,11 @@ from .chain_foundation import (
     ResearchChainRestoreEndpoint,
     ResearchChainSnapshotCreateEndpoint,
 )
+from .chain_tasks import (
+    ResearchChainNodeTaskActionEndpoint,
+    ResearchChainNodeTaskDetailEndpoint,
+    ResearchChainNodeTaskListCreateEndpoint,
+)
 from .knowledge import (
     ResearchChainKnowledgeBaseListEndpoint,
     ResearchChainReferenceEndpoint,
