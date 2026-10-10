@@ -96,6 +96,11 @@ from .projects import (
     ResearchProjectListCreateEndpoint,
     ResearchProjectRestoreEndpoint,
 )
+from .navigation import (
+    ProjectNavigationCategoryDetailEndpoint,
+    ProjectNavigationMoveProjectEndpoint,
+    ProjectNavigationTreeEndpoint,
+)
 from .reports import (
     ResearchReportAcceptEndpoint,
     ResearchReportAccessEndpoint,

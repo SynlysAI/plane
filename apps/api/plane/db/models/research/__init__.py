@@ -46,6 +46,7 @@ from .membership import (
     UserImportBatch,
     UserImportRow,
 )
+from .navigation import ProjectNavigationCategory
 from .org import MentorBinding, OrgUnit, OrgUnitMember
 from .outcome import ResearchOutcome, ResearchOutcomeAttachment, ResearchOutcomeLink
 from .project import ResearchProjectProfile
@@ -146,6 +147,7 @@ __all__ = [
     "ResearchOutcomeLink",
     "OrgUnit",
     "OrgUnitMember",
+    "ProjectNavigationCategory",
     "ALL_MATERIAL_TYPES",
     "MATERIAL_SET_COMPLETE_STATES",
     "MATERIAL_TYPES_BY_STAGE",

@@ -148,6 +148,7 @@ from .research import (
     ResearchAuditEvent,
     ResearchInviteCode,
     ResearchProjectProfile,
+    ProjectNavigationCategory,
     ResearchUserProfile,
     ResearchStageInstance,
     ResearchStageRequirement,

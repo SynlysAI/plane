@@ -66,6 +66,9 @@ from plane.research.views import (
     ResearchOrgUnitMemberDetailEndpoint,
     ResearchOrgUnitMemberListCreateEndpoint,
     ResearchOrgUnitPiTransferEndpoint,
+    ProjectNavigationCategoryDetailEndpoint,
+    ProjectNavigationMoveProjectEndpoint,
+    ProjectNavigationTreeEndpoint,
     ResearchProjectArchiveEndpoint,
     ResearchProjectDetailEndpoint,
     ResearchProjectListCreateEndpoint,
@@ -1027,6 +1030,21 @@ urlpatterns = [
         "research/workspaces/<str:slug>/projects/",
         ResearchProjectListCreateEndpoint.as_view(),
         name="research-projects",
+    ),
+    path(
+        "research/workspaces/<str:slug>/navigation/categories/",
+        ProjectNavigationTreeEndpoint.as_view(),
+        name="research-navigation-categories",
+    ),
+    path(
+        "research/workspaces/<str:slug>/navigation/categories/<uuid:category_id>/",
+        ProjectNavigationCategoryDetailEndpoint.as_view(),
+        name="research-navigation-category",
+    ),
+    path(
+        "research/workspaces/<str:slug>/navigation/projects/<uuid:project_id>/move/",
+        ProjectNavigationMoveProjectEndpoint.as_view(),
+        name="research-navigation-project-move",
     ),
     path(
         "research/workspaces/<str:slug>/projects/<uuid:project_id>/",
