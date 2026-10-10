@@ -189,6 +189,7 @@ from .integrations import (
 )
 from .chain import ResearchProjectChainEndpoint, ResearchProjectTimelineEndpoint
 from .chain_foundation import (
+    ResearchChainAssignableUserListEndpoint,
     ResearchChainArchiveEndpoint,
     ResearchChainDetailEndpoint,
     ResearchChainEventListCreateEndpoint,
@@ -284,6 +285,7 @@ __all__ = [
     "ResearchProjectChainEndpoint",
     "ResearchProjectTimelineEndpoint",
     "ResearchChainListCreateEndpoint",
+    "ResearchChainAssignableUserListEndpoint",
     "ResearchChainDetailEndpoint",
     "ResearchChainArchiveEndpoint",
     "ResearchChainRestoreEndpoint",

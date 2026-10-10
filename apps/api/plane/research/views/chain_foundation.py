@@ -27,8 +27,14 @@ from plane.research.serializers import (
 from plane.research.services.group_knowledge import ensure_group_knowledge_binding
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
+from plane.research.services.chain_tasks import (
+    chain_manager as _chain_manager,
+    chain_writer as _chain_writer,
+    list_assignable_users,
+    review_only_actor as _review_only_actor,
+)
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
-from plane.research.utils.acl import ResearchResource, build_actor_context, check_access, primary_advisor_ids
+from plane.research.utils.acl import build_actor_context
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.views.base import ResearchAPIView
@@ -111,19 +117,6 @@ def _chain_readonly_error(chain):
     )
 
 
-def _chain_manager(workspace, user, chain):
-    """Return whether the caller can manage chain lifecycle and collaborators."""
-    if chain.owner_id == user.id:
-        return True
-    return ProjectMember.objects.filter(
-        project_id=chain.project_id,
-        member=user,
-        role__gte=20,
-        is_active=True,
-        deleted_at__isnull=True,
-    ).exists()
-
-
 def _chain_members(chain):
     """Serialize the owner and active project collaborators for a chain."""
     owner = {
@@ -162,36 +155,6 @@ def _node_operator(workspace, user, node):
     return _chain_writer(workspace, user, node.chain) or node.assignee_id == user.id
 
 
-def _chain_resource(chain):
-    """Project a Chain into the ACL shape used by review scope checks."""
-    profile = getattr(chain.project, "research_profile", None)
-    visibility = {"MEMBERS": "UNIT", "ORG": "ANCESTRY"}.get(chain.visibility, chain.visibility)
-    return ResearchResource(
-        kind="research_chain",
-        workspace_id=chain.workspace_id,
-        owner_id=chain.owner_id,
-        org_unit_id=getattr(profile, "org_unit_id", None),
-        visibility=visibility,
-        state=chain.status,
-        project_id=chain.project_id,
-        is_team_content=chain.visibility != "PRIVATE",
-    )
-
-
-def _review_only_actor(workspace, user, chain):
-    """Return whether an actor has review scope without mutable Chain rights."""
-    if chain.owner_id == user.id:
-        return False
-    context = build_actor_context(user, workspace.id)
-    if context.is_main_pi:
-        return True
-    if user.id in primary_advisor_ids(chain.owner_id, workspace.id):
-        return True
-    if _chain_manager(workspace, user, chain):
-        return False
-    return check_access(user, "review", _chain_resource(chain), context=context)
-
-
 def _agent_scope_kind(workspace, user, chain):
     """Resolve the explicit OWNER or read-only REVIEW Agent scope."""
     if chain.owner_id == user.id:
@@ -201,21 +164,6 @@ def _agent_scope_kind(workspace, user, chain):
     if _chain_writer(workspace, user, chain):
         return "OWNER"
     return None
-
-
-def _chain_writer(workspace, user, chain):
-    """Return whether a caller may append mutable Chain data."""
-    if _review_only_actor(workspace, user, chain):
-        return False
-    if _chain_manager(workspace, user, chain):
-        return True
-    return ProjectMember.objects.filter(
-        project_id=chain.project_id,
-        member=user,
-        role__gte=15,
-        is_active=True,
-        deleted_at__isnull=True,
-    ).exists()
 
 
 def _event_id_for_request(request_id, kind):
@@ -616,6 +564,35 @@ class ResearchChainMemberDetailEndpoint(ResearchAPIView):
             request=request,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ResearchChainAssignableUserListEndpoint(ResearchAPIView):
+    """List server-validated task assignee candidates for a chain."""
+
+    nav_capability = NAV_RESEARCH_CHAIN
+
+    def get(self, request, slug, chain_id):
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        if not _flag_enabled(workspace):
+            return _disabled()
+        chain = _visible_chain(workspace, request.user, chain_id)
+        if chain is None:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
+        if not _chain_writer(workspace, request.user, chain):
+            return research_error(
+                ResearchErrorCode.PERMISSION_DENIED,
+                "Only chain writers can list assignable users.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        return Response(
+            _envelope(
+                data=list_assignable_users(workspace, chain, request.user),
+                request_id=request_id_from(request),
+                schema_version="research-chain-assignable-user.v1",
+            )
+        )
 
 
 class ResearchChainNodeListCreateEndpoint(ResearchAPIView):

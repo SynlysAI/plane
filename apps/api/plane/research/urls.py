@@ -178,6 +178,7 @@ from plane.research.views import (
     ResearchUserImportPreviewEndpoint,
     ResearchUserProfileListEndpoint,
     ResearchChainListCreateEndpoint,
+    ResearchChainAssignableUserListEndpoint,
     ResearchChainDetailEndpoint,
     ResearchChainArchiveEndpoint,
     ResearchChainRestoreEndpoint,
@@ -263,6 +264,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/members/<uuid:user_id>/",
         ResearchChainMemberDetailEndpoint.as_view(),
         name="research-chain-member-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/assignable-users/",
+        ResearchChainAssignableUserListEndpoint.as_view(),
+        name="research-chain-assignable-users",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/",
