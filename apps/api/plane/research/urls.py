@@ -10,6 +10,7 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
 from plane.research.views.report_context import ResearchFormalReportContentEndpoint, ResearchFormalReportOptionsEndpoint
@@ -236,6 +237,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/outcomes/",
         ResearchWorkspaceOutcomeEndpoint.as_view(),
         name="research-workspace-outcomes",
+    ),
+    path(
+        "research/workspaces/<str:slug>/research-todos/",
+        ResearchTodoListEndpoint.as_view(),
+        name="research-todos",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/images/",
