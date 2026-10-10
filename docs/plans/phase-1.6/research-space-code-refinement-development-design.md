@@ -2,9 +2,9 @@
 
 | 项目     | 内容                                                                                                                             |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.2                                                                                                                             |
-| 状态     | 设计复核修订版；增加统一待办投影边界，避免前端扇出与领域状态机重复实现                                                           |
-| 日期     | 2026-10-09                                                                                                                       |
+| 文档版本 | v1.3                                                                                                                             |
+| 状态     | 设计复核修订版；C0 引用审计已实施，统一待办与后续清理切片仍待实施                                                                |
+| 日期     | 2026-10-10                                                                                                                       |
 | 代码基线 | Plane `develop` / `4.24.0`                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                 |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[UX 精炼设计](research-space-ux-refinement-development-design.md) |
@@ -342,17 +342,19 @@ docker compose -f docker-compose-test.yml run --rm api-tests pytest \
 
 ### 9.1 引用审计脚本
 
-新增脚本：`scripts/research-reference-audit.mjs`
+当前状态：**C0 已实施**。脚本位于 `apps/web/scripts/research-reference-audit.mjs`，测试位于 `apps/web/tests/research-reference-audit.test.mjs`。
+
+新增脚本：`apps/web/scripts/research-reference-audit.mjs`
 
 依赖现有 `typescript` package，不引入新依赖。
 
 CLI：
 
 ```bash
-node scripts/research-reference-audit.mjs
-node scripts/research-reference-audit.mjs --format markdown
-node scripts/research-reference-audit.mjs --format json
-node scripts/research-reference-audit.mjs --compare docs/plans/phase-1.6/research-reference-baseline.json
+node apps/web/scripts/research-reference-audit.mjs
+node apps/web/scripts/research-reference-audit.mjs --format markdown
+node apps/web/scripts/research-reference-audit.mjs --format json
+node apps/web/scripts/research-reference-audit.mjs --compare docs/plans/phase-1.6/research-reference-baseline.json
 ```
 
 默认输出 Markdown 到 stdout；只有显式 `--out` 才写文件，避免意外修改工作区。
@@ -360,13 +362,14 @@ node scripts/research-reference-audit.mjs --compare docs/plans/phase-1.6/researc
 扫描范围：
 
 ```text
-apps/web/core/components/research/**/*.{ts,tsx}
-apps/web/core/services/research/**/*.{ts,tsx}
+apps/web/core/**/*.{ts,tsx}
 apps/web/app/**/*.{ts,tsx}
 apps/web/tests/**/*.{ts,tsx,mjs}
 packages/constants/src/**/*.ts
 packages/i18n/src/locales/zh-CN/common.json
 ```
+
+其中 `apps/web/core` 和 `apps/web/app` 全量参与引用解析，导出清单仅来自 research 组件 / 服务和 `packages/constants`；这样不会漏掉 store、hook、路由等运行时消费者，也不会把无关 core 或 app 局部导出混入待清理清单。
 
 固定排除：
 
@@ -401,6 +404,12 @@ AST 识别：
 | internal     | 仅定义文件内引用                                   |
 | unused       | 无任何引用                                         |
 
+报告固定输出四个决策分组：**零运行时引用**、**仅测试引用**、**兼容契约需保留**、**低引用但业务必须保留**。全量表中额外使用：
+
+- `route_entry_keep`：React Router `page/layout/loader` 等文件约定入口；
+- `external_package_keep`：`packages/constants` 的跨包导出，需先确认 admin 等其他消费方；
+- `internal` / `unused`：分别进入“取消 export 保留实现”和 C1 删除候选。
+
 Markdown 输出列：
 
 ```text
@@ -418,6 +427,23 @@ symbol | defined_in | runtime | test | barrel | route | i18n_dynamic | classific
 - `apps/web/tests/research-reference-audit.test.mjs`
 - 使用脚本导出的纯函数分析临时 fixture，不扫描真实仓库。
 - 至少覆盖 export type、default export、barrel、test-only、dynamic i18n、排除产物。
+
+2026-10-10 真实仓库基线（不含生成产物）：
+
+| 指标 / 分类            | 数量 |
+| ---------------------- | ---- |
+| 扫描文件               | 2101 |
+| runtime                | 406  |
+| 零运行时引用           | 164  |
+| unused                 | 2    |
+| test_only              | 1    |
+| internal               | 30   |
+| i18n_dynamic           | 2    |
+| 兼容契约需保留         | 6    |
+| 低引用但业务必须保留   | 7    |
+| constants 跨包契约保留 | 119  |
+
+该结果用于复核脚本行为，不作为直接删除清单；C1 仍必须逐符号核对 §9.2 的处理表。
 
 ### 9.2 零运行时导出处理表
 
@@ -637,7 +663,7 @@ ResearchChainDetail
 
 | 切片                | 修改 / 删除                              | 必跑验证                                             | 回滚                             |
 | ------------------- | ---------------------------------------- | ---------------------------------------------------- | -------------------------------- |
-| C0 audit script     | 新增 script + test                       | `pnpm --filter web test -- research-reference-audit` | revert 单个脚本                  |
+| C0 audit script     | 已实施：新增 script + test               | `pnpm --filter web test -- research-reference-audit` | revert 单个脚本                  |
 | C1 dead code        | 删除 guard、side panel、side panel test  | Agent / navigation tests                             | git revert 删除提交              |
 | C2 agent route      | chain detail + detail test               | route registration + detail test                     | 恢复 Link 为 window.open         |
 | C3 export downgrade | §9.2 表中文件                            | typecheck                                            | 逐文件恢复 export                |
