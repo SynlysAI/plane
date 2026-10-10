@@ -691,6 +691,19 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/${taskId}/`,
   chainNodeTaskAction: (slug: string, chainId: string, nodeId: string, taskId: string, action: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/${taskId}/${action}/`,
+  paperReviews: (slug: string, chainId: string, nodeId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/paper-reviews/`,
+  paperReview: (slug: string, reviewId: string) => `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/`,
+  paperReviewVersions: (slug: string, reviewId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/`,
+  paperReviewVersionPresign: (slug: string, reviewId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/presign/`,
+  paperReviewVersion: (slug: string, reviewId: string, versionNo: number) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/${versionNo}/`,
+  paperReviewVersionAction: (slug: string, reviewId: string, versionNo: number, action: "return" | "accept") =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/${versionNo}/${action}/`,
+  paperReviewWithdraw: (slug: string, reviewId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/withdraw/`,
   chainNode: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/`,
   chainNodeTransitions: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/transitions/`,
   chainNodeEvents: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/events/`,
@@ -713,6 +726,8 @@ export const researchEndpoints = {
   agentApprovals: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/approvals/`,
   agentApproval: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/approvals/`,
   agentArtifacts: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/artifacts/`,
+  workspaceAsset: (slug: string) => `/api/workspaces/${slug}/assets/`,
+  workspaceAssetDetail: (slug: string, assetId: string) => `/api/workspaces/${slug}/assets/${assetId}/`,
   identityMappings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/`,
   identityMapping: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/${id}/`,
   orgUnits: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/`,

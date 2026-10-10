@@ -1393,6 +1393,68 @@
         "cancelled": "Cancelled"
       }
     },
+    "paper_reviews": {
+      "panel_title": "Paper review",
+      "panel_hint": "Immutable versions, Chain Event comments, and final confirmation for this paper-writing node.",
+      "loading": "Loading paper reviews…",
+      "empty": "No paper review has been opened on this node yet.",
+      "no_permission": "You do not have permission to view or manage this paper review.",
+      "load_failed": "The paper review could not be loaded. Please retry later.",
+      "refresh": "Refresh",
+      "review_switch": "Paper reviews on this node",
+      "status": "Review status",
+      "final_reviewer": "Final reviewer",
+      "due_at": "Due",
+      "final_confirmation": "Final confirmation",
+      "final_confirmed": "Confirmed",
+      "final_unconfirmed": "Not confirmed",
+      "versions_title": "Paper versions",
+      "version": "V{version}",
+      "version_empty": "No paper version has been submitted.",
+      "file": "Paper file",
+      "change_summary": "Change summary",
+      "submit": "Submit new version",
+      "open_file": "Open file",
+      "processing": "Processing…",
+      "cancel_edit": "Cancel",
+      "upload_required": "Select a paper file and write the change summary first.",
+      "upload_failed": "The paper upload did not complete. Please retry.",
+      "crypto_unavailable": "This browser cannot compute the required file digest.",
+      "return_opinion": "Latest return opinion",
+      "return_empty": "No return opinion has been recorded.",
+      "comments_title": "Chain Event comments",
+      "comments_empty": "No paper review event has been recorded.",
+      "return": "Return",
+      "final_confirm": "Final confirmation",
+      "withdraw": "Withdraw",
+      "return_reason": "Return opinion",
+      "confirm_note": "Confirmation note (optional)",
+      "withdraw_reason": "Withdrawal reason",
+      "reason_required": "Write the required reason first.",
+      "confirm": "Confirm",
+      "server_rejected": "The server rejected this action. Check the scope and permissions, then retry.",
+      "file_failed": "The paper file could not be opened.",
+      "status": {
+        "open": "Open",
+        "waiting_review": "Waiting for review",
+        "needs_revision": "Needs revision",
+        "accepted": "Accepted",
+        "withdrawn": "Withdrawn"
+      },
+      "version_status": {
+        "submitted": "Submitted",
+        "superseded": "Superseded",
+        "accepted": "Accepted"
+      },
+      "events": {
+        "opened": "Review opened",
+        "version_submitted": "Version submitted",
+        "returned": "Version returned",
+        "accepted": "Final confirmation",
+        "withdrawn": "Review withdrawn",
+        "other": "Paper event"
+      }
+    },
     "knowledge": {
       "panel_title": "RAGPortal knowledge",
       "reasons": {

@@ -219,6 +219,7 @@ export type TResearchChainEvent = {
   refs: Array<Record<string, unknown>>;
   summary: string;
   content_hash: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type TResearchChainSnapshot = {
@@ -353,7 +354,7 @@ export type TResearchPaperReviewCapabilities = {
 };
 
 export type TResearchPaperReview = {
-  schema_version: "paper-review.v1";
+  schema_version: "research-paper-review.v1";
   id: string;
   workspace: string;
   chain: string;
@@ -366,6 +367,7 @@ export type TResearchPaperReview = {
   final_reviewer: string | null;
   final_reviewer_detail?: TResearchUserLite | null;
   due_at: string | null;
+  versions: TResearchPaperReviewVersion[];
   capabilities?: TResearchPaperReviewCapabilities;
   created_at: string;
   updated_at: string;
@@ -374,13 +376,14 @@ export type TResearchPaperReview = {
 export type TResearchPaperReviewVersionStatus = "SUBMITTED" | "SUPERSEDED" | "ACCEPTED";
 
 export type TResearchPaperReviewAssetDetail = {
-  name: string;
-  size: number;
-  type: string;
+  id: string;
+  file_name: string;
+  content_type: string;
+  file_size: number;
 };
 
 export type TResearchPaperReviewVersion = {
-  schema_version: "paper-review-version.v1";
+  schema_version: "research-paper-review-version.v1";
   id: string;
   review: string;
   version_no: number;
@@ -395,7 +398,6 @@ export type TResearchPaperReviewVersion = {
   submitted_by_detail?: TResearchUserLite | null;
   submitted_at: string;
   content_hash: string;
-  request_id: string;
 };
 
 export type TResearchTodoSource =

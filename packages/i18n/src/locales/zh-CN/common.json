@@ -1416,6 +1416,68 @@
         "cancelled": "已取消"
       }
     },
+    "paper_reviews": {
+      "panel_title": "论文评审",
+      "panel_hint": "在论文写作节点内回放不可变版本、Chain Event 评论与最终确认。",
+      "loading": "正在加载论文评审…",
+      "empty": "当前节点还没有开启论文评审。",
+      "no_permission": "没有查看或管理当前论文评审的权限。",
+      "load_failed": "论文评审加载失败，请稍后重试。",
+      "refresh": "刷新",
+      "review_switch": "当前节点的论文评审",
+      "status": "评审状态",
+      "final_reviewer": "最终评审人",
+      "due_at": "截止时间",
+      "final_confirmation": "最终确认",
+      "final_confirmed": "已确认",
+      "final_unconfirmed": "未确认",
+      "versions_title": "论文版本",
+      "version": "V{version}",
+      "version_empty": "还没有提交论文版本。",
+      "file": "论文文件",
+      "change_summary": "修改说明",
+      "submit": "提交新版本",
+      "open_file": "打开文件",
+      "processing": "处理中…",
+      "cancel_edit": "取消",
+      "upload_required": "请先选择论文文件并填写修改说明。",
+      "upload_failed": "论文文件上传未完成，请重试。",
+      "crypto_unavailable": "当前浏览器无法计算文件校验值。",
+      "return_opinion": "最近退回意见",
+      "return_empty": "还没有记录退回意见。",
+      "comments_title": "Chain Event 评论串",
+      "comments_empty": "还没有论文评审事件。",
+      "return": "退回",
+      "final_confirm": "最终确认",
+      "withdraw": "撤回",
+      "return_reason": "退回意见",
+      "confirm_note": "确认说明（可选）",
+      "withdraw_reason": "撤回原因",
+      "reason_required": "请先填写原因。",
+      "confirm": "确认提交",
+      "server_rejected": "服务端拒绝了本次操作，请确认范围和权限后重试。",
+      "file_failed": "论文文件暂时无法打开。",
+      "status": {
+        "open": "待提交",
+        "waiting_review": "待评审",
+        "needs_revision": "需修订",
+        "accepted": "已确认",
+        "withdrawn": "已撤回"
+      },
+      "version_status": {
+        "submitted": "已提交",
+        "superseded": "已替代",
+        "accepted": "最终版"
+      },
+      "events": {
+        "opened": "开启评审",
+        "version_submitted": "提交版本",
+        "returned": "退回版本",
+        "accepted": "最终确认",
+        "withdrawn": "撤回评审",
+        "other": "论文事件"
+      }
+    },
     "knowledge": {
       "panel_title": "RAGPortal 知识库",
       "reasons": {

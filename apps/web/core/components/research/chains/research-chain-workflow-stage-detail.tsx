@@ -8,6 +8,7 @@ import type { TResearchChainEvent, TResearchChainNode, TResearchChainSnapshot } 
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
 import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
+import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
 import type { TResearchWorkflowStage } from "@/components/research/chains/research-chain-workflow";
 
 export type TResearchChainStageNodeDetail = {
@@ -231,6 +232,16 @@ export function ResearchChainWorkflowStageDetail({
                 nodeId={selectedDetail.node.id}
               />
             </div>
+            {selectedDetail.node.node_type === "PAPER_WRITING" && (
+              <div className="border-t border-subtle">
+                <ResearchPaperReviewPanel
+                  workspaceSlug={workspaceSlug}
+                  chainId={selectedDetail.node.chain}
+                  nodeId={selectedDetail.node.id}
+                  events={selectedDetail.events}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
