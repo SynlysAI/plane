@@ -10,6 +10,7 @@ from plane.db.models import (
     Project,
     ProjectMember,
     ProjectNavigationCategory,
+    ResearchChain,
     ResearchProjectProfile,
 )
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
@@ -93,6 +94,15 @@ def navigation_env(db):
     ProjectMember.objects.create(
         project=research_project, workspace=workspace, member=member, role=15
     )
+    research_chain = ResearchChain.objects.create(
+        project=research_project,
+        workspace=workspace,
+        owner=member,
+        visibility=ResearchProjectProfile.ChainVisibility.WORKSPACE,
+        request_id=f"navigation-{uuid4()}",
+        payload_hash=f"navigation-{uuid4()}",
+        created_by=member,
+    )
 
     administrative_project = Project.objects.create(
         workspace=workspace,
@@ -109,6 +119,7 @@ def navigation_env(db):
         "lab": lab,
         "group": group,
         "research_project": research_project,
+        "research_chain": research_chain,
         "administrative_project": administrative_project,
         "admin_client": client_for(admin),
         "member_client": client_for(member),
@@ -180,7 +191,10 @@ def test_research_tree_projects_org_ancestors_and_custom_category(navigation_env
     custom = tree_node(group["children"], "重点课题")
     assert custom is not None
     assert custom["kind"] == "CUSTOM"
-    assert custom["projects"][0]["id"] == str(navigation_env["research_project"].id)
+    navigation_project = custom["projects"][0]
+    assert navigation_project["id"] == str(navigation_env["research_project"].id)
+    assert navigation_project["chain_id"] == str(navigation_env["research_chain"].id)
+    assert navigation_project["chain_id"] != navigation_project["id"]
     assert response.json()["uncategorized"] == []
 
 

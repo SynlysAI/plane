@@ -4,6 +4,7 @@ import { APIService } from "@/services/api.service";
 export type TNavigationScope = "RESEARCH" | "ADMINISTRATIVE";
 export type TNavigationProject = {
   id: string;
+  chain_id?: string | null;
   name: string;
   identifier: string;
   kind: "RESEARCH_CHAIN" | "TEAM_RESEARCH" | "LEGACY_RESEARCH" | "ADMINISTRATIVE";

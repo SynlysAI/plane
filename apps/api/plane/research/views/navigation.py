@@ -14,6 +14,7 @@ from plane.db.models import (
     OrgUnit,
     Project,
     ProjectNavigationCategory,
+    ResearchChain,
     ResearchProjectProfile,
     WorkspaceMember,
 )
@@ -212,7 +213,7 @@ def _project_queryset(workspace, user, scope):
             workspace=workspace,
             id__in=profile_ids,
             deleted_at__isnull=True,
-        ).select_related("navigation_category", "research_profile")
+        ).select_related("navigation_category", "research_profile", "research_chain")
 
     queryset = Project.objects.filter(
         workspace=workspace,
@@ -242,7 +243,7 @@ def _project_payload(project, scope):
         scope: The navigation channel scope.
 
     Returns:
-        A dictionary containing the project ID, name, identifier, and route kind.
+        A dictionary containing the project ID, optional chain ID, name, identifier, and route kind.
     """
     route_kind = "ADMINISTRATIVE"
     profile = getattr(project, "research_profile", None)
@@ -253,12 +254,21 @@ def _project_payload(project, scope):
             route_kind = "TEAM_RESEARCH"
         else:
             route_kind = "LEGACY_RESEARCH"
-    return {
+    chain = None
+    if route_kind == "RESEARCH_CHAIN":
+        try:
+            chain = project.research_chain
+        except ResearchChain.DoesNotExist:
+            chain = None
+    payload = {
         "id": str(project.id),
         "name": project.name,
         "identifier": project.identifier,
         "kind": route_kind,
     }
+    if route_kind == "RESEARCH_CHAIN":
+        payload["chain_id"] = str(chain.id) if chain is not None else None
+    return payload
 
 
 def _ancestor_ids_from_path(path):

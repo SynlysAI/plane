@@ -124,9 +124,10 @@ async function renderPanel() {
 
 function button(label: string) {
   const buttons = [...container.querySelectorAll("button")];
-  const found = buttons.toReversed().find((item) => item.textContent === label);
-  if (!found) throw new Error(`button ${label} not found`);
-  return found;
+  for (let index = buttons.length - 1; index >= 0; index -= 1) {
+    if (buttons[index]?.textContent === label) return buttons[index];
+  }
+  throw new Error(`button ${label} not found`);
 }
 
 async function setInput(selector: string, value: string) {

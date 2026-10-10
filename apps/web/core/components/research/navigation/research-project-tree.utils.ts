@@ -3,9 +3,12 @@ import type { TNavigationCategory, TNavigationProject } from "@/services/researc
 export type FlatCategory = { category: TNavigationCategory; depth: number };
 
 /** 获取项目的现有详情路由。 */
-export function projectHref(workspaceSlug: string | string[], project: Pick<TNavigationProject, "id" | "kind">) {
+export function projectHref(
+  workspaceSlug: string | string[],
+  project: Pick<TNavigationProject, "id" | "chain_id" | "kind">
+) {
   if (project.kind === "RESEARCH_CHAIN") {
-    return `/${workspaceSlug}/research/chains/${project.id}`;
+    return `/${workspaceSlug}/research/chains/${project.chain_id || project.id}`;
   }
   if (project.kind === "LEGACY_RESEARCH") {
     return `/${workspaceSlug}/research/projects/${project.id}/stages`;

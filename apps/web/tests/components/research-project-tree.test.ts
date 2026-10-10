@@ -59,6 +59,9 @@ it("blocks a category and its descendants as deletion targets", () => {
 });
 
 it("keeps the existing research and administrative project routes", () => {
+  expect(projectHref("ws", { id: "project-1", chain_id: "chain-1", kind: "RESEARCH_CHAIN" })).toBe(
+    "/ws/research/chains/chain-1"
+  );
   expect(projectHref("ws", { id: "project-1", kind: "RESEARCH_CHAIN" })).toBe("/ws/research/chains/project-1");
   expect(projectHref("ws", { id: "project-1", kind: "LEGACY_RESEARCH" })).toBe(
     "/ws/research/projects/project-1/stages"
