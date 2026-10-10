@@ -201,6 +201,13 @@ from plane.research.views import (
     ResearchChainNodeTaskActionEndpoint,
     ResearchChainNodeTaskDetailEndpoint,
     ResearchChainNodeTaskListCreateEndpoint,
+    ResearchPaperReviewDetailEndpoint,
+    ResearchPaperReviewListCreateEndpoint,
+    ResearchPaperReviewPresignEndpoint,
+    ResearchPaperReviewVersionActionEndpoint,
+    ResearchPaperReviewVersionDetailEndpoint,
+    ResearchPaperReviewVersionListCreateEndpoint,
+    ResearchPaperReviewWithdrawEndpoint,
 )
 
 urlpatterns = [
@@ -309,6 +316,41 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/<str:action>/",
         ResearchChainNodeTaskActionEndpoint.as_view(),
         name="research-chain-node-task-action",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/paper-reviews/",
+        ResearchPaperReviewListCreateEndpoint.as_view(),
+        name="research-paper-reviews",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/",
+        ResearchPaperReviewDetailEndpoint.as_view(),
+        name="research-paper-review",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/",
+        ResearchPaperReviewVersionListCreateEndpoint.as_view(),
+        name="research-paper-review-versions",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/presign/",
+        ResearchPaperReviewPresignEndpoint.as_view(),
+        name="research-paper-review-presign",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/<int:version_no>/",
+        ResearchPaperReviewVersionDetailEndpoint.as_view(),
+        name="research-paper-review-version",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/<int:version_no>/<str:action>/",
+        ResearchPaperReviewVersionActionEndpoint.as_view(),
+        name="research-paper-review-version-action",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/withdraw/",
+        ResearchPaperReviewWithdrawEndpoint.as_view(),
+        name="research-paper-review-withdraw",
     ),
     path(
         "research/workspaces/<str:slug>/nodes/<uuid:node_id>/snapshots/",

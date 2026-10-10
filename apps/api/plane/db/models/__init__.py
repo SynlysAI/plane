@@ -136,6 +136,8 @@ from .research import (
     ResearchOutcome,
     ResearchOutcomeAttachment,
     ResearchOutcomeLink,
+    ResearchPaperReview,
+    ResearchPaperReviewVersion,
     OrgUnit,
     OrgUnitMember,
     PeriodicReport,

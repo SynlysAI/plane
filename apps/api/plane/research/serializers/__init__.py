@@ -67,7 +67,12 @@ from .chain import (
     ResearchChainUploadSerializer,
     ResearchAnalysisResultSerializer,
 )
-from .collaboration import ResearchChainNodeTaskSerializer
+from .collaboration import (
+    ResearchChainNodeTaskSerializer,
+    ResearchPaperReviewPresignSerializer,
+    ResearchPaperReviewSerializer,
+    ResearchPaperReviewVersionSerializer,
+)
 
 __all__ = [
     "IdentityMappingSerializer",
@@ -104,6 +109,9 @@ __all__ = [
     "ResearchChainUploadSerializer",
     "ResearchAnalysisResultSerializer",
     "ResearchChainNodeTaskSerializer",
+    "ResearchPaperReviewSerializer",
+    "ResearchPaperReviewVersionSerializer",
+    "ResearchPaperReviewPresignSerializer",
     "ResearchAuditEventSerializer",
     "ResearchUserSerializer",
     "WorkspaceResearchSettingSerializer",

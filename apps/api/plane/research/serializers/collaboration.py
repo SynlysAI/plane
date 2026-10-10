@@ -6,16 +6,26 @@
 
 from rest_framework import serializers
 
-from plane.db.models import ResearchChainNodeTask
+from plane.db.models import (
+    ResearchChainNodeTask,
+    ResearchPaperReview,
+    ResearchPaperReviewVersion,
+)
 from plane.research.services.chain_tasks import (
     actor_can_cancel_task,
     actor_can_review_task,
     actor_can_submit_task,
     chain_writer,
 )
+from plane.research.services.paper_review import (
+    actor_can_review_paper,
+    actor_can_submit_paper,
+    actor_can_withdraw_paper,
+)
 from plane.research.utils.action_capabilities import capability_map
 
 TASK_ACTIONS = ("view", "edit", "assign", "submit", "return", "complete", "cancel")
+PAPER_REVIEW_ACTIONS = ("view", "submit", "return", "accept", "withdraw")
 EDITABLE_STATUSES = (
     ResearchChainNodeTask.Status.DRAFT,
     ResearchChainNodeTask.Status.ASSIGNED,
@@ -139,3 +149,178 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
     def get_capabilities(self, obj):
         """Return explicit task action decisions for the current actor."""
         return _capabilities(self, obj)
+
+
+def _paper_capabilities(serializer, review):
+    """Resolve the stable paper action map for the current actor."""
+    actor = _actor(serializer)
+    if actor is None:
+        return capability_map(PAPER_REVIEW_ACTIONS, {})
+    cache = serializer.context.setdefault("_research_paper_roles", {})
+    cache_key = (review.workspace_id, review.chain_id, review.id, actor.id)
+    if cache_key not in cache:
+        cache[cache_key] = {
+            "submitter": actor_can_submit_paper(review.workspace, review, actor),
+            "reviewer": actor_can_review_paper(review.workspace, review, actor),
+            "withdrawer": actor_can_withdraw_paper(review.workspace, review, actor),
+        }
+    roles = cache[cache_key]
+    open_for_submit = review.status in (
+        ResearchPaperReview.Status.OPEN,
+        ResearchPaperReview.Status.NEEDS_REVISION,
+    )
+    decisions = {
+        "view": True,
+        "submit": open_for_submit and roles["submitter"],
+        "return": roles["reviewer"] and review.status == ResearchPaperReview.Status.WAITING_REVIEW,
+        "accept": roles["reviewer"] and review.status == ResearchPaperReview.Status.WAITING_REVIEW,
+        "withdraw": roles["withdrawer"]
+        and review.status
+        not in (
+            ResearchPaperReview.Status.ACCEPTED,
+            ResearchPaperReview.Status.WITHDRAWN,
+        ),
+    }
+    return capability_map(PAPER_REVIEW_ACTIONS, decisions)
+
+
+class ResearchPaperReviewSerializer(serializers.ModelSerializer):
+    """Serialize a paper review loop and its derived action capabilities."""
+
+    schema_version = serializers.SerializerMethodField()
+    owner_detail = serializers.SerializerMethodField()
+    final_reviewer_detail = serializers.SerializerMethodField()
+    versions = serializers.SerializerMethodField()
+    capabilities = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ResearchPaperReview
+        fields = [
+            "schema_version",
+            "id",
+            "workspace",
+            "chain",
+            "node",
+            "outcome",
+            "owner",
+            "owner_detail",
+            "status",
+            "current_version_no",
+            "final_reviewer",
+            "final_reviewer_detail",
+            "due_at",
+            "request_id",
+            "versions",
+            "capabilities",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "schema_version",
+            "id",
+            "workspace",
+            "chain",
+            "node",
+            "owner",
+            "owner_detail",
+            "status",
+            "current_version_no",
+            "final_reviewer_detail",
+            "request_id",
+            "versions",
+            "capabilities",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_schema_version(self, _obj):
+        """Return the paper review API contract version."""
+        return "research-paper-review.v1"
+
+    def get_owner_detail(self, obj):
+        """Return the review owner display projection."""
+        return _user_detail(obj.owner)
+
+    def get_final_reviewer_detail(self, obj):
+        """Return the final reviewer display projection."""
+        return _user_detail(obj.final_reviewer)
+
+    def get_versions(self, obj):
+        """Return versions only for detail responses to keep lists compact."""
+        if not self.context.get("include_versions"):
+            return []
+        return ResearchPaperReviewVersionSerializer(
+            obj.versions.all(),
+            many=True,
+            context=self.context,
+        ).data
+
+    def get_capabilities(self, obj):
+        """Return explicit paper action decisions for the current actor."""
+        return _paper_capabilities(self, obj)
+
+
+class ResearchPaperReviewVersionSerializer(serializers.ModelSerializer):
+    """Serialize an immutable paper version with derived response status."""
+
+    schema_version = serializers.SerializerMethodField()
+    asset_detail = serializers.SerializerMethodField()
+    submitted_by_detail = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ResearchPaperReviewVersion
+        fields = [
+            "schema_version",
+            "id",
+            "review",
+            "version_no",
+            "asset",
+            "asset_detail",
+            "file_name",
+            "content_type",
+            "file_size",
+            "change_summary",
+            "status",
+            "submitted_by",
+            "submitted_by_detail",
+            "submitted_at",
+            "content_hash",
+        ]
+        read_only_fields = fields
+
+    def get_schema_version(self, _obj):
+        """Return the paper version API contract version."""
+        return "research-paper-review-version.v1"
+
+    def get_asset_detail(self, obj):
+        """Project the registered asset without leaking storage credentials."""
+        return {
+            "id": str(obj.asset_id),
+            "file_name": obj.file_name,
+            "content_type": obj.content_type,
+            "file_size": obj.file_size,
+        }
+
+    def get_submitted_by_detail(self, obj):
+        """Return the submitter display projection."""
+        return _user_detail(obj.submitted_by)
+
+    def get_status(self, obj):
+        """Derive version status without mutating append-only rows."""
+        if obj.review.status == ResearchPaperReview.Status.ACCEPTED and obj.version_no == obj.review.current_version_no:
+            return ResearchPaperReviewVersion.Status.ACCEPTED
+        if obj.version_no < obj.review.current_version_no:
+            return ResearchPaperReviewVersion.Status.SUPERSEDED
+        return ResearchPaperReviewVersion.Status.SUBMITTED
+
+
+class ResearchPaperReviewPresignSerializer(serializers.Serializer):
+    """Validate metadata used to create a direct S3 paper upload slot."""
+
+    asset_id = serializers.UUIDField(read_only=True)
+    upload_data = serializers.DictField(read_only=True)
+    file_name = serializers.CharField(max_length=255)
+    content_type = serializers.CharField(max_length=128)
+    size = serializers.IntegerField(min_value=1)
+    sha256 = serializers.RegexField(r"^[0-9a-fA-F]{64}$")

@@ -211,6 +211,15 @@ from .chain_tasks import (
     ResearchChainNodeTaskDetailEndpoint,
     ResearchChainNodeTaskListCreateEndpoint,
 )
+from .paper_reviews import (
+    ResearchPaperReviewDetailEndpoint,
+    ResearchPaperReviewListCreateEndpoint,
+    ResearchPaperReviewPresignEndpoint,
+    ResearchPaperReviewVersionActionEndpoint,
+    ResearchPaperReviewVersionDetailEndpoint,
+    ResearchPaperReviewVersionListCreateEndpoint,
+    ResearchPaperReviewWithdrawEndpoint,
+)
 from .knowledge import (
     ResearchChainKnowledgeBaseListEndpoint,
     ResearchChainReferenceEndpoint,

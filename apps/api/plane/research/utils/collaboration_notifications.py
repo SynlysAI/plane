@@ -13,6 +13,7 @@ from plane.research.utils.acl import direct_advisor_ids, org_unit_ancestry
 from plane.research.utils.org import active_membership_q
 
 RESEARCH_CHAIN_TASK_ENTITY = "research_chain_task"
+RESEARCH_PAPER_REVIEW_ENTITY = "research_paper_review"
 
 
 def _notify(task, receivers, *, actor, action, title, extra=None):
@@ -149,4 +150,93 @@ def notify_task_cancelled(task, actor, reason=""):
         action="cancelled",
         title=f"科研节点任务已取消：{task.title}",
         extra={"reason": (reason or "")[:500]},
+    )
+
+
+def _notify_paper(review, receivers, *, actor, action, title, extra=None):
+    """Create paper-review notifications without a new delivery channel.
+
+    Args:
+        review: Paper review being changed.
+        receivers: Users that should receive the transition.
+        actor: User who performed the paper action.
+        action: Stable notification action for clients.
+        title: Short notification title.
+        extra: Optional additional JSON metadata.
+
+    Returns:
+        The notification rows created for this action.
+    """
+    receiver_users = {
+        receiver.id: receiver for receiver in receivers if receiver is not None and receiver.id != actor.id
+    }
+    rows = [
+        Notification(
+            workspace_id=review.workspace_id,
+            project_id=review.chain.project_id,
+            data={
+                "chain_id": str(review.chain_id),
+                "node_id": str(review.node_id),
+                "review_id": str(review.id),
+                "action": action,
+                "status": review.status,
+                "route": f"/research/paper-reviews/{review.id}",
+                **(extra or {}),
+            },
+            entity_identifier=review.id,
+            entity_name=RESEARCH_PAPER_REVIEW_ENTITY,
+            title=title,
+            message={"action": action, "status": review.status, "at": timezone.now().isoformat()},
+            message_html=f"<p>{escape(title)}</p>",
+            message_stripped=title,
+            sender="research",
+            triggered_by=actor,
+            receiver=receiver_users[receiver_id],
+        )
+        for receiver_id in receiver_users
+    ]
+    if rows:
+        Notification.objects.bulk_create(rows, batch_size=100)
+    return rows
+
+
+def notify_paper_version_submitted(review, actor):
+    """Notify the direct advisor and explicit final reviewer."""
+    receiver_ids = set(direct_advisor_ids(review.owner_id, review.workspace_id))
+    if review.final_reviewer_id:
+        receiver_ids.add(review.final_reviewer_id)
+    receivers = User.objects.filter(id__in=receiver_ids, is_active=True)
+    return _notify_paper(
+        review,
+        receivers,
+        actor=actor,
+        action="submitted",
+        title="论文评审已提交新版本",
+    )
+
+
+def notify_paper_returned(review, actor, comment=""):
+    """Notify the review owner that a version needs revision."""
+    receiver = User.objects.filter(pk=review.owner_id, is_active=True).first()
+    return _notify_paper(
+        review,
+        [receiver],
+        actor=actor,
+        action="returned",
+        title="论文评审版本被退回",
+        extra={"comment": (comment or "")[:500]},
+    )
+
+
+def notify_paper_accepted(review, actor, comment=""):
+    """Notify the review owner, chain owner, and final reviewer."""
+    receiver_ids = {review.owner_id, review.chain.owner_id, review.final_reviewer_id}
+    receivers = User.objects.filter(id__in=receiver_ids, is_active=True)
+    return _notify_paper(
+        review,
+        receivers,
+        actor=actor,
+        action="accepted",
+        title="论文评审已最终确认",
+        extra={"comment": (comment or "")[:500]},
     )
