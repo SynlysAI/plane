@@ -6,6 +6,8 @@
 
 import base64
 import json
+import logging
+from uuid import uuid4
 
 from rest_framework import status
 from rest_framework.response import Response
@@ -14,6 +16,8 @@ from plane.research.services.research_todos import TODO_SCOPES, collect_research
 from plane.research.utils.capabilities import NAV_OVERVIEW
 from plane.research.utils.errors import ResearchErrorCode, research_error
 from plane.research.views.base import ResearchAPIView
+
+logger = logging.getLogger("plane.api")
 
 DEFAULT_TODO_LIMIT = 50
 MAX_TODO_LIMIT = 100
@@ -56,6 +60,18 @@ def decode_todo_cursor(value):
         )
 
 
+def request_id_for_todo_log(request):
+    """读取统一待办降级日志使用的请求标识。
+
+    Args:
+        request: 当前 DRF 请求对象。
+
+    Returns:
+        调用方提供的 ``X-Request-Id``；缺失时生成一次性请求标识。
+    """
+    return str(request.headers.get("X-Request-Id") or uuid4())
+
+
 class ResearchTodoListEndpoint(ResearchAPIView):
     """``GET /api/research/workspaces/<slug>/research-todos/``."""
 
@@ -94,16 +110,35 @@ class ResearchTodoListEndpoint(ResearchAPIView):
             if error:
                 return error
 
-        todos, degraded_sources = collect_research_todos(workspace, request.user, scope)
-        page = todos[offset : offset + limit]
-        next_cursor = encode_todo_cursor(offset + limit) if offset + limit < len(todos) else None
-        return Response(
-            {
-                "schema_version": "research-todo.v2",
-                "results": page,
-                "count": len(page),
-                "total_count": len(todos),
-                "next_cursor": next_cursor,
-                "degraded_sources": degraded_sources,
-            }
-        )
+        request_id = request_id_for_todo_log(request)
+        try:
+            todos, degraded_sources = collect_research_todos(workspace, request.user, scope, request_id)
+            page = todos[offset : offset + limit]
+            next_cursor = encode_todo_cursor(offset + limit) if offset + limit < len(todos) else None
+            return Response(
+                {
+                    "schema_version": "research-todo.v2",
+                    "results": page,
+                    "count": len(page),
+                    "total_count": len(todos),
+                    "next_cursor": next_cursor,
+                    "degraded_sources": degraded_sources,
+                }
+            )
+        except Exception as error:
+            logger.exception(
+                "Research todo aggregate infrastructure failed",
+                extra={
+                    "event": "research_todo_aggregate_failed",
+                    "workspace_id": str(workspace.id),
+                    "workspace_slug": workspace.slug,
+                    "request_id": request_id,
+                    "user_id": str(request.user.id),
+                    "exception_type": type(error).__name__,
+                },
+            )
+            return research_error(
+                ResearchErrorCode.UPSTREAM_DEGRADED,
+                "Research todo aggregation is temporarily unavailable.",
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -17,8 +17,10 @@ from plane.db.models import (
     ApprovalFlowStep,
     ApprovalRequest,
     Issue,
+    OrgUnitMember,
     Page,
     PeriodicReport,
+    ProjectMember,
     ResearchAgentRunEvent,
     ResearchAgentSession,
     ResearchChainNodeTask,
@@ -234,6 +236,7 @@ def env(db, settings):
             "student_client": _client(fixture["student"]),
             "member_client": _client(fixture["group_member"]),
             "advisor_client": _client(fixture["advisor"]),
+            "admin_client": _client(fixture["workspace_admin"]),
             "empty_client": _client(fixture["descendant"]),
         }
     )
@@ -260,6 +263,21 @@ def _by_source(items):
 
 @pytest.mark.django_db
 class TestResearchTodoScopesAndAcl:
+    def test_all_six_sources_successfully_project_the_v2_contract(self, env):
+        payload = _payload(_get(env, "student", "?scope=visible"))
+
+        assert payload["schema_version"] == "research-todo.v2"
+        assert set(_by_source(_items(payload))) == {
+            "CHAIN_TASK",
+            "REPORT",
+            "PAPER_REVIEW",
+            "STAGE_REVIEW",
+            "AGENT_APPROVAL",
+            "OFFICE_APPROVAL",
+        }
+        assert all(item["schema_version"] == "research-todo.v2" for item in _items(payload))
+
+
     def test_to_me_returns_actionable_items_from_server_capabilities(self, env):
         payload = _payload(_get(env, "advisor", "?scope=to_me"))
         sources = set(_by_source(_items(payload)))
@@ -301,6 +319,44 @@ class TestResearchTodoScopesAndAcl:
         client.force_authenticate(user=env["guest"])
         response = client.get(f"/api/research/workspaces/{env['workspace'].slug}/research-todos/")
         assert response.status_code == 403
+
+    def test_workspace_admin_does_not_automatically_gain_research_review_rights(self, env):
+        payload = _payload(_get(env, "admin", "?scope=visible"))
+        research_sources = {"CHAIN_TASK", "PAPER_REVIEW", "STAGE_REVIEW"}
+
+        assert not research_sources.intersection(_by_source(_items(payload)))
+        assert all(
+            not decision["allowed"]
+            for item in _items(payload)
+            if item["source"] in research_sources
+            for decision in item["capabilities"]["actions"].values()
+        )
+
+    def test_expired_org_member_and_invalid_project_member_cannot_act(self, env):
+        OrgUnitMember.objects.filter(user=env["group_member"]).update(
+            effective_to=timezone.localdate() - timedelta(days=1)
+        )
+        ProjectMember.objects.create(
+            project=env["project"],
+            member=env["descendant"],
+            role=15,
+            is_active=False,
+            deleted_at=timezone.now(),
+        )
+        descendant_client = _client(env["descendant"])
+
+        expired_response = _get(env, "member", "?scope=to_me")
+        invalid_project_member = _payload(
+            descendant_client.get(
+                f"/api/research/workspaces/{env['workspace'].slug}/research-todos/?scope=to_me"
+            )
+        )
+
+        assert expired_response.status_code == 403
+        assert expired_response.json()["error_code"] == "research_permission_denied"
+        assert "CHAIN_TASK" not in _by_source(_items(invalid_project_member))
+        assert "PAPER_REVIEW" not in _by_source(_items(invalid_project_member))
+        assert "OFFICE_APPROVAL" not in _by_source(_items(invalid_project_member))
 
 
 @pytest.mark.django_db
@@ -390,13 +446,69 @@ class TestResearchTodoProjectionContract:
         )
         assert response.status_code == 405
 
-    def test_one_external_source_can_degrade_without_dropping_local_sources(self, env, monkeypatch):
+    def test_response_contains_no_v1_contract_or_upload_source(self, env):
+        response = _get(env, "student", "?scope=visible")
+        rendered = response.content.decode()
+        payload = _payload(response)
+
+        assert '"target"' not in rendered
+        assert '"kind"' not in rendered
+        assert "research-todo-summary.v1" not in rendered
+        assert "upload:uuid" not in rendered
+        assert all(item["source"] != "upload" for item in _items(payload))
+
+    @pytest.mark.parametrize(
+        ("source", "collector_name"),
+        [
+            ("CHAIN_TASK", "collect_chain_task_todos"),
+            ("REPORT", "collect_report_todos"),
+            ("PAPER_REVIEW", "collect_paper_review_todos"),
+            ("STAGE_REVIEW", "collect_stage_review_todos"),
+            ("AGENT_APPROVAL", "collect_agent_approval_todos"),
+            ("OFFICE_APPROVAL", "collect_office_approval_todos"),
+        ],
+    )
+    def test_each_source_can_degrade_without_dropping_other_sources(
+        self, env, monkeypatch, caplog, source, collector_name
+    ):
         from plane.research.services import research_todos
 
         def broken(*_args, **_kwargs):
-            raise RuntimeError("agent upstream unavailable")
+            raise RuntimeError(f"{source} upstream unavailable")
 
-        monkeypatch.setattr(research_todos, "collect_agent_approval_todos", broken)
-        payload = _payload(_get(env, "student", "?scope=to_me"))
-        assert payload["degraded_sources"] == ["AGENT_APPROVAL"]
-        assert any(item["source"] == "CHAIN_TASK" for item in _items(payload))
+        monkeypatch.setattr(research_todos, collector_name, broken)
+        with caplog.at_level("ERROR", logger="plane.api"):
+            response = env["student_client"].get(
+                f"/api/research/workspaces/{env['workspace'].slug}/research-todos/?scope=visible",
+                HTTP_X_REQUEST_ID=f"todo-{source}",
+            )
+
+        payload = _payload(response)
+        assert payload["schema_version"] == "research-todo.v2"
+        assert payload["degraded_sources"] == [source]
+        assert len(_items(payload)) > 0
+        assert source not in _by_source(_items(payload))
+        assert f"{source} upstream unavailable" not in response.content.decode()
+        record = caplog.records[0]
+        assert record.source == source
+        assert record.workspace_id == str(env["workspace"].id)
+        assert record.request_id == f"todo-{source}"
+        assert record.exception_type == "RuntimeError"
+
+    def test_aggregate_infrastructure_failure_returns_one_error_envelope(self, env, monkeypatch):
+        from plane.research.views import research_todos as research_todo_view
+
+        def broken(*_args, **_kwargs):
+            raise RuntimeError("aggregate infrastructure failed")
+
+        monkeypatch.setattr(research_todo_view, "collect_research_todos", broken)
+        response = env["student_client"].get(
+            f"/api/research/workspaces/{env['workspace'].slug}/research-todos/",
+            HTTP_X_REQUEST_ID="todo-aggregate",
+        )
+
+        assert response.status_code == 500
+        payload = response.json()
+        assert set(payload) == {"error_code", "message"}
+        assert payload["error_code"] == "UPSTREAM_DEGRADED"
+        assert "aggregate infrastructure failed" not in response.content.decode()

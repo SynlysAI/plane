@@ -735,13 +735,14 @@ def _todo_sort_key(todo, now=None):
     )
 
 
-def collect_research_todos(workspace, user, scope):
+def collect_research_todos(workspace, user, scope, request_id=None):
     """Aggregate all source projections after their original ACL has run.
 
     Args:
         workspace: Workspace whose todos are projected.
         user: Current authenticated caller.
         scope: ``to_me``, ``mine`` or ``visible``.
+        request_id: Request identifier used only by degradation logs.
 
     Returns:
         A ``(todos, degraded_sources)`` tuple; source order in the degraded list
@@ -760,10 +761,19 @@ def collect_research_todos(workspace, user, scope):
     for source, collector in collectors:
         try:
             todos.extend(collector(workspace, user, scope))
-        except Exception:
-            if source != "AGENT_APPROVAL":
-                raise
-            logger.exception("Research todo source %s degraded", source)
+        except Exception as error:
+            logger.exception(
+                "Research todo source degraded",
+                extra={
+                    "event": "research_todo_source_degraded",
+                    "source": source,
+                    "workspace_id": str(workspace.id),
+                    "workspace_slug": workspace.slug,
+                    "request_id": request_id,
+                    "user_id": str(user.id),
+                    "exception_type": type(error).__name__,
+                },
+            )
             degraded.append(source)
     deduplicated = {}
     for todo in todos:
