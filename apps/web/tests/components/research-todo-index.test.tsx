@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TResearchTodoEnvelope, TResearchTodoEnvelopeList } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
+  collectResearchTodos: vi.fn(),
   getResearchTodos: vi.fn(),
   getChainNodes: vi.fn(),
   getKnowledgeUploads: vi.fn(),
@@ -36,12 +38,33 @@ vi.mock("@/services/research/chain.service", () => ({
     getKnowledgeUploads = mocks.getKnowledgeUploads;
   },
 }));
+vi.mock("@/components/research/common/research-todo-source", () => ({
+  collectResearchTodos: mocks.collectResearchTodos,
+}));
 
 const { ResearchTodoEnvelopeList } = await import("@/components/research/common/research-todo-index");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let currentSearch = "";
+
+function RouteProbe() {
+  const location = useLocation();
+  currentSearch = location.search;
+  return null;
+}
+
+function renderTodo(initialPath = "/lab", props: Partial<Parameters<typeof ResearchTodoEnvelopeList>[0]> = {}) {
+  return act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[initialPath]}>
+        <ResearchTodoEnvelopeList workspaceSlug="lab" {...props} />
+        <RouteProbe />
+      </MemoryRouter>
+    )
+  );
+}
 
 function todoEnvelope(overrides: Partial<TResearchTodoEnvelope> = {}): TResearchTodoEnvelope {
   return {
@@ -85,21 +108,25 @@ it("renders server urgency with an explicit textual label beside the due date", 
     ])
   );
 
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" limit={12} />));
+  await renderTodo("/lab", { limit: 12 });
 
   expect(container.textContent).toContain("逾期");
   expect(container.textContent).toContain("今天截止");
   expect(container.textContent).toContain("截止：");
 });
 
-function todoList(results: TResearchTodoEnvelope[], totalCount = results.length): TResearchTodoEnvelopeList {
+function todoList(
+  results: TResearchTodoEnvelope[],
+  totalCount = results.length,
+  degradedSources: TResearchTodoEnvelopeList["degraded_sources"] = []
+): TResearchTodoEnvelopeList {
   return {
     schema_version: "research-todo.v2",
     results,
     count: results.length,
     total_count: totalCount,
     next_cursor: null,
-    degraded_sources: [],
+    degraded_sources: degradedSources,
   };
 }
 
@@ -114,6 +141,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mocks.getResearchTodos.mockResolvedValue(todoList([]));
+  currentSearch = "";
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -142,12 +170,13 @@ it("uses one server aggregate request and never polls chain upload status", asyn
     ])
   );
 
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" limit={12} />));
+  await renderTodo("/lab", { limit: 12 });
 
   expect(mocks.getResearchTodos).toHaveBeenCalledTimes(1);
   expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
   expect(mocks.getChainNodes).not.toHaveBeenCalled();
   expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
+  expect(mocks.collectResearchTodos).not.toHaveBeenCalled();
   const rows = [...container.querySelectorAll("li")];
   expect(rows[0]?.textContent).toContain("补充实验数据");
   expect(rows[0]?.textContent).toContain("处理人一");
@@ -180,15 +209,15 @@ it("uses server-computed next actions without rendering trace payloads", async (
     ])
   );
 
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" limit={12} />));
+  await renderTodo("/lab", { limit: 12 });
 
   expect(container.textContent).toContain("周报待阅读 · 2026-W40");
   expect(container.textContent).toContain("周报待审阅 · 2026-W39");
   expect(container.textContent).toContain("阅读");
   expect(container.textContent).toContain("审阅");
   expect(container.textContent).not.toContain("secret-trace-id");
-  const mutationButtons = [...container.querySelectorAll("button")].filter((item) => item.textContent !== "刷新待办");
-  expect(mutationButtons).toEqual([]);
+  const controls = [...container.querySelectorAll("button")].map((item) => item.textContent ?? "");
+  expect(controls.every((label) => ["刷新待办", "我可处理", "我发起", "全部可见"].includes(label))).toBe(true);
 });
 
 it("filters the server projection by the selected period in one request", async () => {
@@ -199,7 +228,7 @@ it("filters the server projection by the selected period in one request", async 
     ])
   );
 
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" periodDays={30} limit={12} />));
+  await renderTodo("/lab", { periodDays: 30, limit: 12 });
 
   expect(mocks.getResearchTodos).toHaveBeenCalledTimes(1);
   expect(container.textContent).toContain("新待办");
@@ -208,19 +237,80 @@ it("filters the server projection by the selected period in one request", async 
 
 it("renders the loading state with stable accessibility semantics", async () => {
   mocks.getResearchTodos.mockReturnValue(new Promise(() => undefined));
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" />));
+  await renderTodo("/lab");
   expect(container.querySelector('[role="status"][aria-busy="true"]')).not.toBeNull();
 });
 
-it("renders the explicit empty state", async () => {
+it("renders scope-specific empty states and writes every scope to the URL", async () => {
   mocks.getResearchTodos.mockResolvedValue(todoList([]));
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" />));
-  expect(container.textContent).toContain("当前没有需要处理的跨组件事项。");
+  await renderTodo("/lab");
+  expect(container.textContent).toContain("当前没有需要你处理的事项。");
+
+  await act(async () => button("我发起").click());
+  expect(currentSearch).toBe("?todo_scope=mine");
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "mine", limit: 100 });
+  expect(container.textContent).toContain("当前没有你发起或提交的事项。");
+
+  await act(async () => button("全部可见").click());
+  expect(currentSearch).toBe("?todo_scope=visible");
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "visible", limit: 100 });
+  expect(container.textContent).toContain("当前权限范围内暂无可见事项。");
+
+  await act(async () => button("我可处理").click());
+  expect(currentSearch).toBe("?todo_scope=to_me");
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "to_me", limit: 100 });
+});
+
+it("restores the URL scope after a refresh and keeps the layout inside the viewport", async () => {
+  mocks.getResearchTodos.mockResolvedValue(todoList([todoEnvelope()]));
+  await renderTodo("/lab?todo_scope=visible");
+
+  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "visible", limit: 100 });
+  expect(currentSearch).toBe("?todo_scope=visible");
+  expect(container.querySelector("section")?.className).toContain("min-w-0");
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+});
+
+it("shows partial degradation while retaining the available server projection", async () => {
+  mocks.getResearchTodos.mockResolvedValue(todoList([todoEnvelope()], 1, ["AGENT_APPROVAL"]));
+  await renderTodo("/lab?todo_scope=to_me");
+
+  expect(container.textContent).toContain("Agent 审批");
+  expect(container.textContent).toContain("报告需修订 · 2026-W38");
+});
+
+it("renders recoverable errors for permission, conflict and server failures", async () => {
+  mocks.getResearchTodos.mockRejectedValueOnce({ error_code: "research_permission_denied", status: 403 });
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("当前账号没有权限查看科研待办");
+
+  await act(async () => root.unmount());
+  container.remove();
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  mocks.getResearchTodos.mockRejectedValueOnce({ error_code: "INVALID_TRANSITION", status: 409 });
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("待办状态已变化");
+
+  await act(async () => root.unmount());
+  container.remove();
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  mocks.getResearchTodos.mockRejectedValueOnce({ error_code: "server_error", status: 503 });
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("科研待办暂时不可用");
+
+  mocks.getResearchTodos.mockResolvedValueOnce(todoList([todoEnvelope()]));
+  await act(async () => button("重试").click());
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(4);
+  expect(container.textContent).toContain("报告需修订 · 2026-W38");
 });
 
 it("renders the error state and retries the aggregate request", async () => {
   mocks.getResearchTodos.mockRejectedValueOnce(new Error("network"));
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" />));
+  await renderTodo("/lab");
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("科研待办暂时不可用");
 
   mocks.getResearchTodos.mockResolvedValueOnce(todoList([todoEnvelope()]));
@@ -234,7 +324,7 @@ it("refreshes the aggregate projection without adding source requests", async ()
     .mockResolvedValueOnce(todoList([todoEnvelope({ title: "刷新前待办" })]))
     .mockResolvedValueOnce(todoList([todoEnvelope({ title: "刷新后待办" })]));
 
-  await act(async () => root.render(<ResearchTodoEnvelopeList workspaceSlug="lab" />));
+  await renderTodo("/lab");
   expect(container.textContent).toContain("刷新前待办");
 
   await act(async () => button("刷新待办").click());

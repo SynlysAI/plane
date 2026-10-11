@@ -14,6 +14,7 @@ import { ResearchTabLink } from "@/components/research/common/research-tab-link"
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
 import { ResearchAgentApprovalQueue } from "@/components/research/approvals/research-agent-approval-queue";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 import { ReviewInbox } from "@/components/research/reviews/review-inbox";
 // hooks
@@ -24,6 +25,13 @@ type Props = {
 };
 
 type ApprovalTab = "stage_review" | "report_review" | "agent_approval" | "office";
+
+/** 构造审批领域 Tab 深链，并保留待办范围等无关 URL 状态。 */
+function approvalTabHref(searchParams: URLSearchParams, workspaceSlug: string, tabId: ApprovalTab) {
+  const params = new URLSearchParams(searchParams);
+  params.set("tab", tabId);
+  return `/${workspaceSlug}/research/approvals?${params.toString()}`;
+}
 
 /**
  * Unified IA v2 approval queues. Each tab still uses its authoritative legacy
@@ -110,12 +118,15 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
   return (
     <ResearchPageShell {...shellProps}>
       <div className="flex h-full flex-col overflow-hidden">
+        <div className="min-w-0 border-b border-subtle px-5 py-4">
+          <ResearchTodoEnvelopeList workspaceSlug={workspaceSlug} limit={8} />
+        </div>
         <nav aria-label={t("research.nav.approvals_v2")} className="overflow-x-auto border-b border-subtle px-5">
           <TabNavigationList className="py-2">
             {tabs.map((tab) => (
               <ResearchTabLink
                 key={tab.id}
-                href={`/${workspaceSlug}/research/approvals?tab=${tab.id}`}
+                href={approvalTabHref(searchParams, workspaceSlug, tab.id)}
                 isActive={tab.id === activeTab}
               >
                 {t(tab.labelKey)}

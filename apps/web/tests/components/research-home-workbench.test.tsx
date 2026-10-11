@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
+  collectResearchTodos: vi.fn(),
   fetchIdentity: vi.fn(),
+  getChainNodes: vi.fn(),
+  getKnowledgeUploads: vi.fn(),
+  getResearchTodos: vi.fn(),
   fetchReportSummary: vi.fn(),
   getChains: vi.fn(),
   fetchProjects: vi.fn(),
@@ -58,10 +63,17 @@ vi.mock("@/hooks/store/use-project", () => {
 vi.mock("@/services/research/chain.service", () => ({
   ResearchChainService: class {
     getChains = mocks.getChains;
+    getChainNodes = mocks.getChainNodes;
+    getKnowledgeUploads = mocks.getKnowledgeUploads;
   },
 }));
-vi.mock("@/components/research/common/research-todo-index", () => ({
-  ResearchTodoEnvelopeList: () => <section aria-label="跨组件待办">待办动态</section>,
+vi.mock("@/services/research/research-todo.service", () => ({
+  ResearchTodoService: class {
+    getResearchTodos = mocks.getResearchTodos;
+  },
+}));
+vi.mock("@/components/research/common/research-todo-source", () => ({
+  collectResearchTodos: mocks.collectResearchTodos,
 }));
 vi.mock("@/components/home/widgets/recents", () => ({
   RecentActivityWidget: () => <section aria-label="最近动态">最近动态</section>,
@@ -72,6 +84,16 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+
+function renderHome(initialPath = "/lab") {
+  return act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[initialPath]}>
+        <WorkspaceHomeWorkbench workspaceSlug="lab" />
+      </MemoryRouter>
+    )
+  );
+}
 
 function project(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -89,6 +111,14 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.getResearchTodos.mockResolvedValue({
+    schema_version: "research-todo.v2",
+    results: [],
+    count: 0,
+    total_count: 0,
+    next_cursor: null,
+    degraded_sources: [],
+  });
   mocks.fetchIdentity.mockResolvedValue(null);
   mocks.getChains.mockResolvedValue([
     {
@@ -134,14 +164,15 @@ afterEach(async () => {
 });
 
 it("renders the fixed two-column home information architecture without generic widgets", async () => {
-  await act(async () => root.render(<WorkspaceHomeWorkbench workspaceSlug="lab" />));
+  await renderHome();
   await act(async () => undefined);
 
   const columns = container.querySelector("[data-testid='workspace-home-columns']");
+  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
   expect(columns?.className).toContain("min-w-0");
   expect(columns?.className).toContain("grid-cols-1");
   expect(columns?.className).toContain("xl:grid-cols-2");
-  for (const title of ["科研项目概览", "行政项目概览", "待办动态", "最近动态", "报告提交摘要"]) {
+  for (const title of ["科研项目概览", "行政项目概览", "跨组件待办", "最近动态", "报告提交摘要"]) {
     expect(container.textContent).toContain(title);
   }
   expect(container.textContent).not.toContain("快捷入口");
@@ -151,7 +182,7 @@ it("renders the fixed two-column home information architecture without generic w
 });
 
 it("keeps research and administrative project summaries separate", async () => {
-  await act(async () => root.render(<WorkspaceHomeWorkbench workspaceSlug="lab" />));
+  await renderHome();
   await act(async () => undefined);
 
   expect(container.textContent).toContain("催化剂失活机理研究");
@@ -163,8 +194,53 @@ it("keeps research and administrative project summaries separate", async () => {
   expect(mocks.fetchProjects).toHaveBeenCalledTimes(1);
 });
 
+it("uses the shared server todo projection and preserves URL scope changes", async () => {
+  const todo = {
+    schema_version: "research-todo.v2" as const,
+    id: "REPORT:report-1",
+    source: "REPORT" as const,
+    object_id: "report-1",
+    title: "报告需修订 · 2026-W38",
+    context: "高分子课题 / 周报",
+    requester: { id: "student-1", display_name: "学生一" },
+    assignees: [{ id: "advisor-1", display_name: "导师一" }],
+    business_status: "NEEDS_REVISION",
+    urgency: "NORMAL" as const,
+    handling_status: "RETURNED" as const,
+    next_action: "SUBMIT" as const,
+    due_at: null,
+    href: "/lab/research/reports/report-1",
+    capabilities: { schema_version: "research-capabilities.v1" as const, actions: {} },
+    trace_ref: null,
+    updated_at: "2026-10-09T00:00:00Z",
+  };
+  mocks.getResearchTodos.mockResolvedValue({
+    schema_version: "research-todo.v2",
+    results: [todo],
+    count: 1,
+    total_count: 1,
+    next_cursor: null,
+    degraded_sources: [],
+  });
+
+  await renderHome("/lab?todo_scope=visible");
+  await act(async () => undefined);
+
+  expect(mocks.getResearchTodos).toHaveBeenNthCalledWith(1, "lab", { scope: "visible", limit: 100 });
+  expect(container.textContent).toContain("报告需修订 · 2026-W38");
+  expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
+  expect(mocks.collectResearchTodos).not.toHaveBeenCalled();
+  expect(mocks.getChainNodes).not.toHaveBeenCalled();
+  expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
+
+  const visibleButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "我可处理");
+  await act(async () => visibleButton?.click());
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "to_me", limit: 100 });
+  expect(mocks.getChains).toHaveBeenCalledTimes(1);
+});
+
 it("shows the compact report submission summary and refreshes the workbench", async () => {
-  await act(async () => root.render(<WorkspaceHomeWorkbench workspaceSlug="lab" />));
+  await renderHome();
   await act(async () => undefined);
 
   expect(container.textContent).toContain("2026-W41");
@@ -182,7 +258,7 @@ it("shows the compact report submission summary and refreshes the workbench", as
 it("uses a neutral research empty state when the caller has no research access", async () => {
   mocks.researchIdentity.sections.research_chain = false;
   vi.mocked(mocks.getChains).mockRejectedValue({ error_code: "research_permission_denied" });
-  await act(async () => root.render(<WorkspaceHomeWorkbench workspaceSlug="lab" />));
+  await renderHome();
   await act(async () => undefined);
 
   expect(container.textContent).toContain("当前账号没有科研数据访问权限。");

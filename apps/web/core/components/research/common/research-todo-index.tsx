@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -22,6 +23,8 @@ import { ResearchTodoService } from "@/services/research/research-todo.service";
 
 const todoService = new ResearchTodoService();
 const TODO_REQUEST_LIMIT = 100;
+const TODO_SCOPES = ["to_me", "mine", "visible"] as const;
+const TODO_SCOPE_PARAM = "todo_scope";
 
 const SOURCE_LABEL_KEYS: Record<TResearchTodoSource, string> = {
   CHAIN_TASK: "research.todo.source_chain_task",
@@ -62,6 +65,24 @@ const BUSINESS_STATUS_LABEL_KEYS: Record<string, string> = {
   FAILED: "research.todo.business_failed",
 };
 
+const SCOPE_LABEL_KEYS: Record<TResearchTodoScope, string> = {
+  to_me: "research.todo.scope_to_me",
+  mine: "research.todo.scope_mine",
+  visible: "research.todo.scope_visible",
+};
+
+const EMPTY_LABEL_KEYS: Record<TResearchTodoScope, string> = {
+  to_me: "research.todo.empty_to_me",
+  mine: "research.todo.empty_mine",
+  visible: "research.todo.empty_visible",
+};
+
+type TodoErrorKind = "permission" | "conflict" | "unavailable";
+
+type TodoRequestError = {
+  status?: number;
+};
+
 type Props = {
   workspaceSlug: string;
   scope?: TResearchTodoScope;
@@ -96,29 +117,55 @@ function todoMetadata(todo: TResearchTodoEnvelope, translate: (key: string) => s
     .join(" · ");
 }
 
+/** 归一化 URL 中的待办范围，并在缺失或非法时使用调用方默认值。 */
+function normalizeTodoScope(value: string | null, fallback: TResearchTodoScope): TResearchTodoScope {
+  return TODO_SCOPES.find((scope) => scope === value) ?? fallback;
+}
+
+/** 将聚合请求失败映射为安全、可恢复的界面提示类型。 */
+function todoErrorKind(error: TodoRequestError | null): TodoErrorKind {
+  if (error?.status === 401 || error?.status === 403) return "permission";
+  if (error?.status === 409) return "conflict";
+  return "unavailable";
+}
+
+/** 构造降级来源提示，不暴露 Trace 或异常细节。 */
+function degradedSourceMessage(sources: TResearchTodoSource[], translate: (key: string) => string) {
+  const labels = sources.map((source) => translate(SOURCE_LABEL_KEYS[source])).join("、");
+  return `${translate("research.todo.degraded")}：${labels}`;
+}
+
 /** Render the server-authoritative research todo projection without local state transitions. */
 export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit = 5, periodDays = null }: Props) {
   const { t, currentLocale } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeScope = normalizeTodoScope(searchParams.get(TODO_SCOPE_PARAM), scope);
   const [todos, setTodos] = useState<TResearchTodoEnvelope[]>([]);
   const [degradedSources, setDegradedSources] = useState<TResearchTodoSource[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [errorKind, setErrorKind] = useState<TodoErrorKind | null>(null);
   const [page, setPage] = useState(0);
 
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const payload = await todoService.getResearchTodos(workspaceSlug, { scope, limit: TODO_REQUEST_LIMIT });
+      const payload = await todoService.getResearchTodos(workspaceSlug, {
+        scope: activeScope,
+        limit: TODO_REQUEST_LIMIT,
+      });
       const normalized = payload.results.filter((todo) => withinPeriod(todo, periodDays, Date.now()));
       setTodos(normalized);
       setDegradedSources(payload.degraded_sources);
       setPage(0);
+      setErrorKind(null);
       setState(normalized.length ? "ready" : "empty");
-    } catch {
+    } catch (error) {
       setTodos([]);
       setDegradedSources([]);
+      setErrorKind(todoErrorKind(error as TodoRequestError));
       setState("error");
     }
-  }, [periodDays, scope, workspaceSlug]);
+  }, [activeScope, periodDays, workspaceSlug]);
 
   useEffect(() => {
     void load();
@@ -127,14 +174,41 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
   const pageCount = Math.max(1, Math.ceil(todos.length / limit));
   const pagedTodos = useMemo(() => todos.slice(page * limit, (page + 1) * limit), [limit, page, todos]);
 
+  const changeScope = useCallback(
+    (nextScope: TResearchTodoScope) => {
+      if (nextScope === activeScope) return;
+      const params = new URLSearchParams(searchParams);
+      params.set(TODO_SCOPE_PARAM, nextScope);
+      setSearchParams(params);
+    },
+    [activeScope, searchParams, setSearchParams]
+  );
+
   return (
-    <section className="overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <section className="min-w-0 overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div>
           <h3 className="text-13 font-semibold text-primary">{t("research.todo.title")}</h3>
           <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description_v2")}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div
+            className="flex min-w-0 flex-wrap items-center gap-1"
+            role="group"
+            aria-label={t("research.todo.scope_label")}
+          >
+            {TODO_SCOPES.map((scopeOption) => (
+              <Button
+                key={scopeOption}
+                variant="secondary"
+                size="sm"
+                aria-pressed={scopeOption === activeScope}
+                onClick={() => changeScope(scopeOption)}
+              >
+                {t(SCOPE_LABEL_KEYS[scopeOption])}
+              </Button>
+            ))}
+          </div>
           <Button variant="secondary" size="sm" onClick={() => void load()}>
             {t("research.todo.refresh")}
           </Button>
@@ -174,18 +248,35 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
       )}
       {state === "error" && (
         <div className="flex flex-wrap items-center justify-between gap-3 p-4" role="alert">
-          <p className="text-12 text-secondary">{t("research.todo.error_unavailable")}</p>
+          <p className="min-w-0 text-12 text-secondary">
+            {t(
+              errorKind === "permission"
+                ? "research.todo.error_permission"
+                : errorKind === "conflict"
+                  ? "research.todo.error_conflict"
+                  : "research.todo.error_unavailable"
+            )}
+          </p>
           <Button variant="secondary" size="sm" onClick={() => void load()}>
             {t("research.status.retry")}
           </Button>
         </div>
       )}
-      {state === "empty" && <p className="p-4 text-12 text-secondary">{t("research.todo.empty")}</p>}
+      {state === "empty" && (
+        <>
+          <p className="p-4 text-12 text-secondary">{t(EMPTY_LABEL_KEYS[activeScope])}</p>
+          {degradedSources.length > 0 && (
+            <p className="border-t border-subtle px-4 py-2 text-11 text-tertiary" role="status">
+              {degradedSourceMessage(degradedSources, t)}
+            </p>
+          )}
+        </>
+      )}
       {state === "ready" && (
         <>
           {degradedSources.length > 0 && (
             <p className="border-t border-subtle px-4 py-2 text-11 text-tertiary" role="status">
-              {t("research.todo.degraded")}
+              {degradedSourceMessage(degradedSources, t)}
             </p>
           )}
           <ul className="divide-y divide-subtle" role="list">
@@ -193,6 +284,9 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
               <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
+                    <ResearchStatusBadge status={todo.source} size="sm">
+                      {t(SOURCE_LABEL_KEYS[todo.source])}
+                    </ResearchStatusBadge>
                     <ResearchStatusBadge status={todo.handling_status} size="sm">
                       {t(HANDLING_LABEL_KEYS[todo.handling_status])}
                     </ResearchStatusBadge>

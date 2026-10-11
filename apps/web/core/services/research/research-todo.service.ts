@@ -37,7 +37,11 @@ export class ResearchTodoService extends APIService {
     return this.get(researchEndpoints.researchTodos(workspaceSlug), { params })
       .then((response) => response?.data as TResearchTodoEnvelopeList)
       .catch((error) => {
-        throw error?.response?.data ?? error;
+        const response = error?.response;
+        if (response?.data) {
+          throw { ...(response.data as Record<string, unknown>), status: response.status };
+        }
+        throw error;
       });
   }
 }

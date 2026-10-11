@@ -40,6 +40,9 @@ vi.mock("@/components/research/approvals/research-agent-approval-queue", () => (
 vi.mock("@/components/research/common/research-page-shell", () => ({
   ResearchPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
+vi.mock("@/components/research/common/research-todo-index", () => ({
+  ResearchTodoEnvelopeList: () => <section aria-label="跨组件待办">shared-todos</section>,
+}));
 vi.mock("@/components/research/reports/report-list", () => ({
   ResearchReportList: () => <div>report-list</div>,
 }));
