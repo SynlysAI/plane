@@ -2,10 +2,10 @@
 
 | 项目     | 内容                                                                                                                                    |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.2                                                                                                                                    |
-| 状态     | 设计复核修订版；增加 Tower 式待办信封映射，保留业务对象独立模型与状态机                                                                 |
-| 日期     | 2026-10-09                                                                                                                              |
-| 代码基线 | Plane `develop` / `4.24.0`                                                                                                              |
+| 文档版本 | v2.0                                                                                                                                    |
+| 状态     | 实施复核版；L0–L6、行政指派边界、分类导航和服务端待办聚合已实施，helper 迁移仅完成审计                                                  |
+| 日期     | 2026-10-11                                                                                                                              |
+| 代码基线 | Plane `develop` / `4.25.0`                                                                                                              |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                        |
 | 关联设计 | [UX 精炼设计](research-space-ux-refinement-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 
@@ -19,7 +19,7 @@ Phase 1.6 不拆除 `ResearchChain` 与 `Project` 的现有关系，不改变 13
 
 任务、回执和论文评审都不自动迁移历史数据，也不自动转换 Project / Issue。既有 `ResearchChainNode.assignee` 继续表示节点主责任人；新增任务可以有多条，各自有责任人和截止时间。
 
-## 2. 当前代码事实
+## 2. 设计期代码事实与实施状态
 
 | 领域     | 当前事实                                                                                                         | 设计含义                                        |
 | -------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
@@ -40,6 +40,14 @@ Phase 1.6 不拆除 `ResearchChain` 与 `Project` 的现有关系，不改变 13
 - Chain API：`apps/api/plane/research/views/chain_foundation.py`
 - 报告 API：`apps/api/plane/research/views/reports.py`
 - 事件字典：`apps/api/plane/research/services/chain_state.py`
+
+实施状态（2026-10-11）：上表保留设计初稿时的事实，用于解释加法对象的必要性。当前代码已落地：
+
+- 迁移 `0167` 与 `ResearchChainNodeTask`、`PeriodicReportReadReceipt`、`ResearchPaperReview`、`ResearchPaperReviewVersion`。
+- `chain_tasks.py`、`report_read_receipt.py`、`paper_review.py` 与 `research_todos.py` 服务边界。
+- assignable-users、节点任务、周报已读、论文评审和 `research-todos.v2` 只读 API。
+- 前端任务面板、论文评审面板、报告已读展示和服务端待办消费。
+- 行政 Project 指派与负责人继续只认有效 `ProjectMember`，与科研组织候选人来源隔离。
 
 ## 3. 通道归属规则
 
@@ -315,6 +323,8 @@ GET /api/research/workspaces/{slug}/research-todos/?scope=to_me|mine|visible&lim
 文件上传复用 S3 presign 模式，实体类型固定 `RESEARCH_PAPER_REVIEW_VERSION`；只允许 `.pdf/.md/.markdown`。
 
 ## 8. 实现切片
+
+当前状态：L0–L6 均已实施并通过对应契约 / 组件测试；本节保留原切片顺序作为回放和回滚索引。
 
 ### L0：契约与夹具
 

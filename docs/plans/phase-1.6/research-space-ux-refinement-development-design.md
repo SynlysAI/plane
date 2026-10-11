@@ -2,10 +2,10 @@
 
 | 项目     | 内容                                                                                                                                |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.6                                                                                                                                |
-| 状态     | 设计复核修订版；U0 IA 基线测试已落地，页面重构自 U1 起推进；U5 周报已读闭环与 U6 论文评审面板已实现                                 |
-| 日期     | 2026-10-10                                                                                                                          |
-| 代码基线 | Plane `develop` / `4.24.0`                                                                                                          |
+| 文档版本 | v1.7                                                                                                                                |
+| 状态     | 实施复核版；U0–U8 均已实施，静态原型保留为交互对照，不伪装生产数据                                                                  |
+| 日期     | 2026-10-11                                                                                                                          |
+| 代码基线 | Plane `develop` / `4.25.0`                                                                                                          |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                    |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 | 视觉规范 | [Research Workspace UX 指南](../../product/research-workspace-ux-guide.md) 与 Academic Editorial UI                                 |
@@ -38,7 +38,7 @@ U0 后的导航基线如下：
 
 科研项目与行政项目分别消费 `RESEARCH` / `ADMINISTRATIVE` 分类树，具体项目只出现在所属通道下方；IA v2 打开时，App 侧栏不再并行渲染旧 `SidebarProjectsList`。关闭 `research_ia_v2` 时，旧一级导航、旧项目列表和旧路由完整保留；`research-ia-v2-redirect` 负责开启开关后的旧路径兼容跳转。
 
-当前只固定导航与回退合同；`/{workspace}/research` 路由本身、首页两列内容和科研项目容器收敛仍按 §10 后续切片推进。
+导航与回退合同已经落地；旧 `/{workspace}/research` 路由兼容重定向到首页，首页两列和科研 / 行政项目容器收敛见 §10 实施状态。
 
 ### 2.2 当前科研项目容器实现
 
@@ -364,6 +364,8 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 8. 论文区显示版本、修改说明、评论、退回和最终确认。
 9. 原型继续标注“非功能实现”，不伪造真实系统成功状态。
 
+当前实现对照：上述 1–8 已在 IA v2 开启的真实应用中落地，并由导航、首页、课题详情、任务、论文评审和响应式测试覆盖；静态原型继续保留角色切换和示例数据，仅用于产品交互对照。
+
 ## 10. 实现切片
 
 ### U0：设计基线测试
@@ -372,7 +374,7 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 - 固定目标 IA、旧路由兼容和 IA v2 回退断言。
 - 固定单列侧栏、父级可点项目和二级项目树的导航断言。
 
-当前状态：已完成。`research-ia-baseline.test.ts` 固定首页唯一、双项目通道不重复和旧路由注册；`research-chain-navigation.test.tsx` 固定 IA v2 导航、`ResearchProjectTree` 分类展示、科研 / 行政项目去重，以及关闭开关时的旧导航；`research-app-sidebar.test.tsx` 固定 IA v2 关闭旧项目列表、开启后恢复。首页与页面容器重构仍未开始。
+当前状态：已完成。`research-ia-baseline.test.ts` 固定首页唯一、双项目通道不重复和旧路由注册；`research-chain-navigation.test.tsx` 固定 IA v2 导航、`ResearchProjectTree` 分类展示、科研 / 行政项目去重，以及关闭开关时的旧导航；`research-app-sidebar.test.tsx` 固定 IA v2 关闭旧项目列表、开启后恢复。
 
 ### U1：首页两列工作台
 
@@ -406,6 +408,8 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 - 保持 URL `tab/stage/node` 回放。
 - 覆盖角色和权限状态。
 
+当前状态：已完成。`ResearchChainDetail` 装配 `ResearchChainTaskPanel`，候选人仅来自服务端 assignable-users 投影，URL `tab/stage/node` 回放保持不变。
+
 ### U5：周报已读与报告审核（已实现）
 
 - [x] 报告详情自动上报服务端已读；作者与草稿不上报，重复打开由服务端幂等。
@@ -423,11 +427,15 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 - 侧栏移除项目 / 视图 / 分析 / 归档独立入口。
 - 行政审批链接直达 office Tab。
 
+当前状态：已完成。行政项目容器与科研容器分流，行政审批入口保持 office Tab 直达。
+
 ### U8：行政项目容器
 
 - 复用普通 Plane Project、View、Analytics、Archive 路由与组件。
 - 项目列表过滤掉科研主线语义对象，避免双列表重复。
 - 不新建行政数据模型或平行权限系统。
+
+当前状态：已完成。行政通道复用普通 Plane Project / View / Analytics / Archive 能力，列表过滤科研主线语义对象，避免双通道重复展示。
 
 ## 11. 验收
 
@@ -457,7 +465,7 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 - `main` 是 `rounded-lg border border-subtle bg-surface-1`。
 - `ResearchPageShell` 的 Header 是 22px 标题 + 13px 描述 + 12px 元信息。
 
-Phase 1.6 目标外框隐藏 App rail，仅保留 `TopNavigationRoot + 250px Projects sidebar + main`。本轮只改变静态原型的信息架构合同，不修改真实应用代码。
+Phase 1.6 目标外框隐藏 App rail，仅保留 `TopNavigationRoot + 250px Projects sidebar + main`。该结构已在 IA v2 开启的真实应用中落地；静态原型继续作为无数据的交互对照。
 
 目标界面外框：
 

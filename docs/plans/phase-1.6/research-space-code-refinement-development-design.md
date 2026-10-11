@@ -2,10 +2,10 @@
 
 | 项目     | 内容                                                                                                                             |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.4                                                                                                                             |
-| 状态     | 设计复核修订版；C0 引用审计、C5 待办扇出收敛与 C6 课题详情拆分已实施，后续清理切片仍待实施                                       |
-| 日期     | 2026-10-10                                                                                                                       |
-| 代码基线 | Plane `develop` / `4.24.0`                                                                                                       |
+| 文档版本 | v1.5                                                                                                                             |
+| 状态     | 实施复核版；C0–C6 已完成，C7 已完成只读审计，重复 helper 迁移保留为后续候选                                                      |
+| 日期     | 2026-10-11                                                                                                                       |
+| 代码基线 | Plane `develop` / `4.25.0`                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                 |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[UX 精炼设计](research-space-ux-refinement-development-design.md) |
 
@@ -18,6 +18,8 @@ Phase 1.6 的代码精炼不是“大规模重构”，而是小步、可验证�
 3. **不牺牲兼容**：旧路由、功能开关、审计、迁移和外部回执不因低引用而删除。
 4. **不碰数据语义**：本主轴不删除数据库字段、公开 API 字段或事件类型。
 5. **小步提交**：每个切片独立可回滚，禁止混合功能新增和大范围格式化。
+
+实施状态（2026-10-11）：C0 引用审计、C1 死代码删除、C2 Agent 路由、C3 导出降级、C4 浏览参数抽取、C5 待办扇出收敛与 C6 课题详情拆分均已完成；C7 仅完成只读审计，未默认移动 ACL、审计、状态机或 append-only helper。
 
 ## 2. 当前代码事实
 
@@ -708,16 +710,16 @@ ResearchChainDetail
 
 ### 9.7 清理切片执行表
 
-| 切片                | 修改 / 删除                               | 必跑验证                                             | 回滚                             |
-| ------------------- | ----------------------------------------- | ---------------------------------------------------- | -------------------------------- |
-| C0 audit script     | 已实施：新增 script + test                | `pnpm --filter web test -- research-reference-audit` | revert 单个脚本                  |
-| C1 dead code        | 删除 guard、side panel、side panel test   | Agent / navigation tests                             | git revert 删除提交              |
-| C2 agent route      | chain detail + detail test                | route registration + detail test                     | 恢复 Link 为 window.open         |
-| C3 export downgrade | §9.2 表中文件                             | typecheck                                            | 逐文件恢复 export                |
-| C4 browse params    | browse-query + two lists + tests          | browse / project / report tests                      | 回退共同函数，保留领域参数       |
-| C5 todo aggregate   | research-todo API + envelope list service | todo tests + request spy                             | 恢复旧前端聚合调用，API 保留只读 |
-| C6 detail split     | 已实施：chain detail + two panels         | detail / task / paper tests                          | 将面板内容内联回容器             |
-| C7 backend helpers  | 只审计，不默认移动                        | 对应现有 tests                                       | 不产生代码变更                   |
+| 切片                | 修改 / 删除                       | 必跑验证                                             | 回滚                             |
+| ------------------- | --------------------------------- | ---------------------------------------------------- | -------------------------------- |
+| C0 audit script     | 已实施：新增 script + test        | `pnpm --filter web test -- research-reference-audit` | revert 单个脚本                  |
+| C1 dead code        | 已实施：删除确定死代码            | Agent / navigation tests                             | git revert 删除提交              |
+| C2 agent route      | 已实施：复用节点 Agent 路由       | route registration + detail test                     | 恢复外部窗口打开                 |
+| C3 export downgrade | 已实施：收敛模块导出              | typecheck                                            | 逐文件恢复 export                |
+| C4 browse params    | 已实施：共享浏览参数纯函数        | browse / project / report tests                      | 回退共同函数，保留领域参数       |
+| C5 todo aggregate   | 已实施：服务端聚合 + 前端单请求   | todo tests + request spy                             | 恢复旧前端聚合调用，API 保留只读 |
+| C6 detail split     | 已实施：chain detail + two panels | detail / task / paper tests                          | 将面板内容内联回容器             |
+| C7 backend helpers  | 已完成只读审计，不默认移动        | 对应现有 tests                                       | 不产生代码变更                   |
 
 ### 9.8 清理完成定义
 
