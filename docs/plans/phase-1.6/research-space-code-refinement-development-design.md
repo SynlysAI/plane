@@ -5,7 +5,7 @@
 | 文档版本 | v1.5                                                                                                                             |
 | 状态     | 实施复核版；C0–C6 已完成，C7 已完成只读审计，重复 helper 迁移保留为后续候选                                                      |
 | 日期     | 2026-10-11                                                                                                                       |
-| 代码基线 | Plane `develop` / `4.25.0`                                                                                                       |
+| 代码基线 | Plane `develop` / `4.26.0`                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                 |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[UX 精炼设计](research-space-ux-refinement-development-design.md) |
 
@@ -183,11 +183,11 @@ research-paper-review-panel.tsx  # 论文评审
 
 ### 3.5 统一待办的代码边界
 
-`collectResearchTodos` 当前是前端跨服务聚合，且会对课题、节点和上传状态产生扇出请求。后续只增加一个服务端只读 `research-todos` 聚合接口和一个前端 `ResearchTodoEnvelopeList`，不新建统一业务任务模型、不把领域状态转换逻辑搬到前端。
+历史实现中的 `collectResearchTodos` 是前端跨服务聚合，会对课题、节点和上传状态产生扇出请求。当前生产代码只消费服务端只读 `research-todos` 聚合接口和前端 `ResearchTodoEnvelopeList`，不新建统一业务任务模型、不把领域状态转换逻辑搬到前端。
 
 聚合器只负责 ACL 过滤、统一字段投影、稳定去重 ID、范围筛选、排序和 cursor。任务、报告、论文、阶段评审、Agent、办公审批各自的动作仍保留在原 service / endpoint；列表点击动作后回到领域页面，成功后刷新投影。`business_status` 必须来自原对象，`handling_status` 只能是展示派生值。
 
-前端替换顺序为：先保留 `collectResearchTodos` 作为降级路径，再接入服务端聚合；服务端稳定后才删除重复的前端扇出。删除前必须保留无网络、部分来源失败和旧路由兼容测试。
+前端替换记录为：先保留 `collectResearchTodos` 作为回滚路径，再接入服务端聚合；当前生产代码已不再消费旧前端扇出。删除或继续保留该文件必须以无网络、部分来源失败和旧路由兼容测试为门槛。
 
 ### 3.6 分类导航代码边界
 
@@ -245,12 +245,12 @@ research-paper-review-panel.tsx  # 论文评审
   - `mine=true` 旧参数。
   - 报告和项目的领域参数互不串扰。
 
-### C5：待办上传扇出收敛
+### C5：待办前端扇出收敛
 
-前置条件：主轴一 L6 已提供 Chain 聚合或待办聚合 API。
+前置条件：主轴一 L6 已提供 `research-todo.v2` 聚合 API。
 
-- `collectResearchTodos` 停止逐节点请求上传列表。
-- 上传待办从服务端聚合结果读取。
+- 生产入口停止调用 `collectResearchTodos`，并停止逐节点请求上传列表。
+- v2 只消费六类领域来源，不从上传状态生成待办。
 - 保留单课题详情中的上传列表请求。
 - 回归 12 课题 / 多节点场景的请求数。
 
@@ -636,7 +636,7 @@ URL 回放断言：
 - `?cursor=uuid`
 - 项目和报告领域参数互不串扰。
 
-### 9.5 待办上传扇出收敛
+### 9.5 待办前端扇出收敛（历史迁移记录）
 
 当前问题：
 
@@ -654,16 +654,13 @@ chains ≤ 12
 GET /research/workspaces/{slug}/research-todos/
 ```
 
-实施步骤：
+历史实施步骤：
 
 1. 后端实现主轴一 §11.9 聚合 API。
-2. `collectResearchTodos` 改为：
-   - 优先调用聚合 API。
-   - 将 `target` 映射为前端 route。
-   - 保留单源失败降级。
-3. 删除链式逐节点上传请求循环。
-4. 保留集成健康请求，直到聚合 API 返回 `degraded_sources` 稳定后移除。
-5. 增加请求次数 spy 测试：加载总览对两个课题 / 四节点只发一次聚合请求。
+2. 生产入口改为直接调用聚合 API，并由服务端返回 `href`。
+3. 删除总览与首页的链式逐节点上传请求循环。
+4. 六类 collector 分别降级，并由聚合 API 返回 `degraded_sources`。
+5. 请求次数 spy 测试固定：首页和审批中心每次加载只发一次聚合请求。
 
 ### 9.6 课题详情拆分
 

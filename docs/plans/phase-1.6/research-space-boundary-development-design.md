@@ -5,7 +5,7 @@
 | 文档版本 | v2.0                                                                                                                                    |
 | 状态     | 实施复核版；L0–L6、行政指派边界、分类导航和服务端待办聚合已实施，helper 迁移仅完成审计                                                  |
 | 日期     | 2026-10-11                                                                                                                              |
-| 代码基线 | Plane `develop` / `4.25.0`                                                                                                              |
+| 代码基线 | Plane `develop` / `4.26.0`                                                                                                              |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                        |
 | 关联设计 | [UX 精炼设计](research-space-ux-refinement-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 
@@ -365,7 +365,7 @@ GET /api/research/workspaces/{slug}/research-todos/?scope=to_me|mine|visible&lim
 ### L6：待办与总览聚合
 
 - Chain serializer 增加 `open_task_count/next_due_at/current_node`。
-- `collectResearchTodos` 增加任务和论文评审来源。
+- `research-todo.v2` 服务端 collector 增加任务和论文评审来源。
 - 周报待办区分“待阅读”和“待审阅”。
 
 ## 9. 测试与验收
@@ -944,57 +944,69 @@ Root
 
 ### 11.9 服务端待办聚合 API
 
-为消除 `collectResearchTodos` 对最多 12 个课题、每课题 20 个节点逐请求查询上传状态的扇出，新增统一只读接口：
+历史设计中的前端 `collectResearchTodos` 会对最多 12 个课题、每课题 20 个节点逐请求查询上传状态；该路径仅保留为回滚记录，当前生产入口统一消费只读接口：
 
 ```http
-GET /api/research/workspaces/{slug}/research-todos/?limit=50
+GET /api/research/workspaces/{slug}/research-todos/?scope=to_me&limit=50
 ```
 
-响应 schema：`research-todo-summary.v1`
+响应 schema：`research-todo.v2`
 
 ```json
 {
+  "schema_version": "research-todo.v2",
   "results": [
     {
-      "id": "upload:uuid",
-      "source": "upload",
-      "kind": "blocking",
-      "title": "filename.pdf",
+      "schema_version": "research-todo.v2",
+      "id": "CHAIN_TASK:uuid",
+      "source": "CHAIN_TASK",
+      "object_id": "uuid",
+      "title": "补充实验图表",
       "context": "课题 A / 论文写作",
-      "due_at": null,
-      "updated_at": "2026-10-09T12:00:00+08:00",
-      "target": {
-        "type": "chain_node",
-        "chain_id": "uuid",
-        "node_id": "uuid"
-      }
+      "requester": { "id": "user-uuid", "display_name": "学生 A" },
+      "assignees": [{ "id": "user-uuid", "display_name": "导师 A" }],
+      "business_status": "ASSIGNED",
+      "handling_status": "TODO",
+      "next_action": "SUBMIT",
+      "due_at": "2026-10-12",
+      "urgency": "DUE_SOON",
+      "href": "/lab/research/chains/chain-uuid?node=node-uuid",
+      "capabilities": { "schema_version": "research-capabilities.v1", "actions": {} },
+      "trace_ref": { "resource_type": "research_chain_node_task", "resource_id": "uuid" },
+      "updated_at": "2026-10-09T12:00:00+08:00"
     }
   ],
   "count": 12,
-  "degraded_sources": ["RAGPORTAL"]
+  "total_count": 27,
+  "next_cursor": "b2Zmc2V0PTI=",
+  "degraded_sources": []
 }
 ```
 
-服务端来源：
+服务端来源固定为六类领域对象：
 
-- 非 SUCCESS 的 `ResearchChainUpload`
 - `ResearchChainNodeTask`
-- 待我阶段评审
-- 待我报告审阅 / 待阅读
-- 待我 Agent 审批
-- 待我办公审批
-- 集成降级提醒
+- `PeriodicReport` 待阅读 / 待审阅
+- `ResearchPaperReview`
+- `ResearchStageInstance` / `StageReviewerAssignment`
+- `ResearchAgentSession`
+- `ApprovalRequest`
 
 要求：
 
 - 每个来源先走原对象 ACL，再投影为待办。
-- `target` 只传 ID 和类型，前端负责映射路由。
+- 路由字段固定为 `href`，由服务端投影；前端不得按角色或来源重算权限。
+- `todo.id` 固定为 `{source}:{object_id}`；同一业务对象只生成一条待办。
+- `scope` 仅支持 `to_me`、`mine`、`visible`，并始终先执行原对象 ACL。
 - `limit` 默认 50，最大 100。
+- cursor 使用稳定排序后的 offset；排序键包含阻断状态、紧急程度、截止时间、更新时间和 `todo.id`。
+- 任一 collector 异常只进入 `degraded_sources`，其他来源继续返回；聚合基础故障才返回统一错误 envelope。
 - 接口可聚合，不在 SQL 中拼接用户可见标题以外的正文。
 - 该接口只读，不产生 Chain Event 或审计。
+- 不包含上传来源；如未来扩展来源，必须先扩展 v2 schema、来源枚举和完整契约测试。
 
 前端替换规则：
 
-- `collectResearchTodos` 优先调用该接口。
-- 单个来源失败时不阻断其他来源。
+- 首页与审批中心共用 `ResearchTodoEnvelopeList`，并只请求该接口。
+- 旧 `collectResearchTodos` 仅作为历史回滚路径记录，当前生产代码不消费。
 - 课题详情内仍可请求上传列表；总览和首页不得逐节点扇出。

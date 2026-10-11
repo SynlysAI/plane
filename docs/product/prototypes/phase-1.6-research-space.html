@@ -1934,8 +1934,9 @@
                               <option value="equipment-admin">项目成员 · 设备管理员 · MEMBER</option>
                             </select>
                           </div>
-                          <button class="button primary" type="submit">保存负责人</button>
-                          <p class="assignment-scope">候选来源：当前行政 Project 的有效成员；审批人仍由审批流步骤决定，负责人选择不会改变审批范围。</p>
+                            <button class="button primary" type="submit" id="administrative-assignment-submit">保存负责人</button>
+                            <p class="assignment-scope" id="administrative-assignment-scope">候选来源：当前行政 Project 的有效成员；审批人仍由审批流步骤决定，负责人选择不会改变审批范围。</p>
+                            <p class="assignment-scope" id="administrative-capability-hint"></p>
                           <p class="inline-status" id="administrative-assignment-status" role="status" aria-live="polite"></p>
                         </form>
                       <div class="table-scroll">
@@ -2490,7 +2491,7 @@
                               <h2 class="surface-title">节点任务</h2>
                               <p class="surface-hint">任务是节点子对象；状态不隐式推进节点状态。</p>
                             </div>
-                            <button class="button primary" type="button">创建任务</button>
+                            <button class="button primary" type="button" id="research-create-task">创建任务</button>
                           </div>
                           <form class="assignment-form" id="research-assignment-form">
                             <div class="form-field">
@@ -2506,8 +2507,9 @@
                               <label for="research-task-due">截止时间</label>
                               <input class="control" id="research-task-due" type="datetime-local" value="2026-10-15T18:00" />
                             </div>
-                            <button class="button primary" type="submit">保存指派</button>
-                            <p class="assignment-scope">候选来源：当前课题组织及祖先组织的有效成员 + 显式协作者；选择不会自动加入课题。</p>
+                            <button class="button primary" type="submit" id="research-assignment-submit">保存指派</button>
+                            <p class="assignment-scope" id="research-assignment-scope">候选来源：当前课题组织及祖先组织的有效成员 + 显式协作者；选择不会自动加入课题。</p>
+                            <p class="assignment-scope" id="research-capability-hint"></p>
                             <p class="inline-status" id="research-assignment-status" role="status" aria-live="polite"></p>
                           </form>
                           <div class="table-scroll">
@@ -3818,6 +3820,19 @@
           adminContextTitle: "学术会议差旅报销",
           adminContextNode: "补充凭证",
           adminContextNext: "下一步：上传行程凭证并重新提交报销。",
+          researchAssignment: {
+            canWrite: true,
+            groups: [
+              { label: "组织范围", candidates: [["student-a", "学生 A · 界面材料组"], ["mentor-a", "导师 A · 指导关系"]] },
+              { label: "显式协作者", candidates: [["equipment-admin", "设备管理员 · 共享平台组"]] },
+            ],
+            capability: "当前角色可创建和保存节点任务指派；动作能力以服务端返回为准。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["student-a", "学生 A · MEMBER"], ["equipment-admin", "设备管理员 · MEMBER"]] }],
+            capability: "当前角色可维护行政项目负责人；审批人仍由审批流步骤决定。",
+          },
         },
         mentor: {
           name: "导师 A",
@@ -3838,6 +3853,19 @@
           adminContextTitle: "评审劳务费用流程",
           adminContextNode: "待确认发放名单",
           adminContextNext: "下一步：确认发放名单后提交财务复核。",
+          researchAssignment: {
+            canWrite: true,
+            groups: [
+              { label: "组织范围", candidates: [["student-a", "学生 A · 界面材料组"], ["mentor-a", "导师 A · 指导关系"]] },
+              { label: "显式协作者", candidates: [] },
+            ],
+            capability: "当前角色可指派和评审节点任务；评审边界仍由原领域服务判断。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["mentor-a", "导师 A · PROJECT ADMIN"]] }],
+            capability: "当前角色可维护行政项目负责人；不会因此获得科研评审权。",
+          },
         },
         principal: {
           name: "PI A",
@@ -3858,6 +3886,19 @@
           adminContextTitle: "共享设备排期协调",
           adminContextNode: "确认排期回执",
           adminContextNext: "下一步：确认设备占用冲突并回执协作方。",
+          researchAssignment: {
+            canWrite: true,
+            groups: [
+              { label: "组织范围", candidates: [["pi-a", "PI A · 基础研究方向"], ["mentor-a", "导师 A · 指导关系"]] },
+              { label: "显式协作者", candidates: [["equipment-admin", "设备管理员 · 共享平台组"]] },
+            ],
+            capability: "当前角色可复核并维护课题任务；成员负载仍按组织范围约束。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["pi-a", "PI A · PROJECT ADMIN"], ["equipment-admin", "设备管理员 · MEMBER"]] }],
+            capability: "当前角色可维护行政项目负责人；不会改变科研 ACL。",
+          },
         },
         admin: {
           name: "管理员 A",
@@ -3878,6 +3919,16 @@
           adminContextTitle: "实验耗材季度采购",
           adminContextNode: "报价确认",
           adminContextNext: "下一步：确认供应商报价并提交采购审批。",
+          researchAssignment: {
+            canWrite: false,
+            groups: [],
+            capability: "Workspace Admin 不因管理员身份自动获得科研创建、指派或评审权。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["admin-a", "管理员 A · ADMIN"], ["student-a", "学生 A · MEMBER"]] }],
+            capability: "当前角色可维护行政项目负责人；科研表单保持禁用并说明权限边界。",
+          },
         },
       };
 
@@ -4057,6 +4108,87 @@
         );
       }
 
+      /**
+       * 按角色候选分组重建一个指派下拉框。
+       *
+       * Args:
+       *   selectId: 下拉框元素 ID。
+       *   groups: 候选分组数据。
+       *   disabled: 当前角色是否缺少写权限。
+       */
+      function renderAssignmentSelect(selectId, groups, disabled) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        const availableGroups = groups.filter((group) => group.candidates.length > 0);
+        if (availableGroups.length === 0) {
+          const emptyOption = document.createElement("option");
+          emptyOption.value = "";
+          emptyOption.textContent = "暂无可指派候选人";
+          select.replaceChildren(emptyOption);
+          select.disabled = true;
+          return;
+        }
+        select.disabled = Boolean(disabled);
+        select.replaceChildren(
+          ...availableGroups.map((group) => {
+            const optgroup = document.createElement("optgroup");
+            optgroup.label = group.label;
+            optgroup.replaceChildren(
+              ...group.candidates.map(([value, label]) => {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = label;
+                return option;
+              })
+            );
+            return optgroup;
+          })
+        );
+      }
+
+      /**
+       * 由当前角色派生科研与行政指派边界。
+       *
+       * Args:
+       *   role: 当前静态角色数据对象。
+       */
+      function renderAssignmentRole(role) {
+        const research = role.researchAssignment;
+        const administrative = role.administrativeAssignment;
+        renderAssignmentSelect("research-assignee", research.groups, !research.canWrite);
+        renderAssignmentSelect("administrative-assignee", administrative.groups, !administrative.canWrite);
+
+        const researchCreate = document.getElementById("research-create-task");
+        const researchSubmit = document.getElementById("research-assignment-submit");
+        const researchDue = document.getElementById("research-task-due");
+        const administrativeSubmit = document.getElementById("administrative-assignment-submit");
+        const researchEmpty = research.groups.every((group) => group.candidates.length === 0);
+        const administrativeEmpty = administrative.groups.every((group) => group.candidates.length === 0);
+        researchCreate.disabled = !research.canWrite;
+        researchSubmit.disabled = !research.canWrite || researchEmpty;
+        researchDue.disabled = !research.canWrite;
+        administrativeSubmit.disabled = !administrative.canWrite || administrativeEmpty;
+
+        const researchForm = document.getElementById("research-assignment-form");
+        const administrativeForm = document.getElementById("administrative-assignment-form");
+        researchForm.dataset.writable = String(research.canWrite && !researchEmpty);
+        administrativeForm.dataset.writable = String(administrative.canWrite && !administrativeEmpty);
+        document.getElementById("research-assignment-scope").textContent = research.canWrite
+          ? "候选来源：组织范围与显式协作者；两套候选来源不与行政项目成员混用。"
+          : "无权限说明：Workspace Admin 不因管理员身份自动获得科研写权限。";
+        document.getElementById("administrative-assignment-scope").textContent =
+          "候选来源：当前行政 Project 的有效成员；审批人仍由审批流步骤决定。";
+        document.getElementById("research-capability-hint").textContent = `能力提示：${research.capability}`;
+        document.getElementById("administrative-capability-hint").textContent = `能力提示：${administrative.capability}`;
+
+        const researchStatus = document.getElementById("research-assignment-status");
+        const administrativeStatus = document.getElementById("administrative-assignment-status");
+        researchStatus.className = research.canWrite ? "inline-status" : "inline-status error";
+        researchStatus.textContent = research.canWrite ? "" : research.capability;
+        administrativeStatus.className = "inline-status";
+        administrativeStatus.textContent = "";
+      }
+
       function renderNode() {
         const node = nodeData[state.selectedNode];
         document.getElementById("selected-node-title").textContent = node.title;
@@ -4142,6 +4274,7 @@
       document.getElementById("role-select").addEventListener("change", (event) => {
         state.role = event.target.value;
         renderRole();
+        renderAssignmentRole(roleData[state.role]);
       });
 
       function bindAssignmentForm(formId, statusId, successText) {
@@ -4150,6 +4283,7 @@
         if (!form || !status) return;
         form.addEventListener("submit", (event) => {
           event.preventDefault();
+          if (form.dataset.writable !== "true") return;
           status.className = "inline-status";
           status.textContent = `${successText}（静态原型，仅模拟界面反馈）`;
         });
@@ -4157,6 +4291,7 @@
 
       bindAssignmentForm("research-assignment-form", "research-assignment-status", "科研任务责任人已更新");
       bindAssignmentForm("administrative-assignment-form", "administrative-assignment-status", "行政项目负责人已更新");
+      renderAssignmentRole(roleData[state.role]);
 
       const todoScope = document.getElementById("todo-scope");
       const todoRows = Array.from(document.querySelectorAll("#todo-envelope-rows tr"));

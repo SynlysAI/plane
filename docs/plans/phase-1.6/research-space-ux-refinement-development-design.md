@@ -5,7 +5,7 @@
 | 文档版本 | v1.7                                                                                                                                |
 | 状态     | 实施复核版；U0–U8 均已实施，静态原型保留为交互对照，不伪装生产数据                                                                  |
 | 日期     | 2026-10-11                                                                                                                          |
-| 代码基线 | Plane `develop` / `4.25.0`                                                                                                          |
+| 代码基线 | Plane `develop` / `4.26.0`                                                                                                          |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                    |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 | 视觉规范 | [Research Workspace UX 指南](../../product/research-workspace-ux-guide.md) 与 Academic Editorial UI                                 |
@@ -63,7 +63,7 @@ U0 后的导航基线如下：
 
 ### 2.4 待办事实
 
-`collectResearchTodos` 当前聚合：
+历史前端 `collectResearchTodos` 曾聚合：
 
 - 退回报告。
 - 待我阶段评审。
@@ -72,7 +72,7 @@ U0 后的导航基线如下：
 - RAG 上传失败 / 处理中 / 降级。
 - RAGPortal 集成降级的人工提醒。
 
-排序已按严重级别、截止时间和更新时间处理，但没有逾期倒计时，也没有节点任务和论文评审来源。
+当前生产入口已迁移到 `research-todo.v2` 服务端投影，包含节点任务、报告、论文评审、阶段评审、Agent 审批和办公审批六类来源；排序、逾期倒计时、capability 和深链均由服务端输出。
 
 ### 2.5 报告事实
 
@@ -388,7 +388,7 @@ type TResearchTodoUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 
 ### U2：待办升级
 
-- `collectResearchTodos` 接入主轴一新来源。
+- `research-todo.v2` 服务端投影接入主轴一新来源。
 - 增加 `ResearchTodoUrgency`。
 - 更新首页摘要卡和总览待办索引。
 
@@ -542,7 +542,7 @@ Workspace Home
 
 数据来源：
 
-- `ResearchTodoIndex / collectResearchTodos`
+- `ResearchTodoEnvelopeList / ResearchTodoService.getResearchTodos`
 - `ResearchChainService.getChains`
 - `ResearchReportService.getSummary`
 - `ResearchPiAggregateBoard`
