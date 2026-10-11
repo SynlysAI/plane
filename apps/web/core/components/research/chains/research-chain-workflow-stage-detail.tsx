@@ -6,9 +6,6 @@ import { useTranslation } from "@plane/i18n";
 import type { TResearchChainEvent, TResearchChainNode, TResearchChainSnapshot } from "@plane/types";
 // components
 import { formatResearchDateTime } from "@/components/research/common/research-format";
-import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
-import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
-import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
 import type { TResearchWorkflowStage } from "@/components/research/chains/research-chain-workflow";
 
 export type TResearchChainStageNodeDetail = {
@@ -18,7 +15,6 @@ export type TResearchChainStageNodeDetail = {
 };
 
 type Props = {
-  workspaceSlug: string;
   stage: TResearchWorkflowStage;
   nodes: TResearchChainNode[];
   details: TResearchChainStageNodeDetail[];
@@ -27,6 +23,7 @@ type Props = {
   error: boolean;
   onSelectNode: (nodeId: string) => void;
   actionSlot?: ReactNode;
+  detailSlot?: ReactNode;
 };
 
 const SNAPSHOT_TYPE_LABELS: Partial<Record<TResearchChainSnapshot["snapshot_type"], string>> = {
@@ -46,9 +43,8 @@ function referenceLabel(reference: Record<string, unknown>) {
   return typeof identity === "string" ? identity : "";
 }
 
-/** Render one workflow stage with its nodes, immutable snapshots and trace log. */
+/** Render one workflow stage with node selection, immutable snapshots and trace replay. */
 export function ResearchChainWorkflowStageDetail({
-  workspaceSlug,
   stage,
   nodes,
   details,
@@ -57,10 +53,9 @@ export function ResearchChainWorkflowStageDetail({
   error,
   onSelectNode,
   actionSlot,
+  detailSlot,
 }: Props) {
   const { t, currentLocale } = useTranslation();
-  const detailById = new Map(details.map((detail) => [detail.node.id, detail]));
-  const selectedDetail = selectedNodeId ? detailById.get(selectedNodeId) : undefined;
   const snapshots = details
     .flatMap((detail) =>
       detail.snapshots.map((snapshot) => ({
@@ -222,28 +217,7 @@ export function ResearchChainWorkflowStageDetail({
 
         {actionSlot && <div className="border-b border-subtle">{actionSlot}</div>}
 
-        {selectedDetail && (
-          <>
-            <ResearchChainNodeDetail {...selectedDetail} />
-            <div className="border-t border-subtle">
-              <ResearchChainTaskPanel
-                workspaceSlug={workspaceSlug}
-                chainId={selectedDetail.node.chain}
-                nodeId={selectedDetail.node.id}
-              />
-            </div>
-            {selectedDetail.node.node_type === "PAPER_WRITING" && (
-              <div className="border-t border-subtle">
-                <ResearchPaperReviewPanel
-                  workspaceSlug={workspaceSlug}
-                  chainId={selectedDetail.node.chain}
-                  nodeId={selectedDetail.node.id}
-                  events={selectedDetail.events}
-                />
-              </div>
-            )}
-          </>
-        )}
+        {detailSlot}
       </div>
     </section>
   );

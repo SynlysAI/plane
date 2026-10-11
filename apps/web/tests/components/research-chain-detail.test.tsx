@@ -64,6 +64,33 @@ vi.mock("@/components/research/chains/research-chain-knowledge-panel", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/research/chains/research-chain-task-panel", () => ({
+  ResearchChainTaskPanel: ({ chainId, nodeId }: { chainId: string; nodeId: string }) => (
+    <div data-testid="chain-task-panel" data-chain={chainId} data-node={nodeId}>
+      task-panel
+    </div>
+  ),
+}));
+vi.mock("@/components/research/chains/research-paper-review-panel", () => ({
+  ResearchPaperReviewPanel: ({
+    chainId,
+    nodeId,
+    events,
+  }: {
+    chainId: string;
+    nodeId: string;
+    events: Array<{ event_id: string }>;
+  }) => (
+    <div
+      data-testid="paper-review-panel"
+      data-chain={chainId}
+      data-node={nodeId}
+      data-events={events.map((event) => event.event_id).join(",")}
+    >
+      paper-review-panel
+    </div>
+  ),
+}));
 vi.mock("@/services/research/integration.service", () => ({
   ResearchIntegrationService: class {
     getReferences = vi.fn().mockResolvedValue({ results: [] });
@@ -173,6 +200,7 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
   });
   await act(async () => undefined);
+  await act(async () => undefined);
 
   expect(container.textContent).toContain("文献调研");
   expect(container.textContent).toContain("创建节点");
@@ -200,6 +228,8 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     "/lab/research/chains/chain-1/nodes/node-1/agent",
   ]);
   expect(agentLinks.every((item) => item.getAttribute("target") === "_blank")).toBe(true);
+  expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-node")).toBe("node-1");
+  expect(container.querySelector('[data-testid="paper-review-panel"]')).toBeNull();
   expect(container.textContent).not.toContain("记录与知识库");
   expect(container.textContent).not.toContain("报告与成果");
   expect([...container.querySelectorAll("button")].map((item) => item.textContent)).not.toContain("实验记录");
@@ -208,6 +238,40 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     [...container.querySelectorAll("button")].find((button) => button.textContent === "开始")?.click();
   });
   expect(mocks.transitionChainNode).toHaveBeenCalledWith("lab", "node-1", "START", undefined);
+});
+
+it("mounts the paper review panel with selected node events for paper writing replay", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  const paperNode = { ...node, node_type: "PAPER_WRITING", title: "论文撰写" };
+  mocks.query = "tab=nodes&stage=paper_writing&node=node-1";
+  mocks.getChainNodes.mockResolvedValue([paperNode]);
+  mocks.getChainNodeDetail.mockResolvedValue({
+    node: paperNode,
+    events: [
+      {
+        event_id: "event-1",
+        event_type: "NODE_CREATED",
+        occurred_at: "2026-10-10T08:00:00Z",
+        refs: [],
+        summary: "创建论文写作节点",
+      },
+    ],
+    snapshots: [],
+  });
+
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  const taskPanel = container.querySelector('[data-testid="chain-task-panel"]');
+  const reviewPanel = container.querySelector('[data-testid="paper-review-panel"]');
+  expect(taskPanel?.getAttribute("data-chain")).toBe("chain-1");
+  expect(taskPanel?.getAttribute("data-node")).toBe("node-1");
+  expect(reviewPanel?.getAttribute("data-chain")).toBe("chain-1");
+  expect(reviewPanel?.getAttribute("data-node")).toBe("node-1");
+  expect(reviewPanel?.getAttribute("data-events")).toBe("event-1");
+  expect(container.querySelector('[aria-current="step"]')?.textContent).toContain("论文写作");
 });
 
 it("keeps the scoped knowledge upload entry on the references tab", async () => {

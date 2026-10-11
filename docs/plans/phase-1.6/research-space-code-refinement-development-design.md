@@ -3,7 +3,7 @@
 | 项目     | 内容                                                                                                                             |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | 文档版本 | v1.4                                                                                                                             |
-| 状态     | 设计复核修订版；C0 引用审计与 C5 待办扇出收敛已实施，后续清理切片仍待实施                                                        |
+| 状态     | 设计复核修订版；C0 引用审计、C5 待办扇出收敛与 C6 课题详情拆分已实施，后续清理切片仍待实施                                       |
 | 日期     | 2026-10-10                                                                                                                       |
 | 代码基线 | Plane `develop` / `4.24.0`                                                                                                       |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                 |
@@ -263,9 +263,16 @@ research-paper-review-panel.tsx  # 论文评审
 前置条件：UX U4 / U6 需要新增面板。
 
 - 抽出任务面板和论文评审面板。
-- 容器只传入 workspaceSlug、chain、node、capabilities 和刷新回调。
-- 不复制加载逻辑。
+- 容器只传入 workspaceSlug、chainId、选中节点和节点事件。
+- U4 / U6 已实现的领域加载逻辑保留在对应面板内，不复制到容器。
 - 不改变现有 URL 参数。
+
+实施状态（2026-10-11）：已完成。`ResearchChainDetail` 直接装配
+`ResearchChainTaskPanel` 与 `ResearchPaperReviewPanel`；`ResearchChainWorkflowStageDetail`
+收敛为阶段节点选择、快照与 Trace 回放容器，不再感知任务和论文评审领域。
+URL `tab/stage/node`、生命周期 transition 与节点事件回放保持不变。
+隔离浏览器检查已在 1440 / 390 宽度完成：页面无横向溢出，任务面板与论文评审面板可见，
+stage / node 回放保持正确。
 
 ### C7：后端辅助函数审计
 
@@ -652,10 +659,11 @@ research-paper-review-panel.tsx
 
 ```text
 ResearchChainDetail
-  ├─ tasks, assignableUsers, loading, error
-  │  └─ ResearchChainTaskPanel
-  └─ review, versions, events, loading, error
-     └─ ResearchPaperReviewPanel
+  ├─ workspaceSlug / chainId / selected node
+  │  ├─ ResearchChainTaskPanel（任务与候选人领域状态）
+  │  └─ ResearchPaperReviewPanel（评审、版本与评论领域状态）
+  └─ stage / snapshots / trace events
+     └─ ResearchChainWorkflowStageDetail
 ```
 
 拆分顺序：
@@ -675,7 +683,7 @@ ResearchChainDetail
 | C3 export downgrade | §9.2 表中文件                             | typecheck                                            | 逐文件恢复 export                |
 | C4 browse params    | browse-query + two lists + tests          | browse / project / report tests                      | 回退共同函数，保留领域参数       |
 | C5 todo aggregate   | research-todo API + envelope list service | todo tests + request spy                             | 恢复旧前端聚合调用，API 保留只读 |
-| C6 detail split     | chain detail + two panels                 | detail / task / paper tests                          | 将面板内容内联回容器             |
+| C6 detail split     | 已实施：chain detail + two panels         | detail / task / paper tests                          | 将面板内容内联回容器             |
 | C7 backend helpers  | 只审计，不默认移动                        | 对应现有 tests                                       | 不产生代码变更                   |
 
 ### 9.8 清理完成定义

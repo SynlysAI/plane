@@ -233,6 +233,7 @@ it("shows the author view, metadata, versions, file entries, and Chain Event com
   expect(container.textContent).toContain("提交初稿，补充方法部分。");
   expect(container.textContent).toContain("补充第 3 节对照组说明。");
   expect(container.textContent).toContain("Chain Event 评论串");
+  expect(mocks.getPaperChainEvents).not.toHaveBeenCalled();
   expect(container.textContent).toContain("退回版本");
   expect(button("提交新版本")).not.toBeNull();
   expect(button("撤回")).not.toBeNull();

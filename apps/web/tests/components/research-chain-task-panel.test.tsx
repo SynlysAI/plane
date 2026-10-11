@@ -159,6 +159,23 @@ it("shows task metadata, status text, scoped candidates, and the return reason",
   expect(container.querySelector('[role="combobox"]')).toBeNull();
 });
 
+it("keeps task requests scoped to the selected node supplied by the detail container", async () => {
+  const { ResearchChainTaskPanel } = await import("@/components/research/chains/research-chain-task-panel");
+  await act(async () => {
+    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+  });
+  await act(async () => undefined);
+  await act(async () => {
+    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-2" />);
+  });
+  await act(async () => undefined);
+
+  expect(mocks.getNodeTasks).toHaveBeenNthCalledWith(1, "lab", "chain-1", "node-1");
+  expect(mocks.getNodeTasks).toHaveBeenNthCalledWith(2, "lab", "chain-1", "node-2");
+  expect(mocks.getAssignableUsers).toHaveBeenNthCalledWith(1, "lab", "chain-1");
+  expect(mocks.getAssignableUsers).toHaveBeenNthCalledWith(2, "lab", "chain-1");
+});
+
 it("creates a task using only a candidate returned by assignable-users", async () => {
   const created = task({
     id: "task-2",

@@ -33,6 +33,9 @@ import {
   ResearchChainWorkflowStageDetail,
   type TResearchChainStageNodeDetail,
 } from "@/components/research/chains/research-chain-workflow-stage-detail";
+import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
+import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
+import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
 import { ExperimentList } from "@/components/research/experiments/experiment-list";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -611,7 +614,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           <section>
             {selectedStage && (
               <ResearchChainWorkflowStageDetail
-                workspaceSlug={workspaceSlug}
                 stage={selectedStage}
                 nodes={stageNodes}
                 details={stageDetails}
@@ -623,6 +625,30 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   selectNode(nodeId);
                 }}
                 actionSlot={selectedNodeActions}
+                detailSlot={
+                  selected ? (
+                    <>
+                      <ResearchChainNodeDetail {...selected} />
+                      <div className="border-t border-subtle">
+                        <ResearchChainTaskPanel
+                          workspaceSlug={workspaceSlug}
+                          chainId={chainId}
+                          nodeId={selected.node.id}
+                        />
+                      </div>
+                      {selected.node.node_type === "PAPER_WRITING" && (
+                        <div className="border-t border-subtle">
+                          <ResearchPaperReviewPanel
+                            workspaceSlug={workspaceSlug}
+                            chainId={chainId}
+                            nodeId={selected.node.id}
+                            events={selected.events}
+                          />
+                        </div>
+                      )}
+                    </>
+                  ) : null
+                }
               />
             )}
             <section className="border-t border-subtle p-5">
