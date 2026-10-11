@@ -14,6 +14,7 @@ import type {
   TReportReviewLog,
   TReportSummary,
   TReportTemplate,
+  TReportTemplateOption,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -226,6 +227,15 @@ export class ResearchReportService extends APIService {
   async getTemplates(workspaceSlug: string, params: { report_type?: string } = {}) {
     return this.get(researchEndpoints.reportTemplates(workspaceSlug), { params })
       .then((res) => res?.data as { results: TReportTemplate[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** Read the minimal active template options for report creation. */
+  async getTemplateOptions(workspaceSlug: string, params: { report_type?: string } = {}) {
+    return this.get(researchEndpoints.reportTemplateOptions(workspaceSlug), { params })
+      .then((res) => res?.data as { results: TReportTemplateOption[]; count: number })
       .catch((err) => {
         throw err?.response?.data;
       });

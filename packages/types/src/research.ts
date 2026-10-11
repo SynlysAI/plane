@@ -728,6 +728,14 @@ export type TReportTemplate = {
   updated_at: string;
 };
 
+export type TReportTemplateOption = {
+  id: string;
+  report_type: TReportType;
+  name: string;
+  is_default: boolean;
+  is_active: boolean;
+};
+
 export type TIdentityMapping = {
   id: string;
   user: string;

@@ -20,7 +20,7 @@ from .org import (
     ResearchUserSerializer,
 )
 from .settings import WorkspaceResearchSettingSerializer
-from .template import ReportTemplateSerializer
+from .template import ReportTemplateOptionSerializer, ReportTemplateSerializer
 from .report import (
     PeriodicReportSerializer,
     PeriodicReportReadReceiptSerializer,
@@ -79,6 +79,7 @@ __all__ = [
     "MentorBindingSerializer",
     "OrgUnitMemberSerializer",
     "OrgUnitSerializer",
+    "ReportTemplateOptionSerializer",
     "ReportTemplateSerializer",
     "PeriodicReportSerializer",
     "PeriodicReportReadReceiptSerializer",

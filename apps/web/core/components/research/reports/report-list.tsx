@@ -11,7 +11,7 @@ import { useNavigate, useParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportStatus, TReportType } from "@plane/constants";
-import type { TPeriodicReport, TReportTemplate } from "@plane/types";
+import type { TPeriodicReport, TReportTemplateOption } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -96,8 +96,8 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     .getResearchProjects(workspaceSlug)
     .filter((project) => project.research?.research_type === "RESEARCH_PROJECT");
   const templates = research
-    .getReportTemplates(workspaceSlug)
-    .filter((template: TReportTemplate) => template.report_type === reportType && template.is_active);
+    .getReportTemplateOptions(workspaceSlug)
+    .filter((template: TReportTemplateOption) => template.report_type === reportType && template.is_active);
   const hasActiveFilters = Boolean(
     statusFilter ||
     typeFilter ||
@@ -192,7 +192,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
 
   useEffect(() => {
     if (!isCreateDialogOpen) return;
-    void research.fetchReportTemplates(workspaceSlug, { report_type: reportType }).catch(() => undefined);
+    void research.fetchReportTemplateOptions(workspaceSlug, { report_type: reportType }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCreateDialogOpen, reportType, workspaceSlug]);
 

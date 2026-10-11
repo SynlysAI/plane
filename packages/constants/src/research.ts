@@ -767,6 +767,7 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/import-markdown/`,
   reportSummary: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/reports/summary/`,
   reportTemplates: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/report-templates/`,
+  reportTemplateOptions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/reports/template-options/`,
   reportTemplate: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/report-templates/${id}/`,
   approvalFlows: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/approval-flows/`,
   approvalFlow: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/approval-flows/${id}/`,

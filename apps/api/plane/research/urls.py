@@ -86,6 +86,7 @@ from plane.research.views import (
     ResearchReportSummaryEndpoint,
     ResearchReportTemplateDetailEndpoint,
     ResearchReportTemplateListCreateEndpoint,
+    ResearchReportTemplateOptionListEndpoint,
     ResearchSettingsEndpoint,
     ResearchProjectStageListCreateEndpoint,
     ResearchStageDetailEndpoint,
@@ -987,6 +988,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/summary/",
         ResearchReportSummaryEndpoint.as_view(),
         name="research-report-summary",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/template-options/",
+        ResearchReportTemplateOptionListEndpoint.as_view(),
+        name="research-report-template-options",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/",

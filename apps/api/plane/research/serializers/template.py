@@ -25,3 +25,11 @@ class ReportTemplateSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ReportTemplateOptionSerializer(serializers.ModelSerializer):
+    """Minimal template fields exposed to report authors."""
+
+    class Meta:
+        model = ReportTemplate
+        fields = ["id", "report_type", "name", "is_default", "is_active"]

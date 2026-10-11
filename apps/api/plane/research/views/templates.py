@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.db.models import ReportTemplate
-from plane.research.serializers import ReportTemplateSerializer
+from plane.research.serializers import ReportTemplateOptionSerializer, ReportTemplateSerializer
 from plane.research.utils.audit import (
     ResearchAuditAction,
     ResearchResourceType,
@@ -33,16 +33,13 @@ class ResearchReportTemplateListCreateEndpoint(ResearchAPIView):
     nav_capability = NAV_TEMPLATES
 
     def get(self, request, slug):
-        # Report authors need active templates when creating a report; the
-        # template management menu itself remains administrator-only.
-        workspace, error = self.get_workspace(section="reports", nav=NAV_REPORTS)
+        workspace, error = self.get_workspace(section="reports")
         if error:
             return error
-        is_admin = is_research_admin(request.user, workspace.id)
         templates = ReportTemplate.objects.filter(workspace=workspace)
         if request.GET.get("report_type"):
             templates = templates.filter(report_type=str(request.GET["report_type"]).upper())
-        if not is_admin or not truthy(request.GET.get("include_inactive")):
+        if not truthy(request.GET.get("include_inactive")):
             templates = templates.filter(is_active=True)
         data = list(templates.order_by("report_type", "name"))
         return Response(
@@ -102,6 +99,25 @@ class ResearchReportTemplateListCreateEndpoint(ResearchAPIView):
             request=request,
         )
         return Response(ReportTemplateSerializer(template).data, status=status.HTTP_201_CREATED)
+
+
+class ResearchReportTemplateOptionListEndpoint(ResearchAPIView):
+    """``GET /api/research/workspaces/<slug>/reports/template-options/``."""
+
+    nav_capability = NAV_REPORTS
+
+    def get(self, request, slug):
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+        templates = ReportTemplate.objects.filter(workspace=workspace, is_active=True)
+        if request.GET.get("report_type"):
+            templates = templates.filter(report_type=str(request.GET["report_type"]).upper())
+        data = list(templates.order_by("report_type", "name"))
+        return Response(
+            {"results": ReportTemplateOptionSerializer(data, many=True).data, "count": len(data)},
+            status=status.HTTP_200_OK,
+        )
 
 
 class ResearchReportTemplateDetailEndpoint(ResearchAPIView):

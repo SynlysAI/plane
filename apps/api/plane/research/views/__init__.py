@@ -74,6 +74,7 @@ from .summary import ResearchReportSummaryEndpoint
 from .templates import (
     ResearchReportTemplateDetailEndpoint,
     ResearchReportTemplateListCreateEndpoint,
+    ResearchReportTemplateOptionListEndpoint,
 )
 from .identity import (
     ResearchIdentityMappingDetailEndpoint,
@@ -350,6 +351,7 @@ __all__ = [
     "ResearchReportMarkdownImportEndpoint",
     "ResearchReportTemplateDetailEndpoint",
     "ResearchReportTemplateListCreateEndpoint",
+    "ResearchReportTemplateOptionListEndpoint",
     "ResearchIdentityMappingDetailEndpoint",
     "ResearchIdentityMappingListCreateEndpoint",
     "ResearchIdentityMeEndpoint",

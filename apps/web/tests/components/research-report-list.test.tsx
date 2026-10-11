@@ -7,7 +7,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createReport: vi.fn(),
   getReports: vi.fn(),
-  fetchReportTemplates: vi.fn(),
+  fetchReportTemplateOptions: vi.fn(),
   fetchReports: vi.fn(),
   fetchResearchProjects: vi.fn(),
   fetchOrgUnits: vi.fn(),
@@ -82,12 +82,12 @@ vi.mock("@/hooks/store/use-research", () => ({
     getReports: () => mocks.getReports(),
     getOrgUnits: () => [],
     getResearchProjects: () => [],
-    getReportTemplates: () => [template],
+    getReportTemplateOptions: () => [template],
     templatesLoader: false,
     fetchReports: mocks.fetchReports,
     fetchResearchProjects: mocks.fetchResearchProjects,
     fetchOrgUnits: mocks.fetchOrgUnits,
-    fetchReportTemplates: mocks.fetchReportTemplates,
+    fetchReportTemplateOptions: mocks.fetchReportTemplateOptions,
     createReport: mocks.createReport,
   }),
 }));
@@ -115,7 +115,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  mocks.fetchReportTemplates.mockResolvedValue([template]);
+  mocks.fetchReportTemplateOptions.mockResolvedValue([template]);
   mocks.fetchReports.mockResolvedValue([]);
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
@@ -148,7 +148,7 @@ it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () 
     )
   );
   await act(async () => button("创建报告").click());
-  expect(mocks.fetchReportTemplates).toHaveBeenCalledWith("lab", { report_type: "WEEKLY" });
+  expect(mocks.fetchReportTemplateOptions).toHaveBeenCalledWith("lab", { report_type: "WEEKLY" });
   expect(container.textContent).toContain("Graphite weekly template");
 
   const select = container.querySelector<HTMLSelectElement>('select[aria-label="模板"]');
