@@ -6,6 +6,7 @@ import type { TPeriodicReport } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
+  editorMigrationUpdate: false,
   reports: {} as Record<string, TPeriodicReport>,
   reportHistory: {},
   settings: {},
@@ -72,7 +73,7 @@ vi.mock("@/components/editor/document/editor", () => ({
     }: {
       value: string | object;
       editable: boolean;
-      onChange: (json: object, html: string) => void;
+      onChange: (json: object, html: string, options?: { isMigrationUpdate?: boolean }) => void;
     },
     ref
   ) {
@@ -92,6 +93,9 @@ vi.mock("@/components/editor/document/editor", () => ({
       }),
       [body, onChange]
     );
+    React.useEffect(() => {
+      if (mocks.editorMigrationUpdate) onChange({}, initial, { isMigrationUpdate: true });
+    }, [initial, onChange]);
     return (
       <textarea
         aria-label="正文编辑器"
@@ -182,6 +186,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mocks.reports = { "report-1": report() };
+  mocks.editorMigrationUpdate = false;
   mocks.saveReportDraft.mockResolvedValue(undefined);
   mocks.fetchReport.mockResolvedValue(undefined);
   mocks.fetchReportHistory.mockResolvedValue(undefined);
@@ -198,6 +203,13 @@ afterEach(async () => {
 });
 
 describe("报告详情正文保存与替换", () => {
+  it("编辑器初始化迁移不会把正文标记为未保存", async () => {
+    mocks.editorMigrationUpdate = true;
+    await renderDetail();
+
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("已保存");
+  });
+
   it.each([false, true])("项目关联为 %s 时在详情页直接编辑并保存同一正文", async (projectBound) => {
     mocks.reports["report-1"] = report(projectBound);
     await renderDetail();

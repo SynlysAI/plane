@@ -53,6 +53,8 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
 
   // Filter static navigation items based on personal preferences
   const filteredStaticNavigationItems = useMemo(() => {
+    // Phase 1.6 统一工作区信息架构：首页保留为唯一个人入口，其余四个产品入口由科研侧栏渲染。
+    if (usesResearchIaV2) return [WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["home"]];
     const items = [...WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS];
     const personalItems: Array<(typeof items)[0] & { sort_order: number }> = [];
 
@@ -82,7 +84,7 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
 
     // Merge static items with sorted personal items
     return [...items, ...personalItems];
-  }, [personalPreferences]);
+  }, [personalPreferences, usesResearchIaV2]);
 
   const sortedNavigationItems = useMemo(
     () =>

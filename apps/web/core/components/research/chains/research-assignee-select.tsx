@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import type { TResearchAssignableUser, TResearchAssignableUserScope } from "@plane/types";
 
@@ -46,12 +46,38 @@ function candidateIdentity(candidate: TResearchAssignableUser, t: (key: string) 
 export function ResearchAssigneeSelect({ candidates, value, label, disabled = false, onChange }: Props) {
   const { t } = useTranslation();
   const selectId = useId();
+  const searchId = `${selectId}-search`;
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleCandidates = useMemo(
+    () =>
+      candidates.filter((candidate) =>
+        [candidate.display_name, candidate.org_unit_name, candidate.org_role]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase()
+          .includes(normalizedQuery)
+      ),
+    [candidates, normalizedQuery]
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={selectId} className="text-11 text-tertiary">
         {label}
       </label>
+      <label htmlFor={searchId} className="sr-only">
+        {label}搜索
+      </label>
+      <input
+        id={searchId}
+        type="search"
+        value={query}
+        disabled={disabled}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="搜索候选人或组织"
+        className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary placeholder:text-placeholder disabled:text-tertiary"
+      />
       <select
         id={selectId}
         value={value}
@@ -61,7 +87,7 @@ export function ResearchAssigneeSelect({ candidates, value, label, disabled = fa
       >
         <option value="">{t("research.chain_tasks.unassigned")}</option>
         {SCOPE_ORDER.map((scope) => {
-          const scoped = candidates.filter((candidate) => candidate.scope === scope);
+          const scoped = visibleCandidates.filter((candidate) => candidate.scope === scope);
           if (!scoped.length) return null;
           return (
             <optgroup
@@ -77,7 +103,11 @@ export function ResearchAssigneeSelect({ candidates, value, label, disabled = fa
           );
         })}
       </select>
-      <p className="text-11 text-tertiary">{t("research.chain_tasks.candidate_scope_hint")}</p>
+      <p className="text-11 text-tertiary">
+        {visibleCandidates.length
+          ? t("research.chain_tasks.candidate_scope_hint")
+          : "没有匹配的可指派成员，请调整搜索条件。"}
+      </p>
     </div>
   );
 }

@@ -248,8 +248,8 @@ it("collapses research to the IA v2 project channels when IA v2 is enabled", asy
 
   const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
   expect(links).toEqual([
-    "/lab/research/approvals",
     "/lab/research/settings",
+    "/lab/research/approvals",
     "/lab/research/chains",
     "/lab/research/chains/chain-1",
     "/lab/projects",

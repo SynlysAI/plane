@@ -296,7 +296,9 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
           },
           validation: { maxFileSize: (research.settings[workspaceSlug]?.image_max_mb ?? 20) * 1024 * 1024 },
         }}
-        onChange={() => {
+        onChange={(_json, _html, options) => {
+          // 编辑器初始化时会补充稳定的块 ID；这类迁移更新不应把刚加载的报告标记为未保存。
+          if (options?.isMigrationUpdate) return;
           revision.current += 1;
           dirtyRef.current = true;
           setDirty(true);

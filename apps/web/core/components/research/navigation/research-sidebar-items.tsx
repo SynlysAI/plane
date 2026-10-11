@@ -108,35 +108,41 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   };
 
   return (
-    <Disclosure as="div" className="mt-3 flex flex-col border-t border-subtle pt-3" defaultOpen={isMenuOpen}>
-      <div className="group flex w-full items-center justify-between rounded-sm px-2 py-1.5 hover:bg-layer-transparent-hover">
-        <Disclosure.Button
-          as="button"
-          type="button"
-          className="flex w-full items-center gap-1 text-left text-13 font-semibold whitespace-nowrap text-placeholder"
-          onClick={() => toggleMenu(!isMenuOpen)}
-          aria-label={menuAriaLabel}
-          aria-expanded={isMenuOpen}
-        >
-          <span className="text-13 font-semibold">{t("research.nav.group")}</span>
-        </Disclosure.Button>
-        <div className="flex items-center gap-1">
-          <IconButton
-            variant="ghost"
-            size="sm"
-            icon={ChevronRightOutline}
+    <Disclosure
+      as="div"
+      className={cn("flex flex-col", research.isIaV2Enabled ? "mt-1" : "mt-3 border-t border-subtle pt-3")}
+      defaultOpen={research.isIaV2Enabled || isMenuOpen}
+    >
+      {!research.isIaV2Enabled && (
+        <div className="group flex w-full items-center justify-between rounded-sm px-2 py-1.5 hover:bg-layer-transparent-hover">
+          <Disclosure.Button
+            as="button"
+            type="button"
+            className="flex w-full items-center gap-1 text-left text-13 font-semibold whitespace-nowrap text-placeholder"
             onClick={() => toggleMenu(!isMenuOpen)}
-            className="text-placeholder"
-            iconClassName={cn("transition-transform", {
-              "rotate-90": isMenuOpen,
-            })}
             aria-label={menuAriaLabel}
-          />
+            aria-expanded={isMenuOpen}
+          >
+            <span className="text-13 font-semibold">{t("research.nav.group")}</span>
+          </Disclosure.Button>
+          <div className="flex items-center gap-1">
+            <IconButton
+              variant="ghost"
+              size="sm"
+              icon={ChevronRightOutline}
+              onClick={() => toggleMenu(!isMenuOpen)}
+              className="text-placeholder"
+              iconClassName={cn("transition-transform", {
+                "rotate-90": isMenuOpen,
+              })}
+              aria-label={menuAriaLabel}
+            />
+          </div>
         </div>
-      </div>
+      )}
       <Transition
         as="div"
-        show={isMenuOpen}
+        show={research.isIaV2Enabled || isMenuOpen}
         enter="transition duration-100 ease-out"
         enterFrom="transform scale-95 opacity-0"
         enterTo="transform scale-100 opacity-100"
@@ -144,12 +150,16 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
         leaveFrom="transform scale-100 opacity-100"
         leaveTo="transform scale-95 opacity-0"
       >
-        {isMenuOpen && (
+        {(research.isIaV2Enabled || isMenuOpen) && (
           <Disclosure.Panel as="div" className="flex flex-col gap-0.5" static>
             {research.isIaV2Enabled ? (
               <>
                 {visibleIaV2Items
                   .filter((item) => item.key !== "research_chain")
+                  .toSorted((left, right) => {
+                    const order = ["management", "approvals"];
+                    return order.indexOf(left.key) - order.indexOf(right.key);
+                  })
                   .map((item) => renderItem(item.key, item.labelKey, item.path))}
                 {research.canSee("research_chain") && (
                   <ResearchProjectTree

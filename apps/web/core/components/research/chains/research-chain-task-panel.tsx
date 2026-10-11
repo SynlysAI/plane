@@ -11,6 +11,7 @@ import type {
 } from "@plane/types";
 import { formatResearchDate, formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
 import { ResearchAssigneeSelect } from "@/components/research/chains/research-assignee-select";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 
@@ -347,14 +348,16 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
           <>
             {formOpen && (
               <form
-                className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-subtle bg-surface-1 p-4 md:grid-cols-2"
+                className="mb-5 grid grid-cols-1 gap-4 rounded-lg border border-subtle bg-surface-1 p-4 md:grid-cols-2"
                 onSubmit={(event) => {
                   event.preventDefault();
                   void submitForm();
                 }}
               >
                 <label className="flex min-w-0 flex-col gap-1 text-11 text-tertiary">
-                  <span>{t("research.chain_tasks.title")}</span>
+                  <span>
+                    {t("research.chain_tasks.title")} <span className="text-danger-primary">*</span>
+                  </span>
                   <input
                     value={form.title}
                     onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
@@ -386,6 +389,9 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                     className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
                   />
                 </label>
+                <p className="text-11 text-tertiary md:col-span-2">
+                  任务仍归属于当前节点；指派候选人由科研组织范围和显式协作者权限决定。
+                </p>
                 <div className="flex items-center gap-2 md:col-span-2">
                   <Button variant="primary" size="sm" disabled={formBusy} onClick={() => void submitForm()}>
                     {formBusy
@@ -433,7 +439,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                         <ResearchStatusBadge status={task.status} size="sm">
                           {t(TASK_STATUS_KEYS[task.status])}
                         </ResearchStatusBadge>
-                        <span className="text-11 text-tertiary">{task.status}</span>
+                        <span className="sr-only">{task.status}</span>
                       </div>
                     </div>
 
@@ -448,8 +454,9 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                       </div>
                       <div className="min-w-0">
                         <dt className="text-11 text-tertiary">{t("research.chain_tasks.due_at")}</dt>
-                        <dd className="truncate text-secondary">
-                          {formatResearchDate(task.due_at, currentLocale) || "—"}
+                        <dd className="flex flex-wrap items-center gap-2 text-secondary">
+                          <span>{formatResearchDate(task.due_at, currentLocale) || "—"}</span>
+                          {task.due_at && <ResearchTodoUrgency dueAt={task.due_at} />}
                         </dd>
                       </div>
                       <div className="min-w-0">
@@ -461,6 +468,12 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                       <div className="min-w-0 sm:col-span-2 xl:col-span-2">
                         <dt className="text-11 text-tertiary">{t("research.chain_tasks.return_reason")}</dt>
                         <dd className="text-secondary">{task.return_reason || "—"}</dd>
+                      </div>
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-3">
+                        <dt className="text-11 text-tertiary">更新时间</dt>
+                        <dd className="truncate text-secondary">
+                          {formatResearchDateTime(task.updated_at, currentLocale) || "—"}
+                        </dd>
                       </div>
                     </dl>
 
@@ -521,7 +534,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                       )}
                     </div>
 
-                    {activeReasonAction && (
+                    {activeReasonAction?.taskId === task.id && (
                       <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
                         <label className="flex min-w-0 flex-col gap-1 text-11 text-tertiary">
                           <span>

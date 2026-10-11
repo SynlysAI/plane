@@ -43,7 +43,7 @@ export const AppSidebar = observer(function AppSidebar() {
       {/* Research module entry - additive, hidden when the module is off */}
       <ResearchSidebarItems />
       {/* Favorites Menu */}
-      {canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />}
+      {canPerformWorkspaceMemberActions && !usesResearchProjectTree && !isFavoriteEmpty && <SidebarFavoritesMenu />}
       {/* Projects List */}
       {!usesResearchProjectTree && <SidebarProjectsList />}
     </SidebarWrapper>
