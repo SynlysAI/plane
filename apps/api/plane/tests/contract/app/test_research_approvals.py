@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -269,6 +272,18 @@ class TestApprovalWorkflow:
         request_id = create_request(env).json()["id"]
         denied = env["bystander_client"].post(f"{env['requests_url']}{request_id}/approve/", {}, format="json")
         assert denied.status_code == 403
+
+    def test_expired_org_membership_cannot_act(self, env):
+        create_two_step_flow(env)
+        request_id = create_request(env).json()["id"]
+        membership = OrgUnitMember.objects.get(user=env["lead"], org_unit=env["group"])
+        membership.effective_to = timezone.localdate() - timedelta(days=1)
+        membership.save(update_fields=["effective_to", "updated_at"])
+
+        denied = env["lead_client"].post(f"{env['requests_url']}{request_id}/approve/", {}, format="json")
+
+        assert denied.status_code == 403
+        assert not ApprovalAction.objects.filter(request_id=request_id).exists()
 
     def test_requester_can_withdraw_before_completion(self, env):
         create_two_step_flow(env)

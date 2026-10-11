@@ -15,6 +15,7 @@ from plane.db.models import (
     User,
 )
 from plane.research.utils.acl import org_unit_scope_ids
+from plane.research.utils.org import active_membership_q
 
 MANAGING_ROLES = ("OWNER", "PI", "UNIT_ADMIN", "ADVISOR", "REVIEWER")
 
@@ -37,11 +38,10 @@ def step_approver_ids(request, step):
         return set()
     today = timezone.localdate()
     memberships = OrgUnitMember.objects.filter(
+        active_membership_q(today),
         workspace_id=request.flow.workspace_id,
         org_unit_id__in=scope,
         org_role=step.approver_org_role,
-        deleted_at__isnull=True,
-        effective_from__lte=today,
     )
     return set(memberships.values_list("user_id", flat=True))
 
