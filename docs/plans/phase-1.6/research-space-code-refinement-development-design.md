@@ -283,6 +283,39 @@ stage / node 回放保持正确。
 - 涉及 ACL、审计、迁移、外部回执的函数保留原位。
 - 每次移动函数必须保留原测试名或补等价契约测试。
 
+实施状态（2026-10-11）：已完成只读审计，未默认移动函数。审计范围覆盖 ACL 工具、
+节点任务服务、报告状态与已读服务、论文评审服务、统一待办聚合和审批辅助函数。
+
+审计结论：
+
+1. **ACL 边界**：`utils/acl.py` 仍是任务、报告、论文、待办和阶段投影的共同判定入口；
+   任务 / 论文 serializer 的动作能力也回调用领域服务，没有把 `check_access` 整体复制到视图层。
+   报告提交与 `PeriodicReportSerializer.get_can_edit` 仍存在“owner + 可编辑状态”的展示性重复判定，
+   当前行为与 `check_access(action="edit")` 一致，本切片不改。
+2. **状态机边界**：`ResearchChainNodeTask`、`PeriodicReport`、`ResearchPaperReview` 与
+   `ApprovalRequest` 四套状态互不共享。待办聚合无数据库表、无写入，`business_status` 均来自原对象，
+   `handling_status` 只作展示派生值。
+3. **候选人边界**：`chain_tasks._candidate_items` 将有效组织祖先成员标为 `ORG_SCOPE`，
+   将显式课题协作者标为 `COLLABORATOR`，去重后仍由服务端最终校验 assignee；
+   行政 Project 成员查询没有复用该函数。`chain_manager` / `chain_writer` 使用 ProjectMember
+   只表示既有项目协作者或管理员权限，不把 ProjectMember 当作组织继承替代来源。
+4. **跨通道写入**：节点任务与论文评审写 Chain Event、审计和通知属于科研协作通道；
+   周报已读只追加 read receipt；行政审批只写 ApprovalAction / Notification，并按既有合同回写
+   Issue state，不生成 Chain Event；待办聚合没有旁路写入口。
+5. **重复逻辑**：`chain_tasks.py` 与 `paper_reviews.py` 重复 `_payload_with_request_id`、
+   `_serializer_error` 和近乎相同的 `_node_context`；“最新正式报告快照”的 queryset 逻辑也分散在
+   serializer、read receipt、todo 聚合和 Agent 报告上下文中。以上均只登记为后续候选，不在本切片移动。
+
+审计发现一个明确小缺陷：审批步骤按组织角色解析审批人时未排除已过期的
+`OrgUnitMember.effective_to`。该缺陷已用 `active_membership_q` 修复，并新增
+“过期组织成员不能审批”的合同测试；修复和审计文档分开提交。
+
+| 分类         | 函数 / 逻辑                                                                                                    | 结论                                                                    |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 建议保留     | `utils/acl.py`、`utils/reports.py`、任务 / 论文动作判定、待办各 collector、审批 step 解析                      | 权限、领域状态和投影语义不同，继续留在当前权威模块                      |
+| 建议后续移动 | `_payload_with_request_id`、`_serializer_error`、任务 / 论文共用的 `_node_context`、最新正式快照读取 helper    | 语义基本相同的纯辅助或 queryset；未来移动前必须补等价契约并保持预取性能 |
+| 禁止移动     | `check_access` 及 ACL projection、审计写入、Chain Event 写入、报告 snapshot / read receipt、`move_issue_state` | 涉及 ACL、审计、append-only 证据或跨通道合同；不得作为 C7 清理移动      |
+
 ## 5. 禁止事项
 
 - 不删除旧科研路由来减少文件数。
