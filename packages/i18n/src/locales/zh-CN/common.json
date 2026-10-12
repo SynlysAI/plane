@@ -1307,6 +1307,7 @@
         "unmapped_node": "未映射节点",
         "stage_detail_title": "阶段详情",
         "stage_nodes": "阶段节点",
+        "records_title": "记录",
         "stage_node_count": "关联节点 {count} 个",
         "stage_empty": "该阶段尚未产生实际节点。",
         "stage_snapshot": "阶段快照",
@@ -1602,6 +1603,9 @@
     },
     "knowledge": {
       "panel_title": "RAGPortal 知识库",
+      "materials_title": "课题资料",
+      "add_material": "新增资料",
+      "upload_file": "上传",
       "reasons": {
         "not_configured": "服务尚未配置",
         "unauthorized": "认证失败",

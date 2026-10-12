@@ -207,17 +207,17 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   expect(container.textContent).not.toContain("人类决策");
   expect(container.textContent).toContain("R2");
   expect(container.textContent).toContain("阶段节点");
-  expect(container.textContent).toContain("快照");
-  expect(container.textContent).toContain("过程记录");
-  expect(container.textContent).toContain("证据");
-  expect(container.textContent).toContain("空项");
+  expect(container.textContent).toContain("记录");
 
   const clickCount = async (label: string) => {
     await act(async () => {
       [...container.querySelectorAll("button")].find((item) => item.textContent?.startsWith(label))?.click();
     });
   };
-  await clickCount("证据");
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('button[aria-label="记录"]')?.click();
+  });
+  expect(container.textContent).toContain("证据");
   expect(container.textContent).toContain("输入");
   expect(container.textContent).toContain("人类决策");
   await clickCount("快照");
@@ -229,18 +229,8 @@ it("opens node evidence and runs lifecycle actions through the service", async (
     container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
   ).toBe("page");
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
-  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual([
-    "概览",
-    "节点",
-    "课题资料",
-    "成员",
-  ]);
-  const agentLinks = Array.from(container.querySelectorAll("a")).filter((item) => item.textContent === "请智能体分析");
-  expect(agentLinks.map((item) => item.getAttribute("href"))).toEqual([
-    "/lab/research/chains/chain-1/nodes/node-1/agent",
-    "/lab/research/chains/chain-1/nodes/node-1/agent",
-  ]);
-  expect(agentLinks.every((item) => item.getAttribute("target") === "_blank")).toBe(true);
+  expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(["概览", "节点", "成员"]);
+  expect(container.textContent).not.toContain("请智能体分析");
   expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-node")).toBe("node-1");
   expect(container.querySelector('[data-testid="paper-review-panel"]')).toBeNull();
   expect(container.textContent).not.toContain("记录与知识库");
@@ -287,7 +277,7 @@ it("mounts the paper review panel with selected node events for paper writing re
   expect(container.querySelector('[aria-current="step"]')?.textContent).toContain("论文写作");
 });
 
-it("keeps the scoped knowledge upload entry on the references tab", async () => {
+it("shows the scoped knowledge upload below the selected node tasks", async () => {
   mocks.query = "tab=references&node=node-1";
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   await act(async () => {
@@ -298,6 +288,7 @@ it("keeps the scoped knowledge upload entry on the references tab", async () => 
   const panel = container.querySelector('[data-testid="chain-knowledge-panel"]');
   expect(panel?.getAttribute("data-chain")).toBe("chain-1");
   expect(panel?.getAttribute("data-node")).toBe("node-1");
+  expect(container.querySelectorAll("nav a").length).toBe(3);
 });
 
 it("navigates to an empty stage through the workflow itself", async () => {
@@ -330,8 +321,11 @@ it("normalizes legacy replay links into the workflow detail view", async () => {
     container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
   ).toBe("page");
   expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).not.toContain("回放");
-  expect(container.textContent).toContain("快照");
+  expect(container.textContent).not.toContain("快照");
   expect(container.textContent).not.toContain("文献快照");
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((item) => item.textContent?.includes("记录"))?.click();
+  });
   await act(async () => {
     [...container.querySelectorAll("button")].find((item) => item.textContent?.startsWith("快照"))?.click();
   });
@@ -353,18 +347,17 @@ it("renders the fixed thirteen-stage workflow even when later stages have no nod
   expect(workflow?.querySelector('[aria-current="step"]')?.textContent).toContain("文献调研");
 });
 
-it("uses bounded node types and preserves the page when creation fails", async () => {
+it("creates a titled node from the stage plus without exposing a node type selector", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   mocks.createChainNode.mockRejectedValueOnce(new Error("invalid type"));
   await act(async () => {
     root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
   });
 
-  const typeSelect = container.querySelector("select");
-  expect(typeSelect).not.toBeNull();
-  const typeOptions = [...((typeSelect as HTMLSelectElement | null)?.options ?? [])];
-  expect(typeOptions.map((option) => option.value)).not.toContain("not-a-research-node");
-
+  const createTrigger = container.querySelector<HTMLButtonElement>('button[aria-label="创建研究节点"]');
+  expect(createTrigger).not.toBeNull();
+  await act(async () => createTrigger?.click());
+  expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
   const titleInput = container.querySelector('input[placeholder="文献调研、实验或分析"]');
   const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
   await act(async () => {
@@ -375,7 +368,12 @@ it("uses bounded node types and preserves the page when creation fails", async (
     [...container.querySelectorAll("button")].find((button) => button.textContent === "创建节点")?.click();
   });
 
-  expect(mocks.createChainNode).toHaveBeenCalled();
+  expect(mocks.createChainNode).toHaveBeenCalledWith("lab", "chain-1", {
+    node_type: "LITERATURE_REVIEW",
+    title: "新节点",
+    parent_node_id: "node-1",
+    loop_iteration: 1,
+  });
   expect(container.textContent).toContain("文献调研");
   expect(container.textContent).toContain("操作未完成，请根据提示修改后重试；当前页面内容已保留。");
   expect(container.textContent).not.toContain("无法加载");
@@ -404,9 +402,9 @@ it("explains that a failure or return reason is required before sending the tran
 
 it("aliases the old material tabs and explains an empty draft snapshot", async () => {
   const { ResearchChainDetail, resolveChainTab } = await import("@/components/research/chains/research-chain-detail");
-  expect(resolveChainTab("references")).toBe("materials");
-  expect(resolveChainTab("reports")).toBe("materials");
-  expect(resolveChainTab("experiments")).toBe("materials");
+  expect(resolveChainTab("references")).toBe("nodes");
+  expect(resolveChainTab("reports")).toBe("nodes");
+  expect(resolveChainTab("experiments")).toBe("nodes");
   expect(resolveChainTab("replay")).toBe("nodes");
   expect(resolveChainTab(null)).toBe("overview");
   expect(resolveChainTab("")).toBe("overview");
@@ -417,8 +415,12 @@ it("aliases the old material tabs and explains an empty draft snapshot", async (
   });
   await act(async () => undefined);
 
-  expect(container.textContent).toContain("空项");
+  expect(container.textContent).not.toContain("空项");
   expect(container.textContent).not.toContain("提交并确认本节点后生成版本，不能单独上传。");
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((item) => item.textContent?.includes("记录"))?.click();
+  });
+  expect(container.textContent).toContain("空项");
   await act(async () => {
     [...container.querySelectorAll("button")].find((item) => item.textContent?.startsWith("快照"))?.click();
   });
@@ -426,7 +428,7 @@ it("aliases the old material tabs and explains an empty draft snapshot", async (
   expect(container.textContent).not.toContain("该阶段暂无已确认快照");
 });
 
-it("keeps topic materials on one list filtered by the selected node", async () => {
+it("removes the topic materials tab and redirects legacy links to the node workspace", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   mocks.query = "tab=materials";
   await act(async () => {
@@ -434,12 +436,12 @@ it("keeps topic materials on one list filtered by the selected node", async () =
   });
   await act(async () => undefined);
 
-  expect(container.querySelector('[data-testid="chain-knowledge-panel"]')).toBeNull();
-  expect(container.textContent).toContain("选择来源节点后查看该节点的资料。");
-  expect(container.textContent).toContain("experiment-list");
+  expect(container.querySelector('[data-testid="chain-knowledge-panel"]')?.getAttribute("data-node")).toBe("node-1");
+  expect(container.textContent).not.toContain("experiment-list");
+  expect(container.querySelectorAll("nav a").length).toBe(3);
   expect(
     [...container.querySelectorAll("nav a")]
       .find((item) => item.textContent === "课题资料")
       ?.getAttribute("aria-current")
-  ).toBe("page");
+  ).toBeUndefined();
 });

@@ -1383,6 +1383,7 @@
         "unmapped_node": "Unmapped node",
         "stage_detail_title": "Stage detail",
         "stage_nodes": "Stage nodes",
+        "records_title": "Records",
         "stage_node_count": "{count} linked nodes",
         "stage_empty": "No node has been created for this stage yet.",
         "stage_snapshot": "Stage snapshot",
@@ -1578,6 +1579,9 @@
       }
     },
     "knowledge": {
+      "materials_title": "Topic materials",
+      "add_material": "Add file",
+      "upload_file": "Upload",
       "panel_title": "RAGPortal knowledge",
       "reasons": {
         "not_configured": "service is not configured",

@@ -4,8 +4,37 @@
 
 import os
 from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlparse
+
 import pytest
+
 from plane.settings.storage import S3Storage
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("region", [None, "", "us-east-1", "ap-southeast-1"])
+def test_minio_presigned_download_with_optional_region(monkeypatch, region):
+    monkeypatch.setenv("USE_MINIO", "1")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+    monkeypatch.setenv("AWS_S3_BUCKET_NAME", "uploads")
+    monkeypatch.setenv("AWS_S3_ENDPOINT_URL", "http://plane-minio:9000")
+    monkeypatch.setenv("MINIO_ENDPOINT_SSL", "0")
+    monkeypatch.setenv("WEB_URL", "http://localhost:3300")
+    if region is None:
+        monkeypatch.delenv("AWS_REGION", raising=False)
+    else:
+        monkeypatch.setenv("AWS_REGION", region)
+    request = Mock(scheme="http")
+    request.get_host.return_value = "localhost:3300"
+
+    storage = S3Storage(request=request)
+    url = storage.generate_presigned_url("reports/body.png")
+    parsed = urlparse(url)
+
+    assert parsed.netloc == "localhost:3300"
+    assert parse_qs(parsed.query)["X-Amz-Credential"][0].split("/")[2] == (region or "us-east-1")
+    assert storage.server_s3_client.meta.region_name == (region or "us-east-1")
 
 
 @pytest.mark.unit

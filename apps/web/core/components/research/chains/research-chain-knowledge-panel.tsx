@@ -4,14 +4,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FileText, Plus, RefreshCw, Upload, X } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // services
-import {
-  ResearchChainService,
-  type TResearchChainUpload,
-  type TResearchKnowledgeBase,
-} from "@/services/research/chain.service";
+import { ResearchChainService, type TResearchChainUpload } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
 
@@ -50,7 +47,6 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   nodeId,
 }: Props) {
   const { t } = useTranslation();
-  const [knowledgeBases, setKnowledgeBases] = useState<TResearchKnowledgeBase[]>([]);
   const [uploads, setUploads] = useState<TResearchChainUpload[]>([]);
   const [knowledgeBaseId, setKnowledgeBaseId] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -72,11 +68,10 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
         chainService.getKnowledgeBases(workspaceSlug, chainId),
         chainService.getKnowledgeUploads(workspaceSlug, chainId, nodeId),
       ]);
-      setKnowledgeBases(payload.items);
       setKnowledgeState(payload.state ?? KB_READY_STATE);
       setOrgUnitName(payload.orgUnitName ?? "");
       setConnectionStatus(payload.connectionStatus ?? "");
-      setKnowledgeBaseId((current) => current || payload.items[0]?.external_id || "");
+      setKnowledgeBaseId(payload.items[0]?.external_id ?? "");
       setUploads(uploadPayload.data);
       setDegradedReason(payload.degraded_reason ?? "");
       setState(payload.degraded ? "degraded" : "ready");
@@ -140,8 +135,14 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   };
 
   return (
-    <section className="rounded-lg border border-subtle bg-surface-1 p-4">
-      <h3 className="text-13 font-medium text-primary">{t("research.knowledge.panel_title")}</h3>
+    <section className="border-t border-subtle px-4 py-3" aria-label={t("research.knowledge.materials_title")}>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-baseline gap-2 text-13 font-semibold text-primary">
+          {t("research.knowledge.materials_title")}
+          {state !== "loading" && <span className="font-normal text-11 text-tertiary">{uploads.length}</span>}
+        </h3>
+        {orgUnitName && <span className="text-11 text-tertiary">{orgUnitName}</span>}
+      </header>
       {state === "loading" && <p className="mt-2 text-11 text-tertiary">{t("research.knowledge.loading")}</p>}
       {state === "forbidden" && <p className="mt-2 text-11 text-primary">{t("research.common.permission_denied")}</p>}
       {state === "error" && (
@@ -177,14 +178,6 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
             })}
           </p>
         )}
-      {state !== "loading" && state !== "forbidden" && (
-        <dl className="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-11">
-          <dt className="text-tertiary">{t("research.knowledge.candidate_team")}</dt>
-          <dd className="truncate text-secondary">{orgUnitName || "—"}</dd>
-          <dt className="text-tertiary">{t("research.knowledge.candidate_state")}</dt>
-          <dd className="text-secondary">{knowledgeState}</dd>
-        </dl>
-      )}
       {connectionStatus === "not_connected" && state !== "loading" && state !== "forbidden" && (
         <p className="mt-2 text-11 text-tertiary" role="status">
           {t("research.knowledge.ragportal_not_connected")}
@@ -195,91 +188,91 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
           {actionError}
         </p>
       )}
-      {state !== "loading" && state !== "forbidden" && (
+      {(state === "ready" || state === "degraded") && (
         <>
-          <div className="mt-3 grid grid-cols-1 gap-2">
-            <label className="flex flex-col gap-1 text-11 text-secondary">
-              {t("research.knowledge.kb_label")}
-              <select
-                value={knowledgeBaseId}
-                onChange={(event) => setKnowledgeBaseId(event.target.value)}
-                className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
-              >
-                {knowledgeBases.map((knowledgeBase) => (
-                  <option key={knowledgeBase.external_id} value={knowledgeBase.external_id}>
-                    {knowledgeBase.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {knowledgeBases.length === 0 &&
-              connectionStatus !== "not_connected" &&
-              connectionStatus !== "connected" && (
-                <p className="text-11 text-tertiary" role="status">
-                  {t("research.knowledge.no_knowledge_bases")}
-                </p>
-              )}
-            <label className="flex flex-col gap-1 text-11 text-secondary">
-              {t("research.knowledge.file_label")}
-              <input
-                type="file"
-                accept=".pdf,.md,.markdown,.txt,.doc,.docx"
-                ref={fileInputRef}
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                className="hidden"
-                disabled={knowledgeState !== KB_READY_STATE}
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={knowledgeState !== KB_READY_STATE}
-                  className="rounded border border-subtle px-3 py-2 text-12 text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {t("research.knowledge.select_file")}
-                </button>
-                <span className="truncate text-11 text-tertiary" aria-live="polite">
-                  {file ? file.name : t("research.knowledge.no_file_selected")}
-                </span>
-              </div>
-            </label>
-            <button
-              type="button"
-              onClick={() => void submitUpload()}
-              disabled={!file || !knowledgeBaseId || uploading || knowledgeState !== KB_READY_STATE}
-              className="rounded-md bg-accent-primary px-3 py-2 text-12 text-on-color disabled:opacity-50"
-            >
-              {uploading ? t("research.knowledge.uploading") : t("research.knowledge.upload")}
-            </button>
-          </div>
+          {!knowledgeBaseId && knowledgeState === KB_READY_STATE && (
+            <p className="mt-2 text-11 text-tertiary" role="status">
+              {t("research.knowledge.no_knowledge_bases")}
+            </p>
+          )}
           {uploads.length > 0 && (
-            <ul className="mt-3 space-y-2" role="list">
+            <ul className="mt-3 border-t border-subtle" role="list">
               {uploads.map((uploadRecord) => (
-                <li key={uploadRecord.id} className="rounded-md border border-subtle p-3">
-                  <p className="text-11 font-medium text-primary">{uploadRecord.file_name}</p>
-                  <p className="mt-1 text-11 text-tertiary">{uploadRecord.status}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                <li key={uploadRecord.id} className="flex flex-wrap items-center gap-2 border-b border-subtle py-2">
+                  <FileText className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
+                  <p className="min-w-0 flex-1 text-12 break-all text-primary">{uploadRecord.file_name}</p>
+                  <span className="text-11 text-secondary">{uploadRecord.status}</span>
+                  <button
+                    type="button"
+                    onClick={() => void refresh(uploadRecord.id)}
+                    title={t("research.knowledge.refresh_status")}
+                    aria-label={t("research.knowledge.refresh_status")}
+                    className="flex size-7 items-center justify-center rounded-sm text-secondary hover:bg-surface-2"
+                  >
+                    <RefreshCw className="size-3.5" aria-hidden="true" />
+                  </button>
+                  {uploadRecord.knowledge_id && (
                     <button
                       type="button"
-                      onClick={() => void refresh(uploadRecord.id)}
-                      className="rounded border border-subtle px-2 py-1 text-11 text-secondary"
+                      onClick={() => void confirm(uploadRecord)}
+                      className="px-1 py-1 text-11 text-secondary hover:text-primary"
                     >
-                      {t("research.knowledge.refresh_status")}
+                      {t("research.knowledge.confirm_reference")}
                     </button>
-                    {uploadRecord.knowledge_id && (
-                      <button
-                        type="button"
-                        onClick={() => void confirm(uploadRecord)}
-                        className="rounded border border-subtle px-2 py-1 text-11 text-secondary"
-                      >
-                        {t("research.knowledge.confirm_reference")}
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </li>
               ))}
             </ul>
           )}
+          <input
+            type="file"
+            accept=".pdf,.md,.markdown,.txt,.doc,.docx"
+            aria-label={t("research.knowledge.select_file")}
+            ref={fileInputRef}
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            className="hidden"
+            disabled={!knowledgeBaseId || knowledgeState !== KB_READY_STATE || uploading}
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!knowledgeBaseId || knowledgeState !== KB_READY_STATE || uploading}
+              className="inline-flex items-center gap-1 py-2 text-12 text-secondary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus className="size-3.5" aria-hidden="true" />
+              {t("research.knowledge.add_material")}
+            </button>
+            {file && (
+              <>
+                <span className="max-w-full min-w-0 text-12 break-all text-primary" aria-live="polite">
+                  {file.name}
+                </span>
+                <button
+                  type="button"
+                  disabled={uploading}
+                  title={t("research.chain_tasks.cancel_edit")}
+                  aria-label={t("research.chain_tasks.cancel_edit")}
+                  onClick={() => {
+                    setFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="flex size-7 items-center justify-center rounded-sm text-tertiary hover:bg-surface-2 disabled:opacity-50"
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => void submitUpload()}
+              disabled={!file || !knowledgeBaseId || uploading || knowledgeState !== KB_READY_STATE}
+              className="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-12 text-accent-primary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Upload className="size-3.5" aria-hidden="true" />
+              {uploading ? t("research.knowledge.uploading") : t("research.knowledge.upload_file")}
+            </button>
+          </div>
         </>
       )}
     </section>
