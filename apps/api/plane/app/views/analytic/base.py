@@ -32,6 +32,8 @@ from plane.db.models import (
 from plane.utils.analytics_plot import build_graph_plot, VALID_ANALYTICS_FIELDS, VALID_YAXIS
 from plane.utils.issue_filters import issue_filters
 from plane.app.permissions import allow_permission, ROLE
+from plane.utils.administrative_project_overview import OVERVIEW_FIELDS, administrative_overview_annotations
+from plane.utils.administrative_projects import administrative_projects, restrict_administrative_project_visibility
 
 
 class AnalyticsEndpoint(BaseAPIView):
@@ -394,23 +396,28 @@ class ProjectStatsEndpoint(BaseAPIView):
         fields = request.GET.get("fields", "").split(",")
         project_ids = request.GET.get("project_ids", "")
 
-        valid_fields = {
+        default_fields = {
             "total_issues",
             "completed_issues",
             "total_members",
             "total_cycles",
             "total_modules",
         }
-        requested_fields = set(filter(None, fields)) & valid_fields
+        requested_fields = set(filter(None, fields)) & (default_fields | OVERVIEW_FIELDS)
 
         if not requested_fields:
-            requested_fields = valid_fields
+            requested_fields = default_fields
 
         projects = Project.objects.filter(workspace__slug=slug)
         if project_ids:
             projects = projects.filter(id__in=project_ids.split(","))
 
         annotations = {}
+        if requested_fields & OVERVIEW_FIELDS:
+            projects = restrict_administrative_project_visibility(projects, request.user, slug).filter(
+                archived_at__isnull=True, id__in=administrative_projects(slug).values("id")
+            )
+            annotations.update(administrative_overview_annotations(request.user, slug, requested_fields))
         if "total_issues" in requested_fields:
             annotations["total_issues"] = (
                 Issue.issue_objects.filter(project_id=OuterRef("pk"))

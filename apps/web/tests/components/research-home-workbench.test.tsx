@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   fetchReportSummary: vi.fn(),
   getChains: vi.fn(),
   fetchProjects: vi.fn(),
+  fetchProjectAnalyticsCount: vi.fn(),
   researchIdentity: {
     module_enabled: true,
     workspace_enabled: true,
@@ -57,7 +58,10 @@ vi.mock("@/hooks/store/use-research", () => {
   return { useResearch: () => researchStore };
 });
 vi.mock("@/hooks/store/use-project", () => {
-  const projectStore = { fetchProjects: mocks.fetchProjects };
+  const projectStore = {
+    fetchProjects: mocks.fetchProjects,
+    fetchProjectAnalyticsCount: mocks.fetchProjectAnalyticsCount,
+  };
   return { useProject: () => projectStore };
 });
 vi.mock("@/services/research/chain.service", () => ({
@@ -144,6 +148,9 @@ beforeEach(() => {
   mocks.fetchProjects.mockResolvedValue([
     project(),
     project({ id: "research-project", name: "科研项目内部 Project", is_research_project: true }),
+  ]);
+  mocks.fetchProjectAnalyticsCount.mockResolvedValue([
+    { id: "admin-project", open_issues: 3, done_issues: 2, last_activity_at: "2026-10-11T08:30:00Z" },
   ]);
   mocks.fetchReportSummary.mockResolvedValue({
     period_key: "2026-W41",
@@ -281,6 +288,7 @@ it("shows the compact report submission summary and refreshes the workbench", as
   await act(async () => refresh?.click());
   expect(mocks.getChains).toHaveBeenCalledTimes(2);
   expect(mocks.fetchProjects).toHaveBeenCalledTimes(2);
+  expect(mocks.fetchProjectAnalyticsCount).toHaveBeenCalledTimes(2);
   expect(mocks.fetchReportSummary).toHaveBeenCalledTimes(2);
 });
 
@@ -293,4 +301,102 @@ it("uses a neutral research empty state when the caller has no research access",
   expect(container.textContent).toContain("当前账号没有科研数据访问权限。");
   expect(container.textContent).toContain("设备采购协作");
   expect(container.textContent).not.toContain("催化剂失活机理研究");
+});
+
+it("loads administrative work statistics in one batch and shows dates and counts", async () => {
+  await renderHome();
+  expect(mocks.fetchProjectAnalyticsCount).toHaveBeenCalledWith("lab", {
+    project_ids: "admin-project",
+    fields: "open_issues,done_issues,last_activity_at",
+  });
+  const section = [...container.querySelectorAll("section")].find((entry) =>
+    entry.textContent?.includes("行政项目概览")
+  );
+  expect(section?.textContent).toContain("最近更新：");
+  expect(section?.textContent).toContain("2026/10/11");
+  expect(section?.textContent).toContain("未完成 3 项");
+  expect(section?.textContent).toContain("已完成 2 项");
+  expect(section?.querySelector('a[href="/lab/projects/admin-project/issues"]')).not.toBeNull();
+});
+
+it("sorts by work activity, keeps ties stable, and includes older unarchived projects", async () => {
+  mocks.fetchProjects.mockResolvedValue([
+    project({ id: "old", name: "旧项目", updated_at: "2025-01-01" }),
+    project({ id: "tie-a", name: "同时间甲" }),
+    project({ id: "new", name: "最近项目", updated_at: "2025-01-01" }),
+    project({ id: "tie-b", name: "同时间乙" }),
+    project({ id: "archived", name: "已归档项目", archived_at: "2026-10-01" }),
+    project({ id: "research", name: "科研内部项目", is_research_project: true }),
+  ]);
+  mocks.fetchProjectAnalyticsCount.mockResolvedValue([
+    { id: "old", open_issues: 0, done_issues: 0, last_activity_at: "2025-01-01T00:00:00Z" },
+    { id: "tie-a", open_issues: 1, done_issues: 0, last_activity_at: "2026-10-09T00:00:00Z" },
+    { id: "new", open_issues: 2, done_issues: 3, last_activity_at: "2026-10-12T00:00:00Z" },
+    { id: "tie-b", open_issues: 0, done_issues: 1, last_activity_at: "2026-10-09T00:00:00Z" },
+  ]);
+  await renderHome();
+  const names = () => [...container.querySelectorAll('a[href$="/issues"]')].map((entry) => entry.textContent);
+  expect(names()).toEqual(["最近项目", "同时间甲", "同时间乙", "旧项目"]);
+  expect(container.textContent).not.toContain("已归档项目");
+  expect(container.textContent).not.toContain("科研内部项目");
+  const allPeriod = [...container.querySelectorAll("button")].find((entry) => entry.textContent === "全部");
+  await act(async () => allPeriod?.click());
+  expect(names()).toEqual(["最近项目", "同时间甲", "同时间乙", "旧项目"]);
+  const detailed = [...container.querySelectorAll("button")].find((entry) => entry.textContent === "详细");
+  await act(async () => detailed?.click());
+  expect(container.textContent).toContain("未完成 2 项");
+  expect(mocks.fetchProjectAnalyticsCount).toHaveBeenCalledTimes(1);
+});
+
+it("retains project links when statistics fail without inventing zero counts", async () => {
+  mocks.fetchProjectAnalyticsCount.mockRejectedValue(new Error("unavailable"));
+  await renderHome();
+  expect(container.textContent).toContain("设备采购协作");
+  expect(container.textContent).toContain("概览暂不可用");
+  expect(container.textContent).toContain("最近更新：-");
+  expect(container.textContent).not.toContain("未完成 0 项");
+  expect(container.querySelector('a[href="/lab/projects/admin-project/issues"]')).not.toBeNull();
+});
+
+it("handles missing statistics and invalid dates without breaking the home", async () => {
+  mocks.fetchProjects.mockResolvedValue([project(), project({ id: "missing", name: "缺失概览项目" })]);
+  mocks.fetchProjectAnalyticsCount.mockResolvedValue([
+    { id: "admin-project", open_issues: 0, done_issues: 0, last_activity_at: "invalid-date" },
+  ]);
+  await renderHome();
+  expect(container.textContent).toContain("未完成 0 项");
+  expect(container.textContent).toContain("已完成 0 项");
+  expect(container.textContent).toContain("最近更新：-");
+  expect(container.textContent).toContain("缺失概览项目");
+  expect(container.textContent).toContain("概览暂不可用");
+});
+
+it("does not request statistics for an empty list or failed project fetch", async () => {
+  mocks.fetchProjects.mockResolvedValue([]);
+  await renderHome();
+  expect(container.textContent).toContain("暂无行政项目。");
+  expect(mocks.fetchProjectAnalyticsCount).not.toHaveBeenCalled();
+  mocks.fetchProjects.mockRejectedValue(new Error("unavailable"));
+  const refresh = [...container.querySelectorAll("button")].find((entry) => entry.textContent === "刷新");
+  await act(async () => refresh?.click());
+  expect(container.textContent).toContain("行政项目摘要暂时不可用");
+  expect(mocks.fetchProjectAnalyticsCount).not.toHaveBeenCalled();
+});
+
+it("ignores an older statistics response after refresh", async () => {
+  let resolveOld!: (value: unknown) => void;
+  mocks.fetchProjectAnalyticsCount.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      })
+  );
+  await renderHome();
+  const refresh = [...container.querySelectorAll("button")].find((entry) => entry.textContent === "刷新");
+  await act(async () => refresh?.click());
+  await act(async () =>
+    resolveOld([{ id: "admin-project", open_issues: 99, done_issues: 99, last_activity_at: "2026-10-12T00:00:00Z" }])
+  );
+  expect(container.textContent).toContain("未完成 3 项");
+  expect(container.textContent).not.toContain("未完成 99 项");
 });

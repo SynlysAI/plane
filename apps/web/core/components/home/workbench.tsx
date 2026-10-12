@@ -7,11 +7,15 @@ import Link from "next/link";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
-import type { TProject, TReportSummary, TResearchChain } from "@plane/types";
+import type { TProject, TProjectAnalyticsCount, TReportSummary, TResearchChain } from "@plane/types";
 // components
 import { HomeSectionCard, type THomeDensity } from "@/components/home/home-section-card";
 import { RecentActivityWidget } from "@/components/home/widgets/recents";
-import { formatResearchDate, formatResearchTime } from "@/components/research/common/research-format";
+import {
+  formatResearchDate,
+  formatResearchReadAt,
+  formatResearchTime,
+} from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
@@ -52,7 +56,7 @@ function readStoredDensity(): THomeDensity {
 export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({ workspaceSlug }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
-  const { fetchProjects } = useProject();
+  const { fetchProjects, fetchProjectAnalyticsCount } = useProject();
   const [period, setPeriod] = useState<TPeriod>("30");
   const [density, setDensity] = useState<THomeDensity>(readStoredDensity);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -60,6 +64,8 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const [chains, setChains] = useState<TResearchChain[]>([]);
   const [chainState, setChainState] = useState<TLoadState>("loading");
   const [administrativeProjects, setAdministrativeProjects] = useState<TProject[]>([]);
+  const [administrativeStats, setAdministrativeStats] = useState<Record<string, TProjectAnalyticsCount>>({});
+  const [administrativeStatsLoading, setAdministrativeStatsLoading] = useState(false);
   const [administrativeState, setAdministrativeState] = useState<TLoadState>("loading");
   const [reportSummary, setReportSummary] = useState<TReportSummary | null>(null);
   const [reportState, setReportState] = useState<TLoadState>("loading");
@@ -101,18 +107,36 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const loadAdministrativeProjects = useCallback(async () => {
     const version = ++administrativeVersion.current;
     setAdministrativeState("loading");
+    setAdministrativeStats({});
+    setAdministrativeStatsLoading(false);
     try {
       const result = await fetchProjects(workspaceSlug);
       if (administrativeVersion.current !== version) return;
       const administrative = result.filter((project) => !project.is_research_project && !project.archived_at);
       setAdministrativeProjects(administrative);
       setAdministrativeState(administrative.length ? "ready" : "empty");
+      if (!administrative.length) return;
+      setAdministrativeStatsLoading(true);
+      try {
+        const stats = await fetchProjectAnalyticsCount(workspaceSlug, {
+          project_ids: administrative.map((project) => project.id).join(","),
+          fields: "open_issues,done_issues,last_activity_at",
+        });
+        if (administrativeVersion.current !== version) return;
+        setAdministrativeStats(Object.fromEntries(stats.map((entry) => [entry.id, entry])));
+      } catch {
+        // 项目列表仍可使用，统计失败时显示未知而非零值。
+        if (administrativeVersion.current !== version) return;
+        setAdministrativeStats({});
+      } finally {
+        if (administrativeVersion.current === version) setAdministrativeStatsLoading(false);
+      }
     } catch {
       if (administrativeVersion.current !== version) return;
       setAdministrativeProjects([]);
       setAdministrativeState("error");
     }
-  }, [fetchProjects, workspaceSlug]);
+  }, [fetchProjects, fetchProjectAnalyticsCount, workspaceSlug]);
 
   const loadReportSummary = useCallback(async () => {
     if (!canSeeSummary) {
@@ -143,6 +167,9 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
 
   useEffect(() => {
     void loadAdministrativeProjects();
+    return () => {
+      administrativeVersion.current += 1;
+    };
   }, [loadAdministrativeProjects, refreshToken]);
 
   useEffect(() => {
@@ -169,6 +196,12 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   }, [density]);
 
   const summaryHref = `/${workspaceSlug}/research/reports/summary`;
+  // oxlint-disable-next-line unicorn/no-array-sort -- 当前 TypeScript lib 不支持 toSorted，排序副本避免修改原列表。
+  const sortedAdministrativeProjects = [...administrativeProjects].sort((left, right) => {
+    const leftTime = administrativeStats[left.id]?.last_activity_at;
+    const rightTime = administrativeStats[right.id]?.last_activity_at;
+    return (rightTime ? Date.parse(rightTime) || 0 : 0) - (leftTime ? Date.parse(leftTime) || 0 : 0);
+  });
   const todosHref = `/${workspaceSlug}/research/todos`;
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
@@ -374,19 +407,46 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
           )}
           {administrativeState === "ready" && (
             <ul className="divide-y divide-subtle" role="list">
-              {administrativeProjects.map((project) => (
-                <li key={project.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-1">
+              {sortedAdministrativeProjects.map((project) => (
+                <li key={project.id} className="min-w-0 px-4 py-3 hover:bg-surface-1">
                   <Link
                     href={`/${workspaceSlug}/projects/${project.id}/issues`}
-                    className="min-w-0 truncate text-13 font-medium text-primary hover:text-accent-primary"
+                    className="block min-w-0 text-13 font-medium break-words text-primary hover:text-accent-primary"
                   >
                     {project.name}
                   </Link>
-                  <span className="shrink-0 text-11 text-tertiary tabular-nums">
-                    {project.updated_at
-                      ? formatResearchDate(new Date(project.updated_at).toISOString(), currentLocale)
-                      : "-"}
-                  </span>
+                  <p className="mt-1 text-11 text-tertiary tabular-nums">
+                    {t("research.home_workbench.administrative_updated_at", {
+                      value:
+                        formatResearchReadAt(administrativeStats[project.id]?.last_activity_at, currentLocale) || "-",
+                    })}
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-11 text-secondary tabular-nums">
+                    {typeof administrativeStats[project.id]?.open_issues === "number" &&
+                    typeof administrativeStats[project.id]?.done_issues === "number" ? (
+                      <>
+                        <span>
+                          {t("research.home_workbench.administrative_open_issues", {
+                            count: administrativeStats[project.id].open_issues,
+                          })}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          {t("research.home_workbench.administrative_done_issues", {
+                            count: administrativeStats[project.id].done_issues,
+                          })}
+                        </span>
+                      </>
+                    ) : (
+                      <span>
+                        {t(
+                          administrativeStatsLoading
+                            ? "loading"
+                            : "research.home_workbench.administrative_stats_unavailable"
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

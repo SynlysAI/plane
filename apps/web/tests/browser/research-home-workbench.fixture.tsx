@@ -116,7 +116,24 @@ ProjectService.prototype.getProjects = async () =>
       is_research_project: false,
       updated_at: new Date(now),
     },
+    {
+      id: "admin-project-2",
+      name: "实验室设备维护与耗材采购报销进度协调项目ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      archived_at: null,
+      is_research_project: false,
+    },
+    {
+      id: "admin-project-3",
+      name: "历史办公协作",
+      archived_at: null,
+      is_research_project: false,
+    },
   ] as never;
+ProjectService.prototype.getProjectAnalyticsCount = async () => [
+  { id: "admin-project-1", open_issues: 3, done_issues: 2, last_activity_at: "2026-10-11T08:30:00Z" },
+  { id: "admin-project-2", open_issues: 12, done_issues: 8, last_activity_at: "2026-10-12T03:15:00Z" },
+  { id: "admin-project-3", open_issues: 0, done_issues: 5, last_activity_at: "2025-09-01T02:00:00Z" },
+];
 WorkspaceService.prototype.fetchWorkspaceRecents = async () => [
   {
     id: "recent-project",
