@@ -4,16 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 // plane helpers
 import { useTranslation } from "@plane/i18n";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { cn } from "@plane/utils";
-import { PreferencesOutline, SettingsOutline } from "@makeplane/propel/icons";
+import { SettingsOutline } from "@makeplane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
-// components
-import { CustomizeNavigationDialog } from "@/components/navigation/customize-navigation-dialog";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import useSize from "@/hooks/use-window-size";
@@ -22,7 +20,6 @@ import { getGodModeUrl } from "@/helpers/admin-url.helper";
 // plane web components
 import { WorkspaceEditionBadge } from "@/components/workspace/edition-badge";
 import { AppSidebarToggleButton } from "./sidebar-toggle-button";
-import { IconButton } from "@plane/propel/icon-button";
 
 type TSidebarWrapperProps = {
   title: string;
@@ -34,8 +31,6 @@ type TSidebarWrapperProps = {
 export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWrapperProps) {
   const { title, children, quickActions, contentLayout = "scroll" } = props;
   const fillsAvailableHeight = contentLayout === "fill";
-  // state
-  const [isCustomizeNavDialogOpen, setIsCustomizeNavDialogOpen] = useState(false);
   // store hooks
   const { toggleSidebar, sidebarCollapsed } = useAppTheme();
   const isInstanceAdmin = useInstanceAdmin();
@@ -57,7 +52,6 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
 
   return (
     <>
-      <CustomizeNavigationDialog isOpen={isCustomizeNavDialogOpen} onClose={() => setIsCustomizeNavDialogOpen(false)} />
       <div ref={ref} className="flex h-full w-full animate-fade-in flex-col">
         <div className={cn("flex flex-col gap-3 px-3", { "shrink-0": fillsAvailableHeight })}>
           {/* Workspace switcher and settings */}
@@ -65,14 +59,6 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
           <div className="flex items-center justify-between gap-2 px-2">
             <span className="pt-1 text-16 font-medium text-primary">{title}</span>
             <div className="flex items-center gap-2">
-              {title === "Projects" && (
-                <IconButton
-                  size="base"
-                  variant="ghost"
-                  icon={PreferencesOutline}
-                  onClick={() => setIsCustomizeNavDialogOpen(true)}
-                />
-              )}
               <AppSidebarToggleButton />
             </div>
           </div>
