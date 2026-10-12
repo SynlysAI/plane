@@ -18,7 +18,8 @@ from django.db import models
 from django.db.models.functions import Cast, Concat
 
 # Module imports
-from plane.db.models import Issue
+from plane.db.models import Issue, User
+from plane.utils.administrative_projects import visible_administrative_projects
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.analytics_plot import build_graph_plot
 from plane.utils.email import generate_plain_text_from_html
@@ -350,6 +351,10 @@ def generate_non_segmented_rows(
 def analytic_export_task(email, data, slug):
     try:
         filters = issue_filters(data, "POST")
+        user = User.objects.filter(email=email, is_active=True).first()
+        filters["project__id__in"] = visible_administrative_projects(user, slug).filter(
+            archived_at__isnull=True
+        ).values("id")
         queryset = Issue.issue_objects.filter(**filters, workspace__slug=slug)
 
         x_axis = data.get("x_axis", False)

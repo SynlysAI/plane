@@ -614,6 +614,44 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
             return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
         return Response(serialize_profile(profile), status=status.HTTP_200_OK)
 
+    def delete(self, request, slug, project_id):
+        from plane.research.utils.deletion import project_deletion_reason
+
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+        profile = self._get_profile(workspace, project_id)
+        if profile is None:
+            return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
+        if profile.owner_id != request.user.id and not is_workspace_admin(request.user, workspace.id):
+            return research_permission_denied()
+        with transaction.atomic():
+            project = Project.objects.select_for_update().get(pk=profile.project_id)
+            reason = project_deletion_reason(project)
+            if reason:
+                return research_conflict("research_delete_blocked", reason)
+            deleted_at = timezone.now()
+            # Mark only local scaffolding; do not cascade into immutable research evidence.
+            ResearchChain.objects.filter(project=project).update(deleted_at=deleted_at, updated_at=deleted_at)
+            ResearchProjectProfile.objects.filter(pk=profile.pk).update(
+                deleted_at=deleted_at, is_active=False, updated_at=deleted_at
+            )
+            ProjectMember.objects.filter(project=project).update(deleted_at=deleted_at, is_active=False)
+            ProjectIdentifier.objects.filter(project=project).update(deleted_at=deleted_at)
+            project.research_stage_instances.update(deleted_at=deleted_at)
+            project.deleted_at = deleted_at
+            project.save(update_fields=["deleted_at", "updated_at"])
+            record_audit_event(
+                workspace=workspace,
+                action="project.delete",
+                resource_type=ResearchResourceType.PROJECT_PROFILE,
+                resource_id=profile.pk,
+                actor=request.user,
+                metadata={"project": str(project.pk)},
+                request=request,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def patch(self, request, slug, project_id):
         workspace, error = self.get_workspace(section="reports")
         if error:

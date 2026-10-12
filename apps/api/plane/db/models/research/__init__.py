@@ -82,7 +82,7 @@ from .stage import (
     StageTransition,
     StageType,
 )
-from .task import ResearchChainNodeTask
+from .task import ResearchChainNodeTask, ResearchTaskComment
 from .template import ReportTemplate
 
 __all__ = [
@@ -167,4 +167,5 @@ __all__ = [
     "StageTransition",
     "StageType",
     "ResearchChainNodeTask",
+    "ResearchTaskComment",
 ]

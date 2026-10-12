@@ -27,6 +27,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("react-router", () => ({
+  useNavigate: () => vi.fn(),
   useSearchParams: () => [new URLSearchParams(mocks.query), mocks.setSearchParams],
 }));
 vi.mock("@plane/i18n", () => ({

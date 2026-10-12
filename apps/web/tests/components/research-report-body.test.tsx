@@ -6,6 +6,8 @@ import type { TPeriodicReport } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  deleteReport: vi.fn(),
   editorMigrationUpdate: false,
   reports: {} as Record<string, TPeriodicReport>,
   reportHistory: {},
@@ -22,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
+vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));

@@ -26,8 +26,9 @@ CHAIN_ACTIONS = (
     "agent_review",
     "archive",
     "restore",
+    "delete",
 )
-NODE_ACTIONS = ("view", "edit", "transition", "upload", "agent_review")
+NODE_ACTIONS = ("view", "edit", "transition", "upload", "agent_review", "delete")
 OPEN_NODE_TASK_STATUSES = ("DRAFT", "ASSIGNED", "SUBMITTED", "NEEDS_REVISION")
 
 
@@ -127,14 +128,17 @@ def _capabilities(serializer, obj, *, is_node=False):
         from plane.research.views.chain_foundation import _chain_writer, _chain_manager, _node_operator
 
         decisions.update(
+            delete=obj.status == "DRAFT" and _chain_manager(chain.workspace, actor, chain),
             transition=_node_operator(chain.workspace, actor, obj),
             upload=_chain_writer(chain.workspace, actor, chain),
             agent_review=decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
         )
         return capability_map(NODE_ACTIONS, decisions)
     from plane.research.views.chain_foundation import _chain_manager, _chain_writer
+    from plane.research.utils.org import is_workspace_admin
 
     decisions.update(
+        delete=chain.owner_id == actor.id or is_workspace_admin(actor, chain.workspace_id),
         upload=_chain_writer(chain.workspace, actor, chain),
         archive=_chain_manager(chain.workspace, actor, chain),
         restore=_chain_manager(chain.workspace, actor, chain),

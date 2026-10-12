@@ -41,6 +41,11 @@ export type TResearchProjectCreatePayload = {
 };
 
 export class ResearchProjectService extends APIService {
+  async deleteProject(workspaceSlug: string, projectId: string) {
+    return this.delete(researchEndpoints.project(workspaceSlug, projectId)).catch((error) => {
+      throw error?.response?.data ?? error;
+    });
+  }
   constructor() {
     super(API_BASE_URL);
   }

@@ -32,6 +32,24 @@ from plane.db.models import (
 from plane.utils.analytics_plot import build_graph_plot, VALID_ANALYTICS_FIELDS, VALID_YAXIS
 from plane.utils.issue_filters import issue_filters
 from plane.app.permissions import allow_permission, ROLE
+from plane.utils.administrative_projects import visible_administrative_projects
+
+
+def administrative_analytics_filters(user, slug, filters):
+    """为分析过滤条件附加不可绕过的行政项目范围。
+
+    Args:
+        user: 当前用户。
+        slug: 工作区别名。
+        filters: 用户提供的工作项筛选条件。
+
+    Returns:
+        保留用户条件并限制行政项目的过滤字典。
+    """
+    projects = visible_administrative_projects(user, slug).filter(archived_at__isnull=True)
+    if "project__id__in" in filters:
+        projects = projects.filter(id__in=filters["project__id__in"])
+    return {**filters, "project__id__in": projects.values("id")}
 
 
 class AnalyticsEndpoint(BaseAPIView):
@@ -56,7 +74,7 @@ class AnalyticsEndpoint(BaseAPIView):
             )
 
         # Additional filters that need to be applied
-        filters = issue_filters(request.GET, "GET")
+        filters = administrative_analytics_filters(request.user, slug, issue_filters(request.GET, "GET"))
 
         # Get the issues for the workspace with the additional filters applied
         queryset = Issue.issue_objects.filter(workspace__slug=slug, **filters)
@@ -191,8 +209,8 @@ class SavedAnalyticEndpoint(BaseAPIView):
     def get(self, request, slug, analytic_id):
         analytic_view = AnalyticView.objects.get(pk=analytic_id, workspace__slug=slug)
 
-        filter = analytic_view.query
-        queryset = Issue.issue_objects.filter(**filter)
+        filters = administrative_analytics_filters(request.user, slug, analytic_view.query)
+        queryset = Issue.issue_objects.filter(**filters).filter(workspace__slug=slug)
 
         x_axis = analytic_view.query_dict.get("x_axis", False)
         y_axis = analytic_view.query_dict.get("y_axis", False)
@@ -251,7 +269,7 @@ class ExportAnalyticsEndpoint(BaseAPIView):
 class DefaultAnalyticsEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def get(self, request, slug):
-        filters = issue_filters(request.GET, "GET")
+        filters = administrative_analytics_filters(request.user, slug, issue_filters(request.GET, "GET"))
         base_issues = Issue.issue_objects.filter(workspace__slug=slug, **filters)
 
         total_issues = base_issues.count()
@@ -406,7 +424,7 @@ class ProjectStatsEndpoint(BaseAPIView):
         if not requested_fields:
             requested_fields = valid_fields
 
-        projects = Project.objects.filter(workspace__slug=slug)
+        projects = visible_administrative_projects(request.user, slug).filter(archived_at__isnull=True)
         if project_ids:
             projects = projects.filter(id__in=project_ids.split(","))
 

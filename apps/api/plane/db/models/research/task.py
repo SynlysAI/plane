@@ -116,3 +116,21 @@ class ResearchChainNodeTask(BaseModel):
             errors["workspace"] = "Task workspace must match the chain workspace."
         if errors:
             raise ValidationError(errors)
+
+
+class ResearchTaskComment(BaseModel):
+    """Discussion attached to a research task, independent of its instruction."""
+
+    task = models.ForeignKey(ResearchChainNodeTask, on_delete=models.CASCADE, related_name="comments")
+    actor = models.ForeignKey("db.User", on_delete=models.PROTECT, related_name="research_task_comments")
+    comment_html = models.TextField()
+    comment_stripped = models.TextField()
+    edited_at = models.DateTimeField(null=True, blank=True)
+    request_id = models.CharField(max_length=128)
+
+    class Meta:
+        db_table = "research_task_comments"
+        ordering = ("created_at", "id")
+        constraints = [
+            models.UniqueConstraint(fields=["task", "actor", "request_id"], name="rsch_task_comment_request_uq")
+        ]

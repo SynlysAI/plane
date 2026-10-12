@@ -864,6 +864,11 @@
     }
   },
   "research": {
+    "deletion": {
+      "delete_named": "Delete {name}",
+      "confirm": "Delete \"{name}\"? It will be removed from the list. This action cannot be undone here.",
+      "blocked": "This record has submission history or related records. Remove its associations first, or archive it to preserve its history."
+    },
     "nav": {
       "group": "Research",
       "overview": "Research overview",
@@ -1420,6 +1425,17 @@
       }
     },
     "chain_tasks": {
+      "comments": {
+        "confirm_delete": "Delete this comment?",
+        "title": "Comments",
+        "placeholder": "Add a comment...",
+        "post": "Post comment",
+        "edited": "Edited",
+        "loading": "Loading comments...",
+        "load_failed": "Comments could not be loaded. Try again.",
+        "save_failed": "The comment could not be saved. Your draft has been preserved. Try again.",
+        "delete_failed": "The comment could not be deleted. Try again."
+      },
       "panel_title": "Research tasks",
       "panel_hint": "Tasks stay independent from node workflow while assignees, reviews, and return reasons stay together.",
       "loading": "Loading research tasks…",

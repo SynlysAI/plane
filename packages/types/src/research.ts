@@ -318,6 +318,20 @@ export type TResearchChainNodeTaskCreatePayload = {
 
 export type TResearchChainNodeTaskUpdatePayload = Partial<TResearchChainNodeTaskCreatePayload>;
 
+export type TResearchTaskComment = {
+  id: string;
+  task: string;
+  actor: string;
+  actor_detail: { id: string; display_name: string; avatar_url: string | null };
+  comment_html: string;
+  comment_stripped: string;
+  created_at: string;
+  updated_at: string;
+  edited_at: string | null;
+  can_edit: boolean;
+  can_delete: boolean;
+};
+
 export type TResearchChainNodeTask = {
   schema_version: "research-node-task.v1";
   id: string;
@@ -596,6 +610,7 @@ export type TPeriodicReport = {
   created_at: string;
   updated_at: string;
   can_edit?: boolean;
+  can_delete?: boolean;
   can_review?: boolean;
   attachment_count?: number;
   latest_official_version: number | null;
@@ -1328,6 +1343,7 @@ export type TResearchOutcomeLink = {
 };
 
 export type TResearchOutcome = {
+  can_delete?: boolean;
   id: string;
   workspace: string;
   project: string;

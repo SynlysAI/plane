@@ -11,6 +11,7 @@ from .. import BaseViewSet
 from plane.app.serializers import IssueSubscriberSerializer, ProjectMemberLiteSerializer
 from plane.app.permissions import ProjectEntityPermission, ProjectLitePermission
 from plane.db.models import IssueSubscriber, ProjectMember
+from plane.research.utils.project_review import project_member_filters
 
 
 class IssueSubscriberViewSet(BaseViewSet):
@@ -41,8 +42,7 @@ class IssueSubscriberViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(issue_id=self.kwargs.get("issue_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                **project_member_filters(self.request.user, self.kwargs.get("slug"), self.kwargs.get("project_id")),
                 project__archived_at__isnull=True,
             )
             .order_by("-created_at")

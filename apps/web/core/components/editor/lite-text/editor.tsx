@@ -9,7 +9,7 @@ import React, { useState } from "react";
 import type { EIssueCommentAccessSpecifier } from "@plane/constants";
 // plane imports
 import { LiteTextEditorWithRef } from "@plane/editor";
-import type { EditorRefApi, ILiteTextEditorProps, TFileHandler } from "@plane/editor";
+import type { EditorRefApi, ILiteTextEditorProps, TFileHandler, TEditorCommands } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import type { MakeOptional } from "@plane/types";
 import { cn, isCommentEmpty } from "@plane/utils";
@@ -26,6 +26,10 @@ import { useEditorFlagging } from "@/hooks/use-editor-flagging";
 import { WorkspaceService } from "@/services/workspace.service";
 import { LiteToolbar } from "./lite-toolbar";
 const workspaceService = new WorkspaceService();
+
+function isMutableRefObject<T>(forwardedRef: React.ForwardedRef<T>): forwardedRef is React.MutableRefObject<T | null> {
+  return !!forwardedRef && typeof forwardedRef === "object" && "current" in forwardedRef;
+}
 
 type LiteTextEditorWrapperProps = MakeOptional<
   Omit<ILiteTextEditorProps, "fileHandler" | "mentionHandler" | "extendedEditorProps">,
@@ -45,6 +49,7 @@ type LiteTextEditorWrapperProps = MakeOptional<
   parentClassName?: string;
   editorClassName?: string;
   submitButtonText?: string;
+  disabledMenuItems?: TEditorCommands[];
 } & (
     | {
         editable: false;
@@ -81,6 +86,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
     editorClassName = "",
     showPlaceholderOnEmpty = true,
     submitButtonText = "common.comment",
+    disabledMenuItems,
     ...rest
   } = props;
   // states
@@ -111,9 +117,6 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   });
   // editor config
   const { getEditorFileHandlers } = useEditorConfig();
-  function isMutableRefObject<T>(ref: React.ForwardedRef<T>): ref is React.MutableRefObject<T | null> {
-    return !!ref && typeof ref === "object" && "current" in ref;
-  }
   // derived values
   const isEmpty = isCommentEmpty(props.initialValue);
 
@@ -200,6 +203,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
           )}
         >
           <IssueCommentToolbar
+            disabledMenuItems={disabledMenuItems}
             accessSpecifier={accessSpecifier}
             executeCommand={(item) => {
               // TODO: update this while toolbar homogenization

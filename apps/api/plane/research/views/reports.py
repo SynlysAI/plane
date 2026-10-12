@@ -614,6 +614,39 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
             status=status.HTTP_200_OK,
         )
 
+    def delete(self, request, slug, report_id):
+        from plane.research.utils.deletion import report_deletion_reason
+
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+        report, error = self._visible_report(request, workspace, report_id, action="delete")
+        if error:
+            return error
+        with transaction.atomic():
+            report = PeriodicReport.objects.select_for_update().get(pk=report.pk)
+            reason = report_deletion_reason(report)
+            if reason:
+                return research_conflict("research_delete_blocked", reason)
+            deleted_at = timezone.now()
+            report.deleted_at = deleted_at
+            report.save(update_fields=["deleted_at", "updated_at"])
+            report.page.deleted_at = deleted_at
+            report.page.save(update_fields=["deleted_at", "updated_at"])
+            report.page.project_pages.update(deleted_at=deleted_at)
+            report.team_project_references.update(deleted_at=deleted_at)
+            report.attachments.update(deleted_at=deleted_at)
+            record_audit_event(
+                workspace=workspace,
+                action="report.delete",
+                resource_type=ResearchResourceType.REPORT,
+                resource_id=report.pk,
+                actor=request.user,
+                metadata={"period_key": report.period_key},
+                request=request,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class ResearchReportSubmitEndpoint(ResearchAPIView):
     """``POST /api/research/workspaces/<slug>/reports/<report_id>/submit/``"""

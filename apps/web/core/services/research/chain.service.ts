@@ -214,6 +214,12 @@ export class ResearchChainService extends APIService {
       });
   }
 
+  async deleteChainNode(workspaceSlug: string, nodeId: string) {
+    return this.delete(researchEndpoints.chainNode(workspaceSlug, nodeId)).catch((error) => {
+      throw error?.response?.data ?? error;
+    });
+  }
+
   async transitionChainNode(workspaceSlug: string, nodeId: string, action: TResearchChainNodeAction, reason?: string) {
     return this.post(researchEndpoints.chainNodeTransitions(workspaceSlug, nodeId), {
       request_id: request_id(),

@@ -14,17 +14,24 @@ type TProps = {
   handleJoinProject: () => void;
   isJoinButtonDisabled: boolean;
   errorStatusCode: number | undefined;
+  isMembershipRequired?: boolean;
 };
 
 export const ProjectAccessRestriction = observer(function ProjectAccessRestriction(props: TProps) {
-  const { isWorkspaceAdmin, handleJoinProject, isJoinButtonDisabled, errorStatusCode } = props;
+  const {
+    isWorkspaceAdmin,
+    handleJoinProject,
+    isJoinButtonDisabled,
+    errorStatusCode,
+    isMembershipRequired = false,
+  } = props;
   // plane hooks
   const { t } = useTranslation();
 
   // Show join project screen if:
   // - User lacks project membership (409 Conflict)
   // - User lacks permission to access the private project (403 Forbidden) but is a workspace admin (can join any project)
-  if (errorStatusCode === 409 || (errorStatusCode === 403 && isWorkspaceAdmin))
+  if (!isMembershipRequired && (errorStatusCode === 409 || (errorStatusCode === 403 && isWorkspaceAdmin)))
     return (
       <div className="grid h-full w-full place-items-center bg-surface-1">
         <EmptyStateDetailed
@@ -47,7 +54,7 @@ export const ProjectAccessRestriction = observer(function ProjectAccessRestricti
 
   // Show no access screen if:
   // - User lacks permission to access the private project (403 Forbidden)
-  if (errorStatusCode === 403) {
+  if (errorStatusCode === 403 || isMembershipRequired) {
     return (
       <div className="grid h-full w-full place-items-center bg-surface-1">
         <EmptyStateDetailed

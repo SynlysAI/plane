@@ -11,6 +11,7 @@ import type {
   TResearchChainNodeTask,
   TResearchChainNodeTaskCreatePayload,
   TResearchChainNodeTaskUpdatePayload,
+  TResearchTaskComment,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
@@ -45,6 +46,54 @@ function unwrap<T>(response: unknown): T {
 export class ResearchChainTaskService extends APIService {
   constructor() {
     super(API_BASE_URL);
+  }
+
+  async getTaskComments(workspaceSlug: string, chainId: string, nodeId: string, taskId: string) {
+    return this.get(`${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}comments/`)
+      .then((response) => response.data as { results: TResearchTaskComment[]; can_comment: boolean })
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async createTaskComment(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    payload: { comment_html: string; request_id: string }
+  ) {
+    return this.post(`${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}comments/`, payload)
+      .then((response) => response.data as TResearchTaskComment)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async updateTaskComment(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    commentId: string,
+    comment_html: string
+  ) {
+    return this.patch(
+      `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}comments/${commentId}/`,
+      { comment_html }
+    )
+      .then((response) => response.data as TResearchTaskComment)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async deleteTaskComment(workspaceSlug: string, chainId: string, nodeId: string, taskId: string, commentId: string) {
+    return this.delete(
+      `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}comments/${commentId}/`
+    ).catch((error) => {
+      throw error?.response?.data ?? error;
+    });
   }
 
   async getNodeTasks(workspaceSlug: string, chainId: string, nodeId: string) {

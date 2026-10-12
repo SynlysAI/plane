@@ -864,6 +864,11 @@
     }
   },
   "research": {
+    "deletion": {
+      "delete_named": "删除 {name}",
+      "confirm": "确认删除“{name}”？删除后将从列表移除，无法在此撤销。",
+      "blocked": "此记录已有提交历史或关联数据，暂不能删除。请先解除关联；需要保留历史时请使用归档。"
+    },
     "nav": {
       "group": "科研",
       "overview": "科研总览",
@@ -1443,6 +1448,17 @@
       "org_unit": "所属组织"
     },
     "chain_tasks": {
+      "comments": {
+        "confirm_delete": "确认删除这条评论？",
+        "title": "评论",
+        "placeholder": "添加评论…",
+        "post": "发表评论",
+        "edited": "已编辑",
+        "loading": "正在加载评论…",
+        "load_failed": "评论加载失败，请重试。",
+        "save_failed": "评论保存失败，输入内容已保留，请重试。",
+        "delete_failed": "评论删除失败，请重试。"
+      },
       "panel_title": "科研任务",
       "panel_hint": "任务独立于节点流程，责任人、评审与退回原因在同一处追踪。",
       "loading": "正在加载科研任务…",

@@ -22,6 +22,7 @@ import {
 } from "@/components/research/common/research-data-surface";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { ResearchOutcomeService } from "@/services/research/outcome.service";
@@ -154,6 +155,15 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
                   </ResearchStatusBadge>
                 </TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">
+                  {outcome.can_delete && (
+                    <ResearchDeleteButton
+                      name={outcome.title}
+                      disabled={uploadingOutcomeId === outcome.id}
+                      onDelete={async () => {
+                        await research.deleteOutcome(workspaceSlug, outcome.id);
+                      }}
+                    />
+                  )}
                   <button
                     type="button"
                     className="mr-3 text-12 text-accent-primary hover:underline disabled:opacity-50"

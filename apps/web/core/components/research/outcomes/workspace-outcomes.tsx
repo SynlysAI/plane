@@ -16,6 +16,7 @@ import { ResearchOutcomeService } from "@/services/research/outcome.service";
 import { useResearch } from "@/hooks/store/use-research";
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 
 const service = new ResearchOutcomeService();
 type Page = {
@@ -165,6 +166,7 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
                 <th>状态</th>
                 <th>期刊/会议</th>
                 <th>发表/授权日期</th>
+                <th aria-label="操作" />
               </tr>
             </thead>
             <tbody>
@@ -179,6 +181,17 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
                   <td>{t(OUTCOME_STATUS_LABELS[outcome.status])}</td>
                   <td>{outcome.venue || "—"}</td>
                   <td>{outcome.published_at ?? "—"}</td>
+                  <td>
+                    {outcome.can_delete && (
+                      <ResearchDeleteButton
+                        name={outcome.title}
+                        onDelete={async () => {
+                          await service.deleteOutcome(workspaceSlug, outcome.id);
+                          setRefresh((value) => value + 1);
+                        }}
+                      />
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

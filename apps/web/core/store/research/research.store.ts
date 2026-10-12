@@ -118,6 +118,8 @@ export interface IResearchStore {
   mentorBindingIdsByWorkspace: Record<string, string[]>;
   reports: Record<string, TPeriodicReport>;
   reportIdsByWorkspace: Record<string, string[]>;
+  deleteReport: (workspaceSlug: string, reportId: string) => Promise<void>;
+  deleteResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   reportPaginationByWorkspace: Record<string, TPaginationInfo>;
   reportHistory: Record<string, TReportReviewLog[]>;
   reportAttachments: Record<string, TReportAttachment[]>;
@@ -712,6 +714,8 @@ export class ResearchStore implements IResearchStore {
       fetchReportAttachments: action,
       uploadReportAttachment: action,
       deleteReportAttachment: action,
+      deleteReport: action,
+      deleteResearchProject: action,
       importReportMarkdown: action,
       updateReportVisibility: action,
       fetchReportSummary: action,
@@ -1420,6 +1424,28 @@ export class ResearchStore implements IResearchStore {
   restoreResearchProject = async (workspaceSlug: string, projectId: string) => {
     await this.projectService.restoreProject(workspaceSlug, projectId);
     await this.fetchResearchProjects(workspaceSlug);
+  };
+
+  deleteResearchProject = async (workspaceSlug: string, projectId: string) => {
+    await this.projectService.deleteProject(workspaceSlug, projectId);
+    runInAction(() => {
+      delete this.researchProjects[projectId];
+      this.researchProjectIdsByWorkspace[workspaceSlug] = (
+        this.researchProjectIdsByWorkspace[workspaceSlug] ?? []
+      ).filter((id) => id !== projectId);
+    });
+  };
+
+  deleteReport = async (workspaceSlug: string, reportId: string) => {
+    await this.reportService.deleteReport(workspaceSlug, reportId);
+    runInAction(() => {
+      delete this.reports[reportId];
+      delete this.reportHistory[reportId];
+      delete this.reportAttachments[reportId];
+      this.reportIdsByWorkspace[workspaceSlug] = (this.reportIdsByWorkspace[workspaceSlug] ?? []).filter(
+        (id) => id !== reportId
+      );
+    });
   };
 
   // ---------------------------------------------------------------------

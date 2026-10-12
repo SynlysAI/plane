@@ -32,6 +32,7 @@ import {
 } from "@/components/research/common/research-data-surface";
 import { ResearchListState } from "@/components/research/common/research-list-state";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 import { ResearchProjectCreateDialog } from "@/components/research/projects/research-project-create-dialog";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -326,6 +327,15 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                   </TableCell>
                   <TableCell className="text-tertiary tabular-nums">{project.research?.started_at ?? "-"}</TableCell>
                   <TableCell className="text-right">
+                    {(project.research?.owner === currentUserId || research.isWorkspaceAdmin) && (
+                      <ResearchDeleteButton
+                        name={project.name}
+                        onDelete={async () => {
+                          await research.deleteResearchProject(workspaceSlug, project.id);
+                          await load();
+                        }}
+                      />
+                    )}
                     {project.research?.research_type === "RESEARCH_PROJECT" ? (
                       <Link
                         className="mr-2 text-12 text-accent-primary hover:underline"

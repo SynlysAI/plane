@@ -17,6 +17,7 @@ class ResearchOutcomeLinkSerializer(serializers.ModelSerializer):
 class ResearchOutcomeSerializer(serializers.ModelSerializer):
     links = ResearchOutcomeLinkSerializer(many=True, read_only=True)
     attachments = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchOutcome
@@ -37,6 +38,7 @@ class ResearchOutcomeSerializer(serializers.ModelSerializer):
             "created_by",
             "links",
             "attachments",
+            "can_delete",
             "created_at",
             "updated_at",
         ]
@@ -56,3 +58,13 @@ class ResearchOutcomeSerializer(serializers.ModelSerializer):
             }
             for item in obj.attachments.filter(deleted_at__isnull=True)
         ]
+
+    def get_can_delete(self, obj):
+        from plane.research.views.outcomes import can_manage_outcome
+
+        request = self.context.get("request")
+        return bool(
+            request
+            and obj.status == "DRAFT"
+            and can_manage_outcome(request.user, obj.workspace, obj.project.research_profile, obj)
+        )

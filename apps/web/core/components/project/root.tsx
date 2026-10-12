@@ -16,7 +16,6 @@ import { PageHead } from "@/components/core/page-title";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
-import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
 import { ProjectAppliedFiltersList } from "./applied-filters";
@@ -24,7 +23,6 @@ import { ProjectCardList } from "./card-list";
 
 export const ProjectRoot = observer(function ProjectRoot() {
   const { currentWorkspace } = useWorkspace();
-  const research = useResearch();
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { t } = useTranslation();
@@ -44,18 +42,15 @@ export const ProjectRoot = observer(function ProjectRoot() {
     : undefined;
 
   const isArchived = pathname.includes("/archives");
-  const isAdministrativeChannel = research.isEnabled && research.isIaV2Enabled;
 
   /** 只过滤已授权返回值中的科研主线展示对象，不重建 Project 权限。 */
   const administrativeProjectIds = useCallback(
     (projectIds: string[] | undefined) =>
-      projectIds?.filter((projectId) => getProjectById(projectId)?.is_research_project !== true),
+      projectIds?.filter((projectId) => getProjectById(projectId)?.is_research_project === false),
     [getProjectById]
   );
-  const visibleTotalProjectIds = isAdministrativeChannel ? administrativeProjectIds(totalProjectIds) : totalProjectIds;
-  const visibleFilteredProjectIds = isAdministrativeChannel
-    ? administrativeProjectIds(filteredProjectIds)
-    : filteredProjectIds;
+  const visibleTotalProjectIds = administrativeProjectIds(totalProjectIds);
+  const visibleFilteredProjectIds = administrativeProjectIds(filteredProjectIds);
 
   const allowedDisplayFilters =
     currentWorkspaceAppliedDisplayFilters?.filter((filter) => filter !== "archived_projects") ?? [];

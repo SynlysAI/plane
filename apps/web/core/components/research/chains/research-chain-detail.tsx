@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -12,6 +12,8 @@ import { Table, TableBody, TableCell, TableRow } from "@plane/propel/table";
 import type { TResearchChain, TResearchChainMember, TResearchChainNode, TResearchChainNodeAction } from "@plane/types";
 // components
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
+import { useResearch } from "@/hooks/store/use-research";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
@@ -95,6 +97,8 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
 /** Research Chain topic page with fixed context, tabs, workflow evidence and members. */
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
   const { t, currentLocale } = useTranslation();
+  const research = useResearch();
+  const navigate = useNavigate();
   const memberStore = useMember();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") as TRequestedChainTab | null;
@@ -341,6 +345,19 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   ];
   const selectedNodeActions = selected ? (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      {selected.node.capabilities?.actions.delete?.allowed && (
+        <ResearchDeleteButton
+          name={selected.node.title}
+          disabled={transitioning !== null}
+          onDelete={async () => {
+            await chainService.deleteChainNode(workspaceSlug, selected.node.id);
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete("node");
+            setSearchParams(nextParams);
+            await load();
+          }}
+        />
+      )}
       {ACTIONS_BY_STATUS[selected.node.status]
         .filter(() => {
           const capability = selected.node.capabilities?.actions.transition;
@@ -474,8 +491,17 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={() => void load()}>
+          <div className="flex flex-wrap items-center gap-2">
+            {chain?.capabilities?.actions.delete?.allowed && (
+              <ResearchDeleteButton
+                name={chain.project_name ?? chain.project}
+                onDelete={async () => {
+                  await research.deleteResearchProject(workspaceSlug, chain.project);
+                  navigate(`/${workspaceSlug}/research/chains?view=projects`);
+                }}
+              />
+            )}
+            <Button variant="secondary" size="sm" className="h-8" onClick={() => void load()}>
               {t("research.chains.refresh")}
             </Button>
           </div>

@@ -8,6 +8,7 @@ import hashlib
 import uuid
 
 from django.http import HttpResponse, HttpResponseRedirect
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -237,7 +238,7 @@ class ResearchOutcomeDetailEndpoint(ResearchAPIView):
             ),
             request=request,
         )
-        return Response(ResearchOutcomeSerializer(outcome).data, status=status.HTTP_200_OK)
+        return Response(ResearchOutcomeSerializer(outcome, context={"request": request}).data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug, outcome_id):
         workspace, error = self.get_workspace(section=SECTION)
@@ -249,8 +250,16 @@ class ResearchOutcomeDetailEndpoint(ResearchAPIView):
         profile = research_project(workspace, outcome.project_id)
         if not can_manage_outcome(request.user, workspace, profile, outcome):
             return research_permission_denied()
-        outcome.deleted_at = timezone.now()
-        outcome.save(update_fields=["deleted_at", "updated_at"])
+        from plane.research.utils.deletion import outcome_deletion_reason
+
+        with transaction.atomic():
+            outcome = ResearchOutcome.objects.select_for_update().get(pk=outcome.pk)
+            reason = outcome_deletion_reason(outcome)
+            if reason:
+                return research_error("research_delete_blocked", reason, status.HTTP_409_CONFLICT)
+            outcome.deleted_at = timezone.now()
+            outcome.save(update_fields=["deleted_at", "updated_at"])
+            outcome.attachments.update(deleted_at=outcome.deleted_at)
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.OUTCOME_DELETE,
@@ -410,7 +419,7 @@ class ResearchOutcomeLinkEndpoint(ResearchAPIView):
             defaults={"created_by": request.user},
         )
         if not created:
-            return Response(ResearchOutcomeSerializer(outcome).data, status=status.HTTP_200_OK)
+            return Response(ResearchOutcomeSerializer(outcome, context={"request": request}).data, status=status.HTTP_200_OK)
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.OUTCOME_LINK,
@@ -420,7 +429,7 @@ class ResearchOutcomeLinkEndpoint(ResearchAPIView):
             metadata={"target_type": target_type, "target_id": str(target_id)},
             request=request,
         )
-        return Response(ResearchOutcomeSerializer(outcome).data, status=status.HTTP_201_CREATED)
+        return Response(ResearchOutcomeSerializer(outcome, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
     def delete(self, request, slug, outcome_id, link_id=None):
         workspace, error = self.get_workspace(section=SECTION)

@@ -37,7 +37,12 @@ from plane.research.services.chain_tasks import (
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.acl import build_actor_context
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
-from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
+from plane.research.utils.errors import (
+    ResearchErrorCode,
+    research_error,
+    research_not_found,
+    research_permission_denied,
+)
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import can_read_project_research_metadata, profile_queryset
 
@@ -731,6 +736,37 @@ class ResearchChainNodeDetailEndpoint(ResearchAPIView):
     """Return one visible node with its append-only evidence."""
 
     nav_capability = NAV_RESEARCH_CHAIN
+
+    def delete(self, request, slug, node_id):
+        from plane.research.utils.deletion import node_deletion_reason
+
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        if not _flag_enabled(workspace):
+            return _disabled()
+        node = _visible_node(workspace, request.user, node_id)
+        if node is None:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research node not found.")
+        if not _chain_manager(workspace, request.user, node.chain):
+            return research_permission_denied()
+        with transaction.atomic():
+            node = ResearchChainNode.objects.select_for_update().get(pk=node.pk)
+            reason = node_deletion_reason(node)
+            if reason:
+                return research_error("research_delete_blocked", reason, status.HTTP_409_CONFLICT)
+            node.deleted_at = timezone.now()
+            node.save(update_fields=["deleted_at", "updated_at"])
+            record_audit_event(
+                workspace=workspace,
+                action="chain.node.delete",
+                resource_type=ResearchResourceType.RESEARCH_CHAIN,
+                resource_id=node.chain_id,
+                actor=request.user,
+                metadata={"node": str(node.pk)},
+                request=request,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get(self, request, slug, node_id):
         workspace, error = self.get_workspace(section="research_chain", nav=None)
