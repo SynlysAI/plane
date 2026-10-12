@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 // plane helpers
 import { useTranslation } from "@plane/i18n";
 import { useOutsideClickDetector } from "@plane/hooks";
+import { cn } from "@plane/utils";
 import { PreferencesOutline, SettingsOutline } from "@makeplane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
 // components
@@ -27,10 +28,12 @@ type TSidebarWrapperProps = {
   title: string;
   children: React.ReactNode;
   quickActions?: React.ReactNode;
+  contentLayout?: "scroll" | "fill";
 };
 
 export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWrapperProps) {
-  const { title, children, quickActions } = props;
+  const { title, children, quickActions, contentLayout = "scroll" } = props;
+  const fillsAvailableHeight = contentLayout === "fill";
   // state
   const [isCustomizeNavDialogOpen, setIsCustomizeNavDialogOpen] = useState(false);
   // store hooks
@@ -56,7 +59,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
     <>
       <CustomizeNavigationDialog isOpen={isCustomizeNavDialogOpen} onClose={() => setIsCustomizeNavDialogOpen(false)} />
       <div ref={ref} className="flex h-full w-full animate-fade-in flex-col">
-        <div className="flex flex-col gap-3 px-3">
+        <div className={cn("flex flex-col gap-3 px-3", { "shrink-0": fillsAvailableHeight })}>
           {/* Workspace switcher and settings */}
 
           <div className="flex items-center justify-between gap-2 px-2">
@@ -81,22 +84,32 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
           orientation="vertical"
           scrollType="hover"
           size="sm"
-          rootClassName="size-full overflow-x-hidden overflow-y-auto"
-          viewportClassName="flex flex-col gap-3 overflow-x-hidden h-full w-full overflow-y-auto px-3 pt-3 pb-0.5"
+          rootClassName={cn(
+            "overflow-x-hidden overflow-y-auto",
+            fillsAvailableHeight ? "min-h-0 w-full flex-1" : "size-full"
+          )}
+          viewportClassName="flex h-full w-full flex-col gap-3 overflow-x-hidden overflow-y-auto px-3 pt-3 pb-0.5"
         >
           {children}
         </ScrollArea>
         {isInstanceAdmin && (
           <a
             href={getGodModeUrl()}
-            className="mx-3 my-2 flex items-center gap-2 rounded-md border border-subtle px-3 py-2 text-13 font-medium text-primary hover:bg-layer-transparent-hover focus-visible:outline-2 focus-visible:outline-offset-2"
+            className={cn(
+              "mx-3 my-2 flex items-center gap-2 rounded-md border border-subtle px-3 py-2 text-13 font-medium text-primary hover:bg-layer-transparent-hover focus-visible:outline-2 focus-visible:outline-offset-2",
+              { "shrink-0": fillsAvailableHeight }
+            )}
           >
             <SettingsOutline className="size-4 shrink-0" />
             {t("enter_god_mode")}
           </a>
         )}
         {/* Help Section */}
-        <div className="flex h-12 items-center justify-between border-t border-subtle bg-surface-1 p-3">
+        <div
+          className={cn("flex h-12 items-center justify-between border-t border-subtle bg-surface-1 p-3", {
+            "shrink-0": fillsAvailableHeight,
+          })}
+        >
           <WorkspaceEditionBadge />
           {/* TODO: To be checked if we need this */}
           {/* <div className="flex items-center gap-2">

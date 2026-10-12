@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/sidebar/sidebar-wrapper", () => ({
-  SidebarWrapper: ({ children }: { children: React.ReactNode }) => <aside>{children}</aside>,
+  SidebarWrapper: ({ children, contentLayout }: { children: React.ReactNode; contentLayout?: string }) => (
+    <aside data-content-layout={contentLayout}>{children}</aside>
+  ),
 }));
 vi.mock("@/components/workspace/sidebar/favorites/favorites-menu", () => ({
   SidebarFavoritesMenu: () => <div>favorites-menu</div>,
@@ -63,6 +65,7 @@ it("replaces the legacy projects list with scoped trees when IA v2 is enabled", 
   expect(container.textContent).toContain("home-navigation");
   expect(container.textContent).toContain("research-navigation");
   expect(container.textContent).not.toContain("legacy-projects-list");
+  expect(container.querySelector("aside")?.dataset.contentLayout).toBe("fill");
 });
 
 it("restores the legacy projects list when IA v2 is disabled", async () => {
@@ -71,4 +74,5 @@ it("restores the legacy projects list when IA v2 is disabled", async () => {
 
   expect(container.textContent).toContain("research-navigation");
   expect(container.textContent).toContain("legacy-projects-list");
+  expect(container.querySelector("aside")?.dataset.contentLayout).toBe("scroll");
 });

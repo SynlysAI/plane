@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { observer } from "mobx-react";
@@ -31,7 +31,13 @@ const EMPTY_TREE: TNavigationTree = {
   uncategorized: [],
 };
 
-type Props = { scope: TNavigationScope; title: string; href: string; canManage?: boolean };
+type Props = {
+  scope: TNavigationScope;
+  title: string;
+  href: string;
+  canManage?: boolean;
+  fillAvailableSpace?: boolean;
+};
 type CategoryEditor =
   | { mode: "create"; name: string; parent: string | null; orgUnit: string | null }
   | { mode: "rename"; name: string; category: TNavigationCategory };
@@ -198,6 +204,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   title,
   href,
   canManage = false,
+  fillAvailableSpace = false,
 }: Props) {
   const { workspaceSlug } = useParams();
   const { projectMap } = useProject();
@@ -206,6 +213,9 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
+  const [fitsNaturalHeight, setFitsNaturalHeight] = useState(false);
+  const treeRef = useRef<HTMLDivElement>(null);
+  const listContentRef = useRef<HTMLDivElement>(null);
   const [categoryEditor, setCategoryEditor] = useState<CategoryEditor | null>(null);
   const [deleteEditor, setDeleteEditor] = useState<DeleteEditor | null>(null);
   const [moveEditor, setMoveEditor] = useState<MoveEditor | null>(null);
@@ -219,6 +229,45 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   );
   const isOpen = storedOpen ?? true;
   const canManageTree = canManage && tree.can_manage;
+
+  useEffect(() => {
+    const element = treeRef.current;
+    const content = listContentRef.current;
+    const parent = element?.parentElement;
+    if (!element || !content || !parent || typeof ResizeObserver === "undefined") return;
+
+    /** 短列表保留自然高度，长列表按 Flex 内容比例分享可用空间。 */
+    const updateNaturalHeight = () => {
+      const style = getComputedStyle(element);
+      const headerHeight = element.firstElementChild?.getBoundingClientRect().height ?? 0;
+      const naturalHeight =
+        headerHeight +
+        content.getBoundingClientRect().height +
+        parseFloat(style.paddingTop) +
+        parseFloat(style.borderTopWidth);
+      const siblings = [...parent.children];
+      const expandedTrees = siblings.filter((child) => child.getAttribute("data-navigation-expanded") === "true");
+      const fixedHeight = siblings
+        .filter((child) => child.getAttribute("data-navigation-expanded") !== "true")
+        .reduce((height, child) => height + child.getBoundingClientRect().height, 0);
+      const spacing = siblings.reduce(
+        (height, child) => {
+          const childStyle = getComputedStyle(child);
+          return height + parseFloat(childStyle.marginTop) + parseFloat(childStyle.marginBottom);
+        },
+        (parseFloat(getComputedStyle(parent).rowGap) || 0) * Math.max(0, siblings.length - 1)
+      );
+      const availableHeight = parent.clientHeight - fixedHeight - spacing;
+      setFitsNaturalHeight(naturalHeight <= availableHeight / Math.max(1, expandedTrees.length));
+    };
+
+    const resizeObserver = new ResizeObserver(updateNaturalHeight);
+    resizeObserver.observe(parent);
+    resizeObserver.observe(element);
+    resizeObserver.observe(content);
+    updateNaturalHeight();
+    return () => resizeObserver.disconnect();
+  }, [isOpen, fillAvailableSpace]);
 
   // 导航树由项目集合与分类共同投影。项目创建会先写入对应 store，这里跟踪
   // 当前通道的项目 ID 签名，使左侧树无需整页刷新即可同步新增项目。
@@ -358,8 +407,17 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   if (!workspaceSlug) return null;
 
   return (
-    <div className="mt-2 flex flex-col border-t border-subtle pt-2">
-      <div className="group flex items-center gap-1 rounded-sm px-2 py-1.5 text-placeholder hover:bg-layer-transparent-hover">
+    <div
+      ref={treeRef}
+      className={cn("mt-2 flex flex-col border-t border-subtle pt-2", {
+        "min-h-20": isOpen,
+        "shrink-0": !isOpen || fitsNaturalHeight,
+        grow: isOpen && fillAvailableSpace,
+      })}
+      data-navigation-scope={scope}
+      data-navigation-expanded={isOpen}
+    >
+      <div className="group flex shrink-0 items-center gap-1 rounded-sm px-2 py-1.5 text-placeholder hover:bg-layer-transparent-hover">
         <IconButton
           variant="ghost"
           size="sm"
@@ -387,51 +445,53 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
       </div>
 
       {isOpen && (
-        <div className="flex max-h-72 flex-col overflow-x-hidden overflow-y-auto pl-2">
-          {isLoading && <span className="px-2 py-1 text-11 text-placeholder">正在加载项目…</span>}
-          {!isLoading && loadFailed && (
-            <span className="px-2 py-1 text-11 text-placeholder">分类暂不可用，可稍后刷新。</span>
-          )}
-          {!isLoading && !loadFailed && tree.categories.length === 0 && tree.uncategorized.length === 0 && (
-            <span className="px-2 py-1 text-11 text-placeholder">暂无可见项目。</span>
-          )}
-          {tree.categories.map((category) => (
-            <CategoryNode
-              key={category.id}
-              category={category}
-              expanded={expanded ?? {}}
-              toggleExpanded={toggleExpanded}
-              siblings={tree.categories}
-              canManage={canManageTree}
-              onCreateChild={beginCreate}
-              onRename={(item) => setCategoryEditor({ mode: "rename", name: item.name, category: item })}
-              onSort={sortCategory}
-              onDelete={(item) => setDeleteEditor({ category: item, target: "uncategorized" })}
-              onMoveProject={(project, currentCategory) =>
-                setMoveEditor({ project, currentCategory, target: currentCategory ?? "uncategorized" })
-              }
-            />
-          ))}
-          {!isLoading && (tree.uncategorized.length > 0 || canManageTree) && (
-            <div className="mt-1 border-t border-subtle pt-1">
-              <span className="px-2 text-11 text-tertiary">未分类</span>
-              {tree.uncategorized.map((project) => (
-                <ProjectLink
-                  key={project.id}
-                  project={project}
-                  currentCategoryId={null}
-                  canManage={canManageTree}
-                  onMove={(item, currentCategory) =>
-                    setMoveEditor({
-                      project: item,
-                      currentCategory,
-                      target: currentCategory ?? "uncategorized",
-                    })
-                  }
-                />
-              ))}
-            </div>
-          )}
+        <div className="flex min-h-0 flex-col overflow-x-hidden overflow-y-auto pl-2">
+          <div ref={listContentRef} className="shrink-0">
+            {isLoading && <span className="px-2 py-1 text-11 text-placeholder">正在加载项目…</span>}
+            {!isLoading && loadFailed && (
+              <span className="px-2 py-1 text-11 text-placeholder">分类暂不可用，可稍后刷新。</span>
+            )}
+            {!isLoading && !loadFailed && tree.categories.length === 0 && tree.uncategorized.length === 0 && (
+              <span className="px-2 py-1 text-11 text-placeholder">暂无可见项目。</span>
+            )}
+            {tree.categories.map((category) => (
+              <CategoryNode
+                key={category.id}
+                category={category}
+                expanded={expanded ?? {}}
+                toggleExpanded={toggleExpanded}
+                siblings={tree.categories}
+                canManage={canManageTree}
+                onCreateChild={beginCreate}
+                onRename={(item) => setCategoryEditor({ mode: "rename", name: item.name, category: item })}
+                onSort={sortCategory}
+                onDelete={(item) => setDeleteEditor({ category: item, target: "uncategorized" })}
+                onMoveProject={(project, currentCategory) =>
+                  setMoveEditor({ project, currentCategory, target: currentCategory ?? "uncategorized" })
+                }
+              />
+            ))}
+            {!isLoading && (tree.uncategorized.length > 0 || canManageTree) && (
+              <div className="mt-1 border-t border-subtle pt-1">
+                <span className="px-2 text-11 text-tertiary">未分类</span>
+                {tree.uncategorized.map((project) => (
+                  <ProjectLink
+                    key={project.id}
+                    project={project}
+                    currentCategoryId={null}
+                    canManage={canManageTree}
+                    onMove={(item, currentCategory) =>
+                      setMoveEditor({
+                        project: item,
+                        currentCategory,
+                        target: currentCategory ?? "uncategorized",
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

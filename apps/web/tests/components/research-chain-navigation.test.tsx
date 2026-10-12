@@ -2,6 +2,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { clsx } from "clsx";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 const mocks = vi.hoisted(() => ({
   businessItems: [
@@ -75,7 +76,6 @@ const mocks = vi.hoisted(() => ({
     isResearchAdmin: false,
   },
   workspace: { getWorkspaceBySlug: () => ({ name: "Lab" }) },
-  stored: true,
 }));
 
 vi.mock("next/link", () => ({
@@ -99,9 +99,6 @@ vi.mock("@plane/i18n", () => ({
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
 vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ projectMap: {} }) }));
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => mocks.workspace }));
-vi.mock("@/hooks/use-local-storage", () => ({
-  default: () => ({ storedValue: mocks.stored, setValue: vi.fn() }),
-}));
 vi.mock("@/services/research/navigation.service", () => ({
   ResearchNavigationService: class {
     getTree = (_workspaceSlug: string, scope: string) =>
@@ -164,9 +161,17 @@ vi.mock("@makeplane/propel/icons", () => ({
   TickOutline: () => null,
   WarningTriangleOutline: () => null,
 }));
-vi.mock("@plane/propel/icon-button", () => ({ IconButton: () => <button type="button" /> }));
+vi.mock("@plane/propel/icon-button", () => ({
+  IconButton: ({
+    icon: _icon,
+    iconClassName: _iconClassName,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: unknown; iconClassName?: string }) => (
+    <button type="button" {...props} />
+  ),
+}));
 vi.mock("@plane/utils", () => ({
-  cn: (...values: Array<string | false | undefined>) => values.filter(Boolean).join(" "),
+  cn: clsx,
 }));
 vi.mock("@/components/core/page-title", () => ({ PageHead: () => null }));
 vi.mock("@/components/research/common/research-status-panel", () => ({
@@ -187,6 +192,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  localStorage.clear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -278,6 +284,57 @@ it("shows the management destination only for callers with a management tab", as
   mocks.research.canSee = originalCanSee;
 
   expect(container.querySelector('a[href="/lab/research/settings"]')).toBeNull();
+});
+
+it("将科研区收起后释放的高度交给行政区，并保留展开状态", async () => {
+  setSwitches(true, false, true);
+  await act(async () => root.render(<ResearchSidebarItems />));
+  const researchTree = container.querySelector('[data-navigation-scope="RESEARCH"]');
+  const administrativeTree = container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]');
+  expect(researchTree?.classList.contains("grow")).toBe(true);
+  expect(administrativeTree?.classList.contains("grow")).toBe(false);
+
+  const collapseButton = researchTree?.querySelector<HTMLButtonElement>('button[aria-label="收起科研项目"]');
+  if (!collapseButton) throw new Error("未找到科研区收起按钮");
+  await act(async () => collapseButton.click());
+
+  expect(researchTree?.textContent).not.toContain("新材料课题");
+  expect(administrativeTree?.classList.contains("grow")).toBe(true);
+  expect(localStorage.getItem("research_navigation_research_open")).toBe("false");
+
+  await act(async () => root.render(null));
+  await act(async () => root.render(<ResearchSidebarItems />));
+  expect(container.querySelector('[data-navigation-scope="RESEARCH"]')?.textContent).not.toContain("新材料课题");
+  expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.classList.contains("grow")).toBe(true);
+
+  const expandButton = container.querySelector<HTMLButtonElement>('button[aria-label="展开科研项目"]');
+  if (!expandButton) throw new Error("未找到科研区展开按钮");
+  await act(async () => expandButton.click());
+  expect(container.querySelector('[data-navigation-scope="RESEARCH"]')?.classList.contains("grow")).toBe(true);
+  expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.classList.contains("grow")).toBe(false);
+});
+
+it("科研区不可见时行政区使用剩余高度", async () => {
+  setSwitches(true, false, true);
+  const originalNavKeys = mocks.research.visibleNavKeys;
+  mocks.research.visibleNavKeys = originalNavKeys.filter((key) => key !== "research_chain");
+  try {
+    await act(async () => root.render(<ResearchSidebarItems />));
+    expect(container.querySelector('[data-navigation-scope="RESEARCH"]')).toBeNull();
+    expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.classList.contains("grow")).toBe(true);
+  } finally {
+    mocks.research.visibleNavKeys = originalNavKeys;
+  }
+});
+
+it("行政区收起时科研区继续占用剩余高度", async () => {
+  setSwitches(true, false, true);
+  await act(async () => root.render(<ResearchSidebarItems />));
+  const collapseButton = container.querySelector<HTMLButtonElement>('button[aria-label="收起行政项目"]');
+  if (!collapseButton) throw new Error("未找到行政区收起按钮");
+  await act(async () => collapseButton.click());
+  expect(container.querySelector('[data-navigation-scope="RESEARCH"]')?.classList.contains("grow")).toBe(true);
+  expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.textContent).not.toContain("年度采购");
 });
 
 it("guards the agent route with the independent workspace switch", async () => {
