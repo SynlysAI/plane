@@ -290,6 +290,7 @@ export interface IResearchStore {
   fetchResearchProjects: (workspaceSlug: string, params?: Record<string, string>) => Promise<TResearchProject[]>;
   createResearchProject: (workspaceSlug: string, payload: TResearchProjectCreatePayload) => Promise<TResearchProject>;
   archiveResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
+  deleteResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   restoreResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   fetchApprovalFlows: (workspaceSlug: string) => Promise<TApprovalFlow[]>;
   createApprovalFlow: (
@@ -723,6 +724,7 @@ export class ResearchStore implements IResearchStore {
       fetchResearchProjects: action,
       createResearchProject: action,
       archiveResearchProject: action,
+      deleteResearchProject: action,
       restoreResearchProject: action,
       fetchApprovalFlows: action,
       createApprovalFlow: action,
@@ -1414,6 +1416,12 @@ export class ResearchStore implements IResearchStore {
 
   archiveResearchProject = async (workspaceSlug: string, projectId: string) => {
     await this.projectService.archiveProject(workspaceSlug, projectId);
+    await this.fetchResearchProjects(workspaceSlug);
+  };
+
+  /** 删除科研项目并刷新当前工作区的默认项目列表。 */
+  deleteResearchProject = async (workspaceSlug: string, projectId: string) => {
+    await this.projectService.deleteProject(workspaceSlug, projectId);
     await this.fetchResearchProjects(workspaceSlug);
   };
 

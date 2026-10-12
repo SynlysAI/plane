@@ -17,6 +17,7 @@ import {
   formatResearchTime,
 } from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import { chainOwnerLabel, visibleResearchChains } from "@/components/research/common/research-overview-rows";
 import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
 // hooks
@@ -112,7 +113,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     const version = ++researchVersion.current;
     setChainState("loading");
     try {
-      const result = await chainService.getChains(workspaceSlug);
+      const result = visibleResearchChains(await chainService.getChains(workspaceSlug));
       if (researchVersion.current !== version) return;
       setChains(result);
       setChainState(result.length ? "ready" : "empty");
@@ -391,6 +392,10 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
                       </ResearchStatusBadge>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-11 text-tertiary">
+                      <span className="min-w-0 [overflow-wrap:anywhere] break-words">
+                        {t("research.chains.owner")}：
+                        {chainOwnerLabel(research.identity, chain) || t("research.projects.owner_unset")}
+                      </span>
                       <span className="truncate">
                         {t("research.chains.current_node")}：{chain.current_node?.title ?? "-"}
                       </span>

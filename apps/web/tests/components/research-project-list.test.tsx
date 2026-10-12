@@ -3,10 +3,15 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { TResearchProject } from "@/services/research/project.service";
 
 const mocks = vi.hoisted(() => ({
   fetchResearchProjects: vi.fn(),
   fetchOrgUnits: vi.fn(),
+  deleteResearchProject: vi.fn(),
+  restoreResearchProject: vi.fn(),
+  archiveResearchProject: vi.fn(),
+  projects: [] as TResearchProject[],
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -31,7 +36,30 @@ vi.mock("@plane/propel/table", () => ({
 }));
 vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: { SUCCESS: "SUCCESS" }, setToast: vi.fn() }));
 vi.mock("@plane/ui", () => ({
-  AlertModalCore: () => null,
+  AlertModalCore: ({
+    isOpen,
+    content,
+    handleClose,
+    handleSubmit,
+    isSubmitting,
+    primaryButtonText,
+  }: {
+    isOpen: boolean;
+    content: React.ReactNode;
+    handleClose: () => void;
+    handleSubmit: () => void;
+    isSubmitting: boolean;
+    primaryButtonText: { default: string };
+  }) =>
+    isOpen ? (
+      <div role="dialog">
+        {content}
+        <button onClick={handleClose}>取消</button>
+        <button onClick={handleSubmit} disabled={isSubmitting}>
+          {primaryButtonText.default}
+        </button>
+      </div>
+    ) : null,
   EModalPosition: { CENTER: "center" },
   EModalWidth: { LG: "lg" },
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
@@ -56,10 +84,13 @@ vi.mock("@/hooks/store/use-research", () => ({
     isWorkspaceAdmin: false,
     projectLoader: false,
     projectPaginationByWorkspace: {},
-    getResearchProjects: () => [],
+    getResearchProjects: () => mocks.projects,
     getOrgUnits: () => [{ id: "unit-1", name: "材料课题组" }],
     fetchResearchProjects: mocks.fetchResearchProjects,
     fetchOrgUnits: mocks.fetchOrgUnits,
+    deleteResearchProject: mocks.deleteResearchProject,
+    restoreResearchProject: mocks.restoreResearchProject,
+    archiveResearchProject: mocks.archiveResearchProject,
   }),
 }));
 
@@ -70,11 +101,47 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
+  mocks.projects = [];
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
+  mocks.deleteResearchProject.mockResolvedValue(undefined);
+  mocks.restoreResearchProject.mockResolvedValue(undefined);
+  mocks.archiveResearchProject.mockResolvedValue(undefined);
+});
+
+it("旧项目列表提供确认删除，并在成功后刷新当前筛选", async () => {
+  mocks.projects = [
+    {
+      id: "project-1",
+      name: "旧科研课题",
+      identifier: "OLD",
+      archived_at: null,
+      is_research_project: true,
+      research: { owner: "user-1", workflow_status: "ACTIVE", research_type: "RESEARCH_PROJECT" },
+    },
+  ] as TResearchProject[];
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/projects?workflow_status=ACTIVE"]}>
+        <ResearchProjectList workspaceSlug="lab" currentUserId="user-1" />
+      </MemoryRouter>
+    )
+  );
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[aria-label="research.projects.delete：旧科研课题"]')?.click()
+  );
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(mocks.deleteResearchProject).not.toHaveBeenCalled();
+  const confirm = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+    (button) => button.textContent === "research.projects.delete"
+  );
+  await act(async () => confirm?.click());
+  expect(mocks.deleteResearchProject).toHaveBeenCalledWith("lab", "project-1");
+  expect(mocks.fetchResearchProjects).toHaveBeenLastCalledWith("lab", { per_page: "50", workflow_status: "ACTIVE" });
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
 afterEach(async () => {

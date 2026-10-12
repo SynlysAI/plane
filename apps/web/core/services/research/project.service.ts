@@ -101,6 +101,13 @@ export class ResearchProjectService extends APIService {
       });
   }
 
+  /** 可恢复地删除科研项目，不清除研究证据。 */
+  async deleteProject(workspaceSlug: string, projectId: string): Promise<void> {
+    await this.delete(researchEndpoints.project(workspaceSlug, projectId)).catch((err) => {
+      throw err?.response?.data ?? err;
+    });
+  }
+
   async restoreProject(workspaceSlug: string, projectId: string) {
     return this.post(researchEndpoints.projectRestore(workspaceSlug, projectId), {})
       .then((res) => res?.data as TResearchProject)

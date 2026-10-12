@@ -11,7 +11,7 @@ import { ResearchReportService } from "../../core/services/research/report.servi
 import { ResearchTodoService } from "../../core/services/research/research-todo.service";
 import { ProjectService } from "../../core/services/project/project.service";
 import { WorkspaceService } from "../../core/services/workspace.service";
-import type { TResearchIdentity } from "@plane/types";
+import type { TResearchChain, TResearchIdentity } from "@plane/types";
 // oxlint-disable-next-line import/no-unassigned-import -- fixture stylesheet
 import "./research-home-workbench.fixture.css";
 
@@ -45,15 +45,15 @@ const identity = {
 } as TResearchIdentity;
 
 ResearchPlatformService.prototype.getIdentity = async () => identity;
-ResearchChainService.prototype.getChains = async () => [
+const browserChains: TResearchChain[] = [
   {
     schema_version: "research-chain.v1",
     id: "chain-1",
     project: "project-1",
-    project_name: "催化剂界面失活机理研究",
+    project_name: "催化剂界面失活机理研究与多尺度反应动力学联合实验的长期科研项目",
     workspace: "isolated-test",
     owner: "student-1",
-    owner_name: "隔离学生",
+    owner_name: "隔离学生与联合实验负责人长姓名显示验证",
     status: "ACTIVE",
     visibility: "ORG",
     open_task_count: 3,
@@ -67,6 +67,23 @@ ResearchChainService.prototype.getChains = async () => [
     },
     created_at: now,
     updated_at: now,
+  },
+];
+ResearchChainService.prototype.getChains = async () => [
+  ...browserChains,
+  {
+    ...browserChains[0],
+    id: "archived-chain",
+    status: "ARCHIVED",
+    project_name: "不应出现的归档课题",
+    open_task_count: 99,
+  },
+  {
+    ...browserChains[0],
+    id: "deleted-chain",
+    status: "DELETED",
+    project_name: "不应出现的删除课题",
+    open_task_count: 88,
   },
 ];
 ResearchTodoService.prototype.getResearchTodos = async () => ({

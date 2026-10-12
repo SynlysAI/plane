@@ -31,7 +31,7 @@ it("stacks at most five rows for a direction owner and keeps the owner name", ()
   expect(chainOwnerLabel(viewer, chains[0])).toBe("学生甲");
 });
 
-it("uses one row and no name when every chain belongs to the viewer", () => {
+it("uses one row and shows the name when every chain belongs to the viewer", () => {
   const viewer = identity({
     capabilities: { is_main_pi: true },
     user: { id: "student-1", is_main_pi: true, mentee_ids: [], org_units: [] },
@@ -40,5 +40,10 @@ it("uses one row and no name when every chain belongs to the viewer", () => {
 
   expect(selected.mode).toBe("single");
   expect(selected.rows).toHaveLength(1);
-  expect(chainOwnerLabel(viewer, chains[0])).toBe("");
+  expect(chainOwnerLabel(viewer, chains[0])).toBe("学生甲");
+});
+
+it("does not substitute raw IDs for missing owner names", () => {
+  expect(chainOwnerLabel(null, { owner: "raw-user-id" })).toBe("");
+  expect(chainOwnerLabel(null, { owner: "raw-user-id", owner_name: "  " })).toBe("");
 });

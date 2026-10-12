@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Archive, RotateCcw, Trash2 } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { getButtonStyling } from "@plane/propel/button";
@@ -14,6 +15,8 @@ import { ResearchBrowseFilters } from "@/components/research/common/browse-filte
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { useResearch } from "@/hooks/store/use-research";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { AlertModalCore } from "@plane/ui";
 // components
 import { ResearchListState } from "@/components/research/common/research-list-state";
 import { ResearchListSurface, ResearchTableSurface } from "@/components/research/common/research-data-surface";
@@ -46,6 +49,12 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    chain: TResearchChain;
+    action: "archive" | "delete" | "restore";
+  } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [actionError, setActionError] = useState(false);
 
   const load = useCallback(async () => {
     const currentVersion = ++version.current;
@@ -70,6 +79,30 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
       if (version.current === currentVersion) setLoading(false);
     }
   }, [workspaceSlug, queryString]);
+
+  /** 执行已确认的生命周期操作，并保留当前筛选刷新列表。 */
+  const handleAction = async () => {
+    if (!pendingAction || updating) return;
+    setUpdating(true);
+    setActionError(false);
+    try {
+      const { chain, action } = pendingAction;
+      if (action === "delete") await chainService.deleteChain(workspaceSlug, chain.id);
+      else if (action === "archive") await chainService.archiveChain(workspaceSlug, chain.id);
+      else await chainService.restoreChain(workspaceSlug, chain.id);
+      setPendingAction(null);
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t(`research.feedback.project_${action}d.title`),
+        message: t(`research.feedback.project_${action}d.message`),
+      });
+      await load();
+    } catch {
+      setActionError(true);
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -105,9 +138,11 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
           onChange={(event) => query.set("status", event.target.value)}
           className="rounded-md border border-subtle px-2 py-1.5 text-13"
         >
-          <option value="">全部状态</option>
+          <option value="">{t("research.projects.current_projects")}</option>
           <option value="ACTIVE">进行中</option>
+          <option value="COMPLETED">已完成</option>
           <option value="ARCHIVED">已归档</option>
+          <option value="DELETED">已删除</option>
         </select>
         <select
           aria-label="项目类型"
@@ -124,6 +159,11 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
           刷新
         </Button>
       </div>
+      {actionError && (
+        <p role="alert" className="text-13 text-danger-primary">
+          {t("research.projects.action_failed")}
+        </p>
+      )}
       {loading && <p role="status">加载中</p>}
       {forbidden ? (
         <ResearchListState kind="forbidden" resource="reports" />
@@ -133,7 +173,7 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
         <ResearchListState kind={queryString ? "no-results" : "empty"} resource="reports" />
       ) : null}
       <ResearchTableSurface>
-        <Table>
+        <Table className="min-w-[1100px]">
           <caption className="sr-only">{t("research.nav.research_chain")}</caption>
           <TableHeader>
             <TableRow>
@@ -151,7 +191,7 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
           <TableBody>
             {chains.map((chain) => (
               <TableRow key={chain.id} className="hover:bg-surface-2">
-                <TableCell>
+                <TableCell className="max-w-80 [overflow-wrap:anywhere] break-words">
                   <Link
                     href={`/${workspaceSlug}/research/chains/${chain.id}`}
                     className="font-medium text-primary hover:text-accent-primary"
@@ -194,17 +234,51 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
                 <TableCell className="text-secondary">
                   {t(`research.projects.chain_visibility.${chain.visibility.toLowerCase()}`)}
                 </TableCell>
-                <TableCell className="text-secondary">{chain.owner_name ?? chain.owner}</TableCell>
+                <TableCell className="max-w-48 [overflow-wrap:anywhere] break-words text-secondary">
+                  {chain.owner_name?.trim() || t("research.projects.owner_unset")}
+                </TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">
                   {formatResearchDateTime(chain.updated_at, currentLocale)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link
-                    href={`/${workspaceSlug}/research/chains/${chain.id}`}
-                    className={getButtonStyling("secondary", "base")}
-                  >
-                    {t("research.chains.open")}
-                  </Link>
+                  <div className="flex items-center justify-end gap-2">
+                    <Link
+                      href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                      className={getButtonStyling("secondary", "base")}
+                    >
+                      {t("research.chains.open")}
+                    </Link>
+                    {[
+                      {
+                        action: "archive" as const,
+                        icon: Archive,
+                        visible: !["ARCHIVED", "DELETED"].includes(chain.status),
+                      },
+                      {
+                        action: "restore" as const,
+                        icon: RotateCcw,
+                        visible: ["ARCHIVED", "DELETED"].includes(chain.status),
+                      },
+                      { action: "delete" as const, icon: Trash2, visible: chain.status !== "DELETED" },
+                    ].map(({ action, icon: Icon, visible }) =>
+                      visible && chain.capabilities?.actions[action]?.allowed ? (
+                        <Button
+                          key={action}
+                          variant="ghost"
+                          size="sm"
+                          disabled={updating}
+                          title={t(`research.projects.${action}`)}
+                          aria-label={`${t(`research.projects.${action}`)}：${chain.project_name ?? chain.project}`}
+                          onClick={() => {
+                            setActionError(false);
+                            setPendingAction({ chain, action });
+                          }}
+                        >
+                          <Icon className="size-4" />
+                        </Button>
+                      ) : null
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -229,6 +303,38 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
           下一页
         </Button>
       </div>
+      <AlertModalCore
+        isOpen={Boolean(pendingAction)}
+        handleClose={() => {
+          if (!updating) {
+            setPendingAction(null);
+            setActionError(false);
+          }
+        }}
+        handleSubmit={() => void handleAction()}
+        isSubmitting={updating}
+        title={t(`research.projects.confirm_${pendingAction?.action ?? "delete"}_title`)}
+        content={
+          <>
+            <span>
+              {t(`research.projects.confirm_${pendingAction?.action ?? "delete"}`, {
+                project: pendingAction?.chain.project_name ?? pendingAction?.chain.project ?? "",
+              })}
+            </span>
+            {actionError && (
+              <span role="alert" className="mt-2 block text-danger-primary">
+                {t("research.projects.action_failed")}
+              </span>
+            )}
+          </>
+        }
+        primaryButtonText={{
+          default: t(`research.projects.${pendingAction?.action ?? "delete"}`),
+          loading: t("research.common.loading"),
+        }}
+        secondaryButtonText={t("research.common.cancel")}
+        variant={pendingAction?.action === "restore" ? "primary" : "danger"}
+      />
     </ResearchListSurface>
   );
 };

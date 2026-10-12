@@ -1277,6 +1277,7 @@
       "chain_status": {
         "active": "进行中",
         "archived": "已归档",
+        "deleted": "已删除",
         "completed": "已完成"
       },
       "visibility": "可见范围",
@@ -1802,6 +1803,10 @@
         "title": "项目已归档",
         "message": "项目已移出进行中列表，可随时恢复。"
       },
+      "project_deleted": {
+        "title": "项目已删除",
+        "message": "研究数据已保留，可在已删除列表中重新激活。"
+      },
       "project_restored": {
         "title": "项目已恢复",
         "message": "项目已恢复为进行中状态。"
@@ -1950,6 +1955,7 @@
     "project_status": {
       "active": "进行中",
       "archived": "已归档",
+      "deleted": "已删除",
       "completed": "已结题"
     },
     "approval_types": {
@@ -2067,6 +2073,12 @@
       "create": "创建科研项目",
       "open_team_project": "打开项目",
       "archive": "归档",
+      "delete": "删除",
+      "current_projects": "当前项目",
+      "owner_unset": "未设置",
+      "confirm_delete_title": "确认删除项目？",
+      "confirm_delete": "项目“{project}”将从首页及默认列表中移除。研究数据会保留，可在已删除列表中重新激活。",
+      "action_failed": "操作失败，请重试。",
       "restore": "恢复",
       "confirm_archive_title": "确认归档项目？",
       "confirm_archive": "项目“{project}”将从进行中列表移除，后续仍可恢复。",

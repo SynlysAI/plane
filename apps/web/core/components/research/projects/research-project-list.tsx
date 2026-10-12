@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 // plane imports
 import { RESEARCH_PROJECT_STATUS_LABELS, RESEARCH_PROJECT_TYPE_LABELS, RESEARCH_PROJECT_TYPES } from "@plane/constants";
 import type { TResearchProjectType } from "@plane/constants";
@@ -64,7 +65,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const setCursor = (value: string) => query.set("cursor", value);
   const [pendingProjectAction, setPendingProjectAction] = useState<{
     project: TResearchProject;
-    action: "archive" | "restore";
+    action: "archive" | "restore" | "delete";
   } | null>(null);
   const [isUpdatingProject, setIsUpdatingProject] = useState(false);
 
@@ -173,6 +174,8 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
     try {
       if (pendingProjectAction.action === "archive") {
         await research.archiveResearchProject(workspaceSlug, pendingProjectAction.project.id);
+      } else if (pendingProjectAction.action === "delete") {
+        await research.deleteResearchProject(workspaceSlug, pendingProjectAction.project.id);
       } else {
         await research.restoreResearchProject(workspaceSlug, pendingProjectAction.project.id);
       }
@@ -255,8 +258,8 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value)}
         >
-          <option value="">{t("research.projects.all_statuses")}</option>
-          {(["ACTIVE", "ARCHIVED", "COMPLETED"] as const).map((status) => (
+          <option value="">{t("research.projects.current_projects")}</option>
+          {(["ACTIVE", "COMPLETED", "ARCHIVED", "DELETED"] as const).map((status) => (
             <option key={status} value={status}>
               {t(RESEARCH_PROJECT_STATUS_LABELS[status])}
             </option>
@@ -341,11 +344,12 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                         {t("research.nav.stages")}
                       </Link>
                     )}
-                    {project.research?.owner === currentUserId &&
-                      (project.research?.workflow_status === "ACTIVE" ? (
+                    {(project.research?.owner === currentUserId || research.isWorkspaceAdmin) &&
+                      (!["ARCHIVED", "DELETED"].includes(project.research?.workflow_status ?? "") ? (
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={isUpdatingProject}
                           onClick={() => setPendingProjectAction({ project, action: "archive" })}
                         >
                           {t("research.projects.archive")}
@@ -354,11 +358,25 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={isUpdatingProject}
                           onClick={() => setPendingProjectAction({ project, action: "restore" })}
                         >
                           {t("research.projects.restore")}
                         </Button>
                       ))}
+                    {(project.research?.owner === currentUserId || research.isWorkspaceAdmin) &&
+                      project.research?.workflow_status !== "DELETED" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isUpdatingProject}
+                          title={t("research.projects.delete")}
+                          aria-label={`${t("research.projects.delete")}：${project.name}`}
+                          onClick={() => setPendingProjectAction({ project, action: "delete" })}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -396,15 +414,26 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
         handleSubmit={() => void handleProjectAction()}
         isSubmitting={isUpdatingProject}
         title={t(`research.projects.confirm_${pendingProjectAction?.action ?? "archive"}_title`)}
-        content={t(`research.projects.confirm_${pendingProjectAction?.action ?? "archive"}`, {
-          project: pendingProjectAction?.project.name ?? "",
-        })}
+        content={
+          <>
+            <span>
+              {t(`research.projects.confirm_${pendingProjectAction?.action ?? "archive"}`, {
+                project: pendingProjectAction?.project.name ?? "",
+              })}
+            </span>
+            {errorKey && (
+              <span role="alert" className="mt-2 block text-danger-primary">
+                {t(errorKey)}
+              </span>
+            )}
+          </>
+        }
         primaryButtonText={{
           default: t(`research.projects.${pendingProjectAction?.action ?? "archive"}`),
           loading: t("research.common.loading"),
         }}
         secondaryButtonText={t("research.common.cancel")}
-        variant={pendingProjectAction?.action === "archive" ? "danger" : "primary"}
+        variant={pendingProjectAction?.action === "restore" ? "primary" : "danger"}
       />
     </ResearchListSurface>
   );

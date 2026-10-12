@@ -25,6 +25,7 @@ CHAIN_ACTIONS = (
     "upload",
     "agent_review",
     "archive",
+    "delete",
     "restore",
 )
 NODE_ACTIONS = ("view", "edit", "transition", "upload", "agent_review")
@@ -123,22 +124,26 @@ def _capabilities(serializer, obj, *, is_node=False):
         action: check_access(actor, action, resource, context=context)
         for action in ("view", "edit", "review", "accept", "return", "export")
     }
+    writable = chain.status == ResearchChain.Status.ACTIVE
+    for action in ("edit", "review", "accept", "return"):
+        decisions[action] = decisions[action] and writable
     if is_node:
         from plane.research.views.chain_foundation import _chain_writer, _chain_manager, _node_operator
 
         decisions.update(
-            transition=_node_operator(chain.workspace, actor, obj),
-            upload=_chain_writer(chain.workspace, actor, chain),
-            agent_review=decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
+            transition=writable and _node_operator(chain.workspace, actor, obj),
+            upload=writable and _chain_writer(chain.workspace, actor, chain),
+            agent_review=writable and decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
         )
         return capability_map(NODE_ACTIONS, decisions)
     from plane.research.views.chain_foundation import _chain_manager, _chain_writer
 
     decisions.update(
-        upload=_chain_writer(chain.workspace, actor, chain),
-        archive=_chain_manager(chain.workspace, actor, chain),
-        restore=_chain_manager(chain.workspace, actor, chain),
-        agent_review=decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
+        upload=writable and _chain_writer(chain.workspace, actor, chain),
+        archive=_chain_manager(chain.workspace, actor, chain) and chain.status not in ("ARCHIVED", "DELETED"),
+        delete=_chain_manager(chain.workspace, actor, chain) and chain.status != "DELETED",
+        restore=_chain_manager(chain.workspace, actor, chain) and chain.status in ("ARCHIVED", "DELETED"),
+        agent_review=writable and decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
     )
     return capability_map(CHAIN_ACTIONS, decisions)
 

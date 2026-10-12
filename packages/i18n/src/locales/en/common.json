@@ -1263,6 +1263,7 @@
       "chain_status": {
         "active": "Active",
         "archived": "Archived",
+        "deleted": "Deleted",
         "completed": "Completed"
       },
       "visibility": "Visibility",
@@ -1777,6 +1778,10 @@
         "title": "Project archived",
         "message": "The project is no longer active and can be restored later."
       },
+      "project_deleted": {
+        "title": "Project deleted",
+        "message": "Research data is retained. Restore the project from the deleted list."
+      },
       "project_restored": {
         "title": "Project restored",
         "message": "The project is active again."
@@ -1925,6 +1930,7 @@
     "project_status": {
       "active": "In progress",
       "archived": "Archived",
+      "deleted": "Deleted",
       "completed": "Completed"
     },
     "approval_types": {
@@ -2042,6 +2048,12 @@
       "create": "Create research project",
       "open_team_project": "Open project",
       "archive": "Archive",
+      "delete": "Delete",
+      "current_projects": "Current projects",
+      "owner_unset": "Not set",
+      "confirm_delete_title": "Delete this project?",
+      "confirm_delete": "“{project}” will leave the home overview and default lists. Research data will be retained and the project can be restored from the deleted list.",
+      "action_failed": "The operation failed. Please try again.",
       "restore": "Restore",
       "confirm_archive_title": "Archive this project?",
       "confirm_archive": "“{project}” will leave the active list and can be restored later.",

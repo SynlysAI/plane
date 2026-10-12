@@ -254,12 +254,66 @@ it("keeps research and administrative project summaries separate", async () => {
   await act(async () => undefined);
 
   expect(container.textContent).toContain("催化剂失活机理研究");
+  expect(container.textContent).toContain("负责人：学生一");
   expect(container.textContent).toContain("实验数据分析");
   expect(container.textContent).toContain("2 项待办");
   expect(container.textContent).toContain("设备采购协作");
   expect(container.textContent).not.toContain("科研项目内部 Project");
   expect(mocks.getChains).toHaveBeenCalledTimes(1);
   expect(mocks.fetchProjects).toHaveBeenCalledTimes(1);
+});
+
+it("excludes archived and deleted chains from rows, task counts and deadlines", async () => {
+  const active = (await mocks.getChains())[0];
+  mocks.getChains.mockClear();
+  mocks.getChains.mockResolvedValue([
+    active,
+    {
+      ...active,
+      id: "archived",
+      project_name: "归档项目",
+      status: "ARCHIVED",
+      open_task_count: 20,
+      next_due_at: "2026-10-01T00:00:00Z",
+    },
+    { ...active, id: "deleted", project_name: "删除项目", status: "DELETED", open_task_count: 30 },
+    {
+      ...active,
+      id: "completed",
+      project_name: "完成项目",
+      status: "COMPLETED",
+      owner: "other",
+      owner_name: "另一位负责人",
+      open_task_count: 0,
+    },
+  ]);
+  await renderHome();
+  const section = container.querySelector('a[href="/lab/research/chains"]')?.closest("section");
+  expect(section?.textContent).not.toContain("归档项目");
+  expect(section?.textContent).not.toContain("删除项目");
+  expect(section?.textContent).toContain("完成项目");
+  expect(section?.textContent).toContain("负责人：另一位负责人");
+  expect(section?.textContent).toContain("共 2 个课题");
+  const metrics = section?.querySelector("div.grid-cols-3");
+  expect(metrics?.textContent).toContain("未完成任务2");
+  expect(metrics?.textContent).toContain("2026/10/12");
+});
+
+it("uses a readable placeholder without exposing a raw owner ID", async () => {
+  const active = (await mocks.getChains())[0];
+  mocks.getChains.mockResolvedValue([{ ...active, owner: "raw-owner-id", owner_name: "  " }]);
+  await renderHome();
+  expect(container.textContent).toContain("负责人：未设置");
+  expect(container.textContent).not.toContain("raw-owner-id");
+});
+
+it("renders an empty research overview when every chain is hidden", async () => {
+  mocks.getChains.mockResolvedValue([{ status: "ARCHIVED" }, { status: "DELETED" }]);
+  await renderHome();
+  const section = container.querySelector('a[href="/lab/research/chains"]')?.closest("section");
+  expect(section?.querySelectorAll("li")).toHaveLength(0);
+  expect(section?.querySelector("div.grid-cols-3")).toBeNull();
+  expect(section?.textContent).toContain("暂无");
 });
 
 it("uses the shared server todo projection and preserves URL scope changes", async () => {

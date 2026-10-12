@@ -12,7 +12,7 @@
     "chain_kind": { "enum": ["LEGACY_TRAINING", "RESEARCH_CHAIN"] },
     "visibility": { "enum": ["PRIVATE", "MEMBERS", "ORG", "WORKSPACE"] },
     "owner_id": { "type": "string", "minLength": 1 },
-    "status": { "enum": ["ACTIVE", "ARCHIVED", "COMPLETED"] },
+    "status": { "enum": ["ACTIVE", "ARCHIVED", "COMPLETED", "DELETED"] },
     "project_identifier": { "type": "string" },
     "org_unit_name": { "type": ["string", "null"] },
     "open_task_count": { "type": "integer", "minimum": 0 },
