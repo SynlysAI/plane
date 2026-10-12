@@ -21,7 +21,11 @@ from django.db import transaction
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
-from plane.utils.administrative_projects import user_can_manage_administrative_project
+from plane.utils.administrative_projects import (
+    administrative_projects_for_user,
+    visible_administrative_projects,
+    user_can_manage_administrative_project,
+)
 
 # Module imports
 from plane.app.permissions import allow_permission, ROLE
@@ -152,7 +156,7 @@ class WorkspaceViewIssuesViewSet(BaseViewSet):
         Get common project permission filters for guest users and role-based access control.
         Returns Q object for filtering issues based on user role and project settings.
         """
-        return Q(
+        return Q(project_id__in=administrative_projects_for_user(self.request.user, self.kwargs.get("slug")).values("id")) | Q(
             Q(
                 project__project_projectmember__role=5,
                 project__guest_view_all_features=True,
@@ -218,7 +222,12 @@ class WorkspaceViewIssuesViewSet(BaseViewSet):
         )
 
     def get_queryset(self):
-        return Issue.issue_objects.filter(workspace__slug=self.kwargs.get("slug"))
+        return Issue.issue_objects.filter(
+            workspace__slug=self.kwargs.get("slug"),
+            project_id__in=visible_administrative_projects(self.request.user, self.kwargs.get("slug")).filter(
+                archived_at__isnull=True
+            ).values("id"),
+        )
 
     @method_decorator(gzip_page)
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -237,7 +246,7 @@ class WorkspaceViewIssuesViewSet(BaseViewSet):
         # Get common project permission filters
         permission_filters = self._get_project_permission_filters()
         # Apply project permission filters to the issue queryset
-        issue_queryset = issue_queryset.filter(permission_filters)
+        issue_queryset = issue_queryset.filter(permission_filters).distinct()
 
         # Base query for the counts
         total_issue_count_queryset = copy.deepcopy(issue_queryset)

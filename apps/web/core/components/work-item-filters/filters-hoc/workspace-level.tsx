@@ -41,7 +41,7 @@ export const WorkspaceLevelWorkItemFiltersHOC = observer(function WorkspaceLevel
   const { getViewDetailsById, updateGlobalView } = useGlobalView();
   const { data: currentUser } = useUser();
   const { allowPermissions } = useUserPermissions();
-  const { joinedProjectIds } = useProject();
+  const { administrativeJoinedProjectIds: joinedProjectIds, fetchStatus } = useProject();
   const {
     workspace: { getWorkspaceMemberIds },
   } = useMember();
@@ -191,6 +191,7 @@ export const WorkspaceLevelWorkItemFiltersHOC = observer(function WorkspaceLevel
         memberIds={getWorkspaceMemberIds(workspaceSlug)}
         labelIds={getWorkspaceLabelIds(workspaceSlug)}
         projectIds={joinedProjectIds}
+        administrativeProjectScopeReady={fetchStatus === "complete"}
         saveViewOptions={saveViewOptions}
         updateViewOptions={updateViewOptions}
       >

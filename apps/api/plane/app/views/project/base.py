@@ -59,6 +59,8 @@ from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_orde
 from plane.utils.administrative_projects import (
     administrative_projects_for_user,
     restrict_administrative_project_visibility,
+    administrative_project_filter,
+    research_project_ids,
     user_can_manage_administrative_project,
 )
 
@@ -210,7 +212,7 @@ class ProjectViewSet(BaseViewSet):
             .annotate(sort_order=Subquery(sort_order))
             # additive research flag used by the optional serializer field
             .annotate(
-                is_research_project=Exists(ResearchProjectProfile.objects.filter(project_id=OuterRef("pk")))
+                is_research_project=Exists(Project.all_objects.filter(pk=OuterRef("pk"), id__in=research_project_ids()))
             )
             .prefetch_related(
                 Prefetch(
@@ -229,6 +231,9 @@ class ProjectViewSet(BaseViewSet):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         projects = self.get_queryset().order_by("sort_order", "name")
         projects = _restrict_workspace_project_visibility(projects, request, slug)
+
+        if request.GET.get("scope") == "administrative":
+            projects = projects.filter(administrative_project_filter())
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(
@@ -272,7 +277,7 @@ class ProjectViewSet(BaseViewSet):
             .annotate(inbox_view=F("intake_view"))
             .annotate(sort_order=Subquery(sort_order))
             .annotate(
-                is_research_project=Exists(ResearchProjectProfile.objects.filter(project_id=OuterRef("pk")))
+                is_research_project=Exists(Project.all_objects.filter(pk=OuterRef("pk"), id__in=research_project_ids()))
             )
             .distinct()
         ).values(
@@ -302,6 +307,8 @@ class ProjectViewSet(BaseViewSet):
         )
 
         projects = _restrict_workspace_project_visibility(projects, request, slug)
+        if request.GET.get("scope") == "administrative":
+            projects = projects.filter(administrative_project_filter())
         return Response(projects, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")

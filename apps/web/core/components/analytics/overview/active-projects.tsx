@@ -22,13 +22,14 @@ const ActiveProjects = observer(function ActiveProjects() {
   const { t } = useTranslation();
   const { fetchProjectAnalyticsCount } = useProject();
   const { workspaceSlug } = useParams();
-  const { selectedDurationLabel } = useAnalytics();
+  const { selectedDurationLabel, selectedProjects } = useAnalytics();
   const { data: projectAnalyticsCount, isLoading: isProjectAnalyticsCountLoading } = useSWR(
-    workspaceSlug ? ["projectAnalyticsCount", workspaceSlug] : null,
+    workspaceSlug ? ["projectAnalyticsCount", workspaceSlug, selectedProjects.join(",")] : null,
     workspaceSlug
       ? () =>
           fetchProjectAnalyticsCount(workspaceSlug.toString(), {
-            fields: "total_work_items,total_completed_work_items",
+            fields: "total_issues,completed_issues",
+            project_ids: selectedProjects.join(","),
           })
       : null
   );

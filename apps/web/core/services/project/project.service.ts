@@ -52,8 +52,8 @@ export class ProjectService extends APIService {
       });
   }
 
-  async getProjects(workspaceSlug: string): Promise<TProject[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/details/`)
+  async getProjects(workspaceSlug: string, scope?: "administrative"): Promise<TProject[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/details/`, { params: { scope } })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

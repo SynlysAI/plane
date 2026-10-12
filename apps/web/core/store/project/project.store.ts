@@ -36,6 +36,9 @@ export interface IProjectStore {
   totalProjectIds: string[] | undefined;
   joinedProjectIds: string[];
   favoriteProjectIds: string[];
+  administrativeProjectIds: string[] | undefined;
+  administrativeFilteredProjectIds: string[] | undefined;
+  administrativeJoinedProjectIds: string[];
   currentProjectDetails: TProject | undefined;
   currentProjectNextSequenceId: number | undefined;
   // actions
@@ -57,7 +60,7 @@ export interface IProjectStore {
 
   // fetch actions
   fetchPartialProjects: (workspaceSlug: string) => Promise<TPartialProject[]>;
-  fetchProjects: (workspaceSlug: string) => Promise<TProject[]>;
+  fetchProjects: (workspaceSlug: string, scope?: "administrative") => Promise<TProject[]>;
   fetchProjectDetails: (workspaceSlug: string, projectId: string) => Promise<TProject>;
   fetchProjectAnalyticsCount: (
     workspaceSlug: string,
@@ -112,6 +115,9 @@ export class ProjectStore implements IProjectStore {
       workspaceProjectIds: computed,
       archivedProjectIds: computed,
       totalProjectIds: computed,
+      administrativeProjectIds: computed,
+      administrativeFilteredProjectIds: computed,
+      administrativeJoinedProjectIds: computed,
       currentProjectDetails: computed,
       joinedProjectIds: computed,
       favoriteProjectIds: computed,
@@ -215,6 +221,21 @@ export class ProjectStore implements IProjectStore {
     const workspaceProjects = this.workspaceProjectIds ?? [];
     const archivedProjects = this.archivedProjectIds ?? [];
     return [...workspaceProjects, ...archivedProjects];
+  }
+
+  /** 返回当前工作区行政项目 ID，包含归档项目，保留科研项目共享缓存。 */
+  get administrativeProjectIds() {
+    return this.totalProjectIds?.filter((id) => this.projectMap[id]?.is_research_project === false);
+  }
+
+  /** 返回满足页面筛选条件的行政项目 ID。 */
+  get administrativeFilteredProjectIds() {
+    return this.filteredProjectIds?.filter((id) => this.projectMap[id]?.is_research_project === false);
+  }
+
+  /** 返回可用于行政视图和分析筛选的未归档项目 ID。 */
+  get administrativeJoinedProjectIds() {
+    return this.joinedProjectIds.filter((id) => this.projectMap[id]?.is_research_project === false);
   }
 
   /**
@@ -337,14 +358,14 @@ export class ProjectStore implements IProjectStore {
    * @returns Promise<TProject[]>
    *
    */
-  fetchProjects = async (workspaceSlug: string) => {
+  fetchProjects = async (workspaceSlug: string, scope?: "administrative") => {
     try {
       if (this.workspaceProjectIds && this.workspaceProjectIds.length > 0) {
         this.loader = "mutation";
       } else {
         this.loader = "init-loader";
       }
-      const projectsResponse = await this.projectService.getProjects(workspaceSlug);
+      const projectsResponse = await this.projectService.getProjects(workspaceSlug, scope);
       runInAction(() => {
         this._pruneAdministrativeProjectAccess(
           workspaceSlug,

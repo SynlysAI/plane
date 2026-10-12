@@ -2,9 +2,33 @@
 
 from django.db.models import Q
 
-from plane.db.models import Project, ProjectMember, ResearchProjectProfile, Workspace, WorkspaceMember
+from plane.db.models import Project, ProjectMember, ResearchChain, ResearchProjectProfile, Workspace, WorkspaceMember
 from plane.db.models.project import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
+
+
+def research_project_ids():
+    """返回所有科研档案或科研链关联的项目 ID。
+
+    Returns:
+        包含软删除科研档案的项目主键查询集。
+    """
+    profile_ids = ResearchProjectProfile.all_objects.values("project_id")
+    chain_ids = ResearchChain.all_objects.values("project_id")
+    return profile_ids.union(chain_ids)
+
+
+def administrative_project_filter(prefix=""):
+    """返回排除科研项目的 Django 查询条件。
+
+    Args:
+        prefix: 关联项目字段前缀；项目查询使用空字符串，工作项查询使用 ``project__``。
+
+    Returns:
+        排除科研项目的 Q 条件。
+    """
+    field = f"{prefix}id__in" if prefix else "id__in"
+    return ~Q(**{field: research_project_ids()})
 
 
 def administrative_projects(workspace_slug):
@@ -16,9 +40,7 @@ def administrative_projects(workspace_slug):
     Returns:
         行政项目查询集。
     """
-    return Project.objects.filter(workspace__slug=workspace_slug).exclude(
-        id__in=ResearchProjectProfile.objects.values("project_id")
-    )
+    return Project.objects.filter(workspace__slug=workspace_slug).filter(administrative_project_filter())
 
 
 def administrative_projects_for_user(user, workspace_slug):
@@ -47,6 +69,30 @@ def administrative_projects_for_user(user, workspace_slug):
     return projects.none()
 
 
+def visible_administrative_projects(user, workspace_slug):
+    """返回当前用户可读取的行政项目，兼容默认管理员权限。
+
+    Args:
+        user: 当前用户。
+        workspace_slug: 工作区别名。
+
+    Returns:
+        已按工作区准入及有效成员权限限定的行政项目查询集。
+    """
+    projects = administrative_projects(workspace_slug)
+    if not user or not getattr(user, "is_authenticated", False):
+        return projects.none()
+    if not user_can_access_workspace(user, workspace_slug=workspace_slug):
+        return projects.none()
+    member_ids = ProjectMember.objects.filter(
+        workspace__slug=workspace_slug, member=user, is_active=True
+    ).values("project_id")
+    return projects.filter(
+        Q(id__in=member_ids)
+        | Q(id__in=administrative_projects_for_user(user, workspace_slug).values("id"))
+    )
+
+
 def restrict_administrative_project_visibility(queryset, user, workspace_slug):
     """限制行政项目为有效成员或默认管理身份可见。
 
@@ -62,7 +108,7 @@ def restrict_administrative_project_visibility(queryset, user, workspace_slug):
         "project_id"
     )
     return queryset.filter(
-        Q(id__in=ResearchProjectProfile.objects.values("project_id"))
+        Q(id__in=research_project_ids())
         | Q(id__in=member_ids)
         | Q(id__in=administrative_projects_for_user(user, workspace_slug).values("id"))
     )
