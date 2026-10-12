@@ -1,6 +1,6 @@
 # PiLab 文档总索引
 
-> 当前代码事实：`develop` 分支，软件版本 `4.26.0`。本文档按代码、测试和运行证据整理，更新时间：2026-10-11。
+> 当前代码事实：`develop` 分支，软件版本 `4.27.0`。本文档按代码、测试和运行证据整理，更新时间：2026-10-12。
 
 本目录采用分层文档架构。文档不重复争夺同一份“当前状态”，而是分别回答产品为什么做、平台如何协作、代码如何实现、怎样验收和怎样发布。
 
@@ -14,13 +14,13 @@
 4. 产品 PRD、阶段计划和 UX 设计规范。
 5. 标记为历史或档案的旧版本文档。
 
-| 状态     | 含义                                    | 当前文档口径                                                                                                                                                                                                                                                                                          |
-| -------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 已交付   | 代码、自动化测试和发布/验收证据均已具备 | P0、P1、智能平台 Phase 0、Phase 1、Phase 1.5 代码修复、`4.20.0` 兼容发布、`4.21.0` 1008 主体补齐、`4.22.0` 反馈架构/收尾加固、`4.22.1` HTTP/IP 兼容修复、`4.22.2` 组合筛选基线、`4.23.0` 二轮反馈收尾、`4.23.1` Phase 1.6 产品/原型基线、`4.25.0` Phase 1.6 核心实现、`4.26.0` Phase 1.6 统一待办修复 |
-| 灰度中   | 已实现，但仍有真实环境或跨仓门禁        | 首个真实课题的 workflow、KB、成员和 Agent 证据；真实 OIDC 绑定                                                                                                                                                                                                                                        |
-| 规划中   | 已定义范围，尚未进入当前交付            | P2、智能平台 Phase 2/3                                                                                                                                                                                                                                                                                |
-| 暂缓     | 仅保留产品设计和边界                    | P3 AI 结合能力、微信小程序                                                                                                                                                                                                                                                                            |
-| 历史冻结 | 保留当时事实，不覆盖当前契约            | P0/P1 旧版本基线、4.10–4.13 UI/UX 过程文档                                                                                                                                                                                                                                                            |
+| 状态     | 含义                                    | 当前文档口径                                                                                                                                                                                                                                                                                                                       |
+| -------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 已交付   | 代码、自动化测试和发布/验收证据均已具备 | P0、P1、智能平台 Phase 0、Phase 1、Phase 1.5 代码修复、`4.20.0` 兼容发布、`4.21.0` 1008 主体补齐、`4.22.0` 反馈架构/收尾加固、`4.22.1` HTTP/IP 兼容修复、`4.22.2` 组合筛选基线、`4.23.0` 二轮反馈收尾、`4.23.1` Phase 1.6 产品/原型基线、`4.25.0` Phase 1.6 核心实现、`4.26.0` Phase 1.6 统一待办修复、`4.27.0` Phase 1.6 体验收敛 |
+| 灰度中   | 已实现，但仍有真实环境或跨仓门禁        | 首个真实课题的 workflow、KB、成员和 Agent 证据；真实 OIDC 绑定                                                                                                                                                                                                                                                                     |
+| 规划中   | 已定义范围，尚未进入当前交付            | P2、智能平台 Phase 2/3                                                                                                                                                                                                                                                                                                             |
+| 暂缓     | 仅保留产品设计和边界                    | P3 AI 结合能力、微信小程序                                                                                                                                                                                                                                                                                                         |
+| 历史冻结 | 保留当时事实，不覆盖当前契约            | P0/P1 旧版本基线、4.10–4.13 UI/UX 过程文档                                                                                                                                                                                                                                                                                         |
 
 ## 2. 从哪里开始读
 
@@ -70,21 +70,21 @@
 
 ## 3. 产品与平台层
 
-| 文档                                                                                                                               | 职责                                                              | 当前状态                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| [`research-management-prd-roadmap.md`](product/research-management-prd-roadmap.md)                                                 | PiLab 产品目标、生态边界、P0–P3 路线                              | P0/P1 已交付，P2 规划，P3 暂缓；不覆盖平台 Phase 0/1 的实现细节        |
-| [`research-intelligent-platform-prd.md`](product/research-intelligent-platform-prd.md)                                             | Plane、Synlora、RAGPortal、WeKnora 与专业系统的跨仓平台总 PRD     | Phase 0/1/1.5 已进入实现事实层，跨仓真实绑定和首个真实课题证据仍灰度中 |
-| [`research-intelligent-platform-phase-0-plan.md`](plans/phase-0/research-intelligent-platform-phase-0-plan.md)                     | 契约、授权、BFF、安全和观测基础                                   | 已实施，历史计划保留                                                   |
-| [`research-intelligent-platform-phase-1-plan.md`](plans/phase-1/research-intelligent-platform-phase-1-plan.md)                     | UI/UX Ready 工作台和最小闭环                                      | 已实施，真实课题证据灰度中                                             |
-| [`research-intelligent-platform-phase-1.6-prd.md`](product/research-intelligent-platform-phase-1.6-prd.md)                         | 课题 / Project 边界、UX 精炼、角色看板和代码治理规则              | 实施复核版；核心切片已实施，编辑器行为与偏差检测仍为合同边界           |
-| [`research-intelligent-platform-phase-1.6-remediation-prd.md`](product/research-intelligent-platform-phase-1.6-remediation-prd.md) | Phase 1.6 修复：统一待办入口、单源降级、v2 契约收敛与原型指派边界 | 已交付；后端契约、前端组件、类型 / Lint / 引用审计与原型浏览器验证通过 |
-| [`phase-1.6-research-space.html`](product/prototypes/phase-1.6-research-space.html)                                                | Phase 1.6 产品界面型静态原型                                      | 实现对照；四角色指派边界、三种待办范围与响应式已验证，数据均为示例     |
-| [`research-space-boundary-development-design.md`](plans/phase-1.6/research-space-boundary-development-design.md)                   | 主轴一：模型、服务、API、事件与测试夹具设计                       | 实施复核版；领域对象、API、指派边界与服务端待办已实施                  |
-| [`research-space-ux-refinement-development-design.md`](plans/phase-1.6/research-space-ux-refinement-development-design.md)         | 主轴二：真实外框、六屏线框、组件与响应式合同                      | 实施复核版；U0–U8 已实施并保留静态原型对照                             |
-| [`research-space-code-refinement-development-design.md`](plans/phase-1.6/research-space-code-refinement-development-design.md)     | 主轴三：引用审计、逐符号清理表与提交级验证矩阵                    | 实施复核版；C0–C6 已实施，C7 仅完成只读审计                            |
-| [`research-intelligent-platform-phase-2-plan.md`](plans/phase-2/research-intelligent-platform-phase-2-plan.md)                     | 实验运行、Job、数据资产和垂类能力                                 | 规划中                                                                 |
-| [`research-intelligent-platform-phase-3-plan.md`](plans/phase-3/research-intelligent-platform-phase-3-plan.md)                     | 治理、规模化、灾备和开放能力                                      | 规划中                                                                 |
-| [`wechat-mini-program-prd.md`](product/wechat-mini-program-prd.md)                                                                 | 微信小程序独立产品设想                                            | 暂缓，不计入当前 Plane Web 交付                                        |
+| 文档                                                                                                                               | 职责                                                              | 当前状态                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| [`research-management-prd-roadmap.md`](product/research-management-prd-roadmap.md)                                                 | PiLab 产品目标、生态边界、P0–P3 路线                              | P0/P1 已交付，P2 规划，P3 暂缓；不覆盖平台 Phase 0/1 的实现细节                                     |
+| [`research-intelligent-platform-prd.md`](product/research-intelligent-platform-prd.md)                                             | Plane、Synlora、RAGPortal、WeKnora 与专业系统的跨仓平台总 PRD     | Phase 0/1/1.5 已进入实现事实层，跨仓真实绑定和首个真实课题证据仍灰度中                              |
+| [`research-intelligent-platform-phase-0-plan.md`](plans/phase-0/research-intelligent-platform-phase-0-plan.md)                     | 契约、授权、BFF、安全和观测基础                                   | 已实施，历史计划保留                                                                                |
+| [`research-intelligent-platform-phase-1-plan.md`](plans/phase-1/research-intelligent-platform-phase-1-plan.md)                     | UI/UX Ready 工作台和最小闭环                                      | 已实施，真实课题证据灰度中                                                                          |
+| [`research-intelligent-platform-phase-1.6-prd.md`](product/research-intelligent-platform-phase-1.6-prd.md)                         | 课题 / Project 边界、UX 精炼、角色看板和代码治理规则              | 实施复核版 v2.2；`4.27.0` 已回写首页 Bento、待办中心与研究链 Peek，完整编辑器合同与偏差检测仍未实施 |
+| [`research-intelligent-platform-phase-1.6-remediation-prd.md`](product/research-intelligent-platform-phase-1.6-remediation-prd.md) | Phase 1.6 修复：统一待办入口、单源降级、v2 契约收敛与原型指派边界 | 已交付；`4.27.0` 只修订入口布局，不改变 v2 契约、六源降级和指派边界                                 |
+| [`phase-1.6-research-space.html`](product/prototypes/phase-1.6-research-space.html)                                                | Phase 1.6 产品界面型静态原型                                      | 实现对照；四角色指派边界、三种待办范围与响应式已验证，数据均为示例                                  |
+| [`research-space-boundary-development-design.md`](plans/phase-1.6/research-space-boundary-development-design.md)                   | 主轴一：模型、服务、API、事件与测试夹具设计                       | 实施复核版；领域对象、API、指派边界与服务端待办已实施                                               |
+| [`research-space-ux-refinement-development-design.md`](plans/phase-1.6/research-space-ux-refinement-development-design.md)         | 主轴二：真实外框、六屏线框、组件与响应式合同                      | 实施复核版；U0–U8 已实施并保留静态原型对照                                                          |
+| [`research-space-code-refinement-development-design.md`](plans/phase-1.6/research-space-code-refinement-development-design.md)     | 主轴三：引用审计、逐符号清理表与提交级验证矩阵                    | 实施复核版；C0–C6 已实施，C7 仅完成只读审计                                                         |
+| [`research-intelligent-platform-phase-2-plan.md`](plans/phase-2/research-intelligent-platform-phase-2-plan.md)                     | 实验运行、Job、数据资产和垂类能力                                 | 规划中                                                                                              |
+| [`research-intelligent-platform-phase-3-plan.md`](plans/phase-3/research-intelligent-platform-phase-3-plan.md)                     | 治理、规模化、灾备和开放能力                                      | 规划中                                                                                              |
+| [`wechat-mini-program-prd.md`](product/wechat-mini-program-prd.md)                                                                 | 微信小程序独立产品设想                                            | 暂缓，不计入当前 Plane Web 交付                                                                     |
 
 ## 4. 实现规格与当前契约
 
@@ -126,7 +126,7 @@
 
 1. 实现以代码和测试为准；发现冲突时回写当前契约、发布说明和索引，历史文档只补充取代说明。
 2. 产品 PRD 只定义目标、边界和优先级；开发 PRD 定义实现规格；契约文件定义跨服务交换格式；验收/发布文档记录实际结果。
-3. 版本号与根 `package.json`、各应用/包和 API `pyproject.toml` 同步；当前软件版本为 `4.26.0`，文档版本独立维护。
+3. 版本号与根 `package.json`、各应用/包和 API `pyproject.toml` 同步；当前软件版本为 `4.27.0`，文档版本独立维护。
 4. `public` π-Lab 基线不预造课题；一次性凭据、原始 xlsx、`.runtime/` 备份和 `refer/issue.docx` 不进入 Git。
 5. 真实 OIDC 绑定必须双方完成认证；未完成前只能记录为灰度门禁，不能标记为完全打通。
 6. 首个真实课题创建后，补录 workflow、节点动作、成员回执、KB 上传和 Agent 会话证据；不得为截图向 `public` 写入虚构课题。
@@ -145,6 +145,7 @@
 | 2026-10-10 | v4.5 | 增加 Tower 式统一待办信封、三种范围切换、领域状态映射和五步实施顺序，并推进 4.23.3                    |
 | 2026-10-10 | v4.6 | 新增科研/行政项目独立分类导航、组织组别投影、分类管理与权限兼容基线；版本推进 4.24.0                  |
 | 2026-10-11 | v4.7 | 回写 Phase 1.6 实施复核状态、原型对照、三份主轴设计结论与 4.25.0 版本口径                             |
+| 2026-10-12 | v4.9 | 回写 Phase 1.6 体验收敛：首页 Bento、待办中心、审批同级待办与研究链 Peek，版本推进 4.27.0             |
 | 2026-10-11 | v4.8 | 交付 Phase 1.6 修复 PRD：统一待办共享入口、六源独立降级、v2 契约收敛与角色化指派原型，版本推进 4.26.0 |
 | 2026-10-09 | v4.1 | 登记 Phase 1.6 三大主轴、基础设计不变量、PRD 和自包含 HTML 原型；版本推进 4.23.1                      |
 | 2026-10-09 | v4.0 | 补齐 1008 二轮反馈的项目与课题入口、返回导航、报告/成果边界和反馈管理体验；版本推进 4.23.0            |

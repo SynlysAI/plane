@@ -3,8 +3,8 @@
 | 项目     | 内容                                                              |
 | -------- | ----------------------------------------------------------------- |
 | 文档状态 | 当前有效                                                          |
-| 文档版本 | v1.4                                                              |
-| 日期     | 2026-09-24                                                        |
+| 文档版本 | v1.6                                                              |
+| 日期     | 2026-10-12                                                        |
 | 适用版本 | `4.13.0` 起                                                       |
 | 定位     | 科研工作台 UI/UX 系列文档的**唯一入口与权威规范**；冲突以本文为准 |
 
@@ -57,7 +57,7 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 | 阶段详情     | `ResearchChainWorkflowStageDetail`（节点 / 快照 / Trace） | `research/chains/research-chain-workflow-stage-detail.tsx` |
 | 当前对象选择 | `pickCurrentChain` / `pickCurrentNode`（统一口径）        | `research/chains/research-selection.ts`                    |
 | 日期格式化   | `formatResearchDateTime` / `formatResearchDate`           | `research/common/research-format.ts`                       |
-| 待办聚合     | `collectResearchTodos`（跨组件共享口径）                  | `research/common/research-todo-source.ts`                  |
+| 待办聚合     | `ResearchTodoEnvelopeList`（`research-todo.v2` 共享入口） | `research/common/research-todo-index.tsx`                  |
 | Agent 面板   | `ResearchAgentSidePanel`（400px 抽屉 + 上下文继承）       | `research/agent/research-agent-side-panel.tsx`             |
 | 表格         | propel `Table` 系列（禁手写原生 table）                   | `@plane/propel/table`                                      |
 | 按钮 / 加载  | propel `Button` / `getButtonStyling` / `Skeleton`         | `@plane/propel/*`                                          |
@@ -68,13 +68,28 @@ Agent          = 侧边能力（就地出现，不是第二个系统）
 
 ## 5. 页面模式
 
+### 5.0 首页工作台（IA v2）
+
+行动优先，不做彩色仪表盘。宽屏 12 列：首行待办 5 列、科研概览 7 列；次行行政项目、报告摘要、最近动态各 4 列。窄屏单列。
+
+- 卡片使用 `HomeSectionCard`：固定标题、内容区和可选底栏。紧凑模式内部滚动，详细模式交给页面滚动。
+- 密度切换是分段按钮，状态写入 `plane.home.workbench.density`，默认紧凑。
+- 待办、科研和行政不得混成同一列表。紧急状态只用克制红色，并同时显示“逾期 / 今天截止”。
+- “查看全部待办”进入 `/{workspace}/research/todos`，该页只展示完整聚合列表和返回首页的链接。
+
+关闭 `research_ia_v2` 时，本节不替换旧科研总览。
+
 ### 5.1 科研总览
 
 节奏固定：当前科研 → 跨组件待办 → 科研概况（单行统计）→ 折叠 Supporting（筛选 / 组织范围 / 近期成果 / 导航）。KPI 一律单行数字 + 标签 + 细分隔线，不做卡片阵列。
 
 ### 5.2 研究链
 
-Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段）** → Tabs → 阶段详情（关联节点、快照、Trace log 与六段式节点详情）→ Supporting。Rail 始终显示：文献调研 → 选题 → 评估 → 预实验 → 分析 → 开题 → 实验 → 分析 → 迭代 → 总结 → 论文写作 → 结题 → 转化；两个“分析”阶段按结构前后关系区分。`TOPIC_EVALUATION` 在“选题 / 评估”共享关联，`PLAN` 是开题准备节点；点击阶段仅查看该阶段证据，不改变真实当前节点。
+Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段）** → Tabs → 阶段详情（关联节点、快照、过程记录与六段式节点详情）→ Supporting。导轨是可换行的流程地图，不是中点文字链；每个阶段显示序号、名称和可见状态，阶段之间用箭头连接。Rail 始终显示：文献调研 → 选题 → 评估 → 预实验 → 分析 → 开题 → 实验 → 分析 → 迭代 → 总结 → 论文写作 → 结题 → 转化；两个“分析”阶段按结构前后关系区分。`TOPIC_EVALUATION` 在“选题 / 评估”共享关联，`PLAN` 是开题准备节点；点击阶段仅查看该阶段证据，不改变真实当前节点。
+
+### 5.2.1 阶段 Peek
+
+证据、快照、过程记录、空项和节点任务共用一层 Peek，同一时间只打开一层。再次点击同一计数关闭 Peek。任务 Peek 支持侧边、模态框和全屏；创建任务也走同一层，不另开第二套编辑器。候选人搜索只过滤当前课题可指派范围。
 
 ### 5.3 Agent
 
@@ -124,3 +139,5 @@ Header（对象 + 当前节点）→ **Workflow Rail（常驻，固定 13 阶段
 | v1.2 | 2026-09-24 | 将 Research Chain 的中文产品名称统一为“研究链”，同步产品定位与页面模式                            |
 | v1.3 | 2026-09-24 | 登记固定 13 阶段流程地图、共享数据 Surface、列表 / 详情模式与 Agent 键盘焦点规则                  |
 | v1.4 | 2026-09-24 | 新增选择器 / 日期 / 待办聚合语义出口，登记遮罩例外与 fixed 抽屉审计口径                           |
+| v1.5 | 2026-10-11 | 研究链导轨恢复为可换行的十三阶段流程地图，不再使用中点文字链                                      |
+| v1.6 | 2026-10-12 | 登记 IA v2 首页 Bento、待办中心、单层 Peek，并将待办出口改为 `research-todo.v2`                   |

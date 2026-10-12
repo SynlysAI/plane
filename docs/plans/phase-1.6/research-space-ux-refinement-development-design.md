@@ -3,14 +3,16 @@
 | 项目     | 内容                                                                                                                                |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | 文档版本 | v1.7                                                                                                                                |
-| 状态     | 实施复核版；U0–U8 均已实施，静态原型保留为交互对照，不伪装生产数据                                                                  |
-| 日期     | 2026-10-11                                                                                                                          |
-| 代码基线 | Plane `develop` / `4.26.0`                                                                                                          |
+| 状态     | 实施复核版；U0–U8 已实施。`4.27.0` 现行首页、待办入口和 Peek 以阶段 PRD v2.2 为准，本文两列布局仅作 `4.26.0` 对照                   |
+| 日期     | 2026-10-12                                                                                                                          |
+| 代码基线 | Plane `develop` / `4.27.0`                                                                                                          |
 | 上游 PRD | [`research-intelligent-platform-phase-1.6-prd.md`](../../product/research-intelligent-platform-phase-1.6-prd.md)                    |
 | 关联设计 | [逻辑厘清设计](research-space-boundary-development-design.md)、[代码精炼设计](research-space-code-refinement-development-design.md) |
 | 视觉规范 | [Research Workspace UX 指南](../../product/research-workspace-ux-guide.md) 与 Academic Editorial UI                                 |
 
 ## 1. 设计结论
+
+`4.27.0` 起，生产首页不再使用本节描述的两列布局，审批中心增加与领域队列同级的跨组件待办页签，研究链任务和证据共用一层 Peek。这些修订的现行合同见 [Phase 1.6 PRD §4.6](../../product/research-intelligent-platform-phase-1.6-prd.md)。下文保留 `4.26.0` 实施时的设计结论，便于对照，不覆盖现行体验。
 
 Phase 1.6 的 UX 是**现有 Plane UX 的事实收敛**，不是重画一套界面：
 
