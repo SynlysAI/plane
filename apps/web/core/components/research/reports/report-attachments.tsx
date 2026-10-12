@@ -80,7 +80,7 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
         <h3 className="text-13 font-medium text-primary">{t("research.attachments.title")}</h3>
         {editable && (
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Button variant="secondary" size="xl" onClick={() => fileInputRef.current?.click()}>
               {t("research.attachments.upload_file")}
             </Button>
             <input

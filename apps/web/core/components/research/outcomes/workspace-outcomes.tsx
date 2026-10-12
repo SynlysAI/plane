@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { observer } from "mobx-react";
+import { Plus } from "lucide-react";
 import {
   API_BASE_URL,
   OUTCOME_TYPES,
@@ -11,7 +12,15 @@ import {
 import type { TResearchOutcome } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { ModalCore } from "@plane/ui";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
+import { ModalCore, ListFilterField, ListFilterSelect } from "@plane/ui";
+import {
+  ResearchBrowseHeader,
+  ResearchBrowseRefresh,
+  ResearchBrowseToolbar,
+} from "@/components/research/common/research-browse-toolbar";
+import { ResearchListSurface, ResearchTableSurface } from "@/components/research/common/research-data-surface";
+import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchOutcomeService } from "@/services/research/outcome.service";
 import { useResearch } from "@/hooks/store/use-research";
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
@@ -79,72 +88,76 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
   }, [research, workspaceSlug]);
   const selectStyle = "rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary";
   return (
-    <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto bg-canvas p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-16 font-semibold">成果</h2>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={!page?.create_projects.length}
-          onClick={() => {
-            setProject(page?.create_projects[0]?.id ?? "");
-            setTitle("");
-            setStatus("DRAFT");
-            setPublishedAt("");
-            setVenue("");
-            setDoi("");
-            setDialogError("");
-            setDialog(true);
-          }}
-        >
-          登记成果
-        </Button>
-      </div>
-      <div className="flex flex-wrap items-end gap-3">
-        <select
-          aria-label="课题组"
-          className={selectStyle}
-          value={query.get("org_unit")}
-          onChange={(event) => query.set("org_unit", event.target.value)}
-        >
-          <option value="">全部课题组</option>
-          {research.getOrgUnits(workspaceSlug).map((unit) => (
-            <option key={unit.id} value={unit.id}>
-              {unit.name}
-            </option>
-          ))}
-        </select>
-        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="outcomes" />
-        <select
-          aria-label="成果类型"
-          className={selectStyle}
-          value={query.get("output_type")}
-          onChange={(event) => query.set("output_type", event.target.value)}
-        >
-          <option value="">全部类型</option>
-          {OUTCOME_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {t(OUTCOME_TYPE_LABELS[value])}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="成果状态"
-          className={selectStyle}
-          value={query.get("status")}
-          onChange={(event) => query.set("status", event.target.value)}
-        >
-          <option value="">全部状态</option>
-          {OUTCOME_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {t(OUTCOME_STATUS_LABELS[value])}
-            </option>
-          ))}
-        </select>
-        <Button variant="ghost" size="sm" onClick={() => setRefresh((value) => value + 1)}>
-          刷新
-        </Button>
-      </div>
+    <ResearchListSurface>
+      <ResearchBrowseHeader
+        title="成果"
+        actions={
+          <Button
+            variant="primary"
+            size="xl"
+            prependIcon={<Plus />}
+            disabled={!page?.create_projects.length}
+            onClick={() => {
+              setProject(page?.create_projects[0]?.id ?? "");
+              setTitle("");
+              setStatus("DRAFT");
+              setPublishedAt("");
+              setVenue("");
+              setDoi("");
+              setDialogError("");
+              setDialog(true);
+            }}
+          >
+            登记成果
+          </Button>
+        }
+      />
+      <ResearchBrowseToolbar>
+        <ListFilterField label="课题组">
+          <ListFilterSelect
+            aria-label="课题组"
+            value={query.get("org_unit")}
+            onChange={(event) => query.set("org_unit", event.target.value)}
+          >
+            <option value="">全部课题组</option>
+            {research.getOrgUnits(workspaceSlug).map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="outcomes" appearance="list" />
+        <ListFilterField label="类型">
+          <ListFilterSelect
+            aria-label="成果类型"
+            value={query.get("output_type")}
+            onChange={(event) => query.set("output_type", event.target.value)}
+          >
+            <option value="">全部类型</option>
+            {OUTCOME_TYPES.map((value) => (
+              <option key={value} value={value}>
+                {t(OUTCOME_TYPE_LABELS[value])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label="状态">
+          <ListFilterSelect
+            aria-label="成果状态"
+            value={query.get("status")}
+            onChange={(event) => query.set("status", event.target.value)}
+          >
+            <option value="">全部状态</option>
+            {OUTCOME_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {t(OUTCOME_STATUS_LABELS[value])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ResearchBrowseRefresh onRefresh={() => setRefresh((value) => value + 1)} disabled={loading} />
+      </ResearchBrowseToolbar>
       {error && (
         <p role="alert" className="text-13 text-danger-primary">
           {error}
@@ -157,31 +170,39 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
       ) : !page?.results.length ? (
         <p className="text-13 text-secondary">{queryString ? "当前筛选无结果" : "尚无可见成果"}</p>
       ) : (
-        <div className="max-w-full overflow-x-auto border-y border-subtle">
-          <table className="w-full min-w-160 text-left text-13">
-            <thead className="text-secondary">
-              <tr>
-                <th className="p-3">名称</th>
-                <th>类型</th>
-                <th>状态</th>
-                <th>期刊/会议</th>
-                <th>发表/授权日期</th>
-                <th aria-label="操作" />
-              </tr>
-            </thead>
-            <tbody>
+        <ResearchTableSurface>
+          <Table className="min-w-160">
+            <caption className="sr-only">成果</caption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>期刊/会议</TableHead>
+                <TableHead>发表/授权日期</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {page.results.map((outcome) => (
-                <tr key={outcome.id} className="border-t border-subtle">
-                  <td className="p-3">
-                    <Link href={`/${workspaceSlug}/research/projects/${outcome.project}/outcomes`}>
+                <TableRow key={outcome.id} className="hover:bg-surface-2">
+                  <TableCell>
+                    <Link
+                      className="font-medium text-primary hover:text-accent-primary"
+                      href={`/${workspaceSlug}/research/projects/${outcome.project}/outcomes`}
+                    >
                       {outcome.title}
                     </Link>
-                  </td>
-                  <td>{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</td>
-                  <td>{t(OUTCOME_STATUS_LABELS[outcome.status])}</td>
-                  <td>{outcome.venue || "—"}</td>
-                  <td>{outcome.published_at ?? "—"}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell className="text-secondary">{t(OUTCOME_TYPE_LABELS[outcome.output_type])}</TableCell>
+                  <TableCell>
+                    <ResearchStatusBadge status={outcome.status} size="sm">
+                      {t(OUTCOME_STATUS_LABELS[outcome.status])}
+                    </ResearchStatusBadge>
+                  </TableCell>
+                  <TableCell className="text-secondary">{outcome.venue || "—"}</TableCell>
+                  <TableCell className="text-tertiary tabular-nums">{outcome.published_at ?? "—"}</TableCell>
+                  <TableCell className="text-right">
                     {outcome.can_delete && (
                       <ResearchDeleteButton
                         name={outcome.title}
@@ -191,26 +212,26 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
                         }}
                       />
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </ResearchTableSurface>
       )}
-      <div className="flex gap-2">
+      <div className="flex shrink-0 justify-end gap-2">
         <Button
           variant="secondary"
-          size="sm"
-          disabled={!page?.prev_page_results}
+          size="xl"
+          disabled={loading || !page?.prev_page_results}
           onClick={() => query.set("cursor", page?.prev_cursor ?? "")}
         >
           上一页
         </Button>
         <Button
           variant="secondary"
-          size="sm"
-          disabled={!page?.next_page_results}
+          size="xl"
+          disabled={loading || !page?.next_page_results}
           onClick={() => query.set("cursor", page?.next_cursor ?? "")}
         >
           下一页
@@ -338,6 +359,6 @@ export const WorkspaceOutcomes = observer(function WorkspaceOutcomes({ workspace
           </div>
         </form>
       </ModalCore>
-    </div>
+    </ResearchListSurface>
   );
 });

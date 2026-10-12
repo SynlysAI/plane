@@ -13,7 +13,7 @@ import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Input, Spinner } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect, Spinner } from "@plane/ui";
 // services
 import { ResearchAccountService } from "@/services/research/account.service";
 // components
@@ -115,10 +115,8 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
   return (
     <div className="flex flex-col gap-4">
       <ResearchFilterToolbar>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          {t("research.invite_codes.fields.profile_category")}
-          <select
-            className="rounded border border-subtle bg-transparent px-2 py-1.5 text-12 text-primary"
+        <ListFilterField label={t("research.invite_codes.fields.profile_category")}>
+          <ListFilterSelect
             value={draft.profile_category}
             onChange={(event) =>
               setDraft((prev) => ({ ...prev, profile_category: event.target.value as TResearchProfileCategory }))
@@ -129,12 +127,10 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                 {category.label}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          {t("research.invite_codes.fields.primary_org_unit")}
-          <select
-            className="max-w-72 rounded border border-subtle bg-transparent px-2 py-1.5 text-12 text-primary"
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label={t("research.invite_codes.fields.primary_org_unit")} className="w-full sm:w-56">
+          <ListFilterSelect
             value={draft.org_unit ?? ""}
             onChange={(event) => setDraft((prev) => ({ ...prev, org_unit: event.target.value || null }))}
           >
@@ -144,12 +140,10 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                 {unit.display_path}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          {t("research.invite_codes.fields.primary_advisor")}
-          <select
-            className="max-w-64 rounded border border-subtle bg-transparent px-2 py-1.5 text-12 text-primary"
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label={t("research.invite_codes.fields.primary_advisor")} className="w-full sm:w-48">
+          <ListFilterSelect
             value={draft.primary_advisor ?? ""}
             onChange={(event) => setDraft((prev) => ({ ...prev, primary_advisor: event.target.value || null }))}
           >
@@ -159,37 +153,31 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
                 {advisor.display_name || advisor.email}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          {t("research.invite_codes.fields.max_uses")}
-          <Input
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label={t("research.invite_codes.fields.max_uses")} className="sm:w-24">
+          <ListFilterInput
             type="number"
             min={1}
             value={draft.max_uses}
             onChange={(event) => setDraft((prev) => ({ ...prev, max_uses: Number(event.target.value) || 1 }))}
-            className="w-24 text-12"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          {t("research.invite_codes.fields.expires_in_days")}
-          <Input
+        </ListFilterField>
+        <ListFilterField label={t("research.invite_codes.fields.expires_in_days")} className="sm:w-24">
+          <ListFilterInput
             type="number"
             min={0}
             value={draft.expires_in_days}
             onChange={(event) => setDraft((prev) => ({ ...prev, expires_in_days: Number(event.target.value) || 0 }))}
-            className="w-24 text-12"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-11 text-tertiary">
-          {t("research.invite_codes.fields.note")}
-          <Input
+        </ListFilterField>
+        <ListFilterField label={t("research.invite_codes.fields.note")} className="w-full sm:w-48">
+          <ListFilterInput
             value={draft.note}
             onChange={(event) => setDraft((prev) => ({ ...prev, note: event.target.value }))}
-            className="w-48 text-12"
           />
-        </label>
-        <Button variant="primary" size="sm" loading={creating} onClick={handleCreate}>
+        </ListFilterField>
+        <Button variant="primary" size="xl" loading={creating} onClick={handleCreate}>
           {t("research.invite_codes.actions.create")}
         </Button>
       </ResearchFilterToolbar>
@@ -204,7 +192,7 @@ export const ResearchInviteCodeManager = observer(function ResearchInviteCodeMan
         <p className="text-12 text-tertiary">{t("research.invite_codes.empty")}</p>
       ) : (
         <ResearchTableSurface>
-          <Table>
+          <Table className="min-w-240">
             <TableHeader className="bg-surface-2 text-11 text-tertiary">
               <TableRow>
                 <TableHead>{t("research.invite_codes.columns.code")}</TableHead>

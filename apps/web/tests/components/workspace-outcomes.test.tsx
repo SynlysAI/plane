@@ -20,7 +20,8 @@ vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key
 vi.mock("@plane/propel/button", () => ({
   Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
 }));
-vi.mock("@plane/ui", () => ({
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
   ModalCore: ({ children }: { children: React.ReactNode }) => <div role="dialog">{children}</div>,
 }));
 vi.mock("@/services/research/outcome.service", () => ({

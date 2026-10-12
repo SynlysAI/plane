@@ -86,7 +86,8 @@ vi.mock("@plane/propel/button", () => ({
   ),
 }));
 vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: {}, setToast: vi.fn() }));
-vi.mock("@plane/ui", () => ({
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
   EModalPosition: { CENTER: "center" },
   EModalWidth: { LG: "lg" },

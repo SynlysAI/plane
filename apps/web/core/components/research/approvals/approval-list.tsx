@@ -18,7 +18,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TabNavigationItem, TabNavigationList } from "@plane/propel/tab-navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
-import { Input } from "@plane/ui";
+import { Input, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -238,39 +238,39 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
 
       {isAdmin && (
         <ResearchDetailSurface title={t("research.approvals.flows")} collapsible>
-          <div className="mt-2 flex flex-wrap items-end gap-2">
-            <Input
-              className="!w-56"
-              placeholder={t("research.approvals.flow_name_placeholder")}
-              value={flowName}
-              onChange={(event) => setFlowName(event.target.value)}
-            />
-            <select
-              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-              value={flowType}
-              onChange={(event) => setFlowType(event.target.value as TApprovalType)}
-            >
-              {APPROVAL_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {t(APPROVAL_TYPE_LABELS[type])}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-              value={approverRole}
-              onChange={(event) => setApproverRole(event.target.value as TOrgRole)}
-            >
-              {APPROVAL_FLOW_STEP_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {t(`research.roles.${role.toLowerCase()}`)}
-                </option>
-              ))}
-            </select>
-            <Button variant="primary" size="sm" onClick={() => void handleCreateFlow()}>
+          <ResearchFilterToolbar>
+            <ListFilterField label="流程名称" className="w-full sm:w-56">
+              <ListFilterInput
+                placeholder={t("research.approvals.flow_name_placeholder")}
+                value={flowName}
+                onChange={(event) => setFlowName(event.target.value)}
+              />
+            </ListFilterField>
+            <ListFilterField label="审批类型">
+              <ListFilterSelect value={flowType} onChange={(event) => setFlowType(event.target.value as TApprovalType)}>
+                {APPROVAL_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(APPROVAL_TYPE_LABELS[type])}
+                  </option>
+                ))}
+              </ListFilterSelect>
+            </ListFilterField>
+            <ListFilterField label="审批角色">
+              <ListFilterSelect
+                value={approverRole}
+                onChange={(event) => setApproverRole(event.target.value as TOrgRole)}
+              >
+                {APPROVAL_FLOW_STEP_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {t(`research.roles.${role.toLowerCase()}`)}
+                  </option>
+                ))}
+              </ListFilterSelect>
+            </ListFilterField>
+            <Button variant="primary" size="xl" onClick={() => void handleCreateFlow()}>
               {t("research.approvals.add_flow")}
             </Button>
-          </div>
+          </ResearchFilterToolbar>
           <ul className="mt-3 flex flex-col gap-1">
             {flows.map((flow) => (
               <li key={flow.id} className="text-12 text-tertiary">

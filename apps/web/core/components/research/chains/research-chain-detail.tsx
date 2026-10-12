@@ -8,7 +8,9 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Skeleton } from "@plane/propel/skeleton";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
-import { Table, TableBody, TableCell, TableRow } from "@plane/propel/table";
+import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from "@plane/propel/table";
+import { ListFilterField, ListFilterSelect } from "@plane/ui";
+import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import type { TResearchChain, TResearchChainMember, TResearchChainNode, TResearchChainNodeAction } from "@plane/types";
 // components
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
@@ -691,65 +693,76 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
         {activeTab === "members" && (
           <section className="p-5">
-            <div className="flex flex-wrap items-end gap-3">
+            <ResearchFilterToolbar>
               <ResearchPersonSelect
                 people={workspaceMembers}
                 value={memberUserId}
                 onChange={setMemberUserId}
                 label={t("research.chains.members.user_id")}
               />
-              <label className="flex flex-col gap-1 text-12 text-secondary">
-                <span>{t("research.chains.members.role")}</span>
-                <select
+              <ListFilterField label={t("research.chains.members.role")}>
+                <ListFilterSelect
                   value={memberRole}
                   onChange={(event) => setMemberRole(event.target.value as "15" | "20")}
-                  className="rounded-md border border-subtle bg-surface-1 px-2 py-2 text-12 text-primary"
                 >
                   <option value="15">{t("research.chains.members.role_member")}</option>
                   <option value="20">{t("research.chains.members.role_admin")}</option>
-                </select>
-              </label>
+                </ListFilterSelect>
+              </ListFilterField>
               <Button
                 variant="primary"
-                size="lg"
+                size="xl"
                 onClick={() => void addMember()}
                 disabled={!memberUserId.trim() || memberBusy}
               >
                 {t("research.chains.members.add")}
               </Button>
-            </div>
+            </ResearchFilterToolbar>
             {memberError && (
               <p className="mt-3 text-12 text-danger-primary" role="alert">
                 {memberError}
               </p>
             )}
-            <Table className="mt-4">
-              <TableBody>
-                {members.map((member) => (
-                  <TableRow key={member.user_id}>
-                    <TableCell className="font-medium text-primary">{member.display_name}</TableCell>
-                    <TableCell className="text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</TableCell>
-                    <TableCell className="text-right">
-                      {!member.is_owner && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void removeMember(member.user_id)}
-                          disabled={memberBusy}
-                        >
-                          {t("research.chains.members.remove")}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!members.length && (
-                  <TableRow>
-                    <TableCell className="py-3 text-secondary">{t("research.chains.members.empty")}</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <div className="mt-4">
+              <ResearchTableSurface>
+                <Table className="min-w-120">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>成员</TableHead>
+                      <TableHead>{t("research.chains.members.role")}</TableHead>
+                      <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members.map((member) => (
+                      <TableRow key={member.user_id}>
+                        <TableCell className="font-medium text-primary">{member.display_name}</TableCell>
+                        <TableCell className="text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</TableCell>
+                        <TableCell className="text-right">
+                          {!member.is_owner && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => void removeMember(member.user_id)}
+                              disabled={memberBusy}
+                            >
+                              {t("research.chains.members.remove")}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!members.length && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="py-3 text-secondary">
+                          {t("research.chains.members.empty")}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </ResearchTableSurface>
+            </div>
           </section>
         )}
       </div>

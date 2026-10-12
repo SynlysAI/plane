@@ -137,6 +137,17 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
+it("renders member columns and keeps role selection accessible", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=members";
+  await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
+  const headings = [...container.querySelectorAll("th")].map((heading) => heading.textContent);
+  expect(headings).toEqual(["成员", "权限", "操作"]);
+  const role = container.querySelector("select")!;
+  expect(role.labels?.[0]?.textContent).toContain("权限");
+  expect(role.value).toBe("15");
+});
+
 beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -185,8 +196,8 @@ beforeEach(() => {
   mocks.transitionChainNode.mockResolvedValue({ node, event: {} });
 });
 
-afterEach(() => {
-  root.unmount();
+afterEach(async () => {
+  await act(async () => root.unmount());
   container.remove();
   vi.clearAllMocks();
 });

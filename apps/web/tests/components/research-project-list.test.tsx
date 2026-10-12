@@ -30,7 +30,8 @@ vi.mock("@plane/propel/table", () => ({
   TableRow: ({ children }: { children: React.ReactNode }) => <tr>{children}</tr>,
 }));
 vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: { SUCCESS: "SUCCESS" }, setToast: vi.fn() }));
-vi.mock("@plane/ui", () => ({
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
   AlertModalCore: () => null,
   EModalPosition: { CENTER: "center" },
   EModalWidth: { LG: "lg" },

@@ -11,7 +11,7 @@ import { DIRECT_INTEGRATION_SYSTEMS, INTEGRATION_SYSTEM_LABELS } from "@plane/co
 import type { TIntegrationConnection } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect, ListFilterCheckbox } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
@@ -36,48 +36,53 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
   return (
     <div className="flex flex-col gap-2">
       <ResearchFilterToolbar>
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-          value={system}
-          onChange={(event) => {
-            setSystem(event.target.value);
-            const next = connections.find((connection) => connection.system === event.target.value);
-            setDisplayName(next?.display_name ?? "");
-            setBaseUrl(next?.base_url ?? "");
-            setCredentialRef("");
-            setEnabled(Boolean(next?.is_enabled));
-          }}
-        >
-          {DIRECT_INTEGRATION_SYSTEMS.map((value) => (
-            <option key={value} value={value}>
-              {t(INTEGRATION_SYSTEM_LABELS[value])}
-            </option>
-          ))}
-        </select>
-        <Input
-          className="!w-40"
-          value={displayName}
-          placeholder={t("research.integrations.display_name")}
-          onChange={(event) => setDisplayName(event.target.value)}
+        <ListFilterField label={t("research.integrations.columns.system")} className="w-full sm:w-48">
+          <ListFilterSelect
+            value={system}
+            onChange={(event) => {
+              setSystem(event.target.value);
+              const next = connections.find((connection) => connection.system === event.target.value);
+              setDisplayName(next?.display_name ?? "");
+              setBaseUrl(next?.base_url ?? "");
+              setCredentialRef("");
+              setEnabled(Boolean(next?.is_enabled));
+            }}
+          >
+            {DIRECT_INTEGRATION_SYSTEMS.map((value) => (
+              <option key={value} value={value}>
+                {t(INTEGRATION_SYSTEM_LABELS[value])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label={t("research.integrations.display_name")} className="w-full sm:w-40">
+          <ListFilterInput
+            value={displayName}
+            placeholder={t("research.integrations.display_name")}
+            onChange={(event) => setDisplayName(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label="服务地址" className="w-full sm:w-64">
+          <ListFilterInput
+            value={baseUrl}
+            placeholder={baseUrl ? "" : t("research.integrations.base_url_hint")}
+            onChange={(event) => setBaseUrl(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.integrations.credential_ref")} className="w-full sm:w-56">
+          <ListFilterInput
+            value={credentialRef}
+            placeholder={t("research.integrations.credential_ref")}
+            onChange={(event) => setCredentialRef(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterCheckbox
+          label={t("research.integrations.enabled")}
+          checked={enabled}
+          onChange={(event) => setEnabled(event.target.checked)}
         />
-        <Input
-          className="!w-64"
-          value={baseUrl}
-          placeholder={baseUrl ? "" : t("research.integrations.base_url_hint")}
-          onChange={(event) => setBaseUrl(event.target.value)}
-        />
-        <Input
-          className="!w-56"
-          value={credentialRef}
-          placeholder={t("research.integrations.credential_ref")}
-          onChange={(event) => setCredentialRef(event.target.value)}
-        />
-        <label className="flex items-center gap-1 text-12 text-secondary">
-          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-          {t("research.integrations.enabled")}
-        </label>
         <Button
-          size="sm"
+          size="xl"
           variant="primary"
           disabled={!baseUrl.trim()}
           onClick={async () => {

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TResearchProject } from "@/services/research/project.service";
-import { AlertModalCore } from "@plane/ui";
+import { AlertModalCore, ListFilterField, ListFilterSelect } from "@plane/ui";
 import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
 import {
   researchBrowseRequestParams,
@@ -224,45 +224,45 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
       )}
 
       <ResearchFilterToolbar>
-        <select
-          aria-label={t("research.projects.fields.type")}
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value)}
-        >
-          <option value="">{t("research.projects.all_types")}</option>
-          {RESEARCH_PROJECT_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {t(RESEARCH_PROJECT_TYPE_LABELS[type])}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={t("research.projects.fields.org_unit")}
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={orgFilter}
-          onChange={(event) => setOrgFilter(event.target.value)}
-        >
-          <option value="">{t("research.projects.all_org_units")}</option>
-          {orgUnits.map((unit) => (
-            <option key={unit.id} value={unit.id}>
-              {unit.name}
-            </option>
-          ))}
-        </select>
+        <ListFilterField label={t("research.projects.fields.type")}>
+          <ListFilterSelect
+            aria-label={t("research.projects.fields.type")}
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+          >
+            <option value="">{t("research.projects.all_types")}</option>
+            {RESEARCH_PROJECT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {t(RESEARCH_PROJECT_TYPE_LABELS[type])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label={t("research.projects.fields.org_unit")}>
+          <ListFilterSelect
+            aria-label={t("research.projects.fields.org_unit")}
+            value={orgFilter}
+            onChange={(event) => setOrgFilter(event.target.value)}
+          >
+            <option value="">{t("research.projects.all_org_units")}</option>
+            {orgUnits.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
         <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="projects" />
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
-        >
-          <option value="">{t("research.projects.all_statuses")}</option>
-          {(["ACTIVE", "ARCHIVED", "COMPLETED"] as const).map((status) => (
-            <option key={status} value={status}>
-              {t(RESEARCH_PROJECT_STATUS_LABELS[status])}
-            </option>
-          ))}
-        </select>
+        <ListFilterField label="状态">
+          <ListFilterSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">{t("research.projects.all_statuses")}</option>
+            {(["ACTIVE", "ARCHIVED", "COMPLETED"] as const).map((status) => (
+              <option key={status} value={status}>
+                {t(RESEARCH_PROJECT_STATUS_LABELS[status])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
       </ResearchFilterToolbar>
 
       {hasActiveFilters && (

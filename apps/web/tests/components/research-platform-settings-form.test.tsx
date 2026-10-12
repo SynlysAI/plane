@@ -26,7 +26,8 @@ vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => research }));
 vi.mock("@/components/research/common/error-messages", () => ({
   getResearchErrorKey: () => "research.common.error",
 }));
-vi.mock("@plane/constants", () => ({
+vi.mock("@plane/constants", async () => ({
+  ...(await vi.importActual("@plane/constants")),
   REPORT_VISIBILITIES: ["DIRECT_ADVISOR"],
   REPORT_VISIBILITY_LABELS: { DIRECT_ADVISOR: "research.visibility.direct_advisor" },
 }));
@@ -39,7 +40,8 @@ vi.mock("@plane/i18n", () => ({
 vi.mock("@plane/propel/button", () => ({
   Button: ({ children }: { children?: React.ReactNode }) => <button type="button">{children}</button>,
 }));
-vi.mock("@plane/ui", () => ({
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
@@ -156,8 +158,8 @@ describe("platform settings main PI field", () => {
     await renderForm();
     const input = mainPiInput();
     expect(input.value).toBe(LONG_ID);
-    expect(input.className).toContain("h-9");
-    expect(input.className).toContain("leading-8");
+    expect(input.className).toContain("h-8");
+    expect(input.className).toContain("leading-[30px]");
     expect(input.className).toContain("py-0");
     expect(input.className).toContain("overflow-x-auto");
     expect(input.className).toContain("min-w-0");
@@ -166,8 +168,8 @@ describe("platform settings main PI field", () => {
     const numbers = Array.from(container.querySelectorAll('input[type="number"]'));
     expect(numbers).toHaveLength(5);
     numbers.forEach((item) => {
-      expect(item.className).toContain("h-9");
-      expect(item.className).toContain("leading-8");
+      expect(item.className).toContain("h-8");
+      expect(item.className).toContain("leading-[30px]");
       expect(item.className).toContain("py-0");
     });
     expect(container.firstElementChild?.className).toContain("overflow-x-hidden");

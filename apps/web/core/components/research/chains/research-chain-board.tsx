@@ -14,6 +14,12 @@ import { ResearchBrowseFilters } from "@/components/research/common/browse-filte
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { useResearch } from "@/hooks/store/use-research";
 import { Button } from "@plane/propel/button";
+import { ListFilterField, ListFilterSelect } from "@plane/ui";
+import {
+  ResearchBrowseHeader,
+  ResearchBrowseRefresh,
+  ResearchBrowseToolbar,
+} from "@/components/research/common/research-browse-toolbar";
 // components
 import { ResearchListState } from "@/components/research/common/research-list-state";
 import { ResearchListSurface, ResearchTableSurface } from "@/components/research/common/research-data-surface";
@@ -84,46 +90,48 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
 
   return (
     <ResearchListSurface>
-      <div className="flex flex-wrap items-end gap-3">
-        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="projects" />
-        <select
-          aria-label="课题组"
-          value={query.get("org_unit")}
-          onChange={(event) => query.set("org_unit", event.target.value)}
-          className="rounded-md border border-subtle px-2 py-1.5 text-13"
-        >
-          <option value="">全部课题组</option>
-          {research.getOrgUnits(workspaceSlug).map((unit) => (
-            <option key={unit.id} value={unit.id}>
-              {unit.name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="研究链状态"
-          value={query.get("status")}
-          onChange={(event) => query.set("status", event.target.value)}
-          className="rounded-md border border-subtle px-2 py-1.5 text-13"
-        >
-          <option value="">全部状态</option>
-          <option value="ACTIVE">进行中</option>
-          <option value="ARCHIVED">已归档</option>
-        </select>
-        <select
-          aria-label="项目类型"
-          value={query.get("research_type")}
-          onChange={(event) => query.set("research_type", event.target.value)}
-          className="rounded-md border border-subtle px-2 py-1.5 text-13"
-        >
-          <option value="">全部类型</option>
-          <option value="RESEARCH_PROJECT">科研项目</option>
-          <option value="MASTER">硕士</option>
-          <option value="PHD">博士</option>
-        </select>
-        <Button variant="ghost" size="sm" onClick={() => void load()}>
-          刷新
-        </Button>
-      </div>
+      <ResearchBrowseHeader title="课题" />
+      <ResearchBrowseToolbar>
+        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="projects" appearance="list" />
+        <ListFilterField label="课题组">
+          <ListFilterSelect
+            aria-label="课题组"
+            value={query.get("org_unit")}
+            onChange={(event) => query.set("org_unit", event.target.value)}
+          >
+            <option value="">全部课题组</option>
+            {research.getOrgUnits(workspaceSlug).map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label="状态">
+          <ListFilterSelect
+            aria-label="研究链状态"
+            value={query.get("status")}
+            onChange={(event) => query.set("status", event.target.value)}
+          >
+            <option value="">全部状态</option>
+            <option value="ACTIVE">进行中</option>
+            <option value="ARCHIVED">已归档</option>
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label="类型">
+          <ListFilterSelect
+            aria-label="项目类型"
+            value={query.get("research_type")}
+            onChange={(event) => query.set("research_type", event.target.value)}
+          >
+            <option value="">全部类型</option>
+            <option value="RESEARCH_PROJECT">科研项目</option>
+            <option value="MASTER">硕士</option>
+            <option value="PHD">博士</option>
+          </ListFilterSelect>
+        </ListFilterField>
+        <ResearchBrowseRefresh onRefresh={() => void load()} disabled={loading} />
+      </ResearchBrowseToolbar>
       {loading && <p role="status">加载中</p>}
       {forbidden ? (
         <ResearchListState kind="forbidden" resource="reports" />
@@ -133,7 +141,7 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
         <ResearchListState kind={queryString ? "no-results" : "empty"} resource="reports" />
       ) : null}
       <ResearchTableSurface>
-        <Table>
+        <Table className="min-w-240">
           <caption className="sr-only">{t("research.nav.research_chain")}</caption>
           <TableHeader>
             <TableRow>
@@ -211,10 +219,10 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
           </TableBody>
         </Table>
       </ResearchTableSurface>
-      <div className="flex gap-2">
+      <div className="flex shrink-0 justify-end gap-2">
         <Button
           variant="secondary"
-          size="sm"
+          size="xl"
           disabled={!page?.prev_page_results || loading}
           onClick={() => query.set("cursor", page?.prev_cursor ?? "")}
         >
@@ -222,7 +230,7 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
         </Button>
         <Button
           variant="secondary"
-          size="sm"
+          size="xl"
           disabled={!page?.next_page_results || loading}
           onClick={() => query.set("cursor", page?.next_cursor ?? "")}
         >

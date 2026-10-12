@@ -12,7 +12,7 @@ import type { TOutcomeType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -55,37 +55,38 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
   return (
     <ResearchListSurface>
       <ResearchFilterToolbar>
-        <Input
-          className="!w-64"
-          value={title}
-          placeholder={t("research.outcomes.title_placeholder")}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-        <Input
-          className="!w-44"
-          value={venue}
-          placeholder={t("research.outcomes.venue_placeholder")}
-          onChange={(event) => setVenue(event.target.value)}
-        />
-        <Input
-          className="!w-40"
-          value={doi}
-          placeholder={t("research.outcomes.doi_placeholder")}
-          onChange={(event) => setDoi(event.target.value)}
-        />
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-          value={outputType}
-          onChange={(event) => setOutputType(event.target.value as TOutcomeType)}
-        >
-          {OUTCOME_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {t(OUTCOME_TYPE_LABELS[value])}
-            </option>
-          ))}
-        </select>
+        <ListFilterField label={t("research.outcomes.columns.title")} className="w-full sm:w-64">
+          <ListFilterInput
+            value={title}
+            placeholder={t("research.outcomes.title_placeholder")}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.outcomes.columns.venue")} className="w-full sm:w-44">
+          <ListFilterInput
+            value={venue}
+            placeholder={t("research.outcomes.venue_placeholder")}
+            onChange={(event) => setVenue(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label="DOI" className="w-full sm:w-40">
+          <ListFilterInput
+            value={doi}
+            placeholder={t("research.outcomes.doi_placeholder")}
+            onChange={(event) => setDoi(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.outcomes.columns.type")}>
+          <ListFilterSelect value={outputType} onChange={(event) => setOutputType(event.target.value as TOutcomeType)}>
+            {OUTCOME_TYPES.map((value) => (
+              <option key={value} value={value}>
+                {t(OUTCOME_TYPE_LABELS[value])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
         <Button
-          size="sm"
+          size="xl"
           variant="primary"
           disabled={!title.trim()}
           onClick={async () => {

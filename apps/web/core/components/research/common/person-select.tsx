@@ -1,5 +1,7 @@
 import { useId, useState } from "react";
 import { Combobox } from "@headlessui/react";
+import { ChevronDown } from "lucide-react";
+import { LIST_CONTROL_CLASS_NAME } from "@plane/ui";
 
 type PersonOption = {
   id: string;
@@ -19,12 +21,14 @@ export function ResearchPersonSelect({
   onChange,
   label,
   disabled = false,
+  appearance = "list",
 }: {
   people: PersonOption[];
   value: string;
   onChange: (id: string) => void;
   label: string;
   disabled?: boolean;
+  appearance?: "default" | "list";
 }) {
   const [query, setQuery] = useState("");
   const inputId = useId();
@@ -34,7 +38,7 @@ export function ResearchPersonSelect({
   return (
     <Combobox
       as="div"
-      className="relative min-w-56"
+      className={appearance === "list" ? "relative w-full max-w-full min-w-0 sm:w-56" : "relative min-w-56"}
       value={value}
       disabled={disabled}
       onChange={(id: string | null) => {
@@ -42,13 +46,24 @@ export function ResearchPersonSelect({
         setQuery("");
       }}
     >
-      <Combobox.Label htmlFor={inputId} className="block text-11 text-tertiary">
+      <Combobox.Label
+        htmlFor={inputId}
+        className={
+          appearance === "list"
+            ? "mb-1.5 block text-11 leading-4 font-medium text-secondary"
+            : "block text-11 text-tertiary"
+        }
+      >
         {label}
       </Combobox.Label>
-      <div className="flex rounded border border-subtle bg-surface-1">
+      <div className={appearance === "list" ? "relative" : "flex rounded border border-subtle bg-surface-1"}>
         <Combobox.Input
           id={inputId}
-          className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-12"
+          className={
+            appearance === "list"
+              ? `${LIST_CONTROL_CLASS_NAME} pr-8`
+              : "min-w-0 flex-1 bg-transparent px-2 py-1.5 text-12"
+          }
           placeholder="搜索姓名或邮箱"
           displayValue={(id: string) => {
             const person = people.find((item) => item.id === id);
@@ -59,8 +74,15 @@ export function ResearchPersonSelect({
             if (value) onChange("");
           }}
         />
-        <Combobox.Button aria-label={`展开${label}`} className="px-2">
-          ⌄
+        <Combobox.Button
+          aria-label={`展开${label}`}
+          className={
+            appearance === "list"
+              ? "absolute top-0 right-0 flex size-8 items-center justify-center rounded-r-md text-tertiary"
+              : "px-2"
+          }
+        >
+          {appearance === "list" ? <ChevronDown aria-hidden="true" className="size-4" /> : "⌄"}
         </Combobox.Button>
       </div>
       <Combobox.Options className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded border border-subtle bg-surface-1 shadow-raised-200">

@@ -16,7 +16,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 // components
 import { CodeSummaryCard } from "@/components/research/code/code-summary-card";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
@@ -80,25 +80,24 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
 
       <ResearchFilterToolbar>
-        <Input
-          className="!w-72"
-          value={repositoryUrl}
-          placeholder={t("research.code.repository_placeholder")}
-          onChange={(event) => setRepositoryUrl(event.target.value)}
-        />
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-          value={provider}
-          onChange={(event) => setProvider(event.target.value)}
-        >
-          {CODE_PROVIDERS.map((value) => (
-            <option key={value} value={value}>
-              {t(CODE_PROVIDER_LABELS[value])}
-            </option>
-          ))}
-        </select>
+        <ListFilterField label="仓库地址" className="w-full sm:w-72">
+          <ListFilterInput
+            value={repositoryUrl}
+            placeholder={t("research.code.repository_placeholder")}
+            onChange={(event) => setRepositoryUrl(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label="托管平台">
+          <ListFilterSelect value={provider} onChange={(event) => setProvider(event.target.value)}>
+            {CODE_PROVIDERS.map((value) => (
+              <option key={value} value={value}>
+                {t(CODE_PROVIDER_LABELS[value])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
         <Button
-          size="sm"
+          size="xl"
           variant="primary"
           disabled={!repositoryUrl.trim()}
           onClick={async () => {
@@ -182,26 +181,25 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
 
       {selected && (
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-              value={refType}
-              onChange={(event) => setRefType(event.target.value)}
-            >
-              {(["COMMIT", "BRANCH", "TAG"] as const).map((value) => (
-                <option key={value} value={value}>
-                  {t(CODE_REF_TYPE_LABELS[value])}
-                </option>
-              ))}
-            </select>
-            <Input
-              className="!w-64"
-              value={artifactRef}
-              placeholder={t("research.code.ref_placeholder")}
-              onChange={(event) => setArtifactRef(event.target.value)}
-            />
+          <ResearchFilterToolbar>
+            <ListFilterField label="引用类型">
+              <ListFilterSelect value={refType} onChange={(event) => setRefType(event.target.value)}>
+                {(["COMMIT", "BRANCH", "TAG"] as const).map((value) => (
+                  <option key={value} value={value}>
+                    {t(CODE_REF_TYPE_LABELS[value])}
+                  </option>
+                ))}
+              </ListFilterSelect>
+            </ListFilterField>
+            <ListFilterField label="引用值" className="w-full sm:w-64">
+              <ListFilterInput
+                value={artifactRef}
+                placeholder={t("research.code.ref_placeholder")}
+                onChange={(event) => setArtifactRef(event.target.value)}
+              />
+            </ListFilterField>
             <Button
-              size="sm"
+              size="xl"
               variant="secondary"
               disabled={!artifactRef.trim()}
               onClick={async () => {
@@ -218,19 +216,18 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
             >
               {t("research.code.add_artifact")}
             </Button>
-            <Input
-              className="!w-32"
-              value={snapshotRef}
-              placeholder={t("research.code.snapshot_ref")}
-              onChange={(event) => setSnapshotRef(event.target.value)}
-            />
-            <input
-              type="file"
-              className="text-11 text-secondary"
-              onChange={(event) => setSnapshotFile(event.target.files?.[0] ?? null)}
-            />
+            <ListFilterField label={t("research.code.snapshot_ref")}>
+              <ListFilterInput
+                value={snapshotRef}
+                placeholder={t("research.code.snapshot_ref")}
+                onChange={(event) => setSnapshotRef(event.target.value)}
+              />
+            </ListFilterField>
+            <ListFilterField label="快照文件" className="w-full sm:w-64">
+              <ListFilterInput type="file" onChange={(event) => setSnapshotFile(event.target.files?.[0] ?? null)} />
+            </ListFilterField>
             <Button
-              size="sm"
+              size="xl"
               variant="secondary"
               disabled={!snapshotFile || !snapshotRef.trim()}
               onClick={async () => {
@@ -249,7 +246,7 @@ export const CodeRepositoryList = observer(function CodeRepositoryList({ workspa
             >
               {t("research.code.upload_snapshot")}
             </Button>
-          </div>
+          </ResearchFilterToolbar>
 
           <ResearchTableSurface>
             <Table>
