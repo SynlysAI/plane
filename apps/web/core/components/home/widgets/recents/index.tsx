@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
@@ -38,6 +38,10 @@ type TRecentWidgetProps = THomeWidgetProps & {
   title?: string;
   /** 首页卡片内嵌模式：隐藏自身标题与展开容器，滚动交由外层卡片管理。 */
   embedded?: boolean;
+  /** 仅展示行政项目及相关内容；省略时保持通用最近访问行为。 */
+  scope?: "administrative";
+  /** 首页刷新序号，变化时重新验证缓存中的访问记录。 */
+  refreshToken?: number;
   /** 科研项目 ID 到研究链 ID 的映射。最近动态里的研究链应进入课题，而不是行政工作项。 */
   researchChainByProject?: Record<string, string>;
 };
@@ -49,6 +53,8 @@ export const RecentActivityWidget = observer(function RecentActivityWidget(props
     title,
     workspaceSlug,
     embedded = false,
+    scope,
+    refreshToken = 0,
     researchChainByProject,
   } = props;
   // states
@@ -56,23 +62,38 @@ export const RecentActivityWidget = observer(function RecentActivityWidget(props
   const { t } = useTranslation();
   // ref
   const ref = useRef<HTMLDivElement>(null);
+  const previousRefresh = useRef(refreshToken);
 
-  const { data: recents, isLoading } = useSWR(
-    workspaceSlug ? `WORKSPACE_RECENT_ACTIVITY_${workspaceSlug}_${filter}` : null,
+  const {
+    data: recents,
+    isLoading,
+    error,
+    mutate,
+  } = useSWR(
+    workspaceSlug ? ["WORKSPACE_RECENT_ACTIVITY", workspaceSlug, filter, scope ?? "all"] : null,
     workspaceSlug
       ? () =>
           workspaceService.fetchWorkspaceRecents(
             workspaceSlug.toString(),
-            filter === filters[0].name ? undefined : filter
+            filter === filters[0].name ? undefined : filter,
+            scope
           )
       : null,
     {
       revalidateIfStale: false,
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateOnMount: scope === "administrative" ? true : undefined,
     }
   );
 
+  useEffect(() => {
+    if (previousRefresh.current === refreshToken) return;
+    previousRefresh.current = refreshToken;
+    void mutate();
+  }, [mutate, refreshToken]);
+
+  const visibleRecents = recents?.filter((recent) => recent.entity_data) ?? [];
   const resolveRecent = (activity: TActivityEntityData) => {
     switch (activity.entity_name) {
       case "page":
@@ -101,14 +122,18 @@ export const RecentActivityWidget = observer(function RecentActivityWidget(props
           <WidgetLoader widgetKey={WIDGET_KEY} />
         </div>
       );
-    if (!recents || recents.length === 0) return <RecentsEmptyState type={filter} />;
+    if (error && visibleRecents.length === 0)
+      return (
+        <p className="p-4 text-12 text-secondary" role="alert">
+          {t("research.home_workbench.recent_error")}
+        </p>
+      );
+    if (visibleRecents.length === 0) return <RecentsEmptyState type={filter} />;
     return (
       <div className="flex min-h-0 flex-col divide-y divide-subtle">
-        {recents
-          ?.filter((recent) => recent.entity_data)
-          .map((activity) => (
-            <div key={activity.id}>{resolveRecent(activity)}</div>
-          ))}
+        {visibleRecents.map((activity) => (
+          <div key={activity.id}>{resolveRecent(activity)}</div>
+        ))}
       </div>
     );
   }

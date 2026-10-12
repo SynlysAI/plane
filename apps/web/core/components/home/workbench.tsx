@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
-import type { TProject, TProjectAnalyticsCount, TReportSummary, TResearchChain } from "@plane/types";
+import type { TProject, TProjectAnalyticsCount, TReportSummary, TResearchChain, TResearchIdentity } from "@plane/types";
 // components
 import { HomeSectionCard, type THomeDensity } from "@/components/home/home-section-card";
 import { RecentActivityWidget } from "@/components/home/widgets/recents";
@@ -24,8 +24,10 @@ import { useProject } from "@/hooks/store/use-project";
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
+import { ResearchReportService } from "@/services/research/report.service";
 
 const chainService = new ResearchChainService();
+const reportService = new ResearchReportService();
 
 type Props = {
   workspaceSlug: string;
@@ -33,6 +35,19 @@ type Props = {
 
 type TLoadState = "loading" | "ready" | "empty" | "forbidden" | "error";
 type TPeriod = "30" | "90" | "all";
+type TReportPeriod = "WEEKLY" | "MONTHLY";
+type TReportPeriodSummary = {
+  workspaceSlug: string;
+  identity: TResearchIdentity;
+  summary: TReportSummary | null;
+  state: TLoadState;
+};
+
+const REPORT_PERIODS = [
+  { type: "WEEKLY", labelKey: "research.home_workbench.this_week" },
+  { type: "MONTHLY", labelKey: "research.home_workbench.this_month" },
+] as const;
+const REPORT_BUCKETS = ["not_submitted", "needs_revision", "submitted", "accepted"] as const;
 
 const PERIOD_OPTIONS = [
   { value: "30" as const, labelKey: "research.overview.period_30" },
@@ -67,8 +82,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const [administrativeStats, setAdministrativeStats] = useState<Record<string, TProjectAnalyticsCount>>({});
   const [administrativeStatsLoading, setAdministrativeStatsLoading] = useState(false);
   const [administrativeState, setAdministrativeState] = useState<TLoadState>("loading");
-  const [reportSummary, setReportSummary] = useState<TReportSummary | null>(null);
-  const [reportState, setReportState] = useState<TLoadState>("loading");
+  const [reportSummaries, setReportSummaries] = useState<Partial<Record<TReportPeriod, TReportPeriodSummary>>>({});
   const researchVersion = useRef(0);
   const administrativeVersion = useRef(0);
   const reportVersion = useRef(0);
@@ -79,7 +93,14 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     research.identity?.sections?.research_chain &&
     research.canSee("research_chain")
   );
-  const canSeeSummary = Boolean(research.identity?.sections?.reports && research.canSee("summary"));
+  const reportIdentity = research.identity;
+  const canSeeSummary = Boolean(
+    research.identityWorkspaceSlug === workspaceSlug &&
+    research.identity?.module_enabled &&
+    research.identity?.workspace_enabled &&
+    research.identity?.sections?.reports &&
+    research.canSee("summary")
+  );
 
   useEffect(() => {
     if (research.identityWorkspaceSlug !== workspaceSlug || !research.identity) {
@@ -139,26 +160,32 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   }, [fetchProjects, fetchProjectAnalyticsCount, workspaceSlug]);
 
   const loadReportSummary = useCallback(async () => {
-    if (!canSeeSummary) {
-      setReportSummary(null);
-      setReportState("empty");
+    const version = ++reportVersion.current;
+    setReportSummaries({});
+    if (!canSeeSummary || !reportIdentity) {
       return;
     }
-    const version = ++reportVersion.current;
-    setReportState("loading");
-    try {
-      const summary = await research.fetchReportSummary(workspaceSlug, { report_type: "WEEKLY" });
-      if (reportVersion.current !== version) return;
-      setReportSummary(summary);
-      setReportState("ready");
-    } catch (error) {
-      if (reportVersion.current !== version) return;
-      setReportSummary(null);
-      setReportState(
-        (error as { error_code?: string })?.error_code === "research_permission_denied" ? "forbidden" : "error"
-      );
-    }
-  }, [canSeeSummary, research, workspaceSlug]);
+    await Promise.all(
+      REPORT_PERIODS.map(async ({ type }) => {
+        try {
+          const summary = await reportService.getSummary(workspaceSlug, { report_type: type });
+          if (reportVersion.current !== version) return;
+          setReportSummaries((current) => ({
+            ...current,
+            [type]: { workspaceSlug, identity: reportIdentity, summary, state: "ready" },
+          }));
+        } catch (error) {
+          if (reportVersion.current !== version) return;
+          const state =
+            (error as { error_code?: string })?.error_code === "research_permission_denied" ? "forbidden" : "error";
+          setReportSummaries((current) => ({
+            ...current,
+            [type]: { workspaceSlug, identity: reportIdentity, summary: null, state },
+          }));
+        }
+      })
+    );
+  }, [canSeeSummary, reportIdentity, workspaceSlug]);
 
   useEffect(() => {
     if (canSeeResearch) void loadChains();
@@ -174,6 +201,9 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
 
   useEffect(() => {
     void loadReportSummary();
+    return () => {
+      reportVersion.current += 1;
+    };
   }, [loadReportSummary, refreshToken]);
 
   const periodDays = period === "all" ? null : Number(period);
@@ -195,7 +225,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     window.localStorage.setItem(DENSITY_STORAGE_KEY, density);
   }, [density]);
 
-  const summaryHref = `/${workspaceSlug}/research/reports/summary`;
+  const summaryHref = "/public/research/chains/?view=reports";
   // oxlint-disable-next-line unicorn/no-array-sort -- 当前 TypeScript lib 不支持 toSorted，排序副本避免修改原列表。
   const sortedAdministrativeProjects = [...administrativeProjects].sort((left, right) => {
     const leftTime = administrativeStats[left.id]?.last_activity_at;
@@ -456,12 +486,21 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
         <HomeSectionCard
           className="xl:col-span-4"
           density={density}
+          title={t("research.home_workbench.recent_activity")}
+        >
+          <RecentActivityWidget
+            workspaceSlug={workspaceSlug}
+            showFilterSelect={false}
+            embedded
+            scope="administrative"
+            refreshToken={refreshToken}
+          />
+        </HomeSectionCard>
+
+        <HomeSectionCard
+          className="xl:col-span-4"
+          density={density}
           title={t("research.home_workbench.report_summary")}
-          hint={
-            reportSummary
-              ? `${reportSummary.period_key} · ${reportSummary.period_start} ~ ${reportSummary.period_end}`
-              : undefined
-          }
           action={
             canSeeSummary ? (
               <Link href={summaryHref} className={cardLinkClassName}>
@@ -470,52 +509,60 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             ) : undefined
           }
         >
-          {reportState === "loading" && (
-            <div className="p-4" role="status" aria-busy="true">
-              <Skeleton.Item height="72px" width="100%" />
-            </div>
-          )}
-          {reportState === "error" && (
-            <p className="p-4 text-12 text-secondary" role="alert">
-              {t("research.home_workbench.report_error")}
-            </p>
-          )}
-          {reportState === "forbidden" && (
+          {!canSeeSummary ? (
             <p className="p-4 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
-          )}
-          {(reportState === "empty" || reportState === "ready") && (
-            <div className="grid min-w-0 grid-cols-2 divide-x divide-y divide-subtle sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
-              {[
-                { label: t("research.summary.not_submitted"), value: reportSummary?.counts.not_submitted ?? 0 },
-                { label: t("research.summary.needs_revision"), value: reportSummary?.counts.needs_revision ?? 0 },
-                { label: t("research.summary.submitted"), value: reportSummary?.counts.submitted ?? 0 },
-                { label: t("research.summary.accepted"), value: reportSummary?.counts.accepted ?? 0 },
-              ].map((item) => (
-                <Link
-                  key={item.label}
-                  href={summaryHref}
-                  className="min-w-0 px-4 py-3 transition-colors hover:bg-surface-1"
-                >
-                  <p className="truncate text-11 text-tertiary">{item.label}</p>
-                  <p className="mt-1 text-18 font-semibold text-primary tabular-nums">{item.value}</p>
-                </Link>
-              ))}
+          ) : (
+            <div className="divide-y divide-subtle">
+              {REPORT_PERIODS.map(({ type, labelKey }) => {
+                const entry = reportSummaries[type];
+                const isCurrent = entry?.workspaceSlug === workspaceSlug && entry.identity === reportIdentity;
+                const summary = isCurrent ? entry.summary : null;
+                const state = isCurrent ? entry.state : "loading";
+                return (
+                  <div key={type} className="min-w-0 px-4 py-3" role="group" aria-label={t(labelKey)}>
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                      <h3 className="text-13 font-medium text-primary">{t(labelKey)}</h3>
+                      {summary && <span className="text-11 text-tertiary">{summary.period_key}</span>}
+                    </div>
+                    {summary && (
+                      <p className="mt-0.5 text-11 text-tertiary">
+                        {summary.period_start} ~ {summary.period_end}
+                      </p>
+                    )}
+                    {state === "loading" && (
+                      <div className="mt-2" role="status" aria-busy="true">
+                        <Skeleton.Item height="48px" width="100%" />
+                      </div>
+                    )}
+                    {state === "error" && (
+                      <p className="mt-2 text-12 text-secondary" role="alert">
+                        {t("research.home_workbench.report_error")}
+                      </p>
+                    )}
+                    {state === "forbidden" && (
+                      <p className="mt-2 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
+                    )}
+                    {summary && state === "ready" && (
+                      <div className="mt-2 grid min-w-0 grid-cols-2 gap-y-2 sm:grid-cols-4">
+                        {REPORT_BUCKETS.map((bucket) => (
+                          <Link
+                            key={bucket}
+                            href={summaryHref}
+                            className="min-w-0 rounded-sm py-1 pr-2 transition-colors hover:bg-surface-1"
+                          >
+                            <p className="text-11 text-tertiary">{t(`research.summary.${bucket}`)}</p>
+                            <p className="mt-1 text-20 font-semibold break-all text-primary tabular-nums">
+                              {summary.counts[bucket]}
+                            </p>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
-        </HomeSectionCard>
-
-        <HomeSectionCard
-          className="xl:col-span-4"
-          density={density}
-          title={t("research.home_workbench.recent_activity")}
-        >
-          <RecentActivityWidget
-            key={`recent-${refreshToken}`}
-            workspaceSlug={workspaceSlug}
-            showFilterSelect={false}
-            embedded
-            researchChainByProject={Object.fromEntries(chains.map((chain) => [chain.project, chain.id]))}
-          />
         </HomeSectionCard>
       </div>
     </div>

@@ -20,6 +20,14 @@ const identity = {
   module_enabled: true,
   workspace_enabled: true,
   sections: { org: false, reports: true, approvals: false, research_chain: true },
+  capabilities: {
+    level: "ADMIN",
+    nav: ["research_chain", "summary"],
+    is_mentor: false,
+    is_main_pi: false,
+    is_stage_reviewer: false,
+    management: { workspace: false, organization: false, integrations: false, operations: false, accounts: false },
+  },
   user: {
     id: "student-1",
     is_workspace_admin: false,
@@ -89,13 +97,16 @@ ResearchTodoService.prototype.getResearchTodos = async () => ({
   next_cursor: null,
   degraded_sources: [],
 });
-ResearchReportService.prototype.getSummary = async () => ({
-  period_key: "2026-W41",
-  period_start: "2026-10-05",
-  period_end: "2026-10-11",
+ResearchReportService.prototype.getSummary = async (_workspaceSlug, params = {}) => ({
+  period_key: params.report_type === "MONTHLY" ? "2026-10" : "2026-W42",
+  period_start: params.report_type === "MONTHLY" ? "2026-10-01" : "2026-10-12",
+  period_end: params.report_type === "MONTHLY" ? "2026-10-31" : "2026-10-18",
   org_unit: null,
   org_unit_name: null,
-  counts: { not_submitted: 3, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+  counts:
+    params.report_type === "MONTHLY"
+      ? { not_submitted: 93, draft: 1, submitted: 15, needs_revision: 12, accepted: 18 }
+      : { not_submitted: 193, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
   pending_members: [],
 });
 ProjectService.prototype.getProjects = async () =>

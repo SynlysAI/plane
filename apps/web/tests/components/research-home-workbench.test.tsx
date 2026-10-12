@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   getKnowledgeUploads: vi.fn(),
   getResearchTodos: vi.fn(),
   fetchReportSummary: vi.fn(),
+  getReportSummary: vi.fn(),
+  recentWidget: vi.fn(),
+  identityWorkspaceSlug: "lab",
   getChains: vi.fn(),
   fetchProjects: vi.fn(),
   fetchProjectAnalyticsCount: vi.fn(),
@@ -49,8 +52,12 @@ vi.mock("@plane/propel/button", () => ({
 }));
 vi.mock("@/hooks/store/use-research", () => {
   const researchStore = {
-    identity: mocks.researchIdentity,
-    identityWorkspaceSlug: "lab",
+    get identity() {
+      return mocks.researchIdentity;
+    },
+    get identityWorkspaceSlug() {
+      return mocks.identityWorkspaceSlug;
+    },
     canSee: (key: string) => ["research_chain", "summary"].includes(key),
     fetchIdentity: mocks.fetchIdentity,
     fetchReportSummary: mocks.fetchReportSummary,
@@ -76,11 +83,19 @@ vi.mock("@/services/research/research-todo.service", () => ({
     getResearchTodos = mocks.getResearchTodos;
   },
 }));
+vi.mock("@/services/research/report.service", () => ({
+  ResearchReportService: class {
+    getSummary = mocks.getReportSummary;
+  },
+}));
 vi.mock("@/components/research/common/research-todo-source", () => ({
   collectResearchTodos: mocks.collectResearchTodos,
 }));
 vi.mock("@/components/home/widgets/recents", () => ({
-  RecentActivityWidget: () => <section aria-label="最近动态">最近动态</section>,
+  RecentActivityWidget: (props: unknown) => {
+    mocks.recentWidget(props);
+    return <div>最近动态</div>;
+  },
 }));
 
 const { WorkspaceHomeWorkbench } = await import("@/components/home/workbench");
@@ -89,11 +104,11 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
-function renderHome(initialPath = "/lab") {
+function renderHome(initialPath = "/lab", workspaceSlug = "lab") {
   return act(async () =>
     root.render(
       <MemoryRouter initialEntries={[initialPath]}>
-        <WorkspaceHomeWorkbench workspaceSlug="lab" />
+        <WorkspaceHomeWorkbench workspaceSlug={workspaceSlug} />
       </MemoryRouter>
     )
   );
@@ -112,6 +127,8 @@ function project(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
+  mocks.identityWorkspaceSlug = "lab";
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -158,6 +175,21 @@ beforeEach(() => {
     period_end: "2026-10-11",
     counts: { not_submitted: 3, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
   });
+  mocks.getReportSummary.mockImplementation(async (_slug, params) =>
+    params.report_type === "MONTHLY"
+      ? {
+          period_key: "2026-10",
+          period_start: "2026-10-01",
+          period_end: "2026-10-31",
+          counts: { not_submitted: 13, draft: 4, submitted: 15, needs_revision: 12, accepted: 18 },
+        }
+      : {
+          period_key: "2026-W42",
+          period_start: "2026-10-12",
+          period_end: "2026-10-18",
+          counts: { not_submitted: 3, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+        }
+  );
   mocks.researchIdentity.module_enabled = true;
   mocks.researchIdentity.workspace_enabled = true;
   mocks.researchIdentity.sections.research_chain = true;
@@ -183,7 +215,7 @@ it("renders the action-first bento home information architecture without generic
     expect(container.textContent).toContain(title);
   }
   expect(container.querySelector('a[href="/lab/research/todos"]')).not.toBeNull();
-  expect(container.querySelector('a[href="/lab/research/reports/summary"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/public/research/chains/?view=reports"]')).not.toBeNull();
   expect(container.textContent).not.toContain("快捷入口");
   expect(container.textContent).not.toContain("我的工作");
   expect(container.textContent).not.toContain("便签");
@@ -279,7 +311,7 @@ it("shows the compact report submission summary and refreshes the workbench", as
   await renderHome();
   await act(async () => undefined);
 
-  expect(container.textContent).toContain("2026-W41");
+  expect(container.textContent).toContain("2026-W42");
   for (const label of ["未提交3", "需修改2", "已验收8"]) {
     expect(container.textContent).toContain(label);
   }
@@ -289,7 +321,133 @@ it("shows the compact report submission summary and refreshes the workbench", as
   expect(mocks.getChains).toHaveBeenCalledTimes(2);
   expect(mocks.fetchProjects).toHaveBeenCalledTimes(2);
   expect(mocks.fetchProjectAnalyticsCount).toHaveBeenCalledTimes(2);
-  expect(mocks.fetchReportSummary).toHaveBeenCalledTimes(2);
+  expect(mocks.getReportSummary).toHaveBeenCalledTimes(4);
+  expect(mocks.fetchReportSummary).not.toHaveBeenCalled();
+});
+
+it("keeps weekly and monthly counts and periods separate", async () => {
+  await renderHome();
+  expect(mocks.getReportSummary).toHaveBeenCalledWith("lab", { report_type: "WEEKLY" });
+  expect(mocks.getReportSummary).toHaveBeenCalledWith("lab", { report_type: "MONTHLY" });
+  const week = container.querySelector('[role="group"][aria-label="本周"]');
+  const month = container.querySelector('[role="group"][aria-label="本月"]');
+  expect(week?.textContent).toContain("2026-10-12 ~ 2026-10-18");
+  expect(month?.textContent).toContain("2026-10-01 ~ 2026-10-31");
+  expect([...week!.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
+    "未提交3",
+    "需修改2",
+    "已提交5",
+    "已验收8",
+  ]);
+  expect([...month!.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
+    "未提交13",
+    "需修改12",
+    "已提交15",
+    "已验收18",
+  ]);
+  expect(
+    [...week!.querySelectorAll("a"), ...month!.querySelectorAll("a")].every(
+      (link) => link.getAttribute("href") === "/public/research/chains/?view=reports"
+    )
+  ).toBe(true);
+  const allPeriod = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部");
+  await act(async () => allPeriod?.click());
+  expect(mocks.getReportSummary).toHaveBeenCalledTimes(2);
+});
+
+it("places administrative recents before reports and passes scope and refresh", async () => {
+  await renderHome();
+  const grid = container.querySelector("[data-testid='workspace-home-columns']");
+  expect([...grid!.children].slice(2).map((section) => section.getAttribute("aria-label"))).toEqual([
+    "行政项目概览",
+    "最近动态",
+    "报告提交摘要",
+  ]);
+  expect(mocks.recentWidget).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      workspaceSlug: "lab",
+      scope: "administrative",
+      refreshToken: 0,
+    })
+  );
+  const refresh = [...container.querySelectorAll("button")].find((button) => button.textContent === "刷新");
+  await act(async () => refresh?.click());
+  expect(mocks.recentWidget).toHaveBeenLastCalledWith(expect.objectContaining({ refreshToken: 1 }));
+});
+
+it("retains the monthly summary when the weekly request fails", async () => {
+  mocks.getReportSummary.mockRejectedValueOnce(new Error("unavailable"));
+  await renderHome();
+  expect(container.querySelector('[aria-label="本周"]')?.textContent).toContain("暂不可用");
+  expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
+  expect(container.querySelector('[aria-label="本周"] a')).toBeNull();
+});
+
+it("does not request or invent counts without summary permission", async () => {
+  mocks.researchIdentity.sections.reports = false;
+  await renderHome();
+  const section = container.querySelector('section[aria-label="报告提交摘要"]');
+  expect(mocks.getReportSummary).not.toHaveBeenCalled();
+  expect(section?.textContent).toContain("没有科研数据访问权限");
+  expect(section?.querySelector("a")).toBeNull();
+});
+
+it("retains monthly counts when the weekly summary is forbidden", async () => {
+  mocks.getReportSummary.mockRejectedValueOnce({ error_code: "research_permission_denied" });
+  await renderHome();
+  expect(container.querySelector('[aria-label="本周"]')?.textContent).toContain("没有科研数据访问权限");
+  expect(container.querySelector('[aria-label="本周"] a')).toBeNull();
+  expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
+});
+
+it("ignores pending summaries when identity permissions change while summary access remains", async () => {
+  const originalIdentity = mocks.researchIdentity;
+  const pending: ((summary: unknown) => void)[] = [];
+  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
+  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
+  try {
+    await renderHome();
+    mocks.researchIdentity = {
+      ...originalIdentity,
+      user: { ...originalIdentity.user, is_workspace_admin: true },
+    };
+    await renderHome();
+    expect(mocks.getReportSummary).toHaveBeenCalledTimes(4);
+    await act(async () => pending.forEach((done) => done({ period_key: "stale-identity", counts: {} })));
+    expect(container.textContent).not.toContain("stale-identity");
+    expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
+  } finally {
+    mocks.researchIdentity = originalIdentity;
+  }
+});
+
+it("ignores a pending report response after permission is revoked", async () => {
+  let resolve!: (summary: unknown) => void;
+  mocks.getReportSummary.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      })
+  );
+  await renderHome();
+  expect(container.querySelectorAll('[aria-busy="true"]').length).toBeGreaterThan(0);
+  mocks.researchIdentity.sections.reports = false;
+  await renderHome();
+  await act(async () => resolve({ period_key: "stale-report", counts: { accepted: 999 } }));
+  expect(container.textContent).not.toContain("stale-report");
+  expect(container.querySelector('section[aria-label="报告提交摘要"] a')).toBeNull();
+});
+
+it("ignores report responses from the previous workspace", async () => {
+  const pending: ((summary: unknown) => void)[] = [];
+  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
+  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
+  await renderHome();
+  mocks.identityWorkspaceSlug = "other";
+  await renderHome("/other", "other");
+  await act(async () => pending.forEach((done) => done({ period_key: "stale-workspace", counts: {} })));
+  expect(container.textContent).not.toContain("stale-workspace");
+  expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
 });
 
 it("uses a neutral research empty state when the caller has no research access", async () => {
