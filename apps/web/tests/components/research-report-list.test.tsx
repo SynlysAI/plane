@@ -6,7 +6,8 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createReport: vi.fn(),
-  fetchReportTemplates: vi.fn(),
+  getReports: vi.fn(),
+  fetchReportTemplateOptions: vi.fn(),
   fetchReports: vi.fn(),
   fetchResearchProjects: vi.fn(),
   fetchOrgUnits: vi.fn(),
@@ -35,6 +36,9 @@ vi.mock("@plane/i18n", () => ({
         "research.reports.template": "模板",
         "research.feedback.report_created.title": "报告已创建",
         "research.feedback.report_created.message": "请继续编辑正文。",
+        "research.reports.columns.read_state": "已读状态",
+        "research.reports.read.waiting": "待阅读",
+        "research.reports.read.read_pending_review": "已读 · 待审阅",
       })[key] ?? key,
     currentLocale: "zh-CN",
   }),
@@ -75,21 +79,24 @@ vi.mock("@/hooks/store/use-research", () => ({
     identity: { user: { org_units: [{ org_unit: "unit-1", is_primary: true }] } },
     reportLoader: false,
     reportPaginationByWorkspace: {},
-    getReports: () => [],
+    getReports: () => mocks.getReports(),
     getOrgUnits: () => [],
     getResearchProjects: () => [],
-    getReportTemplates: () => [template],
+    getReportTemplateOptions: () => [template],
     templatesLoader: false,
     fetchReports: mocks.fetchReports,
     fetchResearchProjects: mocks.fetchResearchProjects,
     fetchOrgUnits: mocks.fetchOrgUnits,
-    fetchReportTemplates: mocks.fetchReportTemplates,
+    fetchReportTemplateOptions: mocks.fetchReportTemplateOptions,
     createReport: mocks.createReport,
   }),
 }));
 
 const { ResearchReportList } = await import("@/components/research/reports/report-list");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
+
+/** Render the report list with its default test props. */
+const ReportScopeProbe = () => <ResearchReportList workspaceSlug="lab" />;
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -108,11 +115,12 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  mocks.fetchReportTemplates.mockResolvedValue([template]);
+  mocks.fetchReportTemplateOptions.mockResolvedValue([template]);
   mocks.fetchReports.mockResolvedValue([]);
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
   mocks.createReport.mockResolvedValue({ id: "report-1" });
+  mocks.getReports.mockReturnValue([]);
 });
 
 afterEach(async () => {
@@ -140,7 +148,7 @@ it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () 
     )
   );
   await act(async () => button("创建报告").click());
-  expect(mocks.fetchReportTemplates).toHaveBeenCalledWith("lab", { report_type: "WEEKLY" });
+  expect(mocks.fetchReportTemplateOptions).toHaveBeenCalledWith("lab", { report_type: "WEEKLY" });
   expect(container.textContent).toContain("Graphite weekly template");
 
   const select = container.querySelector<HTMLSelectElement>('select[aria-label="模板"]');
@@ -158,4 +166,96 @@ it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () 
     template: "template-1",
   });
   expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/reports/report-1");
+});
+
+it("报告列表回放 mine 旧链接并只携带报告领域参数", async () => {
+  const search =
+    "?mine=true&owner=uuid&q=graphite&date_from=2026-10-01&date_to=2026-10-08&org_unit=org-1&cursor=cursor-1&status=SUBMITTED&report_type=WEEKLY&period_key=2026-W40";
+  function Probe() {
+    const location = useLocation();
+    return (
+      <>
+        <ResearchReportList workspaceSlug="lab" />
+        <output aria-label="URL">{`${location.pathname}${location.search}`}</output>
+      </>
+    );
+  }
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[`/lab/research/reports${search}`]}>
+        <Probe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
+
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe(`/lab/research/reports${search}`);
+  expect(mocks.fetchReports).toHaveBeenCalledWith("lab", {
+    per_page: "50",
+    mine: "true",
+    owner: "uuid",
+    q: "graphite",
+    date_from: "2026-10-01",
+    date_to: "2026-10-08",
+    org_unit: "org-1",
+    cursor: "cursor-1",
+    status: "SUBMITTED",
+    report_type: "WEEKLY",
+    period_key: "2026-W40",
+  });
+  expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("workflow_status");
+  expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("research_type");
+});
+
+it("报告列表 scope=mine 新链接不再输出 mine 请求参数", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports?scope=mine"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
+
+  expect(mocks.fetchReports).toHaveBeenCalledWith("lab", {
+    per_page: "50",
+    scope: "mine",
+  });
+  expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("mine");
+});
+
+it("报告审核列表区分待阅读和已读待审阅", async () => {
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-unread",
+      period_key: "2026-W40",
+      status: "SUBMITTED",
+      visibility: "DIRECT_ADVISOR",
+      has_read: false,
+      read_count: 0,
+      latest_read_at: null,
+    },
+    {
+      id: "report-read",
+      period_key: "2026-W39",
+      status: "SUBMITTED",
+      visibility: "DIRECT_ADVISOR",
+      has_read: true,
+      read_count: 1,
+      latest_read_at: "2026-10-10T08:09:00Z",
+    },
+  ]);
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/approvals?tab=report_review"]}>
+        <ResearchReportList workspaceSlug="lab" variant="review" />
+      </MemoryRouter>
+    )
+  );
+
+  const rows = [...container.querySelectorAll("tr")];
+  expect(rows[1]?.textContent).toContain("待阅读");
+  expect(rows[2]?.textContent).toContain("已读 · 待审阅");
 });

@@ -19,3 +19,6 @@ export * from "./integration.service";
 export * from "./timeline.service";
 export * from "./account.service";
 export * from "./feedback.service";
+export * from "./chain-task.service";
+export * from "./paper-review.service";
+export * from "./research-todo.service";

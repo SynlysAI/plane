@@ -2,6 +2,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { TResearchTodoEnvelopeList } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 type SummaryIdentity = {
@@ -22,12 +23,15 @@ const mocks = vi.hoisted(() => ({
   getChains: vi.fn(),
   getChainNodes: vi.fn(),
   getChainNodeDetail: vi.fn(),
+  getKnowledgeUploads: vi.fn(),
+  getResearchTodos: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "zh-CN",
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => {
       const value = key
@@ -44,6 +48,12 @@ vi.mock("@/services/research/chain.service", () => ({
     getChains = mocks.getChains;
     getChainNodes = mocks.getChainNodes;
     getChainNodeDetail = mocks.getChainNodeDetail;
+    getKnowledgeUploads = mocks.getKnowledgeUploads;
+  },
+}));
+vi.mock("@/services/research/research-todo.service", () => ({
+  ResearchTodoService: class {
+    getResearchTodos = mocks.getResearchTodos;
   },
 }));
 vi.mock("@/services/research/report.service", () => ({
@@ -74,6 +84,17 @@ vi.mock("@/services/research/integration.service", () => ({
 
 const { ResearchHomeSummaryCard } = await import("@/components/research/common/research-home-summary-card");
 
+function emptyTodoList(totalCount = 0): TResearchTodoEnvelopeList {
+  return {
+    schema_version: "research-todo.v2",
+    results: [],
+    count: 0,
+    total_count: totalCount,
+    next_cursor: null,
+    degraded_sources: [],
+  };
+}
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -88,6 +109,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.getResearchTodos.mockResolvedValue(emptyTodoList());
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -135,6 +157,22 @@ it("shows the latest visible chain, current node and snapshot", async () => {
   expect(container.querySelector('a[href="/lab/research/chains/chain-1?node=node-1"]')).not.toBeNull();
   expect(container.textContent).toContain("处理当前节点");
   expect(container.querySelector('a[href="/lab/research"]')).toBeNull();
+});
+
+it("reads the todo count from one aggregate request without polling uploads", async () => {
+  mocks.getChains.mockResolvedValue([
+    { id: "chain-1", project: "课题一", project_name: "课题一", status: "ACTIVE", updated_at: "2026-09-23T00:00:00Z" },
+  ]);
+  mocks.getChainNodes.mockResolvedValue([]);
+  mocks.getResearchTodos.mockResolvedValue(emptyTodoList(3));
+
+  await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" />));
+
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(1);
+  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
+  expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("3");
+  expect(container.textContent).toContain("待处理");
 });
 
 it("does not leak chain content when the summary is forbidden", async () => {

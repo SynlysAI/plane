@@ -98,6 +98,9 @@ export const createUniqueIDPlugin = (options: UniqueIDOptions) => {
       // `tr.setNodeMarkup` resets the stored marks
       // so we'll restore them if they exist
       tr.setStoredMarks(newState.tr.storedMarks);
+      // Mark ID generation as a migration-only update so controlled editors can
+      // avoid treating automatic block ID normalization as a user edit.
+      tr.setMeta("uniqueIdOnlyChange", true);
 
       // Don't add ID generation to undo history
       // since its causing issue with undo feature we are commmeting it out for now

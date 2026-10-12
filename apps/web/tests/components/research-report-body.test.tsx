@@ -6,6 +6,7 @@ import type { TPeriodicReport } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
+  editorMigrationUpdate: false,
   reports: {} as Record<string, TPeriodicReport>,
   reportHistory: {},
   settings: {},
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   fetchReport: vi.fn(),
   fetchReportHistory: vi.fn(),
   fetchReports: vi.fn(),
+  markReportRead: vi.fn(),
   submitReport: vi.fn(),
   updateReportVisibility: vi.fn(),
 }));
@@ -71,7 +73,7 @@ vi.mock("@/components/editor/document/editor", () => ({
     }: {
       value: string | object;
       editable: boolean;
-      onChange: (json: object, html: string) => void;
+      onChange: (json: object, html: string, options?: { isMigrationUpdate?: boolean }) => void;
     },
     ref
   ) {
@@ -91,6 +93,9 @@ vi.mock("@/components/editor/document/editor", () => ({
       }),
       [body, onChange]
     );
+    React.useEffect(() => {
+      if (mocks.editorMigrationUpdate) onChange({}, initial, { isMigrationUpdate: true });
+    }, [initial, onChange]);
     return (
       <textarea
         aria-label="正文编辑器"
@@ -181,11 +186,13 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mocks.reports = { "report-1": report() };
+  mocks.editorMigrationUpdate = false;
   mocks.saveReportDraft.mockResolvedValue(undefined);
   mocks.fetchReport.mockResolvedValue(undefined);
   mocks.fetchReportHistory.mockResolvedValue(undefined);
   mocks.fetchReports.mockResolvedValue(undefined);
   mocks.submitReport.mockResolvedValue(undefined);
+  mocks.markReportRead.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -196,6 +203,13 @@ afterEach(async () => {
 });
 
 describe("报告详情正文保存与替换", () => {
+  it("编辑器初始化迁移不会把正文标记为未保存", async () => {
+    mocks.editorMigrationUpdate = true;
+    await renderDetail();
+
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("已保存");
+  });
+
   it.each([false, true])("项目关联为 %s 时在详情页直接编辑并保存同一正文", async (projectBound) => {
     mocks.reports["report-1"] = report(projectBound);
     await renderDetail();
@@ -348,5 +362,54 @@ describe("报告详情正文保存与替换", () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe("未保存");
     expect(button("保存").disabled).toBe(false);
     expect(button("提交").disabled).toBe(false);
+  });
+});
+
+describe("报告详情已读回执", () => {
+  it("非作者打开正式版本后自动上报一次", async () => {
+    const official = report();
+    Object.assign(official, {
+      owner: "advisor-1",
+      status: "SUBMITTED",
+      can_edit: false,
+      can_review: true,
+      draft_content: null,
+      official_content: {
+        version_no: 1,
+        description_json: {},
+        description_html: "<p>正式正文</p>",
+        description_stripped: "正式正文",
+      },
+      has_read: false,
+      read_count: 0,
+      latest_read_at: null,
+    });
+    mocks.reports["report-1"] = official;
+
+    await renderDetail();
+    await act(async () => undefined);
+
+    expect(mocks.markReportRead).toHaveBeenCalledTimes(1);
+    expect(mocks.markReportRead).toHaveBeenCalledWith("lab", "report-1");
+  });
+
+  it("作者和未返回正式版本的报告不上报已读", async () => {
+    mocks.reports["report-1"] = report();
+    await renderDetail();
+    await act(async () => undefined);
+    expect(mocks.markReportRead).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    const submittedByAuthor = report();
+    Object.assign(submittedByAuthor, {
+      status: "SUBMITTED",
+      can_edit: false,
+      official_content: { version_no: 1, description_json: {}, description_html: "<p>正文</p>" },
+    });
+    mocks.reports["report-1"] = submittedByAuthor;
+    await renderDetail();
+    await act(async () => undefined);
+    expect(mocks.markReportRead).not.toHaveBeenCalled();
   });
 });

@@ -29,7 +29,7 @@ export type TReviewerAssignmentPayload = {
   valid_until?: string | null;
 };
 
-export type TToMeResponse = {
+type TToMeResponse = {
   results: TToMeReview[];
   count: number;
   required: TToMeReview[];

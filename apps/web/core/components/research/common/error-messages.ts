@@ -116,13 +116,10 @@ const RESEARCH_ERROR_KEYS: Record<string, string> = {
   external_reference_link_not_found: "research.errors.external_reference_link_not_found",
 };
 
-export const RESEARCH_GENERIC_ERROR_KEY = "research.errors.generic";
+const RESEARCH_GENERIC_ERROR_KEY = "research.errors.generic";
 
 export const getResearchErrorKey = (error?: unknown): string => {
   const errorCode = (error as { error_code?: string } | null | undefined)?.error_code;
   if (!errorCode) return RESEARCH_GENERIC_ERROR_KEY;
   return RESEARCH_ERROR_KEYS[errorCode] ?? RESEARCH_GENERIC_ERROR_KEY;
 };
-
-export const getResearchErrorCode = (error?: unknown): string | null =>
-  (error as { error_code?: string } | null | undefined)?.error_code ?? null;

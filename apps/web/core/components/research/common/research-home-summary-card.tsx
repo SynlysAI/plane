@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 // plane imports
@@ -11,14 +11,15 @@ import type { TResearchChain, TResearchChainNode, TResearchChainSnapshot } from 
 // components
 import { chainOwnerLabel, selectResearchOverviewChains } from "@/components/research/common/research-overview-rows";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
-import { collectResearchTodos } from "@/components/research/common/research-todo-source";
 import { pickCurrentChain, pickCurrentNode } from "@/components/research/chains/research-selection";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
+import { ResearchTodoService } from "@/services/research/research-todo.service";
 
 const chainService = new ResearchChainService();
+const todoService = new ResearchTodoService();
 
 /** Node statuses where the most important next action is handling the node itself. */
 const NODE_ACTION_STATUSES = new Set<TResearchChainNode["status"]>(["WAITING_HUMAN", "NEEDS_REVISION", "FAILED"]);
@@ -39,19 +40,22 @@ type TChainSummary = {
   todoCount: number;
 };
 
-/** Read the newest visible chain, its active node, latest snapshot and todo count. */
-async function loadChainSummary(
-  workspaceSlug: string,
-  translate: (key: string) => string,
-  canSee: (key: string) => boolean,
-  agentEnabled: boolean
-): Promise<TChainSummary> {
-  const chains = await chainService.getChains(workspaceSlug);
+/**
+ * Read the newest visible chain, active node, snapshot and aggregate todo count.
+ *
+ * The todo request is issued once beside the chain list and never fans out to
+ * individual chain nodes or knowledge-upload endpoints.
+ */
+async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
+  const [chains, todoPayload] = await Promise.all([
+    chainService.getChains(workspaceSlug),
+    todoService.getResearchTodos(workspaceSlug, { scope: "to_me", limit: 100 }).catch(() => null),
+  ]);
   const currentChain = pickCurrentChain(chains);
   if (!currentChain) return { chains, chainDetails: [], todoCount: 0 };
 
   const chainDetails = await Promise.all(
-    chains.map(async (chain) => {
+    chains.map(async (chain: TResearchChain) => {
       const nodes = await chainService.getChainNodes(workspaceSlug, chain.id);
       const currentNode = pickCurrentNode(nodes);
       const detail = currentNode
@@ -66,23 +70,13 @@ async function loadChainSummary(
       return { chainId: chain.id, currentNode, latestSnapshot };
     })
   );
-  // Reuse the already loaded chains inside the shared todo aggregation so the
-  // summary card and the todo index share one deduplication and sorting rule.
-  const todos = await collectResearchTodos({
-    workspaceSlug,
-    access: { canSee, agentEnabled },
-    translate,
-    preloadedChains: chains,
-  }).catch(() => []);
-  return { chains, chainDetails, todoCount: todos.length };
+  return { chains, chainDetails, todoCount: todoPayload?.total_count ?? 0 };
 }
 
 /** Compact research summary for the regular Plane workspace home. */
 export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard({ workspaceSlug }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
-  const translateRef = useRef(t);
-  const researchRef = useRef(research);
   const [state, setState] = useState<TSummaryState>("loading");
   const [summary, setSummary] = useState<TChainSummary | null>(null);
   const [chainIndex, setChainIndex] = useState(0);
@@ -102,13 +96,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const currentResearch = researchRef.current;
-      const result = await loadChainSummary(
-        workspaceSlug,
-        translateRef.current,
-        currentResearch.canSee.bind(currentResearch),
-        Boolean(currentResearch.identity?.sections?.research_agent)
-      );
+      const result = await loadChainSummary(workspaceSlug);
       setSummary(result);
       setChainIndex(0);
       setState(result.chains.length ? "ready" : "empty");

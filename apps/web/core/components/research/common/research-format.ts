@@ -31,6 +31,28 @@ export function formatResearchDate(value: string | Date | null | undefined, loca
 }
 
 /**
+ * Format a read receipt timestamp with minute-level precision.
+ *
+ * Args:
+ *   value: ISO timestamp returned by the backend, or an empty value.
+ *   locale: Current interface locale used by Intl formatting.
+ *
+ * Returns:
+ *   A date and clock-time string without seconds, or an empty string.
+ */
+export function formatResearchReadAt(value: string | Date | null | undefined, locale?: string): string {
+  const date = value instanceof Date ? value : value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(locale || undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
  * Format a clock time for page metadata such as the last refresh moment.
  *
  * Args:

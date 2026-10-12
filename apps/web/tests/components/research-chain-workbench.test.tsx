@@ -4,8 +4,14 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("mobx-react", () => ({
+  observer: (component: unknown) => component,
+  enableStaticRendering: vi.fn(),
+}));
+vi.mock("@plane/i18n", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+  DEFAULT_LANGUAGE: "zh-CN",
+}));
 vi.mock("@plane/propel/tab-navigation", () => ({
   TabNavigationList: ({ children }: { children: React.ReactNode }) => <nav>{children}</nav>,
 }));
@@ -18,11 +24,12 @@ vi.mock("@/components/research/common/research-tab-link", () => ({
 vi.mock("@/components/research/chains/research-chain-board", () => ({
   ResearchChainBoard: () => <output>chain-board</output>,
 }));
-vi.mock("@/components/research/projects/research-project-list", () => ({
-  ResearchProjectList: () => <output>project-list</output>,
-}));
 vi.mock("@/components/research/reports/report-list", () => ({
   ResearchReportList: () => <output>report-outcome-workbench</output>,
+}));
+vi.mock("@/components/research/projects/research-project-create-dialog", () => ({
+  ResearchProjectCreateDialog: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div role="dialog">research.projects.create_title</div> : null,
 }));
 vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
@@ -57,6 +64,7 @@ async function render(entry: string) {
       </MemoryRouter>
     )
   );
+  await act(async () => undefined);
 }
 
 beforeEach(() => {
@@ -85,7 +93,15 @@ it("legacy reports 视图继续渲染报告与成果工作台", async () => {
   expect(container.textContent).not.toContain("chain-board");
 });
 
-it("课题与项目视图共享一个创建科研项目入口，报告与成果视图不显示", async () => {
+it("legacy project 视图回退到课题列表，不再渲染行政或权威 Project 列表", async () => {
+  await render("/lab/research/chains?view=projects");
+
+  expect(container.textContent).toContain("chain-board");
+  expect(container.textContent).not.toContain("project-list");
+  expect(container.textContent).not.toContain("research.chains.views.projects");
+});
+
+it("课题视图保留创建科研项目入口，报告与成果视图不显示", async () => {
   await render("/lab/research/chains");
   const createButton = Array.from(container.querySelectorAll("button")).find(
     (button) => button.textContent === "research.projects.create"
@@ -94,13 +110,18 @@ it("课题与项目视图共享一个创建科研项目入口，报告与成果�
   expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains");
 
   await act(async () => createButton.click());
-  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe(
-    "/lab/research/chains?view=projects&create=1"
-  );
-  expect(container.textContent).toContain("project-list");
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("research.projects.create_title");
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains");
 
   await render("/lab/research/chains?view=reports");
   expect(
     Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "research.projects.create")
   ).toBe(false);
+});
+
+it("create=1 会打开创建弹窗并清理 URL", async () => {
+  await render("/lab/research/chains?create=1");
+
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("research.projects.create_title");
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains");
 });

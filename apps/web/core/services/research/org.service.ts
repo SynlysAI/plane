@@ -15,7 +15,7 @@ export type TOrgUnitPayload = Partial<
   parent?: string | null;
 };
 
-export type TOrgUnitMemberPayload = {
+type TOrgUnitMemberPayload = {
   user: string;
   org_role?: string;
   is_primary?: boolean;

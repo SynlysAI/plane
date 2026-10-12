@@ -74,6 +74,7 @@ from .summary import ResearchReportSummaryEndpoint
 from .templates import (
     ResearchReportTemplateDetailEndpoint,
     ResearchReportTemplateListCreateEndpoint,
+    ResearchReportTemplateOptionListEndpoint,
 )
 from .identity import (
     ResearchIdentityMappingDetailEndpoint,
@@ -95,6 +96,15 @@ from .projects import (
     ResearchProjectDetailEndpoint,
     ResearchProjectListCreateEndpoint,
     ResearchProjectRestoreEndpoint,
+)
+from .navigation import (
+    ProjectNavigationCategoryDetailEndpoint,
+    ProjectNavigationMoveProjectEndpoint,
+    ProjectNavigationTreeEndpoint,
+)
+from .report_read import (
+    ResearchReportReadEndpoint,
+    ResearchReportReadReceiptListEndpoint,
 )
 from .reports import (
     ResearchReportAcceptEndpoint,
@@ -184,6 +194,7 @@ from .integrations import (
 )
 from .chain import ResearchProjectChainEndpoint, ResearchProjectTimelineEndpoint
 from .chain_foundation import (
+    ResearchChainAssignableUserListEndpoint,
     ResearchChainArchiveEndpoint,
     ResearchChainDetailEndpoint,
     ResearchChainEventListCreateEndpoint,
@@ -195,6 +206,20 @@ from .chain_foundation import (
     ResearchChainNodeTransitionEndpoint,
     ResearchChainRestoreEndpoint,
     ResearchChainSnapshotCreateEndpoint,
+)
+from .chain_tasks import (
+    ResearchChainNodeTaskActionEndpoint,
+    ResearchChainNodeTaskDetailEndpoint,
+    ResearchChainNodeTaskListCreateEndpoint,
+)
+from .paper_reviews import (
+    ResearchPaperReviewDetailEndpoint,
+    ResearchPaperReviewListCreateEndpoint,
+    ResearchPaperReviewPresignEndpoint,
+    ResearchPaperReviewVersionActionEndpoint,
+    ResearchPaperReviewVersionDetailEndpoint,
+    ResearchPaperReviewVersionListCreateEndpoint,
+    ResearchPaperReviewWithdrawEndpoint,
 )
 from .knowledge import (
     ResearchChainKnowledgeBaseListEndpoint,
@@ -279,6 +304,7 @@ __all__ = [
     "ResearchProjectChainEndpoint",
     "ResearchProjectTimelineEndpoint",
     "ResearchChainListCreateEndpoint",
+    "ResearchChainAssignableUserListEndpoint",
     "ResearchChainDetailEndpoint",
     "ResearchChainArchiveEndpoint",
     "ResearchChainRestoreEndpoint",
@@ -325,6 +351,7 @@ __all__ = [
     "ResearchReportMarkdownImportEndpoint",
     "ResearchReportTemplateDetailEndpoint",
     "ResearchReportTemplateListCreateEndpoint",
+    "ResearchReportTemplateOptionListEndpoint",
     "ResearchIdentityMappingDetailEndpoint",
     "ResearchIdentityMappingListCreateEndpoint",
     "ResearchIdentityMeEndpoint",
@@ -345,6 +372,8 @@ __all__ = [
     "ResearchReportDetailEndpoint",
     "ResearchReportHistoryEndpoint",
     "ResearchReportListCreateEndpoint",
+    "ResearchReportReadEndpoint",
+    "ResearchReportReadReceiptListEndpoint",
     "ResearchReportReturnEndpoint",
     "ResearchReportSubmitEndpoint",
     "ResearchInviteCodeListCreateEndpoint",

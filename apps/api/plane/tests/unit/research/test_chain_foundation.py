@@ -1,14 +1,17 @@
 """Research Chain foundation migration-view, ACL and idempotency tests."""
 
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
     Project,
     ResearchChain,
     ResearchChainEvent,
+    ResearchChainNodeTask,
     ResearchChainNode,
     ResearchChainSnapshot,
     ResearchProjectProfile,
@@ -100,9 +103,9 @@ def test_workspace_visible_chain_is_readable_without_research_nav(env):
     assert env["outsider_client"].get(chains_url(env)).status_code == 200
     assert env["outsider_client"].get(f"{chains_url(env)}{chain_id}/").status_code == 200
     assert (
-        env["outsider_client"].get(
-            f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node.id}/events/"
-        ).status_code
+        env["outsider_client"]
+        .get(f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node.id}/events/")
+        .status_code
         == 200
     )
     denied = env["outsider_client"].post(
@@ -170,6 +173,103 @@ def test_chain_list_and_detail_use_project_visibility(env):
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()["data"]] == [chain_id]
     assert env["client"].get(detail_url).status_code == 200
+
+
+def test_chain_list_returns_aggregated_summary_without_per_row_node_requests(env):
+    from django.test.utils import CaptureQueriesContext
+    from django.db import connection
+
+    def table_query_count(capture, table_name):
+        return sum(table_name in query["sql"] for query in capture.captured_queries)
+
+    created, _ = create_chain(env)
+    chain = ResearchChain.objects.get(id=created.json()["data"]["id"])
+    active_node = ResearchChainNode.objects.create(
+        chain=chain,
+        node_type="ANALYSIS",
+        title="实验数据分析",
+        status="ACTIVE",
+        request_id=f"node-active-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+    waiting_node = ResearchChainNode.objects.create(
+        chain=chain,
+        node_type="PAPER_WRITING",
+        title="论文修改",
+        status="WAITING_HUMAN",
+        request_id=f"node-waiting-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+    ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain=chain,
+        node=active_node,
+        title="补充实验图表",
+        status="ASSIGNED",
+        due_at=timezone.now() + timedelta(days=3),
+        request_id=f"task-open-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+    ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain=chain,
+        node=active_node,
+        title="整理数据表",
+        status="ASSIGNED",
+        due_at=timezone.now() + timedelta(days=1),
+        request_id=f"task-next-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+    ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain=chain,
+        node=active_node,
+        title="已完成任务",
+        status="COMPLETED",
+        request_id=f"task-completed-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+
+    with CaptureQueriesContext(connection) as first_capture:
+        listed = env["client"].get(chains_url(env))
+    summary = next(item for item in listed.json()["data"] if item["id"] == str(chain.id))
+    assert summary["open_task_count"] == 2
+    assert summary["next_due_at"] is not None
+    assert summary["current_node"]["id"] == str(waiting_node.id)
+    assert summary["current_node"]["title"] == "论文修改"
+
+    project_suffix = uuid4().hex[:6]
+    second_project = Project.objects.create(
+        workspace=env["workspace"],
+        name=f"Second chain project {project_suffix}",
+        identifier=f"S{project_suffix}",
+        network=0,
+        created_by=env["owner"],
+    )
+    ResearchProjectProfile.objects.create(
+        project=second_project,
+        workspace=env["workspace"],
+        owner=env["owner"],
+        chain_kind="RESEARCH_CHAIN",
+        chain_visibility="PRIVATE",
+        created_by=env["owner"],
+    )
+    ResearchChain.objects.create(
+        project=second_project,
+        workspace=env["workspace"],
+        owner=env["owner"],
+        request_id=f"chain-second-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+
+    with CaptureQueriesContext(connection) as second_capture:
+        listed_again = env["client"].get(chains_url(env))
+    assert len(listed_again.json()["data"]) == 2
+    assert table_query_count(second_capture, "research_chain_nodes") == table_query_count(
+        first_capture, "research_chain_nodes"
+    )
+    assert any("research_chain_node_tasks" in query["sql"] for query in first_capture.captured_queries)
 
 
 def test_node_event_and_snapshot_are_idempotent_append_only(env):

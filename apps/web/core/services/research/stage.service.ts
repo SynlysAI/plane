@@ -17,7 +17,7 @@ import type {
 // services
 import { APIService } from "@/services/api.service";
 
-export type TStageListResponse = {
+type TStageListResponse = {
   results: TStageInstance[];
   count: number;
   current_stage: string | null;

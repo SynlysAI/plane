@@ -17,7 +17,7 @@ import type {
 // services
 import { APIService } from "@/services/api.service";
 
-export type TInviteCodePayload = {
+type TInviteCodePayload = {
   org_role?: Extract<TOrgRole, "REVIEWER"> | "";
   org_unit?: string | null;
   profile_category?: TResearchUserProfile["category"];
@@ -27,7 +27,7 @@ export type TInviteCodePayload = {
   note?: string;
 };
 
-export type ImportPreviewPerson = {
+type ImportPreviewPerson = {
   id: string;
   name: string;
   email: string;

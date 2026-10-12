@@ -11,7 +11,7 @@ import { EmptyStateCompact, EmptyStateDetailed } from "@plane/propel/empty-state
 import { Spinner } from "@plane/ui";
 
 /** 通用空态文案与行动配置，供未内置 resource 枚举的科研列表复用。 */
-export type TResearchListStateConfig = {
+type TResearchListStateConfig = {
   titleKey: string;
   descriptionKey: string;
   createLabelKey?: string;

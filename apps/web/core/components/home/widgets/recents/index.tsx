@@ -35,10 +35,22 @@ const filters: { name: TRecentActivityFilterKeys; icon?: React.ReactNode; i18n_k
 type TRecentWidgetProps = THomeWidgetProps & {
   presetFilter?: TRecentActivityFilterKeys;
   showFilterSelect?: boolean;
+  title?: string;
+  /** 首页卡片内嵌模式：隐藏自身标题与展开容器，滚动交由外层卡片管理。 */
+  embedded?: boolean;
+  /** 科研项目 ID 到研究链 ID 的映射。最近动态里的研究链应进入课题，而不是行政工作项。 */
+  researchChainByProject?: Record<string, string>;
 };
 
 export const RecentActivityWidget = observer(function RecentActivityWidget(props: TRecentWidgetProps) {
-  const { presetFilter, showFilterSelect = true, workspaceSlug } = props;
+  const {
+    presetFilter,
+    showFilterSelect = true,
+    title,
+    workspaceSlug,
+    embedded = false,
+    researchChainByProject,
+  } = props;
   // states
   const [filter, setFilter] = useState<TRecentActivityFilterKeys>(presetFilter ?? filters[0].name);
   const { t } = useTranslation();
@@ -67,7 +79,14 @@ export const RecentActivityWidget = observer(function RecentActivityWidget(props
       case "workspace_page":
         return <RecentPage activity={activity} ref={ref} workspaceSlug={workspaceSlug} />;
       case "project":
-        return <RecentProject activity={activity} ref={ref} workspaceSlug={workspaceSlug} />;
+        return (
+          <RecentProject
+            activity={activity}
+            ref={ref}
+            workspaceSlug={workspaceSlug}
+            researchChainByProject={researchChainByProject}
+          />
+        );
       case "issue":
         return <RecentIssue activity={activity} ref={ref} workspaceSlug={workspaceSlug} />;
       default:
@@ -75,11 +94,30 @@ export const RecentActivityWidget = observer(function RecentActivityWidget(props
     }
   };
 
+  if (embedded) {
+    if (isLoading)
+      return (
+        <div className="p-4" role="status" aria-busy="true">
+          <WidgetLoader widgetKey={WIDGET_KEY} />
+        </div>
+      );
+    if (!recents || recents.length === 0) return <RecentsEmptyState type={filter} />;
+    return (
+      <div className="flex min-h-0 flex-col divide-y divide-subtle">
+        {recents
+          ?.filter((recent) => recent.entity_data)
+          .map((activity) => (
+            <div key={activity.id}>{resolveRecent(activity)}</div>
+          ))}
+      </div>
+    );
+  }
+
   if (!isLoading && recents?.length === 0)
     return (
       <div ref={ref} className="max-h-[500px] overflow-y-scroll">
         <div className="mb-4 flex items-center justify-between">
-          <div className="text-14 font-semibold text-tertiary">{t("home.recents.title")}</div>
+          <div className="text-14 font-semibold text-tertiary">{title ?? t("home.recents.title")}</div>
           {showFilterSelect && <FiltersDropdown filters={filters} activeFilter={filter} setActiveFilter={setFilter} />}
         </div>
         <div className="flex flex-col items-center justify-center">
@@ -96,7 +134,7 @@ export const RecentActivityWidget = observer(function RecentActivityWidget(props
       buttonClassName="bg-surface-2/20"
     >
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-14 font-semibold text-tertiary">{t("home.recents.title")}</div>
+        <div className="text-14 font-semibold text-tertiary">{title ?? t("home.recents.title")}</div>
         {showFilterSelect && <FiltersDropdown filters={filters} activeFilter={filter} setActiveFilter={setFilter} />}
       </div>
       <div className="flex min-h-[250px] flex-col">

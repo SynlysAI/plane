@@ -862,5 +862,23 @@
       "description": "Ekspor item kerja ke file JSON.",
       "short_description": "Ekspor sebagai json"
     }
+  },
+  "administrative": {
+    "projects": {
+      "title": "Projects",
+      "description": "Procurement, reimbursement, equipment collaboration, office approvals, and ordinary Plane collaboration.",
+      "boundary": "Administrative projects are not research projects; administrative tasks do not write Chain Events.",
+      "create": "Create administrative project",
+      "empty": "No administrative projects."
+    },
+    "views": {
+      "title": "Views"
+    },
+    "analytics": {
+      "title": "Analytics"
+    },
+    "archives": {
+      "title": "Archives"
+    }
   }
 }

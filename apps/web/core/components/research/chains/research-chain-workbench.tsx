@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useSearchParams } from "react-router";
 // plane imports
@@ -14,7 +15,7 @@ import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
-import { ResearchProjectList } from "@/components/research/projects/research-project-list";
+import { ResearchProjectCreateDialog } from "@/components/research/projects/research-project-create-dialog";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -24,11 +25,11 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ChainView = "chains" | "projects" | "reports" | "outcomes";
+type ChainView = "chains" | "reports" | "outcomes";
 
 /**
- * IA v2 Research Chain landing container. Legacy projects and reports remain
- * authoritative objects and are embedded as saved views of the chain surface.
+ * IA v2 research container. It only renders research chains (topics), reports,
+ * and the legacy outcomes query; administrative Projects stay out of this channel.
  */
 export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({ workspaceSlug }: Props) {
   const { t } = useTranslation();
@@ -36,25 +37,41 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
   const { data: currentUser } = useUser();
   const query = useResearchBrowseQuery();
   const [searchParams] = useSearchParams();
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const requestedView = searchParams.get("view") as ChainView | null;
+  const canCreateProject = Boolean(
+    currentUser?.id && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
+  );
+  const shouldAutoOpenCreate = query.get("create") === "1";
+
+  useEffect(() => {
+    if (!shouldAutoOpenCreate) return;
+    if (canCreateProject) setIsCreateDialogOpen(true);
+    query.set("create", "");
+    // The query helper is stable for this URL state and is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCreateProject, shouldAutoOpenCreate]);
 
   if (!research.isIaV2Enabled) return <ResearchChainBoard workspaceSlug={workspaceSlug} />;
 
   const views = [
     { id: "chains" as const, labelKey: "research.chains.views.chains" },
-    { id: "projects" as const, labelKey: "research.chains.views.projects" },
     { id: "reports" as const, labelKey: "research.chains.views.reports" },
   ];
   const activeView =
     requestedView && (requestedView === "outcomes" || views.some((view) => view.id === requestedView))
       ? requestedView
       : "chains";
-  const canCreateProject = Boolean(
-    currentUser?.id && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
-  );
+  const activeTabId = activeView === "chains" ? "chains" : "reports";
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <ResearchProjectCreateDialog
+        workspaceSlug={workspaceSlug}
+        currentUserId={currentUser?.id ?? ""}
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+      />
       <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-5">
         <nav aria-label={t("research.nav.research_chain_v2")} className="min-w-0 flex-1 overflow-x-auto">
           <TabNavigationList className="py-2">
@@ -62,29 +79,21 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
               <ResearchTabLink
                 key={view.id}
                 href={`/${workspaceSlug}/research/chains${view.id === "chains" ? "" : `?view=${view.id}`}`}
-                isActive={view.id === activeView}
+                isActive={view.id === activeTabId}
               >
                 {t(view.labelKey)}
               </ResearchTabLink>
             ))}
           </TabNavigationList>
         </nav>
-        {canCreateProject && (activeView === "chains" || activeView === "projects") && (
-          <Button
-            variant="primary"
-            size="sm"
-            className="shrink-0"
-            onClick={() => query.patch({ view: "projects", create: "1" }, false)}
-          >
+        {canCreateProject && activeView === "chains" && (
+          <Button variant="primary" size="sm" className="shrink-0" onClick={() => setIsCreateDialogOpen(true)}>
             {t("research.projects.create")}
           </Button>
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeView === "chains" && <ResearchChainBoard workspaceSlug={workspaceSlug} />}
-        {activeView === "projects" && (
-          <ResearchProjectList workspaceSlug={workspaceSlug} currentUserId={currentUser?.id ?? ""} />
-        )}
         {(activeView === "reports" || activeView === "outcomes") && (
           <ResearchReportList workspaceSlug={workspaceSlug} />
         )}

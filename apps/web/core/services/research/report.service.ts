@@ -9,9 +9,12 @@ import type {
   TPeriodicReport,
   TPaginationInfo,
   TReportAttachment,
+  TReportReadReceipt,
+  TReportReadResult,
   TReportReviewLog,
   TReportSummary,
   TReportTemplate,
+  TReportTemplateOption,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -119,6 +122,22 @@ export class ResearchReportService extends APIService {
       });
   }
 
+  async markReportRead(workspaceSlug: string, reportId: string) {
+    return this.post(researchEndpoints.reportRead(workspaceSlug, reportId), {})
+      .then((res) => res?.data as TReportReadResult)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async getReportReadReceipts(workspaceSlug: string, reportId: string) {
+    return this.get(researchEndpoints.reportReadReceipts(workspaceSlug, reportId))
+      .then((res) => res?.data as { results: TReportReadReceipt[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
   async getReportAccess(workspaceSlug: string, reportId: string) {
     return this.get(researchEndpoints.reportAccess(workspaceSlug, reportId))
       .then((res) => res?.data)
@@ -208,6 +227,15 @@ export class ResearchReportService extends APIService {
   async getTemplates(workspaceSlug: string, params: { report_type?: string } = {}) {
     return this.get(researchEndpoints.reportTemplates(workspaceSlug), { params })
       .then((res) => res?.data as { results: TReportTemplate[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** Read the minimal active template options for report creation. */
+  async getTemplateOptions(workspaceSlug: string, params: { report_type?: string } = {}) {
+    return this.get(researchEndpoints.reportTemplateOptions(workspaceSlug), { params })
+      .then((res) => res?.data as { results: TReportTemplateOption[]; count: number })
       .catch((err) => {
         throw err?.response?.data;
       });

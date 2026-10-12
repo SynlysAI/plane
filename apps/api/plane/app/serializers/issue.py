@@ -147,13 +147,44 @@ class IssueCreateSerializer(BaseSerializer):
                 raise serializers.ValidationError({"description_binary": "Invalid binary data"})
 
         # Validate assignees are from project
-        if attrs.get("assignee_ids", []):
-            attrs["assignee_ids"] = ProjectMember.objects.filter(
+        requested_assignees = attrs.get("assignee_ids", [])
+        if requested_assignees:
+            requested_assignee_ids = [assignee.id for assignee in requested_assignees]
+            valid_assignee_ids = set(
+                ProjectMember.objects.filter(
+                    project_id=self.context["project_id"],
+                    role__gte=15,
+                    is_active=True,
+                    deleted_at__isnull=True,
+                    member_id__in=requested_assignee_ids,
+                ).values_list("member_id", flat=True)
+            )
+            invalid_assignee_ids = set(requested_assignee_ids) - valid_assignee_ids
+            if invalid_assignee_ids:
+                raise serializers.ValidationError(
+                    {
+                        "assignee_ids": [
+                            f"{assignee_id} is not an active member of this project"
+                            for assignee_id in invalid_assignee_ids
+                        ]
+                    }
+                )
+
+        if (
+            self.instance is None
+            and not ProjectMember.objects.filter(
                 project_id=self.context["project_id"],
                 role__gte=15,
                 is_active=True,
-                member_id__in=attrs["assignee_ids"],
-            ).values_list("member_id", flat=True)
+                deleted_at__isnull=True,
+            ).exists()
+        ):
+            raise serializers.ValidationError({"assignee_ids": "This project has no assignable members"})
+
+        if requested_assignees:
+            attrs["assignee_ids"] = [
+                assignee.id for assignee in requested_assignees if assignee.id in valid_assignee_ids
+            ]
 
         # Validate labels are from project
         if attrs.get("label_ids"):

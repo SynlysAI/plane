@@ -26,12 +26,26 @@ import { ResearchReportAttachments } from "@/components/research/reports/report-
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { formatResearchDateTime } from "@/components/research/common/research-format";
+import { formatResearchDateTime, formatResearchReadAt } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
   reportId: string;
 };
+
+type ReportReadState = "waiting" | "read_pending_review" | "reviewed";
+
+/** Keep the author-facing advisor read signal separate from workflow status. */
+function reportReadState(
+  report: { status: string; owner: string; has_read?: boolean; read_count?: number },
+  currentUserId: string | undefined
+): ReportReadState | null {
+  if (report.status === "DRAFT") return null;
+  if (report.status !== "SUBMITTED") return "reviewed";
+  const isAuthor = report.owner === currentUserId;
+  const hasRead = isAuthor ? (report.read_count ?? 0) > 0 : Boolean(report.has_read);
+  return hasRead ? "read_pending_review" : "waiting";
+}
 
 /**
  * Report detail: metadata, workflow actions, review history and visibility
@@ -50,10 +64,13 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const [pendingAction, setPendingAction] = useState<"save" | "submit" | "return" | "accept" | "visibility" | null>(
     null
   );
+  const readReceiptKeyRef = useRef<string | null>(null);
 
   const report = research.reports[reportId];
   const history = research.reportHistory[reportId] ?? [];
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? "";
+  const currentUserId = research.identity?.user.id;
+  const readState = report ? reportReadState(report, currentUserId) : null;
 
   useEffect(() => {
     void (async () => {
@@ -66,6 +83,22 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, reportId]);
+
+  useEffect(() => {
+    if (
+      !report ||
+      report.owner === currentUserId ||
+      !report.official_content ||
+      report.has_read ||
+      !report.official_content.version_no
+    ) {
+      return;
+    }
+    const receiptKey = `${report.id}:${report.official_content.version_no}`;
+    if (readReceiptKeyRef.current === receiptKey) return;
+    readReceiptKeyRef.current = receiptKey;
+    research.markReportRead(workspaceSlug, report.id).catch(() => undefined);
+  }, [currentUserId, report, research, workspaceSlug]);
 
   const handleSubmit = useCallback(async () => {
     if (pendingAction) return;
@@ -166,6 +199,12 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         metadata={
           <>
             <span>{t(REPORT_STATUS_LABELS[report.status])}</span>
+            {readState && <span>{t(`research.reports.read.${readState}`)}</span>}
+            {report.latest_read_at && (
+              <span className="tabular-nums">
+                {t("research.reports.read.at")} {formatResearchReadAt(report.latest_read_at, currentLocale)}
+              </span>
+            )}
             <span className="tabular-nums">
               {report.period_start} ~ {report.period_end}
             </span>

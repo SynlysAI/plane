@@ -24,18 +24,21 @@ import { MemberOptions } from "./member-options";
 import type { MemberDropdownProps } from "./types";
 
 type TMemberDropdownBaseProps = {
+  allowClear?: boolean;
   getUserDetails: (userId: string) => IUserLite | undefined;
   icon?: ComponentType<SVGProps<SVGSVGElement>>;
   memberIds?: string[];
   onClose?: () => void;
   onDropdownOpen?: () => void;
   optionsClassName?: string;
+  projectId?: string;
   renderByDefault?: boolean;
 } & MemberDropdownProps;
 
 export const MemberDropdownBase = observer(function MemberDropdownBase(props: TMemberDropdownBaseProps) {
   const { t } = useTranslation();
   const {
+    allowClear = false,
     button,
     buttonClassName,
     buttonContainerClassName,
@@ -54,6 +57,7 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
     onDropdownOpen,
     optionsClassName = "",
     placeholder = t("members"),
+    projectId,
     placement,
     renderByDefault = true,
     showTooltip = false,
@@ -88,22 +92,26 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
     if (!multiple) handleClose();
   };
 
-  const getDisplayName = (value: string | string[] | null, showUserDetails: boolean, placeholder: string = "") => {
-    if (Array.isArray(value)) {
-      if (value.length > 0) {
-        if (value.length === 1) {
-          return getUserDetails(value[0])?.display_name || placeholder;
+  const getDisplayName = (
+    selectedValue: string | string[] | null,
+    shouldShowUserDetails: boolean,
+    fallbackPlaceholder: string = ""
+  ) => {
+    if (Array.isArray(selectedValue)) {
+      if (selectedValue.length > 0) {
+        if (selectedValue.length === 1) {
+          return getUserDetails(selectedValue[0])?.display_name || fallbackPlaceholder;
         } else {
-          return showUserDetails ? `${value.length} ${t("members").toLocaleLowerCase()}` : "";
+          return shouldShowUserDetails ? `${selectedValue.length} ${t("members").toLocaleLowerCase()}` : "";
         }
       } else {
-        return placeholder;
+        return fallbackPlaceholder;
       }
     } else {
-      if (showUserDetails && value) {
-        return getUserDetails(value)?.display_name || placeholder;
+      if (shouldShowUserDetails && selectedValue) {
+        return getUserDetails(selectedValue)?.display_name || fallbackPlaceholder;
       } else {
-        return placeholder;
+        return fallbackPlaceholder;
       }
     }
   };
@@ -162,6 +170,8 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
   return (
     <ComboDropDown
       as="div"
+      role="group"
+      aria-label={placeholder}
       ref={dropdownRef}
       {...comboboxProps}
       className={cn("h-full", className)}
@@ -178,6 +188,8 @@ export const MemberDropdownBase = observer(function MemberDropdownBase(props: TM
           onDropdownOpen={onDropdownOpen}
           optionsClassName={optionsClassName}
           placement={placement}
+          projectId={projectId}
+          allowClear={allowClear}
           referenceElement={referenceElement}
           value={value}
         />

@@ -1,0 +1,4351 @@
+<!doctype html>
+<html lang="zh-CN">
+<!-- 2026-10-11 实现对照：Phase 1.6 核心交互已落地 develop/4.25.0；本文件仅保留静态示例数据与角色切换，不作为运行时数据源。 -->
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Phase 1.6 · PiLab 科研空间原型（实现对照）</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --canvas: #f7f7f5;
+        --surface-1: #ffffff;
+        --surface-2: #f1f1ed;
+        --layer-1: #f1f1ed;
+        --layer-hover: #f5f5f1;
+        --subtle: #e5e5df;
+        --strong: #d8d8d1;
+        --primary: #252522;
+        --secondary: #6d6d67;
+        --tertiary: #92928b;
+        --accent: #426b67;
+        --accent-soft: #eef4f2;
+        --danger: #a4403b;
+        --danger-soft: #f8efee;
+        --success: #426b67;
+        --warning: #8a6a32;
+        --radius-sm: 6px;
+        --radius-lg: 8px;
+        --topbar: 40px;
+        --sidebar: 250px;
+        --font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--canvas);
+        color: var(--primary);
+        font-family: var(--font-family);
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      :focus-visible {
+        outline: 2px solid color-mix(in oklch, var(--accent), transparent 35%);
+        outline-offset: 2px;
+      }
+
+      .app-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        min-width: 0;
+      }
+
+      /* Application chrome */
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: var(--topbar);
+        flex: 0 0 var(--topbar);
+        padding: 0 12px;
+        background: var(--canvas);
+        border-bottom: 1px solid var(--subtle);
+      }
+
+      .menu-toggle {
+        display: none;
+      }
+
+      .app-shell .menu-toggle {
+        display: none;
+      }
+
+      .menu-toggle,
+      .icon-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--secondary);
+      }
+
+      .icon-button:hover,
+      .menu-toggle:hover {
+        background: var(--layer-hover);
+        color: var(--primary);
+      }
+
+      .workspace-switch {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        padding: 3px 7px;
+        border-radius: var(--radius-sm);
+        color: var(--primary);
+        font-weight: 600;
+      }
+
+      .workspace-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        background: var(--accent);
+        color: white;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .workspace-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .global-search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: min(360px, 30vw);
+        height: 28px;
+        padding: 0 8px;
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-sm);
+        background: var(--surface-1);
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .topbar-spacer {
+        flex: 1;
+      }
+
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .prototype-role {
+        width: 150px;
+        height: 28px;
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-sm);
+        background: var(--surface-1);
+        color: var(--primary);
+        font-size: 12px;
+      }
+
+      .prototype-mark {
+        padding: 3px 6px;
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--tertiary);
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .workspace-body {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        width: var(--sidebar);
+        flex: 0 0 var(--sidebar);
+        min-height: 0;
+        background: var(--surface-1);
+        border-right: 1px solid var(--subtle);
+      }
+
+      .sidebar-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 12px 8px;
+      }
+
+      .sidebar-title {
+        margin: 0;
+        color: var(--primary);
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .sidebar-search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 12px 10px;
+        height: 28px;
+        padding: 0 8px;
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .sidebar-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 0 8px 12px;
+      }
+
+      .nav-group {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nav-subgroup {
+        margin: 1px 0 3px;
+        padding: 0 0 0 13px;
+        list-style: none;
+        border-left: 1px solid var(--subtle);
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        margin: 1px 0;
+        padding: 6px 8px;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--secondary);
+        font-size: 13px;
+        text-align: left;
+      }
+
+      .nav-item:hover {
+        background: var(--layer-hover);
+        color: var(--primary);
+      }
+
+      .nav-item[aria-current="page"] {
+        background: var(--layer-hover);
+        color: var(--primary);
+        font-weight: 600;
+      }
+
+      .nav-item .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.55;
+      }
+
+      .nav-subgroup .nav-item {
+        min-height: 28px;
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .nav-category-header {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 26px;
+        padding: 4px 7px 2px 5px;
+        color: var(--secondary);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .nav-category-header.muted {
+        color: var(--tertiary);
+        font-weight: 500;
+      }
+
+      .tree-chevron {
+        width: 10px;
+        color: var(--tertiary);
+        text-align: center;
+      }
+
+      .tree-menu {
+        margin-left: auto;
+        border: 0;
+        background: transparent;
+        color: var(--tertiary);
+        cursor: pointer;
+        opacity: 0;
+      }
+
+      .nav-category-header:hover .tree-menu,
+      .tree-menu:focus-visible {
+        opacity: 1;
+      }
+
+      .nav-category-empty {
+        padding: 2px 8px 5px 20px;
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
+      .sidebar-foot {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-top: 1px solid var(--subtle);
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
+      .avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      /* Main application surface */
+      .main-area {
+        flex: 1;
+        min-width: 0;
+        padding: 8px;
+      }
+
+      .main-surface {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-lg);
+        background: var(--surface-1);
+      }
+
+      .page[hidden] {
+        display: none;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex: 0 0 auto;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--subtle);
+      }
+
+      .page-title-wrap {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-bottom: 3px;
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .breadcrumb button {
+        border: 0;
+        background: none;
+        padding: 0;
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .breadcrumb button:hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+
+      .page-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .page-title-wrap h1 {
+        margin: 0;
+        overflow: hidden;
+        color: var(--primary);
+        font-size: 22px;
+        font-weight: 650;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .page-description {
+        margin: 3px 0 0;
+        color: var(--tertiary);
+        font-size: 13px;
+      }
+
+      .page-metadata {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        margin-top: 6px;
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .page-actions {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .secondary-tabs {
+        display: flex;
+        flex: 0 0 40px;
+        align-items: stretch;
+        overflow-x: auto;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--subtle);
+        background: var(--surface-1);
+      }
+
+      .secondary-tab {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 18px;
+        border: 0;
+        background: none;
+        color: var(--secondary);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .secondary-tab::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 2px;
+        background: transparent;
+      }
+
+      .secondary-tab:hover {
+        color: var(--primary);
+      }
+
+      .secondary-tab[aria-selected="true"] {
+        color: var(--primary);
+        font-weight: 650;
+      }
+
+      .secondary-tab[aria-selected="true"]::after {
+        background: var(--accent);
+      }
+
+      .page-content {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        background: var(--canvas);
+      }
+
+      .content-pad {
+        padding: 18px;
+      }
+
+      /* Generic components */
+      .surface {
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-lg);
+        background: var(--surface-1);
+      }
+
+      .surface-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--subtle);
+      }
+
+      .surface-title {
+        margin: 0;
+        color: var(--primary);
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .surface-hint {
+        margin: 2px 0 0;
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .surface-body {
+        padding: 14px;
+      }
+
+      .surface-body.flush {
+        padding: 0;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        min-height: 28px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        background: var(--surface-1);
+        color: var(--secondary);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .button:hover {
+        background: var(--layer-hover);
+        color: var(--primary);
+      }
+
+      .button.primary {
+        background: var(--accent);
+        color: white;
+        font-weight: 600;
+      }
+
+      .button.primary:hover {
+        background: color-mix(in oklch, var(--accent), black 12%);
+      }
+
+      .button.ghost {
+        border-color: transparent;
+        background: transparent;
+      }
+
+      .button.lg {
+        min-height: 32px;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+
+      .filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .control {
+        height: 28px;
+        min-width: 0;
+        padding: 0 8px;
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-sm);
+        background: var(--surface-1);
+        color: var(--primary);
+        font-size: 12px;
+      }
+
+      .control.fixed {
+        width: 112px;
+      }
+
+      textarea.control {
+        height: auto;
+        min-height: 96px;
+        padding: 7px 8px;
+        line-height: 1.5;
+        resize: vertical;
+      }
+
+      .search-input {
+        width: 220px;
+      }
+
+      .table-scroll {
+        width: 100%;
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th {
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--subtle);
+        color: var(--tertiary);
+        font-size: 11px;
+        font-weight: 650;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--subtle);
+        color: var(--secondary);
+        font-size: 13px;
+        vertical-align: top;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tbody tr:hover {
+        background: var(--surface-2);
+      }
+
+      .cell-primary {
+        color: var(--primary);
+        font-weight: 550;
+      }
+
+      .cell-subtle {
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .row-link {
+        border: 0;
+        padding: 0;
+        background: none;
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 550;
+        text-align: left;
+      }
+
+      .row-link:hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 20px;
+        padding: 1px 7px;
+        border: 1px solid var(--subtle);
+        border-radius: 999px;
+        background: var(--surface-2);
+        color: var(--secondary);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
+      .badge.accent {
+        border-color: color-mix(in oklch, var(--accent), transparent 65%);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 650;
+      }
+
+      .badge.danger {
+        border-color: color-mix(in oklch, var(--danger), transparent 76%);
+        background: var(--danger-soft);
+        color: var(--danger);
+        font-weight: 650;
+      }
+
+      .badge.success {
+        color: var(--success);
+        font-weight: 600;
+      }
+
+      .urgent {
+        color: var(--danger);
+        font-weight: 650;
+      }
+
+      .pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding-top: 12px;
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      /* Overview */
+      .overview-grid {
+        display: grid;
+        grid-template-columns: minmax(300px, 1.05fr) minmax(280px, 0.95fr);
+        gap: 14px;
+      }
+
+      .home-column-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 0 0 10px;
+        color: var(--secondary);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .home-column-title span {
+        color: var(--tertiary);
+        font-weight: 500;
+      }
+
+      .todo-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .todo-item {
+        display: grid;
+        grid-template-columns: minmax(220px, 1.5fr) minmax(120px, 0.7fr) minmax(90px, 0.45fr) minmax(100px, 0.55fr);
+        gap: 12px;
+        align-items: center;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--subtle);
+      }
+
+      .todo-item:last-child {
+        border-bottom: 0;
+      }
+
+      .todo-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+
+      .todo-title strong {
+        overflow: hidden;
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .todo-context,
+      .todo-due,
+      .todo-action {
+        margin: 0;
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .todo-action {
+        color: var(--accent);
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .metric-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        margin-top: 14px;
+        border-top: 1px solid var(--subtle);
+      }
+
+      .metric {
+        padding: 12px 0 0;
+      }
+
+      .metric strong {
+        display: block;
+        color: var(--primary);
+        font-size: 26px;
+        font-weight: 650;
+        line-height: 1.2;
+      }
+
+      .metric span {
+        color: var(--tertiary);
+        font-size: 12px;
+      }
+
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .summary-list {
+        margin: 0;
+        padding: 0 14px;
+        list-style: none;
+      }
+
+      .summary-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--subtle);
+        font-size: 12px;
+      }
+
+      .summary-list li:last-child {
+        border-bottom: 0;
+      }
+
+      /* Chain detail */
+      .current-node {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-lg);
+        background: var(--surface-2);
+      }
+
+      .current-node-label {
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
+      .current-node-title {
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .workflow {
+        display: grid;
+        grid-template-columns: repeat(13, minmax(92px, 1fr));
+        margin: 0;
+        padding: 0;
+        overflow-x: auto;
+        list-style: none;
+      }
+
+      .workflow li {
+        min-height: 60px;
+        padding: 8px;
+        border-right: 1px solid var(--subtle);
+        background: var(--surface-1);
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
+      .workflow li:last-child {
+        border-right: 0;
+      }
+
+      .workflow b {
+        display: block;
+        margin-bottom: 2px;
+        color: inherit;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .workflow .done {
+        background: var(--surface-2);
+        color: var(--secondary);
+      }
+
+      .workflow .current {
+        border-color: color-mix(in oklch, var(--accent), transparent 55%);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 650;
+      }
+
+      .chain-detail-grid {
+        display: grid;
+        grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.28fr);
+        gap: 14px;
+      }
+
+      .node-list {
+        margin: 0;
+        padding: 0 8px;
+        list-style: none;
+      }
+
+      .node-list li {
+        padding: 8px 6px;
+        border-bottom: 1px solid var(--subtle);
+      }
+
+      .node-list li:last-child {
+        border-bottom: 0;
+      }
+
+      .node-button {
+        display: block;
+        width: 100%;
+        border: 0;
+        padding: 0;
+        background: none;
+        text-align: left;
+      }
+
+      .node-button:hover strong {
+        color: var(--accent);
+      }
+
+      .node-button strong {
+        display: block;
+        overflow: hidden;
+        color: var(--primary);
+        font-size: 12px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .node-button span {
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
+      .node-button[aria-current="true"] strong {
+        color: var(--accent);
+      }
+
+      .section-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .section-grid > section {
+        min-width: 0;
+        padding: 12px;
+      }
+
+      .section-grid > section:first-child {
+        border-right: 1px solid var(--subtle);
+      }
+
+      .mini-title {
+        margin: 0 0 8px;
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .trace-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .trace-list li {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--subtle);
+        font-size: 12px;
+      }
+
+      .trace-list li:last-child {
+        border-bottom: 0;
+      }
+
+      .trace-list b {
+        display: block;
+        color: var(--primary);
+        font-size: 12px;
+      }
+
+      .trace-list span {
+        color: var(--tertiary);
+      }
+
+      .panel-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .review-list {
+        margin: 0;
+        padding: 0 14px;
+        list-style: none;
+      }
+
+      .review-list li {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--subtle);
+        font-size: 12px;
+      }
+
+      .review-list li:last-child {
+        border-bottom: 0;
+      }
+
+      .review-list b {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--primary);
+        font-size: 12px;
+      }
+
+      .review-list span {
+        color: var(--tertiary);
+      }
+
+      /* Report */
+      .report-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+      }
+
+      .editor-shell {
+        border: 1px solid var(--subtle);
+        border-radius: var(--radius-lg);
+        background: var(--surface-1);
+        overflow: hidden;
+      }
+
+      .editor-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--subtle);
+        background: var(--surface-2);
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
+      .editor-body {
+        min-height: 280px;
+        padding: 16px;
+      }
+
+      .editor-body h2 {
+        margin: 0 0 8px;
+        color: var(--primary);
+        font-size: 18px;
+      }
+
+      .editor-body p {
+        margin: 0;
+        color: var(--secondary);
+      }
+
+      .editor-body ul {
+        margin: 10px 0 0;
+        padding-left: 20px;
+        color: var(--primary);
+      }
+
+      .details {
+        border-top: 1px solid var(--subtle);
+      }
+
+      .details summary {
+        padding: 11px 14px;
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .details > div {
+        padding: 0 14px 14px;
+      }
+
+      /* Management */
+      .settings-grid {
+        display: grid;
+        grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+        gap: 14px;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .form-field label {
+        color: var(--secondary);
+        font-size: 12px;
+      }
+
+      .form-field .control {
+        width: 100%;
+      }
+
+      .assignment-form {
+        display: grid;
+        grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) auto;
+        gap: 8px;
+        align-items: end;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--subtle);
+        background: var(--surface-2);
+      }
+
+      .assignment-form .form-field {
+        gap: 4px;
+      }
+
+      .assignment-scope {
+        grid-column: 1 / -1;
+        margin: 0;
+        color: var(--tertiary);
+        font-size: 11px;
+      }
+
+      .inline-status {
+        grid-column: 1 / -1;
+        min-height: 16px;
+        margin: 0;
+        color: var(--accent);
+        font-size: 12px;
+      }
+
+      .inline-status.error {
+        color: var(--danger);
+      }
+
+      .todo-envelope {
+        margin-bottom: 14px;
+      }
+
+      .todo-envelope tbody tr[data-todo-hidden="true"] {
+        display: none;
+      }
+
+      .mobile-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 35;
+        background: color-mix(in oklch, var(--primary), transparent 72%);
+      }
+
+      .status-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      /* Responsive behavior */
+      @media (max-width: 1180px) {
+        .chain-detail-grid,
+        .settings-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .overview-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 1000px) {
+        .section-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .section-grid > section:first-child {
+          border-right: 0;
+          border-bottom: 1px solid var(--subtle);
+        }
+      }
+
+      @media (max-width: 820px) {
+        .global-search,
+        .topbar-actions .icon-button,
+        .topbar-actions .button {
+          display: none;
+        }
+
+        .app-shell .menu-toggle {
+          display: inline-flex;
+        }
+
+        .workspace-body {
+          position: relative;
+        }
+
+        .sidebar {
+          position: absolute;
+          z-index: 40;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          transform: translateX(-100%);
+          transition-transform 160ms ease;
+          box-shadow: none;
+        }
+
+        body.sidebar-open .sidebar {
+          transform: translateX(0);
+        }
+
+        body.sidebar-open .mobile-overlay {
+          display: block;
+        }
+
+        .main-area {
+          padding: 0;
+        }
+
+        .main-surface {
+          border: 0;
+          border-radius: 0;
+        }
+
+        .page-header {
+          padding: 12px 14px;
+        }
+
+        .secondary-tabs {
+          padding: 0 14px;
+        }
+
+        .content-pad {
+          padding: 12px;
+        }
+
+        .todo-item {
+          grid-template-columns: 1fr;
+          gap: 3px;
+        }
+
+        .todo-action {
+          text-align: left;
+        }
+
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .page-header,
+        .page-actions {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .page-title h1 {
+          font-size: 19px;
+          white-space: normal;
+        }
+
+        .search-input,
+        .prototype-role {
+          width: 100%;
+        }
+
+        .filter-bar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .assignment-form {
+          grid-template-columns: 1fr;
+        }
+
+        .control,
+        .button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <button class="menu-toggle" type="button" id="menu-button" aria-label="打开项目侧栏" aria-expanded="false">
+          ☰
+        </button>
+        <div class="workspace-switch">
+          <span class="workspace-mark" aria-hidden="true">P</span>
+          <span class="workspace-name">PiLab</span>
+        </div>
+        <div class="global-search">搜索课题、报告、审批或成员</div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-actions">
+          <label class="prototype-mark" for="role-select">静态原型 · 实现对照</label>
+          <select class="prototype-role" id="role-select" aria-label="切换原型角色">
+            <option value="student">学生</option>
+            <option value="mentor">直接导师</option>
+            <option value="principal">课题组主 PI</option>
+            <option value="admin">Workspace Admin</option>
+          </select>
+          <button class="button" type="button">反馈</button>
+          <button class="icon-button" type="button" aria-label="通知">◻</button>
+          <button class="icon-button" type="button" aria-label="帮助">?</button>
+          <span class="avatar" id="role-avatar" aria-hidden="true">学</span>
+        </div>
+      </header>
+
+      <div class="workspace-body">
+        <aside class="sidebar" id="project-sidebar" aria-label="Projects 侧栏">
+          <div class="sidebar-head">
+            <h2 class="sidebar-title">Projects</h2>
+            <button class="icon-button" type="button" aria-label="收起侧栏">‹</button>
+          </div>
+          <div class="sidebar-search">搜索或跳转项目</div>
+          <div class="sidebar-scroll">
+            <ul class="nav-group" id="workspace-navigation">
+              <li>
+                <button class="nav-item" type="button" data-nav="home"><span class="dot"></span>首页</button>
+              </li>
+              <li>
+                <button class="nav-item" type="button" data-nav="settings"><span class="dot"></span>管理</button>
+              </li>
+              <li>
+                <button class="nav-item" type="button" data-nav="approvals"><span class="dot"></span>审批中心</button>
+              </li>
+              <li>
+                <button class="nav-item" type="button" data-nav="chains" data-default-chain-view="chains">
+                  <span class="dot"></span>科研项目
+                </button>
+                <ul class="nav-subgroup" aria-label="科研项目列表">
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>分子材料组</span><button class="tree-menu" type="button" aria-label="管理分子材料组">⋯</button></li>
+                  <li>
+                    <button
+                      class="nav-item"
+                      type="button"
+                      data-nav="chain-detail"
+                      data-chain-id="molecular"
+                      data-chain-title="分子界面稳定性研究"
+                      data-chain-code="MOL-01"
+                      data-chain-owner="学生 A"
+                      data-chain-org="界面材料组"
+                    >
+                      <span class="dot"></span>分子界面稳定性研究
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      class="nav-item"
+                      type="button"
+                      data-nav="chain-detail"
+                      data-chain-id="catalyst"
+                      data-chain-title="催化剂界面失活机理研究"
+                      data-chain-code="CAT-07"
+                      data-chain-owner="学生 B"
+                      data-chain-org="催化材料组"
+                    >
+                      <span class="dot"></span>催化剂界面失活机理研究
+                    </button>
+                  </li>
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>电池材料组</span><button class="tree-menu" type="button" aria-label="管理电池材料组">⋯</button></li>
+                  <li><button class="nav-item" type="button" data-nav="chains"><span class="dot"></span>电解液体系优化</button></li>
+                  <li class="nav-category-header"><span class="tree-chevron">›</span><span>自定义分类</span><button class="tree-menu" type="button" aria-label="管理自定义分类">⋯</button></li>
+                  <li class="nav-category-empty">暂无展开项目</li>
+                  <li class="nav-category-header muted"><span class="tree-chevron">⌄</span><span>未分类</span></li>
+                </ul>
+              </li>
+              <li>
+                <button class="nav-item" type="button" data-nav="admin" data-default-admin-tab="projects">
+                  <span class="dot"></span>行政项目
+                </button>
+                <ul class="nav-subgroup" aria-label="行政项目列表">
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>采购与资产</span><button class="tree-menu" type="button" aria-label="管理采购与资产">⋯</button></li>
+                  <li>
+                    <button
+                      class="nav-item"
+                      type="button"
+                      data-nav="admin"
+                      data-admin-project="设备采购协作"
+                      data-default-admin-tab="projects"
+                    >
+                      <span class="dot"></span>设备采购协作
+                    </button>
+                  </li>
+                  <li class="nav-category-header"><span class="tree-chevron">⌄</span><span>财务与报销</span><button class="tree-menu" type="button" aria-label="管理财务与报销">⋯</button></li>
+                  <li>
+                    <button
+                      class="nav-item"
+                      type="button"
+                      data-nav="admin"
+                      data-admin-project="报销与用章流程"
+                      data-default-admin-tab="projects"
+                    >
+                      <span class="dot"></span>报销与用章流程
+                    </button>
+                  </li>
+                  <li class="nav-category-header muted"><span class="tree-chevron">⌄</span><span>未分类</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+          <div class="sidebar-foot">
+            <span class="avatar" id="sidebar-avatar" aria-hidden="true">学</span>
+            <span id="sidebar-user">学生 A</span>
+          </div>
+        </aside>
+
+        <div class="mobile-overlay" id="mobile-overlay" hidden></div>
+
+        <main class="main-area">
+          <div class="main-surface">
+            <!-- Home -->
+            <section class="page" id="page-home" data-page="home" aria-labelledby="page-home-title">
+              <header class="page-header">
+                <div class="page-title-wrap">
+                  <h1 id="page-home-title">首页</h1>
+                  <p class="page-description">左侧查看科研项目与行政项目概览，右侧处理跨组件待办与最近动态。</p>
+                  <div class="page-metadata">
+                    <span>2026-10-09 星期五</span>
+                    <span>刷新于 10:24</span>
+                    <span>统计周期：近 30 天</span>
+                    <span id="overview-role-context">角色：学生</span>
+                  </div>
+                </div>
+                <div class="page-actions">
+                  <select class="control fixed" aria-label="统计周期">
+                    <option>近 30 天</option>
+                    <option>近 90 天</option>
+                    <option>全部</option>
+                  </select>
+                  <button class="button" type="button">刷新</button>
+                </div>
+              </header>
+              <div class="page-content">
+                <div class="content-pad overview-grid">
+                  <div class="stack" aria-label="项目概览列">
+                    <p class="home-column-title">项目概览 <span>科研与行政分通道</span></p>
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">科研项目</h2>
+                          <p class="surface-hint" id="current-context-title">分子界面稳定性研究</p>
+                        </div>
+                        <button class="button ghost" type="button" data-nav="chains">全部科研项目</button>
+                      </div>
+                      <div class="surface-body">
+                        <div class="status-line">
+                          <span class="badge" id="current-context-node">论文写作</span>
+                          <span class="badge accent">WAITING_HUMAN</span>
+                        </div>
+                        <div class="metric-row">
+                          <div class="metric">
+                            <strong id="metric-primary">3</strong><span id="metric-primary-label">进行中科研项目</span>
+                          </div>
+                          <div class="metric">
+                            <strong id="metric-secondary">5</strong><span id="metric-secondary-label">待处理事项</span>
+                          </div>
+                        </div>
+                        <p class="surface-hint" style="margin-top: 12px" id="current-context-next">
+                          下一步：导师评审论文第 2 稿与修改说明。
+                        </p>
+                        <div class="page-actions" style="justify-content: flex-start; margin-top: 10px">
+                          <button
+                            class="button primary"
+                            type="button"
+                            id="current-context-action"
+                            data-nav="chain-detail"
+                          >
+                            打开科研项目
+                          </button>
+                        </div>
+                      </div>
+                      <ul class="summary-list">
+                        <li><span>阻塞节点</span><strong>4</strong></li>
+                        <li><span>待评审</span><strong>8</strong></li>
+                        <li><span>本周到期任务</span><strong>12</strong></li>
+                      </ul>
+                    </article>
+
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">行政项目</h2>
+                          <p class="surface-hint" id="admin-context-title">设备采购协作</p>
+                        </div>
+                        <button class="button ghost" type="button" data-nav="admin">全部行政项目</button>
+                      </div>
+                      <div class="surface-body">
+                        <div class="status-line">
+                          <span class="badge" id="admin-context-node">报价确认</span>
+                          <span class="badge danger">待审批</span>
+                        </div>
+                        <p class="surface-hint" style="margin-top: 10px" id="admin-context-next">
+                          下一步：确认供应商报价并提交采购审批。
+                        </p>
+                        <div class="page-actions" style="justify-content: flex-start; margin-top: 10px">
+                          <button class="button" type="button" id="admin-context-action" data-nav="admin">
+                            打开行政项目
+                          </button>
+                        </div>
+                      </div>
+                      <ul class="summary-list">
+                        <li><span>进行中</span><strong>18</strong></li>
+                        <li><span>待审批</span><strong>6</strong></li>
+                        <li><span>逾期</span><strong>3</strong></li>
+                      </ul>
+                    </article>
+                  </div>
+
+                  <div class="stack" aria-label="待办与动态列">
+                    <p class="home-column-title">待办与动态 <span>按截止时间排序</span></p>
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">跨组件待办</h2>
+                          <p class="surface-hint">按阻断、待确认、提醒和同步状态排序。</p>
+                        </div>
+                        <button class="button" type="button" data-nav="approvals">打开统一待办</button>
+                      </div>
+                      <ul class="todo-list" id="overview-todos"></ul>
+                    </article>
+
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">最近动态</h2>
+                          <p class="surface-hint">跨科研与行政项目的最近活动。</p>
+                        </div>
+                        <button class="button ghost" type="button">查看全部</button>
+                      </div>
+                      <ul class="review-list">
+                        <li><b>学生 A 提交论文第 2 稿</b><span>科研项目 · 10-09 09:20</span></li>
+                        <li><b>导师 A 已读第 41 周周报</b><span>报告 · 10-09 10:02</span></li>
+                        <li><b>管理员 A 更新采购审批配置</b><span>行政项目 · 10-08 16:40</span></li>
+                      </ul>
+                    </article>
+
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">报告提交汇总</h2>
+                          <p class="surface-hint">当前权限范围内第 41 周。</p>
+                        </div>
+                        <button class="button ghost" type="button" data-nav="chains">进入报告</button>
+                      </div>
+                      <ul class="summary-list">
+                        <li><span>应提交</span><strong>18</strong></li>
+                        <li><span>已提交</span><strong>15</strong></li>
+                        <li><span>待阅读</span><strong>2</strong></li>
+                        <li><span>待审阅</span><strong>1</strong></li>
+                      </ul>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Chains workbench -->
+            <section class="page" id="page-chains" data-page="chains" aria-labelledby="page-chains-title" hidden>
+              <header class="page-header">
+                <div class="page-title-wrap">
+                  <div class="breadcrumb">
+                    <span>科研项目</span>
+                  </div>
+                  <div class="page-title"><h1 id="page-chains-title">科研项目</h1></div>
+                  <p class="page-description">Research Chain 承载科研主线、节点任务、报告与评审。</p>
+                </div>
+                <div class="page-actions">
+                  <button class="button primary lg" type="button">创建科研项目</button>
+                </div>
+              </header>
+              <nav class="secondary-tabs" role="tablist" aria-label="科研项目视图">
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-chain-view-chains"
+                  aria-controls="panel-chain-view-chains"
+                  data-chain-view="chains"
+                  aria-selected="true"
+                >
+                  科研项目
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-chain-view-reports"
+                  aria-controls="panel-chain-view-reports"
+                  data-chain-view="reports"
+                  aria-selected="false"
+                >
+                  报告
+                </button>
+              </nav>
+              <div class="page-content">
+                <div class="content-pad">
+                  <div class="filter-bar" aria-label="浏览筛选">
+                    <select class="control fixed" aria-label="范围">
+                      <option>全部可见</option>
+                      <option>我负责</option>
+                      <option>我参与</option>
+                    </select>
+                    <select class="control fixed" aria-label="责任人">
+                      <option>全部责任人</option>
+                      <option>学生 A</option>
+                      <option>导师 A</option>
+                    </select>
+                    <input class="control search-input" type="search" placeholder="关键词" aria-label="关键词" />
+                    <select class="control fixed" aria-label="日期范围">
+                      <option>任意</option>
+                      <option>近 7 天</option>
+                      <option>近 30 天</option>
+                    </select>
+                    <select class="control fixed" aria-label="状态">
+                      <option>全部状态</option>
+                      <option>进行中</option>
+                      <option>已归档</option>
+                    </select>
+                    <button class="button" type="button">刷新</button>
+                  </div>
+
+                  <div
+                    id="panel-chain-view-chains"
+                    role="tabpanel"
+                    aria-labelledby="tab-chain-view-chains"
+                    data-chain-panel="chains"
+                  >
+                    <article class="surface">
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>科研项目</th>
+                              <th>负责人</th>
+                              <th>课题组</th>
+                              <th>当前节点</th>
+                              <th>下一步</th>
+                              <th>截止时间</th>
+                              <th>状态</th>
+                              <th>更新时间</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td>
+                                <button class="row-link" type="button" data-nav="chain-detail">
+                                  分子界面稳定性研究
+                                </button>
+                                <div class="cell-subtle">MOL-01</div>
+                              </td>
+                              <td>学生 A</td>
+                              <td>界面材料组</td>
+                              <td><span class="badge">论文写作</span></td>
+                              <td>导师评审第 2 稿</td>
+                              <td><span class="urgent">今天 18:00</span></td>
+                              <td><span class="badge accent">ACTIVE</span></td>
+                              <td class="cell-subtle">10-09 09:20</td>
+                              <td><button class="button ghost" type="button" data-nav="chain-detail">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <button class="row-link" type="button">导电聚合物界面调控</button>
+                                <div class="cell-subtle">POLY-04</div>
+                              </td>
+                              <td>学生 B</td>
+                              <td>高分子组</td>
+                              <td><span class="badge">实验</span></td>
+                              <td>补录实验参数</td>
+                              <td class="cell-subtle">10-14</td>
+                              <td><span class="badge accent">ACTIVE</span></td>
+                              <td class="cell-subtle">10-08 17:12</td>
+                              <td><button class="button ghost" type="button">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <button class="row-link" type="button">器件稳定性评价方法</button>
+                                <div class="cell-subtle">DEV-02</div>
+                              </td>
+                              <td>学生 C</td>
+                              <td>器件组</td>
+                              <td><span class="badge">总结</span></td>
+                              <td>确认分析快照</td>
+                              <td class="cell-subtle">10-16</td>
+                              <td><span class="badge accent">ACTIVE</span></td>
+                              <td class="cell-subtle">10-07 11:30</td>
+                              <td><button class="button ghost" type="button">打开</button></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+                    <div class="pagination">
+                      <span>共 18 个科研项目</span
+                      ><span><button class="button">上一页</button> <button class="button">下一页</button></span>
+                    </div>
+                  </div>
+
+                  <div
+                    id="panel-chain-view-reports"
+                    role="tabpanel"
+                    aria-labelledby="tab-chain-view-reports"
+                    data-chain-panel="reports"
+                    hidden
+                  >
+                    <article class="surface">
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>报告</th>
+                              <th>提交人</th>
+                              <th>课题组</th>
+                              <th>已读状态</th>
+                              <th>审核状态</th>
+                              <th>状态</th>
+                              <th>提交时间</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="cell-primary">第 41 周周报</td>
+                              <td>学生 A</td>
+                              <td>界面材料组</td>
+                              <td><span class="badge accent">导师已读</span></td>
+                              <td><span class="badge accent">待审阅</span></td>
+                              <td><span class="badge accent">SUBMITTED</span></td>
+                              <td class="cell-subtle">10-10 09:20</td>
+                              <td><button class="button ghost" data-nav="report">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">第 41 周周报</td>
+                              <td>学生 B</td>
+                              <td>高分子组</td>
+                              <td><span class="badge danger">待阅读</span></td>
+                              <td><span class="badge">待审阅</span></td>
+                              <td><span class="badge accent">SUBMITTED</span></td>
+                              <td class="cell-subtle">10-10 08:40</td>
+                              <td><button class="button ghost" data-nav="report">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">第 40 周周报</td>
+                              <td>学生 A</td>
+                              <td>界面材料组</td>
+                              <td><span class="badge success">导师已读</span></td>
+                              <td><span class="badge success">已接受</span></td>
+                              <td><span class="badge success">ACCEPTED</span></td>
+                              <td class="cell-subtle">10-03 15:10</td>
+                              <td><button class="button ghost">打开</button></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Administrative projects -->
+            <section class="page" id="page-admin" data-page="admin" aria-labelledby="page-admin-title" hidden>
+              <header class="page-header">
+                <div class="page-title-wrap">
+                  <div class="breadcrumb">
+                    <span>行政项目</span>
+                  </div>
+                  <div class="page-title"><h1 id="page-admin-title">行政项目</h1></div>
+                  <p class="page-description">采购、报销、设备协作、办公审批与普通 Plane 项目协作。</p>
+                </div>
+                <div class="page-actions">
+                  <button class="button primary lg" type="button">创建行政项目</button>
+                </div>
+              </header>
+
+              <nav class="secondary-tabs" role="tablist" aria-label="行政项目视图">
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-admin-projects"
+                  aria-controls="panel-admin-projects"
+                  data-admin-tab="projects"
+                  aria-selected="true"
+                >
+                  项目
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-admin-views"
+                  aria-controls="panel-admin-views"
+                  data-admin-tab="views"
+                  aria-selected="false"
+                >
+                  视图
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-admin-analytics"
+                  aria-controls="panel-admin-analytics"
+                  data-admin-tab="analytics"
+                  aria-selected="false"
+                >
+                  分析
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-admin-archives"
+                  aria-controls="panel-admin-archives"
+                  data-admin-tab="archives"
+                  aria-selected="false"
+                >
+                  归档
+                </button>
+              </nav>
+
+                  <div class="page-content">
+                <div class="content-pad">
+                  <div class="filter-bar" aria-label="行政项目筛选">
+                    <select class="control fixed" aria-label="项目类型">
+                      <option>全部类型</option>
+                      <option>采购</option>
+                      <option>报销</option>
+                      <option>设备协作</option>
+                      <option>通用协作</option>
+                    </select>
+                    <select class="control fixed" aria-label="负责人">
+                      <option>全部负责人</option>
+                      <option>管理员 A</option>
+                      <option>学生 A</option>
+                      <option>设备管理员</option>
+                    </select>
+                    <input
+                      class="control search-input"
+                      type="search"
+                      placeholder="搜索行政项目"
+                      aria-label="搜索行政项目"
+                    />
+                    <select class="control fixed" aria-label="日期范围">
+                      <option>任意</option>
+                      <option>近 7 天</option>
+                      <option>近 30 天</option>
+                    </select>
+                    <select class="control fixed" aria-label="状态">
+                      <option>全部状态</option>
+                      <option>进行中</option>
+                      <option>待处理</option>
+                      <option>已完成</option>
+                    </select>
+                    <button class="button" type="button">刷新</button>
+                  </div>
+
+                  <div class="stack">
+                    <article
+                      class="surface"
+                      id="panel-admin-projects"
+                      role="tabpanel"
+                      aria-labelledby="tab-admin-projects"
+                      data-admin-panel="projects"
+                    >
+                        <form class="assignment-form" id="administrative-assignment-form">
+                          <div class="form-field">
+                            <label for="administrative-project">行政项目</label>
+                            <select class="control" id="administrative-project">
+                              <option>实验耗材季度采购</option>
+                              <option>学术会议差旅报销</option>
+                              <option>共享设备排期协调</option>
+                            </select>
+                          </div>
+                          <div class="form-field">
+                            <label for="administrative-assignee">项目负责人</label>
+                            <select class="control" id="administrative-assignee">
+                              <option value="admin-a">项目成员 · 管理员 A · ADMIN</option>
+                              <option value="student-a">项目成员 · 学生 A · MEMBER</option>
+                              <option value="equipment-admin">项目成员 · 设备管理员 · MEMBER</option>
+                            </select>
+                          </div>
+                            <button class="button primary" type="submit" id="administrative-assignment-submit">保存负责人</button>
+                            <p class="assignment-scope" id="administrative-assignment-scope">候选来源：当前行政 Project 的有效成员；审批人仍由审批流步骤决定，负责人选择不会改变审批范围。</p>
+                            <p class="assignment-scope" id="administrative-capability-hint"></p>
+                          <p class="inline-status" id="administrative-assignment-status" role="status" aria-live="polite"></p>
+                        </form>
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>行政项目</th>
+                              <th>类型</th>
+                              <th>负责人</th>
+                              <th>当前环节</th>
+                              <th>截止时间</th>
+                              <th>状态</th>
+                              <th>更新时间</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="cell-primary">
+                                实验耗材季度采购
+                                <div class="cell-subtle">PROC-2026-041</div>
+                              </td>
+                              <td>采购</td>
+                              <td>管理员 A</td>
+                              <td>供应商报价确认</td>
+                              <td><span class="urgent">今天 18:00</span></td>
+                              <td><span class="badge danger">待审批</span></td>
+                              <td class="cell-subtle">10-09 09:10</td>
+                              <td><button class="button ghost">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">
+                                学术会议差旅报销
+                                <div class="cell-subtle">EXP-2026-118</div>
+                              </td>
+                              <td>报销</td>
+                              <td>学生 A</td>
+                              <td>补充行程凭证</td>
+                              <td class="cell-subtle">10-16</td>
+                              <td><span class="badge">待提交</span></td>
+                              <td class="cell-subtle">10-08 16:20</td>
+                              <td><button class="button ghost">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">
+                                共享设备排期协调
+                                <div class="cell-subtle">EQU-2026-027</div>
+                              </td>
+                              <td>设备协作</td>
+                              <td>设备管理员</td>
+                              <td>确认排期回执</td>
+                              <td class="cell-subtle">10-18</td>
+                              <td><span class="badge">进行中</span></td>
+                              <td class="cell-subtle">10-07 14:35</td>
+                              <td><button class="button ghost">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">
+                                实验室安全培训记录
+                                <div class="cell-subtle">OPS-2026-009</div>
+                              </td>
+                              <td>通用协作</td>
+                              <td>管理员 A</td>
+                              <td>归档材料复核</td>
+                              <td class="cell-subtle">10-20</td>
+                              <td><span class="badge success">已完成</span></td>
+                              <td class="cell-subtle">10-06 11:00</td>
+                              <td><button class="button ghost">查看</button></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div class="pagination">
+                        <span>共 18 个行政项目</span
+                        ><span><button class="button">上一页</button> <button class="button">下一页</button></span>
+                      </div>
+                    </article>
+
+                    <article
+                      class="surface"
+                      id="panel-admin-views"
+                      role="tabpanel"
+                      aria-labelledby="tab-admin-views"
+                      data-admin-panel="views"
+                      hidden
+                    >
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">工作区视图</h2>
+                          <p class="surface-hint">复用普通 Plane 视图，不新建科研视图系统。</p>
+                        </div>
+                        <button class="button">新建视图</button>
+                      </div>
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>视图名称</th>
+                              <th>适用范围</th>
+                              <th>创建人</th>
+                              <th>更新时间</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="cell-primary">我负责的行政事项</td>
+                              <td>全部行政项目</td>
+                              <td>学生 A</td>
+                              <td class="cell-subtle">10-08 10:20</td>
+                              <td><button class="button ghost">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">待我审批</td>
+                              <td>采购、报销</td>
+                              <td>管理员 A</td>
+                              <td class="cell-subtle">10-09 08:40</td>
+                              <td><button class="button ghost">打开</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">设备协作排期</td>
+                              <td>设备协作项目</td>
+                              <td>设备管理员</td>
+                              <td class="cell-subtle">10-07 15:12</td>
+                              <td><button class="button ghost">打开</button></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+
+                    <article
+                      class="surface"
+                      id="panel-admin-analytics"
+                      role="tabpanel"
+                      aria-labelledby="tab-admin-analytics"
+                      data-admin-panel="analytics"
+                      hidden
+                    >
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">行政项目分析</h2>
+                          <p class="surface-hint">复用普通 Plane Analytics，不统计科研节点。</p>
+                        </div>
+                        <button class="button">导出</button>
+                      </div>
+                      <div class="surface-body">
+                        <div class="filter-bar">
+                          <select class="control fixed" aria-label="分析时间">
+                            <option>近 30 天</option>
+                            <option>近 90 天</option>
+                            <option>本年度</option>
+                          </select>
+                          <select class="control fixed" aria-label="分析范围">
+                            <option>全部行政项目</option>
+                            <option>采购</option>
+                            <option>报销</option>
+                            <option>设备协作</option>
+                          </select>
+                          <button class="button">应用</button>
+                        </div>
+                        <ul class="summary-list" style="margin-top: 12px">
+                          <li><span>待处理事项</span><strong>24</strong></li>
+                          <li><span>已完成事项</span><strong>86</strong></li>
+                          <li><span>参与成员</span><strong>18</strong></li>
+                          <li><span>逾期事项</span><strong>3</strong></li>
+                        </ul>
+                      </div>
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>项目洞察</th>
+                              <th>待处理</th>
+                              <th>已完成</th>
+                              <th>逾期</th>
+                              <th>最近更新</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="cell-primary">实验耗材季度采购</td>
+                              <td>6</td>
+                              <td>12</td>
+                              <td><span class="urgent">2</span></td>
+                              <td class="cell-subtle">10-09 09:10</td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">共享设备排期协调</td>
+                              <td>4</td>
+                              <td>9</td>
+                              <td>0</td>
+                              <td class="cell-subtle">10-07 14:35</td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">差旅与报销事务</td>
+                              <td>8</td>
+                              <td>21</td>
+                              <td><span class="urgent">1</span></td>
+                              <td class="cell-subtle">10-08 16:20</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+
+                    <article
+                      class="surface"
+                      id="panel-admin-archives"
+                      role="tabpanel"
+                      aria-labelledby="tab-admin-archives"
+                      data-admin-panel="archives"
+                      hidden
+                    >
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">归档</h2>
+                          <p class="surface-hint">已完成的行政项目与工作项；科研链归档仍在科研项目详情。</p>
+                        </div>
+                        <button class="button">恢复选中</button>
+                      </div>
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>已归档对象</th>
+                              <th>类型</th>
+                              <th>负责人</th>
+                              <th>归档时间</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="cell-primary">2025 年度试剂采购</td>
+                              <td>行政项目</td>
+                              <td>管理员 A</td>
+                              <td class="cell-subtle">01-12 17:20</td>
+                              <td><button class="button ghost">恢复</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">实验室安全培训记录</td>
+                              <td>工作项</td>
+                              <td>管理员 A</td>
+                              <td class="cell-subtle">10-06 11:00</td>
+                              <td><button class="button ghost">恢复</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">暑期设备维护协作</td>
+                              <td>行政项目</td>
+                              <td>设备管理员</td>
+                              <td class="cell-subtle">09-02 10:40</td>
+                              <td><button class="button ghost">恢复</button></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Chain detail -->
+            <section
+              class="page"
+              id="page-chain-detail"
+              data-page="chain-detail"
+              aria-labelledby="page-chain-title"
+              hidden
+            >
+              <header class="page-header">
+                <div class="page-title-wrap">
+                  <div class="breadcrumb">
+                    <button type="button" data-nav="chains">科研项目</button><span aria-hidden="true">/</span
+                    ><span id="chain-breadcrumb-title">分子界面稳定性研究</span>
+                  </div>
+                  <div class="page-title">
+                    <h1 id="page-chain-title">分子界面稳定性研究</h1>
+                    <span class="badge accent">ACTIVE</span><span class="badge">ORG</span>
+                  </div>
+                  <div class="page-metadata">
+                    <span id="chain-project-owner">负责人：学生 A</span
+                    ><span id="chain-project-code">Project：MOL-01</span
+                    ><span id="chain-project-org">组织：界面材料组</span><span>更新：10-09 09:20</span>
+                  </div>
+                </div>
+                <div class="page-actions">
+                  <button class="button" type="button">打开 Agent</button>
+                  <button class="button" type="button">归档课题</button>
+                </div>
+              </header>
+
+              <div class="page-content">
+                <div class="content-pad">
+                  <div class="current-node">
+                    <span class="current-node-label">当前节点</span>
+                    <span class="current-node-title">论文写作 · 第 2 轮修改</span>
+                    <span class="badge accent">WAITING_HUMAN</span>
+                    <span class="cell-subtle">责任人：导师 A</span>
+                    <span class="cell-subtle">下一步：评审修改说明与论文版本</span>
+                  </div>
+
+                  <article class="surface" style="margin-bottom: 14px">
+                    <ol class="workflow" aria-label="科研链工作流">
+                      <li class="done"><b>1 文献调研</b>已完成</li>
+                      <li class="done"><b>2 选题</b>已完成</li>
+                      <li class="done"><b>3 评估</b>已完成</li>
+                      <li class="done"><b>4 预实验</b>已完成</li>
+                      <li class="done"><b>5 分析</b>已完成</li>
+                      <li class="done"><b>6 开题</b>已完成</li>
+                      <li class="done"><b>7 实验</b>已完成</li>
+                      <li class="done"><b>8 分析</b>已完成</li>
+                      <li class="done"><b>9 迭代</b>已完成</li>
+                      <li class="done"><b>10 总结</b>已完成</li>
+                      <li class="current"><b>11 论文写作</b>等待评审</li>
+                      <li><b>12 结题</b>未开始</li>
+                      <li><b>13 转化</b>未开始</li>
+                    </ol>
+                  </article>
+
+                  <nav
+                    class="secondary-tabs"
+                    role="tablist"
+                    aria-label="课题详情分区"
+                    style="
+                      padding: 0 14px;
+                      margin-bottom: 14px;
+                      border: 1px solid var(--subtle);
+                      border-radius: var(--radius-lg);
+                      background: var(--surface-1);
+                    "
+                  >
+                    <button
+                      class="secondary-tab"
+                      type="button"
+                      role="tab"
+                      id="tab-chain-detail-overview"
+                      aria-controls="panel-chain-detail-overview"
+                      data-chain-tab="overview"
+                      aria-selected="false"
+                    >
+                      概览
+                    </button>
+                    <button
+                      class="secondary-tab"
+                      type="button"
+                      role="tab"
+                      id="tab-chain-detail-nodes"
+                      aria-controls="panel-chain-detail-nodes"
+                      data-chain-tab="nodes"
+                      aria-selected="true"
+                    >
+                      节点
+                    </button>
+                    <button
+                      class="secondary-tab"
+                      type="button"
+                      role="tab"
+                      id="tab-chain-detail-materials"
+                      aria-controls="panel-chain-detail-materials"
+                      data-chain-tab="materials"
+                      aria-selected="false"
+                    >
+                      课题资料
+                    </button>
+                    <button
+                      class="secondary-tab"
+                      type="button"
+                      role="tab"
+                      id="tab-chain-detail-members"
+                      aria-controls="panel-chain-detail-members"
+                      data-chain-tab="members"
+                      aria-selected="false"
+                    >
+                      成员
+                    </button>
+                  </nav>
+
+                  <div
+                    id="panel-chain-detail-overview"
+                    role="tabpanel"
+                    aria-labelledby="tab-chain-detail-overview"
+                    data-chain-tab-panel="overview"
+                    hidden
+                  >
+                    <div class="overview-grid">
+                      <article class="surface">
+                        <div class="surface-header">
+                          <div>
+                            <h2 class="surface-title">科研项目摘要</h2>
+                            <p class="surface-hint">研究问题、当前证据和近期结论。</p>
+                          </div>
+                        </div>
+                        <div class="surface-body">
+                          <p class="cell-subtle">
+                            围绕分子界面稳定性，建立“实验记录 → 分析结果 → 论文版本”的可回放链路。当前重点是第 3
+                            节对照说明与结论限制表述。
+                          </p>
+                          <div class="metric-row">
+                            <div class="metric"><strong>10 / 13</strong><span>阶段进展</span></div>
+                            <div class="metric"><strong>3</strong><span>未完成任务</span></div>
+                          </div>
+                        </div>
+                      </article>
+                      <article class="surface">
+                        <div class="surface-header">
+                          <div>
+                            <h2 class="surface-title">最近快照</h2>
+                            <p class="surface-hint">只读、按版本回放。</p>
+                          </div>
+                        </div>
+                        <ul class="review-list">
+                          <li><b>论文调研快照 v3</b><span>10-08 16:20 · 输入引用 12 项</span></li>
+                          <li><b>分析结果快照 v5</b><span>10-07 11:30 · 对照组差异已确认</span></li>
+                          <li><b>过程快照 v8</b><span>10-06 18:02 · 导师评论已沉淀</span></li>
+                        </ul>
+                      </article>
+
+                      <article class="surface">
+                        <div class="surface-header">
+                          <div>
+                            <h2 class="surface-title">报告摘要</h2>
+                            <p class="surface-hint">周期报告与阶段报告均归属科研通道。</p>
+                          </div>
+                          <button class="button ghost" type="button" data-nav="chains">全部报告</button>
+                        </div>
+                        <ul class="review-list">
+                          <li><b>第 41 周周报</b><span>SUBMITTED · 导师已读 · 待审阅</span></li>
+                          <li><b>中期检查报告</b><span>DRAFT · 待补充第 2 组对照说明</span></li>
+                          <li><b>第 40 周周报</b><span>ACCEPTED · 已归档为过程事实</span></li>
+                        </ul>
+                      </article>
+
+                      <article class="surface">
+                        <div class="surface-header">
+                          <div>
+                            <h2 class="surface-title">风险与阻塞</h2>
+                            <p class="surface-hint">只显示影响主线推进的事项。</p>
+                          </div>
+                          <span class="badge danger">2 项阻塞</span>
+                        </div>
+                        <ul class="review-list">
+                          <li><b>论文第 3 节对照说明缺失</b><span>当前节点 · 今天 18:00 截止</span></li>
+                          <li><b>迭代分析 R2 数据来源未确认</b><span>等待导师评审 · 10-14 截止</span></li>
+                          <li><b>结题材料未生成</b><span>依赖论文节点完成，暂不计为阻塞</span></li>
+                        </ul>
+                      </article>
+                    </div>
+                  </div>
+
+                  <div
+                    id="panel-chain-detail-nodes"
+                    role="tabpanel"
+                    aria-labelledby="tab-chain-detail-nodes"
+                    data-chain-tab-panel="nodes"
+                  >
+                    <div class="chain-detail-grid">
+                      <article class="surface">
+                        <div class="surface-header">
+                          <div>
+                            <h2 class="surface-title">阶段节点</h2>
+                            <p class="surface-hint">点击仅切换查看，不改变当前业务节点。</p>
+                          </div>
+                        </div>
+                        <ul class="node-list" id="node-list">
+                          <li>
+                            <button class="node-button" type="button" data-node-id="literature" aria-current="false">
+                              <strong>文献调研</strong><span>LITERATURE_REVIEW · COMPLETED</span>
+                            </button>
+                          </li>
+                          <li>
+                            <button class="node-button" type="button" data-node-id="iteration" aria-current="false">
+                              <strong>迭代分析 R2</strong><span>ITERATION · NEEDS_REVISION</span>
+                            </button>
+                          </li>
+                          <li>
+                            <button class="node-button" type="button" data-node-id="paper" aria-current="true">
+                              <strong>论文写作</strong><span>PAPER_WRITING · WAITING_HUMAN</span>
+                            </button>
+                          </li>
+                          <li>
+                            <button class="node-button" type="button" data-node-id="completion" aria-current="false">
+                              <strong>结题</strong><span>COMPLETION · DRAFT</span>
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              class="node-button"
+                              type="button"
+                              data-node-id="failed-validation"
+                              aria-current="false"
+                            >
+                              <strong>早期验证方案</strong><span>PRE_EXPERIMENT · FAILED</span>
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              class="node-button"
+                              type="button"
+                              data-node-id="archived-record"
+                              aria-current="false"
+                            >
+                              <strong>预实验记录 R1</strong><span>PRE_EXPERIMENT · ARCHIVED</span>
+                            </button>
+                          </li>
+                        </ul>
+                      </article>
+
+                      <div class="panel-stack">
+                        <article class="surface">
+                          <div class="surface-header">
+                            <div>
+                              <h2 class="surface-title" id="selected-node-title">论文写作</h2>
+                              <p class="surface-hint" id="selected-node-subtitle">
+                                PAPER_WRITING · WAITING_HUMAN · 责任人：导师 A
+                              </p>
+                            </div>
+                            <div class="page-actions">
+                              <button class="button" type="button">提交评审</button>
+                              <button class="button primary" type="button">通过</button>
+                              <button class="button" type="button">退回</button>
+                            </div>
+                          </div>
+                          <div class="section-grid">
+                            <section>
+                              <h3 class="mini-title">输入与产物</h3>
+                              <ul class="trace-list">
+                                <li>
+                                  <b>输入</b><span id="selected-node-input">论文第 2 稿、修改说明、实验数据摘要。</span>
+                                </li>
+                                <li>
+                                  <b>中间产物</b
+                                  ><span id="selected-node-output">论文版本 v2、修改说明、图表来源清单。</span>
+                                </li>
+                              </ul>
+                            </section>
+                            <section>
+                              <h3 class="mini-title">Trace</h3>
+                              <ol class="trace-list">
+                                <li><b>PAPER_VERSION_SUBMITTED</b><span>10-09 09:20 · 学生 A</span></li>
+                                <li><b>COMMUNICATION</b><span>10-09 10:02 · 导师评论：补充对照说明。</span></li>
+                                <li><b>HUMAN_DECISION</b><span>等待导师选择通过或退回。</span></li>
+                              </ol>
+                            </section>
+                          </div>
+                        </article>
+
+                        <article class="surface">
+                          <div class="surface-header">
+                            <div>
+                              <h2 class="surface-title">节点任务</h2>
+                              <p class="surface-hint">任务是节点子对象；状态不隐式推进节点状态。</p>
+                            </div>
+                            <button class="button primary" type="button" id="research-create-task">创建任务</button>
+                          </div>
+                          <form class="assignment-form" id="research-assignment-form">
+                            <div class="form-field">
+                              <label for="research-assignee">科研任务责任人</label>
+                              <select class="control" id="research-assignee">
+                                <option value="student-a">组织范围 · 学生 A · 界面材料组</option>
+                                <option value="mentor-a">组织范围 · 导师 A · 导师组</option>
+                                <option value="pi-a">组织范围 · PI A · 基础研究方向</option>
+                                <option value="collaborator">显式协作者 · 设备管理员 · 共享平台组</option>
+                              </select>
+                            </div>
+                            <div class="form-field">
+                              <label for="research-task-due">截止时间</label>
+                              <input class="control" id="research-task-due" type="datetime-local" value="2026-10-15T18:00" />
+                            </div>
+                            <button class="button primary" type="submit" id="research-assignment-submit">保存指派</button>
+                            <p class="assignment-scope" id="research-assignment-scope">候选来源：当前课题组织及祖先组织的有效成员 + 显式协作者；选择不会自动加入课题。</p>
+                            <p class="assignment-scope" id="research-capability-hint"></p>
+                            <p class="inline-status" id="research-assignment-status" role="status" aria-live="polite"></p>
+                          </form>
+                          <div class="table-scroll">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>任务</th>
+                                  <th>状态</th>
+                                  <th>责任人</th>
+                                  <th>截止</th>
+                                  <th>下一步</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td class="cell-primary">
+                                    补充第 3 节对照说明
+                                    <div class="cell-subtle">指派人：导师 A</div>
+                                  </td>
+                                  <td><span class="badge accent">ASSIGNED</span></td>
+                                  <td>学生 A</td>
+                                  <td><span class="urgent">10-15 12:00</span></td>
+                                  <td>提交修改说明</td>
+                                </tr>
+                                <tr>
+                                  <td class="cell-primary">
+                                    确认实验数据来源
+                                    <div class="cell-subtle">ITERATION R2</div>
+                                  </td>
+                                  <td><span class="badge danger">SUBMITTED</span></td>
+                                  <td>导师 A</td>
+                                  <td class="cell-subtle">10-14 18:00</td>
+                                  <td>退回或完成</td>
+                                </tr>
+                                <tr>
+                                  <td class="cell-primary">
+                                    补充结论限制表述
+                                    <div class="cell-subtle">第 1 轮退回</div>
+                                  </td>
+                                  <td><span class="badge">NEEDS_REVISION</span></td>
+                                  <td>学生 A</td>
+                                  <td class="cell-subtle">10-16 12:00</td>
+                                  <td>按评论修改</td>
+                                </tr>
+                                <tr>
+                                  <td class="cell-primary">
+                                    整理终稿附件清单
+                                    <div class="cell-subtle">COMPLETION</div>
+                                  </td>
+                                  <td><span class="badge">DRAFT</span></td>
+                                  <td>待定</td>
+                                  <td class="cell-subtle">—</td>
+                                  <td>等待论文节点完成</td>
+                                </tr>
+                                <tr>
+                                  <td class="cell-primary">
+                                    导出旧版图表
+                                    <div class="cell-subtle">已由新版图表替代</div>
+                                  </td>
+                                  <td><span class="badge">CANCELLED</span></td>
+                                  <td>学生 A</td>
+                                  <td class="cell-subtle">—</td>
+                                  <td>取消原因可追溯</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </article>
+
+                        <article class="surface" data-paper-panel>
+                          <div class="surface-header">
+                            <div>
+                              <h2 class="surface-title">论文修改评审</h2>
+                              <p class="surface-hint">版本 + 修改说明 + 评论 + 最终确认。</p>
+                            </div>
+                            <button class="button primary" type="button">上传新版本</button>
+                          </div>
+                          <ul class="review-list">
+                            <li><b>v1 · 初稿</b><span>已退回：补充实验对照与结论限制。版本状态 SUPERSEDED。</span></li>
+                            <li>
+                              <b>v2 · 第 2 稿</b
+                              ><span>修改说明已提交；导师评论保留在 Chain Event，当前待最终确认。</span>
+                            </li>
+                            <li><b>最终确认人</b><span>配置化角色 · 导师 A；确认后进入 ACCEPTED。</span></li>
+                            <li><b>退回事件</b><span>退回时写入 PAPER_REVIEW_RETURNED。</span></li>
+                            <li><b>确认事件</b><span>最终确认时写入 PAPER_REVIEW_ACCEPTED。</span></li>
+                          </ul>
+                        </article>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    id="panel-chain-detail-materials"
+                    role="tabpanel"
+                    aria-labelledby="tab-chain-detail-materials"
+                    data-chain-tab-panel="materials"
+                    hidden
+                  >
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">课题资料</h2>
+                          <p class="surface-hint">知识上传、实验、成果与外部引用。</p>
+                        </div>
+                        <button class="button">上传资料</button>
+                      </div>
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>资料名称</th>
+                              <th>类型</th>
+                              <th>版本</th>
+                              <th>上传人</th>
+                              <th>关联节点</th>
+                              <th>状态</th>
+                              <th>更新时间</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="cell-primary">interface-stability-v2.md</td>
+                              <td>Markdown</td>
+                              <td>v2</td>
+                              <td>学生 A</td>
+                              <td>论文写作</td>
+                              <td><span class="badge success">SUCCESS</span></td>
+                              <td class="cell-subtle">10-08 16:20</td>
+                              <td><button class="button ghost">查看</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">experiment-summary.pdf</td>
+                              <td>PDF</td>
+                              <td>v5</td>
+                              <td>学生 A</td>
+                              <td>实验</td>
+                              <td><span class="badge success">SUCCESS</span></td>
+                              <td class="cell-subtle">10-06 14:00</td>
+                              <td><button class="button ghost">查看</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">figure-3.png</td>
+                              <td>图片</td>
+                              <td>v3</td>
+                              <td>学生 A</td>
+                              <td>论文写作</td>
+                              <td><span class="badge success">SUCCESS</span></td>
+                              <td class="cell-subtle">10-08 16:25</td>
+                              <td><button class="button ghost">查看</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">SpecLabOS Run #128</td>
+                              <td>外部引用</td>
+                              <td>v1</td>
+                              <td>集成同步</td>
+                              <td>分析</td>
+                              <td><span class="badge">ACTIVE</span></td>
+                              <td class="cell-subtle">10-07 11:30</td>
+                              <td><button class="button ghost">打开来源</button></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+                  </div>
+
+                  <div
+                    id="panel-chain-detail-members"
+                    role="tabpanel"
+                    aria-labelledby="tab-chain-detail-members"
+                    data-chain-tab-panel="members"
+                    hidden
+                  >
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">成员</h2>
+                          <p class="surface-hint">组织继承成员与显式协作者并列展示。</p>
+                        </div>
+                        <button class="button primary">添加成员</button>
+                      </div>
+                      <div class="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>成员</th>
+                              <th>科研角色</th>
+                              <th>组织</th>
+                              <th>继承关系</th>
+                              <th>对象权限</th>
+                              <th>显式协作者</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="cell-primary">学生 A</td>
+                              <td><span class="badge accent">OWNER</span></td>
+                              <td>界面材料组</td>
+                              <td>直接成员</td>
+                              <td>READ / WRITE</td>
+                              <td><span class="badge">是</span></td>
+                              <td><button class="button ghost">查看</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">导师 A</td>
+                              <td><span class="badge">ADVISOR</span></td>
+                              <td>导师组</td>
+                              <td>上级组织继承</td>
+                              <td>READ / REVIEW</td>
+                              <td><span class="badge">否</span></td>
+                              <td><button class="button ghost">查看</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">PI A</td>
+                              <td><span class="badge">PI</span></td>
+                              <td>基础研究方向</td>
+                              <td>上级组织继承</td>
+                              <td>READ / REVIEW / MANAGE</td>
+                              <td><span class="badge">否</span></td>
+                              <td><button class="button ghost">查看</button></td>
+                            </tr>
+                            <tr>
+                              <td class="cell-primary">设备管理员</td>
+                              <td><span class="badge">COLLABORATOR</span></td>
+                              <td>共享平台组</td>
+                              <td>跨组织显式加入</td>
+                              <td>READ</td>
+                              <td><span class="badge">是</span></td>
+                              <td><button class="button ghost">移除</button></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Report detail -->
+            <section class="page" id="page-report" data-page="report" aria-labelledby="page-report-title" hidden>
+              <header class="page-header">
+                <div class="page-title-wrap">
+                  <div class="breadcrumb">
+                    <button type="button" data-nav="chains">科研项目</button><span aria-hidden="true">/</span
+                    ><button type="button" data-nav="chains">报告</button><span aria-hidden="true">/</span
+                    ><span>第 41 周周报</span>
+                  </div>
+                  <div class="page-title">
+                    <h1 id="page-report-title">第 41 周周报</h1>
+                    <span class="badge accent">SUBMITTED</span>
+                  </div>
+                  <div class="page-metadata">
+                    <span>作者：学生 A</span><span>组织：界面材料组</span><span>周期：2026-10-05 ~ 2026-10-11</span
+                    ><span>正式版本 v3</span>
+                  </div>
+                </div>
+                <div class="page-actions">
+                  <span class="badge accent">导师已读 · 待审阅</span>
+                  <button class="button" type="button">退回</button>
+                  <button class="button primary" type="button">接受</button>
+                </div>
+              </header>
+              <div class="page-content">
+                <div class="content-pad report-grid">
+                  <article class="surface">
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title">正文</h2>
+                        <p class="surface-hint">提交后只读；退回后可编辑草稿。</p>
+                      </div>
+                      <span class="badge">正式版本 v3</span>
+                    </div>
+                    <div class="surface-body flush">
+                      <div class="editor-shell">
+                        <div class="editor-toolbar">
+                          <span>只读正文 · 最近提交 10-10 09:20</span>
+                          <span>Markdown 导入 · 插入图片</span>
+                        </div>
+                        <div class="editor-body">
+                          <h2>本周研究进展</h2>
+                          <p>
+                            本周完成第 2 组对照实验记录，更新论文第 3 节图表来源说明，并整理导师上一轮意见的处理结果。
+                          </p>
+                          <ul>
+                            <li>完成界面稳定性对照实验 6 组。</li>
+                            <li>更新分析结果快照 v5。</li>
+                            <li>论文第 2 稿已提交导师评审。</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+
+                  <div class="overview-grid">
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">附件</h2>
+                          <p class="surface-hint">PDF / 图片 / Markdown。</p>
+                        </div>
+                        <button class="button">下载全部</button>
+                      </div>
+                      <ul class="review-list">
+                        <li><b>experiment-summary.pdf</b><span>1.8 MB · 已纳入正式版本 manifest</span></li>
+                        <li><b>figure-3.png</b><span>420 KB · 图片校验通过</span></li>
+                      </ul>
+                    </article>
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">历史</h2>
+                          <p class="surface-hint">提交、退回与接受记录。</p>
+                        </div>
+                      </div>
+                      <ul class="review-list">
+                        <li><b>SUBMIT</b><span>10-10 09:20 · 学生 A · v3</span></li>
+                        <li><b>已读回执</b><span>10-10 10:02 · 导师 A · v3</span></li>
+                        <li><b>RETURN</b><span>10-03 14:20 · 导师 A · 补充结论限制</span></li>
+                      </ul>
+                    </article>
+
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">审核意见</h2>
+                          <p class="surface-hint">意见与正式版本绑定，接受或退回时写入事件。</p>
+                        </div>
+                        <span class="badge accent">待审阅</span>
+                      </div>
+                      <div class="surface-body">
+                        <label class="form-field" for="report-review-comment" style="display: grid; gap: 5px">
+                          <span class="surface-hint">审核意见</span>
+                          <textarea
+                            class="control"
+                            id="report-review-comment"
+                            rows="4"
+                            placeholder="填写接受说明或退回原因"
+                          ></textarea>
+                        </label>
+                        <div class="page-actions" style="justify-content: flex-end; margin-top: 10px">
+                          <button class="button" type="button">退回</button>
+                          <button class="button primary" type="button">接受</button>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article class="surface">
+                      <div class="surface-header">
+                        <div>
+                          <h2 class="surface-title">评论与 Trace</h2>
+                          <p class="surface-hint">论坛跟帖式过程记录。</p>
+                        </div>
+                      </div>
+                      <ul class="review-list">
+                        <li><b>导师 A</b><span>10-09 10:03 · 请补充第 3 节与对照组的差异说明。</span></li>
+                        <li><b>学生 A</b><span>10-09 10:18 · 已整理修改说明，待提交第 3 稿。</span></li>
+                        <li><b>REPORT_READ</b><span>10-09 10:02 · 已读回执 v3</span></li>
+                      </ul>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Approval center -->
+            <section
+              class="page"
+              id="page-approvals"
+              data-page="approvals"
+              aria-labelledby="page-approvals-title"
+              hidden
+            >
+              <header class="page-header">
+                <div class="page-title-wrap">
+                  <div class="breadcrumb"><span>审批中心</span></div>
+                  <h1 id="page-approvals-title">审批中心</h1>
+                  <p class="page-description">
+                    聚合阶段评审、报告审核、Agent 审批和办公审批；每个队列保留权威对象 ACL。
+                  </p>
+                </div>
+                <div class="page-actions"><button class="button" type="button">刷新队列</button></div>
+              </header>
+              <nav class="secondary-tabs" role="tablist" aria-label="审批队列">
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-approval-stage"
+                  aria-controls="panel-approval-stage"
+                  data-approval-tab="stage"
+                  aria-selected="true"
+                >
+                  阶段评审
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-approval-report"
+                  aria-controls="panel-approval-report"
+                  data-approval-tab="report"
+                  aria-selected="false"
+                >
+                  报告审核
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-approval-agent"
+                  aria-controls="panel-approval-agent"
+                  data-approval-tab="agent"
+                  aria-selected="false"
+                >
+                  Agent 审批
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-approval-office"
+                  aria-controls="panel-approval-office"
+                  data-approval-tab="office"
+                  aria-selected="false"
+                >
+                  办公审批
+                </button>
+              </nav>
+              <div class="page-content">
+                <div class="content-pad">
+                  <article class="surface todo-envelope" aria-labelledby="todo-envelope-title">
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title" id="todo-envelope-title">统一待办</h2>
+                        <p class="surface-hint">Tower 式处理入口：业务对象保持独立，当前处理人和下一步动作统一展示。</p>
+                      </div>
+                      <div class="page-actions">
+                        <select class="control fixed" id="todo-scope" aria-label="待办范围">
+                          <option value="to_me">我可处理</option>
+                          <option value="mine">我发起</option>
+                          <option value="visible">全部可见</option>
+                        </select>
+                        <button class="button" type="button" id="todo-refresh">刷新</button>
+                      </div>
+                    </div>
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>来源 / 事项</th>
+                            <th>发起人</th>
+                            <th>当前负责人</th>
+                            <th>业务状态</th>
+                            <th>处理状态</th>
+                            <th>下一步</th>
+                            <th>截止</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody id="todo-envelope-rows">
+                          <tr>
+                            <td class="cell-primary">节点任务 · 补充第 3 节对照说明<div class="cell-subtle">分子界面稳定性研究 / 论文写作</div></td>
+                            <td>导师 A</td>
+                            <td>学生 A</td>
+                            <td><span class="badge accent">SUBMITTED</span></td>
+                            <td><span class="badge danger">待处理</span></td>
+                            <td>退回或完成</td>
+                            <td><span class="urgent">今天 18:00</span></td>
+                            <td><button class="button ghost" type="button" data-nav="chain-detail">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">周报 · 2026-W41<div class="cell-subtle">科研项目 / 报告审核</div></td>
+                            <td>学生 B</td>
+                            <td>导师 A</td>
+                            <td><span class="badge accent">SUBMITTED</span></td>
+                            <td><span class="badge danger">待阅读</span></td>
+                            <td>阅读并审阅</td>
+                            <td><span class="urgent">今天 18:00</span></td>
+                            <td><button class="button ghost" type="button" data-nav="report">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">论文评审 · v2<div class="cell-subtle">分子界面稳定性研究 / PAPER_WRITING</div></td>
+                            <td>学生 A</td>
+                            <td>导师 A</td>
+                            <td><span class="badge accent">WAITING_REVIEW</span></td>
+                            <td><span class="badge">待评审</span></td>
+                            <td>评论、退回或接受</td>
+                            <td>明天 12:00</td>
+                            <td><button class="button ghost" type="button" data-nav="chain-detail">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">阶段评审 · 中期检查材料<div class="cell-subtle">导电聚合物界面调控 / MIDTERM</div></td>
+                            <td>学生 B</td>
+                            <td>PI A（必评人）</td>
+                            <td><span class="badge accent">SUBMITTED</span></td>
+                            <td><span class="badge">待确认</span></td>
+                            <td>提交评审意见</td>
+                            <td>10-14</td>
+                            <td><button class="button ghost" type="button" data-approval-tab="stage">打开上下文</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">办公审批 · 实验耗材季度采购<div class="cell-subtle">行政项目 / 报价确认</div></td>
+                            <td>管理员 A</td>
+                            <td>PI A（当前步骤）</td>
+                            <td><span class="badge danger">PENDING</span></td>
+                            <td><span class="badge danger">待审批</span></td>
+                            <td>批准或驳回</td>
+                            <td><span class="urgent">已逾期 1 天</span></td>
+                            <td><button class="button ghost" type="button" data-approval-tab="office">打开上下文</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                  <div class="filter-bar" aria-label="审批队列筛选">
+                    <select class="control fixed" aria-label="队列范围">
+                      <option>我可处理</option>
+                      <option>全部可见</option>
+                      <option>我发起</option>
+                    </select>
+                    <select class="control fixed" aria-label="审批类型">
+                      <option>全部类型</option>
+                      <option>阶段评审</option>
+                      <option>报告审核</option>
+                      <option>Agent 审批</option>
+                      <option>办公审批</option>
+                    </select>
+                    <select class="control fixed" aria-label="截止时间">
+                      <option>全部时间</option>
+                      <option>今天</option>
+                      <option>7 天内</option>
+                      <option>已逾期</option>
+                    </select>
+                    <select class="control fixed" aria-label="状态">
+                      <option>全部状态</option>
+                      <option>待阅读</option>
+                      <option>待审阅</option>
+                      <option>待确认</option>
+                      <option>待审批</option>
+                    </select>
+                    <input
+                      class="control search-input"
+                      type="search"
+                      placeholder="搜索标题、课题或提交人"
+                      aria-label="搜索审批"
+                    />
+                    <button class="button" type="button">刷新</button>
+                  </div>
+
+                  <article
+                    class="surface"
+                    id="panel-approval-stage"
+                    role="tabpanel"
+                    aria-labelledby="tab-approval-stage"
+                    data-approval-panel="stage"
+                  >
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>标题</th>
+                            <th>科研项目</th>
+                            <th>提交人</th>
+                            <th>当前节点</th>
+                            <th>截止</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">中期检查材料</td>
+                            <td>导电聚合物界面调控</td>
+                            <td>学生 B</td>
+                            <td>MIDTERM · 必评人</td>
+                            <td><span class="urgent">今天 18:00</span></td>
+                            <td><span class="badge danger">待确认</span></td>
+                            <td><button class="button ghost">评审</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">开题研究计划</td>
+                            <td>器件稳定性评价方法</td>
+                            <td>学生 C</td>
+                            <td>OPENING</td>
+                            <td class="cell-subtle">10-14</td>
+                            <td><span class="badge accent">待确认</span></td>
+                            <td><button class="button ghost">评审</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">预开题形式审查</td>
+                            <td>分子界面稳定性研究</td>
+                            <td>学生 A</td>
+                            <td>PRE_OPENING</td>
+                            <td class="cell-subtle">10-15</td>
+                            <td><span class="badge">待人工复核</span></td>
+                            <td><button class="button ghost">评审</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-approval-report"
+                    role="tabpanel"
+                    aria-labelledby="tab-approval-report"
+                    data-approval-panel="report"
+                    hidden
+                  >
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>标题</th>
+                            <th>科研项目</th>
+                            <th>提交人</th>
+                            <th>当前环节</th>
+                            <th>截止</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">2026-W41 周报 · 学生 B</td>
+                            <td>导电聚合物界面调控</td>
+                            <td>学生 B</td>
+                            <td>导师阅读</td>
+                            <td><span class="urgent">今天 18:00</span></td>
+                            <td><span class="badge danger">待阅读</span></td>
+                            <td><button class="button ghost" data-nav="report">打开</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">2026-W41 周报 · 学生 A</td>
+                            <td>分子界面稳定性研究</td>
+                            <td>学生 A</td>
+                            <td>导师审阅</td>
+                            <td class="cell-subtle">明天 12:00</td>
+                            <td><span class="badge accent">已读 · 待审阅</span></td>
+                            <td><button class="button ghost" data-nav="report">打开</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">2026-W41 周报 · 学生 C</td>
+                            <td>器件稳定性评价方法</td>
+                            <td>学生 C</td>
+                            <td>导师阅读</td>
+                            <td class="cell-subtle">10-12 18:00</td>
+                            <td><span class="badge danger">待阅读</span></td>
+                            <td><button class="button ghost">打开</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-approval-agent"
+                    role="tabpanel"
+                    aria-labelledby="tab-approval-agent"
+                    data-approval-panel="agent"
+                    hidden
+                  >
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Agent 请求</th>
+                            <th>科研项目</th>
+                            <th>节点</th>
+                            <th>请求时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">文献检索工具调用</td>
+                            <td>分子界面稳定性研究</td>
+                            <td>论文写作</td>
+                            <td class="cell-subtle">10-09 09:40</td>
+                            <td><span class="badge accent">待确认</span></td>
+                            <td><button class="button ghost">处理</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">实验数据结构转换</td>
+                            <td>导电聚合物界面调控</td>
+                            <td>实验</td>
+                            <td class="cell-subtle">10-09 08:55</td>
+                            <td><span class="badge">等待材料</span></td>
+                            <td><button class="button ghost">查看</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-approval-office"
+                    role="tabpanel"
+                    aria-labelledby="tab-approval-office"
+                    data-approval-panel="office"
+                    hidden
+                  >
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>行政审批</th>
+                            <th>类型</th>
+                            <th>提交人</th>
+                            <th>当前环节</th>
+                            <th>截止</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">实验耗材季度采购</td>
+                            <td>采购</td>
+                            <td>管理员 A</td>
+                            <td>报价确认</td>
+                            <td><span class="urgent">已逾期 1 天</span></td>
+                            <td><span class="badge danger">待审批</span></td>
+                            <td><button class="button ghost">处理</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">学术会议差旅报销</td>
+                            <td>报销</td>
+                            <td>学生 A</td>
+                            <td>补充凭证</td>
+                            <td class="cell-subtle">10-16</td>
+                            <td><span class="badge">待提交</span></td>
+                            <td><button class="button ghost">打开行政项目</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">共享设备排期回执</td>
+                            <td>设备协作</td>
+                            <td>设备管理员</td>
+                            <td>确认回执</td>
+                            <td class="cell-subtle">10-18</td>
+                            <td><span class="badge">进行中</span></td>
+                            <td><button class="button ghost">打开行政项目</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </section>
+
+            <!-- Settings -->
+            <section class="page" id="page-settings" data-page="settings" aria-labelledby="page-settings-title" hidden>
+              <header class="page-header">
+                <div class="page-title-wrap">
+                  <div class="breadcrumb"><span>管理</span></div>
+                  <h1 id="page-settings-title">管理</h1>
+                  <p class="page-description">组织、成员、系统、模板、身份、平台配置与审计。</p>
+                </div>
+              </header>
+              <nav class="secondary-tabs" role="tablist" aria-label="管理分区">
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-settings-org"
+                  aria-controls="panel-settings-org"
+                  data-settings-tab="org"
+                  aria-selected="true"
+                >
+                  组织与人员
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-settings-system"
+                  aria-controls="panel-settings-system"
+                  data-settings-tab="system"
+                  aria-selected="false"
+                >
+                  系统
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-settings-templates"
+                  aria-controls="panel-settings-templates"
+                  data-settings-tab="templates"
+                  aria-selected="false"
+                >
+                  模板
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-settings-identity"
+                  aria-controls="panel-settings-identity"
+                  data-settings-tab="identity"
+                  aria-selected="false"
+                >
+                  身份映射
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-settings-platform"
+                  aria-controls="panel-settings-platform"
+                  data-settings-tab="platform"
+                  aria-selected="false"
+                >
+                  平台配置
+                </button>
+                <button
+                  class="secondary-tab"
+                  type="button"
+                  role="tab"
+                  id="tab-settings-audit"
+                  aria-controls="panel-settings-audit"
+                  data-settings-tab="audit"
+                  aria-selected="false"
+                >
+                  审计记录
+                </button>
+              </nav>
+              <div class="page-content">
+                <div class="content-pad settings-grid">
+                  <article
+                    class="surface"
+                    id="panel-settings-org"
+                    role="tabpanel"
+                    aria-labelledby="tab-settings-org"
+                    data-settings-panel="org"
+                  >
+                    <div class="overview-grid">
+                      <article class="surface">
+                        <div class="surface-header">
+                          <div>
+                            <h2 class="surface-title">组织树</h2>
+                            <p class="surface-hint">方向、课题组和导师组。</p>
+                          </div>
+                          <button class="button primary">新增组织</button>
+                        </div>
+                        <ul class="review-list">
+                          <li><b>PiLab</b><span>ROOT · 24 个活动节点</span></li>
+                          <li><b>基础研究方向</b><span>BASIC_RESEARCH · 12 个课题组</span></li>
+                          <li><b>界面材料组</b><span>GROUP · 当前科研项目 6 个</span></li>
+                          <li><b>高分子组</b><span>GROUP · 当前科研项目 8 个</span></li>
+                          <li><b>导师组</b><span>ADVISOR_POOL · 18 位导师</span></li>
+                        </ul>
+                      </article>
+                      <article class="surface">
+                        <div class="surface-header">
+                          <div>
+                            <h2 class="surface-title">组织成员</h2>
+                            <p class="surface-hint">按有效组织关系过滤。</p>
+                          </div>
+                          <input
+                            class="control search-input"
+                            type="search"
+                            placeholder="搜索成员"
+                            aria-label="搜索成员"
+                          />
+                        </div>
+                        <div class="table-scroll">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>成员</th>
+                                <th>组织角色</th>
+                                <th>主归属</th>
+                                <th>上级组织</th>
+                                <th>有效期</th>
+                                <th>操作</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td class="cell-primary">学生 A</td>
+                                <td>REVIEWER</td>
+                                <td>界面材料组</td>
+                                <td>基础研究方向</td>
+                                <td class="cell-subtle">长期</td>
+                                <td><button class="button ghost">编辑</button></td>
+                              </tr>
+                              <tr>
+                                <td class="cell-primary">导师 A</td>
+                                <td>ADVISOR</td>
+                                <td>导师组</td>
+                                <td>基础研究方向</td>
+                                <td class="cell-subtle">长期</td>
+                                <td><button class="button ghost">编辑</button></td>
+                              </tr>
+                              <tr>
+                                <td class="cell-primary">PI A</td>
+                                <td>PI</td>
+                                <td>基础研究方向</td>
+                                <td>PiLab</td>
+                                <td class="cell-subtle">长期</td>
+                                <td><button class="button ghost">编辑</button></td>
+                              </tr>
+                              <tr>
+                                <td class="cell-primary">设备管理员</td>
+                                <td>UNIT_ADMIN</td>
+                                <td>共享平台组</td>
+                                <td>PiLab</td>
+                                <td class="cell-subtle">2027-03-31</td>
+                                <td><button class="button ghost">编辑</button></td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </article>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-settings-system"
+                    role="tabpanel"
+                    aria-labelledby="tab-settings-system"
+                    data-settings-panel="system"
+                    hidden
+                  >
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title">系统</h2>
+                        <p class="surface-hint">科研模块开关、邀请码与成员导入。</p>
+                      </div>
+                      <button class="button primary">创建邀请码</button>
+                    </div>
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>功能</th>
+                            <th>影响范围</th>
+                            <th>状态</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">科研项目通道</td>
+                            <td>Research Chain、节点任务、报告</td>
+                            <td><span class="badge success">开启</span></td>
+                            <td class="cell-subtle">10-01 09:00</td>
+                            <td><button class="button ghost">配置</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">审批中心</td>
+                            <td>阶段评审、报告审核、Agent、办公</td>
+                            <td><span class="badge success">开启</span></td>
+                            <td class="cell-subtle">10-02 14:20</td>
+                            <td><button class="button ghost">配置</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">成员批量导入</td>
+                            <td>组织成员与导师关系</td>
+                            <td><span class="badge">试运行</span></td>
+                            <td class="cell-subtle">10-05 11:30</td>
+                            <td><button class="button ghost">查看模板</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">邀请码</td>
+                            <td>新成员加入组织</td>
+                            <td><span class="badge">30 天有效</span></td>
+                            <td class="cell-subtle">10-08 16:00</td>
+                            <td><button class="button ghost">复制</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-settings-templates"
+                    role="tabpanel"
+                    aria-labelledby="tab-settings-templates"
+                    data-settings-panel="templates"
+                    hidden
+                  >
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title">模板</h2>
+                        <p class="surface-hint">周报、月报与后续科研模板。</p>
+                      </div>
+                      <button class="button primary">新建模板</button>
+                    </div>
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>模板名称</th>
+                            <th>类型</th>
+                            <th>适用范围</th>
+                            <th>版本</th>
+                            <th>状态</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">研究生周报模板</td>
+                            <td>周报</td>
+                            <td>全部课题组</td>
+                            <td>v3</td>
+                            <td><span class="badge success">启用</span></td>
+                            <td class="cell-subtle">10-01 10:00</td>
+                            <td><button class="button ghost">编辑</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">中期检查模板</td>
+                            <td>阶段报告</td>
+                            <td>基础研究方向</td>
+                            <td>v2</td>
+                            <td><span class="badge success">启用</span></td>
+                            <td class="cell-subtle">09-18 15:20</td>
+                            <td><button class="button ghost">编辑</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">论文修改说明模板</td>
+                            <td>节点资料</td>
+                            <td>PAPER_WRITING</td>
+                            <td>v1</td>
+                            <td><span class="badge">试运行</span></td>
+                            <td class="cell-subtle">10-06 11:10</td>
+                            <td><button class="button ghost">编辑</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">设备采购审批模板</td>
+                            <td>行政审批</td>
+                            <td>行政项目</td>
+                            <td>v4</td>
+                            <td><span class="badge success">启用</span></td>
+                            <td class="cell-subtle">09-28 09:40</td>
+                            <td><button class="button ghost">编辑</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-settings-identity"
+                    role="tabpanel"
+                    aria-labelledby="tab-settings-identity"
+                    data-settings-panel="identity"
+                    hidden
+                  >
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title">身份映射</h2>
+                        <p class="surface-hint">AI4MS OIDC 绑定。</p>
+                      </div>
+                      <button class="button primary">新建映射</button>
+                    </div>
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>用户</th>
+                            <th>科研身份</th>
+                            <th>组织</th>
+                            <th>导师 / PI 关系</th>
+                            <th>同步状态</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">学生 A</td>
+                            <td>STUDENT</td>
+                            <td>界面材料组</td>
+                            <td>导师 A</td>
+                            <td><span class="badge success">已同步</span></td>
+                            <td><button class="button ghost">查看</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">导师 A</td>
+                            <td>ADVISOR</td>
+                            <td>导师组</td>
+                            <td>PI A</td>
+                            <td><span class="badge success">已同步</span></td>
+                            <td><button class="button ghost">查看</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">PI A</td>
+                            <td>PI</td>
+                            <td>基础研究方向</td>
+                            <td>—</td>
+                            <td><span class="badge">待复核</span></td>
+                            <td><button class="button ghost">复核</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">设备管理员</td>
+                            <td>UNIT_ADMIN</td>
+                            <td>共享平台组</td>
+                            <td>—</td>
+                            <td><span class="badge">未绑定</span></td>
+                            <td><button class="button ghost">绑定</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-settings-platform"
+                    role="tabpanel"
+                    aria-labelledby="tab-settings-platform"
+                    data-settings-panel="platform"
+                    hidden
+                  >
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title">平台配置</h2>
+                        <p class="surface-hint">模块开关与上传限制。</p>
+                      </div>
+                      <button class="button primary">保存</button>
+                    </div>
+                    <div class="surface-body form-grid">
+                      <div class="form-field">
+                        <label for="research-chain-switch">科研链</label
+                        ><select class="control" id="research-chain-switch">
+                          <option>开启</option>
+                          <option>关闭</option>
+                        </select>
+                      </div>
+                      <div class="form-field">
+                        <label for="research-agent-switch">科研 Agent</label
+                        ><select class="control" id="research-agent-switch">
+                          <option>开启</option>
+                          <option>关闭</option>
+                        </select>
+                      </div>
+                      <div class="form-field">
+                        <label for="agent-provider">Agent 入口</label
+                        ><input class="control" id="agent-provider" value="Synlora Agent" readonly />
+                      </div>
+                      <div class="form-field">
+                        <label for="notification-channel">通知渠道</label
+                        ><select class="control" id="notification-channel">
+                          <option>站内通知</option>
+                          <option>站内 + 邮件</option>
+                        </select>
+                      </div>
+                      <div class="form-field">
+                        <label for="storage-provider">附件存储</label
+                        ><select class="control" id="storage-provider">
+                          <option>S3 兼容存储</option>
+                          <option>本地存储</option>
+                        </select>
+                      </div>
+                      <div class="form-field">
+                        <label for="pdf-limit">PDF 上传上限 MB</label
+                        ><input class="control" id="pdf-limit" value="100" />
+                      </div>
+                      <div class="form-field">
+                        <label for="markdown-limit">Markdown 上传上限 MB</label
+                        ><input class="control" id="markdown-limit" value="5" />
+                      </div>
+                    </div>
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>集成</th>
+                            <th>用途</th>
+                            <th>状态</th>
+                            <th>最近检查</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-primary">Synlora Agent</td>
+                            <td>科研 Agent 唯一产品入口</td>
+                            <td><span class="badge success">正常</span></td>
+                            <td class="cell-subtle">10-09 10:00</td>
+                            <td><button class="button ghost">查看</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">AI4MS OIDC</td>
+                            <td>身份绑定</td>
+                            <td><span class="badge success">正常</span></td>
+                            <td class="cell-subtle">10-09 09:30</td>
+                            <td><button class="button ghost">查看</button></td>
+                          </tr>
+                          <tr>
+                            <td class="cell-primary">对象存储</td>
+                            <td>报告与课题资料附件</td>
+                            <td><span class="badge">降级</span></td>
+                            <td class="cell-subtle">10-09 08:20</td>
+                            <td><button class="button ghost">重试</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+
+                  <article
+                    class="surface"
+                    id="panel-settings-audit"
+                    role="tabpanel"
+                    aria-labelledby="tab-settings-audit"
+                    data-settings-panel="audit"
+                    hidden
+                  >
+                    <div class="surface-header">
+                      <div>
+                        <h2 class="surface-title">审计记录</h2>
+                        <p class="surface-hint">只读、只追加。</p>
+                      </div>
+                      <button class="button">导出</button>
+                    </div>
+                    <div class="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>时间</th>
+                            <th>操作者</th>
+                            <th>对象</th>
+                            <th>动作</th>
+                            <th>结果</th>
+                            <th>Trace ID</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td class="cell-subtle">10-09 10:02</td>
+                            <td>导师 A</td>
+                            <td>2026-W41 周报</td>
+                            <td>report.read</td>
+                            <td><span class="badge success">成功</span></td>
+                            <td class="cell-subtle">tr-8f21c</td>
+                          </tr>
+                          <tr>
+                            <td class="cell-subtle">10-09 09:20</td>
+                            <td>学生 A</td>
+                            <td>论文评审 v2</td>
+                            <td>paper.version.submit</td>
+                            <td><span class="badge success">成功</span></td>
+                            <td class="cell-subtle">tr-71a09</td>
+                          </tr>
+                          <tr>
+                            <td class="cell-subtle">10-09 08:55</td>
+                            <td>管理员 A</td>
+                            <td>采购审批流</td>
+                            <td>approval.update</td>
+                            <td><span class="badge success">成功</span></td>
+                            <td class="cell-subtle">tr-63d44</td>
+                          </tr>
+                          <tr>
+                            <td class="cell-subtle">10-08 16:40</td>
+                            <td>系统同步</td>
+                            <td>AI4MS 身份映射</td>
+                            <td>identity.sync</td>
+                            <td><span class="badge">部分成功</span></td>
+                            <td class="cell-subtle">tr-52b18</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      const roleData = {
+        student: {
+          name: "学生 A",
+          avatar: "学",
+          context: "角色：学生",
+          primary: ["3", "进行中科研项目"],
+          secondary: ["5", "待处理事项"],
+          todos: [
+            ["补充论文第 3 节对照说明", "任务 · 论文写作", "今天 18:00", "剩 8 小时", "chain-detail"],
+            ["第 42 周周报待提交", "报告 · DRAFT", "本周日 22:00", "剩 3 天", "report"],
+            ["迭代分析评审意见", "课题 · ITERATION R2", "10-14", "剩 5 天", "chain-detail"],
+          ],
+          contextTitle: "分子界面稳定性研究",
+          contextNode: "论文写作",
+          contextNext: "下一步：导师评审论文第 2 稿与修改说明。",
+          contextAction: "打开科研项目",
+          contextTarget: "chain-detail",
+          adminContextTitle: "学术会议差旅报销",
+          adminContextNode: "补充凭证",
+          adminContextNext: "下一步：上传行程凭证并重新提交报销。",
+          researchAssignment: {
+            canWrite: true,
+            groups: [
+              { label: "组织范围", candidates: [["student-a", "学生 A · 界面材料组"], ["mentor-a", "导师 A · 指导关系"]] },
+              { label: "显式协作者", candidates: [["equipment-admin", "设备管理员 · 共享平台组"]] },
+            ],
+            capability: "当前角色可创建和保存节点任务指派；动作能力以服务端返回为准。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["student-a", "学生 A · MEMBER"], ["equipment-admin", "设备管理员 · MEMBER"]] }],
+            capability: "当前角色可维护行政项目负责人；审批人仍由审批流步骤决定。",
+          },
+        },
+        mentor: {
+          name: "导师 A",
+          avatar: "导",
+          context: "角色：直接导师",
+          primary: ["6", "指导学生"],
+          secondary: ["8", "待处理事项"],
+          todos: [
+            ["2026-W41 周报待阅读", "报告 · 学生 B", "今天 18:00", "剩 8 小时", "report"],
+            ["论文第 2 稿待评审", "课题 · 论文写作", "明天 12:00", "剩 1 天", "chain-detail"],
+            ["中期检查材料待评议", "阶段评审 · MIDTERM", "10-12", "剩 3 天", "approvals"],
+          ],
+          contextTitle: "指导中的科研项目",
+          contextNode: "3 个待评审节点",
+          contextNext: "下一步：先阅读学生 B 的第 41 周周报。",
+          contextAction: "进入审批中心",
+          contextTarget: "approvals",
+          adminContextTitle: "评审劳务费用流程",
+          adminContextNode: "待确认发放名单",
+          adminContextNext: "下一步：确认发放名单后提交财务复核。",
+          researchAssignment: {
+            canWrite: true,
+            groups: [
+              { label: "组织范围", candidates: [["student-a", "学生 A · 界面材料组"], ["mentor-a", "导师 A · 指导关系"]] },
+              { label: "显式协作者", candidates: [] },
+            ],
+            capability: "当前角色可指派和评审节点任务；评审边界仍由原领域服务判断。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["mentor-a", "导师 A · PROJECT ADMIN"]] }],
+            capability: "当前角色可维护行政项目负责人；不会因此获得科研评审权。",
+          },
+        },
+        principal: {
+          name: "PI A",
+          avatar: "PI",
+          context: "角色：课题组主 PI",
+          primary: ["12", "课题组科研项目"],
+          secondary: ["4", "阻塞事项"],
+          todos: [
+            ["论文评审队列阻塞", "课题组 · 论文写作", "今天 20:00", "剩 10 小时", "approvals"],
+            ["中期检查材料待复核", "课题组 · MIDTERM", "10-13", "剩 4 天", "approvals"],
+            ["成员负载过高提醒", "课题组 · 任务分布", "10-15", "剩 6 天", "settings"],
+          ],
+          contextTitle: "界面材料组科研项目",
+          contextNode: "12 个进行中主线",
+          contextNext: "下一步：复核论文评审队列阻塞。",
+          contextAction: "查看评审队列",
+          contextTarget: "approvals",
+          adminContextTitle: "共享设备排期协调",
+          adminContextNode: "确认排期回执",
+          adminContextNext: "下一步：确认设备占用冲突并回执协作方。",
+          researchAssignment: {
+            canWrite: true,
+            groups: [
+              { label: "组织范围", candidates: [["pi-a", "PI A · 基础研究方向"], ["mentor-a", "导师 A · 指导关系"]] },
+              { label: "显式协作者", candidates: [["equipment-admin", "设备管理员 · 共享平台组"]] },
+            ],
+            capability: "当前角色可复核并维护课题任务；成员负载仍按组织范围约束。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["pi-a", "PI A · PROJECT ADMIN"], ["equipment-admin", "设备管理员 · MEMBER"]] }],
+            capability: "当前角色可维护行政项目负责人；不会改变科研 ACL。",
+          },
+        },
+        admin: {
+          name: "管理员 A",
+          avatar: "管",
+          context: "角色：Workspace Admin",
+          primary: ["18", "行政项目"],
+          secondary: ["3", "配置待处理"],
+          todos: [
+            ["组织成员归属待确认", "管理 · 组织架构", "10-12", "剩 3 天", "settings"],
+            ["采购审批流配置", "管理 · 平台配置", "10-14", "剩 5 天", "settings"],
+            ["审计导出请求", "管理 · 审计记录", "10-16", "剩 7 天", "settings"],
+          ],
+          contextTitle: "行政项目与组织配置",
+          contextNode: "18 个行政项目",
+          contextNext: "下一步：确认采购审批流配置和组织成员归属。",
+          contextAction: "打开行政项目",
+          contextTarget: "admin",
+          adminContextTitle: "实验耗材季度采购",
+          adminContextNode: "报价确认",
+          adminContextNext: "下一步：确认供应商报价并提交采购审批。",
+          researchAssignment: {
+            canWrite: false,
+            groups: [],
+            capability: "Workspace Admin 不因管理员身份自动获得科研创建、指派或评审权。",
+          },
+          administrativeAssignment: {
+            canWrite: true,
+            groups: [{ label: "项目成员", candidates: [["admin-a", "管理员 A · ADMIN"], ["student-a", "学生 A · MEMBER"]] }],
+            capability: "当前角色可维护行政项目负责人；科研表单保持禁用并说明权限边界。",
+          },
+        },
+      };
+
+      const nodeData = {
+        literature: {
+          title: "文献调研",
+          subtitle: "LITERATURE_REVIEW · COMPLETED · 责任人：学生 A",
+          input: "12 篇文献、检索式和筛选记录。",
+          output: "文献调研快照 v3，包含来源、版本和人工备注。",
+          paper: false,
+        },
+        iteration: {
+          title: "迭代分析 R2",
+          subtitle: "ITERATION · NEEDS_REVISION · 责任人：学生 A",
+          input: "第 2 组实验数据、对照组说明和导师评论。",
+          output: "分析结果快照 v5，待补充数据来源说明。",
+          paper: false,
+        },
+        paper: {
+          title: "论文写作",
+          subtitle: "PAPER_WRITING · WAITING_HUMAN · 责任人：导师 A",
+          input: "论文第 2 稿、修改说明、实验数据摘要。",
+          output: "论文版本 v2、修改说明、图表来源清单。",
+          paper: true,
+        },
+        "failed-validation": {
+          title: "早期验证方案",
+          subtitle: "PRE_EXPERIMENT · FAILED · 责任人：学生 A",
+          input: "首轮界面处理参数和设备运行记录。",
+          output: "失败原因已写入节点事件，可重新开始迭代。",
+          paper: false,
+        },
+        "archived-record": {
+          title: "预实验记录 R1",
+          subtitle: "PRE_EXPERIMENT · ARCHIVED · 责任人：学生 A",
+          input: "归档前的实验参数与记录。",
+          output: "只读回放，不参与当前论文证据链。",
+          paper: false,
+        },
+        completion: {
+          title: "结题",
+          subtitle: "COMPLETION · DRAFT · 责任人：课题组主 PI",
+          input: "等待论文节点完成。",
+          output: "尚未生成结题材料快照。",
+          paper: false,
+        },
+      };
+
+      const state = {
+        page: "home",
+        chainView: "chains",
+        adminTab: "projects",
+        chainTab: "nodes",
+        approvalTab: "stage",
+        settingsTab: "org",
+        role: "student",
+        selectedNode: "paper",
+        selectedChainId: "molecular",
+        selectedAdminProject: null,
+      };
+
+      const pages = Array.from(document.querySelectorAll("[data-page]"));
+      const navItems = Array.from(document.querySelectorAll("[data-nav]"));
+
+      function setSelected(buttons, attribute, value) {
+        buttons.forEach((button) => button.setAttribute("aria-selected", String(button.dataset[attribute] === value)));
+      }
+
+      function showPanels(panels, attribute, value) {
+        panels.forEach((panel) => {
+          panel.hidden = panel.dataset[attribute] !== value;
+        });
+      }
+
+      function activateChainView(value) {
+        state.chainView = value;
+        setSelected(document.querySelectorAll("[data-chain-view]"), "chainView", state.chainView);
+        showPanels(document.querySelectorAll("[data-chain-panel]"), "chainPanel", state.chainView);
+      }
+
+      function activateAdminTab(value) {
+        state.adminTab = value;
+        setSelected(document.querySelectorAll("[data-admin-tab]"), "adminTab", state.adminTab);
+        showPanels(document.querySelectorAll("[data-admin-panel]"), "adminPanel", state.adminTab);
+      }
+
+      function updateSidebar() {
+        document.querySelectorAll(".sidebar [data-nav]").forEach((item) => {
+          const target = item.dataset.nav;
+          const parentCurrent =
+            target === state.page || (["chain-detail", "report"].includes(state.page) && target === "chains");
+          const nested = Boolean(item.closest(".nav-subgroup"));
+          let current = parentCurrent;
+          if (nested) {
+            current =
+              (state.page === "chain-detail" && item.dataset.chainId === state.selectedChainId) ||
+              (state.page === "admin" && item.dataset.adminProject === state.selectedAdminProject);
+          }
+          item.setAttribute("aria-current", current ? "page" : "false");
+        });
+      }
+
+      function renderChainProject() {
+        const project = document.querySelector(`[data-chain-id="${state.selectedChainId}"]`);
+        const fallback = document.querySelector('[data-chain-id="molecular"]');
+        const source = project ?? fallback;
+        if (!source) return;
+        document.getElementById("chain-breadcrumb-title").textContent = source.dataset.chainTitle;
+        document.getElementById("page-chain-title").textContent = source.dataset.chainTitle;
+        document.getElementById("chain-project-owner").textContent = `负责人：${source.dataset.chainOwner}`;
+        document.getElementById("chain-project-code").textContent = `Project：${source.dataset.chainCode}`;
+        document.getElementById("chain-project-org").textContent = `组织：${source.dataset.chainOrg}`;
+      }
+
+      function navigate(page) {
+        if (!pages.some((item) => item.dataset.page === page)) return;
+        state.page = page;
+        pages.forEach((item) => {
+          item.hidden = item.dataset.page !== page;
+        });
+        updateSidebar();
+        document.querySelector(".main-surface").scrollIntoView({ block: "start" });
+        closeSidebar();
+      }
+
+      function renderRole() {
+        const role = roleData[state.role];
+        document.getElementById("role-avatar").textContent = role.avatar;
+        document.getElementById("sidebar-avatar").textContent = role.avatar;
+        document.getElementById("sidebar-user").textContent = role.name;
+        document.getElementById("overview-role-context").textContent = role.context;
+        document.getElementById("metric-primary").textContent = role.primary[0];
+        document.getElementById("metric-primary-label").textContent = role.primary[1];
+        document.getElementById("metric-secondary").textContent = role.secondary[0];
+        document.getElementById("metric-secondary-label").textContent = role.secondary[1];
+        document.getElementById("current-context-title").textContent = role.contextTitle;
+        document.getElementById("current-context-node").textContent = role.contextNode;
+        document.getElementById("current-context-next").textContent = role.contextNext;
+        const currentAction = document.getElementById("current-context-action");
+        currentAction.textContent = role.contextAction;
+        currentAction.dataset.nav = role.contextTarget;
+        document.getElementById("admin-context-title").textContent = role.adminContextTitle;
+        document.getElementById("admin-context-node").textContent = role.adminContextNode;
+        document.getElementById("admin-context-next").textContent = role.adminContextNext;
+
+        const list = document.getElementById("overview-todos");
+        list.replaceChildren(
+          ...role.todos.map(([title, context, due, countdown, target]) => {
+            const item = document.createElement("li");
+            item.className = "todo-item";
+            const titleWrap = document.createElement("div");
+            titleWrap.className = "todo-title";
+            const badge = document.createElement("span");
+            const isUrgent = due.includes("今天") || due.includes("逾期");
+            badge.className = isUrgent ? "badge danger" : "badge accent";
+            badge.textContent = isUrgent ? "紧急" : "提醒";
+            const strong = document.createElement("strong");
+            strong.textContent = title;
+            const contextText = document.createElement("p");
+            contextText.className = "todo-context";
+            contextText.textContent = context;
+            const dueText = document.createElement("p");
+            dueText.className = "todo-due";
+            dueText.textContent = due;
+            const countdownText = document.createElement("p");
+            countdownText.className = "todo-due";
+            countdownText.textContent = countdown;
+            const action = document.createElement("button");
+            action.className = "button ghost";
+            action.type = "button";
+            action.dataset.nav = target;
+            action.textContent = "处理";
+            titleWrap.append(badge, strong);
+            item.append(titleWrap, contextText, dueText, countdownText, action);
+            return item;
+          })
+        );
+      }
+
+      /**
+       * 按角色候选分组重建一个指派下拉框。
+       *
+       * Args:
+       *   selectId: 下拉框元素 ID。
+       *   groups: 候选分组数据。
+       *   disabled: 当前角色是否缺少写权限。
+       */
+      function renderAssignmentSelect(selectId, groups, disabled) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        const availableGroups = groups.filter((group) => group.candidates.length > 0);
+        if (availableGroups.length === 0) {
+          const emptyOption = document.createElement("option");
+          emptyOption.value = "";
+          emptyOption.textContent = "暂无可指派候选人";
+          select.replaceChildren(emptyOption);
+          select.disabled = true;
+          return;
+        }
+        select.disabled = Boolean(disabled);
+        select.replaceChildren(
+          ...availableGroups.map((group) => {
+            const optgroup = document.createElement("optgroup");
+            optgroup.label = group.label;
+            optgroup.replaceChildren(
+              ...group.candidates.map(([value, label]) => {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = label;
+                return option;
+              })
+            );
+            return optgroup;
+          })
+        );
+      }
+
+      /**
+       * 由当前角色派生科研与行政指派边界。
+       *
+       * Args:
+       *   role: 当前静态角色数据对象。
+       */
+      function renderAssignmentRole(role) {
+        const research = role.researchAssignment;
+        const administrative = role.administrativeAssignment;
+        renderAssignmentSelect("research-assignee", research.groups, !research.canWrite);
+        renderAssignmentSelect("administrative-assignee", administrative.groups, !administrative.canWrite);
+
+        const researchCreate = document.getElementById("research-create-task");
+        const researchSubmit = document.getElementById("research-assignment-submit");
+        const researchDue = document.getElementById("research-task-due");
+        const administrativeSubmit = document.getElementById("administrative-assignment-submit");
+        const researchEmpty = research.groups.every((group) => group.candidates.length === 0);
+        const administrativeEmpty = administrative.groups.every((group) => group.candidates.length === 0);
+        researchCreate.disabled = !research.canWrite;
+        researchSubmit.disabled = !research.canWrite || researchEmpty;
+        researchDue.disabled = !research.canWrite;
+        administrativeSubmit.disabled = !administrative.canWrite || administrativeEmpty;
+
+        const researchForm = document.getElementById("research-assignment-form");
+        const administrativeForm = document.getElementById("administrative-assignment-form");
+        researchForm.dataset.writable = String(research.canWrite && !researchEmpty);
+        administrativeForm.dataset.writable = String(administrative.canWrite && !administrativeEmpty);
+        document.getElementById("research-assignment-scope").textContent = research.canWrite
+          ? "候选来源：组织范围与显式协作者；两套候选来源不与行政项目成员混用。"
+          : "无权限说明：Workspace Admin 不因管理员身份自动获得科研写权限。";
+        document.getElementById("administrative-assignment-scope").textContent =
+          "候选来源：当前行政 Project 的有效成员；审批人仍由审批流步骤决定。";
+        document.getElementById("research-capability-hint").textContent = `能力提示：${research.capability}`;
+        document.getElementById("administrative-capability-hint").textContent = `能力提示：${administrative.capability}`;
+
+        const researchStatus = document.getElementById("research-assignment-status");
+        const administrativeStatus = document.getElementById("administrative-assignment-status");
+        researchStatus.className = research.canWrite ? "inline-status" : "inline-status error";
+        researchStatus.textContent = research.canWrite ? "" : research.capability;
+        administrativeStatus.className = "inline-status";
+        administrativeStatus.textContent = "";
+      }
+
+      function renderNode() {
+        const node = nodeData[state.selectedNode];
+        document.getElementById("selected-node-title").textContent = node.title;
+        document.getElementById("selected-node-subtitle").textContent = node.subtitle;
+        document.getElementById("selected-node-input").textContent = node.input;
+        document.getElementById("selected-node-output").textContent = node.output;
+        const panel = document.querySelector("[data-paper-panel]");
+        panel.hidden = !node.paper;
+        document.querySelectorAll("#node-list .node-button").forEach((button) => {
+          button.setAttribute("aria-current", String(button.dataset.nodeId === state.selectedNode));
+        });
+      }
+
+      function closeSidebar() {
+        document.body.classList.remove("sidebar-open");
+        document.getElementById("mobile-overlay").hidden = true;
+        document.getElementById("menu-button").setAttribute("aria-expanded", "false");
+      }
+
+      document.addEventListener("click", (event) => {
+        const nav = event.target.closest("[data-nav]");
+        if (nav) {
+          if (nav.dataset.defaultChainView) activateChainView(nav.dataset.defaultChainView);
+          if (nav.dataset.defaultAdminTab) activateAdminTab(nav.dataset.defaultAdminTab);
+          if (nav.dataset.chainId) state.selectedChainId = nav.dataset.chainId;
+          if (nav.dataset.adminProject) {
+            state.selectedAdminProject = nav.dataset.adminProject;
+          } else if (nav.dataset.nav === "admin" && !nav.closest(".nav-subgroup")) {
+            state.selectedAdminProject = null;
+          }
+          renderChainProject();
+          navigate(nav.dataset.nav);
+          return;
+        }
+
+        const chainView = event.target.closest("[data-chain-view]");
+        if (chainView) {
+          state.chainView = chainView.dataset.chainView;
+          setSelected(document.querySelectorAll("[data-chain-view]"), "chainView", state.chainView);
+          showPanels(document.querySelectorAll("[data-chain-panel]"), "chainPanel", state.chainView);
+          return;
+        }
+
+        const adminTab = event.target.closest("[data-admin-tab]");
+        if (adminTab) {
+          state.adminTab = adminTab.dataset.adminTab;
+          setSelected(document.querySelectorAll("[data-admin-tab]"), "adminTab", state.adminTab);
+          showPanels(document.querySelectorAll("[data-admin-panel]"), "adminPanel", state.adminTab);
+          return;
+        }
+
+        const chainTab = event.target.closest("[data-chain-tab]");
+        if (chainTab && chainTab.dataset.chainTab) {
+          state.chainTab = chainTab.dataset.chainTab;
+          setSelected(document.querySelectorAll("[data-chain-tab]"), "chainTab", state.chainTab);
+          showPanels(document.querySelectorAll("[data-chain-tab-panel]"), "chainTabPanel", state.chainTab);
+          return;
+        }
+
+        const approvalTab = event.target.closest("[data-approval-tab]");
+        if (approvalTab) {
+          state.approvalTab = approvalTab.dataset.approvalTab;
+          setSelected(document.querySelectorAll("[data-approval-tab]"), "approvalTab", state.approvalTab);
+          showPanels(document.querySelectorAll("[data-approval-panel]"), "approvalPanel", state.approvalTab);
+          return;
+        }
+
+        const settingsTab = event.target.closest("[data-settings-tab]");
+        if (settingsTab) {
+          state.settingsTab = settingsTab.dataset.settingsTab;
+          setSelected(document.querySelectorAll("[data-settings-tab]"), "settingsTab", state.settingsTab);
+          showPanels(document.querySelectorAll("[data-settings-panel]"), "settingsPanel", state.settingsTab);
+          return;
+        }
+
+        const nodeButton = event.target.closest("[data-node-id]");
+        if (nodeButton) {
+          state.selectedNode = nodeButton.dataset.nodeId;
+          renderNode();
+        }
+      });
+
+      document.getElementById("role-select").addEventListener("change", (event) => {
+        state.role = event.target.value;
+        renderRole();
+        renderAssignmentRole(roleData[state.role]);
+      });
+
+      function bindAssignmentForm(formId, statusId, successText) {
+        const form = document.getElementById(formId);
+        const status = document.getElementById(statusId);
+        if (!form || !status) return;
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          if (form.dataset.writable !== "true") return;
+          status.className = "inline-status";
+          status.textContent = `${successText}（静态原型，仅模拟界面反馈）`;
+        });
+      }
+
+      bindAssignmentForm("research-assignment-form", "research-assignment-status", "科研任务责任人已更新");
+      bindAssignmentForm("administrative-assignment-form", "administrative-assignment-status", "行政项目负责人已更新");
+      renderAssignmentRole(roleData[state.role]);
+
+      const todoScope = document.getElementById("todo-scope");
+      const todoRows = Array.from(document.querySelectorAll("#todo-envelope-rows tr"));
+      const todoRefresh = document.getElementById("todo-refresh");
+      function renderTodoScope() {
+        const scope = todoScope?.value ?? "to_me";
+        todoRows.forEach((row, index) => {
+          const shouldHide = scope === "mine" ? index === 1 || index === 3 || index === 4 : false;
+          row.dataset.todoHidden = String(shouldHide);
+        });
+      }
+      todoScope?.addEventListener("change", renderTodoScope);
+      todoRefresh?.addEventListener("click", () => {
+        if (todoRefresh) todoRefresh.textContent = "已刷新";
+        window.setTimeout(() => {
+          if (todoRefresh) todoRefresh.textContent = "刷新";
+        }, 900);
+      });
+      renderTodoScope();
+
+      document.getElementById("menu-button").addEventListener("click", () => {
+        const isOpen = document.body.classList.toggle("sidebar-open");
+        document.getElementById("mobile-overlay").hidden = !isOpen;
+        document.getElementById("menu-button").setAttribute("aria-expanded", String(isOpen));
+      });
+
+      document.getElementById("mobile-overlay").addEventListener("click", closeSidebar);
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeSidebar();
+          return;
+        }
+
+        const tab = event.target.closest("[role='tab']");
+        if (!tab) return;
+        const tabs = Array.from(tab.closest("[role='tablist']").querySelectorAll("[role='tab']"));
+        const currentIndex = tabs.indexOf(tab);
+        let nextIndex = null;
+        if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+        if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+        if (event.key === "Home") nextIndex = 0;
+        if (event.key === "End") nextIndex = tabs.length - 1;
+        if (nextIndex === null) return;
+
+        event.preventDefault();
+        tabs[nextIndex].focus();
+        tabs[nextIndex].click();
+      });
+
+      renderRole();
+      renderNode();
+      renderChainProject();
+      updateSidebar();
+    </script>
+  </body>
+</html>

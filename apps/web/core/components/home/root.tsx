@@ -6,37 +6,18 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import useSWR from "swr";
 // plane imports
 import { ContentWrapper } from "@plane/ui";
-// hooks
-import { useHome } from "@/hooks/store/use-home";
-import { useUserProfile, useUser } from "@/hooks/store/user";
+import { useUserProfile } from "@/hooks/store/user";
 // plane web imports
 import { TourRoot } from "@/components/onboarding/tour/root";
-import { ResearchHomeSummaryCard } from "@/components/research/common/research-home-summary-card";
 // local imports
-import { DashboardWidgets } from "./home-dashboard-widgets";
-import { UserGreetingsView } from "./user-greetings";
-import { HomePeekOverviewsRoot } from "../issues/peek-overview/peek-overviews";
+import { WorkspaceHomeWorkbench } from "./workbench";
 
 export const WorkspaceHomeView = observer(function WorkspaceHomeView() {
   // store hooks
   const { workspaceSlug } = useParams();
-  const { data: currentUser } = useUser();
   const { data: currentUserProfile, updateTourCompleted } = useUserProfile();
-  const { fetchWidgets } = useHome();
-
-  useSWR(
-    workspaceSlug ? `HOME_DASHBOARD_WIDGETS_${workspaceSlug}` : null,
-    workspaceSlug ? () => fetchWidgets(workspaceSlug?.toString()) : null,
-    {
-      revalidateIfStale: true,
-      revalidateOnFocus: false,
-      revalidateOnReconnect: true,
-    }
-  );
-
   const handleTourCompleted = async () => {
     try {
       await updateTourCompleted();
@@ -54,13 +35,8 @@ export const WorkspaceHomeView = observer(function WorkspaceHomeView() {
         </div>
       )}
       <>
-        <HomePeekOverviewsRoot />
-        <ContentWrapper className="mx-auto scrollbar-hide gap-6 bg-surface-1 px-page-x">
-          <div className="mx-auto w-full max-w-[800px]">
-            {currentUser && <UserGreetingsView user={currentUser} />}
-            {workspaceSlug && <ResearchHomeSummaryCard workspaceSlug={workspaceSlug.toString()} />}
-            <DashboardWidgets />
-          </div>
+        <ContentWrapper className="mx-auto scrollbar-hide h-full min-h-0 gap-6 bg-canvas px-page-x">
+          {workspaceSlug && <WorkspaceHomeWorkbench workspaceSlug={workspaceSlug.toString()} />}
         </ContentWrapper>
       </>
     </>

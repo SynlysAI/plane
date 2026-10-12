@@ -6,16 +6,23 @@
 
 // components
 import { Outlet } from "react-router";
+import { useParams } from "next/navigation";
+import { AdministrativeProjectTabs } from "@/components/administrative/administrative-project-tabs";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
 import { WorkspaceAnalyticsHeader } from "./header";
 
 export default function WorkspaceAnalyticsTabLayout() {
+  const { workspaceSlug } = useParams();
+  const slug = workspaceSlug?.toString() ?? "";
+
   return (
     <>
       <AppHeader header={<WorkspaceAnalyticsHeader />} />
       <ContentWrapper>
-        <Outlet />
+        <AdministrativeProjectTabs workspaceSlug={slug} activeTab="analytics">
+          <Outlet />
+        </AdministrativeProjectTabs>
       </ContentWrapper>
     </>
   );

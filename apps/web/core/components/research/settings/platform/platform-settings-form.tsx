@@ -52,7 +52,7 @@ const RESEARCH_FIELD_INPUT_CLASS = [
 const platformService = new ResearchPlatformService();
 const MAIN_PI_LOOKUP_DELAY_MS = 300;
 
-export type TMainPiResolvedName = {
+type TMainPiResolvedName = {
   state: "hidden" | "resolved" | "missing";
   name: string | null;
 };

@@ -24,6 +24,7 @@ import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import useLocalStorage from "@/hooks/use-local-storage";
+import { ResearchProjectTree } from "./research-project-tree";
 
 /** Collapse state of the research group; mirrors the workspace / projects groups. */
 const RESEARCH_MENU_OPEN_KEY = "is_research_menu_open";
@@ -85,7 +86,6 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   );
   const visibleIaV2Items = RESEARCH_IA_V2_NAVIGATION_ITEMS.filter((item) => {
     if (item.key === "management") return visibleSettingsItems.length > 0;
-    if (!item.section) return research.canSee(item.key);
     return Boolean(sections?.[item.section]) && research.canSee(item.key);
   });
 
@@ -108,35 +108,41 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   };
 
   return (
-    <Disclosure as="div" className="mt-3 flex flex-col border-t border-subtle pt-3" defaultOpen={isMenuOpen}>
-      <div className="group flex w-full items-center justify-between rounded-sm px-2 py-1.5 hover:bg-layer-transparent-hover">
-        <Disclosure.Button
-          as="button"
-          type="button"
-          className="flex w-full items-center gap-1 text-left text-13 font-semibold whitespace-nowrap text-placeholder"
-          onClick={() => toggleMenu(!isMenuOpen)}
-          aria-label={menuAriaLabel}
-          aria-expanded={isMenuOpen}
-        >
-          <span className="text-13 font-semibold">{t("research.nav.group")}</span>
-        </Disclosure.Button>
-        <div className="flex items-center gap-1">
-          <IconButton
-            variant="ghost"
-            size="sm"
-            icon={ChevronRightOutline}
+    <Disclosure
+      as="div"
+      className={cn("flex flex-col", research.isIaV2Enabled ? "mt-1" : "mt-3 border-t border-subtle pt-3")}
+      defaultOpen={research.isIaV2Enabled || isMenuOpen}
+    >
+      {!research.isIaV2Enabled && (
+        <div className="group flex w-full items-center justify-between rounded-sm px-2 py-1.5 hover:bg-layer-transparent-hover">
+          <Disclosure.Button
+            as="button"
+            type="button"
+            className="flex w-full items-center gap-1 text-left text-13 font-semibold whitespace-nowrap text-placeholder"
             onClick={() => toggleMenu(!isMenuOpen)}
-            className="text-placeholder"
-            iconClassName={cn("transition-transform", {
-              "rotate-90": isMenuOpen,
-            })}
             aria-label={menuAriaLabel}
-          />
+            aria-expanded={isMenuOpen}
+          >
+            <span className="text-13 font-semibold">{t("research.nav.group")}</span>
+          </Disclosure.Button>
+          <div className="flex items-center gap-1">
+            <IconButton
+              variant="ghost"
+              size="sm"
+              icon={ChevronRightOutline}
+              onClick={() => toggleMenu(!isMenuOpen)}
+              className="text-placeholder"
+              iconClassName={cn("transition-transform", {
+                "rotate-90": isMenuOpen,
+              })}
+              aria-label={menuAriaLabel}
+            />
+          </div>
         </div>
-      </div>
+      )}
       <Transition
         as="div"
-        show={isMenuOpen}
+        show={research.isIaV2Enabled || isMenuOpen}
         enter="transition duration-100 ease-out"
         enterFrom="transform scale-95 opacity-0"
         enterTo="transform scale-100 opacity-100"
@@ -144,15 +150,42 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
         leaveFrom="transform scale-100 opacity-100"
         leaveTo="transform scale-95 opacity-0"
       >
-        {isMenuOpen && (
+        {(research.isIaV2Enabled || isMenuOpen) && (
           <Disclosure.Panel as="div" className="flex flex-col gap-0.5" static>
-            {research.isIaV2Enabled
-              ? visibleIaV2Items.map((item) => renderItem(item.key, item.labelKey, item.path, item.key === "overview"))
-              : [
-                  ...(research.canSee("overview") ? [renderItem("overview", "research.nav.overview", "", true)] : []),
-                  ...visibleBusinessItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
-                  ...visibleSettingsItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
-                ]}
+            {research.isIaV2Enabled ? (
+              <>
+                {visibleIaV2Items
+                  .filter((item) => item.key !== "research_chain")
+                  // eslint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
+                  .sort((left, right) => {
+                    const order = ["management", "approvals"];
+                    return order.indexOf(left.key) - order.indexOf(right.key);
+                  })
+                  .map((item) => renderItem(item.key, item.labelKey, item.path))}
+                {research.canSee("research_chain") && (
+                  <ResearchProjectTree
+                    scope="RESEARCH"
+                    title={t("research.nav.research_chain_v2")}
+                    href={`/${workspaceSlug}/research/chains`}
+                    canManage={research.canSee("management")}
+                  />
+                )}
+                {research.canSee("projects") && (
+                  <ResearchProjectTree
+                    scope="ADMINISTRATIVE"
+                    title="行政项目"
+                    href={`/${workspaceSlug}/projects`}
+                    canManage={research.canSee("management")}
+                  />
+                )}
+              </>
+            ) : (
+              [
+                ...(research.canSee("overview") ? [renderItem("overview", "research.nav.overview", "", true)] : []),
+                ...visibleBusinessItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
+                ...visibleSettingsItems.map((item) => renderItem(item.key, item.labelKey, item.path)),
+              ]
+            )}
           </Disclosure.Panel>
         )}
       </Transition>

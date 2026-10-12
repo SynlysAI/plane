@@ -10,6 +10,7 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
 from plane.research.views.report_context import ResearchFormalReportContentEndpoint, ResearchFormalReportOptionsEndpoint
@@ -66,6 +67,9 @@ from plane.research.views import (
     ResearchOrgUnitMemberDetailEndpoint,
     ResearchOrgUnitMemberListCreateEndpoint,
     ResearchOrgUnitPiTransferEndpoint,
+    ProjectNavigationCategoryDetailEndpoint,
+    ProjectNavigationMoveProjectEndpoint,
+    ProjectNavigationTreeEndpoint,
     ResearchProjectArchiveEndpoint,
     ResearchProjectDetailEndpoint,
     ResearchProjectListCreateEndpoint,
@@ -75,11 +79,14 @@ from plane.research.views import (
     ResearchReportDetailEndpoint,
     ResearchReportHistoryEndpoint,
     ResearchReportListCreateEndpoint,
+    ResearchReportReadEndpoint,
+    ResearchReportReadReceiptListEndpoint,
     ResearchReportReturnEndpoint,
     ResearchReportSubmitEndpoint,
     ResearchReportSummaryEndpoint,
     ResearchReportTemplateDetailEndpoint,
     ResearchReportTemplateListCreateEndpoint,
+    ResearchReportTemplateOptionListEndpoint,
     ResearchSettingsEndpoint,
     ResearchProjectStageListCreateEndpoint,
     ResearchStageDetailEndpoint,
@@ -175,6 +182,7 @@ from plane.research.views import (
     ResearchUserImportPreviewEndpoint,
     ResearchUserProfileListEndpoint,
     ResearchChainListCreateEndpoint,
+    ResearchChainAssignableUserListEndpoint,
     ResearchChainDetailEndpoint,
     ResearchChainArchiveEndpoint,
     ResearchChainRestoreEndpoint,
@@ -192,6 +200,16 @@ from plane.research.views import (
     ResearchChainUploadDetailEndpoint,
     ResearchChainReferenceEndpoint,
     ResearchChainAnalysisListCreateEndpoint,
+    ResearchChainNodeTaskActionEndpoint,
+    ResearchChainNodeTaskDetailEndpoint,
+    ResearchChainNodeTaskListCreateEndpoint,
+    ResearchPaperReviewDetailEndpoint,
+    ResearchPaperReviewListCreateEndpoint,
+    ResearchPaperReviewPresignEndpoint,
+    ResearchPaperReviewVersionActionEndpoint,
+    ResearchPaperReviewVersionDetailEndpoint,
+    ResearchPaperReviewVersionListCreateEndpoint,
+    ResearchPaperReviewWithdrawEndpoint,
 )
 
 urlpatterns = [
@@ -220,6 +238,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/outcomes/",
         ResearchWorkspaceOutcomeEndpoint.as_view(),
         name="research-workspace-outcomes",
+    ),
+    path(
+        "research/workspaces/<str:slug>/research-todos/",
+        ResearchTodoListEndpoint.as_view(),
+        name="research-todos",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/images/",
@@ -262,6 +285,11 @@ urlpatterns = [
         name="research-chain-member-detail",
     ),
     path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/assignable-users/",
+        ResearchChainAssignableUserListEndpoint.as_view(),
+        name="research-chain-assignable-users",
+    ),
+    path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/",
         ResearchChainNodeListCreateEndpoint.as_view(),
         name="research-chain-nodes",
@@ -280,6 +308,56 @@ urlpatterns = [
         "research/workspaces/<str:slug>/nodes/<uuid:node_id>/transitions/",
         ResearchChainNodeTransitionEndpoint.as_view(),
         name="research-chain-node-transitions",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/",
+        ResearchChainNodeTaskListCreateEndpoint.as_view(),
+        name="research-chain-node-tasks",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/",
+        ResearchChainNodeTaskDetailEndpoint.as_view(),
+        name="research-chain-node-task",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/<str:action>/",
+        ResearchChainNodeTaskActionEndpoint.as_view(),
+        name="research-chain-node-task-action",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/paper-reviews/",
+        ResearchPaperReviewListCreateEndpoint.as_view(),
+        name="research-paper-reviews",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/",
+        ResearchPaperReviewDetailEndpoint.as_view(),
+        name="research-paper-review",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/",
+        ResearchPaperReviewVersionListCreateEndpoint.as_view(),
+        name="research-paper-review-versions",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/presign/",
+        ResearchPaperReviewPresignEndpoint.as_view(),
+        name="research-paper-review-presign",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/<int:version_no>/",
+        ResearchPaperReviewVersionDetailEndpoint.as_view(),
+        name="research-paper-review-version",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/versions/<int:version_no>/<str:action>/",
+        ResearchPaperReviewVersionActionEndpoint.as_view(),
+        name="research-paper-review-version-action",
+    ),
+    path(
+        "research/workspaces/<str:slug>/paper-reviews/<uuid:review_id>/withdraw/",
+        ResearchPaperReviewWithdrawEndpoint.as_view(),
+        name="research-paper-review-withdraw",
     ),
     path(
         "research/workspaces/<str:slug>/nodes/<uuid:node_id>/snapshots/",
@@ -912,6 +990,11 @@ urlpatterns = [
         name="research-report-summary",
     ),
     path(
+        "research/workspaces/<str:slug>/reports/template-options/",
+        ResearchReportTemplateOptionListEndpoint.as_view(),
+        name="research-report-template-options",
+    ),
+    path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/",
         ResearchReportDetailEndpoint.as_view(),
         name="research-report",
@@ -935,6 +1018,16 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/history/",
         ResearchReportHistoryEndpoint.as_view(),
         name="research-report-history",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/read/",
+        ResearchReportReadEndpoint.as_view(),
+        name="research-report-read",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/read-receipts/",
+        ResearchReportReadReceiptListEndpoint.as_view(),
+        name="research-report-read-receipts",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/access/",
@@ -1027,6 +1120,21 @@ urlpatterns = [
         "research/workspaces/<str:slug>/projects/",
         ResearchProjectListCreateEndpoint.as_view(),
         name="research-projects",
+    ),
+    path(
+        "research/workspaces/<str:slug>/navigation/categories/",
+        ProjectNavigationTreeEndpoint.as_view(),
+        name="research-navigation-categories",
+    ),
+    path(
+        "research/workspaces/<str:slug>/navigation/categories/<uuid:category_id>/",
+        ProjectNavigationCategoryDetailEndpoint.as_view(),
+        name="research-navigation-category",
+    ),
+    path(
+        "research/workspaces/<str:slug>/navigation/projects/<uuid:project_id>/move/",
+        ProjectNavigationMoveProjectEndpoint.as_view(),
+        name="research-navigation-project-move",
     ),
     path(
         "research/workspaces/<str:slug>/projects/<uuid:project_id>/",

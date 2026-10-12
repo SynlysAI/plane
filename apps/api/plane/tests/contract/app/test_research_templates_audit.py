@@ -74,7 +74,7 @@ class TestReportTemplateApi:
         )
         assert response.status_code == 403
 
-    def test_report_author_reads_active_templates_without_management_scope(self, env):
+    def test_report_author_reads_active_template_options_without_management_scope(self, env):
         env["admin_client"].post(
             env["templates_url"],
             {"name": "Active weekly", "report_type": "WEEKLY", "is_active": True},
@@ -96,15 +96,20 @@ class TestReportTemplateApi:
             is_primary=True,
         )
 
-        active = env["member_client"].get(env["templates_url"], {"report_type": "WEEKLY"})
+        management = env["member_client"].get(env["templates_url"], {"report_type": "WEEKLY"})
+        options_url = f"/api/research/workspaces/{env['workspace'].slug}/reports/template-options/"
+        active = env["member_client"].get(options_url, {"report_type": "WEEKLY"})
         with_inactive = env["member_client"].get(
-            env["templates_url"], {"report_type": "WEEKLY", "include_inactive": "true"}
+            options_url, {"report_type": "WEEKLY", "include_inactive": "true"}
         )
 
+        assert management.status_code == 403
+        assert management.json()["error_code"] == "research_permission_denied"
         assert active.status_code == 200
         assert [item["name"] for item in active.json()["results"]] == ["Active weekly"]
         assert with_inactive.status_code == 200
         assert str(inactive["id"]) not in {item["id"] for item in with_inactive.json()["results"]}
+        assert set(active.json()["results"][0]) == {"id", "report_type", "name", "is_default", "is_active"}
 
     def test_duplicate_template_name_is_rejected(self, env):
         payload = {"name": "Standard", "report_type": "WEEKLY"}

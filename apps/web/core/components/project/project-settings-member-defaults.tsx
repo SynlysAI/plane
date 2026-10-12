@@ -114,6 +114,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
           type: TOAST_TYPE.SUCCESS,
           message: t("project_settings.general.toast.success"),
         });
+        return null;
       })
       .catch((err) => {
         console.error(err);
@@ -132,6 +133,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
           type: TOAST_TYPE.SUCCESS,
           message: t("project_settings.general.toast.success"),
         });
+        return null;
       })
       .catch((err) => {
         console.error(err);
@@ -148,7 +150,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
             render={({ field: { value } }) => (
               <MemberSelect
                 value={value}
-                onChange={(val: string) => {
+                onChange={(val: string | null) => {
                   submitChanges({ project_lead: val });
                 }}
                 isDisabled={!isAdmin}
@@ -169,7 +171,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
             render={({ field: { value } }) => (
               <MemberSelect
                 value={value}
-                onChange={(val: string) => {
+                onChange={(val: string | null) => {
                   submitChanges({ default_assignee: val });
                 }}
                 isDisabled={!isAdmin}

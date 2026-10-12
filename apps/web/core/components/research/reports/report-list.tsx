@@ -11,7 +11,7 @@ import { useNavigate, useParams } from "react-router";
 // plane imports
 import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportStatus, TReportType } from "@plane/constants";
-import type { TReportTemplate } from "@plane/types";
+import type { TPeriodicReport, TReportTemplateOption } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
@@ -19,7 +19,11 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
 import { WorkspaceOutcomes } from "@/components/research/outcomes/workspace-outcomes";
-import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
+import {
+  researchBrowseRequestParams,
+  researchFilterSummary,
+  useResearchBrowseQuery,
+} from "@/components/research/common/browse-query";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -33,13 +37,23 @@ import { ResearchListState } from "@/components/research/common/research-list-st
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
-import { formatResearchDate } from "@/components/research/common/research-format";
+import { formatResearchDate, formatResearchReadAt } from "@/components/research/common/research-format";
 
 type Props = {
   workspaceSlug: string;
   /** `review` turns the list into an approval queue without creation controls. */
   variant?: "default" | "review";
 };
+
+type ReportReadState = "waiting" | "read_pending_review" | "reviewed";
+
+/** Derive read state without conflating it with the report review state. */
+function reportReadState(report: TPeriodicReport, isAuthor: boolean): ReportReadState | null {
+  if (report.status === "DRAFT") return null;
+  if (report.status !== "SUBMITTED") return "reviewed";
+  const hasRead = isAuthor ? (report.read_count ?? 0) > 0 : Boolean(report.has_read);
+  return hasRead ? "read_pending_review" : "waiting";
+}
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
 const ReportListContent = observer(function ReportListContent({ workspaceSlug, variant = "default" }: Props) {
@@ -56,7 +70,8 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const setTypeFilter = (value: string) => query.set("report_type", value);
   const periodFilter = query.get("period_key");
   const setPeriodFilter = (value: string) => query.set("period_key", value);
-  const mineOnly = query.get("scope") === "mine" || query.get("mine") === "true";
+  const mineFilter = query.get("mine");
+  const mineOnly = query.get("scope") === "mine" || mineFilter === "true";
   const orgFilter = query.get("org_unit");
   const setOrgFilter = (value: string) => query.set("org_unit", value);
   const ownerFilter = query.get("owner");
@@ -73,6 +88,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const [templateId, setTemplateId] = useState("");
 
   const reports = research.getReports(workspaceSlug);
+  const currentUserId = research.identity?.user.id;
   const orgUnits = research.getOrgUnits(workspaceSlug);
   const pagination = research.reportPaginationByWorkspace[workspaceSlug];
   const canCreateReport = Boolean(research.identity?.user.org_units.length);
@@ -80,8 +96,8 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     .getResearchProjects(workspaceSlug)
     .filter((project) => project.research?.research_type === "RESEARCH_PROJECT");
   const templates = research
-    .getReportTemplates(workspaceSlug)
-    .filter((template: TReportTemplate) => template.report_type === reportType && template.is_active);
+    .getReportTemplateOptions(workspaceSlug)
+    .filter((template: TReportTemplateOption) => template.report_type === reportType && template.is_active);
   const hasActiveFilters = Boolean(
     statusFilter ||
     typeFilter ||
@@ -96,7 +112,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   );
   const filterSummary = useMemo(
     () =>
-      [
+      researchFilterSummary([
         statusFilter && t(REPORT_STATUS_LABELS[statusFilter as TReportStatus]),
         typeFilter && t(REPORT_TYPE_LABELS[typeFilter as TReportType]),
         periodFilter.trim(),
@@ -105,23 +121,28 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         dateFrom && `${t("research.common.date_from")}: ${dateFrom}`,
         dateTo && `${t("research.common.date_to")}: ${dateTo}`,
         mineOnly && t("research.reports.mine_only"),
-      ].filter((filter): filter is string => typeof filter === "string" && filter.length > 0),
+      ]),
     [dateFrom, dateTo, mineOnly, orgFilter, orgUnits, ownerFilter, periodFilter, statusFilter, t, typeFilter]
   );
 
   const load = useCallback(async () => {
-    const params: Record<string, string> = { per_page: "50" };
-    if (statusFilter) params.status = statusFilter;
-    if (typeFilter) params.report_type = typeFilter;
-    if (periodFilter) params.period_key = periodFilter.trim();
-    if (mineOnly) params.mine = "true";
-    if (orgFilter) params.org_unit = orgFilter;
-    if (ownerFilter) params.owner = ownerFilter.trim();
-    if (dateFrom) params.date_from = dateFrom;
-    if (dateTo) params.date_to = dateTo;
-    if (cursor) params.cursor = cursor;
-    if (keyword) params.q = keyword;
-    params.scope = scope;
+    const params = researchBrowseRequestParams(
+      {
+        org_unit: orgFilter,
+        owner: ownerFilter,
+        date_from: dateFrom,
+        date_to: dateTo,
+        q: keyword,
+        scope,
+        mine: mineFilter,
+        cursor,
+      },
+      {
+        status: statusFilter,
+        report_type: typeFilter,
+        period_key: periodFilter.trim(),
+      }
+    );
     try {
       await research.fetchReports(workspaceSlug, params);
       setErrorKey(null);
@@ -132,7 +153,6 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     cursor,
     dateFrom,
     dateTo,
-    mineOnly,
     orgFilter,
     ownerFilter,
     periodFilter,
@@ -141,6 +161,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     typeFilter,
     workspaceSlug,
     keyword,
+    mineFilter,
     scope,
   ]);
 
@@ -159,6 +180,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     dateTo,
     cursor,
     keyword,
+    mineFilter,
     scope,
   ]);
 
@@ -170,7 +192,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
 
   useEffect(() => {
     if (!isCreateDialogOpen) return;
-    void research.fetchReportTemplates(workspaceSlug, { report_type: reportType }).catch(() => undefined);
+    void research.fetchReportTemplateOptions(workspaceSlug, { report_type: reportType }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCreateDialogOpen, reportType, workspaceSlug]);
 
@@ -310,6 +332,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                 <TableHead>{t("research.reports.columns.owner")}</TableHead>
                 <TableHead>{t("research.reports.columns.org_unit")}</TableHead>
                 <TableHead>{t("research.reports.columns.status")}</TableHead>
+                <TableHead>{t("research.reports.columns.read_state")}</TableHead>
                 <TableHead>{t("research.reports.columns.visibility")}</TableHead>
                 <TableHead className="text-right">{t("research.chains.updated_at")}</TableHead>
                 <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
@@ -340,6 +363,22 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                     <ResearchStatusBadge status={report.status} size="sm">
                       {t(REPORT_STATUS_LABELS[report.status])}
                     </ResearchStatusBadge>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const readState = reportReadState(report, report.owner === currentUserId);
+                      if (!readState) return <span className="text-tertiary">-</span>;
+                      return (
+                        <span className="flex flex-col gap-0.5">
+                          <span className="text-12 text-secondary">{t(`research.reports.read.${readState}`)}</span>
+                          {readState === "read_pending_review" && report.latest_read_at && (
+                            <span className="text-11 text-tertiary tabular-nums">
+                              {formatResearchReadAt(report.latest_read_at, currentLocale)}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-tertiary">
                     {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}

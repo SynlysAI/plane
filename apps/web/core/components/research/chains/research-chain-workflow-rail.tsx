@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { AlertTriangle, Check, ChevronRight, CircleDot } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { TResearchChainNode } from "@plane/types";
@@ -23,7 +22,7 @@ type Props = {
 
 type TStepKind = "completed" | "current" | "attention" | "archived" | "upcoming";
 
-/** Derive the visual step kind while keeping text status separate from color. */
+/** 从阶段状态推导文字层级，不使用颜色或卡片底色区分。 */
 function stepKind(stage: TResearchWorkflowStage): TStepKind {
   if (stage.isCurrent) return "current";
   if (stage.status === "COMPLETED") return "completed";
@@ -33,33 +32,36 @@ function stepKind(stage: TResearchWorkflowStage): TStepKind {
   return "upcoming";
 }
 
-const STEP_DOT_CLASSES: Record<TStepKind, string> = {
-  completed: "border-success-subtle bg-success-subtle-1 text-success-primary",
-  current: "border-accent-strong bg-accent-primary text-on-color",
-  attention: "border-warning-subtle bg-warning-subtle text-warning-primary",
-  archived: "border-subtle bg-surface-2 text-tertiary",
-  upcoming: "border-subtle bg-surface-2 text-tertiary",
-};
-
-const STEP_TITLE_CLASSES: Record<TStepKind, string> = {
+const NAME_CLASSES: Record<TStepKind, string> = {
   completed: "text-secondary",
-  current: "font-medium text-primary",
+  current: "font-medium text-primary underline decoration-accent-primary underline-offset-4",
   attention: "font-medium text-primary",
   archived: "text-tertiary",
   upcoming: "text-tertiary",
 };
 
-const STEP_SURFACE_CLASSES: Record<TStepKind, string> = {
-  completed: "border-transparent bg-surface-1 hover:bg-surface-2",
-  current: "border-accent-strong bg-surface-1",
-  attention: "border-transparent bg-surface-1 hover:bg-surface-2",
-  archived: "border-transparent bg-surface-1/60 opacity-70 hover:bg-surface-2",
-  upcoming: "border-transparent bg-surface-1/60 hover:bg-surface-2",
+const STATUS_CLASSES: Record<TStepKind, string> = {
+  completed: "text-secondary",
+  current: "text-secondary",
+  attention: "font-medium text-primary",
+  archived: "text-tertiary",
+  upcoming: "text-tertiary",
 };
 
+/** 将阶段序号格式化为两位数字，换行后仍能读出顺序。
+
+Args:
+  index: 阶段在固定流程中的从零开始序号。
+
+Returns:
+  两位数字序号。
+ */
+function stageIndexLabel(index: number): string {
+  return String(index + 1).padStart(2, "0");
+}
+
 /**
- * Fixed thirteen-stage research workflow map. It communicates the complete flow,
- * the real current position and a temporary viewing position without changing node state.
+ * 十三阶段流程地图。换行展示序号、名称和可见状态，不使用横向滚动。
  */
 export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageId, onSelectStage }: Props) {
   const { t } = useTranslation();
@@ -67,23 +69,21 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageI
 
   return (
     <section
-      className="shrink-0 border-b border-subtle bg-canvas px-4 py-3 sm:px-5"
+      className="shrink-0 border-b border-subtle bg-surface-2 px-5 py-3"
       aria-label={t("research.chains.workflow_title")}
     >
-      <div
-        className="grid grid-cols-1 gap-1.5 min-[390px]:grid-cols-2 md:flex md:flex-wrap md:items-stretch md:gap-1.5"
-        role="list"
-      >
+      <div className="flex flex-wrap items-stretch gap-y-2" role="list">
         {workflow.stages.map((stage, index) => {
           const kind = stepKind(stage);
           const selected = selectedStageId === stage.id;
+          const viewing = selected && !stage.isCurrent;
           const statusLabel =
             stage.status === "NOT_STARTED"
               ? t("research.chains.workflow.not_started")
               : t(`research.chains.node_status.${stage.status.toLowerCase()}`);
-          const summary = [statusLabel, stage.shared ? t("research.chains.workflow.shared") : ""]
-            .filter(Boolean)
-            .join(" · ");
+          const sharedLabel = stage.shared ? t("research.chains.workflow.shared") : "";
+          const preparationLabel = stage.associatedNodeIds.length > 0 ? t("research.chains.workflow.preparation") : "";
+          const summary = [statusLabel, sharedLabel].filter(Boolean).join(" · ");
           const stageTitle =
             stage.status === "NOT_STARTED"
               ? `${t(stage.labelKey)} · ${summary} · ${t("research.chains.workflow.not_started_hint")}`
@@ -92,8 +92,8 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageI
           return (
             <div key={stage.id} className="flex items-stretch" role="listitem">
               {index > 0 && (
-                <span className="hidden w-4 items-center text-tertiary md:flex" aria-hidden="true">
-                  <ChevronRight className="size-3.5" />
+                <span className="flex items-center px-1.5 text-11 text-tertiary" aria-hidden="true">
+                  →
                 </span>
               )}
               <button
@@ -102,27 +102,21 @@ export function ResearchChainWorkflowRail({ nodes, currentNodeId, selectedStageI
                 aria-current={stage.isCurrent ? "step" : undefined}
                 aria-pressed={selected || undefined}
                 title={stageTitle}
-                className={`flex w-full flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors md:w-auto md:max-w-36 md:min-w-28 ${STEP_SURFACE_CLASSES[kind]} ${
-                  selected ? "ring-border-strong border-strong ring-1" : ""
-                }`}
+                className={`flex min-w-0 flex-col gap-0.5 rounded-md px-2 py-1 text-left transition-colors duration-150 hover:bg-surface-2 ${
+                  viewing ? "bg-surface-2" : ""
+                } ${kind === "archived" ? "opacity-70" : ""}`}
               >
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span
-                    className={`grid size-4 shrink-0 place-items-center rounded-full border ${STEP_DOT_CLASSES[kind]}`}
-                    aria-hidden="true"
-                  >
-                    {kind === "completed" && <Check className="size-2.5" strokeWidth={3} />}
-                    {kind === "current" && <CircleDot className="size-2.5" strokeWidth={3} />}
-                    {kind === "attention" && <AlertTriangle className="size-2.5" strokeWidth={3} />}
+                <span className="flex items-baseline gap-1.5">
+                  <span className="text-10 text-tertiary tabular-nums">{stageIndexLabel(index)}</span>
+                  <span className={`text-12 ${viewing ? "font-medium text-primary" : NAME_CLASSES[kind]}`}>
+                    {t(stage.labelKey)}
                   </span>
-                  <span className={`text-12 break-words ${STEP_TITLE_CLASSES[kind]}`}>{t(stage.labelKey)}</span>
                 </span>
-                <span className="text-11 break-words text-secondary">{statusLabel}</span>
-                {stage.shared && (
-                  <span className="text-10 break-words text-tertiary">{t("research.chains.workflow.shared")}</span>
-                )}
-                {stage.associatedNodeIds.length > 0 && (
-                  <span className="text-10 break-words text-tertiary">{t("research.chains.workflow.preparation")}</span>
+                <span className={`text-11 ${STATUS_CLASSES[kind]}`}>{statusLabel}</span>
+                {(sharedLabel || preparationLabel) && (
+                  <span className="text-10 text-tertiary">
+                    {[sharedLabel, preparationLabel].filter(Boolean).join(" · ")}
+                  </span>
                 )}
               </button>
             </div>

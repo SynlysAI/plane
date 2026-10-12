@@ -8,7 +8,7 @@ import { API_BASE_URL, researchEndpoints } from "@plane/constants";
 import type { TFeedbackStatus, TResearchFeedback, TResearchFeedbackListResponse } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
-export type TResearchFeedbackFilters = {
+type TResearchFeedbackFilters = {
   page?: number | string;
   page_size?: number | string;
   feedback_type?: string;

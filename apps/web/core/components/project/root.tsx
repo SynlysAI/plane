@@ -16,6 +16,7 @@ import { PageHead } from "@/components/core/page-title";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
+import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
 import { ProjectAppliedFiltersList } from "./applied-filters";
@@ -23,11 +24,12 @@ import { ProjectCardList } from "./card-list";
 
 export const ProjectRoot = observer(function ProjectRoot() {
   const { currentWorkspace } = useWorkspace();
+  const research = useResearch();
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { t } = useTranslation();
   // store
-  const { totalProjectIds, filteredProjectIds } = useProject();
+  const { totalProjectIds, filteredProjectIds, getProjectById } = useProject();
   const {
     currentWorkspaceFilters,
     currentWorkspaceAppliedDisplayFilters,
@@ -42,6 +44,18 @@ export const ProjectRoot = observer(function ProjectRoot() {
     : undefined;
 
   const isArchived = pathname.includes("/archives");
+  const isAdministrativeChannel = research.isEnabled && research.isIaV2Enabled;
+
+  /** 只过滤已授权返回值中的科研主线展示对象，不重建 Project 权限。 */
+  const administrativeProjectIds = useCallback(
+    (projectIds: string[] | undefined) =>
+      projectIds?.filter((projectId) => getProjectById(projectId)?.is_research_project !== true),
+    [getProjectById]
+  );
+  const visibleTotalProjectIds = isAdministrativeChannel ? administrativeProjectIds(totalProjectIds) : totalProjectIds;
+  const visibleFilteredProjectIds = isAdministrativeChannel
+    ? administrativeProjectIds(filteredProjectIds)
+    : filteredProjectIds;
 
   const allowedDisplayFilters =
     currentWorkspaceAppliedDisplayFilters?.filter((filter) => filter !== "archived_projects") ?? [];
@@ -72,11 +86,11 @@ export const ProjectRoot = observer(function ProjectRoot() {
     clearAllFilters(workspaceSlug.toString());
     clearAllAppliedDisplayFilters(workspaceSlug.toString());
     if (isArchived) updateDisplayFilters(workspaceSlug.toString(), { archived_projects: true });
-  }, [clearAllFilters, clearAllAppliedDisplayFilters, workspaceSlug]);
+  }, [clearAllFilters, clearAllAppliedDisplayFilters, isArchived, updateDisplayFilters, workspaceSlug]);
 
   useEffect(() => {
     updateDisplayFilters(workspaceSlug.toString(), { archived_projects: isArchived });
-  }, [pathname]);
+  }, [isArchived, pathname, updateDisplayFilters, workspaceSlug]);
 
   return (
     <>
@@ -89,12 +103,12 @@ export const ProjectRoot = observer(function ProjectRoot() {
             handleClearAllFilters={handleClearAllFilters}
             handleRemoveFilter={handleRemoveFilter}
             handleRemoveDisplayFilter={handleRemoveDisplayFilter}
-            filteredProjects={filteredProjectIds?.length ?? 0}
-            totalProjects={totalProjectIds?.length ?? 0}
+            filteredProjects={visibleFilteredProjectIds?.length ?? 0}
+            totalProjects={visibleTotalProjectIds?.length ?? 0}
             alwaysAllowEditing
           />
         )}
-        <ProjectCardList />
+        <ProjectCardList totalProjectIds={visibleTotalProjectIds} filteredProjectIds={visibleFilteredProjectIds} />
       </div>
     </>
   );

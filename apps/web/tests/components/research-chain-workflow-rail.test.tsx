@@ -131,13 +131,66 @@ it("uses a wrapping responsive layout instead of a fixed horizontal rail", async
     );
   });
   const list = container.querySelector('[role="list"]');
-  expect(list?.className).toContain("grid-cols-1");
-  expect(list?.className).toContain("min-[390px]:grid-cols-2");
-  expect(list?.className).toContain("md:flex-wrap");
+  expect(list?.className).toContain("flex-wrap");
+  expect(list?.className).not.toContain("grid-cols-2");
   expect(list?.className).not.toContain("min-w-max");
   const section = list?.closest("section");
   expect(section?.className).not.toContain("overflow-x-auto");
   const buttons = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')];
   expect(buttons.every((button) => !button.textContent?.includes("…"))).toBe(true);
   expect(buttons.some((button) => button.className.includes("truncate"))).toBe(false);
+});
+
+it("renders a wrapping process map with visible status and a distinct viewing state", async () => {
+  const literature = node({
+    id: "literature",
+    node_type: "LITERATURE_REVIEW",
+    title: "文献调研",
+    status: "COMPLETED",
+  });
+  const experiment = node({
+    id: "experiment",
+    node_type: "EXPERIMENT",
+    title: "正式实验",
+    status: "WAITING_HUMAN",
+  });
+  await act(async () => {
+    root.render(
+      <ResearchChainWorkflowRail
+        nodes={[literature, experiment]}
+        currentNodeId={literature.id}
+        selectedStageId="transfer"
+        onSelectStage={() => undefined}
+      />
+    );
+  });
+
+  const section = container.querySelector("section");
+  const arrows = [...(section?.querySelectorAll('[aria-hidden="true"]') ?? [])].filter(
+    (item) => item.textContent?.trim() === "→"
+  );
+  expect(arrows).toHaveLength(12);
+  expect(section?.className).not.toContain("overflow-x-auto");
+
+  const current = section?.querySelector('[aria-current="step"]');
+  const currentName = [...(current?.querySelectorAll("span") ?? [])].find((item) => item.textContent === "文献调研");
+  const currentStatus = [...(current?.querySelectorAll("span") ?? [])].find((item) => item.textContent === "已完成");
+  expect(currentName?.className).toContain("underline");
+  expect(currentStatus?.classList.contains("sr-only")).toBe(false);
+
+  const transfer = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')].find((button) =>
+    [...button.querySelectorAll("span")].some((item) => item.textContent === "转化")
+  );
+  const transferName = [...(transfer?.querySelectorAll("span") ?? [])].find((item) => item.textContent === "转化");
+  expect(transfer?.getAttribute("aria-pressed")).toBe("true");
+  expect(transferName?.className).not.toContain("underline");
+
+  const attention = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')].find((button) =>
+    [...button.querySelectorAll("span")].some((item) => item.textContent === "实验")
+  );
+  const attentionStatus = [...(attention?.querySelectorAll("span") ?? [])].find(
+    (item) => item.textContent === "等待人工确认"
+  );
+  expect(attentionStatus?.classList.contains("sr-only")).toBe(false);
+  expect(attentionStatus?.className).toContain("font-medium");
 });

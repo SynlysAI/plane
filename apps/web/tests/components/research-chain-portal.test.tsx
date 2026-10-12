@@ -8,7 +8,7 @@ import type { TResearchChain } from "@plane/types";
 const mocks = vi.hoisted(() => ({
   research: {
     identity: { sections: {} },
-    canSee: (key: string) => key === "research_chain",
+    canSee: (key: string): boolean => key === "research_chain",
   },
   getChains: vi.fn(),
   getConnections: vi.fn(),
@@ -94,4 +94,13 @@ it("does not show a switcher for one visible chain", async () => {
   await act(async () => root.render(<ResearchChainPortal workspaceSlug="lab" />));
   expect(container.querySelector('button[aria-label="下一个课题"]')).toBeNull();
   expect(container.querySelector('a[href="/lab/research/chains/only"]')).not.toBeNull();
+});
+
+it("opens administrative approvals directly in the office queue", async () => {
+  mocks.getChains.mockResolvedValue([chain("only", "唯一课题")]);
+  mocks.research.canSee = (key: string) => key === "research_chain" || key === "approvals";
+  await act(async () => root.render(<ResearchChainPortal workspaceSlug="lab" />));
+  mocks.research.canSee = (key: string) => key === "research_chain";
+
+  expect(container.querySelector('a[href="/lab/research/approvals?tab=office"]')).not.toBeNull();
 });

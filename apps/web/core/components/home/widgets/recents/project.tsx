@@ -18,9 +18,10 @@ type BlockProps = {
   activity: TActivityEntityData;
   ref: React.RefObject<HTMLDivElement | null>;
   workspaceSlug: string;
+  researchChainByProject?: Record<string, string>;
 };
 export function RecentProject(props: BlockProps) {
-  const { activity, ref, workspaceSlug } = props;
+  const { activity, ref, workspaceSlug, researchChainByProject } = props;
   // router
   const router = useRouter();
   // derived values
@@ -28,7 +29,10 @@ export function RecentProject(props: BlockProps) {
 
   if (!projectDetails) return <></>;
 
-  const projectLink = `/${workspaceSlug}/projects/${projectDetails?.id}/issues`;
+  const researchChainId = projectDetails?.id ? researchChainByProject?.[projectDetails.id] : undefined;
+  const projectLink = researchChainId
+    ? `/${workspaceSlug}/research/chains/${researchChainId}`
+    : `/${workspaceSlug}/projects/${projectDetails?.id}/issues`;
 
   return (
     <ListItem

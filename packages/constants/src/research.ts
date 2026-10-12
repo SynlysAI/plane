@@ -255,9 +255,8 @@ export const RESEARCH_NAVIGATION_ITEMS = [
   { key: "approvals", labelKey: "research.nav.approvals", path: "approvals", section: "approvals" },
 ] as const;
 
-/** Phase 1 IA v2 renders at most four first-level research destinations. */
+/** Phase 1.6 IA v2 leaves the workspace home unique and keeps three research destinations. */
 export const RESEARCH_IA_V2_NAVIGATION_ITEMS = [
-  { key: "overview", labelKey: "research.nav.overview", path: "", section: null },
   {
     key: "research_chain",
     labelKey: "research.nav.research_chain_v2",
@@ -672,6 +671,7 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/context/resources/${kind}/${id}/`,
   settings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/settings/`,
   identityMe: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/me/`,
+  researchTodos: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/research-todos/`,
   feedback: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/`,
   feedbackStatus: (slug: string, feedbackId: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/status/`,
   feedbackScreenshot: (slug: string, feedbackId: string, screenshotId: string) =>
@@ -684,6 +684,27 @@ export const researchEndpoints = {
   chainMembers: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/`,
   chainMember: (slug: string, chainId: string, userId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/${userId}/`,
+  chainAssignableUsers: (slug: string, chainId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/assignable-users/`,
+  chainNodeTasks: (slug: string, chainId: string, nodeId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/`,
+  chainNodeTask: (slug: string, chainId: string, nodeId: string, taskId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/${taskId}/`,
+  chainNodeTaskAction: (slug: string, chainId: string, nodeId: string, taskId: string, action: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/tasks/${taskId}/${action}/`,
+  paperReviews: (slug: string, chainId: string, nodeId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/nodes/${nodeId}/paper-reviews/`,
+  paperReview: (slug: string, reviewId: string) => `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/`,
+  paperReviewVersions: (slug: string, reviewId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/`,
+  paperReviewVersionPresign: (slug: string, reviewId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/presign/`,
+  paperReviewVersion: (slug: string, reviewId: string, versionNo: number) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/${versionNo}/`,
+  paperReviewVersionAction: (slug: string, reviewId: string, versionNo: number, action: "return" | "accept") =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/versions/${versionNo}/${action}/`,
+  paperReviewWithdraw: (slug: string, reviewId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/paper-reviews/${reviewId}/withdraw/`,
   chainNode: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/`,
   chainNodeTransitions: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/transitions/`,
   chainNodeEvents: (slug: string, nodeId: string) => `${RESEARCH_API_ROOT}/${slug}/nodes/${nodeId}/events/`,
@@ -706,6 +727,8 @@ export const researchEndpoints = {
   agentApprovals: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/approvals/`,
   agentApproval: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/approvals/`,
   agentArtifacts: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/artifacts/`,
+  workspaceAsset: (slug: string) => `/api/workspaces/${slug}/assets/`,
+  workspaceAssetDetail: (slug: string, assetId: string) => `/api/workspaces/${slug}/assets/${assetId}/`,
   identityMappings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/`,
   identityMapping: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/${id}/`,
   orgUnits: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/org-units/`,
@@ -718,6 +741,11 @@ export const researchEndpoints = {
   mentors: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/mentors/`,
   mentor: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/mentors/${id}/`,
   projects: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/projects/`,
+  navigationCategories: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/navigation/categories/`,
+  navigationCategory: (slug: string, categoryId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/navigation/categories/${categoryId}/`,
+  navigationProjectMove: (slug: string, projectId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/navigation/projects/${projectId}/move/`,
   project: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/`,
   projectArchive: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/archive/`,
   projectRestore: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/restore/`,
@@ -727,6 +755,9 @@ export const researchEndpoints = {
   reportReturn: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/return/`,
   reportAccept: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/accept/`,
   reportHistory: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/history/`,
+  reportRead: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/read/`,
+  reportReadReceipts: (slug: string, reportId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/read-receipts/`,
   reportAccess: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/access/`,
   reportAttachments: (slug: string, reportId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/attachments/`,
@@ -736,6 +767,7 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/import-markdown/`,
   reportSummary: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/reports/summary/`,
   reportTemplates: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/report-templates/`,
+  reportTemplateOptions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/reports/template-options/`,
   reportTemplate: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/report-templates/${id}/`,
   approvalFlows: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/approval-flows/`,
   approvalFlow: (slug: string, id: string) => `${RESEARCH_API_ROOT}/${slug}/approval-flows/${id}/`,

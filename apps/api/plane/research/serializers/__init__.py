@@ -20,9 +20,10 @@ from .org import (
     ResearchUserSerializer,
 )
 from .settings import WorkspaceResearchSettingSerializer
-from .template import ReportTemplateSerializer
+from .template import ReportTemplateOptionSerializer, ReportTemplateSerializer
 from .report import (
     PeriodicReportSerializer,
+    PeriodicReportReadReceiptSerializer,
     ReportAccessGrantSerializer,
     ReportReviewLogSerializer,
 )
@@ -66,14 +67,22 @@ from .chain import (
     ResearchChainUploadSerializer,
     ResearchAnalysisResultSerializer,
 )
+from .collaboration import (
+    ResearchChainNodeTaskSerializer,
+    ResearchPaperReviewPresignSerializer,
+    ResearchPaperReviewSerializer,
+    ResearchPaperReviewVersionSerializer,
+)
 
 __all__ = [
     "IdentityMappingSerializer",
     "MentorBindingSerializer",
     "OrgUnitMemberSerializer",
     "OrgUnitSerializer",
+    "ReportTemplateOptionSerializer",
     "ReportTemplateSerializer",
     "PeriodicReportSerializer",
+    "PeriodicReportReadReceiptSerializer",
     "ReportAccessGrantSerializer",
     "ReportReviewLogSerializer",
     "ReportAttachmentSerializer",
@@ -100,6 +109,10 @@ __all__ = [
     "ResearchChainSnapshotSerializer",
     "ResearchChainUploadSerializer",
     "ResearchAnalysisResultSerializer",
+    "ResearchChainNodeTaskSerializer",
+    "ResearchPaperReviewSerializer",
+    "ResearchPaperReviewVersionSerializer",
+    "ResearchPaperReviewPresignSerializer",
     "ResearchAuditEventSerializer",
     "ResearchUserSerializer",
     "WorkspaceResearchSettingSerializer",

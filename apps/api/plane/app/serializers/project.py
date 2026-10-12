@@ -21,6 +21,7 @@ from plane.db.models import (
     DeployBoard,
     ProjectPublicMember,
     IssueSequence,
+    WorkspaceMember,
 )
 from plane.utils.content_validator import (
     validate_html_content,
@@ -99,6 +100,36 @@ class ProjectSerializer(BaseSerializer):
 
             if not is_valid:
                 raise serializers.ValidationError({"error": "html content is not valid"})
+
+        assignment_fields = ("project_lead", "default_assignee")
+        for field in assignment_fields:
+            if field not in data or data[field] is None:
+                continue
+
+            user = data[field]
+            user_id = getattr(user, "id", user)
+            if self.instance is None:
+                # A project being created has no roster yet. Its view creates
+                # memberships for the caller and selected lead; a default
+                # assignee remains deferred and is rechecked when an issue is
+                # created.
+                is_valid_user = WorkspaceMember.objects.filter(
+                    workspace_id=self.context["workspace_id"],
+                    member_id=user_id,
+                    is_active=True,
+                    deleted_at__isnull=True,
+                ).exists()
+            else:
+                is_valid_user = ProjectMember.objects.filter(
+                    project_id=self.instance.id,
+                    member_id=user_id,
+                    role__gte=15,
+                    is_active=True,
+                    deleted_at__isnull=True,
+                ).exists()
+
+            if not is_valid_user:
+                raise serializers.ValidationError({field: "The provided user is not an active member of this project"})
 
         return data
 

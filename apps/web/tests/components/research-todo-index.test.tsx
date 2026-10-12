@@ -1,24 +1,23 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { TResearchTodoEnvelope, TResearchTodoEnvelopeList } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
-  research: { canSee: (key: string) => key !== "reviews" },
-  reports: vi.fn(),
-  reviews: vi.fn(),
-  approvals: vi.fn(),
-  chains: vi.fn(),
-  chainNodes: vi.fn(),
-  uploads: vi.fn(),
-  connections: vi.fn(),
+  collectResearchTodos: vi.fn(),
+  getResearchTodos: vi.fn(),
+  getChainNodes: vi.fn(),
+  getKnowledgeUploads: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "zh-CN",
   useTranslation: () => ({
     t: (key: string) => {
       const value = key
@@ -28,50 +27,121 @@ vi.mock("@plane/i18n", () => ({
     },
   }),
 }));
-vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
-vi.mock("@/services/research/report.service", () => ({
-  ResearchReportService: class {
-    getReports = mocks.reports;
-  },
-}));
-vi.mock("@/services/research/review.service", () => ({
-  ResearchReviewService: class {
-    getReviews = mocks.reviews;
-  },
-}));
-vi.mock("@/services/research/approval.service", () => ({
-  ResearchApprovalService: class {
-    getApprovalRequests = mocks.approvals;
+vi.mock("@/services/research/research-todo.service", () => ({
+  ResearchTodoService: class {
+    getResearchTodos = mocks.getResearchTodos;
   },
 }));
 vi.mock("@/services/research/chain.service", () => ({
   ResearchChainService: class {
-    getChains = mocks.chains;
-    getChainNodes = mocks.chainNodes;
-    getKnowledgeUploads = mocks.uploads;
+    getChainNodes = mocks.getChainNodes;
+    getKnowledgeUploads = mocks.getKnowledgeUploads;
   },
 }));
-vi.mock("@/services/research/integration.service", () => ({
-  ResearchIntegrationService: class {
-    getConnections = mocks.connections;
-  },
+vi.mock("@/components/research/common/research-todo-source", () => ({
+  collectResearchTodos: mocks.collectResearchTodos,
 }));
 
-const { ResearchTodoIndex } = await import("@/components/research/common/research-todo-index");
+const { ResearchTodoEnvelopeList } = await import("@/components/research/common/research-todo-index");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let currentSearch = "";
+
+function RouteProbe() {
+  const location = useLocation();
+  currentSearch = location.search;
+  return null;
+}
+
+function renderTodo(initialPath = "/lab", props: Partial<Parameters<typeof ResearchTodoEnvelopeList>[0]> = {}) {
+  return act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[initialPath]}>
+        <ResearchTodoEnvelopeList workspaceSlug="lab" {...props} />
+        <RouteProbe />
+      </MemoryRouter>
+    )
+  );
+}
+
+function todoEnvelope(overrides: Partial<TResearchTodoEnvelope> = {}): TResearchTodoEnvelope {
+  return {
+    schema_version: "research-todo.v2",
+    id: "REPORT:report-1",
+    source: "REPORT",
+    object_id: "report-1",
+    title: "报告需修订 · 2026-W38",
+    context: "高分子课题 / 周报",
+    requester: { id: "student-1", display_name: "学生一" },
+    assignees: [{ id: "advisor-1", display_name: "导师一" }],
+    business_status: "NEEDS_REVISION",
+    urgency: "NORMAL",
+    handling_status: "RETURNED",
+    next_action: "SUBMIT",
+    due_at: "2026-09-30T00:00:00Z",
+    href: "/lab/research/reports/report-1",
+    capabilities: {
+      schema_version: "research-capabilities.v1",
+      actions: {},
+    },
+    trace_ref: null,
+    updated_at: "2026-09-22T00:00:00Z",
+    ...overrides,
+  };
+}
+
+it("renders server urgency with an explicit textual label beside the due date", async () => {
+  mocks.getResearchTodos.mockResolvedValue(
+    todoList([
+      todoEnvelope({
+        title: "逾期节点任务",
+        due_at: "2026-10-09T08:00:00Z",
+        urgency: "OVERDUE",
+      }),
+      todoEnvelope({
+        title: "今天截止报告",
+        due_at: "2026-10-10T18:30:00Z",
+        urgency: "DUE_TODAY",
+      }),
+    ])
+  );
+
+  await renderTodo("/lab", { limit: 12 });
+
+  expect(container.textContent).toContain("逾期");
+  expect(container.textContent).toContain("今天截止");
+  expect(container.textContent).toContain("截止：");
+});
+
+function todoList(
+  results: TResearchTodoEnvelope[],
+  totalCount = results.length,
+  degradedSources: TResearchTodoEnvelopeList["degraded_sources"] = []
+): TResearchTodoEnvelopeList {
+  return {
+    schema_version: "research-todo.v2",
+    results,
+    count: results.length,
+    total_count: totalCount,
+    next_cursor: null,
+    degraded_sources: degradedSources,
+  };
+}
+
+function button(label: string) {
+  const target = [...container.querySelectorAll("button")].find((item) => item.textContent === label);
+  expect(target).toBeDefined();
+  return target as HTMLButtonElement;
+}
 
 beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  mocks.reports.mockResolvedValue({ results: [] });
-  mocks.approvals.mockResolvedValue({ results: [] });
-  mocks.reviews.mockResolvedValue({ results: [] });
-  mocks.chains.mockResolvedValue([]);
-  mocks.connections.mockResolvedValue({ results: [] });
+  mocks.getResearchTodos.mockResolvedValue(todoList([]));
+  currentSearch = "";
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -79,63 +149,188 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-it("aggregates authoritative sources and orders blocking items first", async () => {
-  mocks.reports.mockResolvedValue({
-    results: [
-      {
-        id: "report-1",
-        period_key: "2026-W38",
-        period_end: "2026-09-30T00:00:00Z",
-        project: "project-1",
-        owner: "user-1",
-        updated_at: "2026-09-22T00:00:00Z",
-      },
-    ],
-  });
-  mocks.approvals.mockResolvedValue({
-    results: [
-      {
-        id: "approval-1",
-        status: "PENDING",
-        issue_detail: { name: "采购超算机时" },
-        requested_by: "user-2",
-        created_at: "2026-09-23T00:00:00Z",
-      },
-    ],
-  });
+it("uses one server aggregate request and never polls chain upload status", async () => {
+  mocks.getResearchTodos.mockResolvedValue(
+    todoList([
+      todoEnvelope({
+        id: "CHAIN_TASK:task-1",
+        source: "CHAIN_TASK",
+        object_id: "task-1",
+        title: "补充实验数据",
+        context: "高分子课题 / 数据分析",
+        requester: { id: "student-1", display_name: "学生一" },
+        assignees: [{ id: "member-1", display_name: "处理人一" }],
+        business_status: "FAILED",
+        handling_status: "BLOCKED",
+        next_action: "SUBMIT",
+        href: "/lab/research/chains/chain-1?node=node-1",
+        updated_at: "2026-09-23T00:00:00Z",
+      }),
+      todoEnvelope(),
+    ])
+  );
 
-  await act(async () => root.render(<ResearchTodoIndex workspaceSlug="lab" />));
+  await renderTodo("/lab", { limit: 12 });
 
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(1);
+  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
+  expect(mocks.getChainNodes).not.toHaveBeenCalled();
+  expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
+  expect(mocks.collectResearchTodos).not.toHaveBeenCalled();
   const rows = [...container.querySelectorAll("li")];
-  expect(rows[0]?.textContent).toContain("报告需修订 · 2026-W38");
-  expect(rows[1]?.textContent).toContain("采购超算机时");
-  expect(
-    container.querySelector('a[href="/lab/research/chains?view=reports&status=NEEDS_REVISION&mine=true"]')
-  ).not.toBeNull();
+  expect(rows[0]?.textContent).toContain("补充实验数据");
+  expect(rows[0]?.textContent).toContain("处理人一");
+  expect(rows[1]?.textContent).toContain("报告需修订 · 2026-W38");
+  expect(container.querySelector('a[href="/lab/research/chains/chain-1?node=node-1"]')).not.toBeNull();
 });
 
-it("marks a non-success RAG upload as blocking without exposing payload JSON", async () => {
-  mocks.chains.mockResolvedValue([
-    { id: "chain-1", project: "chain", updated_at: "2026-09-23T00:00:00Z", status: "ACTIVE" },
-  ]);
-  mocks.chainNodes.mockResolvedValue([{ id: "node-1", updated_at: "2026-09-23T00:00:00Z" }]);
-  mocks.uploads.mockResolvedValue({
-    data: [
-      {
-        id: "upload-1",
-        status: "FAILED",
-        knowledge_id: "secret-knowledge",
-        knowledge_base_id: "kb-1",
-        file_name: "literature.pdf",
-        error_code: "http_error",
-      },
-    ],
-  });
+it("uses server-computed next actions without rendering trace payloads", async () => {
+  mocks.getResearchTodos.mockResolvedValue(
+    todoList([
+      todoEnvelope({
+        id: "REPORT:report-unread",
+        title: "周报待阅读 · 2026-W40",
+        business_status: "SUBMITTED",
+        handling_status: "TODO",
+        next_action: "READ",
+        href: "/lab/research/reports/report-unread",
+        trace_ref: {
+          resource_type: "report",
+          resource_id: "report-unread",
+          trace_id: "secret-trace-id",
+        },
+      }),
+      todoEnvelope({
+        id: "REPORT:report-review",
+        title: "周报待审阅 · 2026-W39",
+        next_action: "REVIEW",
+        href: "/lab/research/reports/report-review",
+      }),
+    ])
+  );
 
-  await act(async () => root.render(<ResearchTodoIndex workspaceSlug="lab" />));
+  await renderTodo("/lab", { limit: 12 });
 
-  expect(container.textContent).toContain("literature.pdf");
-  expect(container.textContent).toContain("阻断");
-  expect(container.textContent).not.toContain("secret-knowledge");
-  expect(container.textContent).not.toContain("http_error");
+  expect(container.textContent).toContain("周报待阅读 · 2026-W40");
+  expect(container.textContent).toContain("周报待审阅 · 2026-W39");
+  expect(container.textContent).toContain("阅读");
+  expect(container.textContent).toContain("审阅");
+  expect(container.textContent).not.toContain("secret-trace-id");
+  const controls = [...container.querySelectorAll("button")].map((item) => item.textContent ?? "");
+  expect(controls.every((label) => ["刷新待办", "我可处理", "我发起", "全部可见"].includes(label))).toBe(true);
+});
+
+it("filters the server projection by the selected period in one request", async () => {
+  mocks.getResearchTodos.mockResolvedValue(
+    todoList([
+      todoEnvelope({ id: "REPORT:new", title: "新待办", updated_at: "2026-10-09T00:00:00Z" }),
+      todoEnvelope({ id: "REPORT:old", title: "旧待办", updated_at: "2026-08-01T00:00:00Z" }),
+    ])
+  );
+
+  await renderTodo("/lab", { periodDays: 30, limit: 12 });
+
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(1);
+  expect(container.textContent).toContain("新待办");
+  expect(container.textContent).not.toContain("旧待办");
+});
+
+it("renders the loading state with stable accessibility semantics", async () => {
+  mocks.getResearchTodos.mockReturnValue(new Promise(() => undefined));
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="status"][aria-busy="true"]')).not.toBeNull();
+});
+
+it("renders scope-specific empty states and writes every scope to the URL", async () => {
+  mocks.getResearchTodos.mockResolvedValue(todoList([]));
+  await renderTodo("/lab");
+  expect(container.textContent).toContain("当前没有需要你处理的事项。");
+
+  await act(async () => button("我发起").click());
+  expect(currentSearch).toBe("?todo_scope=mine");
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "mine", limit: 100 });
+  expect(container.textContent).toContain("当前没有你发起或提交的事项。");
+
+  await act(async () => button("全部可见").click());
+  expect(currentSearch).toBe("?todo_scope=visible");
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "visible", limit: 100 });
+  expect(container.textContent).toContain("当前权限范围内暂无可见事项。");
+
+  await act(async () => button("我可处理").click());
+  expect(currentSearch).toBe("?todo_scope=to_me");
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "to_me", limit: 100 });
+});
+
+it("restores the URL scope after a refresh and keeps the layout inside the viewport", async () => {
+  mocks.getResearchTodos.mockResolvedValue(todoList([todoEnvelope()]));
+  await renderTodo("/lab?todo_scope=visible");
+
+  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "visible", limit: 100 });
+  expect(currentSearch).toBe("?todo_scope=visible");
+  expect(container.querySelector("section")?.className).toContain("min-w-0");
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+});
+
+it("shows partial degradation while retaining the available server projection", async () => {
+  mocks.getResearchTodos.mockResolvedValue(todoList([todoEnvelope()], 1, ["AGENT_APPROVAL"]));
+  await renderTodo("/lab?todo_scope=to_me");
+
+  expect(container.textContent).toContain("Agent 审批");
+  expect(container.textContent).toContain("报告需修订 · 2026-W38");
+});
+
+it("renders recoverable errors for permission, conflict and server failures", async () => {
+  mocks.getResearchTodos.mockRejectedValueOnce({ error_code: "research_permission_denied", status: 403 });
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("当前账号没有权限查看科研待办");
+
+  await act(async () => root.unmount());
+  container.remove();
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  mocks.getResearchTodos.mockRejectedValueOnce({ error_code: "INVALID_TRANSITION", status: 409 });
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("待办状态已变化");
+
+  await act(async () => root.unmount());
+  container.remove();
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  mocks.getResearchTodos.mockRejectedValueOnce({ error_code: "server_error", status: 503 });
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("科研待办暂时不可用");
+
+  mocks.getResearchTodos.mockResolvedValueOnce(todoList([todoEnvelope()]));
+  await act(async () => button("重试").click());
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(4);
+  expect(container.textContent).toContain("报告需修订 · 2026-W38");
+});
+
+it("renders the error state and retries the aggregate request", async () => {
+  mocks.getResearchTodos.mockRejectedValueOnce(new Error("network"));
+  await renderTodo("/lab");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("科研待办暂时不可用");
+
+  mocks.getResearchTodos.mockResolvedValueOnce(todoList([todoEnvelope()]));
+  await act(async () => button("重试").click());
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain("报告需修订 · 2026-W38");
+});
+
+it("refreshes the aggregate projection without adding source requests", async () => {
+  mocks.getResearchTodos
+    .mockResolvedValueOnce(todoList([todoEnvelope({ title: "刷新前待办" })]))
+    .mockResolvedValueOnce(todoList([todoEnvelope({ title: "刷新后待办" })]));
+
+  await renderTodo("/lab");
+  expect(container.textContent).toContain("刷新前待办");
+
+  await act(async () => button("刷新待办").click());
+
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(2);
+  expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("刷新后待办");
+  expect(container.textContent).not.toContain("刷新前待办");
 });

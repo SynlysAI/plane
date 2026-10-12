@@ -14,13 +14,15 @@ const integrationService = new ResearchIntegrationService();
 const reportService = new ResearchReportService();
 const reviewService = new ResearchReviewService();
 
-export type TResearchTodoKind = "blocking" | "confirmation" | "reminder" | "syncing";
-export type TResearchTodoSource = "report" | "review" | "office" | "upload" | "manual" | "agent";
+type TResearchTodoKind = "blocking" | "confirmation" | "reminder" | "syncing";
+type TResearchTodoSource = "report" | "review" | "office" | "upload" | "manual" | "agent";
 
 export type TResearchTodo = {
   id: string;
   source: TResearchTodoSource;
   kind: TResearchTodoKind;
+  /** Lower values sort first inside the same severity level. */
+  priority?: number;
   title: string;
   context: string;
   href: string;
@@ -28,14 +30,14 @@ export type TResearchTodo = {
   updatedAt: string;
 };
 
-export type TResearchTodoAccess = {
+type TResearchTodoAccess = {
   /** Capability check from the research identity store. */
   canSee: (key: string) => boolean;
   /** Whether the research agent section is enabled for the workspace. */
   agentEnabled: boolean;
 };
 
-export type TResearchTodoTranslate = (key: string) => string;
+type TResearchTodoTranslate = (key: string) => string;
 
 const KIND_RANK: Record<TResearchTodoKind, number> = {
   blocking: 0,
@@ -45,7 +47,7 @@ const KIND_RANK: Record<TResearchTodoKind, number> = {
 };
 
 /** Convert a timestamp to a stable numeric value even when a backend omits it. */
-export function todoTimeValue(value: string | null | undefined) {
+function todoTimeValue(value: string | null | undefined) {
   if (!value) return 0;
   const parsed = new Date(value).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
@@ -60,14 +62,18 @@ export function todoTimeValue(value: string | null | undefined) {
  * Returns:
  *   Deduplicated todos ordered by severity, due date and recency.
  */
-export function normalizeResearchTodos(todos: TResearchTodo[]) {
+function normalizeResearchTodos(todos: TResearchTodo[]) {
   const byObject = new Map<string, TResearchTodo>();
   for (const todo of todos) {
     const existing = byObject.get(todo.id);
+    const todoPriority = todo.priority ?? 0;
+    const existingPriority = existing?.priority ?? 0;
     if (
       !existing ||
       KIND_RANK[todo.kind] < KIND_RANK[existing.kind] ||
+      (KIND_RANK[todo.kind] === KIND_RANK[existing.kind] && todoPriority < existingPriority) ||
       (KIND_RANK[todo.kind] === KIND_RANK[existing.kind] &&
+        todoPriority === existingPriority &&
         todoTimeValue(todo.updatedAt) > todoTimeValue(existing.updatedAt))
     ) {
       byObject.set(todo.id, todo);
@@ -78,6 +84,8 @@ export function normalizeResearchTodos(todos: TResearchTodo[]) {
     if (KIND_RANK[left.kind] !== KIND_RANK[right.kind]) return KIND_RANK[left.kind] - KIND_RANK[right.kind];
     const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
     const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    const priorityGap = (left.priority ?? 0) - (right.priority ?? 0);
+    if (priorityGap !== 0) return priorityGap;
     if (leftDue !== rightDue) return leftDue - rightDue;
     return todoTimeValue(right.updatedAt) - todoTimeValue(left.updatedAt);
   });
@@ -105,6 +113,10 @@ function uploadTodo(workspaceSlug: string, chainId: string, upload: TResearchCha
 
 /**
  * Collect cross-component research todos from every source system.
+ *
+ * This frontend aggregation is retained only as a short-term rollback path for
+ * ``ResearchTodoEnvelopeList``. Production consumers must use the read-only
+ * server aggregate so chain/node upload status is not fanned out per node.
  *
  * Args:
  *   options: Workspace slug, visibility access, translator, optional period and
@@ -148,6 +160,33 @@ export async function collectResearchTodos({
               title: `${translate("research.todo.report_revision")} · ${report.period_key}`,
               context: report.owner_detail?.display_name ?? report.project ?? "",
               href: `/${workspaceSlug}/research/chains?view=reports&status=NEEDS_REVISION&mine=true`,
+              dueAt: report.period_end,
+              updatedAt: report.updated_at,
+            });
+          }
+        }
+      })()
+    );
+    tasks.push(
+      (async () => {
+        const payload = await reportService
+          .getReports(workspaceSlug, { scope: "review", status: "SUBMITTED", per_page: "50" })
+          .catch(() => null);
+        if (payload) {
+          for (const report of payload.results as TPeriodicReport[]) {
+            if (report.status !== "SUBMITTED") continue;
+            if (!withinPeriod(report.updated_at)) continue;
+            const unread = !report.has_read;
+            collected.push({
+              id: `report-review:${report.id}`,
+              source: "report",
+              kind: "confirmation",
+              priority: unread ? 0 : 1,
+              title: `${translate(
+                unread ? "research.todo.report_pending_read" : "research.todo.report_pending_review"
+              )} · ${report.period_key}`,
+              context: report.owner_detail?.display_name ?? report.owner ?? "",
+              href: `/${workspaceSlug}/research/reports/${report.id}`,
               dueAt: report.period_end,
               updatedAt: report.updated_at,
             });

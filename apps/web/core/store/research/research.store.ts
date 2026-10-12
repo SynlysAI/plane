@@ -18,6 +18,7 @@ import type {
   TReportReviewLog,
   TReportSummary,
   TReportTemplate,
+  TReportTemplateOption,
   TResearchAuditEvent,
   TResearchIdentity,
   TStageGate,
@@ -124,6 +125,8 @@ export interface IResearchStore {
   summaryByWorkspace: Record<string, TReportSummary>;
   reportTemplates: Record<string, TReportTemplate>;
   reportTemplateIdsByWorkspace: Record<string, string[]>;
+  reportTemplateOptions: Record<string, TReportTemplateOption>;
+  reportTemplateOptionIdsByWorkspace: Record<string, string[]>;
   researchProjects: Record<string, TResearchProject>;
   researchProjectIdsByWorkspace: Record<string, string[]>;
   projectPaginationByWorkspace: Record<string, TPaginationInfo>;
@@ -195,6 +198,7 @@ export interface IResearchStore {
   getApprovalRequests: (workspaceSlug: string) => TApprovalRequest[];
   getApprovalFlows: (workspaceSlug: string) => TApprovalFlow[];
   getReportTemplates: (workspaceSlug: string) => TReportTemplate[];
+  getReportTemplateOptions: (workspaceSlug: string) => TReportTemplateOption[];
   getAuditEvents: (workspaceSlug: string) => TResearchAuditEvent[];
   getProjectStages: (workspaceSlug: string, projectId: string) => TStageInstance[];
   getStageMaterials: (stageId: string) => TStageMaterial[];
@@ -244,6 +248,7 @@ export interface IResearchStore {
   ) => Promise<TPeriodicReport>;
   returnReport: (workspaceSlug: string, reportId: string, comment: string) => Promise<TPeriodicReport>;
   acceptReport: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
+  markReportRead: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
   fetchReportHistory: (workspaceSlug: string, reportId: string) => Promise<TReportReviewLog[]>;
   fetchReportAttachments: (workspaceSlug: string, reportId: string) => Promise<TReportAttachment[]>;
   uploadReportAttachment: (
@@ -268,6 +273,10 @@ export interface IResearchStore {
     params?: { period_key?: string; report_type?: string; org_unit?: string }
   ) => Promise<TReportSummary>;
   fetchReportTemplates: (workspaceSlug: string, params?: { report_type?: string }) => Promise<TReportTemplate[]>;
+  fetchReportTemplateOptions: (
+    workspaceSlug: string,
+    params?: { report_type?: string }
+  ) => Promise<TReportTemplateOption[]>;
   createReportTemplate: (
     workspaceSlug: string,
     payload: { name: string; report_type: string; is_default?: boolean }
@@ -521,6 +530,8 @@ export class ResearchStore implements IResearchStore {
   summaryByWorkspace: Record<string, TReportSummary> = {};
   reportTemplates: Record<string, TReportTemplate> = {};
   reportTemplateIdsByWorkspace: Record<string, string[]> = {};
+  reportTemplateOptions: Record<string, TReportTemplateOption> = {};
+  reportTemplateOptionIdsByWorkspace: Record<string, string[]> = {};
   researchProjects: Record<string, TResearchProject> = {};
   researchProjectIdsByWorkspace: Record<string, string[]> = {};
   projectPaginationByWorkspace: Record<string, TPaginationInfo> = {};
@@ -616,6 +627,8 @@ export class ResearchStore implements IResearchStore {
       summaryByWorkspace: observable,
       reportTemplates: observable,
       reportTemplateIdsByWorkspace: observable,
+      reportTemplateOptions: observable,
+      reportTemplateOptionIdsByWorkspace: observable,
       researchProjects: observable,
       researchProjectIdsByWorkspace: observable,
       approvalFlows: observable,
@@ -694,6 +707,7 @@ export class ResearchStore implements IResearchStore {
       submitReport: action,
       returnReport: action,
       acceptReport: action,
+      markReportRead: action,
       fetchReportHistory: action,
       fetchReportAttachments: action,
       uploadReportAttachment: action,
@@ -702,6 +716,7 @@ export class ResearchStore implements IResearchStore {
       updateReportVisibility: action,
       fetchReportSummary: action,
       fetchReportTemplates: action,
+      fetchReportTemplateOptions: action,
       createReportTemplate: action,
       updateReportTemplate: action,
       deleteReportTemplate: action,
@@ -913,6 +928,11 @@ export class ResearchStore implements IResearchStore {
     (this.reportTemplateIdsByWorkspace[workspaceSlug] ?? [])
       .map((id) => this.reportTemplates[id])
       .filter((template): template is TReportTemplate => Boolean(template));
+
+  getReportTemplateOptions = (workspaceSlug: string) =>
+    (this.reportTemplateOptionIdsByWorkspace[workspaceSlug] ?? [])
+      .map((id) => this.reportTemplateOptions[id])
+      .filter((template): template is TReportTemplateOption => Boolean(template));
 
   getAuditEvents = (workspaceSlug: string) =>
     (this.auditEventIdsByWorkspace[workspaceSlug] ?? [])
@@ -1210,6 +1230,21 @@ export class ResearchStore implements IResearchStore {
     return report;
   };
 
+  markReportRead = async (workspaceSlug: string, reportId: string) => {
+    const receipt = await this.reportService.markReportRead(workspaceSlug, reportId);
+    runInAction(() => {
+      const report = this.reports[reportId];
+      if (!report) return;
+      this.reports[reportId] = {
+        ...report,
+        has_read: receipt.has_read,
+        read_count: receipt.read_count,
+        latest_read_at: receipt.latest_read_at,
+      };
+    });
+    return this.reports[reportId];
+  };
+
   fetchReportHistory = async (workspaceSlug: string, reportId: string) => {
     const response = await this.reportService.getReportHistory(workspaceSlug, reportId);
     runInAction(() => {
@@ -1296,6 +1331,25 @@ export class ResearchStore implements IResearchStore {
           this.reportTemplates[template.id] = template;
         });
         this.reportTemplateIdsByWorkspace[workspaceSlug] = response.results.map((template) => template.id);
+      });
+      return response.results;
+    } finally {
+      runInAction(() => {
+        this.templatesLoader = false;
+      });
+    }
+  };
+
+  /** Load active template options without exposing template management data. */
+  fetchReportTemplateOptions = async (workspaceSlug: string, params: { report_type?: string } = {}) => {
+    this.templatesLoader = true;
+    try {
+      const response = await this.reportService.getTemplateOptions(workspaceSlug, params);
+      runInAction(() => {
+        response.results.forEach((template) => {
+          this.reportTemplateOptions[template.id] = template;
+        });
+        this.reportTemplateOptionIdsByWorkspace[workspaceSlug] = response.results.map((template) => template.id);
       });
       return response.results;
     } finally {

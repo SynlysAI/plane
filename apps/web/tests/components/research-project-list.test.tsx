@@ -106,3 +106,42 @@ it("工作台统一的 create=1 参数会自动打开项目创建弹窗并清理
   expect(container.querySelector('[role="dialog"]')?.textContent).toContain("research.projects.create_title");
   expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains?view=projects");
 });
+
+it("项目列表回放共同浏览参数并只携带项目领域参数", async () => {
+  const search =
+    "?scope=owned&owner=uuid&q=graphite&date_from=2026-10-01&date_to=2026-10-08&org_unit=org-1&cursor=cursor-1&workflow_status=ACTIVE&research_type=RESEARCH_PROJECT";
+  function Probe() {
+    const location = useLocation();
+    return (
+      <>
+        <ResearchProjectList workspaceSlug="lab" currentUserId="user-1" />
+        <output aria-label="URL">{`${location.pathname}${location.search}`}</output>
+      </>
+    );
+  }
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[`/lab/research/chains${search}`]}>
+        <Probe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
+
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe(`/lab/research/chains${search}`);
+  expect(mocks.fetchResearchProjects).toHaveBeenCalledWith("lab", {
+    per_page: "50",
+    scope: "owned",
+    owner: "uuid",
+    q: "graphite",
+    date_from: "2026-10-01",
+    date_to: "2026-10-08",
+    org_unit: "org-1",
+    cursor: "cursor-1",
+    workflow_status: "ACTIVE",
+    research_type: "RESEARCH_PROJECT",
+  });
+  expect(mocks.fetchResearchProjects.mock.calls[0]?.[1]).not.toHaveProperty("status");
+  expect(mocks.fetchResearchProjects.mock.calls[0]?.[1]).not.toHaveProperty("report_type");
+});

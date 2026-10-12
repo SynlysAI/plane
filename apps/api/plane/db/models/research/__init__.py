@@ -46,11 +46,14 @@ from .membership import (
     UserImportBatch,
     UserImportRow,
 )
+from .navigation import ProjectNavigationCategory
 from .org import MentorBinding, OrgUnit, OrgUnitMember
 from .outcome import ResearchOutcome, ResearchOutcomeAttachment, ResearchOutcomeLink
+from .paper_review import ResearchPaperReview, ResearchPaperReviewVersion
 from .project import ResearchProjectProfile
 from .report import (
     PeriodicReport,
+    PeriodicReportReadReceipt,
     PeriodicReportProjectReference,
     PeriodicReportSnapshot,
     ReportAccessGrant,
@@ -79,6 +82,7 @@ from .stage import (
     StageTransition,
     StageType,
 )
+from .task import ResearchChainNodeTask
 from .template import ReportTemplate
 
 __all__ = [
@@ -120,6 +124,7 @@ __all__ = [
     "ReportVisibility",
     "ReportTemplate",
     "PeriodicReport",
+    "PeriodicReportReadReceipt",
     "PeriodicReportProjectReference",
     "PeriodicReportSnapshot",
     "ReportAccessGrant",
@@ -144,8 +149,11 @@ __all__ = [
     "ResearchOutcome",
     "ResearchOutcomeAttachment",
     "ResearchOutcomeLink",
+    "ResearchPaperReview",
+    "ResearchPaperReviewVersion",
     "OrgUnit",
     "OrgUnitMember",
+    "ProjectNavigationCategory",
     "ALL_MATERIAL_TYPES",
     "MATERIAL_SET_COMPLETE_STATES",
     "MATERIAL_TYPES_BY_STAGE",
@@ -158,4 +166,5 @@ __all__ = [
     "StageMaterialVersion",
     "StageTransition",
     "StageType",
+    "ResearchChainNodeTask",
 ]

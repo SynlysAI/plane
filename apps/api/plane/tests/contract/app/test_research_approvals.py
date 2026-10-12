@@ -2,14 +2,17 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
     ApprovalAction,
     ApprovalFlow,
-    ApprovalRequest,
     Issue,
+    IssueAssignee,
     Notification,
     OrgUnit,
     OrgUnitMember,
@@ -91,9 +94,7 @@ def env(db):
     OrgUnitMember.objects.create(
         workspace=workspace, org_unit=group, user=requester, org_role=OrgUnitMember.OrgRole.OWNER
     )
-    OrgUnitMember.objects.create(
-        workspace=workspace, org_unit=group, user=lead, org_role=OrgUnitMember.OrgRole.PI
-    )
+    OrgUnitMember.objects.create(workspace=workspace, org_unit=group, user=lead, org_role=OrgUnitMember.OrgRole.PI)
     # v2.5.0: acting on an approval needs a research relation. The director owns
     # the institute above the group, which is exactly the level that reviews a
     # purchase order of that group.
@@ -221,6 +222,23 @@ class TestApprovalWorkflow:
         assert env["issue"].state.group == "completed"
         assert ApprovalAction.objects.filter(request_id=request_id).count() == 2
 
+    def test_issue_assignee_does_not_replace_flow_approver(self, env):
+        create_two_step_flow(env)
+        IssueAssignee.objects.create(
+            issue=env["issue"],
+            assignee=env["bystander"],
+            project=env["project"],
+            workspace=env["workspace"],
+        )
+
+        request_id = create_request(env).json()["id"]
+        denied = env["bystander_client"].post(f"{env['requests_url']}{request_id}/approve/", {}, format="json")
+
+        assert denied.status_code == 403
+        approved = env["lead_client"].post(f"{env['requests_url']}{request_id}/approve/", {}, format="json")
+        assert approved.status_code == 200
+        assert approved.json()["current_step_order"] == 2
+
     def test_rejection_stops_the_flow_and_returns_the_issue(self, env):
         create_two_step_flow(env)
         request_id = create_request(env).json()["id"]
@@ -232,9 +250,7 @@ class TestApprovalWorkflow:
         assert rejected.json()["status"] == "REJECTED"
 
         # the second step must never be reachable
-        blocked = env["director_client"].post(
-            f"{env['requests_url']}{request_id}/approve/", {}, format="json"
-        )
+        blocked = env["director_client"].post(f"{env['requests_url']}{request_id}/approve/", {}, format="json")
         assert blocked.status_code == 409
 
         env["issue"].refresh_from_db()
@@ -254,17 +270,25 @@ class TestApprovalWorkflow:
     def test_only_resolved_approvers_can_act(self, env):
         create_two_step_flow(env)
         request_id = create_request(env).json()["id"]
-        denied = env["bystander_client"].post(
-            f"{env['requests_url']}{request_id}/approve/", {}, format="json"
-        )
+        denied = env["bystander_client"].post(f"{env['requests_url']}{request_id}/approve/", {}, format="json")
         assert denied.status_code == 403
+
+    def test_expired_org_membership_cannot_act(self, env):
+        create_two_step_flow(env)
+        request_id = create_request(env).json()["id"]
+        membership = OrgUnitMember.objects.get(user=env["lead"], org_unit=env["group"])
+        membership.effective_to = timezone.localdate() - timedelta(days=1)
+        membership.save(update_fields=["effective_to", "updated_at"])
+
+        denied = env["lead_client"].post(f"{env['requests_url']}{request_id}/approve/", {}, format="json")
+
+        assert denied.status_code == 403
+        assert not ApprovalAction.objects.filter(request_id=request_id).exists()
 
     def test_requester_can_withdraw_before_completion(self, env):
         create_two_step_flow(env)
         request_id = create_request(env).json()["id"]
-        response = env["requester_client"].post(
-            f"{env['requests_url']}{request_id}/withdraw/", {}, format="json"
-        )
+        response = env["requester_client"].post(f"{env['requests_url']}{request_id}/withdraw/", {}, format="json")
         assert response.status_code == 200
         assert response.json()["status"] == "WITHDRAWN"
         assert ApprovalAction.objects.filter(request_id=request_id, action="WITHDRAW").exists()
