@@ -27,6 +27,10 @@ vi.mock("@/components/research/chains/research-chain-board", () => ({
 vi.mock("@/components/research/reports/report-list", () => ({
   ResearchReportList: () => <output>report-outcome-workbench</output>,
 }));
+vi.mock("@/components/research/projects/research-project-create-dialog", () => ({
+  ResearchProjectCreateDialog: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div role="dialog">research.projects.create_title</div> : null,
+}));
 vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
     isIaV2Enabled: true,
@@ -60,6 +64,7 @@ async function render(entry: string) {
       </MemoryRouter>
     )
   );
+  await act(async () => undefined);
 }
 
 beforeEach(() => {
@@ -105,10 +110,18 @@ it("课题视图保留创建科研项目入口，报告与成果视图不显示"
   expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains");
 
   await act(async () => createButton.click());
-  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains?create=1");
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("research.projects.create_title");
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains");
 
   await render("/lab/research/chains?view=reports");
   expect(
     Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "research.projects.create")
   ).toBe(false);
+});
+
+it("create=1 会打开创建弹窗并清理 URL", async () => {
+  await render("/lab/research/chains?create=1");
+
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("research.projects.create_title");
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/chains");
 });

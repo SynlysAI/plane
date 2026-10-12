@@ -7,6 +7,7 @@
 import { API_BASE_URL, researchEndpoints } from "@plane/constants";
 import type {
   TResearchAssignableUser,
+  TResearchChainEvent,
   TResearchChainNodeTask,
   TResearchChainNodeTaskCreatePayload,
   TResearchChainNodeTaskUpdatePayload,
@@ -50,6 +51,27 @@ export class ResearchChainTaskService extends APIService {
     return this.get(researchEndpoints.chainNodeTasks(workspaceSlug, chainId, nodeId))
       .then((response) => {
         const payload = response?.data as TResearchEnvelope<TResearchChainNodeTask[]> | undefined;
+        return payload?.data ?? [];
+      })
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /**
+   * 读取节点 Chain Event，供任务详情过滤出本任务的活动。
+   *
+   * Args:
+   *   workspaceSlug: 工作区标识。
+   *   nodeId: 任务所属节点。
+   *
+   * Returns:
+   *   该节点的不可变事件列表；接口失败时抛出服务端错误体。
+   */
+  async getNodeEvents(workspaceSlug: string, nodeId: string) {
+    return this.get(researchEndpoints.chainNodeEvents(workspaceSlug, nodeId))
+      .then((response) => {
+        const payload = response?.data as TResearchEnvelope<TResearchChainEvent[]> | undefined;
         return payload?.data ?? [];
       })
       .catch((error) => {

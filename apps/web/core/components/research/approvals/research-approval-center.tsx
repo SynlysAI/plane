@@ -24,18 +24,50 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ApprovalTab = "stage_review" | "report_review" | "agent_approval" | "office";
+type ApprovalTab = "shared_todos" | "stage_review" | "report_review" | "agent_approval" | "office";
 
-/** 构造审批领域 Tab 深链，并保留待办范围等无关 URL 状态。 */
+type ApprovalShell = {
+  titleKey: string;
+  descriptionKey: string;
+  section: "stages" | "reports" | "approvals";
+  navKey: string;
+};
+
+/** 构造审批中心 Tab 深链，并保留待办范围等无关 URL 状态。 */
 function approvalTabHref(searchParams: URLSearchParams, workspaceSlug: string, tabId: ApprovalTab) {
   const params = new URLSearchParams(searchParams);
   params.set("tab", tabId);
   return `/${workspaceSlug}/research/approvals?${params.toString()}`;
 }
 
+/** 按当前队列选择页面门禁，跨组件待办沿用第一个可见领域队列，避免单独被审批开关拦住。 */
+function approvalShell(tab: Exclude<ApprovalTab, "shared_todos">): ApprovalShell {
+  if (tab === "stage_review") {
+    return {
+      titleKey: "research.nav.approvals_v2",
+      descriptionKey: "research.approvals.description",
+      section: "stages",
+      navKey: "reviews",
+    };
+  }
+  if (tab === "report_review") {
+    return {
+      titleKey: "research.nav.approvals_v2",
+      descriptionKey: "research.approvals.description",
+      section: "reports",
+      navKey: "reports",
+    };
+  }
+  return {
+    titleKey: "research.nav.approvals_v2",
+    descriptionKey: "research.approvals.description",
+    section: "approvals",
+    navKey: "approvals",
+  };
+}
+
 /**
- * Unified IA v2 approval queues. Each tab still uses its authoritative legacy
- * component and capability; this container only changes presentation.
+ * 审批中心。跨组件待办与领域队列同级，避免聚合列表把阶段评审等页签顶出视口。
  */
 export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({ workspaceSlug }: Props) {
   const { t } = useTranslation();
@@ -57,7 +89,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
     );
   }
 
-  const tabs = [
+  const domainTabs = [
     {
       id: "stage_review" as const,
       labelKey: "research.approvals.tabs.stage_review",
@@ -79,49 +111,22 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
       visible: Boolean(sections?.approvals) && research.canSee("approvals"),
     },
   ].filter((tab) => tab.visible);
-  const activeTab = requestedTab && tabs.some((tab) => tab.id === requestedTab) ? requestedTab : tabs[0]?.id;
+  const tabs = [{ id: "shared_todos" as const, labelKey: "research.approvals.tabs.shared_todos" }, ...domainTabs];
+  const activeTab = requestedTab && tabs.some((tab) => tab.id === requestedTab) ? requestedTab : tabs[0].id;
 
-  if (!activeTab) {
-    return (
-      <ResearchPageShell
-        titleKey="research.nav.approvals_v2"
-        descriptionKey="research.approvals.description"
-        section="approvals"
-      >
-        <p className="p-5 text-13 text-secondary">{t("research.approvals.empty")}</p>
-      </ResearchPageShell>
-    );
-  }
-
-  const shellProps =
-    activeTab === "stage_review"
-      ? {
-          titleKey: "research.nav.approvals_v2",
-          descriptionKey: "research.approvals.description",
-          section: "stages" as const,
-          navKey: "reviews",
-        }
-      : activeTab === "report_review"
-        ? {
-            titleKey: "research.nav.approvals_v2",
-            descriptionKey: "research.approvals.description",
-            section: "reports" as const,
-            navKey: "reports",
-          }
-        : {
-            titleKey: "research.nav.approvals_v2",
-            descriptionKey: "research.approvals.description",
-            section: "approvals" as const,
-            navKey: "approvals",
-          };
+  const shellTab = activeTab === "shared_todos" ? domainTabs[0]?.id : activeTab;
+  const shellProps = {
+    ...(shellTab ? approvalShell(shellTab) : approvalShell("office")),
+    ...(activeTab === "shared_todos" ? { descriptionKey: "research.todo.description_v2" } : {}),
+  };
 
   return (
     <ResearchPageShell {...shellProps}>
       <div className="flex h-full flex-col overflow-hidden">
-        <div className="min-w-0 border-b border-subtle px-5 py-4">
-          <ResearchTodoEnvelopeList workspaceSlug={workspaceSlug} limit={8} />
-        </div>
-        <nav aria-label={t("research.nav.approvals_v2")} className="overflow-x-auto border-b border-subtle px-5">
+        <nav
+          aria-label={t("research.nav.approvals_v2")}
+          className="shrink-0 overflow-x-auto border-b border-subtle px-5"
+        >
           <TabNavigationList className="py-2">
             {tabs.map((tab) => (
               <ResearchTabLink
@@ -135,6 +140,11 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
           </TabNavigationList>
         </nav>
         <div className="min-h-0 flex-1 overflow-hidden">
+          {activeTab === "shared_todos" && (
+            <div className="h-full overflow-y-auto bg-canvas p-5">
+              <ResearchTodoEnvelopeList workspaceSlug={workspaceSlug} />
+            </div>
+          )}
           {activeTab === "stage_review" && <ReviewInbox workspaceSlug={workspaceSlug} />}
           {activeTab === "report_review" && <ResearchReportList workspaceSlug={workspaceSlug} variant="review" />}
           {activeTab === "office" && (

@@ -1,4 +1,4 @@
-/** Isolated browser fixture for the two-column home workbench; no real account is used. */
+/** Isolated browser fixture for the bento home workbench; no real account is used. */
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router";
@@ -13,7 +13,7 @@ import { ProjectService } from "../../core/services/project/project.service";
 import { WorkspaceService } from "../../core/services/workspace.service";
 import type { TResearchIdentity } from "@plane/types";
 // oxlint-disable-next-line import/no-unassigned-import -- fixture stylesheet
-import "../../styles/globals.css";
+import "./research-home-workbench.fixture.css";
 
 const now = new Date("2026-10-10T15:00:00.000Z").toISOString();
 const identity = {
@@ -137,8 +137,17 @@ createRoot(document.getElementById("root")!).render(
   <StoreProvider>
     <TranslationProvider>
       <MemoryRouter initialEntries={["/isolated-test"]}>
-        <main className="h-screen overflow-y-auto bg-canvas p-6">
-          <WorkspaceHomeWorkbench workspaceSlug="isolated-test" />
+        <main className="relative h-screen overflow-hidden bg-surface-1">
+          <div className="flex h-11 items-center border-b border-subtle bg-surface-1 px-4 text-12 text-secondary">
+            首页
+          </div>
+          <div className="absolute inset-x-0 top-11 bottom-0 overflow-hidden">
+            <div className="h-full w-full overflow-hidden">
+              <div className="relative flex h-full w-full flex-col overflow-x-hidden overflow-y-auto bg-canvas px-page-x py-page-y">
+                <WorkspaceHomeWorkbench workspaceSlug="isolated-test" />
+              </div>
+            </div>
+          </div>
         </main>
       </MemoryRouter>
     </TranslationProvider>

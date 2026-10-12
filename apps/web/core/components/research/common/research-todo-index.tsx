@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
@@ -86,8 +86,11 @@ type TodoRequestError = {
 type Props = {
   workspaceSlug: string;
   scope?: TResearchTodoScope;
-  limit?: number;
   periodDays?: number | null;
+  /** 首页卡片内嵌模式：不渲染卡片外壳与标题，工具行吸顶。 */
+  embedded?: boolean;
+  /** 最多渲染条数；省略时渲染全部，超出部分由待办中心承接。 */
+  limit?: number;
 };
 
 /** Check whether a server todo belongs to the selected overview period. */
@@ -136,7 +139,13 @@ function degradedSourceMessage(sources: TResearchTodoSource[], translate: (key: 
 }
 
 /** Render the server-authoritative research todo projection without local state transitions. */
-export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit = 5, periodDays = null }: Props) {
+export function ResearchTodoEnvelopeList({
+  workspaceSlug,
+  scope = "to_me",
+  periodDays = null,
+  embedded = false,
+  limit,
+}: Props) {
   const { t, currentLocale } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeScope = normalizeTodoScope(searchParams.get(TODO_SCOPE_PARAM), scope);
@@ -144,7 +153,7 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
   const [degradedSources, setDegradedSources] = useState<TResearchTodoSource[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [errorKind, setErrorKind] = useState<TodoErrorKind | null>(null);
-  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -156,12 +165,13 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
       const normalized = payload.results.filter((todo) => withinPeriod(todo, periodDays, Date.now()));
       setTodos(normalized);
       setDegradedSources(payload.degraded_sources);
-      setPage(0);
+      setTotalCount(payload.total_count ?? normalized.length);
       setErrorKind(null);
       setState(normalized.length ? "ready" : "empty");
     } catch (error) {
       setTodos([]);
       setDegradedSources([]);
+      setTotalCount(0);
       setErrorKind(todoErrorKind(error as TodoRequestError));
       setState("error");
     }
@@ -170,9 +180,6 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
   useEffect(() => {
     void load();
   }, [load]);
-
-  const pageCount = Math.max(1, Math.ceil(todos.length / limit));
-  const pagedTodos = useMemo(() => todos.slice(page * limit, (page + 1) * limit), [limit, page, todos]);
 
   const changeScope = useCallback(
     (nextScope: TResearchTodoScope) => {
@@ -184,61 +191,42 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
     [activeScope, searchParams, setSearchParams]
   );
 
-  return (
-    <section className="min-w-0 overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <div>
-          <h3 className="text-13 font-semibold text-primary">{t("research.todo.title")}</h3>
-          <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description_v2")}</p>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div
-            className="flex min-w-0 flex-wrap items-center gap-1"
-            role="group"
-            aria-label={t("research.todo.scope_label")}
+  /** 工具行：范围切换、总数与刷新，紧凑排布避免喧宾夺主。 */
+  const toolbar = (
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-1"
+        role="group"
+        aria-label={t("research.todo.scope_label")}
+      >
+        {TODO_SCOPES.map((scopeOption) => (
+          <Button
+            key={scopeOption}
+            variant="secondary"
+            size="sm"
+            aria-pressed={scopeOption === activeScope}
+            onClick={() => changeScope(scopeOption)}
           >
-            {TODO_SCOPES.map((scopeOption) => (
-              <Button
-                key={scopeOption}
-                variant="secondary"
-                size="sm"
-                aria-pressed={scopeOption === activeScope}
-                onClick={() => changeScope(scopeOption)}
-              >
-                {t(SCOPE_LABEL_KEYS[scopeOption])}
-              </Button>
-            ))}
-          </div>
-          <Button variant="secondary" size="sm" onClick={() => void load()}>
-            {t("research.todo.refresh")}
+            {t(SCOPE_LABEL_KEYS[scopeOption])}
           </Button>
-          {todos.length > limit && (
-            <div className="flex items-center gap-1" aria-label={t("research.todo.pagination")}>
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label={t("research.todo.previous_page")}
-                disabled={page === 0}
-                onClick={() => setPage((value) => Math.max(0, value - 1))}
-              >
-                ‹
-              </Button>
-              <span className="text-11 tabular-nums" aria-live="polite">
-                {page + 1}/{pageCount}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label={t("research.todo.next_page")}
-                disabled={page >= pageCount - 1}
-                onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
-              >
-                ›
-              </Button>
-            </div>
-          )}
-        </div>
+        ))}
       </div>
+      <div className="flex min-w-0 items-center gap-2">
+        {state !== "loading" && state !== "error" && (
+          <span className="text-11 text-tertiary tabular-nums">
+            {t("research.todo.total_count", { count: totalCount })}
+          </span>
+        )}
+        <Button variant="secondary" size="sm" onClick={() => void load()}>
+          {t("research.todo.refresh")}
+        </Button>
+      </div>
+    </div>
+  );
+
+  /** 主体内容：加载、错误、空态与完整列表，由外层决定滚动方式。 */
+  const body = (
+    <>
       {state === "loading" && (
         <div className="space-y-2 p-4" role="status" aria-busy="true">
           {[0, 1, 2].map((row) => (
@@ -275,12 +263,12 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
       {state === "ready" && (
         <>
           {degradedSources.length > 0 && (
-            <p className="border-t border-subtle px-4 py-2 text-11 text-tertiary" role="status">
+            <p className="border-b border-subtle px-4 py-2 text-11 text-tertiary" role="status">
               {degradedSourceMessage(degradedSources, t)}
             </p>
           )}
           <ul className="divide-y divide-subtle" role="list">
-            {pagedTodos.map((todo) => (
+            {(limit ? todos.slice(0, limit) : todos).map((todo) => (
               <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -290,9 +278,13 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
                     <ResearchStatusBadge status={todo.handling_status} size="sm">
                       {t(HANDLING_LABEL_KEYS[todo.handling_status])}
                     </ResearchStatusBadge>
-                    <p className="truncate text-12 font-medium text-primary">{todo.title}</p>
+                    <p className="truncate text-12 font-medium text-primary" title={todo.title}>
+                      {todo.title}
+                    </p>
                   </div>
-                  <p className="mt-1 truncate text-11 text-tertiary">{todoMetadata(todo, t)}</p>
+                  <p className="mt-1 truncate text-11 text-tertiary" title={todoMetadata(todo, t)}>
+                    {todoMetadata(todo, t)}
+                  </p>
                   {todo.due_at && (
                     <p className="mt-1 flex flex-wrap items-center gap-2 text-11 text-tertiary">
                       <span>
@@ -310,6 +302,28 @@ export function ResearchTodoEnvelopeList({ workspaceSlug, scope = "to_me", limit
           </ul>
         </>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-col">
+        <div className="sticky top-0 z-10 border-b border-subtle bg-surface-2 px-4 py-2">{toolbar}</div>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <section className="min-w-0 overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
+      <header className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="text-14 font-semibold text-primary">{t("research.todo.title")}</h2>
+          <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description_v2")}</p>
+        </div>
+      </header>
+      <div className="border-t border-subtle px-4 py-2">{toolbar}</div>
+      {body}
     </section>
   );
 }

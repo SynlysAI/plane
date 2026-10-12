@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useSearchParams } from "react-router";
 // plane imports
@@ -14,6 +15,7 @@ import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
+import { ResearchProjectCreateDialog } from "@/components/research/projects/research-project-create-dialog";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -35,7 +37,20 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
   const { data: currentUser } = useUser();
   const query = useResearchBrowseQuery();
   const [searchParams] = useSearchParams();
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const requestedView = searchParams.get("view") as ChainView | null;
+  const canCreateProject = Boolean(
+    currentUser?.id && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
+  );
+  const shouldAutoOpenCreate = query.get("create") === "1";
+
+  useEffect(() => {
+    if (!shouldAutoOpenCreate) return;
+    if (canCreateProject) setIsCreateDialogOpen(true);
+    query.set("create", "");
+    // The query helper is stable for this URL state and is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCreateProject, shouldAutoOpenCreate]);
 
   if (!research.isIaV2Enabled) return <ResearchChainBoard workspaceSlug={workspaceSlug} />;
 
@@ -48,12 +63,15 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
       ? requestedView
       : "chains";
   const activeTabId = activeView === "chains" ? "chains" : "reports";
-  const canCreateProject = Boolean(
-    currentUser?.id && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
-  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <ResearchProjectCreateDialog
+        workspaceSlug={workspaceSlug}
+        currentUserId={currentUser?.id ?? ""}
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+      />
       <div className="flex shrink-0 items-center gap-4 border-b border-subtle bg-surface-1 px-5">
         <nav aria-label={t("research.nav.research_chain_v2")} className="min-w-0 flex-1 overflow-x-auto">
           <TabNavigationList className="py-2">
@@ -69,7 +87,7 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
           </TabNavigationList>
         </nav>
         {canCreateProject && activeView === "chains" && (
-          <Button variant="primary" size="sm" className="shrink-0" onClick={() => query.patch({ create: "1" }, false)}>
+          <Button variant="primary" size="sm" className="shrink-0" onClick={() => setIsCreateDialogOpen(true)}>
             {t("research.projects.create")}
           </Button>
         )}

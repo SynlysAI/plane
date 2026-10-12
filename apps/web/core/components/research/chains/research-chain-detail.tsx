@@ -33,7 +33,6 @@ import {
   ResearchChainWorkflowStageDetail,
   type TResearchChainStageNodeDetail,
 } from "@/components/research/chains/research-chain-workflow-stage-detail";
-import { ResearchChainNodeDetail } from "@/components/research/chains/research-chain-node-detail";
 import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
 import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
 import { ExperimentList } from "@/components/research/experiments/experiment-list";
@@ -63,13 +62,13 @@ const MATERIAL_TABS = new Set(["materials", "reports", "experiments", "reference
  *     requested: 地址栏中的 tab 参数。
  *
  * Returns:
- *     课题页实际展示的分区。
+ *     课题页实际展示的分区。未指定时回到概览，而不是节点工作台。
  */
 export function resolveChainTab(requested: string | null): TChainTab {
   if (requested === "replay") return "nodes";
   if (requested && MATERIAL_TABS.has(requested)) return "materials";
   if (requested === "overview" || requested === "nodes" || requested === "members") return requested;
-  return "nodes";
+  return "overview";
 }
 
 /**
@@ -157,6 +156,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [actionError, setActionError] = useState("");
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [reasonAction, setReasonAction] = useState<TResearchChainNodeAction | null>(null);
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState<"15" | "20">("15");
   const [memberBusy, setMemberBusy] = useState(false);
@@ -318,19 +318,33 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
   const transition = async (node: TResearchChainNode, action: TResearchChainNodeAction) => {
     if ((action === "FAIL" || action === "RETURN") && !reason.trim()) {
+      setReasonAction(action);
       setActionError(t("research.chains.reason_required"));
-      return;
+      return false;
     }
     setTransitioning(node.id);
     setActionError("");
     try {
       await chainService.transitionChainNode(workspaceSlug, node.id, action, reason.trim() || undefined);
+      setReasonAction(null);
       await load();
+      return true;
     } catch {
       setActionError(t("research.chains.action_failed"));
+      return false;
     } finally {
       setTransitioning(null);
     }
+  };
+
+  const requestTransition = (node: TResearchChainNode, action: TResearchChainNodeAction) => {
+    if (action === "FAIL" || action === "RETURN") {
+      setReasonAction(action);
+      if (!reason.trim()) setActionError(t("research.chains.reason_required"));
+      else setActionError("");
+      return;
+    }
+    void transition(node, action);
   };
 
   const addMember = async () => {
@@ -401,7 +415,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     return referenceSourceNodeId(reference) === materialNode.id;
   });
   const selectedNodeActions = selected ? (
-    <div className="flex flex-wrap items-center gap-2 bg-surface-1 px-5 py-3">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {ACTIONS_BY_STATUS[selected.node.status]
         .filter(() => {
           const capability = selected.node.capabilities?.actions.transition;
@@ -413,7 +427,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             variant={action === "APPROVE" ? "primary" : "secondary"}
             size="sm"
             disabled={transitioning === selected.node.id}
-            onClick={() => void transition(selected.node, action)}
+            onClick={() => requestTransition(selected.node, action)}
           >
             {t(`research.chains.action_${action.toLowerCase()}`)}
           </Button>
@@ -433,20 +447,40 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           {t("research.chains.open_agent")}
         </Link>
       )}
-      {(selected.node.status === "ACTIVE" || selected.node.status === "WAITING_HUMAN") && (
-        <label className="flex flex-1 flex-col gap-1 text-11 text-tertiary">
-          <span>{t("research.chains.reason_label")}</span>
-          <input
-            value={reason}
-            aria-invalid={Boolean(actionError === t("research.chains.reason_required"))}
-            aria-describedby="chain-reason-error"
-            onChange={(event) => setReason(event.target.value)}
-            className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
-          />
-          <span id="chain-reason-error" className="text-11 text-danger-primary">
-            {actionError === t("research.chains.reason_required") ? actionError : ""}
-          </span>
-        </label>
+      {reasonAction && (
+        <div
+          role="dialog"
+          data-reason-dialog=""
+          aria-label={t("research.chains.reason_label")}
+          className="fixed top-24 right-6 z-40 w-80 rounded-md border border-subtle bg-surface-1 p-4 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
+        >
+          <label className="flex flex-col gap-1 text-11 text-tertiary">
+            <span>{t("research.chains.reason_label")}</span>
+            <input
+              value={reason}
+              aria-invalid={Boolean(actionError === t("research.chains.reason_required"))}
+              aria-describedby="chain-reason-error"
+              onChange={(event) => setReason(event.target.value)}
+              className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
+            />
+            <span id="chain-reason-error" className="text-11 text-danger-primary">
+              {actionError === t("research.chains.reason_required") ? actionError : ""}
+            </span>
+          </label>
+          <div className="mt-3 flex gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={transitioning === selected.node.id}
+              onClick={() => void transition(selected.node, reasonAction)}
+            >
+              {t("research.chains.confirm_reason")}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setReasonAction(null)}>
+              {t("research.chain_tasks.cancel_edit")}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   ) : null;
@@ -486,7 +520,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <section className="shrink-0 border-b border-subtle bg-surface-1 px-5 py-3.5">
+      <section className="shrink-0 border-b border-subtle bg-surface-1 px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -495,7 +529,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 {t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}
               </ResearchStatusBadge>
               <ResearchStatusBadge status="visibility">
-                {t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}
+                {t(`research.projects.chain_visibility.${chain?.visibility.toLowerCase()}`)}
               </ResearchStatusBadge>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
@@ -511,7 +545,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               <span>{chain ? formatResearchDateTime(chain.updated_at, currentLocale) : "-"}</span>
             </div>
             {current && (
-              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
+              <div className="border-accent-primary mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-l-2 pl-3">
                 <span className="text-11 text-tertiary">{t("research.chains.current_node")}</span>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate text-13 font-medium text-primary">{current.title}</span>
@@ -552,7 +586,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
       <nav
         aria-label={t("research.chains.tabs.label")}
-        className="shrink-0 overflow-x-auto border-b border-subtle bg-surface-1 px-5"
+        className="sticky top-0 z-10 shrink-0 overflow-x-auto border-b border-subtle bg-surface-1 px-5"
       >
         <TabNavigationList className="py-2">
           {tabs.map((tab) => (
@@ -588,7 +622,9 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-tertiary">{t("research.chains.visibility")}</dt>
-                  <dd className="text-primary">{t(`research.chains.visibility.${chain?.visibility.toLowerCase()}`)}</dd>
+                  <dd className="text-primary">
+                    {t(`research.projects.chain_visibility.${chain?.visibility.toLowerCase()}`)}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-tertiary">{t("research.chains.updated_at")}</dt>
@@ -622,38 +658,41 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 error={stageDetailError}
                 onSelectNode={(nodeId) => {
                   setReason("");
+                  setReasonAction(null);
                   selectNode(nodeId);
                 }}
                 actionSlot={selectedNodeActions}
                 detailSlot={
                   selected ? (
                     <>
-                      <ResearchChainNodeDetail {...selected} />
-                      <div className="border-t border-subtle">
-                        <ResearchChainTaskPanel
-                          workspaceSlug={workspaceSlug}
-                          chainId={chainId}
-                          nodeId={selected.node.id}
-                        />
-                      </div>
+                      <ResearchChainTaskPanel
+                        workspaceSlug={workspaceSlug}
+                        chainId={chainId}
+                        nodeId={selected.node.id}
+                      />
                       {selected.node.node_type === "PAPER_WRITING" && (
-                        <div className="border-t border-subtle">
+                        <details className="border-t border-subtle">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-13 font-medium text-primary">
+                            {t("research.paper_reviews.panel_title")}
+                          </summary>
                           <ResearchPaperReviewPanel
                             workspaceSlug={workspaceSlug}
                             chainId={chainId}
                             nodeId={selected.node.id}
                             events={selected.events}
                           />
-                        </div>
+                        </details>
                       )}
                     </>
                   ) : null
                 }
               />
             )}
-            <section className="border-t border-subtle p-5">
-              <h4 className="text-13 font-semibold text-primary">{t("research.chains.create_node_title")}</h4>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto]">
+            <details className="border-t border-subtle">
+              <summary className="cursor-pointer list-none px-5 py-3 text-13 font-semibold text-primary">
+                {t("research.chains.create_node_title")}
+              </summary>
+              <div className="grid grid-cols-1 gap-3 px-5 pb-5 md:grid-cols-[180px_minmax(0,1fr)_auto]">
                 <label className="flex flex-col gap-1 text-12 text-secondary">
                   <span>{t("research.chains.node_type")}</span>
                   <select
@@ -687,7 +726,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   {t("research.chains.create_node")}
                 </Button>
               </div>
-            </section>
+            </details>
           </section>
         )}
 

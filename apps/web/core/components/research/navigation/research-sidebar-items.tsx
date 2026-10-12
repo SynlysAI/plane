@@ -156,7 +156,8 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
               <>
                 {visibleIaV2Items
                   .filter((item) => item.key !== "research_chain")
-                  .toSorted((left, right) => {
+                  // eslint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
+                  .sort((left, right) => {
                     const order = ["management", "approvals"];
                     return order.indexOf(left.key) - order.indexOf(right.key);
                   })

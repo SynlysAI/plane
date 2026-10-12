@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
     isIaV2Enabled: true,
     isWorkspaceAdmin: false,
     canSee: (key: string) => key !== "reviews",
+    getOrgUnits: () => [],
+    fetchOrgUnits: async () => undefined,
   },
 }));
 
@@ -28,6 +30,7 @@ vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 vi.mock("react-router", () => ({
+  useNavigate: () => vi.fn(),
   useSearchParams: () => [new URLSearchParams(mocks.view ? `view=${mocks.view}` : "")],
 }));
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -77,11 +80,13 @@ it("renders the IA v2 approval queue with capability-filtered tabs", async () =>
   mocks.view = "";
   await act(async () => root.render(<ResearchApprovalCenter workspaceSlug="lab" />));
 
+  expect(container.textContent).toContain("research.approvals.tabs.shared_todos");
   expect(container.textContent).toContain("research.approvals.tabs.report_review");
   expect(container.textContent).toContain("research.approvals.tabs.agent_approval");
   expect(container.textContent).toContain("research.approvals.tabs.office");
   expect(container.textContent).not.toContain("research.approvals.tabs.stage_review");
-  expect(container.textContent).toContain("report-list");
+  expect(container.textContent).toContain("shared-todos");
+  expect(container.textContent).not.toContain("report-list");
 });
 
 it("keeps the office approval page when IA v2 is disabled", async () => {

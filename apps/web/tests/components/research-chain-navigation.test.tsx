@@ -97,6 +97,7 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
+vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ projectMap: {} }) }));
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => mocks.workspace }));
 vi.mock("@/hooks/use-local-storage", () => ({
   default: () => ({ storedValue: mocks.stored, setValue: vi.fn() }),
@@ -251,7 +252,7 @@ it("collapses research to the IA v2 project channels when IA v2 is enabled", asy
     "/lab/research/settings",
     "/lab/research/approvals",
     "/lab/research/chains",
-    "/lab/research/chains/chain-1",
+    "/lab/research/chains/chain-1?tab=overview",
     "/lab/projects",
     "/lab/projects/admin-1/issues",
   ]);
@@ -264,7 +265,8 @@ it("collapses research to the IA v2 project channels when IA v2 is enabled", asy
   expect(container.textContent).not.toContain("报告");
   expect(container.textContent).not.toContain("提交汇总");
   expect(container.textContent).not.toContain("待我评审");
-  expect(container.querySelectorAll("a[href='/lab/research/chains/chain-1']")).toHaveLength(1);
+  expect(container.querySelectorAll("a[href='/lab/research/chains/chain-1?tab=overview']")).toHaveLength(1);
+  expect(container.querySelectorAll("a[href='/lab/research/chains']")).toHaveLength(1);
   expect(container.querySelectorAll("a[href='/lab/projects/admin-1/issues']")).toHaveLength(1);
 });
 

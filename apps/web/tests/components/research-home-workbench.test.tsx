@@ -163,7 +163,7 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 
-it("renders the fixed two-column home information architecture without generic widgets", async () => {
+it("renders the action-first bento home information architecture without generic widgets", async () => {
   await renderHome();
   await act(async () => undefined);
 
@@ -171,14 +171,43 @@ it("renders the fixed two-column home information architecture without generic w
   expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
   expect(columns?.className).toContain("min-w-0");
   expect(columns?.className).toContain("grid-cols-1");
-  expect(columns?.className).toContain("xl:grid-cols-2");
+  expect(columns?.className).toContain("xl:grid-cols-12");
   for (const title of ["科研项目概览", "行政项目概览", "跨组件待办", "最近动态", "报告提交摘要"]) {
     expect(container.textContent).toContain(title);
   }
+  expect(container.querySelector('a[href="/lab/research/todos"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research/reports/summary"]')).not.toBeNull();
   expect(container.textContent).not.toContain("快捷入口");
   expect(container.textContent).not.toContain("我的工作");
   expect(container.textContent).not.toContain("便签");
   expect(container.textContent).not.toContain("草稿");
+});
+
+it("fills the wide viewport in compact mode and supports density switching", async () => {
+  await renderHome();
+  await act(async () => undefined);
+
+  const cards = [...container.querySelectorAll("section")];
+  expect(cards.length).toBeGreaterThanOrEqual(5);
+  for (const card of cards.slice(0, 5)) {
+    expect(card.className).toMatch(/max-xl:h-\[(400|320)px\]/);
+    expect(card.className).toMatch(/xl:h-full/);
+    expect(card.className).toContain("xl:min-h-0");
+    const body = card.querySelector("div.border-t");
+    expect(body?.className).toContain("overflow-y-auto");
+  }
+  const grid = container.querySelector("[data-testid='workspace-home-columns']");
+  expect(grid?.className).toContain("xl:flex-1");
+  expect(grid?.className).toContain("xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]");
+  expect(grid?.parentElement?.className.split(/\s+/)).toContain("xl:h-full");
+
+  const detailedButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "详细");
+  await act(async () => detailedButton?.click());
+  expect(window.localStorage.getItem("plane.home.workbench.density")).toBe("detailed");
+  for (const card of cards.slice(0, 5)) {
+    expect(card.className).not.toMatch(/max-xl:h-\[(400|320)px\]/);
+  }
+  expect(grid?.parentElement?.className.split(/\s+/)).not.toContain("xl:h-full");
 });
 
 it("keeps research and administrative project summaries separate", async () => {

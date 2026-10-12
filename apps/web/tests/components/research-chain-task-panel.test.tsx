@@ -143,20 +143,44 @@ it("shows task metadata, status text, scoped candidates, and the return reason",
   await renderPanel();
 
   expect(container.textContent).toContain("整理开题文献");
-  expect(container.textContent).toContain("王导师");
   expect(container.textContent).toContain("李同学");
   expect(container.textContent).toContain("2026/10/20");
   expect(container.textContent).toContain("已提交");
   expect(container.textContent).toContain("SUBMITTED");
-  expect(container.textContent).toContain("2026/10/9");
-  expect(container.textContent).toContain("实验样本说明不足");
-  await act(async () => button("创建任务").click());
-  const groups = [...container.querySelectorAll("optgroup")];
-  expect(groups.map((group) => group.label)).toEqual(["组织范围", "显式协作者"]);
+  expect(container.textContent).not.toContain("实验样本说明不足");
+
+  await act(async () => button("整理开题文献").click());
+  const peek = container.querySelector("aside");
+  expect(peek?.className).toContain("md:w-1/2");
+  expect(peek?.textContent).toContain("属性");
+  expect(peek?.textContent).toContain("活动");
+  expect(peek?.textContent).toContain("补充近三年实验方法对比。");
+  expect(peek?.textContent).toContain("王导师");
+  expect(peek?.textContent).toContain("2026/10/9");
+  expect(peek?.textContent).toContain("实验样本说明不足");
+
+  const assignee = container.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
+  await act(async () => assignee.click());
+  const groups = [...container.querySelectorAll('[role="group"]')];
+  expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual(["组织范围", "显式协作者"]);
   expect(groups[0]?.textContent).toContain("智能材料组");
   expect(groups[0]?.textContent).toContain("评审人");
   expect(groups[1]?.textContent).toContain("外部导师组");
+  expect([...container.querySelectorAll('[role="option"]')].some((option) => option.textContent === "未指派")).toBe(
+    false
+  );
   expect(container.querySelector('[role="combobox"]')).toBeNull();
+});
+
+it("uses the administrative peek pattern for an empty research instruction", async () => {
+  mocks.getNodeTasks.mockResolvedValue([task({ instruction: "", return_reason: null })]);
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+  const peek = container.querySelector("aside");
+  expect(peek?.textContent).toContain("点击添加描述");
+  expect(peek?.textContent).not.toContain("添加责任人");
+  expect(peek?.textContent).not.toContain("添加截止时间");
+  expect(peek?.textContent).toContain("创建了任务");
 });
 
 it("keeps task requests scoped to the selected node supplied by the detail container", async () => {
@@ -187,14 +211,15 @@ it("creates a task using only a candidate returned by assignable-users", async (
   mocks.createNodeTask.mockResolvedValue(created);
   await renderPanel();
 
-  await act(async () => button("创建任务").click());
-  await setInput('input:not([type="date"])', "补充实验记录");
-  const select = container.querySelector("select") as HTMLSelectElement;
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-    setter?.call(select, "student-1");
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  await act(async () => button("+ 创建任务").click());
+  await setInput('input:not([type="date"]):not([type="search"])', "补充实验记录");
+  await act(async () => button("更多").click());
+  const assigneeButtons = [...container.querySelectorAll('button[aria-label="责任人"]')];
+  await act(async () => assigneeButtons.at(-1)?.click());
+  const option = [...container.querySelectorAll('[role="option"]')].find((item) =>
+    item.textContent?.includes("李同学")
+  );
+  await act(async () => option?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   await act(async () => button("创建任务").click());
 
   expect(mocks.createNodeTask).toHaveBeenCalledWith(
@@ -210,6 +235,7 @@ it("requires and submits a return reason", async () => {
   mocks.runNodeTaskAction.mockResolvedValue(task({ status: "NEEDS_REVISION", return_reason: "请补充样本信息" }));
   await renderPanel();
 
+  await act(async () => button("已提交").click());
   await act(async () => button("退回").click());
   await act(async () => button("确认提交").click());
   expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
@@ -243,8 +269,8 @@ it("renders empty, forbidden, loading, refresh, and server rejection states", as
   await act(async () => button("刷新").click());
   await act(async () => undefined);
   mocks.createNodeTask.mockRejectedValueOnce({ error: "assignee is outside the assignable-user boundary." });
-  await act(async () => button("创建任务").click());
-  await setInput('input:not([type="date"])', "越权任务");
+  await act(async () => button("+ 创建任务").click());
+  await setInput('input:not([type="date"]):not([type="search"])', "越权任务");
   await act(async () => button("创建任务").click());
   expect(container.textContent).toContain("assignee is outside the assignable-user boundary.");
 });

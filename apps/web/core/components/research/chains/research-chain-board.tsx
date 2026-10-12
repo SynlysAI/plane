@@ -192,7 +192,7 @@ export const ResearchChainBoard = function ResearchChainBoard({ workspaceSlug }:
                   )}
                 </TableCell>
                 <TableCell className="text-secondary">
-                  {t(`research.chains.visibility.${chain.visibility.toLowerCase()}`)}
+                  {t(`research.projects.chain_visibility.${chain.visibility.toLowerCase()}`)}
                 </TableCell>
                 <TableCell className="text-secondary">{chain.owner_name ?? chain.owner}</TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">

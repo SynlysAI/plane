@@ -173,39 +173,65 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-it("renders the shared todo envelope above capability-filtered domain tabs", async () => {
+it("places the shared todo envelope beside capability-filtered domain tabs", async () => {
   await renderCenter("/lab/research/approvals?tab=report_review");
   await act(async () => undefined);
 
-  const sharedTodos = container.querySelectorAll('section[aria-label="跨组件待办"]');
-  expect(sharedTodos).toHaveLength(1);
+  const nav = container.querySelector('nav[aria-label="审批中心"]');
+  expect(nav?.textContent).toContain("跨组件待办");
+  expect(nav?.textContent).toContain("阶段评审");
+  expect(nav?.textContent).toContain("报告审核");
+  expect(nav?.textContent).toContain("Agent 审批");
+  expect(nav?.textContent).toContain("办公审批");
+  expect(container.querySelector('section[aria-label="跨组件待办"]')).toBeNull();
+  expect(container.textContent).toContain("report-list");
+  expect(mocks.getResearchTodos).not.toHaveBeenCalled();
+
+  const todoTab = [...container.querySelectorAll("a")].find((link) => link.textContent === "跨组件待办");
+  expect(todoTab?.getAttribute("href")).toBe("/lab/research/approvals?tab=shared_todos");
+  await act(async () => todoTab?.click());
+  await act(async () => undefined);
+
+  const sharedTodos = container.querySelector('section[aria-label="跨组件待办"]');
+  const tabNav = container.querySelector('nav[aria-label="审批中心"]');
+  expect(sharedTodos).not.toBeNull();
+  expect(tabNav?.compareDocumentPosition(sharedTodos!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
   expect(container.textContent).toContain("报告需修订 · 2026-W38");
   expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
-  expect(container.textContent).toContain("报告");
+  expect(container.textContent).not.toContain("report-list");
   expect(mocks.collectResearchTodos).not.toHaveBeenCalled();
   expect(mocks.getChainNodes).not.toHaveBeenCalled();
   expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
 });
 
 it("keeps todo scope while switching approval domain tabs", async () => {
-  await renderCenter("/lab/research/approvals?tab=report_review");
+  await renderCenter("/lab/research/approvals?tab=shared_todos");
   await act(async () => undefined);
 
   const visibleButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部可见");
   await act(async () => visibleButton?.click());
   expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "visible", limit: 100 });
-  expect(currentSearch).toBe("?tab=report_review&todo_scope=visible");
+  expect(currentSearch).toBe("?tab=shared_todos&todo_scope=visible");
 
-  const agentTab = [...container.querySelectorAll("a")].find((link) => link.getAttribute("href")?.includes("agent"));
+  const agentTab = [...container.querySelectorAll("a")].find((link) =>
+    link.getAttribute("href")?.includes("agent_approval")
+  );
   expect(agentTab?.getAttribute("href")).toBe("/lab/research/approvals?tab=agent_approval&todo_scope=visible");
   await act(async () => agentTab?.click());
   await act(async () => undefined);
 
   expect(currentSearch).toBe("?tab=agent_approval&todo_scope=visible");
   expect(container.textContent).toContain("agent-approval-queue");
-  expect(container.querySelector('section[aria-label="跨组件待办"]')).not.toBeNull();
+  expect(container.querySelector('section[aria-label="跨组件待办"]')).toBeNull();
+
+  const todoTab = [...container.querySelectorAll("a")].find((link) => link.textContent === "跨组件待办");
+  expect(todoTab?.getAttribute("href")).toBe("/lab/research/approvals?tab=shared_todos&todo_scope=visible");
+  await act(async () => todoTab?.click());
+  await act(async () => undefined);
+
   expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "visible", limit: 100 });
 });
 
 it("keeps degraded sources visible and the approval layout inside the viewport", async () => {
@@ -213,8 +239,11 @@ it("keeps degraded sources visible and the approval layout inside the viewport",
   await renderCenter("/lab/research/approvals?todo_scope=visible");
   await act(async () => undefined);
 
+  const tabNav = container.querySelector('nav[aria-label="审批中心"]');
+  const sharedTodos = container.querySelector('section[aria-label="跨组件待办"]');
   expect(container.querySelector('[role="status"]')?.textContent).toContain("Agent 审批");
   expect(container.textContent).toContain("报告需修订 · 2026-W38");
-  expect(container.querySelector("section")?.className).toContain("min-w-0");
+  expect(sharedTodos?.className).toContain("min-w-0");
+  expect(tabNav?.compareDocumentPosition(sharedTodos!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 });

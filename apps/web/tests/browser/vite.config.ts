@@ -12,6 +12,9 @@ export default defineConfig({
     "process.env": JSON.stringify({}),
   },
   plugins: [tsconfigPaths({ projects: [path.join(webRoot, "tsconfig.json")] })],
+  css: {
+    postcss: path.join(webRoot, "postcss.config.js"),
+  },
   resolve: {
     alias: {
       "@": path.join(webRoot, "core"),

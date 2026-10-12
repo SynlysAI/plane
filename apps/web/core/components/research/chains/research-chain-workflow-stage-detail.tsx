@@ -1,11 +1,20 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { TResearchChainEvent, TResearchChainNode, TResearchChainSnapshot } from "@plane/types";
 // components
 import { formatResearchDateTime } from "@/components/research/common/research-format";
+import {
+  ResearchChainNodeDetail,
+  summarizeNodeEvidence,
+} from "@/components/research/chains/research-chain-node-detail";
+import {
+  ResearchChainWorkbenchPeek,
+  ResearchChainWorkbenchPeekProvider,
+  useResearchChainWorkbenchPeek,
+} from "@/components/research/chains/research-chain-workbench-peek";
 import type { TResearchWorkflowStage } from "@/components/research/chains/research-chain-workflow";
 
 export type TResearchChainStageNodeDetail = {
@@ -43,8 +52,19 @@ function referenceLabel(reference: Record<string, unknown>) {
   return typeof identity === "string" ? identity : "";
 }
 
-/** Render one workflow stage with node selection, immutable snapshots and trace replay. */
-export function ResearchChainWorkflowStageDetail({
+/**
+ * 渲染阶段工作台：浅灰节点列、白底当前节点，以及证据计数 Peek。
+ */
+export function ResearchChainWorkflowStageDetail(props: Props) {
+  return (
+    <ResearchChainWorkbenchPeekProvider>
+      <ResearchChainWorkflowStageBody {...props} />
+    </ResearchChainWorkbenchPeekProvider>
+  );
+}
+
+/** 阶段工作台正文。Peek 状态来自外层 provider，以便任务面板替换证据层。 */
+function ResearchChainWorkflowStageBody({
   stage,
   nodes,
   details,
@@ -56,169 +76,242 @@ export function ResearchChainWorkflowStageDetail({
   detailSlot,
 }: Props) {
   const { t, currentLocale } = useTranslation();
-  const snapshots = details
-    .flatMap((detail) =>
-      detail.snapshots.map((snapshot) => ({
-        snapshot,
-        nodeId: detail.node.id,
-        nodeTitle: detail.node.title,
-      }))
-    )
-    // The array is created by flatMap, so sorting it cannot mutate source data.
-    // eslint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
-    .sort((left, right) => {
-      const nodeResult = left.nodeTitle.localeCompare(right.nodeTitle, currentLocale);
-      return nodeResult !== 0 ? nodeResult : left.snapshot.version - right.snapshot.version;
-    });
-  const events = details
-    .flatMap((detail) => detail.events.map((event) => ({ event, nodeId: detail.node.id })))
-    // The array is created by flatMap, so sorting it cannot mutate source data.
-    // eslint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
-    .sort(
-      (left, right) =>
-        left.event.occurred_at.localeCompare(right.event.occurred_at) ||
-        left.event.event_id.localeCompare(right.event.event_id)
-    );
-  const statusLabel =
-    stage.status === "NOT_STARTED"
+  const workbenchPeek = useResearchChainWorkbenchPeek();
+  const recordPeek =
+    workbenchPeek?.peek && workbenchPeek.peek.kind !== "task" && workbenchPeek.peek.kind !== "create"
+      ? workbenchPeek.peek.kind
+      : null;
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedDetail = details.find((detail) => detail.node.id === selectedNodeId) ?? null;
+  const evidence = selectedDetail
+    ? summarizeNodeEvidence(selectedDetail.node, selectedDetail.events, selectedDetail.snapshots)
+    : { recordCount: 0, emptyCount: 0, emptyKeys: [] };
+  const snapshots = selectedDetail?.snapshots ?? [];
+  const events = selectedDetail?.events ?? [];
+  const statusLabel = selectedNode
+    ? t(`research.chains.node_status.${selectedNode.status.toLowerCase()}`)
+    : stage.status === "NOT_STARTED"
       ? t("research.chains.workflow.not_started")
       : t(`research.chains.node_status.${stage.status.toLowerCase()}`);
 
+  const closePeekRef = useRef(workbenchPeek?.close);
+  closePeekRef.current = workbenchPeek?.close;
+  useEffect(() => {
+    closePeekRef.current?.();
+  }, [selectedNodeId]);
+
+  const openRecord = (kind: "evidence" | "snapshots" | "trace" | "empty") => {
+    workbenchPeek?.openRecord(kind);
+  };
+
   return (
-    <section className="p-5" aria-label={t("research.chains.workflow.stage_detail_title")}>
-      <div className="overflow-hidden rounded-xl border border-subtle bg-surface-1">
-        <header className="border-b border-subtle px-5 py-4">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h3 className="text-15 font-semibold text-primary">{t(stage.labelKey)}</h3>
-            <span className="text-12 text-secondary">{statusLabel}</span>
-            {stage.shared && <span className="text-11 text-tertiary">{t("research.chains.workflow.shared")}</span>}
-            {stage.associatedNodeIds.length > 0 && (
-              <span className="text-11 text-tertiary">{t("research.chains.workflow.preparation")}</span>
-            )}
-          </div>
-          <p className="mt-1 text-12 text-tertiary">
-            {t("research.chains.workflow.stage_node_count", { count: nodes.length })}
-          </p>
-        </header>
-
-        <div className="grid grid-cols-1 border-b border-subtle xl:grid-cols-[280px_minmax(0,1fr)]">
-          <div
-            className="border-subtle p-4 xl:border-r"
-            role="region"
-            aria-label={t("research.chains.workflow.stage_nodes")}
-          >
-            <h4 className="text-12 font-semibold text-primary">{t("research.chains.workflow.stage_nodes")}</h4>
-            <div className="mt-3 space-y-1" role="list">
-              {nodes.map((node) => {
-                const selected = node.id === selectedNodeId;
-                const associated = stage.associatedNodeIds.includes(node.id);
-                const unmapped = !stage.nodeIds.includes(node.id) && !stage.associatedNodeIds.includes(node.id);
-                return (
-                  <button
-                    key={node.id}
-                    type="button"
-                    onClick={() => onSelectNode(node.id)}
-                    aria-pressed={selected || undefined}
-                    className={`flex w-full flex-col gap-1 rounded-md border px-3 py-2 text-left transition-colors hover:bg-surface-2 ${
-                      selected ? "ring-border-strong border-strong ring-1" : "border-transparent"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="truncate text-12 font-medium text-primary">{node.title}</span>
-                      {node.loop_iteration > 0 && (
-                        <span className="shrink-0 text-10 text-secondary">R{node.loop_iteration}</span>
-                      )}
-                    </span>
-                    <span className="truncate text-11 text-secondary">
-                      {t(`research.chains.node_status.${node.status.toLowerCase()}`)}
-                      {associated ? ` · ${t("research.chains.workflow.preparation")}` : ""}
-                      {unmapped ? ` · ${t("research.chains.workflow.unmapped_node")}` : ""}
-                    </span>
-                  </button>
-                );
-              })}
-              {!nodes.length && <p className="text-12 text-tertiary">{t("research.chains.workflow.stage_empty")}</p>}
-            </div>
-          </div>
-
-          <div className="grid min-w-0 grid-cols-1 2xl:grid-cols-2">
-            <section className="border-subtle p-4 2xl:border-r" aria-label={t("research.chains.snapshots_title")}>
-              <h4 className="text-12 font-semibold text-primary">{t("research.chains.snapshots_title")}</h4>
-              {loading ? (
-                <p className="mt-3 text-12 text-tertiary">{t("research.common.loading")}</p>
-              ) : (
-                <ul className="mt-3 divide-y divide-subtle" role="list">
-                  {snapshots.map(({ snapshot, nodeId, nodeTitle }) => (
-                    <li
-                      key={`${nodeId}-${snapshot.snapshot_id}-${snapshot.version}`}
-                      className="py-2 first:pt-0 last:pb-0"
-                    >
-                      <p className="text-12 font-medium text-primary">
-                        {t(SNAPSHOT_TYPE_LABELS[snapshot.snapshot_type] ?? "research.chains.workflow.stage_snapshot")}·{" "}
-                        {t("research.chains.workflow.snapshot_version", { version: snapshot.version })}
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-12 text-secondary">{snapshot.summary}</p>
-                      <p className="mt-1 text-11 text-tertiary">
-                        {nodeTitle} · {formatResearchDateTime(snapshot.created_at, currentLocale)}
-                        {snapshot.source_versions.length
-                          ? ` · ${snapshot.source_versions.map(referenceLabel).filter(Boolean).join("、")}`
-                          : ""}
-                      </p>
-                    </li>
-                  ))}
-                  {!snapshots.length && (
-                    <li className="py-2 text-12 text-tertiary">{t("research.chains.workflow.stage_snapshot_empty")}</li>
-                  )}
-                </ul>
-              )}
-            </section>
-
-            <section className="border-subtle p-4" aria-label={t("research.chains.workflow.trace_title")}>
-              <h4 className="text-12 font-semibold text-primary">{t("research.chains.workflow.trace_title")}</h4>
-              {loading ? (
-                <p className="mt-3 text-12 text-tertiary">{t("research.common.loading")}</p>
-              ) : (
-                <ol className="mt-3 space-y-0 border-l border-subtle pl-4" role="list">
-                  {events.map(({ event, nodeId }) => (
-                    <li
-                      key={`${nodeId}-${event.event_id}-${event.occurred_at}`}
-                      className="relative py-2 pl-4 first:pt-0 last:pb-0"
-                    >
-                      <span
-                        className="bg-border-strong absolute top-[15px] -left-[21px] size-2 rounded-full"
-                        aria-hidden="true"
-                      />
-                      <p className="text-12 font-medium text-primary">{event.summary || event.event_type}</p>
-                      <p className="mt-1 text-11 text-tertiary">
-                        {formatResearchDateTime(event.occurred_at, currentLocale)} · {event.actor_type} ·{" "}
-                        {event.source_system}
-                      </p>
-                      <p className="mt-0.5 truncate text-11 text-tertiary">
-                        {event.trace_id
-                          ? t("research.chains.workflow.trace_id", { id: event.trace_id })
-                          : t("research.chains.workflow.trace_id_empty")}
-                      </p>
-                    </li>
-                  ))}
-                  {!events.length && (
-                    <li className="py-2 text-12 text-tertiary">{t("research.chains.workflow.trace_empty")}</li>
-                  )}
-                </ol>
-              )}
-            </section>
+    <section
+      className="border-b border-subtle bg-surface-1"
+      aria-label={t("research.chains.workflow.stage_detail_title")}
+    >
+      <div className="grid grid-cols-1 items-start xl:grid-cols-[220px_minmax(0,1fr)]">
+        <div
+          className="border-b border-subtle bg-surface-2 p-4 xl:border-r xl:border-b-0"
+          role="region"
+          aria-label={t("research.chains.workflow.stage_nodes")}
+        >
+          <h4 className="text-12 font-semibold text-primary">{t("research.chains.workflow.stage_nodes")}</h4>
+          <div className="mt-3 space-y-1" role="list">
+            {nodes.map((node) => {
+              const selected = node.id === selectedNodeId;
+              const associated = stage.associatedNodeIds.includes(node.id);
+              const unmapped = !stage.nodeIds.includes(node.id) && !stage.associatedNodeIds.includes(node.id);
+              return (
+                <button
+                  key={node.id}
+                  type="button"
+                  onClick={() => onSelectNode(node.id)}
+                  aria-pressed={selected || undefined}
+                  className={`flex w-full flex-col gap-0.5 border-l-2 px-3 py-2 text-left ${
+                    selected ? "border-accent-primary bg-surface-1" : "border-transparent hover:bg-surface-1"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="truncate text-12 font-medium text-primary">{node.title}</span>
+                    {node.loop_iteration > 0 && (
+                      <span className="shrink-0 text-10 text-secondary">R{node.loop_iteration}</span>
+                    )}
+                  </span>
+                  <span className="truncate text-11 text-secondary">
+                    {t(`research.chains.node_status.${node.status.toLowerCase()}`)}
+                    {associated ? ` · ${t("research.chains.workflow.preparation")}` : ""}
+                    {unmapped ? ` · ${t("research.chains.workflow.unmapped_node")}` : ""}
+                  </span>
+                </button>
+              );
+            })}
+            {!nodes.length && <p className="px-3 text-12 text-tertiary">{t("research.chains.workflow.stage_empty")}</p>}
           </div>
         </div>
 
-        {error && (
-          <p className="border-b border-subtle px-5 py-3 text-12 text-danger-primary" role="alert">
-            {t("research.chains.workflow.detail_load_failed")}
-          </p>
-        )}
-
-        {actionSlot && <div className="border-b border-subtle">{actionSlot}</div>}
-
-        {detailSlot}
+        <div className="min-w-0 bg-surface-1">
+          <header className="flex flex-wrap items-start justify-between gap-3 border-b border-subtle px-4 py-3">
+            <div className="min-w-0">
+              <h3 className="truncate text-16 font-semibold text-primary">
+                {selectedNode?.title ?? t(stage.labelKey)}
+              </h3>
+              <p className="mt-1 text-12 text-secondary">{statusLabel}</p>
+            </div>
+            {actionSlot}
+          </header>
+          {selectedNode && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-subtle px-4 py-2 text-12">
+              <CountButton
+                label={t("research.chains.workflow.evidence")}
+                count={evidence.recordCount}
+                pressed={recordPeek === "evidence"}
+                onClick={() => openRecord("evidence")}
+              />
+              <CountButton
+                label={t("research.chains.snapshots_title")}
+                count={snapshots.length}
+                pressed={recordPeek === "snapshots"}
+                onClick={() => openRecord("snapshots")}
+              />
+              <CountButton
+                label={t("research.chains.workflow.trace_title")}
+                count={events.length}
+                pressed={recordPeek === "trace"}
+                onClick={() => openRecord("trace")}
+              />
+              <CountButton
+                label={t("research.chains.sections.empty_group")}
+                count={evidence.emptyCount}
+                pressed={recordPeek === "empty"}
+                onClick={() => openRecord("empty")}
+              />
+            </div>
+          )}
+          {error && (
+            <p className="border-b border-subtle px-4 py-3 text-12 text-danger-primary" role="alert">
+              {t("research.chains.workflow.detail_load_failed")}
+            </p>
+          )}
+          {detailSlot}
+        </div>
       </div>
+      {recordPeek && (
+        <ResearchChainWorkbenchPeek
+          title={t(
+            `research.chains.workflow.peek_${recordPeek === "evidence" ? "evidence" : recordPeek === "snapshots" ? "snapshots" : recordPeek === "trace" ? "trace" : "empty"}`
+          )}
+          onClose={() => workbenchPeek?.close()}
+        >
+          {loading ? (
+            <p className="text-12 text-tertiary">{t("research.common.loading")}</p>
+          ) : recordPeek === "evidence" && selectedDetail ? (
+            <ResearchChainNodeDetail {...selectedDetail} embedded />
+          ) : recordPeek === "snapshots" ? (
+            <SnapshotList snapshots={snapshots} nodeTitle={selectedNode?.title ?? ""} locale={currentLocale} />
+          ) : recordPeek === "trace" ? (
+            <TraceList events={events} />
+          ) : (
+            <ul className="space-y-1 text-12 text-tertiary" role="list">
+              {evidence.emptyKeys.map((key) => (
+                <li key={key}>{t(`research.chains.sections.${key}`)}</li>
+              ))}
+              {!evidence.emptyKeys.length && <li>{t("research.chains.sections.empty")}</li>}
+            </ul>
+          )}
+        </ResearchChainWorkbenchPeek>
+      )}
     </section>
+  );
+}
+
+/**
+ * 渲染工作台计数按钮。再次点击同一计数会关闭 Peek。
+ */
+function CountButton({
+  label,
+  count,
+  pressed,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  pressed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-peek-trigger=""
+      aria-pressed={pressed || undefined}
+      onClick={onClick}
+      className={`rounded-sm px-1 py-0.5 ${pressed ? "font-medium text-primary" : "text-secondary hover:text-primary"}`}
+    >
+      {label} {count}
+    </button>
+  );
+}
+
+/**
+ * 在 Peek 中列出当前节点的不可变快照。
+ */
+function SnapshotList({
+  snapshots,
+  nodeTitle,
+  locale,
+}: {
+  snapshots: TResearchChainSnapshot[];
+  nodeTitle: string;
+  locale: string;
+}) {
+  const { t } = useTranslation();
+  if (!snapshots.length) {
+    return <p className="text-12 text-tertiary">{t("research.chains.workflow.stage_snapshot_empty")}</p>;
+  }
+  return (
+    <ul className="divide-y divide-subtle" role="list">
+      {snapshots.map((snapshot) => (
+        <li key={`${snapshot.snapshot_id}-${snapshot.version}`} className="py-2 first:pt-0 last:pb-0">
+          <p className="text-12 font-medium text-primary">
+            {t(SNAPSHOT_TYPE_LABELS[snapshot.snapshot_type] ?? "research.chains.workflow.stage_snapshot")}·{" "}
+            {t("research.chains.workflow.snapshot_version", { version: snapshot.version })}
+          </p>
+          <p className="mt-1 text-12 text-secondary">{snapshot.summary}</p>
+          <p className="mt-1 text-11 text-tertiary">
+            {nodeTitle} · {formatResearchDateTime(snapshot.created_at, locale)}
+            {snapshot.source_versions.length
+              ? ` · ${snapshot.source_versions.map(referenceLabel).filter(Boolean).join("、")}`
+              : ""}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * 在 Peek 中按时间列出当前节点的过程记录。
+ */
+function TraceList({ events }: { events: TResearchChainEvent[] }) {
+  const { t, currentLocale } = useTranslation();
+  if (!events.length) {
+    return <p className="text-12 text-tertiary">{t("research.chains.workflow.trace_empty")}</p>;
+  }
+  return (
+    <ol className="space-y-0 border-l border-subtle pl-4" role="list">
+      {events.map((event) => (
+        <li key={`${event.event_id}-${event.occurred_at}`} className="relative py-2 pl-4 first:pt-0 last:pb-0">
+          <span className="bg-border-strong absolute top-[15px] -left-[21px] size-2 rounded-full" aria-hidden="true" />
+          <p className="text-12 font-medium text-primary">{event.summary || event.event_type}</p>
+          <p className="mt-1 text-11 text-tertiary">
+            {formatResearchDateTime(event.occurred_at, currentLocale)} · {event.actor_type} · {event.source_system}
+          </p>
+          <p className="mt-0.5 truncate text-11 text-tertiary">
+            {event.trace_id
+              ? t("research.chains.workflow.trace_id", { id: event.trace_id })
+              : t("research.chains.workflow.trace_id_empty")}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }

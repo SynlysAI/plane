@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
+import { observer } from "mobx-react";
 import { AddOutline, ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
 import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
@@ -11,6 +12,8 @@ import { CustomMenu, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 import { collectBlockedIds, flattenCategories, projectHref } from "./research-project-tree.utils";
+import { useProject } from "@/hooks/store/use-project";
+import { useResearch } from "@/hooks/store/use-research";
 import useLocalStorage from "@/hooks/use-local-storage";
 import {
   ResearchNavigationService,
@@ -57,8 +60,9 @@ function ProjectLink({
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const href = projectHref(workspaceSlug, project);
+  const path = href.split("?")[0];
   return (
-    <SidebarNavItem isActive={pathname === href || pathname?.startsWith(`${href}/`)}>
+    <SidebarNavItem isActive={pathname === path || Boolean(pathname?.startsWith(`${path}/`))}>
       <Link href={href} className="min-w-0 flex-1 truncate" title={project.name}>
         <span className="block truncate text-12">{project.name}</span>
       </Link>
@@ -189,8 +193,15 @@ function CategoryNode({
 }
 
 /** 渲染一个项目通道的分类树和分类管理交互。 */
-export function ResearchProjectTree({ scope, title, href, canManage = false }: Props) {
+export const ResearchProjectTree = observer(function ResearchProjectTree({
+  scope,
+  title,
+  href,
+  canManage = false,
+}: Props) {
   const { workspaceSlug } = useParams();
+  const { projectMap } = useProject();
+  const { researchProjects } = useResearch();
   const [tree, setTree] = useState<TNavigationTree>({ ...EMPTY_TREE, scope });
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -209,6 +220,14 @@ export function ResearchProjectTree({ scope, title, href, canManage = false }: P
   const isOpen = storedOpen ?? true;
   const canManageTree = canManage && tree.can_manage;
 
+  // 导航树由项目集合与分类共同投影。项目创建会先写入对应 store，这里跟踪
+  // 当前通道的项目 ID 签名，使左侧树无需整页刷新即可同步新增项目。
+  const projects = scope === "ADMINISTRATIVE" ? projectMap : researchProjects;
+  const projectSignature = Object.keys(projects ?? {})
+    // eslint-disable-next-line unicorn/no-array-sort -- Object.keys 已生成新数组，且当前 TS target 不含 toSorted。
+    .sort()
+    .join("|");
+
   /** 重新加载当前通道的分类树。 */
   const refreshTree = useCallback(async () => {
     if (!workspaceSlug) return;
@@ -226,7 +245,7 @@ export function ResearchProjectTree({ scope, title, href, canManage = false }: P
 
   useEffect(() => {
     void refreshTree();
-  }, [refreshTree]);
+  }, [projectSignature, refreshTree]);
 
   /** 切换分类节点的持久化展开状态。 */
   const toggleExpanded = useCallback(
@@ -349,7 +368,11 @@ export function ResearchProjectTree({ scope, title, href, canManage = false }: P
           aria-label={`${isOpen ? "收起" : "展开"}${title}`}
           onClick={() => setStoredOpen(!isOpen)}
         />
-        <Link href={href} className="min-w-0 flex-1 truncate text-13 font-semibold">
+        <Link
+          href={href}
+          className="min-w-0 flex-1 truncate text-13 font-semibold"
+          title={scope === "RESEARCH" ? "打开科研项目总览" : undefined}
+        >
           {title}
         </Link>
         {canManageTree && (
@@ -533,4 +556,4 @@ export function ResearchProjectTree({ scope, title, href, canManage = false }: P
       </ModalCore>
     </div>
   );
-}
+});

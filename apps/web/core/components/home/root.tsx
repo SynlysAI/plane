@@ -35,7 +35,7 @@ export const WorkspaceHomeView = observer(function WorkspaceHomeView() {
         </div>
       )}
       <>
-        <ContentWrapper className="mx-auto scrollbar-hide gap-6 bg-canvas px-page-x">
+        <ContentWrapper className="mx-auto scrollbar-hide h-full min-h-0 gap-6 bg-canvas px-page-x">
           {workspaceSlug && <WorkspaceHomeWorkbench workspaceSlug={workspaceSlug.toString()} />}
         </ContentWrapper>
       </>

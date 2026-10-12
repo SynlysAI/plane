@@ -203,14 +203,27 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   await act(async () => undefined);
 
   expect(container.textContent).toContain("文献调研");
-  expect(container.textContent).toContain("创建节点");
-  expect(container.textContent).toContain("文献快照");
-  expect(container.textContent).toContain("输入");
-  expect(container.textContent).toContain("人类决策");
+  expect(container.textContent).not.toContain("文献快照");
+  expect(container.textContent).not.toContain("人类决策");
   expect(container.textContent).toContain("R2");
   expect(container.textContent).toContain("阶段节点");
   expect(container.textContent).toContain("快照");
-  expect(container.textContent).toContain("Trace log");
+  expect(container.textContent).toContain("过程记录");
+  expect(container.textContent).toContain("证据");
+  expect(container.textContent).toContain("空项");
+
+  const clickCount = async (label: string) => {
+    await act(async () => {
+      [...container.querySelectorAll("button")].find((item) => item.textContent?.startsWith(label))?.click();
+    });
+  };
+  await clickCount("证据");
+  expect(container.textContent).toContain("输入");
+  expect(container.textContent).toContain("人类决策");
+  await clickCount("快照");
+  expect(container.textContent).toContain("文献快照");
+  await clickCount("过程记录");
+  expect(container.textContent).toContain("创建节点");
   expect(container.querySelector("path[stroke-dasharray='4 4']")).toBeNull();
   expect(
     container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
@@ -317,6 +330,11 @@ it("normalizes legacy replay links into the workflow detail view", async () => {
     container.querySelector('a[href="/lab/research/chains/chain-1?tab=nodes"]')?.getAttribute("aria-current")
   ).toBe("page");
   expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).not.toContain("回放");
+  expect(container.textContent).toContain("快照");
+  expect(container.textContent).not.toContain("文献快照");
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((item) => item.textContent?.startsWith("快照"))?.click();
+  });
   expect(container.textContent).toContain("文献快照");
 });
 
@@ -390,6 +408,8 @@ it("aliases the old material tabs and explains an empty draft snapshot", async (
   expect(resolveChainTab("reports")).toBe("materials");
   expect(resolveChainTab("experiments")).toBe("materials");
   expect(resolveChainTab("replay")).toBe("nodes");
+  expect(resolveChainTab(null)).toBe("overview");
+  expect(resolveChainTab("")).toBe("overview");
 
   mocks.getChainNodeDetail.mockResolvedValueOnce({ node, events: [], snapshots: [] });
   await act(async () => {
@@ -397,8 +417,12 @@ it("aliases the old material tabs and explains an empty draft snapshot", async (
   });
   await act(async () => undefined);
 
+  expect(container.textContent).toContain("空项");
+  expect(container.textContent).not.toContain("提交并确认本节点后生成版本，不能单独上传。");
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((item) => item.textContent?.startsWith("快照"))?.click();
+  });
   expect(container.textContent).toContain("提交并确认本节点后生成版本，不能单独上传。");
-  expect(container.textContent).toContain("还没有记录");
   expect(container.textContent).not.toContain("该阶段暂无已确认快照");
 });
 
