@@ -10,7 +10,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.db.models.deletion import Collector
 
-from plane.db.models import Page, Project, ProjectPage
+from plane.db.models import FileAsset, Page, Project, ProjectPage
 from plane.utils.administrative_projects import research_project_ids
 
 
@@ -145,6 +145,8 @@ def cleanup_legacy_plane_data(workspace, apply=False):
         references = protected_references()
         collector = Collector(using=projects.db)
         protected_pages = set(Page.all_objects.filter(id__in=references).values_list("id", flat=True))
+        referenced_asset_pages = FileAsset.all_objects.filter(id__in=references).exclude(page_id=None).values("page_id")
+        protected_pages.update(Page.all_objects.filter(id__in=referenced_asset_pages).values_list("id", flat=True))
         shared_pages = ProjectPage.all_objects.exclude(project_id__in=target_ids).values("page_id")
         protected_pages.update(Page.all_objects.filter(id__in=shared_pages).values_list("id", flat=True))
         # 递归保留科研页面的父页面，避免级联更改科研正文的层级关系。
@@ -169,11 +171,15 @@ def cleanup_legacy_plane_data(workspace, apply=False):
         for rows in collector.fast_deletes:
             affected.setdefault(rows.model, set()).update(rows.values_list("pk", flat=True))
         for model, ids in affected.items():
+            if not ids:
+                continue
             if is_research_model(model) or model.__name__ in PRESERVED_MODELS:
                 raise RuntimeError(f"删除会影响保留模型：{model._meta.label}")
             if set(str(value) for value in ids).intersection(references):
                 raise RuntimeError(f"删除会影响科研引用：{model._meta.label}")
             fields = {field.name for field in model._meta.fields if field.is_relation}
+            if "page" in fields and all_rows(model).filter(pk__in=ids, page_id__in=references).exists():
+                raise RuntimeError(f"删除会影响科研页面资源：{model._meta.label}")
             if "project" in fields and all_rows(model).filter(pk__in=ids).exclude(project_id__in=target_ids).exists():
                 raise RuntimeError(f"删除会影响行政数据：{model._meta.label}")
         for (field, _value), batches in collector.field_updates.items():

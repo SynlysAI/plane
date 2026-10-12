@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from django.utils import timezone
 
-from plane.db.models import Issue, Page, PeriodicReport, Project, ProjectPage, ResearchChain, ResearchProjectProfile, State
+from plane.db.models import FileAsset, Issue, Page, PeriodicReport, Project, ProjectPage, ReportAttachment, ResearchChain, ResearchProjectProfile, State
 from plane.utils.legacy_plane_cleanup import cleanup_legacy_plane_data
 
 pytestmark = [pytest.mark.unit, pytest.mark.django_db]
@@ -103,3 +103,38 @@ def test_administrative_child_reference_aborts_preview(env):
     with pytest.raises(RuntimeError, match="行政数据"):
         cleanup_legacy_plane_data(workspace)
     assert Issue.all_objects.filter(pk=issues[1].id, parent_id=issues[0].id).exists()
+
+
+def test_old_attachment_with_empty_research_cascades_is_deleted(env):
+    """旧附件没有科研引用时，空的科研级联查询不能阻止清理。"""
+    workspace, research, _, _, issues, _ = env
+    asset = FileAsset.objects.create(
+        workspace=workspace, project=research, issue=issues[0], asset="legacy/attachment.pdf",
+    )
+    preview = cleanup_legacy_plane_data(workspace)
+    assert str(asset.id) in preview["deletions"]["db.FileAsset"]
+    result = cleanup_legacy_plane_data(workspace, apply=True)
+    assert result["verified"]
+    assert not FileAsset.all_objects.filter(pk=asset.id).exists()
+
+
+def test_referenced_attachment_preserves_its_host_page(env):
+    """科研报告引用的附件与其原始页面关联（含软删除引用）完整保留。"""
+    workspace, research, _, chain, _, page = env
+    body = Page.objects.create(workspace=workspace, owned_by=chain.owner, name="Report body")
+    report = PeriodicReport.objects.create(
+        workspace=workspace, project=research, owner=chain.owner, page=body,
+        report_type="WEEKLY", period_key="2026-W41",
+        period_start="2026-10-05", period_end="2026-10-11",
+    )
+    asset = FileAsset.objects.create(
+        workspace=workspace, project=research, page=page, asset="research/attachment.pdf",
+    )
+    attachment = ReportAttachment.objects.create(report=report, asset=asset)
+    ReportAttachment.all_objects.filter(pk=attachment.id).update(deleted_at=timezone.now())
+    result = cleanup_legacy_plane_data(workspace, apply=True)
+    assert result["verified"]
+    assert FileAsset.all_objects.filter(pk=asset.id, page_id=page.id).exists()
+    assert Page.all_objects.filter(pk=page.id).exists()
+    assert ReportAttachment.all_objects.filter(pk=attachment.id, asset_id=asset.id).exists()
+    assert cleanup_legacy_plane_data(workspace)["deletions"] == {}
