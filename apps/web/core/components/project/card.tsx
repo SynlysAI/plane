@@ -37,6 +37,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { projectCanBeJoined } from "@/store/project/project-visibility";
 // local imports
 import { AvatarGroupOverflow } from "@/components/common/avatar-group-overflow";
 import { CoverImage } from "@/components/common/cover-image";
@@ -77,6 +78,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   const hasMemberRole = project.member_role === EUserPermissions.MEMBER;
   // archive
   const isArchived = !!project.archived_at;
+  const canJoinProject = projectCanBeJoined(project);
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue: isFavoriteMenuOpen } = useLocalStorage<boolean>(
     IS_FAVORITE_MENU_OPEN,
@@ -145,7 +147,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       action: () => setJoinProjectModal(true),
       title: "Join",
       icon: UserPlusOutline,
-      shouldRender: !isMemberOfProject && !isArchived,
+      shouldRender: canJoinProject,
     },
     {
       key: "open-new-tab",
@@ -186,7 +188,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
         onClose={() => setDeleteProjectModal(false)}
       />
       {/* Join Project Modal */}
-      {workspaceSlug && (
+      {workspaceSlug && canJoinProject && (
         <JoinProjectModal
           workspaceSlug={workspaceSlug.toString()}
           project={project}
@@ -211,7 +213,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
           if (!isMemberOfProject || isArchived) {
             e.preventDefault();
             e.stopPropagation();
-            if (!isArchived) setJoinProjectModal(true);
+            if (canJoinProject) setJoinProjectModal(true);
           }
         }}
         data-prevent-progress={!isMemberOfProject || isArchived}
@@ -319,7 +321,8 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
             {isArchived ? (
               hasAdminRole && (
                 <div className="flex items-center justify-center gap-2">
-                  <div
+                  <button
+                    type="button"
                     className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
                     onClick={(e) => {
                       e.preventDefault();
@@ -331,8 +334,11 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                       <RestoreOutline className="h-3.5 w-3.5" />
                       Restore
                     </div>
-                  </div>
-                  <div
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete project"
+                    title="Delete project"
                     className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
                     onClick={(e) => {
                       e.preventDefault();
@@ -341,7 +347,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                     }}
                   >
                     <DeleteOutline className="h-3.5 w-3.5" />
-                  </div>
+                  </button>
                 </div>
               )
             ) : (
@@ -363,7 +369,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                       Joined
                     </span>
                   ))}
-                {!isMemberOfProject && (
+                {canJoinProject && (
                   <div className="flex items-center">
                     <Button
                       variant="link"

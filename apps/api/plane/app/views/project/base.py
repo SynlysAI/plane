@@ -56,7 +56,11 @@ from plane.db.models import (
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
-from plane.utils.administrative_projects import administrative_projects_for_user, user_can_manage_administrative_project
+from plane.utils.administrative_projects import (
+    administrative_projects_for_user,
+    restrict_administrative_project_visibility,
+    user_can_manage_administrative_project,
+)
 
 
 def _cached_research_review_ids(request, slug):
@@ -119,7 +123,7 @@ def _project_member_role_expression(request, slug):
 
 
 def _restrict_workspace_project_visibility(queryset, request, slug):
-    """保留原有成员和公开网络规则，并并入研究链只读项目。
+    """限制行政项目成员准入，保留科研项目网络和研究链只读规则。
 
     Args:
         queryset: 工作区项目查询集。
@@ -127,9 +131,10 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
         slug: 工作区别名。
 
     Returns:
-        过滤后的查询集。工作区管理员保持原样，可以看到全部项目。
+        过滤后的查询集，默认管理身份仍可看到全部行政项目。
     """
     user = request.user
+    queryset = restrict_administrative_project_visibility(queryset, user, slug)
     review_ids = _cached_research_review_ids(request, slug)
     administrative_ids = administrative_projects_for_user(user, slug).values("id")
     if WorkspaceMember.objects.filter(
@@ -314,6 +319,14 @@ class ProjectViewSet(BaseViewSet):
             and not review_reader
             and not user_can_manage_administrative_project(request.user, slug, pk)
         ):
+            if not project.is_research_project:
+                return Response(
+                    {
+                        "error": "Project membership must be configured by an administrator",
+                        "code": "PROJECT_MEMBERSHIP_REQUIRED",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             if project.network == ProjectNetwork.SECRET.value:
                 return Response(
                     {"error": "You do not have permission"},

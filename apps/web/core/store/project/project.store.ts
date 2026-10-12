@@ -313,6 +313,10 @@ export class ProjectStore implements IProjectStore {
       this.loader = "init-loader";
       const projectsResponse = await this.projectService.getProjectsLite(workspaceSlug);
       runInAction(() => {
+        this._pruneAdministrativeProjectAccess(
+          workspaceSlug,
+          projectsResponse.map((project) => project.id)
+        );
         projectsResponse.forEach((project) => {
           update(this.projectMap, [project.id], (p) => ({ ...p, ...project }));
         });
@@ -342,6 +346,10 @@ export class ProjectStore implements IProjectStore {
       }
       const projectsResponse = await this.projectService.getProjects(workspaceSlug);
       runInAction(() => {
+        this._pruneAdministrativeProjectAccess(
+          workspaceSlug,
+          projectsResponse.map((project) => project.id)
+        );
         projectsResponse.forEach((project) => {
           update(this.projectMap, [project.id], (p) => ({ ...p, ...project }));
         });
@@ -371,6 +379,14 @@ export class ProjectStore implements IProjectStore {
       return response;
     } catch (error) {
       console.log("Error while fetching project details", error);
+      const response = error as { status?: number; data?: { code?: string } };
+      if (response?.status === 403 && response.data?.code === "PROJECT_MEMBERSHIP_REQUIRED") {
+        runInAction(() => {
+          delete this.projectMap[projectId];
+          delete this.rootStore.user.permission.workspaceProjectsPermissions[workspaceSlug]?.[projectId];
+          delete this.rootStore.user.permission.projectUserInfo[workspaceSlug]?.[projectId];
+        });
+      }
       throw error;
     }
   };
@@ -636,4 +652,22 @@ export class ProjectStore implements IProjectStore {
         throw error;
       });
   };
+
+  /**
+   * 清理服务端完整列表已不再授权的行政项目缓存。
+   * @param workspaceSlug 当前列表所属工作区。
+   * @param visibleProjectIds 服务端返回的全部可见项目 ID。
+   */
+  private _pruneAdministrativeProjectAccess(workspaceSlug: string, visibleProjectIds: string[]) {
+    const workspaceId = this.rootStore.workspaceRoot.getWorkspaceBySlug(workspaceSlug)?.id;
+    if (!workspaceId) return;
+    const visibleIds = new Set(visibleProjectIds);
+    for (const project of Object.values(this.projectMap)) {
+      if (project.workspace === workspaceId && project.is_research_project !== true && !visibleIds.has(project.id)) {
+        delete this.projectMap[project.id];
+        delete this.rootStore.user.permission.workspaceProjectsPermissions[workspaceSlug]?.[project.id];
+        delete this.rootStore.user.permission.projectUserInfo[workspaceSlug]?.[project.id];
+      }
+    }
+  }
 }
