@@ -412,7 +412,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
       className={cn("mt-2 flex flex-col border-t border-subtle pt-2", {
         "min-h-20": isOpen,
         "shrink-0": !isOpen || fitsNaturalHeight,
-        grow: isOpen && fillAvailableSpace,
+        grow: isOpen && fillAvailableSpace && !fitsNaturalHeight,
       })}
       data-navigation-scope={scope}
       data-navigation-expanded={isOpen}

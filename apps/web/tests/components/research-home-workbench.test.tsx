@@ -214,7 +214,8 @@ it("renders the action-first bento home information architecture without generic
   for (const title of ["科研项目概览", "行政项目概览", "跨组件待办", "最近动态", "报告提交摘要"]) {
     expect(container.textContent).toContain(title);
   }
-  expect(container.querySelector('a[href="/lab/research/todos"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research/approvals/"]')?.textContent).toBe("查看全部待办");
+  expect(container.querySelector('a[href="/lab/research/todos"]')).toBeNull();
   expect(container.querySelector('a[href="/public/research/chains/?view=reports"]')).not.toBeNull();
   expect(container.textContent).not.toContain("快捷入口");
   expect(container.textContent).not.toContain("我的工作");

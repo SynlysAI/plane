@@ -233,7 +233,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     const rightTime = administrativeStats[right.id]?.last_activity_at;
     return (rightTime ? Date.parse(rightTime) || 0 : 0) - (leftTime ? Date.parse(leftTime) || 0 : 0);
   });
-  const todosHref = `/${workspaceSlug}/research/todos`;
+  const todosHref = `/${workspaceSlug}/research/approvals/`;
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
   return (
