@@ -29,6 +29,7 @@ from django.utils import timezone
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
+from plane.research.utils.project_review import project_member_filters
 from plane.app.permissions import allow_permission, ROLE
 from plane.db.models import Cycle, UserFavorite, Issue, Label, User, Project
 from plane.utils.analytics_plot import burndown_plot
@@ -116,8 +117,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(archived_at__isnull=False)
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                **project_member_filters(self.request.user, self.kwargs.get("slug"), self.kwargs.get("project_id")),
             )
             .filter(project__archived_at__isnull=True)
             .select_related("project", "workspace", "owned_by")

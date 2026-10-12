@@ -5,6 +5,7 @@
 from plane.db.models import ProjectMember, Page
 from plane.app.permissions import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
+from plane.utils.administrative_projects import user_can_manage_administrative_project
 from plane.research.utils.page_guard import get_material_for_page, get_report_for_page
 
 
@@ -100,6 +101,8 @@ class ProjectPagePermission(BasePermission):
         Hook for extended access checking
         Returns: True (allow), False (deny), None (continue with normal flow)
         """
+        if user_can_manage_administrative_project(request.user, slug, project_id):
+            return True, ADMIN
         role = self._check_project_member_access(request, slug, project_id)
         if role:
             return True, role

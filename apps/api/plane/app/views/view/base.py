@@ -21,6 +21,7 @@ from django.db import transaction
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
+from plane.utils.administrative_projects import user_can_manage_administrative_project
 
 # Module imports
 from plane.app.permissions import allow_permission, ROLE
@@ -301,7 +302,8 @@ class IssueViewViewSet(BaseViewSet):
         queryset = self.get_queryset()
         project = Project.objects.get(id=project_id)
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,
@@ -325,7 +327,8 @@ class IssueViewViewSet(BaseViewSet):
         """
 
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,
@@ -376,7 +379,8 @@ class IssueViewViewSet(BaseViewSet):
     def destroy(self, request, slug, project_id, pk):
         project_view = IssueView.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
         if (
-            ProjectMember.objects.filter(
+            user_can_manage_administrative_project(request.user, slug, project_id)
+            or ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,

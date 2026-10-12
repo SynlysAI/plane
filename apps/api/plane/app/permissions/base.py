@@ -7,6 +7,7 @@ from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
 from plane.utils.workspace_access import user_can_access_workspace
+from plane.utils.administrative_projects import user_can_manage_administrative_project
 
 from enum import Enum
 
@@ -57,6 +58,10 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None, 
                 ).exists():
                     return view_func(instance, request, *args, **kwargs)
             else:
+                if ROLE.ADMIN.value in allowed_role_values and user_can_manage_administrative_project(
+                    request.user, kwargs["slug"], kwargs.get("project_id")
+                ):
+                    return view_func(instance, request, *args, **kwargs)
                 is_user_has_allowed_role = ProjectMember.objects.filter(
                     member=request.user,
                     workspace__slug=kwargs["slug"],

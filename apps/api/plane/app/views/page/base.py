@@ -32,6 +32,7 @@ from rest_framework.response import Response
 # Module imports
 from plane.app.permissions import allow_permission, ROLE
 from plane.research.utils.page_guard import page_mutation_error_code, page_mutation_error_message
+from plane.research.utils.project_review import project_member_filters
 from plane.app.serializers import (
     PageSerializer,
     PageDetailSerializer,
@@ -48,6 +49,7 @@ from plane.db.models import (
 )
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.order_queryset import PAGE_ORDER_BY_ALLOWLIST, sanitize_order_by
+from plane.utils.administrative_projects import user_can_manage_administrative_project
 
 # Local imports
 from ..base import BaseAPIView, BaseViewSet
@@ -91,10 +93,16 @@ class PageViewSet(BaseViewSet):
 
         slug = self.kwargs.get("slug")
         project_id = self.kwargs.get("project_id")
-        review_reader = bool(project_id and user_can_review_research_project(self.request.user, slug, project_id))
+        has_default_access = bool(
+            project_id
+            and (
+                user_can_manage_administrative_project(self.request.user, slug, project_id)
+                or user_can_review_research_project(self.request.user, slug, project_id)
+            )
+        )
         project_scope = (
             Q(projects__id=project_id, projects__archived_at__isnull=True)
-            if review_reader
+            if has_default_access
             else Q(
                 projects__project_projectmember__member=self.request.user,
                 projects__project_projectmember__is_active=True,
@@ -262,7 +270,8 @@ class PageViewSet(BaseViewSet):
         """
 
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,
@@ -336,7 +345,9 @@ class PageViewSet(BaseViewSet):
             project_pages__deleted_at__isnull=True,
         )
         if page_mutation_error_code(page, "delete"):
-            return Response({"error": "Research-owned page access is managed by research ACL."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Research-owned page access is managed by research ACL."}, status=status.HTTP_403_FORBIDDEN
+            )
 
         # Only update access if the page owner is the requesting user
         if page.access != request.data.get("access", page.access) and page.owned_by_id != request.user.id:
@@ -353,7 +364,8 @@ class PageViewSet(BaseViewSet):
         queryset = self.get_queryset()
         project = Project.objects.get(pk=project_id)
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,
@@ -374,11 +386,14 @@ class PageViewSet(BaseViewSet):
             project_pages__deleted_at__isnull=True,
         )
         if page_mutation_error_code(page, "delete"):
-            return Response({"error": "Research-owned pages cannot be archived directly."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Research-owned pages cannot be archived directly."}, status=status.HTTP_403_FORBIDDEN
+            )
 
         # only the owner or admin can archive the page
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 project_id=project_id, member=request.user, is_active=True, role__lte=15
             ).exists()
             and request.user.id != page.owned_by_id
@@ -407,11 +422,14 @@ class PageViewSet(BaseViewSet):
             project_pages__deleted_at__isnull=True,
         )
         if page_mutation_error_code(page, "delete"):
-            return Response({"error": "Research-owned pages cannot be unarchived directly."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Research-owned pages cannot be unarchived directly."}, status=status.HTTP_403_FORBIDDEN
+            )
 
         # only the owner or admin can un archive the page
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 project_id=project_id, member=request.user, is_active=True, role__lte=15
             ).exists()
             and request.user.id != page.owned_by_id
@@ -452,14 +470,18 @@ class PageViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if page.owned_by_id != request.user.id and (
-            not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                member=request.user,
-                role=20,
-                project_id=project_id,
-                is_active=True,
-            ).exists()
+        if (
+            page.owned_by_id != request.user.id
+            and not user_can_manage_administrative_project(request.user, slug, project_id)
+            and (
+                not ProjectMember.objects.filter(
+                    workspace__slug=slug,
+                    member=request.user,
+                    role=20,
+                    project_id=project_id,
+                    is_active=True,
+                ).exists()
+            )
         ):
             return Response(
                 {"error": "Only admin or owner can delete the page"},
@@ -495,9 +517,8 @@ class PageViewSet(BaseViewSet):
         queryset = (
             Page.objects.filter(workspace__slug=slug)
             .filter(
-                projects__project_projectmember__member=self.request.user,
-                projects__project_projectmember__is_active=True,
                 projects__archived_at__isnull=True,
+                **project_member_filters(request.user, slug, project_id, prefix="projects__project_projectmember__"),
             )
             .filter(parent__isnull=True)
             .filter(Q(owned_by=request.user) | Q(access=0))
@@ -514,7 +535,8 @@ class PageViewSet(BaseViewSet):
 
         project = Project.objects.get(pk=project_id)
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,

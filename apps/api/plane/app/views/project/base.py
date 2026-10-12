@@ -8,7 +8,20 @@ import json
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Case, CharField, Count, Exists, F, OuterRef, Prefetch, Q, Subquery, Value, When
+from django.db.models import (
+    Case,
+    CharField,
+    Count,
+    Exists,
+    F,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+    When,
+)
 from django.utils import timezone
 
 # Third Party imports
@@ -43,7 +56,7 @@ from plane.db.models import (
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
-
+from plane.utils.administrative_projects import administrative_projects_for_user, user_can_manage_administrative_project
 
 
 def _cached_research_review_ids(request, slug):
@@ -85,6 +98,26 @@ def _research_access_expression(request, slug):
     )
 
 
+def _project_member_role_expression(request, slug):
+    """生成包含行政项目默认权限的有效项目角色。
+
+    Args:
+        request: 当前请求。
+        slug: 工作区别名。
+
+    Returns:
+        管理身份在行政项目中返回管理员角色，其他情况返回显式成员角色。
+    """
+    member_role = ProjectMember.objects.filter(
+        project_id=OuterRef("pk"), member_id=request.user.id, is_active=True
+    ).values("role")
+    return Case(
+        When(id__in=administrative_projects_for_user(request.user, slug).values("id"), then=Value(ROLE.ADMIN.value)),
+        default=Subquery(member_role),
+        output_field=IntegerField(),
+    )
+
+
 def _restrict_workspace_project_visibility(queryset, request, slug):
     """保留原有成员和公开网络规则，并并入研究链只读项目。
 
@@ -98,6 +131,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
     """
     user = request.user
     review_ids = _cached_research_review_ids(request, slug)
+    administrative_ids = administrative_projects_for_user(user, slug).values("id")
     if WorkspaceMember.objects.filter(
         member=user,
         workspace__slug=slug,
@@ -110,6 +144,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
                 project_projectmember__is_active=True,
             )
             | Q(id__in=review_ids)
+            | Q(id__in=administrative_ids)
         )
     if WorkspaceMember.objects.filter(
         member=user,
@@ -124,6 +159,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
             )
             | Q(network=2)
             | Q(id__in=review_ids)
+            | Q(id__in=administrative_ids)
         )
     return queryset
 
@@ -155,13 +191,7 @@ class ProjectViewSet(BaseViewSet):
                     )
                 )
             )
-            .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
-            )
+            .annotate(member_role=_project_member_role_expression(self.request, self.kwargs.get("slug")))
             .annotate(
                 research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
             )
@@ -221,13 +251,7 @@ class ProjectViewSet(BaseViewSet):
         projects = (
             Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
             .select_related("workspace", "workspace__owner", "default_assignee", "project_lead")
-            .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
-            )
+            .annotate(member_role=_project_member_role_expression(self.request, self.kwargs.get("slug")))
             .annotate(
                 research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
             )
@@ -285,7 +309,11 @@ class ProjectViewSet(BaseViewSet):
         member_ids = [str(project_member.member_id) for project_member in project.members_list]
 
         review_reader = getattr(project, "research_access", None) == "review"
-        if str(request.user.id) not in member_ids and not review_reader:
+        if (
+            str(request.user.id) not in member_ids
+            and not review_reader
+            and not user_can_manage_administrative_project(request.user, slug, pk)
+        ):
             if project.network == ProjectNetwork.SECRET.value:
                 return Response(
                     {"error": "You do not have permission"},
@@ -383,7 +411,11 @@ class ProjectViewSet(BaseViewSet):
         ).exists()
 
         # Return error for if the user is neither workspace admin nor project admin
-        if not is_project_admin and not is_workspace_admin:
+        if (
+            not is_project_admin
+            and not is_workspace_admin
+            and not user_can_manage_administrative_project(request.user, slug, pk)
+        ):
             return Response(
                 {"error": "You don't have the required permissions."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -435,7 +467,8 @@ class ProjectViewSet(BaseViewSet):
 
     def destroy(self, request, slug, pk):
         if (
-            WorkspaceMember.objects.filter(
+            user_can_manage_administrative_project(request.user, slug, pk)
+            or WorkspaceMember.objects.filter(
                 member=request.user,
                 workspace__slug=slug,
                 is_active=True,
