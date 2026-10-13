@@ -68,6 +68,13 @@ from .approvals import (
     ResearchApprovalRequestListCreateEndpoint,
 )
 from .health import ResearchHealthEndpoint
+from .administrative_organizations import (
+    AdministrativeOrganizationDetailEndpoint,
+    AdministrativeOrganizationListCreateEndpoint,
+    AdministrativeOrganizationMemberEndpoint,
+    AdministrativeOrganizationAssignableMembersEndpoint,
+    AdministrativeProjectOrganizationEndpoint,
+)
 from .settings import ResearchSettingsEndpoint
 from .observability import ResearchExternalHealthProbeEndpoint, ResearchObservabilityEndpoint
 from .summary import ResearchReportSummaryEndpoint

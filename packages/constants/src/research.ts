@@ -748,6 +748,17 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/navigation/categories/${categoryId}/`,
   navigationProjectMove: (slug: string, projectId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/navigation/projects/${projectId}/move/`,
+  administrativeOrganizations: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/`,
+  administrativeOrganization: (slug: string, id: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/`,
+  administrativeOrganizationMembers: (slug: string, id: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/members/`,
+  administrativeOrganizationAssignableMembers: (slug: string, id: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/assignable-members/`,
+  administrativeOrganizationMember: (slug: string, id: string, memberId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/members/${memberId}/`,
+  administrativeProjectOrganization: (slug: string, projectId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-projects/${projectId}/organization/`,
   project: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/`,
   projectArchive: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/archive/`,
   projectRestore: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/restore/`,

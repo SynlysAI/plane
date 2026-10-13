@@ -9,6 +9,7 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 from plane.db.models import ProjectMember, WorkspaceMember
 from plane.db.models.project import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
+from plane.utils.administrative_projects import administrative_organization_project_ids
 
 
 def _passes_workspace_access_gate(request, view):
@@ -43,6 +44,10 @@ class ProjectBasePermission(BasePermission):
             project_id=view.project_id,
             is_active=True,
         )
+        if request.method in SAFE_METHODS and administrative_organization_project_ids(
+            request.user, view.workspace_slug
+        ).filter(id=view.project_id).exists():
+            return True
 
         ## Only project admins or workspace admin who is part of the project can access
 
@@ -74,7 +79,9 @@ class ProjectMemberPermission(BasePermission):
                 member=request.user,
                 project_id=view.project_id,
                 is_active=True,
-            ).exists()
+            ).exists() or administrative_organization_project_ids(
+                request.user, view.workspace_slug
+            ).filter(id=view.project_id).exists()
         ## Only workspace owners or admins can create the projects
         if request.method == "POST":
             return WorkspaceMember.objects.filter(
@@ -109,7 +116,9 @@ class ProjectEntityPermission(BasePermission):
                     member=request.user,
                     project__identifier=view.project_identifier,
                     is_active=True,
-                ).exists()
+                ).exists() or administrative_organization_project_ids(
+                    request.user, view.workspace_slug
+                ).filter(project__identifier=view.project_identifier).exists()
 
         ## Safe Methods -> Handle the filtering logic in queryset
         if request.method in SAFE_METHODS:
@@ -118,7 +127,9 @@ class ProjectEntityPermission(BasePermission):
                 member=request.user,
                 project_id=view.project_id,
                 is_active=True,
-            ).exists()
+            ).exists() or administrative_organization_project_ids(
+                request.user, view.workspace_slug
+            ).filter(id=view.project_id).exists()
 
         ## Only project members or admins can create and edit the project attributes
         return ProjectMember.objects.filter(

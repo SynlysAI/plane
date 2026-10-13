@@ -92,6 +92,8 @@ from .sticky import Sticky
 from .description import Description, DescriptionVersion
 
 from .research import (
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     ALL_MATERIAL_TYPES,
     MATERIAL_SET_COMPLETE_STATES,
     MATERIAL_TYPES_BY_STAGE,

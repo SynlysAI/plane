@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from plane.utils.workspace_access import user_can_access_workspace
 from plane.utils.administrative_projects import user_can_manage_administrative_project
+from plane.utils.administrative_projects import administrative_organization_project_ids
 
 from enum import Enum
 
@@ -69,6 +70,13 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None, 
                     role__in=allowed_role_values,
                     is_active=True,
                 ).exists()
+                if (
+                    request.method in ("GET", "HEAD", "OPTIONS")
+                    and administrative_organization_project_ids(
+                        request.user, kwargs["slug"]
+                    ).filter(id=kwargs["project_id"]).exists()
+                ):
+                    is_user_has_allowed_role = True
 
                 # Return if the user has the allowed role else if they are workspace admin and part of the project regardless of the role # noqa: E501
                 if is_user_has_allowed_role:

@@ -126,6 +126,13 @@ class Project(BaseModel):
         null=True,
         blank=True,
     )
+    administrative_organization = models.ForeignKey(
+        "db.AdministrativeOrganization",
+        on_delete=models.PROTECT,
+        related_name="projects",
+        null=True,
+        blank=True,
+    )
 
     def __init__(self, *args, **kwargs):
         # Track if timezone is provided, if so, don't override it with the workspace timezone when saving

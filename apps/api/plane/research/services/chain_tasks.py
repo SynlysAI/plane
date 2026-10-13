@@ -36,7 +36,7 @@ from plane.research.utils.collaboration_notifications import (
     notify_task_returned,
     notify_task_submitted,
 )
-from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q
+from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q, is_workspace_admin
 
 ORG_SCOPE = "ORG_SCOPE"
 COLLABORATOR_SCOPE = "COLLABORATOR"
@@ -66,7 +66,7 @@ class ChainTaskConflictError(Exception):
 
 
 def chain_manager(workspace, user, chain) -> bool:
-    """Return whether the caller can manage chain lifecycle and collaborators.
+    """Return whether the caller owns or administers the chain project.
 
     Args:
         workspace: Workspace used for future scope extensions.
@@ -74,7 +74,7 @@ def chain_manager(workspace, user, chain) -> bool:
         chain: Research chain being managed.
 
     Returns:
-        True when the caller owns the chain or administers its project.
+        True when the caller owns the chain or has an active project admin role.
     """
     if chain.owner_id == user.id:
         return True
@@ -85,6 +85,24 @@ def chain_manager(workspace, user, chain) -> bool:
         is_active=True,
         deleted_at__isnull=True,
     ).exists()
+
+
+def chain_lifecycle_manager(workspace, user, chain, *, workspace_admin=None) -> bool:
+    """Return whether the caller may archive, restore, or delete a chain.
+
+    Args:
+        workspace: Workspace that owns the chain.
+        user: Caller whose lifecycle authority is checked.
+        chain: Research chain being managed.
+        workspace_admin: Optional pre-resolved workspace administrator state.
+
+    Returns:
+        True when the caller owns or administers the chain project, or is an
+        active administrator of the chain's workspace.
+    """
+    if workspace_admin is None:
+        workspace_admin = is_workspace_admin(user, workspace.id)
+    return workspace_admin or chain_manager(workspace, user, chain)
 
 
 def chain_resource(chain) -> ResearchResource:
