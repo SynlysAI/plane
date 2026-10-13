@@ -1,0 +1,5 @@
+# Official Plane MCP server; installed in a separate virtual environment.
+plane-mcp-server==0.3.4
+mcp==1.28.1
+plane-sdk==0.3.1
+fastmcp==3.2.0

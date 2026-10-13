@@ -1,0 +1,12 @@
+# Append to the existing ScienceDiscovery compose command. No Plane update.
+# Set PLANE_DEMO_NETWORK to the network of your local Plane API service.
+services:
+  sciencediscovery:
+    networks:
+      - default
+      - plane-demo
+
+networks:
+  plane-demo:
+    external: true
+    name: ${PLANE_DEMO_NETWORK:-pilab_windows_local}
