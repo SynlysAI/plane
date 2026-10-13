@@ -1,0 +1,25 @@
+# Standalone HTTP MCP service. Does not restart or upgrade Plane/ScienceDiscovery.
+services:
+  plane-mcp-http:
+    build:
+      context: .
+      dockerfile: Dockerfile.http
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${PLANE_HTTP_BIND:-127.0.0.1}:${PLANE_HTTP_PORT:-8765}:8765"
+    volumes:
+      - type: bind
+        source: "${PLANE_HTTP_CONFIG_FILE:?Set the absolute path to private http.local.json}"
+        target: /run/plane-mcp/http.local.json
+        read_only: true
+      - plane-http-state:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/healthz', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  plane-http-state:

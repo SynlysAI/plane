@@ -3,3 +3,5 @@ plane-mcp-server==0.3.4
 mcp==1.28.1
 plane-sdk==0.3.1
 fastmcp==3.2.0
+starlette==1.7.0
+uvicorn==0.54.0

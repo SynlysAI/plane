@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "Plane HTTP MCP": {
+      "type": "http",
+      "url": "http://10.26.15.92:8765/mcp",
+      "headers": {
+        "Authorization": "Bearer REPLACE_WITH_YOUR_HTTP_MCP_TOKEN_LOCALLY"
+      },
+      "timeoutSeconds": 120
+    }
+  }
+}

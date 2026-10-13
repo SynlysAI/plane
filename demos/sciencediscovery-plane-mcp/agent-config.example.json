@@ -1,0 +1,7 @@
+{
+  "PLANE_BASE_URL": "http://plane-api.lab:8000",
+  "PLANE_UI_BASE_URL": "http://plane.lab:3000",
+  "PLANE_WORKSPACE_SLUG": "lab",
+  "PLANE_API_KEY": "REPLACE_WITH_YOUR_PERSONAL_TOKEN_LOCALLY",
+  "PLANE_AGENT_ENABLE_PUBLISH": true
+}

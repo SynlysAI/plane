@@ -1,0 +1,21 @@
+{
+  "host": "0.0.0.0",
+  "port": 8765,
+  "state_dir": "/app/data",
+  "allowed_hosts": ["127.0.0.1:*", "localhost:*", "10.26.15.92:*", "plane-mcp-http:*"],
+  "allowed_origins": [],
+  "clients": [
+    {
+      "name": "student-1",
+      "bearer_token": "REPLACE_WITH_A_RANDOM_TOKEN_GENERATED_LOCALLY",
+      "mode": "read-only",
+      "enable_publish": false,
+      "plane": {
+        "PLANE_BASE_URL": "http://10.26.15.92:3300",
+        "PLANE_UI_BASE_URL": "http://10.26.15.92:3300",
+        "PLANE_WORKSPACE_SLUG": "REPLACE_WITH_SERVER_WORKSPACE_SLUG",
+        "PLANE_API_KEY": "REPLACE_WITH_THIS_USERS_PLANE_TOKEN_LOCALLY"
+      }
+    }
+  ]
+}
