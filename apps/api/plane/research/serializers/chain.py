@@ -11,6 +11,7 @@ from plane.db.models import (
     ResearchChainSnapshot,
     ResearchChainUpload,
 )
+from plane.research.services.chain_tasks import chain_lifecycle_manager, chain_manager, chain_writer
 from plane.research.utils.action_capabilities import capability_map
 from plane.research.utils.acl import ResearchResource, build_actor_context, check_access
 
@@ -133,22 +134,25 @@ def _capabilities(serializer, obj, *, is_node=False):
     for action in ("edit", "review", "accept", "return"):
         decisions[action] = decisions[action] and writable
     if is_node:
-        from plane.research.views.chain_foundation import _chain_writer, _chain_manager, _node_operator
+        from plane.research.views.chain_foundation import _node_operator
 
         decisions.update(
-            delete=writable and obj.status == "DRAFT" and _chain_manager(chain.workspace, actor, chain),
+            delete=writable and obj.status == "DRAFT" and chain_manager(chain.workspace, actor, chain),
             transition=writable and _node_operator(chain.workspace, actor, obj),
-            upload=writable and _chain_writer(chain.workspace, actor, chain),
+            upload=writable and chain_writer(chain.workspace, actor, chain),
             agent_review=writable and decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
         )
         return capability_map(NODE_ACTIONS, decisions)
-    from plane.research.views.chain_foundation import _chain_manager, _chain_writer
 
+    workspace_admin = context.is_workspace_admin
     decisions.update(
-        upload=writable and _chain_writer(chain.workspace, actor, chain),
-        archive=_chain_manager(chain.workspace, actor, chain) and chain.status not in ("ARCHIVED", "DELETED"),
-        delete=_chain_manager(chain.workspace, actor, chain) and chain.status != "DELETED",
-        restore=_chain_manager(chain.workspace, actor, chain) and chain.status in ("ARCHIVED", "DELETED"),
+        upload=writable and chain_writer(chain.workspace, actor, chain),
+        archive=chain_lifecycle_manager(chain.workspace, actor, chain, workspace_admin=workspace_admin)
+        and chain.status not in ("ARCHIVED", "DELETED"),
+        delete=chain_lifecycle_manager(chain.workspace, actor, chain, workspace_admin=workspace_admin)
+        and chain.status != "DELETED",
+        restore=chain_lifecycle_manager(chain.workspace, actor, chain, workspace_admin=workspace_admin)
+        and chain.status in ("ARCHIVED", "DELETED"),
         agent_review=writable and decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
     )
     return capability_map(CHAIN_ACTIONS, decisions)

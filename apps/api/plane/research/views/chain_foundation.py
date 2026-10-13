@@ -29,6 +29,7 @@ from plane.research.services.group_knowledge import ensure_group_knowledge_bindi
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
 from plane.research.services.chain_tasks import (
+    chain_lifecycle_manager as _chain_lifecycle_manager,
     chain_manager as _chain_manager,
     chain_writer as _chain_writer,
     list_assignable_users,
@@ -87,7 +88,7 @@ def _visible_node(workspace, user, node_id):
             chain__project__deleted_at__isnull=True,
             chain__project__research_profile__deleted_at__isnull=True,
         )
-        .select_related("chain__project__research_profile")
+        .select_related("chain__workspace", "chain__project__research_profile")
         .first()
     )
     if node is None:
@@ -105,7 +106,7 @@ def _visible_chain(workspace, user, chain_id):
             project__deleted_at__isnull=True,
             project__research_profile__deleted_at__isnull=True,
         )
-        .select_related("project__research_profile", "project", "owner")
+        .select_related("workspace", "project__research_profile", "project", "owner")
         .first()
     )
     if chain is None or not can_read_project_research_metadata(workspace, user, chain.project.research_profile):
@@ -221,7 +222,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
                 workspace=workspace,
                 project_id__in=profiles.values("project_id"),
             )
-            .select_related("project__research_profile", "owner")
+            .select_related("workspace", "project__research_profile", "owner")
             .order_by("-updated_at", "id")
         )
         if request.GET.get("status"):
@@ -262,7 +263,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
         if not request_id:
             return research_error(ResearchErrorCode.IDEMPOTENCY_CONFLICT, "request_id is required.")
         digest = payload_hash(request.data)
-        existing = ResearchChain.objects.filter(request_id=request_id).first()
+        existing = ResearchChain.objects.select_related("workspace").filter(request_id=request_id).first()
         if existing:
             if existing.payload_hash != digest:
                 return conflict_response()
@@ -331,7 +332,7 @@ class ResearchChainDetailEndpoint(ResearchAPIView):
                 project__deleted_at__isnull=True,
                 project__research_profile__deleted_at__isnull=True,
             ).select_related(
-                "project__research_profile", "project", "owner"
+                "workspace", "project__research_profile", "project", "owner"
             )
         ).first()
         if chain is not None and not can_read_project_research_metadata(
@@ -352,7 +353,7 @@ class ResearchChainDetailEndpoint(ResearchAPIView):
         """由研究链管理者删除课题，保留其节点、任务和证据。"""
         from plane.research.views.projects import delete_research_project
 
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return error
         if not _flag_enabled(workspace):
@@ -360,7 +361,7 @@ class ResearchChainDetailEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        if not _chain_manager(workspace, request.user, chain):
+        if not _chain_lifecycle_manager(workspace, request.user, chain):
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
                 "Only chain managers can delete a chain.",
@@ -376,7 +377,7 @@ class ResearchChainArchiveEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def post(self, request, slug, chain_id):
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return error
         if not _flag_enabled(workspace):
@@ -384,7 +385,7 @@ class ResearchChainArchiveEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        if not _chain_manager(workspace, request.user, chain):
+        if not _chain_lifecycle_manager(workspace, request.user, chain):
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
                 "Only chain managers can archive a chain.",
@@ -428,7 +429,7 @@ class ResearchChainRestoreEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def post(self, request, slug, chain_id):
-        workspace, error = self.get_workspace(section="research_chain")
+        workspace, error = self.get_workspace(section="research_chain", nav=None)
         if error:
             return error
         if not _flag_enabled(workspace):
@@ -436,7 +437,7 @@ class ResearchChainRestoreEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        if not _chain_manager(workspace, request.user, chain):
+        if not _chain_lifecycle_manager(workspace, request.user, chain):
             return research_error(
                 ResearchErrorCode.PERMISSION_DENIED,
                 "Only chain managers can restore a chain.",
