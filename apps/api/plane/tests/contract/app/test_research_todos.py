@@ -263,6 +263,17 @@ def _by_source(items):
 
 @pytest.mark.django_db
 class TestResearchTodoScopesAndAcl:
+    def test_archived_chain_tasks_are_excluded_from_todos(self, env):
+        env["chain"].status = "ARCHIVED"
+        env["chain"].save(update_fields=["status", "updated_at"])
+        env["project"].research_profile.workflow_status = "ARCHIVED"
+        env["project"].research_profile.save(update_fields=["workflow_status", "is_active", "updated_at"])
+
+        payload = _payload(_get(env, "student", "?scope=visible"))
+        task_ids = {str(env[key].id) for key in ("assigned_task", "submitted_task", "returned_task")}
+
+        assert task_ids.isdisjoint({item["object_id"] for item in _items(payload) if item["source"] == "CHAIN_TASK"})
+
     def test_all_six_sources_successfully_project_the_v2_contract(self, env):
         payload = _payload(_get(env, "student", "?scope=visible"))
 

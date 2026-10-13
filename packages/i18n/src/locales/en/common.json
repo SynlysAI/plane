@@ -1165,6 +1165,7 @@
       "requester": "Requester",
       "assignees": "Handlers",
       "business_status": "Source status",
+      "business_draft": "Draft",
       "business_assigned": "Assigned",
       "business_submitted": "Submitted",
       "business_needs_revision": "Needs revision",

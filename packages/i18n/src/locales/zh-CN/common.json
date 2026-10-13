@@ -1172,6 +1172,7 @@
       "requester": "发起人",
       "assignees": "处理人",
       "business_status": "原状态",
+      "business_draft": "草稿",
       "business_assigned": "已指派",
       "business_submitted": "已提交",
       "business_needs_revision": "需修订",
