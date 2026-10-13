@@ -47,6 +47,7 @@ from .membership import (
     UserImportRow,
 )
 from .navigation import ProjectNavigationCategory
+from .administrative import AdministrativeOrganization, AdministrativeOrganizationMember
 from .org import MentorBinding, OrgUnit, OrgUnitMember
 from .outcome import ResearchOutcome, ResearchOutcomeAttachment, ResearchOutcomeLink
 from .paper_review import ResearchPaperReview, ResearchPaperReviewVersion
@@ -154,6 +155,8 @@ __all__ = [
     "OrgUnit",
     "OrgUnitMember",
     "ProjectNavigationCategory",
+    "AdministrativeOrganization",
+    "AdministrativeOrganizationMember",
     "ALL_MATERIAL_TYPES",
     "MATERIAL_SET_COMPLETE_STATES",
     "MATERIAL_TYPES_BY_STAGE",

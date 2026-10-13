@@ -14,6 +14,8 @@ from django.db.models import Max
 from plane.app.serializers.workspace import WorkspaceLiteSerializer
 from plane.app.serializers.user import UserLiteSerializer, UserAdminLiteSerializer
 from plane.db.models import (
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     Project,
     ProjectMember,
     ProjectMemberInvite,
@@ -22,9 +24,15 @@ from plane.db.models import (
     ProjectPublicMember,
     IssueSequence,
     WorkspaceMember,
+    Workspace,
 )
 from plane.utils.content_validator import (
     validate_html_content,
+)
+from plane.utils.administrative_projects import (
+    get_or_create_default_administrative_organization,
+    user_can_manage_administrative_organization,
+    research_project_ids,
 )
 
 
@@ -46,6 +54,7 @@ def resolve_is_research_project(obj):
 class ProjectSerializer(BaseSerializer):
     workspace_detail = WorkspaceLiteSerializer(source="workspace", read_only=True)
     inbox_view = serializers.BooleanField(read_only=True, source="intake_view")
+    new_administrative_organization = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = Project
@@ -131,10 +140,122 @@ class ProjectSerializer(BaseSerializer):
             if not is_valid_user:
                 raise serializers.ValidationError({field: "The provided user is not an active member of this project"})
 
+        organization = data.get("administrative_organization")
+        new_organization_name = str(data.pop("new_administrative_organization", "") or "").strip()
+        if new_organization_name:
+            if organization is not None:
+                raise serializers.ValidationError(
+                    {
+                        "new_administrative_organization": (
+                            "Choose either an existing organization or a new organization name."
+                        )
+                    }
+                )
+            if not new_organization_name or len(new_organization_name) > 255 or new_organization_name == "默认":
+                raise serializers.ValidationError({"new_administrative_organization": "Organization name is invalid."})
+            if AdministrativeOrganization.objects.filter(
+                workspace_id=self.context["workspace_id"],
+                name=new_organization_name,
+                deleted_at__isnull=True,
+            ).exists():
+                raise serializers.ValidationError(
+                    {"new_administrative_organization": "Organization name is already taken."}
+                )
+            requester = getattr(self.context.get("request"), "user", None)
+            if (
+                not requester
+                or not requester.is_authenticated
+                or not WorkspaceMember.objects.filter(
+                    workspace_id=self.context["workspace_id"],
+                    member=requester,
+                    role=20,
+                    is_active=True,
+                    deleted_at__isnull=True,
+                ).exists()
+            ):
+                raise serializers.ValidationError(
+                    {"new_administrative_organization": ("Only workspace administrators can create an organization.")}
+                )
+            data["new_administrative_organization"] = new_organization_name
+        if organization is None and "administrative_organization" in data and self.instance is not None:
+            organization = get_or_create_default_administrative_organization(
+                Workspace.objects.filter(pk=self.context["workspace_id"]).first()
+            )
+            data["administrative_organization"] = organization
+        if organization is not None:
+            organization_obj = AdministrativeOrganization.objects.filter(
+                pk=organization.pk,
+                workspace_id=self.context["workspace_id"],
+                deleted_at__isnull=True,
+            ).first()
+            if organization_obj is None:
+                raise serializers.ValidationError(
+                    {"administrative_organization": "Organization should belong to this workspace."}
+                )
+            requester = getattr(getattr(self.context.get("request"), "user", None), "is_authenticated", False)
+            workspace = organization_obj.workspace
+            if not organization_obj.is_default and (
+                not requester
+                or not user_can_manage_administrative_organization(
+                    self.context["request"].user,
+                    workspace.slug,
+                    organization_obj.id,
+                )
+            ):
+                raise serializers.ValidationError(
+                    {"administrative_organization": "Only organization administrators can assign this organization."}
+                )
+            data["administrative_organization"] = organization_obj
+
+        if self.instance is not None and "administrative_organization" in data:
+            if research_project_ids().filter(id=self.instance.id).exists():
+                raise serializers.ValidationError(
+                    {"administrative_organization": "Research projects cannot join administrative organizations."}
+                )
+            current = self.instance.administrative_organization
+            target = data.get("administrative_organization")
+            if current != target:
+                requester = getattr(self.context.get("request"), "user", None)
+                workspace_slug = self.instance.workspace.slug
+                for organization in (current, target):
+                    if organization is not None and not user_can_manage_administrative_organization(
+                        requester, workspace_slug, organization.id
+                    ):
+                        raise serializers.ValidationError(
+                            {
+                                "administrative_organization": (
+                                    "Only source and target organization administrators can move this project."
+                                )
+                            }
+                        )
+
         return data
 
     def create(self, validated_data):
         workspace_id = self.context["workspace_id"]
+        new_organization_name = validated_data.pop("new_administrative_organization", None)
+        if new_organization_name:
+            workspace = Workspace.objects.filter(pk=workspace_id).first()
+            creator = self.context["request"].user
+            organization = AdministrativeOrganization.objects.create(
+                workspace=workspace,
+                name=new_organization_name,
+                created_by=creator,
+            )
+            AdministrativeOrganizationMember.objects.create(
+                workspace=workspace,
+                organization=organization,
+                member=creator,
+                role=AdministrativeOrganizationMember.Role.ADMIN,
+                created_by=creator,
+            )
+            validated_data["administrative_organization"] = organization
+        if validated_data.get("administrative_organization") is None:
+            default_organization = get_or_create_default_administrative_organization(
+                Workspace.objects.filter(pk=workspace_id).first()
+            )
+            if default_organization is not None:
+                validated_data["administrative_organization"] = default_organization
 
         project = Project.objects.create(**validated_data, workspace_id=workspace_id)
 

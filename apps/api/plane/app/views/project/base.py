@@ -8,6 +8,7 @@ import json
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django.db.models import (
     Case,
     CharField,
@@ -47,7 +48,6 @@ from plane.db.models import (
     ProjectMember,
     ProjectNetwork,
     ProjectUserProperty,
-    ResearchProjectProfile,
     State,
     DEFAULT_STATES,
     Workspace,
@@ -57,6 +57,7 @@ from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
 from plane.utils.administrative_projects import (
+    administrative_organization_project_ids,
     administrative_projects_for_user,
     restrict_administrative_project_visibility,
     administrative_project_filter,
@@ -117,8 +118,13 @@ def _project_member_role_expression(request, slug):
     member_role = ProjectMember.objects.filter(
         project_id=OuterRef("pk"), member_id=request.user.id, is_active=True
     ).values("role")
+    explicit_project_ids = ProjectMember.objects.filter(
+        project_id=OuterRef("pk"), member_id=request.user.id, is_active=True
+    ).values("project_id")
     return Case(
         When(id__in=administrative_projects_for_user(request.user, slug).values("id"), then=Value(ROLE.ADMIN.value)),
+        When(id__in=explicit_project_ids, then=Subquery(member_role)),
+        When(id__in=administrative_organization_project_ids(request.user, slug), then=Value(ROLE.GUEST.value)),
         default=Subquery(member_role),
         output_field=IntegerField(),
     )
@@ -139,6 +145,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
     queryset = restrict_administrative_project_visibility(queryset, user, slug)
     review_ids = _cached_research_review_ids(request, slug)
     administrative_ids = administrative_projects_for_user(user, slug).values("id")
+    organization_ids = administrative_organization_project_ids(user, slug)
     if WorkspaceMember.objects.filter(
         member=user,
         workspace__slug=slug,
@@ -152,6 +159,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
             )
             | Q(id__in=review_ids)
             | Q(id__in=administrative_ids)
+            | Q(id__in=organization_ids)
         )
     if WorkspaceMember.objects.filter(
         member=user,
@@ -167,6 +175,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
             | Q(network=2)
             | Q(id__in=review_ids)
             | Q(id__in=administrative_ids)
+            | Q(id__in=organization_ids)
         )
     return queryset
 
@@ -199,9 +208,7 @@ class ProjectViewSet(BaseViewSet):
                 )
             )
             .annotate(member_role=_project_member_role_expression(self.request, self.kwargs.get("slug")))
-            .annotate(
-                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
-            )
+            .annotate(research_access=_research_access_expression(self.request, self.kwargs.get("slug")))
             .annotate(
                 anchor=DeployBoard.objects.filter(
                     entity_name="project",
@@ -262,9 +269,7 @@ class ProjectViewSet(BaseViewSet):
             Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
             .select_related("workspace", "workspace__owner", "default_assignee", "project_lead")
             .annotate(member_role=_project_member_role_expression(self.request, self.kwargs.get("slug")))
-            .annotate(
-                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
-            )
+            .annotate(research_access=_research_access_expression(self.request, self.kwargs.get("slug")))
             .annotate(
                 intake_count=Count(
                     "project_intakeissue",
@@ -319,10 +324,12 @@ class ProjectViewSet(BaseViewSet):
             return Response({"error": "Project does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
         member_ids = [str(project_member.member_id) for project_member in project.members_list]
+        organization_member = administrative_organization_project_ids(request.user, slug).filter(id=pk).exists()
 
         review_reader = getattr(project, "research_access", None) == "review"
         if (
             str(request.user.id) not in member_ids
+            and not organization_member
             and not review_reader
             and not user_can_manage_administrative_project(request.user, slug, pk)
         ):
@@ -360,54 +367,57 @@ class ProjectViewSet(BaseViewSet):
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
 
-        serializer = ProjectSerializer(data={**request.data}, context={"workspace_id": workspace.id})
+        serializer = ProjectSerializer(
+            data={**request.data}, context={"workspace_id": workspace.id, "request": request}
+        )
         if serializer.is_valid():
-            serializer.save()
+            with transaction.atomic():
+                serializer.save()
 
-            # Add the user as Administrator to the project
-            _ = ProjectMember.objects.create(
-                project_id=serializer.data["id"],
-                member=request.user,
-                role=ROLE.ADMIN.value,
-            )
-
-            if serializer.data["project_lead"] is not None and str(serializer.data["project_lead"]) != str(
-                request.user.id
-            ):
-                ProjectMember.objects.create(
+                # Add the user as Administrator to the project
+                _ = ProjectMember.objects.create(
                     project_id=serializer.data["id"],
-                    member_id=serializer.data["project_lead"],
+                    member=request.user,
                     role=ROLE.ADMIN.value,
                 )
 
-            State.objects.bulk_create(
-                [
-                    State(
-                        name=state["name"],
-                        color=state["color"],
-                        project=serializer.instance,
-                        sequence=state["sequence"],
-                        workspace=serializer.instance.workspace,
-                        group=state["group"],
-                        default=state.get("default", False),
-                        created_by=request.user,
+                if serializer.data["project_lead"] is not None and str(serializer.data["project_lead"]) != str(
+                    request.user.id
+                ):
+                    ProjectMember.objects.create(
+                        project_id=serializer.data["id"],
+                        member_id=serializer.data["project_lead"],
+                        role=ROLE.ADMIN.value,
                     )
-                    for state in DEFAULT_STATES
-                ]
-            )
 
-            project = self.get_queryset().filter(pk=serializer.data["id"]).first()
+                State.objects.bulk_create(
+                    [
+                        State(
+                            name=state["name"],
+                            color=state["color"],
+                            project=serializer.instance,
+                            sequence=state["sequence"],
+                            workspace=serializer.instance.workspace,
+                            group=state["group"],
+                            default=state.get("default", False),
+                            created_by=request.user,
+                        )
+                        for state in DEFAULT_STATES
+                    ]
+                )
 
-            # Create the model activity
-            model_activity.delay(
-                model_name="project",
-                model_id=str(project.id),
-                requested_data=request.data,
-                current_instance=None,
-                actor_id=request.user.id,
-                slug=slug,
-                origin=base_host(request=request, is_app=True),
-            )
+                project = self.get_queryset().filter(pk=serializer.data["id"]).first()
+                transaction.on_commit(
+                    lambda: model_activity.delay(
+                        model_name="project",
+                        model_id=str(project.id),
+                        requested_data=request.data,
+                        current_instance=None,
+                        actor_id=request.user.id,
+                        slug=slug,
+                        origin=base_host(request=request, is_app=True),
+                    )
+                )
 
             serializer = ProjectListSerializer(project)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -455,7 +465,7 @@ class ProjectViewSet(BaseViewSet):
         serializer = ProjectSerializer(
             project,
             data={**request.data, "intake_view": intake_view},
-            context={"workspace_id": workspace.id},
+            context={"workspace_id": workspace.id, "request": request},
             partial=True,
         )
 
