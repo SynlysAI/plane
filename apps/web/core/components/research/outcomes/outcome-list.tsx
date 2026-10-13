@@ -234,6 +234,11 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
             const response = await fetch(presigned.upload_data.url, { method: "POST", body: form });
             if (!response.ok) throw new Error("upload_failed");
             await outcomeService.registerOutcomeAttachment(workspaceSlug, outcomeId, presigned.asset_id);
+            // The upload and attachment registration happen outside the research
+            // store, so reload the project outcomes before clearing the busy state.
+            // This makes the newly registered file visible without a page refresh.
+            await research.fetchOutcomes(workspaceSlug, projectId);
+            setErrorKey(null);
           } catch (error) {
             setErrorKey(getResearchErrorKey(error));
           } finally {
