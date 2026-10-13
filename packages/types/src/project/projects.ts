@@ -47,6 +47,8 @@ export interface IPartialProject {
 }
 
 export interface IProject extends IPartialProject {
+  administrative_organization?: string | null;
+  new_administrative_organization?: string;
   archive_in?: number;
   close_in?: number;
   // only for uploading the cover image
