@@ -27,7 +27,7 @@ export const FilterProjects = observer(function FilterProjects(props: Props) {
   const [itemsToRender, setItemsToRender] = useState(5);
   const [previewEnabled, setPreviewEnabled] = useState(true);
   // store
-  const { getProjectById, joinedProjectIds } = useProject();
+  const { getProjectById, administrativeJoinedProjectIds: joinedProjectIds } = useProject();
   // derived values
   const projects = joinedProjectIds?.map((projectId) => getProjectById(projectId)!) ?? null;
   const appliedFiltersCount = appliedFilters?.length ?? 0;
@@ -41,7 +41,7 @@ export const FilterProjects = observer(function FilterProjects(props: Props) {
       (project) => project.name.toLowerCase(),
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
+  }, [searchQuery, joinedProjectIds.join(","), appliedFilters?.join(",")]);
 
   const handleViewToggle = () => {
     if (!sortedOptions) return;
@@ -65,7 +65,7 @@ export const FilterProjects = observer(function FilterProjects(props: Props) {
                 {sortedOptions.slice(0, itemsToRender).map((project) => (
                   <FilterOption
                     key={`project-${project.id}`}
-                    isChecked={appliedFilters?.includes(project.id) ? true : false}
+                    isChecked={Boolean(appliedFilters?.includes(project.id))}
                     onClick={() => handleUpdate(project.id)}
                     icon={
                       <span className="grid h-4 w-4 flex-shrink-0 place-items-center">

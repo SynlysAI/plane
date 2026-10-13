@@ -3,13 +3,77 @@ import uuid
 import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
+from django.utils import timezone
 
 
 def archive_pending_chain_requests(apps, schema_editor):
     """Move unfinished per-chain knowledge requests onto their team binding."""
-    from plane.research.services.group_knowledge import migrate_pending_chain_requests
+    # Runtime models can reference columns added by later migrations. Keep the
+    # data migration tied to the schema at this point in migration history.
+    alias = schema_editor.connection.alias
+    Request = apps.get_model("db", "ResearchKnowledgeRequest")
+    Binding = apps.get_model("db", "ResearchGroupKnowledgeBinding")
+    Membership = apps.get_model("db", "OrgUnitMember")
+    today = timezone.localdate()
 
-    migrate_pending_chain_requests()
+    def nearest_team(unit):
+        seen = set()
+        while unit is not None and unit.pk not in seen:
+            seen.add(unit.pk)
+            if unit.deleted_at is None and unit.unit_type == "TEAM":
+                return unit
+            unit = unit.parent
+        return None
+
+    rows = (
+        Request.objects.using(alias)
+        .filter(deleted_at__isnull=True)
+        .exclude(state__in=("READY", "ARCHIVED"))
+        .select_related("chain__project__research_profile__org_unit")
+    )
+    for row in rows:
+        chain = row.chain
+        profile = getattr(chain.project, "research_profile", None)
+        team = nearest_team(profile.org_unit) if profile is not None else None
+        if team is None and chain.owner_id is not None:
+            membership = (
+                Membership.objects.using(alias)
+                .filter(
+                    workspace_id=chain.workspace_id,
+                    user_id=chain.owner_id,
+                    is_primary=True,
+                    deleted_at__isnull=True,
+                    effective_from__lte=today,
+                )
+                .filter(models.Q(effective_to__isnull=True) | models.Q(effective_to__gte=today))
+                .select_related("org_unit")
+                .first()
+            )
+            if membership is not None:
+                team = nearest_team(membership.org_unit)
+        if team is None:
+            continue
+        binding, _ = Binding.objects.using(alias).get_or_create(
+            workspace_id=chain.workspace_id,
+            org_unit_id=team.pk,
+            defaults={
+                "request_key": f"team:{team.pk}",
+                "state": "PENDING_ADMIN",
+                "created_by_id": row.created_by_id,
+            },
+        )
+        if binding.deleted_at is not None:
+            binding.deleted_at = None
+            if binding.state == "ARCHIVED":
+                binding.state = "PENDING_ADMIN"
+            binding.save(using=alias, update_fields=["deleted_at", "state", "updated_at"])
+        summary = dict(row.parameter_summary or {})
+        summary["superseded_by_group_binding_id"] = str(binding.pk)
+        summary["superseded_reason"] = "group_kb_2026_09_26"
+        row.state = "ARCHIVED"
+        row.parameter_summary = summary
+        row.updated_at = timezone.now()
+        row.save(using=alias, update_fields=["state", "parameter_summary", "updated_at"])
 
 
 class Migration(migrations.Migration):
@@ -27,7 +91,12 @@ class Migration(migrations.Migration):
                 (
                     "id",
                     models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, primary_key=True, serialize=False, unique=True
+                        db_index=True,
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                        unique=True,
                     ),
                 ),
                 ("request_key", models.CharField(max_length=128, unique=True)),

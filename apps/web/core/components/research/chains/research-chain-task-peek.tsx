@@ -44,6 +44,7 @@ import {
   type TWorkbenchPeekMode,
 } from "@/components/research/chains/research-chain-workbench-peek";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
+import { ResearchTaskComments } from "@/components/research/chains/research-task-comments";
 
 type TTaskFormState = {
   taskId: string | null;
@@ -314,6 +315,7 @@ export function ResearchChainTaskPeek(props: Props) {
   const canEdit = kind === "create" || isAllowed(task, "edit");
   const canAssign = kind === "create" || isAllowed(task, "edit") || isAllowed(task, "assign");
   const lifecycle = task ? LIFECYCLE_ACTIONS.filter((action) => isAllowed(task, action)) : [];
+  const primaryLifecycle = lifecycle.filter((action) => action !== "cancel");
   const status = task?.status ?? "DRAFT";
   const title =
     kind === "create" ? t("research.chain_tasks.create") : task?.title || t("research.chain_tasks.panel_title");
@@ -347,7 +349,7 @@ export function ResearchChainTaskPeek(props: Props) {
     if (!task) return [];
     const matched = events.length ? eventActivity(events, task, candidates, t) : synthesizedActivity(task, t);
     const sorted = [...matched].toSorted((left, right) => left.at.localeCompare(right.at));
-    return activityOrder === "asc" ? sorted : sorted.toReversed();
+    return activityOrder === "asc" ? sorted : [...sorted].toReversed();
   }, [activityOrder, candidates, events, t, task]);
 
   /**
@@ -413,9 +415,9 @@ export function ResearchChainTaskPeek(props: Props) {
           />
         </div>
 
-        {lifecycle.length > 0 && (
+        {primaryLifecycle.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            {lifecycle.map((action) => {
+            {primaryLifecycle.map((action) => {
               const Icon = ACTION_ICONS[action];
               return (
                 <button
@@ -538,6 +540,13 @@ export function ResearchChainTaskPeek(props: Props) {
             ) : (
               <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.activity_empty")}</p>
             )}
+            <ResearchTaskComments
+              key={task.id}
+              task={task}
+              workspaceSlug={workspaceSlug}
+              locale={locale}
+              order={activityOrder}
+            />
           </section>
         )}
 
@@ -649,6 +658,9 @@ function TaskPeekHeader({
             <button
               type="button"
               aria-label={t("research.chain_tasks.more")}
+              title={t("research.chain_tasks.more")}
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
               className="text-tertiary hover:text-secondary"
               onClick={() => setMoreOpen((open) => !open)}
             >
@@ -665,7 +677,12 @@ function TaskPeekHeader({
                     type="button"
                     role="menuitem"
                     disabled={Boolean(actionBusy)}
-                    className="block w-full rounded-sm px-2 py-1.5 text-left text-12 text-primary hover:bg-surface-2"
+                    className={cn(
+                      "block w-full rounded-sm px-2 py-1.5 text-left text-12",
+                      action === "cancel"
+                        ? "text-danger-primary hover:bg-danger-subtle"
+                        : "text-primary hover:bg-surface-2"
+                    )}
                     onClick={() => {
                       setMoreOpen(false);
                       onAction(action);

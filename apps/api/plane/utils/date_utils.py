@@ -7,6 +7,7 @@ from django.utils import timezone
 from typing import Dict, Optional, List, Union, Tuple, Any
 
 from plane.db.models import User
+from plane.utils.administrative_projects import visible_administrative_projects
 
 
 def get_analytics_date_range(
@@ -150,26 +151,29 @@ def get_analytics_filters(
     if project_ids and isinstance(project_ids, str):
         project_ids = [str(project_id) for project_id in project_ids.split(",")]
 
+    requested_projects = bool(project_ids)
+    administrative_ids = visible_administrative_projects(user, slug).filter(archived_at__isnull=True).values_list("id", flat=True)
+    if project_ids:
+        project_ids = list(set(project_ids).intersection({str(value) for value in administrative_ids}))
+
     # Base filters for workspace and user
     base_filters = {
         "workspace__slug": slug,
-        "project__project_projectmember__member": user,
-        "project__project_projectmember__is_active": True,
         "project__deleted_at__isnull": True,
         "project__archived_at__isnull": True,
     }
+    base_filters["project__id__in"] = administrative_ids
 
     # Project filters
     project_filters = {
         "workspace__slug": slug,
-        "project_projectmember__member": user,
-        "project_projectmember__is_active": True,
         "deleted_at__isnull": True,
         "archived_at__isnull": True,
     }
+    project_filters["id__in"] = administrative_ids
 
     # Add project IDs to filters if provided
-    if project_ids:
+    if requested_projects:
         base_filters["project_id__in"] = project_ids
         project_filters["id__in"] = project_ids
 

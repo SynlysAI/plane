@@ -37,7 +37,10 @@ vi.mock("@/services/research/account.service", () => ({
   },
 }));
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
-vi.mock("@plane/constants", () => ({ USER_IMPORT_ROW_STATUS_LABELS: {} }));
+vi.mock("@plane/constants", async () => ({
+  ...(await vi.importActual("@plane/constants")),
+  USER_IMPORT_ROW_STATUS_LABELS: {},
+}));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, string | number>) => {
@@ -59,7 +62,10 @@ vi.mock("@plane/propel/button", () => ({
   ),
 }));
 vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: {}, setToast: vi.fn() }));
-vi.mock("@plane/ui", () => ({ Spinner: () => null }));
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
+  Spinner: () => null,
+}));
 
 import { ResearchUserImportPanel } from "@/components/research/settings/system/user-import-panel";
 
@@ -129,7 +135,7 @@ async function change(input: HTMLInputElement | HTMLSelectElement, value: string
 
 function labeledControl(label: string) {
   return Array.from(container.querySelectorAll("label"))
-    .find((item) => item.firstChild?.textContent?.trim() === label)!
+    .find((item) => item.firstChild?.textContent?.trim().replace(/\s*\*$/, "") === label.replace(/\s*\*$/, ""))!
     .querySelector("input,select") as HTMLInputElement | HTMLSelectElement;
 }
 

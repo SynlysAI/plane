@@ -33,7 +33,7 @@ export const LiteratureStatusBoard = observer(function LiteratureStatusBoard({ c
           key={status}
           type="button"
           onClick={() => onSelect(active === status ? "" : status)}
-          className={`flex items-center gap-1 rounded-md border px-2 py-1 text-12 transition-colors ${
+          className={`flex h-8 items-center gap-1 rounded-md border px-2 text-13 transition-colors ${
             active === status
               ? "border-accent-strong bg-surface-1 text-primary"
               : "border-transparent text-secondary hover:bg-surface-1"

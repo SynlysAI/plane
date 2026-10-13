@@ -6,6 +6,8 @@ import { ResearchAccountService } from "@/services/research/account.service";
 import type { ImportApprovalPreview, ImportRelations } from "@/services/research/account.service";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { LayoutErrorBoundary } from "@/components/common/layout-error-boundary";
+import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 
 const service = new ResearchAccountService();
 const inputClass = "rounded border border-subtle bg-surface-1 px-2 py-1 text-12";
@@ -153,41 +155,43 @@ export function ImportReview({
           {error}
         </p>
       )}
-      <div className="flex gap-2">
-        <input
-          className={inputClass}
-          aria-label="搜索导入人员"
-          placeholder="搜索姓名或邮箱"
-          value={search}
-          disabled={busy || !!editing}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setSelected([]);
-          }}
-        />
-        <select
-          className={inputClass}
-          aria-label="审核状态筛选"
-          value={filter}
-          disabled={busy || !!editing}
-          onChange={(event) => {
-            setFilter(event.target.value);
-            setSelected([]);
-          }}
-        >
-          {[
-            ["ALL", "全部"],
-            ["PENDING", "待审核"],
-            ["INCLUDED", "已纳入"],
-            ["EXCLUDED", "已排除"],
-            ["INVALID", "校验问题"],
-          ].map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ResearchFilterToolbar>
+        <ListFilterField label="人员" className="w-full sm:w-56">
+          <ListFilterInput
+            aria-label="搜索导入人员"
+            placeholder="搜索姓名或邮箱"
+            value={search}
+            disabled={busy || !!editing}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setSelected([]);
+            }}
+          />
+        </ListFilterField>
+        <ListFilterField label="审核状态">
+          <ListFilterSelect
+            aria-label="审核状态筛选"
+            value={filter}
+            disabled={busy || !!editing}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setSelected([]);
+            }}
+          >
+            {[
+              ["ALL", "全部"],
+              ["PENDING", "待审核"],
+              ["INCLUDED", "已纳入"],
+              ["EXCLUDED", "已排除"],
+              ["INVALID", "校验问题"],
+            ].map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+      </ResearchFilterToolbar>
       <fieldset disabled={busy || !editable || !!editing} className="min-w-0">
         <LayoutErrorBoundary>
           <div className="max-h-96 overflow-auto rounded border border-subtle">

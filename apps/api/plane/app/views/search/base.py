@@ -29,6 +29,11 @@ from rest_framework.response import Response
 # Module imports
 from plane.app.views.base import BaseAPIView
 from plane.app.permissions import WorkspaceUserPermission
+from plane.utils.administrative_projects import (
+    administrative_projects,
+    administrative_projects_for_user,
+    restrict_administrative_project_visibility,
+)
 from plane.db.models import (
     Workspace,
     Project,
@@ -70,8 +75,8 @@ class GlobalSearchEndpoint(BaseAPIView):
         return (
             Project.objects.filter(
                 q,
-                project_projectmember__member=self.request.user,
-                project_projectmember__is_active=True,
+                Q(project_projectmember__member=self.request.user, project_projectmember__is_active=True)
+                | Q(id__in=administrative_projects_for_user(self.request.user, slug).values("id")),
                 archived_at__isnull=True,
                 workspace__slug=slug,
             )
@@ -314,6 +319,19 @@ class SearchEndpoint(BaseAPIView):
         count = int(request.query_params.get("count", 5))
         project_id = request.query_params.get("project_id", None)
 
+        visible_projects = restrict_administrative_project_visibility(
+            Project.objects.filter(workspace__slug=slug), request.user, slug
+        )
+        if (
+            project_id
+            and administrative_projects(slug).filter(id=project_id).exists()
+            and not visible_projects.filter(id=project_id).exists()
+        ):
+            return Response(
+                {"error": "Project membership is required", "code": "PROJECT_MEMBERSHIP_REQUIRED"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         response_data = {}
 
         if project_id:
@@ -377,8 +395,11 @@ class SearchEndpoint(BaseAPIView):
                     projects = (
                         Project.objects.filter(
                             q,
-                            Q(project_projectmember__member=self.request.user) | Q(network=2),
+                            Q(project_projectmember__member=self.request.user, project_projectmember__is_active=True)
+                            | Q(network=2)
+                            | Q(id__in=administrative_projects_for_user(self.request.user, slug).values("id")),
                             workspace__slug=slug,
+                            id__in=visible_projects.values("id"),
                         )
                         .order_by("-created_at")
                         .distinct()
@@ -584,8 +605,11 @@ class SearchEndpoint(BaseAPIView):
                     projects = (
                         Project.objects.filter(
                             q,
-                            Q(project_projectmember__member=self.request.user) | Q(network=2),
+                            Q(project_projectmember__member=self.request.user, project_projectmember__is_active=True)
+                            | Q(network=2)
+                            | Q(id__in=administrative_projects_for_user(self.request.user, slug).values("id")),
                             workspace__slug=slug,
+                            id__in=visible_projects.values("id"),
                         )
                         .order_by("-created_at")
                         .distinct()

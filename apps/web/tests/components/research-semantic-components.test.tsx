@@ -145,7 +145,7 @@ it("provides one semantic surface system for research lists and details", async 
   );
 
   expect(container.querySelector(".bg-canvas")).not.toBeNull();
-  expect(container.querySelector(".bg-surface-2")).not.toBeNull();
+  expect(container.querySelector('input[aria-label="筛选"]')).not.toBeNull();
   expect(container.querySelector("button")?.textContent).toBe("清除筛选");
   expect(container.querySelector("h2")?.textContent).toBe("周期报告");
   const collapsible = container.querySelector("details");

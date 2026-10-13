@@ -1,24 +1,21 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Button, getButtonStyling } from "@plane/propel/button";
+import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Skeleton } from "@plane/propel/skeleton";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
-import { Table, TableBody, TableCell, TableRow } from "@plane/propel/table";
-import type {
-  TExternalReference,
-  TResearchChain,
-  TResearchChainMember,
-  TResearchChainNode,
-  TResearchChainNodeAction,
-} from "@plane/types";
+import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from "@plane/propel/table";
+import { ListFilterField, ListFilterSelect } from "@plane/ui";
+import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
+import type { TResearchChain, TResearchChainMember, TResearchChainNode, TResearchChainNodeAction } from "@plane/types";
 // components
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
+import { useResearch } from "@/hooks/store/use-research";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
@@ -35,52 +32,36 @@ import {
 } from "@/components/research/chains/research-chain-workflow-stage-detail";
 import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
 import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
-import { ExperimentList } from "@/components/research/experiments/experiment-list";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
-import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
-import { ResearchIntegrationService } from "@/services/research/integration.service";
 const chainService = new ResearchChainService();
-const integrationService = new ResearchIntegrationService();
 
 type Props = {
   workspaceSlug: string;
   chainId: string;
 };
 
-type TChainTab = "overview" | "nodes" | "materials" | "members";
+type TChainTab = "overview" | "nodes" | "members";
 type TRequestedChainTab = TChainTab | "replay" | "reports" | "experiments" | "references";
 
 const MATERIAL_TABS = new Set(["materials", "reports", "experiments", "references"]);
 
 /**
- * 把旧的报告、实验和外部引用地址收成课题资料。
+ * 将已移除的课题资料旧地址收回节点工作台。
  *
  * Args:
  *     requested: 地址栏中的 tab 参数。
  *
  * Returns:
- *     课题页实际展示的分区。未指定时回到概览，而不是节点工作台。
+ *     课题页实际展示的分区。旧资料页签地址回到节点工作台。
  */
 export function resolveChainTab(requested: string | null): TChainTab {
   if (requested === "replay") return "nodes";
-  if (requested && MATERIAL_TABS.has(requested)) return "materials";
+  if (requested && MATERIAL_TABS.has(requested)) return "nodes";
   if (requested === "overview" || requested === "nodes" || requested === "members") return requested;
   return "overview";
-}
-
-/**
- * 读取外部引用上可选的来源节点，没有则返回空。
- */
-function referenceSourceNodeId(reference: TExternalReference): string | null {
-  const metadata = reference.metadata ?? {};
-  for (const key of ["node_id", "chain_node_id", "chain_node"]) {
-    const value = metadata[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return null;
 }
 
 const ACTIONS_BY_STATUS: Record<TResearchChainNode["status"], TResearchChainNodeAction[]> = {
@@ -93,36 +74,20 @@ const ACTIONS_BY_STATUS: Record<TResearchChainNode["status"], TResearchChainNode
   ARCHIVED: [],
 };
 
-const NODE_TYPE_OPTIONS = [
-  "RESEARCH",
-  "LITERATURE_REVIEW",
-  "TOPIC_EVALUATION",
-  "PRE_EXPERIMENT",
-  "PLAN",
-  "OPENING",
-  "EXPERIMENT",
-  "ANALYSIS",
-  "ITERATION",
-  "SUMMARY",
-  "PAPER_WRITING",
-  "COMPLETION",
-  "TRANSFER",
-] as const;
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  RESEARCH: "research.chains.node_types.research",
-  LITERATURE_REVIEW: "research.chains.node_types.literature_review",
-  TOPIC_EVALUATION: "research.chains.node_types.topic_evaluation",
-  PRE_EXPERIMENT: "research.chains.node_types.pre_experiment",
-  PLAN: "research.chains.node_types.plan",
-  OPENING: "research.chains.node_types.opening",
-  EXPERIMENT: "research.chains.node_types.experiment",
-  ANALYSIS: "research.chains.node_types.analysis",
-  ITERATION: "research.chains.node_types.iteration",
-  SUMMARY: "research.chains.node_types.summary",
-  PAPER_WRITING: "research.chains.node_types.paper_writing",
-  COMPLETION: "research.chains.node_types.completion",
-  TRANSFER: "research.chains.node_types.transfer",
+const NODE_TYPE_BY_STAGE: Record<TResearchWorkflowStage["id"], string> = {
+  literature_review: "LITERATURE_REVIEW",
+  topic_selection: "TOPIC_EVALUATION",
+  topic_evaluation: "TOPIC_EVALUATION",
+  pre_experiment: "PRE_EXPERIMENT",
+  analysis_pre_experiment: "ANALYSIS",
+  opening: "OPENING",
+  experiment: "EXPERIMENT",
+  analysis_experiment: "ANALYSIS",
+  iteration: "ITERATION",
+  summary: "SUMMARY",
+  paper_writing: "PAPER_WRITING",
+  completion: "COMPLETION",
+  transfer: "TRANSFER",
 };
 
 const MEMBER_ROLE_LABELS: Record<string, string> = {
@@ -135,6 +100,7 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
+  const navigate = useNavigate();
   const memberStore = useMember();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") as TRequestedChainTab | null;
@@ -150,8 +116,8 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [forbidden, setForbidden] = useState(false);
-  const [nodeType, setNodeType] = useState("LITERATURE_REVIEW");
   const [nodeTitle, setNodeTitle] = useState("");
+  const [creatingNodeInline, setCreatingNodeInline] = useState(false);
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState("");
   const [transitioning, setTransitioning] = useState<string | null>(null);
@@ -161,9 +127,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [memberRole, setMemberRole] = useState<"15" | "20">("15");
   const [memberBusy, setMemberBusy] = useState(false);
   const [memberError, setMemberError] = useState("");
-  const [contextReferences, setContextReferences] = useState<TExternalReference[] | null>(null);
-  const [contextError, setContextError] = useState(false);
-  const agentEnabled = Boolean(research.identity?.sections?.research_agent);
   const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
   const workflow = useMemo(() => buildResearchWorkflow(nodes, current?.id ?? null), [current, nodes]);
   const requestedStageId = searchParams.get("stage");
@@ -270,44 +233,18 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     void memberStore.workspace.fetchWorkspaceMembers(workspaceSlug).catch(() => undefined);
   }, [memberStore, workspaceSlug]);
 
-  useEffect(() => {
-    if (!chain || activeTab !== "materials") return;
-    let active = true;
-    setContextError(false);
-    void (async () => {
-      try {
-        const references = await integrationService.getReferences(workspaceSlug);
-        if (!active) return;
-        setContextReferences(
-          references.results.filter(
-            (reference) =>
-              reference.links?.some((link) => link.target_id === chain.project) ||
-              reference.metadata?.chain_id === chain.id ||
-              reference.metadata?.project === chain.project
-          )
-        );
-      } catch {
-        if (active) {
-          setContextError(true);
-          setContextReferences([]);
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [activeTab, chain, workspaceSlug]);
-
   const createNode = async () => {
     if (!nodeTitle.trim() || creating) return;
     setCreating(true);
     setActionError("");
     try {
       await chainService.createChainNode(workspaceSlug, chainId, {
-        node_type: nodeType,
+        node_type: NODE_TYPE_BY_STAGE[selectedStage?.id ?? "literature_review"],
         title: nodeTitle.trim(),
+        ...(selected ? { parent_node_id: selected.node.id, loop_iteration: selected.node.loop_iteration + 1 } : {}),
       });
       setNodeTitle("");
+      setCreatingNodeInline(false);
       await load();
     } catch {
       setActionError(t("research.chains.action_failed"));
@@ -406,16 +343,23 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const tabs: Array<{ id: TChainTab; labelKey: string }> = [
     { id: "overview", labelKey: "research.chains.tabs.overview" },
     { id: "nodes", labelKey: "research.chains.tabs.nodes" },
-    { id: "materials", labelKey: "research.chains.tabs.materials" },
     { id: "members", labelKey: "research.chains.tabs.members" },
   ];
-  const materialNode = nodes.find((item) => item.id === requestedNodeId) ?? null;
-  const visibleReferences = (contextReferences ?? []).filter((reference) => {
-    if (!materialNode || activeTab !== "materials") return true;
-    return referenceSourceNodeId(reference) === materialNode.id;
-  });
   const selectedNodeActions = selected ? (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      {selected.node.capabilities?.actions.delete?.allowed && (
+        <ResearchDeleteButton
+          name={selected.node.title}
+          disabled={transitioning !== null}
+          onDelete={async () => {
+            await chainService.deleteChainNode(workspaceSlug, selected.node.id);
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete("node");
+            setSearchParams(nextParams);
+            await load();
+          }}
+        />
+      )}
       {ACTIONS_BY_STATUS[selected.node.status]
         .filter(() => {
           const capability = selected.node.capabilities?.actions.transition;
@@ -425,7 +369,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           <Button
             key={action}
             variant={action === "APPROVE" ? "primary" : "secondary"}
-            size="sm"
+            size="base"
             disabled={transitioning === selected.node.id}
             onClick={() => requestTransition(selected.node, action)}
           >
@@ -437,48 +381,41 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           {selected.node.capabilities.actions.transition.reason}
         </span>
       )}
-      {agentEnabled && (
-        <Link
-          href={`/${workspaceSlug}/research/chains/${chainId}/nodes/${selected.node.id}/agent`}
-          target="_blank"
-          rel="noreferrer"
-          className={getButtonStyling("secondary", "sm")}
-        >
-          {t("research.chains.open_agent")}
-        </Link>
-      )}
       {reasonAction && (
         <div
           role="dialog"
           data-reason-dialog=""
           aria-label={t("research.chains.reason_label")}
-          className="fixed top-24 right-6 z-40 w-80 rounded-md border border-subtle bg-surface-1 p-4 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
+          className="fixed inset-0 z-40 flex items-center justify-center bg-backdrop p-4"
         >
-          <label className="flex flex-col gap-1 text-11 text-tertiary">
-            <span>{t("research.chains.reason_label")}</span>
-            <input
-              value={reason}
-              aria-invalid={Boolean(actionError === t("research.chains.reason_required"))}
-              aria-describedby="chain-reason-error"
-              onChange={(event) => setReason(event.target.value)}
-              className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
-            />
-            <span id="chain-reason-error" className="text-11 text-danger-primary">
-              {actionError === t("research.chains.reason_required") ? actionError : ""}
-            </span>
-          </label>
-          <div className="mt-3 flex gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={transitioning === selected.node.id}
-              onClick={() => void transition(selected.node, reasonAction)}
-            >
-              {t("research.chains.confirm_reason")}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setReasonAction(null)}>
-              {t("research.chain_tasks.cancel_edit")}
-            </Button>
+          <div className="w-full max-w-md rounded-lg border border-subtle bg-surface-1 p-5 shadow-[0_8px_24px_rgba(37,37,34,0.16)]">
+            <h3 className="mb-4 text-16 font-semibold text-primary">{t("research.chains.reason_label")}</h3>
+            <label className="flex flex-col gap-1 text-11 text-tertiary">
+              <span>{t("research.chains.reason_label")}</span>
+              <input
+                value={reason}
+                aria-invalid={Boolean(actionError === t("research.chains.reason_required"))}
+                aria-describedby="chain-reason-error"
+                onChange={(event) => setReason(event.target.value)}
+                className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
+              />
+              <span id="chain-reason-error" className="text-11 text-danger-primary">
+                {actionError === t("research.chains.reason_required") ? actionError : ""}
+              </span>
+            </label>
+            <div className="mt-3 flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={transitioning === selected.node.id}
+                onClick={() => void transition(selected.node, reasonAction)}
+              >
+                {t("research.chains.confirm_reason")}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setReasonAction(null)}>
+                {t("research.chain_tasks.cancel_edit")}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -556,20 +493,19 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={() => void load()}>
+          <div className="flex flex-wrap items-center gap-2">
+            {chain?.capabilities?.actions.delete?.allowed && (
+              <ResearchDeleteButton
+                name={chain.project_name ?? chain.project}
+                onDelete={async () => {
+                  await research.deleteResearchProject(workspaceSlug, chain.project);
+                  navigate(`/${workspaceSlug}/research/chains?view=projects`);
+                }}
+              />
+            )}
+            <Button variant="secondary" size="sm" className="h-8" onClick={() => void load()}>
               {t("research.chains.refresh")}
             </Button>
-            {agentEnabled && research.canSee("research_chain") && current && (
-              <Link
-                href={`/${workspaceSlug}/research/chains/${chainId}/nodes/${current.id}/agent`}
-                target="_blank"
-                rel="noreferrer"
-                className={getButtonStyling("primary", "base")}
-              >
-                {t("research.chains.open_agent")}
-              </Link>
-            )}
           </div>
         </div>
       </section>
@@ -662,10 +598,74 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   selectNode(nodeId);
                 }}
                 actionSlot={selectedNodeActions}
+                createSlot={
+                  <>
+                    <button
+                      type="button"
+                      aria-label={t("research.chains.create_node_title")}
+                      title={t("research.chains.create_node_title")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md px-1.5 text-12 font-medium text-secondary hover:bg-surface-1 hover:text-accent-primary"
+                      onClick={() => {
+                        setCreatingNodeInline(true);
+                        setNodeTitle("");
+                      }}
+                    >
+                      <span className="text-16 leading-none">+</span>
+                      新增节点
+                    </button>
+                    {creatingNodeInline && (
+                      <div className="fixed inset-0 z-40 flex items-center justify-center bg-backdrop p-4">
+                        <form
+                          role="dialog"
+                          aria-modal="true"
+                          aria-label={t("research.chains.create_node_title")}
+                          className="w-full max-w-md rounded-lg border border-subtle bg-surface-1 p-5 shadow-[0_8px_24px_rgba(37,37,34,0.16)]"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void createNode();
+                          }}
+                        >
+                          <label className="flex flex-col gap-1 text-12 text-secondary">
+                            <span>{t("research.chains.node_title")}</span>
+                            <input
+                              value={nodeTitle}
+                              onChange={(event) => setNodeTitle(event.target.value)}
+                              placeholder={t("research.chains.node_title_placeholder")}
+                              className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
+                            />
+                          </label>
+                          <div className="mt-3 flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="base"
+                              onClick={() => setCreatingNodeInline(false)}
+                            >
+                              {t("research.chain_tasks.cancel_edit")}
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="base"
+                              type="submit"
+                              disabled={!nodeTitle.trim() || creating}
+                            >
+                              {t("research.chains.create_node")}
+                            </Button>
+                          </div>
+                        </form>
+                      </div>
+                    )}
+                  </>
+                }
                 detailSlot={
                   selected ? (
                     <>
                       <ResearchChainTaskPanel
+                        workspaceSlug={workspaceSlug}
+                        chainId={chainId}
+                        nodeId={selected.node.id}
+                      />
+                      <ResearchChainKnowledgePanel
                         workspaceSlug={workspaceSlug}
                         chainId={chainId}
                         nodeId={selected.node.id}
@@ -688,186 +688,81 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 }
               />
             )}
-            <details className="border-t border-subtle">
-              <summary className="cursor-pointer list-none px-5 py-3 text-13 font-semibold text-primary">
-                {t("research.chains.create_node_title")}
-              </summary>
-              <div className="grid grid-cols-1 gap-3 px-5 pb-5 md:grid-cols-[180px_minmax(0,1fr)_auto]">
-                <label className="flex flex-col gap-1 text-12 text-secondary">
-                  <span>{t("research.chains.node_type")}</span>
-                  <select
-                    value={nodeType}
-                    onChange={(event) => setNodeType(event.target.value)}
-                    className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
-                  >
-                    {NODE_TYPE_OPTIONS.map((type) => (
-                      <option key={type} value={type}>
-                        {t(NODE_TYPE_LABELS[type])}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-12 text-secondary">
-                  <span>{t("research.chains.node_title")}</span>
-                  <input
-                    value={nodeTitle}
-                    onChange={(event) => setNodeTitle(event.target.value)}
-                    placeholder={t("research.chains.node_title_placeholder")}
-                    className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
-                  />
-                </label>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="mt-auto"
-                  onClick={() => void createNode()}
-                  disabled={!nodeTitle.trim() || creating}
-                >
-                  {t("research.chains.create_node")}
-                </Button>
-              </div>
-            </details>
-          </section>
-        )}
-
-        {activeTab === "materials" && chain && (
-          <section className="space-y-6 p-5">
-            <label className="flex max-w-sm flex-col gap-1 text-12 text-secondary">
-              <span>{t("research.chains.materials.node_filter")}</span>
-              <select
-                aria-label={t("research.chains.materials.node_filter")}
-                className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
-                value={materialNode?.id ?? ""}
-                onChange={(event) => {
-                  const nextParams = new URLSearchParams(searchParams);
-                  nextParams.set("tab", "materials");
-                  if (event.target.value) nextParams.set("node", event.target.value);
-                  else nextParams.delete("node");
-                  setSearchParams(nextParams);
-                }}
-              >
-                <option value="">{t("research.chains.materials.all_nodes")}</option>
-                {nodes.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div>
-              <h4 className="text-13 font-semibold text-primary">{t("research.chains.materials.files")}</h4>
-              {materialNode ? (
-                <div className="mt-3">
-                  <ResearchChainKnowledgePanel
-                    workspaceSlug={workspaceSlug}
-                    chainId={chainId}
-                    nodeId={materialNode.id}
-                  />
-                </div>
-              ) : (
-                <p className="mt-2 text-12 text-tertiary">{t("research.chains.materials.files_hint")}</p>
-              )}
-            </div>
-            <div>
-              <h4 className="text-13 font-semibold text-primary">{t("research.chains.materials.experiments")}</h4>
-              <div className="mt-3">
-                <ExperimentList workspaceSlug={workspaceSlug} projectId={chain.project} />
-              </div>
-            </div>
-            <div>
-              <h4 className="text-13 font-semibold text-primary">{t("research.chains.materials.references")}</h4>
-              <p className="mt-1 text-11 text-tertiary">{t("research.chains.context.external_hint")}</p>
-              {contextError && (
-                <p className="mt-3 text-12 text-secondary" role="alert">
-                  {t("research.chains.context_load_failed")}
-                </p>
-              )}
-              <ul className="mt-3 divide-y divide-subtle rounded-lg border border-subtle bg-surface-1" role="list">
-                {visibleReferences.map((reference) => (
-                  <li key={reference.id} className="px-4 py-3">
-                    <p className="text-12 font-medium text-primary">{reference.title}</p>
-                    <p className="mt-1 text-11 text-tertiary">{reference.summary || reference.system}</p>
-                    {reference.source_url && (
-                      <a
-                        href={reference.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-block text-11 text-accent-primary"
-                      >
-                        {t("research.chains.context.open_source")}
-                      </a>
-                    )}
-                  </li>
-                ))}
-                {contextReferences && !visibleReferences.length && (
-                  <li className="px-4 py-3 text-12 text-secondary">{t("research.chains.sections.empty")}</li>
-                )}
-              </ul>
-            </div>
           </section>
         )}
 
         {activeTab === "members" && (
           <section className="p-5">
-            <div className="flex flex-wrap items-end gap-3">
+            <ResearchFilterToolbar>
               <ResearchPersonSelect
                 people={workspaceMembers}
                 value={memberUserId}
                 onChange={setMemberUserId}
                 label={t("research.chains.members.user_id")}
               />
-              <label className="flex flex-col gap-1 text-12 text-secondary">
-                <span>{t("research.chains.members.role")}</span>
-                <select
+              <ListFilterField label={t("research.chains.members.role")}>
+                <ListFilterSelect
                   value={memberRole}
                   onChange={(event) => setMemberRole(event.target.value as "15" | "20")}
-                  className="rounded-md border border-subtle bg-surface-1 px-2 py-2 text-12 text-primary"
                 >
                   <option value="15">{t("research.chains.members.role_member")}</option>
                   <option value="20">{t("research.chains.members.role_admin")}</option>
-                </select>
-              </label>
+                </ListFilterSelect>
+              </ListFilterField>
               <Button
                 variant="primary"
-                size="lg"
+                size="xl"
                 onClick={() => void addMember()}
                 disabled={!memberUserId.trim() || memberBusy}
               >
                 {t("research.chains.members.add")}
               </Button>
-            </div>
+            </ResearchFilterToolbar>
             {memberError && (
               <p className="mt-3 text-12 text-danger-primary" role="alert">
                 {memberError}
               </p>
             )}
-            <Table className="mt-4">
-              <TableBody>
-                {members.map((member) => (
-                  <TableRow key={member.user_id}>
-                    <TableCell className="font-medium text-primary">{member.display_name}</TableCell>
-                    <TableCell className="text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</TableCell>
-                    <TableCell className="text-right">
-                      {!member.is_owner && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void removeMember(member.user_id)}
-                          disabled={memberBusy}
-                        >
-                          {t("research.chains.members.remove")}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!members.length && (
-                  <TableRow>
-                    <TableCell className="py-3 text-secondary">{t("research.chains.members.empty")}</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <div className="mt-4">
+              <ResearchTableSurface>
+                <Table className="min-w-120">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>成员</TableHead>
+                      <TableHead>{t("research.chains.members.role")}</TableHead>
+                      <TableHead className="text-right">{t("research.approvals.columns.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members.map((member) => (
+                      <TableRow key={member.user_id}>
+                        <TableCell className="font-medium text-primary">{member.display_name}</TableCell>
+                        <TableCell className="text-tertiary">{t(MEMBER_ROLE_LABELS[member.role])}</TableCell>
+                        <TableCell className="text-right">
+                          {!member.is_owner && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => void removeMember(member.user_id)}
+                              disabled={memberBusy}
+                            >
+                              {t("research.chains.members.remove")}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!members.length && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="py-3 text-secondary">
+                          {t("research.chains.members.empty")}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </ResearchTableSurface>
+            </div>
           </section>
         )}
       </div>

@@ -341,10 +341,16 @@ export class WorkspaceService extends APIService {
   }
 
   // recents
-  async fetchWorkspaceRecents(workspaceSlug: string, entity_name?: string): Promise<TActivityEntityData[]> {
+  /** 获取当前用户的最近访问，可限定为行政项目及相关内容。 */
+  async fetchWorkspaceRecents(
+    workspaceSlug: string,
+    entity_name?: string,
+    scope?: "administrative"
+  ): Promise<TActivityEntityData[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/recent-visits/`, {
       params: {
         entity_name,
+        scope,
       },
     })
       .then((response) => response?.data)

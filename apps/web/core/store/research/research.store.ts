@@ -118,6 +118,7 @@ export interface IResearchStore {
   mentorBindingIdsByWorkspace: Record<string, string[]>;
   reports: Record<string, TPeriodicReport>;
   reportIdsByWorkspace: Record<string, string[]>;
+  deleteReport: (workspaceSlug: string, reportId: string) => Promise<void>;
   reportPaginationByWorkspace: Record<string, TPaginationInfo>;
   reportHistory: Record<string, TReportReviewLog[]>;
   reportAttachments: Record<string, TReportAttachment[]>;
@@ -290,6 +291,7 @@ export interface IResearchStore {
   fetchResearchProjects: (workspaceSlug: string, params?: Record<string, string>) => Promise<TResearchProject[]>;
   createResearchProject: (workspaceSlug: string, payload: TResearchProjectCreatePayload) => Promise<TResearchProject>;
   archiveResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
+  deleteResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   restoreResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   fetchApprovalFlows: (workspaceSlug: string) => Promise<TApprovalFlow[]>;
   createApprovalFlow: (
@@ -712,6 +714,7 @@ export class ResearchStore implements IResearchStore {
       fetchReportAttachments: action,
       uploadReportAttachment: action,
       deleteReportAttachment: action,
+      deleteReport: action,
       importReportMarkdown: action,
       updateReportVisibility: action,
       fetchReportSummary: action,
@@ -723,6 +726,7 @@ export class ResearchStore implements IResearchStore {
       fetchResearchProjects: action,
       createResearchProject: action,
       archiveResearchProject: action,
+      deleteResearchProject: action,
       restoreResearchProject: action,
       fetchApprovalFlows: action,
       createApprovalFlow: action,
@@ -1417,9 +1421,27 @@ export class ResearchStore implements IResearchStore {
     await this.fetchResearchProjects(workspaceSlug);
   };
 
+  /** 删除科研项目并刷新当前工作区的默认项目列表。 */
+  deleteResearchProject = async (workspaceSlug: string, projectId: string) => {
+    await this.projectService.deleteProject(workspaceSlug, projectId);
+    await this.fetchResearchProjects(workspaceSlug);
+  };
+
   restoreResearchProject = async (workspaceSlug: string, projectId: string) => {
     await this.projectService.restoreProject(workspaceSlug, projectId);
     await this.fetchResearchProjects(workspaceSlug);
+  };
+
+  deleteReport = async (workspaceSlug: string, reportId: string) => {
+    await this.reportService.deleteReport(workspaceSlug, reportId);
+    runInAction(() => {
+      delete this.reports[reportId];
+      delete this.reportHistory[reportId];
+      delete this.reportAttachments[reportId];
+      this.reportIdsByWorkspace[workspaceSlug] = (this.reportIdsByWorkspace[workspaceSlug] ?? []).filter(
+        (id) => id !== reportId
+      );
+    });
   };
 
   // ---------------------------------------------------------------------

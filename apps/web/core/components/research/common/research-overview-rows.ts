@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { TResearchIdentity } from "@plane/types";
+import type { TResearchChain, TResearchIdentity } from "@plane/types";
 
 const RESEARCH_OVERVIEW_ROW_LIMIT = 5;
 
@@ -43,10 +43,13 @@ export function selectResearchOverviewChains<T extends TOverviewChain>(
 }
 
 /**
- * 查看者不是所有者时返回已有显示名，否则不写名字。
+ * 返回负责人显示名，包括查看者自己的项目；缺失名称时由界面提供占位文案。
  */
-export function chainOwnerLabel(identity: TResearchIdentity | null | undefined, chain: TOverviewChain): string {
-  const viewerId = identity?.user?.id;
-  if (!viewerId || chain.owner === viewerId) return "";
+export function chainOwnerLabel(_identity: TResearchIdentity | null | undefined, chain: TOverviewChain): string {
   return chain.owner_name?.trim() ?? "";
+}
+
+/** 排除归档和已删除课题，使概览行与统计使用同一组项目。 */
+export function visibleResearchChains(chains: TResearchChain[]): TResearchChain[] {
+  return chains.filter((chain) => chain.status !== "ARCHIVED" && chain.status !== "DELETED");
 }

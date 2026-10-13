@@ -864,6 +864,11 @@
     }
   },
   "research": {
+    "deletion": {
+      "delete_named": "Delete {name}",
+      "confirm": "Delete \"{name}\"? It will be removed from the list. This action cannot be undone here.",
+      "blocked": "This record has submission history or related records. Remove its associations first, or archive it to preserve its history."
+    },
     "nav": {
       "group": "Research",
       "overview": "Research overview",
@@ -1089,9 +1094,16 @@
       "administrative_hint": "Purchasing, reimbursement and general collaboration projects.",
       "administrative_empty": "No administrative project yet.",
       "administrative_error": "The administrative summary is temporarily unavailable. Please retry later.",
+      "administrative_updated_at": "Last updated: {value}",
+      "administrative_open_issues": "{count} open",
+      "administrative_done_issues": "{count} completed",
+      "administrative_stats_unavailable": "Overview unavailable",
       "all_administrative": "All administrative projects",
       "recent_activity": "Recent activity",
       "report_summary": "Report submission summary",
+      "this_week": "This week",
+      "this_month": "This month",
+      "recent_error": "Recent activity is unavailable. Please refresh later.",
       "report_error": "The report summary is unavailable. Refresh or open the report view.",
       "view_summary": "View summary",
       "view_todos": "View all to-dos",
@@ -1153,6 +1165,7 @@
       "requester": "Requester",
       "assignees": "Handlers",
       "business_status": "Source status",
+      "business_draft": "Draft",
       "business_assigned": "Assigned",
       "business_submitted": "Submitted",
       "business_needs_revision": "Needs revision",
@@ -1256,6 +1269,7 @@
       "chain_status": {
         "active": "Active",
         "archived": "Archived",
+        "deleted": "Deleted",
         "completed": "Completed"
       },
       "visibility": "Visibility",
@@ -1383,6 +1397,7 @@
         "unmapped_node": "Unmapped node",
         "stage_detail_title": "Stage detail",
         "stage_nodes": "Stage nodes",
+        "records_title": "Records",
         "stage_node_count": "{count} linked nodes",
         "stage_empty": "No node has been created for this stage yet.",
         "stage_snapshot": "Stage snapshot",
@@ -1419,6 +1434,17 @@
       }
     },
     "chain_tasks": {
+      "comments": {
+        "confirm_delete": "Delete this comment?",
+        "title": "Comments",
+        "placeholder": "Add a comment...",
+        "post": "Post comment",
+        "edited": "Edited",
+        "loading": "Loading comments...",
+        "load_failed": "Comments could not be loaded. Try again.",
+        "save_failed": "The comment could not be saved. Your draft has been preserved. Try again.",
+        "delete_failed": "The comment could not be deleted. Try again."
+      },
       "panel_title": "Research tasks",
       "panel_hint": "Tasks stay independent from node workflow while assignees, reviews, and return reasons stay together.",
       "loading": "Loading research tasks…",
@@ -1578,6 +1604,9 @@
       }
     },
     "knowledge": {
+      "materials_title": "Topic materials",
+      "add_material": "Add file",
+      "upload_file": "Upload",
       "panel_title": "RAGPortal knowledge",
       "reasons": {
         "not_configured": "service is not configured",
@@ -1770,6 +1799,10 @@
         "title": "Project archived",
         "message": "The project is no longer active and can be restored later."
       },
+      "project_deleted": {
+        "title": "Project deleted",
+        "message": "Research data is retained. Restore the project from the deleted list."
+      },
       "project_restored": {
         "title": "Project restored",
         "message": "The project is active again."
@@ -1918,6 +1951,7 @@
     "project_status": {
       "active": "In progress",
       "archived": "Archived",
+      "deleted": "Deleted",
       "completed": "Completed"
     },
     "approval_types": {
@@ -2035,6 +2069,12 @@
       "create": "Create research project",
       "open_team_project": "Open project",
       "archive": "Archive",
+      "delete": "Delete",
+      "current_projects": "Current projects",
+      "owner_unset": "Not set",
+      "confirm_delete_title": "Delete this project?",
+      "confirm_delete": "“{project}” will leave the home overview and default lists. Research data will be retained and the project can be restored from the deleted list.",
+      "action_failed": "The operation failed. Please try again.",
       "restore": "Restore",
       "confirm_archive_title": "Archive this project?",
       "confirm_archive": "“{project}” will leave the active list and can be restored later.",

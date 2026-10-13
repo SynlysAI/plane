@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { observer } from "mobx-react";
 // plane imports
 import {
@@ -20,6 +21,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, ModalCore } from "@plane/ui";
 // components
 import { ReportBody, type ReportBodyRef } from "@/components/research/reports/report-body";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ResearchReportAttachments } from "@/components/research/reports/report-attachments";
@@ -54,6 +56,7 @@ function reportReadState(
  */
 export const ResearchReportDetail = observer(function ResearchReportDetail({ workspaceSlug, reportId }: Props) {
   const { t, currentLocale } = useTranslation();
+  const navigate = useNavigate();
   const research = useResearch();
   const { getWorkspaceBySlug } = useWorkspace();
   const [returnReason, setReturnReason] = useState("");
@@ -213,6 +216,16 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         hint={t(`research.reports.next_step.${report.status.toLowerCase()}`)}
         actions={
           <>
+            {report.can_delete && (
+              <ResearchDeleteButton
+                name={`${report.period_key} · ${t(REPORT_TYPE_LABELS[report.report_type])}`}
+                disabled={pendingAction !== null || bodyBusy}
+                onDelete={async () => {
+                  await research.deleteReport(workspaceSlug, reportId);
+                  navigate(`/${workspaceSlug}/research/reports`);
+                }}
+              />
+            )}
             {report.can_edit && (
               <Button
                 variant="primary"

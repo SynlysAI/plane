@@ -6,6 +6,7 @@ import type { TProject } from "@plane/types";
 
 const mocks = vi.hoisted(() => ({
   cardProps: null as { totalProjectIds?: string[]; filteredProjectIds?: string[] } | null,
+  pathname: "/lab/projects",
   research: {
     isEnabled: true,
     isIaV2Enabled: true,
@@ -26,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ workspaceSlug: "lab" }),
-  usePathname: () => "/lab/projects",
+  usePathname: () => mocks.pathname,
 }));
 vi.mock("@/components/core/page-title", () => ({ PageHead: () => null }));
 vi.mock("../../core/components/project/card-list", () => ({
@@ -62,6 +63,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mocks.cardProps = null;
+  mocks.pathname = "/lab/projects";
 });
 
 afterEach(async () => {
@@ -77,11 +79,18 @@ it("hides research-backed authority projects from the administrative project tab
   expect(mocks.cardProps?.filteredProjectIds).toEqual(["admin-1", "admin-2"]);
 });
 
-it("keeps the legacy all-project list when IA v2 is disabled", async () => {
+it("keeps the administrative scope when IA v2 is disabled", async () => {
   mocks.research.isIaV2Enabled = false;
   await act(async () => root.render(<ProjectRoot />));
   mocks.research.isIaV2Enabled = true;
 
-  expect(mocks.cardProps?.totalProjectIds).toEqual(["research-1", "admin-1", "research-2", "admin-2"]);
-  expect(mocks.cardProps?.filteredProjectIds).toEqual(["research-1", "admin-1", "admin-2"]);
+  expect(mocks.cardProps?.totalProjectIds).toEqual(["admin-1", "admin-2"]);
+  expect(mocks.cardProps?.filteredProjectIds).toEqual(["admin-1", "admin-2"]);
+});
+
+it("keeps research projects out of the archive entrance", async () => {
+  mocks.pathname = "/lab/archives";
+  await act(async () => root.render(<ProjectRoot />));
+  expect(mocks.cardProps?.totalProjectIds).toEqual(["admin-1", "admin-2"]);
+  expect(mocks.cardProps?.filteredProjectIds).toEqual(["admin-1", "admin-2"]);
 });

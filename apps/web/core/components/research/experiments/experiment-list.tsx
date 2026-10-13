@@ -10,7 +10,7 @@ import { observer } from "mobx-react";
 import { EXPERIMENT_SOURCE_LABELS, EXPERIMENT_STATUSES, EXPERIMENT_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 // components
 import { ExperimentDetail } from "@/components/research/experiments/experiment-detail";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
@@ -58,15 +58,16 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
   return (
     <div className="flex h-full overflow-hidden bg-canvas">
       <div className="flex w-96 flex-col gap-2 overflow-y-auto border-r border-subtle bg-surface-2 p-3">
-        <div className="flex items-center gap-2">
-          <Input
-            className="!w-40"
-            value={title}
-            placeholder={t("research.experiments.title_placeholder")}
-            onChange={(event) => setTitle(event.target.value)}
-          />
+        <div className="flex flex-wrap items-end gap-3">
+          <ListFilterField label="实验名称" className="w-full sm:w-40">
+            <ListFilterInput
+              value={title}
+              placeholder={t("research.experiments.title_placeholder")}
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </ListFilterField>
           <Button
-            size="sm"
+            size="xl"
             variant="primary"
             disabled={!title.trim()}
             onClick={async () => {
@@ -82,18 +83,16 @@ export const ExperimentList = observer(function ExperimentList({ workspaceSlug, 
             {t("research.experiments.create")}
           </Button>
         </div>
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
-        >
-          <option value="">{t("research.experiments.all_statuses")}</option>
-          {EXPERIMENT_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {t(EXPERIMENT_STATUS_LABELS[status])}
-            </option>
-          ))}
-        </select>
+        <ListFilterField label="状态" className="w-full sm:w-full">
+          <ListFilterSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">{t("research.experiments.all_statuses")}</option>
+            {EXPERIMENT_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {t(EXPERIMENT_STATUS_LABELS[status])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
         {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
         <div className="flex flex-col gap-1">
           {records.map((record) => (

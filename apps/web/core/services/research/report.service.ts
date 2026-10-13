@@ -44,6 +44,11 @@ export type TReportCreatePayload = {
 };
 
 export class ResearchReportService extends APIService {
+  async deleteReport(workspaceSlug: string, reportId: string) {
+    return this.delete(researchEndpoints.report(workspaceSlug, reportId)).catch((error) => {
+      throw error?.response?.data ?? error;
+    });
+  }
   constructor() {
     super(API_BASE_URL);
   }

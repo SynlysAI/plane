@@ -137,6 +137,13 @@ export class ResearchChainService extends APIService {
       });
   }
 
+  /** 可恢复地删除研究链及其课题，保留研究数据。 */
+  async deleteChain(workspaceSlug: string, chainId: string): Promise<void> {
+    await this.delete(researchEndpoints.chain(workspaceSlug, chainId)).catch((err) => {
+      throw err?.response?.data ?? err;
+    });
+  }
+
   async restoreChain(workspaceSlug: string, chainId: string) {
     return this.post(researchEndpoints.chainRestore(workspaceSlug, chainId), {})
       .then((res) => {
@@ -212,6 +219,12 @@ export class ResearchChainService extends APIService {
       .catch((err) => {
         throw err?.response?.data ?? err;
       });
+  }
+
+  async deleteChainNode(workspaceSlug: string, nodeId: string) {
+    return this.delete(researchEndpoints.chainNode(workspaceSlug, nodeId)).catch((error) => {
+      throw error?.response?.data ?? error;
+    });
   }
 
   async transitionChainNode(workspaceSlug: string, nodeId: string, action: TResearchChainNodeAction, reason?: string) {

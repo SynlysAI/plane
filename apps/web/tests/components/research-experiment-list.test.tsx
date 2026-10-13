@@ -21,7 +21,8 @@ vi.mock("@/components/research/common/error-messages", () => ({ getResearchError
 vi.mock("@/components/research/common/research-status-badge", () => ({
   ResearchStatusBadge: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }));
-vi.mock("@plane/constants", () => ({
+vi.mock("@plane/constants", async () => ({
+  ...(await vi.importActual("@plane/constants")),
   EXPERIMENT_STATUSES: ["PLANNED"],
   EXPERIMENT_STATUS_LABELS: { PLANNED: "research.experiments.status.planned" },
   EXPERIMENT_SOURCE_LABELS: { MANUAL: "research.experiments.source.manual" },
@@ -40,7 +41,8 @@ vi.mock("@plane/propel/button", () => ({
     </button>
   ),
 }));
-vi.mock("@plane/ui", () => ({
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 

@@ -33,6 +33,7 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import ROLE, allow_permission
+from plane.utils.administrative_projects import user_can_manage_administrative_project
 from plane.app.serializers import (
     IssueCreateSerializer,
     IssueDetailSerializer,
@@ -95,14 +96,17 @@ class IssueListEndpoint(BaseAPIView):
 
         # Restrict guests without full feature access to issues they created,
         # mirroring IssueViewSet.list.
-        if ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            member=request.user,
-            role=ROLE.GUEST.value,
-            is_active=True,
-            project__guest_view_all_features=False,
-        ).exists():
+        if (
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                member=request.user,
+                role=ROLE.GUEST.value,
+                is_active=True,
+                project__guest_view_all_features=False,
+            ).exists()
+        ):
             queryset = queryset.filter(created_by=request.user)
 
         # Apply filtering from filterset
@@ -308,7 +312,8 @@ class IssueViewSet(BaseViewSet):
             user_id=request.user.id,
         )
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,
@@ -603,7 +608,8 @@ class IssueViewSet(BaseViewSet):
         """
 
         if (
-            ProjectMember.objects.filter(
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
                 member=request.user,
@@ -749,21 +755,11 @@ class ProjectUserDisplayPropertyEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def patch(self, request, slug, project_id):
         try:
-            issue_property = ProjectUserProperty.objects.get(
-                user=request.user, 
-                project_id=project_id
-            )
+            issue_property = ProjectUserProperty.objects.get(user=request.user, project_id=project_id)
         except ProjectUserProperty.DoesNotExist:
-            issue_property = ProjectUserProperty.objects.create(
-                user=request.user, 
-                project_id=project_id
-            )
+            issue_property = ProjectUserProperty.objects.create(user=request.user, project_id=project_id)
 
-        serializer = ProjectUserPropertySerializer(
-            issue_property, 
-            data=request.data,
-            partial=True
-        )
+        serializer = ProjectUserPropertySerializer(issue_property, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -920,7 +916,11 @@ class IssuePaginatedViewSet(BaseViewSet):
             role=5,
             is_active=True,
         )
-        if project_member.exists() and not project.guest_view_all_features:
+        if (
+            not user_can_manage_administrative_project(request.user, slug, project_id)
+            and project_member.exists()
+            and not project.guest_view_all_features
+        ):
             base_queryset = base_queryset.filter(created_by=request.user)
             queryset = queryset.filter(created_by=request.user)
 
@@ -1064,7 +1064,9 @@ class IssueDetailEndpoint(BaseAPIView):
         from plane.research.utils.project_review import user_can_review_research_project
 
         issue = Issue.issue_objects.filter(workspace__slug=slug, project_id=project_id)
-        if not user_can_review_research_project(request.user, slug, project_id):
+        if not user_can_manage_administrative_project(
+            request.user, slug, project_id
+        ) and not user_can_review_research_project(request.user, slug, project_id):
             issue = issue.filter(Exists(permission_subquery))
 
         # Add additional prefetch based on expand parameter
@@ -1232,7 +1234,7 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
             member=request.user,
             is_active=True,
         ).exists()
-        if not is_project_member:
+        if not is_project_member and not user_can_manage_administrative_project(request.user, slug, project.id):
             from plane.research.utils.project_review import user_can_review_research_project
 
             if not user_can_review_research_project(request.user, slug, project.id):

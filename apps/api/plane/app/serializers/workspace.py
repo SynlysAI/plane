@@ -288,10 +288,12 @@ class PageRecentVisitSerializer(serializers.ModelSerializer):
         ]
 
     def get_project_id(self, obj):
+        if "recent_project" in self.context:
+            return self.context["recent_project"].id
         return obj.project_id if hasattr(obj, "project_id") else obj.projects.values_list("id", flat=True).first()
 
     def get_project_identifier(self, obj):
-        project = obj.projects.first()
+        project = self.context.get("recent_project") or obj.projects.first()
 
         return project.identifier if project else None
 
@@ -323,7 +325,22 @@ class WorkspaceRecentVisitSerializer(BaseSerializer):
             try:
                 entity = entity_model.objects.get(pk=entity_identifier)
 
-                return entity_serializer(entity).data
+                context = {}
+                projects = self.context.get("recent_administrative_projects")
+                if entity_name == "page" and projects is not None:
+                    # 页面可关联多个项目，链接必须指向本次授权范围内的行政项目。
+                    project = (
+                        projects.filter(
+                            project_pages__page=entity,
+                            project_pages__deleted_at__isnull=True,
+                        )
+                        .order_by("id")
+                        .first()
+                    )
+                    if project is None:
+                        return None
+                    context["recent_project"] = project
+                return entity_serializer(entity, context=context).data
             except entity_model.DoesNotExist:
                 return None
         return None

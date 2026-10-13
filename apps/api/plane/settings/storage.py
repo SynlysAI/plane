@@ -31,6 +31,8 @@ class S3Storage(S3Boto3Storage):
         self.aws_storage_bucket_name = os.environ.get("AWS_S3_BUCKET_NAME")
         # Use the AWS_REGION environment variable for the region
         self.aws_region = os.environ.get("AWS_REGION")
+        if os.environ.get("USE_MINIO") == "1" and not self.aws_region:
+            self.aws_region = "us-east-1"
         # Use the AWS_S3_ENDPOINT_URL environment variable for the endpoint URL
         self.aws_s3_endpoint_url = os.environ.get("AWS_S3_ENDPOINT_URL") or os.environ.get("MINIO_ENDPOINT_URL")
         # Use the SIGNED_URL_EXPIRATION environment variable for the expiration time (default: 3600 seconds)

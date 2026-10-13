@@ -4,6 +4,7 @@
  */
 
 import type { ReactNode } from "react";
+import { ResearchBrowseToolbar } from "./research-browse-toolbar";
 
 type TResearchListSurfaceProps = {
   /** Page-level list content. */
@@ -48,12 +49,12 @@ type TResearchDetailSurfaceProps = {
 
 /** Stable canvas, spacing and vertical rhythm for research list pages. */
 export function ResearchListSurface({ children }: TResearchListSurfaceProps) {
-  return <div className="flex h-full flex-col gap-4 overflow-y-auto bg-canvas p-5">{children}</div>;
+  return <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto bg-canvas p-5">{children}</div>;
 }
 
-/** Muted filter surface; creation controls stay in the same semantic group. */
+/** Shared layout for list filters and record-creation controls. */
 export function ResearchFilterToolbar({ children }: TResearchFilterToolbarProps) {
-  return <div className="flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 px-3 py-2.5">{children}</div>;
+  return <ResearchBrowseToolbar>{children}</ResearchBrowseToolbar>;
 }
 
 /** Compact active-filter chips with one stable clear action. */
@@ -76,7 +77,7 @@ export function ResearchFilterChips({ filters, activeLabel, clearLabel, onClear 
 
 /** Primary table surface with bounded horizontal scrolling. */
 export function ResearchTableSurface({ children }: TResearchTableSurfaceProps) {
-  return <div className="shrink-0 overflow-x-auto rounded-lg bg-surface-1">{children}</div>;
+  return <div className="max-w-full min-w-0 shrink-0 overflow-x-auto rounded-lg bg-surface-1">{children}</div>;
 }
 
 /** Unique detail-page object header; metadata is kept below the title baseline. */

@@ -11,8 +11,8 @@ import { REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/constants";
 import type { TReportType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
-import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
+import { ResearchBrowseRefresh } from "@/components/research/common/research-browse-toolbar";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -72,26 +72,23 @@ export const ResearchReportSummaryBoard = observer(function ResearchReportSummar
       )}
 
       <ResearchFilterToolbar>
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={reportType}
-          onChange={(event) => setReportType(event.target.value as TReportType)}
-        >
-          {REPORT_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {t(REPORT_TYPE_LABELS[type])}
-            </option>
-          ))}
-        </select>
-        <Input
-          className="!w-40"
-          placeholder={t("research.reports.period_placeholder")}
-          value={periodKey}
-          onChange={(event) => setPeriodKey(event.target.value)}
-        />
-        <Button variant="secondary" size="sm" onClick={() => void load()}>
-          {t("research.common.refresh")}
-        </Button>
+        <ListFilterField label={t("research.reports.columns.type")}>
+          <ListFilterSelect value={reportType} onChange={(event) => setReportType(event.target.value as TReportType)}>
+            {REPORT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {t(REPORT_TYPE_LABELS[type])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label={t("research.reports.columns.period")} className="sm:w-40">
+          <ListFilterInput
+            placeholder={t("research.reports.period_placeholder")}
+            value={periodKey}
+            onChange={(event) => setPeriodKey(event.target.value)}
+          />
+        </ListFilterField>
+        <ResearchBrowseRefresh onRefresh={() => void load()} />
         {summary && (
           <span className="text-12 text-tertiary">
             {summary.period_key} · {summary.period_start} ~ {summary.period_end}

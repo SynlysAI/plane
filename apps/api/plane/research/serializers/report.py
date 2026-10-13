@@ -72,6 +72,7 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     owner_detail = ResearchUserSerializer(source="owner", read_only=True)
     org_unit_detail = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
     can_review = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
     team_projects = serializers.SerializerMethodField()
@@ -110,6 +111,7 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "can_edit",
+            "can_delete",
             "can_review",
             "attachment_count",
             "latest_official_version",
@@ -143,6 +145,10 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
         if request is None:
             return False
         return check_access(request.user, "review", report_resource(obj), context=context)
+
+    def get_can_delete(self, obj):
+        request = self.context.get("request")
+        return bool(request and obj.owner_id == request.user.id and obj.status == "DRAFT" and not obj.submitted_at)
 
     def get_attachment_count(self, obj):
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("attachments")

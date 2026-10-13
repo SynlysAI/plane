@@ -11,7 +11,7 @@ import { ResearchReportService } from "../../core/services/research/report.servi
 import { ResearchTodoService } from "../../core/services/research/research-todo.service";
 import { ProjectService } from "../../core/services/project/project.service";
 import { WorkspaceService } from "../../core/services/workspace.service";
-import type { TResearchIdentity } from "@plane/types";
+import type { TResearchChain, TResearchIdentity } from "@plane/types";
 // oxlint-disable-next-line import/no-unassigned-import -- fixture stylesheet
 import "./research-home-workbench.fixture.css";
 
@@ -20,6 +20,14 @@ const identity = {
   module_enabled: true,
   workspace_enabled: true,
   sections: { org: false, reports: true, approvals: false, research_chain: true },
+  capabilities: {
+    level: "ADMIN",
+    nav: ["research_chain", "summary"],
+    is_mentor: false,
+    is_main_pi: false,
+    is_stage_reviewer: false,
+    management: { workspace: false, organization: false, integrations: false, operations: false, accounts: false },
+  },
   user: {
     id: "student-1",
     is_workspace_admin: false,
@@ -37,15 +45,15 @@ const identity = {
 } as TResearchIdentity;
 
 ResearchPlatformService.prototype.getIdentity = async () => identity;
-ResearchChainService.prototype.getChains = async () => [
+const browserChains: TResearchChain[] = [
   {
     schema_version: "research-chain.v1",
     id: "chain-1",
     project: "project-1",
-    project_name: "催化剂界面失活机理研究",
+    project_name: "催化剂界面失活机理研究与多尺度反应动力学联合实验的长期科研项目",
     workspace: "isolated-test",
     owner: "student-1",
-    owner_name: "隔离学生",
+    owner_name: "隔离学生与联合实验负责人长姓名显示验证",
     status: "ACTIVE",
     visibility: "ORG",
     open_task_count: 3,
@@ -59,6 +67,23 @@ ResearchChainService.prototype.getChains = async () => [
     },
     created_at: now,
     updated_at: now,
+  },
+];
+ResearchChainService.prototype.getChains = async () => [
+  ...browserChains,
+  {
+    ...browserChains[0],
+    id: "archived-chain",
+    status: "ARCHIVED",
+    project_name: "不应出现的归档课题",
+    open_task_count: 99,
+  },
+  {
+    ...browserChains[0],
+    id: "deleted-chain",
+    status: "DELETED",
+    project_name: "不应出现的删除课题",
+    open_task_count: 88,
   },
 ];
 ResearchTodoService.prototype.getResearchTodos = async () => ({
@@ -89,13 +114,16 @@ ResearchTodoService.prototype.getResearchTodos = async () => ({
   next_cursor: null,
   degraded_sources: [],
 });
-ResearchReportService.prototype.getSummary = async () => ({
-  period_key: "2026-W41",
-  period_start: "2026-10-05",
-  period_end: "2026-10-11",
+ResearchReportService.prototype.getSummary = async (_workspaceSlug, params = {}) => ({
+  period_key: params.report_type === "MONTHLY" ? "2026-10" : "2026-W42",
+  period_start: params.report_type === "MONTHLY" ? "2026-10-01" : "2026-10-12",
+  period_end: params.report_type === "MONTHLY" ? "2026-10-31" : "2026-10-18",
   org_unit: null,
   org_unit_name: null,
-  counts: { not_submitted: 3, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+  counts:
+    params.report_type === "MONTHLY"
+      ? { not_submitted: 93, draft: 1, submitted: 15, needs_revision: 12, accepted: 18 }
+      : { not_submitted: 193, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
   pending_members: [],
 });
 ProjectService.prototype.getProjects = async () =>
@@ -116,7 +144,24 @@ ProjectService.prototype.getProjects = async () =>
       is_research_project: false,
       updated_at: new Date(now),
     },
+    {
+      id: "admin-project-2",
+      name: "实验室设备维护与耗材采购报销进度协调项目ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      archived_at: null,
+      is_research_project: false,
+    },
+    {
+      id: "admin-project-3",
+      name: "历史办公协作",
+      archived_at: null,
+      is_research_project: false,
+    },
   ] as never;
+ProjectService.prototype.getProjectAnalyticsCount = async () => [
+  { id: "admin-project-1", open_issues: 3, done_issues: 2, last_activity_at: "2026-10-11T08:30:00Z" },
+  { id: "admin-project-2", open_issues: 12, done_issues: 8, last_activity_at: "2026-10-12T03:15:00Z" },
+  { id: "admin-project-3", open_issues: 0, done_issues: 5, last_activity_at: "2025-09-01T02:00:00Z" },
+];
 WorkspaceService.prototype.fetchWorkspaceRecents = async () => [
   {
     id: "recent-project",

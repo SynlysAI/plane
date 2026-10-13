@@ -73,6 +73,12 @@ export type TProjectAnalyticsCountParams = {
 export type TProjectAnalyticsCount = Pick<IProject, "id"> & {
   total_issues?: number;
   completed_issues?: number;
+  /** 首页概览：未完成工作项数量，不含已取消、草稿、收集箱及归档项。 */
+  open_issues?: number;
+  /** 首页概览：真正完成的工作项数量，不含已取消。 */
+  done_issues?: number;
+  /** 项目资料及当前用户可见工作项、活动和评论的最近更新时间。 */
+  last_activity_at?: string | null;
   total_cycles?: number;
   total_members?: number;
   total_modules?: number;

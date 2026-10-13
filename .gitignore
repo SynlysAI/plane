@@ -130,5 +130,8 @@ packages/i18n/src/types/keys.generated.ts
 
 # Local verified rebuild backups and one-time credentials
 .runtime/
+
+# 浏览器夹具生成的本地构建产物。
+/apps/web/tests/browser/dist-home/
 refer/issue.docx
 refer/issue/

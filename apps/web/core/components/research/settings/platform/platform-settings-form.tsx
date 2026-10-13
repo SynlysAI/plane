@@ -12,7 +12,7 @@ import type { TReportVisibility } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TResearchProfileCategory, TWorkspaceResearchSetting } from "@plane/types";
-import { Input } from "@plane/ui";
+import { ListFilterInput as Input, ListFilterField, ListFilterSelect } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchDetailSurface } from "@/components/research/common/research-data-surface";
@@ -42,11 +42,11 @@ const LIMITS: { field: keyof TWorkspaceResearchSetting; labelKey: string }[] = [
   { field: "audit_retention_days", labelKey: "research.platform.audit_retention_days" },
 ];
 
-/** 与数字框同高，去掉默认内边距，避免字形被底边裁成半行。 */
+/** Keep text and numeric fields aligned without clipping their line box. */
 const RESEARCH_FIELD_INPUT_CLASS = [
-  "box-border h-9 w-full min-w-0",
+  "box-border h-8 w-full min-w-0",
   "overflow-x-auto overflow-y-hidden",
-  "px-3 py-0 text-13 leading-8",
+  "px-2.5 py-0 text-13 leading-[30px]",
 ].join(" ");
 
 const platformService = new ResearchPlatformService();
@@ -237,10 +237,8 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
               ["monthly_default_visibility", "research.platform.monthly_visibility"],
             ] as const
           ).map(([field, labelKey]) => (
-            <label key={field} className="flex flex-col gap-1 text-12 text-secondary">
-              <span>{t(labelKey)}</span>
-              <select
-                className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
+            <ListFilterField key={field} label={t(labelKey)} className="w-full sm:w-full">
+              <ListFilterSelect
                 value={(draft[field] as string | null) ?? ""}
                 onChange={(event) => setDraft({ ...draft, [field]: event.target.value || null })}
               >
@@ -250,19 +248,18 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
                     {t(REPORT_VISIBILITY_LABELS[visibility])}
                   </option>
                 ))}
-              </select>
-            </label>
+              </ListFilterSelect>
+            </ListFilterField>
           ))}
         </div>
-        <label className="mt-3 flex flex-col gap-1 text-12 text-secondary">
-          <span>{t("research.platform.timezone")}</span>
+        <ListFilterField label={t("research.platform.timezone")} className="mt-3 w-full sm:w-full">
           <Input
             className={RESEARCH_FIELD_INPUT_CLASS}
             value={draft.timezone ?? ""}
             placeholder="Asia/Shanghai"
             onChange={(event) => setDraft({ ...draft, timezone: event.target.value || null })}
           />
-        </label>
+        </ListFilterField>
       </ResearchDetailSurface>
 
       <ResearchDetailSurface
@@ -316,8 +313,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
       <ResearchDetailSurface title={t("research.platform.limits")}>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {LIMITS.map((item) => (
-            <label key={item.field} className="flex flex-col gap-1 text-12 text-secondary">
-              <span>{t(item.labelKey)}</span>
+            <ListFilterField key={item.field} label={t(item.labelKey)} className="w-full sm:w-full">
               <Input
                 className={RESEARCH_FIELD_INPUT_CLASS}
                 type="number"
@@ -325,14 +321,14 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
                 value={String(draft[item.field] ?? 0)}
                 onChange={(event) => setDraft({ ...draft, [item.field]: Number(event.target.value) })}
               />
-            </label>
+            </ListFilterField>
           ))}
         </div>
         <p className="mt-2 text-11 text-tertiary">{t("research.platform.limits_hint")}</p>
       </ResearchDetailSurface>
 
       <div className="sticky bottom-0 flex justify-end bg-canvas py-3">
-        <Button variant="primary" size="lg" loading={saving} onClick={() => void handleSave()}>
+        <Button variant="primary" size="xl" loading={saving} onClick={() => void handleSave()}>
           {t("research.common.save")}
         </Button>
       </div>

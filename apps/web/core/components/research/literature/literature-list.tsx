@@ -10,7 +10,7 @@ import { observer } from "mobx-react";
 import { LITERATURE_STATUSES, LITERATURE_STATUS_LABELS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput } from "@plane/ui";
 // components
 import {
   ResearchFilterToolbar,
@@ -52,18 +52,19 @@ export const LiteratureList = observer(function LiteratureList({ workspaceSlug, 
       <LiteratureThresholdPanel threshold={threshold} />
       <ResearchFilterToolbar>
         <LiteratureStatusBoard counters={threshold?.counters} active={status} onSelect={(value) => setStatus(value)} />
-        <Input
-          className="!w-56"
-          value={query}
-          placeholder={t("research.literature.search_placeholder")}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter")
-              void research
-                .fetchLiterature(workspaceSlug, projectId, { status: status || undefined, q: query || undefined })
-                .catch(() => undefined);
-          }}
-        />
+        <ListFilterField label="关键词" className="w-full sm:w-56">
+          <ListFilterInput
+            value={query}
+            placeholder={t("research.literature.search_placeholder")}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter")
+                void research
+                  .fetchLiterature(workspaceSlug, projectId, { status: status || undefined, q: query || undefined })
+                  .catch(() => undefined);
+            }}
+          />
+        </ListFilterField>
         <LiteratureImportDialog onImport={(payload) => research.importLiterature(workspaceSlug, projectId, payload)} />
       </ResearchFilterToolbar>
 

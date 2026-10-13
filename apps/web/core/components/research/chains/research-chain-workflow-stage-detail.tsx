@@ -32,6 +32,7 @@ type Props = {
   error: boolean;
   onSelectNode: (nodeId: string) => void;
   actionSlot?: ReactNode;
+  createSlot?: ReactNode;
   detailSlot?: ReactNode;
 };
 
@@ -53,7 +54,7 @@ function referenceLabel(reference: Record<string, unknown>) {
 }
 
 /**
- * 渲染阶段工作台：浅灰节点列、白底当前节点，以及证据计数 Peek。
+ * 渲染阶段工作台：浅灰节点列、清晰的节点标题和任务层级，以及统一记录侧栏。
  */
 export function ResearchChainWorkflowStageDetail(props: Props) {
   return (
@@ -73,6 +74,7 @@ function ResearchChainWorkflowStageBody({
   error,
   onSelectNode,
   actionSlot,
+  createSlot,
   detailSlot,
 }: Props) {
   const { t, currentLocale } = useTranslation();
@@ -115,7 +117,10 @@ function ResearchChainWorkflowStageBody({
           role="region"
           aria-label={t("research.chains.workflow.stage_nodes")}
         >
-          <h4 className="text-12 font-semibold text-primary">{t("research.chains.workflow.stage_nodes")}</h4>
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-12 font-semibold text-primary">{t("research.chains.workflow.stage_nodes")}</h4>
+            {createSlot}
+          </div>
           <div className="mt-3 space-y-1" role="list">
             {nodes.map((node) => {
               const selected = node.id === selectedNodeId;
@@ -152,41 +157,38 @@ function ResearchChainWorkflowStageBody({
         <div className="min-w-0 bg-surface-1">
           <header className="flex flex-wrap items-start justify-between gap-3 border-b border-subtle px-4 py-3">
             <div className="min-w-0">
-              <h3 className="truncate text-16 font-semibold text-primary">
-                {selectedNode?.title ?? t(stage.labelKey)}
-              </h3>
-              <p className="mt-1 text-12 text-secondary">{statusLabel}</p>
+              <div className="flex min-w-0 items-center gap-2">
+                <h3 className="truncate text-18 font-semibold text-primary">
+                  {selectedNode?.title ?? t(stage.labelKey)}
+                </h3>
+                <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-11 text-secondary">
+                  {statusLabel}
+                </span>
+              </div>
             </div>
-            {actionSlot}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {actionSlot}
+              {selectedNode && (
+                <button
+                  type="button"
+                  data-peek-trigger=""
+                  aria-label={t("research.chains.workflow.records_title")}
+                  onClick={() => openRecord(recordPeek ?? "evidence")}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-sm border px-2 text-11 ${
+                    recordPeek
+                      ? "border-accent-primary bg-surface-2 text-primary"
+                      : "border-subtle text-secondary hover:bg-surface-2 hover:text-primary"
+                  }`}
+                >
+                  <span aria-hidden="true">☷</span>
+                  {t("research.chains.workflow.records_title")}
+                  <span className="text-tertiary">
+                    {evidence.recordCount + snapshots.length + evidence.emptyCount + events.length}
+                  </span>
+                </button>
+              )}
+            </div>
           </header>
-          {selectedNode && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-subtle px-4 py-2 text-12">
-              <CountButton
-                label={t("research.chains.workflow.evidence")}
-                count={evidence.recordCount}
-                pressed={recordPeek === "evidence"}
-                onClick={() => openRecord("evidence")}
-              />
-              <CountButton
-                label={t("research.chains.snapshots_title")}
-                count={snapshots.length}
-                pressed={recordPeek === "snapshots"}
-                onClick={() => openRecord("snapshots")}
-              />
-              <CountButton
-                label={t("research.chains.workflow.trace_title")}
-                count={events.length}
-                pressed={recordPeek === "trace"}
-                onClick={() => openRecord("trace")}
-              />
-              <CountButton
-                label={t("research.chains.sections.empty_group")}
-                count={evidence.emptyCount}
-                pressed={recordPeek === "empty"}
-                onClick={() => openRecord("empty")}
-              />
-            </div>
-          )}
           {error && (
             <p className="border-b border-subtle px-4 py-3 text-12 text-danger-primary" role="alert">
               {t("research.chains.workflow.detail_load_failed")}
@@ -197,9 +199,50 @@ function ResearchChainWorkflowStageBody({
       </div>
       {recordPeek && (
         <ResearchChainWorkbenchPeek
-          title={t(
-            `research.chains.workflow.peek_${recordPeek === "evidence" ? "evidence" : recordPeek === "snapshots" ? "snapshots" : recordPeek === "trace" ? "trace" : "empty"}`
-          )}
+          title={t("research.chains.workflow.records_title")}
+          header={
+            <header className="flex flex-col gap-3 border-b border-subtle px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-14 font-semibold text-primary">{t("research.chains.workflow.records_title")}</h3>
+                  <p className="mt-0.5 truncate text-11 text-secondary">{selectedNode?.title}</p>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 text-12 text-secondary hover:text-primary"
+                  onClick={() => workbenchPeek?.close()}
+                >
+                  {t("research.chains.workflow.close_peek")}
+                </button>
+              </div>
+              <nav className="flex gap-1 overflow-x-auto" aria-label={t("research.chains.workflow.records_title")}>
+                <RecordTab
+                  label={t("research.chains.workflow.evidence")}
+                  count={evidence.recordCount}
+                  active={recordPeek === "evidence"}
+                  onClick={() => openRecord("evidence")}
+                />
+                <RecordTab
+                  label={t("research.chains.snapshots_title")}
+                  count={snapshots.length}
+                  active={recordPeek === "snapshots"}
+                  onClick={() => openRecord("snapshots")}
+                />
+                <RecordTab
+                  label={t("research.chains.sections.empty_group")}
+                  count={evidence.emptyCount}
+                  active={recordPeek === "empty"}
+                  onClick={() => openRecord("empty")}
+                />
+                <RecordTab
+                  label={t("research.chains.workflow.trace_title")}
+                  count={events.length}
+                  active={recordPeek === "trace"}
+                  onClick={() => openRecord("trace")}
+                />
+              </nav>
+            </header>
+          }
           onClose={() => workbenchPeek?.close()}
         >
           {loading ? (
@@ -227,24 +270,24 @@ function ResearchChainWorkflowStageBody({
 /**
  * 渲染工作台计数按钮。再次点击同一计数会关闭 Peek。
  */
-function CountButton({
+function RecordTab({
   label,
   count,
-  pressed,
+  active,
   onClick,
 }: {
   label: string;
   count: number;
-  pressed: boolean;
+  active: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       data-peek-trigger=""
-      aria-pressed={pressed || undefined}
+      aria-pressed={active}
       onClick={onClick}
-      className={`rounded-sm px-1 py-0.5 ${pressed ? "font-medium text-primary" : "text-secondary hover:text-primary"}`}
+      className={`shrink-0 border-b-2 px-2 py-1.5 text-11 ${active ? "border-accent-primary font-medium text-primary" : "border-transparent text-secondary hover:text-primary"}`}
     >
       {label} {count}
     </button>

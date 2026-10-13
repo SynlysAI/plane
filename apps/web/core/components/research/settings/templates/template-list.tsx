@@ -12,7 +12,7 @@ import type { TReportType } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect, ListFilterCheckbox } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -92,34 +92,34 @@ export const ResearchTemplateList = observer(function ResearchTemplateList({ wor
       )}
 
       <ResearchFilterToolbar>
-        <Input
-          className="!w-64"
-          placeholder={t("research.templates.name_placeholder")}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
+        <ListFilterField label={t("research.templates.columns.name")} className="w-full sm:w-64">
+          <ListFilterInput
+            placeholder={t("research.templates.name_placeholder")}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.templates.columns.type")}>
+          <ListFilterSelect value={reportType} onChange={(event) => setReportType(event.target.value as TReportType)}>
+            {REPORT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {t(REPORT_TYPE_LABELS[type])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterCheckbox
+          label={t("research.templates.set_default")}
+          checked={isDefault}
+          onChange={(event) => setIsDefault(event.target.checked)}
         />
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={reportType}
-          onChange={(event) => setReportType(event.target.value as TReportType)}
-        >
-          {REPORT_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {t(REPORT_TYPE_LABELS[type])}
-            </option>
-          ))}
-        </select>
-        <label className="flex items-center gap-1 text-12 text-secondary">
-          <input type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} />
-          {t("research.templates.set_default")}
-        </label>
-        <Button variant="primary" size="sm" onClick={() => void handleCreate()}>
+        <Button variant="primary" size="xl" onClick={() => void handleCreate()}>
           {t("research.common.create")}
         </Button>
       </ResearchFilterToolbar>
 
       <ResearchTableSurface>
-        <Table>
+        <Table className="min-w-120">
           <TableHeader>
             <TableRow className="text-tertiary">
               <TableHead>{t("research.templates.columns.name")}</TableHead>
