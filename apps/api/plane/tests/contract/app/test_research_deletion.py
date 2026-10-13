@@ -103,30 +103,50 @@ def outcome(env, status="DRAFT"):
     )
 
 
-def test_empty_project_is_soft_deleted_with_profile_and_chain(env):
+def test_empty_project_is_recoverably_deleted_with_profile_and_chain(env):
     response = env["client"].delete(env["root"] + f"projects/{env['project'].pk}/")
     assert response.status_code == 204, response.data
-    assert not Project.objects.filter(pk=env["project"].pk).exists()
-    assert not ResearchProjectProfile.objects.filter(pk=env["profile"].pk).exists()
-    assert not ResearchChain.objects.filter(pk=env["chain"].pk).exists()
-    assert Project.all_objects.filter(pk=env["project"].pk, deleted_at__isnull=False).exists()
+    assert Project.objects.filter(pk=env["project"].pk, deleted_at__isnull=True).exists()
+    env["profile"].refresh_from_db()
+    env["chain"].refresh_from_db()
+    assert env["profile"].workflow_status == "DELETED"
+    assert env["profile"].is_active is False
+    assert env["chain"].status == "DELETED"
     assert ResearchAuditEvent.objects.filter(action="project.delete", resource_id=env["profile"].pk).exists()
+    restored = env["client"].post(env["root"] + f"projects/{env['project'].pk}/restore/", {}, format="json")
+    assert restored.status_code == 200, restored.data
+    env["profile"].refresh_from_db()
+    env["chain"].refresh_from_db()
+    assert env["profile"].workflow_status == env["chain"].status == "ACTIVE"
+    assert env["profile"].is_active is True
 
 
-def test_project_with_node_is_blocked_and_nonowner_cannot_delete(env):
-    node(env)
+def test_project_deletion_preserves_nodes_and_nonowner_cannot_delete(env):
+    item = node(env)
     url = env["root"] + f"projects/{env['project'].pk}/"
     assert env["other"].delete(url).status_code == 403
     response = env["client"].delete(url)
-    assert response.status_code == 409
-    assert response.data["error_code"] == "research_delete_blocked"
+    assert response.status_code == 204, response.data
     assert Project.objects.filter(pk=env["project"].pk).exists()
+    assert ResearchChainNode.objects.filter(pk=item.pk).exists()
 
 
 @pytest.mark.parametrize("kind", ["report", "outcome"])
-def test_project_with_research_content_is_blocked(env, kind):
-    (report if kind == "report" else outcome)(env)
-    assert env["client"].delete(env["root"] + f"projects/{env['project'].pk}/").status_code == 409
+def test_project_deletion_preserves_research_content(env, kind):
+    item = (report if kind == "report" else outcome)(env)
+    assert env["client"].delete(env["root"] + f"projects/{env['project'].pk}/").status_code == 204
+    item.refresh_from_db()
+    assert item.deleted_at is None
+
+
+@pytest.mark.parametrize("status", ["ARCHIVED", "DELETED", "COMPLETED"])
+def test_inactive_chain_retains_draft_nodes_until_restored(env, status):
+    item = node(env)
+    env["chain"].status = status
+    env["chain"].save(update_fields=["status"])
+    response = env["client"].delete(env["root"] + f"nodes/{item.pk}/")
+    assert response.status_code == 409, response.data
+    assert ResearchChainNode.objects.filter(pk=item.pk).exists()
 
 
 def test_draft_node_deletion_retains_creation_event_and_releases_iteration(env):

@@ -5,21 +5,16 @@
  */
 
 import { observer } from "mobx-react";
-import { HomeOutline, WidgetOutline } from "@makeplane/propel/icons";
+import { HomeOutline } from "@makeplane/propel/icons";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
 import { Breadcrumbs, Header } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
-// hooks
-import { useHome } from "@/hooks/store/use-home";
 
 export const WorkspaceDashboardHeader = observer(function WorkspaceDashboardHeader() {
   // plane hooks
   const { t } = useTranslation();
-  // hooks
-  const { toggleWidgetSettings } = useHome();
 
   return (
     <>
@@ -35,17 +30,6 @@ export const WorkspaceDashboardHeader = observer(function WorkspaceDashboardHead
             </Breadcrumbs>
           </div>
         </Header.LeftItem>
-        <Header.RightItem>
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={() => toggleWidgetSettings(true)}
-            className="my-auto mb-0"
-            prependIcon={<WidgetOutline />}
-          >
-            <div className="hidden sm:hidden md:block">{t("home.manage_widgets")}</div>
-          </Button>
-        </Header.RightItem>
       </Header>
     </>
   );

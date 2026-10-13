@@ -114,6 +114,34 @@ def lock_cultivation_owner(workspace, owner):
     return User.objects.select_for_update().get(pk=owner.pk)
 
 
+def delete_research_project(profile, request, *, chain=None):
+    """标记科研项目为已删除，并保留关联研究数据。
+
+    Args:
+        profile: 调用方已完成可见性与管理权限检查的科研档案。
+        request: 用于记录操作人和审计信息的请求。
+        chain: 从研究链入口删除时对应的研究链。
+    """
+    with transaction.atomic():
+        profile = ResearchProjectProfile.objects.select_for_update().get(pk=profile.pk)
+        if profile.workflow_status == ResearchProjectProfile.WorkflowStatus.DELETED:
+            return
+        profile.workflow_status = ResearchProjectProfile.WorkflowStatus.DELETED
+        profile.is_active = False
+        profile.save(update_fields=["workflow_status", "is_active", "updated_at"])
+        sync_chain_lifecycle(profile)
+        record_audit_event(
+            workspace=profile.workspace,
+            action=ResearchAuditAction.CHAIN_DELETE if chain else ResearchAuditAction.PROJECT_DELETE,
+            resource_type=ResearchResourceType.RESEARCH_CHAIN if chain else ResearchResourceType.PROJECT_PROFILE,
+            resource_id=chain.id if chain else profile.id,
+            org_unit=profile.org_unit,
+            actor=request.user,
+            metadata={"project": str(profile.project_id)},
+            request=request,
+        )
+
+
 def identifier_from(name):
     """ASCII short code derived from a name; empty when nothing to derive."""
     letters = re.sub(r"[^A-Za-z0-9]", "", name or "").upper()
@@ -167,7 +195,7 @@ def unique_project_name(workspace, base):
 
 def profile_queryset(workspace):
     return (
-        ResearchProjectProfile.objects.filter(workspace=workspace)
+        ResearchProjectProfile.objects.filter(workspace=workspace, project__deleted_at__isnull=True)
         .select_related("project", "project__research_chain", "owner", "org_unit")
         .prefetch_related("project__project_projectmember")
         .order_by("-created_at")
@@ -357,6 +385,8 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
         queryset, error = filter_profiles(queryset, request)
         if error:
             return error
+        if not request.GET.get("workflow_status"):
+            queryset = queryset.exclude(workflow_status__in=["ARCHIVED", "DELETED"])
         return self.paginate(
             request=request,
             queryset=queryset,
@@ -615,41 +645,16 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
         return Response(serialize_profile(profile), status=status.HTTP_200_OK)
 
     def delete(self, request, slug, project_id):
-        from plane.research.utils.deletion import project_deletion_reason
-
+        """可恢复地删除科研项目，仅允许负责人或工作区管理员操作。"""
         workspace, error = self.get_workspace(section="reports")
         if error:
             return error
         profile = self._get_profile(workspace, project_id)
         if profile is None:
             return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
-        if profile.owner_id != request.user.id and not is_workspace_admin(request.user, workspace.id):
+        if not is_workspace_admin(request.user, workspace.id) and profile.owner_id != request.user.id:
             return research_permission_denied()
-        with transaction.atomic():
-            project = Project.objects.select_for_update().get(pk=profile.project_id)
-            reason = project_deletion_reason(project)
-            if reason:
-                return research_conflict("research_delete_blocked", reason)
-            deleted_at = timezone.now()
-            # Mark only local scaffolding; do not cascade into immutable research evidence.
-            ResearchChain.objects.filter(project=project).update(deleted_at=deleted_at, updated_at=deleted_at)
-            ResearchProjectProfile.objects.filter(pk=profile.pk).update(
-                deleted_at=deleted_at, is_active=False, updated_at=deleted_at
-            )
-            ProjectMember.objects.filter(project=project).update(deleted_at=deleted_at, is_active=False)
-            ProjectIdentifier.objects.filter(project=project).update(deleted_at=deleted_at)
-            project.research_stage_instances.update(deleted_at=deleted_at)
-            project.deleted_at = deleted_at
-            project.save(update_fields=["deleted_at", "updated_at"])
-            record_audit_event(
-                workspace=workspace,
-                action="project.delete",
-                resource_type=ResearchResourceType.PROJECT_PROFILE,
-                resource_id=profile.pk,
-                actor=request.user,
-                metadata={"project": str(project.pk)},
-                request=request,
-            )
+        delete_research_project(profile, request)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def patch(self, request, slug, project_id):
@@ -669,6 +674,8 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                 pk=profile.pk,
                 workspace=workspace,
             )
+            if profile.workflow_status == ResearchProjectProfile.WorkflowStatus.DELETED:
+                return research_conflict(ResearchErrorCode.CHAIN_INVALID, "Restore the deleted project first.")
             requested_owner = profile.owner
             was_cultivation_project = (
                 profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
@@ -696,6 +703,8 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                 requested_status = str(request.data.get("workflow_status") or "").upper()
                 if requested_status not in ResearchProjectProfile.WorkflowStatus.values:
                     return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown workflow status.")
+                if requested_status == ResearchProjectProfile.WorkflowStatus.DELETED:
+                    return research_conflict(ResearchErrorCode.CHAIN_INVALID, "Use the project deletion endpoint.")
             if (
                 requested_status == ResearchProjectProfile.WorkflowStatus.ACTIVE
                 and profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
@@ -797,6 +806,8 @@ class ResearchProjectArchiveEndpoint(ResearchAPIView):
 
         with transaction.atomic():
             profile = ResearchProjectProfile.objects.select_for_update().get(pk=profile.pk)
+            if profile.workflow_status == ResearchProjectProfile.WorkflowStatus.DELETED:
+                return research_conflict(ResearchErrorCode.CHAIN_INVALID, "Restore the deleted project first.")
             profile.workflow_status = ResearchProjectProfile.WorkflowStatus.ARCHIVED
             profile.is_active = False
             profile.save(update_fields=["workflow_status", "is_active", "updated_at"])

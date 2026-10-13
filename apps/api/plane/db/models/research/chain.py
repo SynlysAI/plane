@@ -17,6 +17,7 @@ class ResearchChain(BaseModel):
         ACTIVE = "ACTIVE", "Active"
         ARCHIVED = "ARCHIVED", "Archived"
         COMPLETED = "COMPLETED", "Completed"
+        DELETED = "DELETED", "Deleted"
 
     project = models.OneToOneField("db.Project", on_delete=models.PROTECT, related_name="research_chain")
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="research_chains")

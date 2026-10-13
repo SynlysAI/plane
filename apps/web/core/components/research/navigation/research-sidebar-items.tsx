@@ -54,6 +54,8 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
     RESEARCH_MENU_OPEN_KEY,
     true
   );
+  // 同步项目树持久化的展开状态，科研区收起后将剩余高度交给行政区。
+  const { storedValue: storedIsResearchTreeOpen } = useLocalStorage<boolean>("research_navigation_research_open", true);
 
   // default to expanded before the stored value is hydrated
   const isMenuOpen = storedIsMenuOpen ?? true;
@@ -99,7 +101,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
     const href = path ? `/${workspaceSlug}/research/${path}` : `/${workspaceSlug}/research`;
     const isActive = exact ? pathname === href : pathname === href || pathname?.startsWith(`${href}/`);
     return (
-      <Link key={key} href={href}>
+      <Link key={key} href={href} className="shrink-0">
         <SidebarNavItem isActive={isActive}>
           <span className="flex-1 truncate text-13 leading-5 font-medium whitespace-nowrap">{t(labelKey)}</span>
         </SidebarNavItem>
@@ -110,7 +112,10 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   return (
     <Disclosure
       as="div"
-      className={cn("flex flex-col", research.isIaV2Enabled ? "mt-1" : "mt-3 border-t border-subtle pt-3")}
+      className={cn(
+        "flex flex-col",
+        research.isIaV2Enabled ? "mt-1 min-h-0 flex-1" : "mt-3 border-t border-subtle pt-3"
+      )}
       defaultOpen={research.isIaV2Enabled || isMenuOpen}
     >
       {!research.isIaV2Enabled && (
@@ -142,6 +147,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
       )}
       <Transition
         as="div"
+        className={cn({ "flex min-h-0 flex-1 flex-col": research.isIaV2Enabled })}
         show={research.isIaV2Enabled || isMenuOpen}
         enter="transition duration-100 ease-out"
         enterFrom="transform scale-95 opacity-0"
@@ -151,7 +157,11 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
         leaveTo="transform scale-95 opacity-0"
       >
         {(research.isIaV2Enabled || isMenuOpen) && (
-          <Disclosure.Panel as="div" className="flex flex-col gap-0.5" static>
+          <Disclosure.Panel
+            as="div"
+            className={cn("flex flex-col gap-0.5", { "min-h-0 flex-1": research.isIaV2Enabled })}
+            static
+          >
             {research.isIaV2Enabled ? (
               <>
                 {visibleIaV2Items
@@ -168,6 +178,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
                     title={t("research.nav.research_chain_v2")}
                     href={`/${workspaceSlug}/research/chains`}
                     canManage={research.canSee("management")}
+                    fillAvailableSpace
                   />
                 )}
                 {research.canSee("projects") && (
@@ -176,6 +187,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
                     title="行政项目"
                     href={`/${workspaceSlug}/projects`}
                     canManage={research.canSee("management")}
+                    fillAvailableSpace={!research.canSee("research_chain") || !(storedIsResearchTreeOpen ?? true)}
                   />
                 )}
               </>

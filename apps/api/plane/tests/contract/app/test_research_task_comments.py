@@ -90,14 +90,15 @@ def test_task_reader_can_comment_but_cannot_change_another_authors_comment(env):
     assert reader.delete(detail).status_code == 403
 
 
-def test_comment_id_is_scoped_to_its_task_and_archived_chain_is_read_only(env):
+@pytest.mark.parametrize("status", ["ARCHIVED", "DELETED", "COMPLETED"])
+def test_comment_id_is_scoped_to_its_task_and_inactive_chain_is_read_only(env, status):
     first = _create(env)
     second = _create(env)
     comment = post_comment(env, first).data
     other_url = comments_url(env, second["id"]) + comment["id"] + "/"
     assert env["student_client"].patch(other_url, {"comment_html": "<p>Changed</p>"}, format="json").status_code == 404
     assert env["student_client"].delete(other_url).status_code == 404
-    env["chain"].status = "ARCHIVED"
+    env["chain"].status = status
     env["chain"].save(update_fields=["status"])
     payload = env["student_client"].get(comments_url(env, first["id"])).data
     assert payload["can_comment"] is False

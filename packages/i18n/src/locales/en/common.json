@@ -1094,9 +1094,16 @@
       "administrative_hint": "Purchasing, reimbursement and general collaboration projects.",
       "administrative_empty": "No administrative project yet.",
       "administrative_error": "The administrative summary is temporarily unavailable. Please retry later.",
+      "administrative_updated_at": "Last updated: {value}",
+      "administrative_open_issues": "{count} open",
+      "administrative_done_issues": "{count} completed",
+      "administrative_stats_unavailable": "Overview unavailable",
       "all_administrative": "All administrative projects",
       "recent_activity": "Recent activity",
       "report_summary": "Report submission summary",
+      "this_week": "This week",
+      "this_month": "This month",
+      "recent_error": "Recent activity is unavailable. Please refresh later.",
       "report_error": "The report summary is unavailable. Refresh or open the report view.",
       "view_summary": "View summary",
       "view_todos": "View all to-dos",
@@ -1261,6 +1268,7 @@
       "chain_status": {
         "active": "Active",
         "archived": "Archived",
+        "deleted": "Deleted",
         "completed": "Completed"
       },
       "visibility": "Visibility",
@@ -1790,6 +1798,10 @@
         "title": "Project archived",
         "message": "The project is no longer active and can be restored later."
       },
+      "project_deleted": {
+        "title": "Project deleted",
+        "message": "Research data is retained. Restore the project from the deleted list."
+      },
       "project_restored": {
         "title": "Project restored",
         "message": "The project is active again."
@@ -1938,6 +1950,7 @@
     "project_status": {
       "active": "In progress",
       "archived": "Archived",
+      "deleted": "Deleted",
       "completed": "Completed"
     },
     "approval_types": {
@@ -2055,6 +2068,12 @@
       "create": "Create research project",
       "open_team_project": "Open project",
       "archive": "Archive",
+      "delete": "Delete",
+      "current_projects": "Current projects",
+      "owner_unset": "Not set",
+      "confirm_delete_title": "Delete this project?",
+      "confirm_delete": "“{project}” will leave the home overview and default lists. Research data will be retained and the project can be restored from the deleted list.",
+      "action_failed": "The operation failed. Please try again.",
       "restore": "Restore",
       "confirm_archive_title": "Archive this project?",
       "confirm_archive": "“{project}” will leave the active list and can be restored later.",

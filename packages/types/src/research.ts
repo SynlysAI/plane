@@ -28,7 +28,7 @@ export type TReportVisibility = "PRIVATE" | "DIRECT_ADVISOR" | "UNIT" | "ANCESTR
 export type TFeedbackType = "bug" | "ux" | "idea" | "other";
 export type TFeedbackStatus = "open" | "in_progress" | "done" | "closed";
 export type TResearchProjectType = "PHD" | "MASTER" | "POSTDOC" | "RESEARCH_PROJECT";
-export type TResearchProjectStatus = "ACTIVE" | "ARCHIVED" | "COMPLETED";
+export type TResearchProjectStatus = "ACTIVE" | "ARCHIVED" | "COMPLETED" | "DELETED";
 export type TApprovalType = "TASK" | "PURCHASE" | "CUSTOM";
 export type TApprovalRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN" | "CANCELLED";
 export type TStageType = "PRE_OPENING" | "OPENING" | "MIDTERM" | "FINAL";
@@ -170,7 +170,7 @@ export type TResearchChain = {
   project_identifier?: string;
   org_unit_name?: string | null;
   capabilities?: TResearchActionCapabilities;
-  status: "ACTIVE" | "ARCHIVED" | "COMPLETED";
+  status: TResearchProjectStatus;
   visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   open_task_count?: number;
   next_due_at?: string | null;

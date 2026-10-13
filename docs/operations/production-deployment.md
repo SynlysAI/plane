@@ -98,6 +98,27 @@ handle_path /god-mode/* {
 
 如果缺少这段路由，访问 `/god-mode/` 会返回普通 Web 的 `index.html`，不会进入系统管理应用。
 
+API、认证和存储代理必须保留浏览器发送的完整 Host，包括非默认端口：
+
+```caddyfile
+header_up Host {http.request.hostport}
+```
+
+不要使用 `{http.request.host}`：它只包含主机名。例如，浏览器访问 `http://10.26.15.92:3300/` 时，后端会丢失 `:3300`，将默认封面上传地址生成为 `http://10.26.15.92/uploads/`。项目创建会先上传封面，这个跨源请求会被生产 CSP 拦截，前端显示 `Network Error`，项目创建接口尚未调用。存储下载签名同样依赖完整 Host，三处代理应保持一致。
+
+修复此配置后，先验证并重新加载 Caddy；本项修复无需重新构建前端或修改数据库：
+
+```bash
+docker exec plane-web-prod-1 caddy validate --config /etc/caddy/Caddyfile
+docker exec plane-web-prod-1 caddy reload --config /etc/caddy/Caddyfile
+```
+
+本地有 Caddy 可执行文件时，可以运行真实代理回归测试。测试使用临时监听端口和模拟上游，不连接生产服务；未安装 Caddy 时，此用例会跳过：
+
+```bash
+CADDY_BINARY=/path/to/caddy node --test apps/web/tests/production-proxy.test.mjs
+```
+
 ## 4. 日常更新流程
 
 在服务器执行：
@@ -164,13 +185,14 @@ curl -fsS -o /dev/null -w 'api=%{http_code}\n' \
 
 常见故障：
 
-| 现象                            | 原因                                                         | 处理                                                    |
-| ------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
-| 跳转到 `10.26.15.53:3001`       | Web 构建时仍使用 `VITE_ADMIN_BASE_URL=http://localhost:3001` | 修正 `apps/web/.env`，重新构建 Web                      |
-| `/god-mode/` 显示普通 Web 首页  | Caddy 缺少 Admin 路由或 Admin 卷挂载                         | 检查两个生产配置文件，并强制重建 `web-prod`             |
-| Admin 页面静态资源 404          | 未构建 Admin，或 Admin 构建基路径不为 `/god-mode/`           | 检查 `.env`，运行 `pnpm turbo run build --filter=admin` |
-| Admin 页面接口 502              | API 正在重启或 Caddy 无法解析 `api:8000`                     | 检查 `plane-api-1` 状态和 `plane_dev_env` 网络          |
-| 登录后再次跳到 `localhost:3001` | 后端 `ADMIN_BASE_URL` 仍是旧值                               | 修正 `apps/api/.env` 并重新创建 API 容器                |
+| 现象                                               | 原因                                                         | 处理                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| 跳转到 `10.26.15.53:3001`                          | Web 构建时仍使用 `VITE_ADMIN_BASE_URL=http://localhost:3001` | 修正 `apps/web/.env`，重新构建 Web                                         |
+| `/god-mode/` 显示普通 Web 首页                     | Caddy 缺少 Admin 路由或 Admin 卷挂载                         | 检查两个生产配置文件，并强制重建 `web-prod`                                |
+| Admin 页面静态资源 404                             | 未构建 Admin，或 Admin 构建基路径不为 `/god-mode/`           | 检查 `.env`，运行 `pnpm turbo run build --filter=admin`                    |
+| Admin 页面接口 502                                 | API 正在重启或 Caddy 无法解析 `api:8000`                     | 检查 `plane-api-1` 状态和 `plane_dev_env` 网络                             |
+| 登录后再次跳到 `localhost:3001`                    | 后端 `ADMIN_BASE_URL` 仍是旧值                               | 修正 `apps/api/.env` 并重新创建 API 容器                                   |
+| 创建项目提示 `Network Error`，上传地址缺少 `:3300` | Caddy 的 `{http.request.host}` 转发丢失端口                  | 将 API、认证、存储代理改用 `{http.request.hostport}`，验证并重新加载 Caddy |
 
 ## 6. 回滚
 

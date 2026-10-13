@@ -13,6 +13,9 @@ from plane.db.models import (
     ResearchAuditEvent,
     ResearchChain,
     ResearchChainEvent,
+    ResearchChainNode,
+    ResearchChainNodeTask,
+    ResearchChainSnapshot,
     ResearchChainUpload,
     ResearchProjectProfile,
     ResearchUserProfile,
@@ -161,6 +164,95 @@ def test_archived_chain_is_replayable_and_readonly(env):
     restored = env["owner_client"].post(restore_url, {}, format="json")
     assert restored.status_code == 200, restored.json()
     assert restored.json()["data"]["status"] == ResearchChain.Status.ACTIVE
+
+
+def test_deleted_chain_preserves_evidence_is_readonly_and_can_restore(env):
+    """删除保留节点、任务和证据，拒绝新增写入，恢复后继续使用。"""
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
+    chain_id = created.json()["data"]["id"]
+    detail_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/"
+    nodes_url = f"{detail_url}nodes/"
+    payload = {"request_id": uuid4().hex, "node_type": "EXPERIMENT", "title": "保留实验"}
+    node_response = env["owner_client"].post(nodes_url, payload, format="json")
+    assert node_response.status_code == 201, node_response.json()
+    node_id = node_response.json()["data"]["id"]
+    node_url = f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node_id}/"
+    event = env["owner_client"].post(
+        f"{node_url}events/",
+        {"request_id": uuid4().hex, "event_id": uuid4().hex, "event_type": "DATA_CHANGE", "summary": "保留参数"},
+        format="json",
+    )
+    snapshot = env["owner_client"].post(
+        f"{node_url}snapshots/", {"request_id": uuid4().hex, "summary": "保留快照"}, format="json"
+    )
+    assert event.status_code == 201, event.json()
+    assert snapshot.status_code == 201, snapshot.json()
+    task = ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"], chain_id=chain_id, node_id=node_id,
+        title="保留任务", request_id=uuid4().hex, payload_hash="fixture", created_by=env["owner"],
+    )
+    assert env["collaborator_client"].delete(detail_url).status_code == 403
+    assert env["owner_client"].delete(detail_url).status_code == 204
+    chain = ResearchChain.objects.get(pk=chain_id)
+    deleted_at = chain.updated_at
+    assert chain.status == "DELETED"
+    profile = ResearchProjectProfile.objects.get(project=env["public_project"])
+    assert profile.workflow_status == "DELETED"
+    assert not profile.is_active
+    assert Project.objects.filter(pk=env["public_project"].id).exists()
+    assert ResearchChainNode.objects.filter(pk=node_id).exists()
+    assert ResearchChainNodeTask.objects.filter(pk=task.id).exists()
+    assert ResearchChainEvent.objects.filter(chain_id=chain_id).exists()
+    assert ResearchChainSnapshot.objects.filter(chain_id=chain_id).exists()
+    assert env["owner_client"].delete(detail_url).status_code == 204
+    chain.refresh_from_db()
+    assert chain.updated_at == deleted_at
+    assert ResearchAuditEvent.objects.filter(action="chain.delete", resource_id=chain_id).count() == 1
+    detail = env["owner_client"].get(detail_url).json()["data"]
+    assert detail["capabilities"]["actions"]["restore"]["allowed"]
+    for action in ("edit", "upload", "archive", "delete", "agent_review"):
+        assert not detail["capabilities"]["actions"][action]["allowed"]
+    assert env["owner_client"].post(nodes_url, {**payload, "request_id": uuid4().hex}, format="json").status_code == 409
+    assert env["owner_client"].post(f"{detail_url}archive/", {}, format="json").status_code == 409
+    assert env["owner_client"].post(f"{detail_url}restore/", {}, format="json").status_code == 200
+    profile.refresh_from_db()
+    chain.refresh_from_db()
+    assert profile.is_active and profile.workflow_status == chain.status == "ACTIVE"
+    assert env["owner_client"].post(nodes_url, {**payload, "request_id": uuid4().hex}, format="json").status_code == 201
+
+
+@pytest.mark.parametrize("history_status", ["ARCHIVED", "DELETED"])
+def test_chain_default_list_hides_history_but_explicit_filters_keep_acl(env, history_status):
+    """历史状态在分页前排除，显式筛选仍遵循项目可见性。"""
+    public = _create_chain(env["owner_client"], env["workspace"], env["public_project"]).json()["data"]
+    private = _create_chain(env["owner_client"], env["workspace"], env["private_project"]).json()["data"]
+    for row in (public, private):
+        ResearchChain.objects.filter(pk=row["id"]).update(status=history_status)
+        ResearchProjectProfile.objects.filter(project_id=row["project"]).update(workflow_status=history_status, is_active=False)
+    list_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/"
+    empty = env["owner_client"].get(list_url).json()
+    assert empty["results"] == empty["data"] == []
+    assert empty["total_results"] == 0
+    assert not empty["next_page_results"]
+    history = env["collaborator_client"].get(list_url, {"status": history_status}).json()
+    assert [row["id"] for row in history["results"]] == [public["id"]]
+    assert history["total_results"] == 1
+
+
+@pytest.mark.parametrize("deleted_model", ["project", "profile"])
+def test_chain_never_exposes_underlying_deleted_records(env, deleted_model):
+    """底层软删除的项目或档案不能从列表、详情或恢复接口泄漏。"""
+    from django.utils import timezone
+
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"]).json()["data"]
+    target = env["public_project"] if deleted_model == "project" else env["public_profile"]
+    target.deleted_at = timezone.now()
+    target.save(update_fields=["deleted_at"])
+    list_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/"
+    assert env["owner_client"].get(list_url).json()["results"] == []
+    assert env["owner_client"].get(list_url, {"status": "ACTIVE"}).json()["results"] == []
+    assert env["owner_client"].get(f"{list_url}{created['id']}/").status_code == 404
+    assert env["owner_client"].post(f"{list_url}{created['id']}/restore/", {}, format="json").status_code == 404
 
 
 def test_node_state_machine_is_service_driven_and_idempotent(env):

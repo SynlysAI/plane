@@ -41,11 +41,6 @@ export type TResearchProjectCreatePayload = {
 };
 
 export class ResearchProjectService extends APIService {
-  async deleteProject(workspaceSlug: string, projectId: string) {
-    return this.delete(researchEndpoints.project(workspaceSlug, projectId)).catch((error) => {
-      throw error?.response?.data ?? error;
-    });
-  }
   constructor() {
     super(API_BASE_URL);
   }
@@ -104,6 +99,13 @@ export class ResearchProjectService extends APIService {
       .catch((err) => {
         throw err?.response?.data;
       });
+  }
+
+  /** 可恢复地删除科研项目，不清除研究证据。 */
+  async deleteProject(workspaceSlug: string, projectId: string): Promise<void> {
+    await this.delete(researchEndpoints.project(workspaceSlug, projectId)).catch((err) => {
+      throw err?.response?.data ?? err;
+    });
   }
 
   async restoreProject(workspaceSlug: string, projectId: string) {

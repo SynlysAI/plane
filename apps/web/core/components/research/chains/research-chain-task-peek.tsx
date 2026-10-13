@@ -349,7 +349,7 @@ export function ResearchChainTaskPeek(props: Props) {
     if (!task) return [];
     const matched = events.length ? eventActivity(events, task, candidates, t) : synthesizedActivity(task, t);
     const sorted = [...matched].toSorted((left, right) => left.at.localeCompare(right.at));
-    return activityOrder === "asc" ? sorted : sorted.toReversed();
+    return activityOrder === "asc" ? sorted : [...sorted].toReversed();
   }, [activityOrder, candidates, events, t, task]);
 
   /**

@@ -210,12 +210,14 @@ export const RESEARCH_PROJECT_STATUSES = [
   "ACTIVE",
   "ARCHIVED",
   "COMPLETED",
+  "DELETED",
 ] as const satisfies readonly TResearchProjectStatus[];
 
 export const RESEARCH_PROJECT_STATUS_LABELS: Record<TResearchProjectStatus, string> = {
   ACTIVE: "research.project_status.active",
   ARCHIVED: "research.project_status.archived",
   COMPLETED: "research.project_status.completed",
+  DELETED: "research.project_status.deleted",
 };
 
 export const APPROVAL_TYPES = ["TASK", "PURCHASE", "CUSTOM"] as const satisfies readonly TApprovalType[];

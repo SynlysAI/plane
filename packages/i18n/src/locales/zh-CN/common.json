@@ -1101,9 +1101,16 @@
       "administrative_hint": "采购、报销与普通协作项目。",
       "administrative_empty": "暂无行政项目。",
       "administrative_error": "行政项目摘要暂时不可用，请稍后重试。",
+      "administrative_updated_at": "最近更新：{value}",
+      "administrative_open_issues": "未完成 {count} 项",
+      "administrative_done_issues": "已完成 {count} 项",
+      "administrative_stats_unavailable": "概览暂不可用",
       "all_administrative": "全部行政项目",
       "recent_activity": "最近动态",
       "report_summary": "报告提交摘要",
+      "this_week": "本周",
+      "this_month": "本月",
+      "recent_error": "最近动态暂不可用，请稍后刷新。",
       "report_error": "报告汇总暂不可用，可刷新或直接进入报告视图。",
       "view_summary": "查看汇总",
       "view_todos": "查看全部待办",
@@ -1275,6 +1282,7 @@
       "chain_status": {
         "active": "进行中",
         "archived": "已归档",
+        "deleted": "已删除",
         "completed": "已完成"
       },
       "visibility": "可见范围",
@@ -1815,6 +1823,10 @@
         "title": "项目已归档",
         "message": "项目已移出进行中列表，可随时恢复。"
       },
+      "project_deleted": {
+        "title": "项目已删除",
+        "message": "研究数据已保留，可在已删除列表中重新激活。"
+      },
       "project_restored": {
         "title": "项目已恢复",
         "message": "项目已恢复为进行中状态。"
@@ -1963,6 +1975,7 @@
     "project_status": {
       "active": "进行中",
       "archived": "已归档",
+      "deleted": "已删除",
       "completed": "已结题"
     },
     "approval_types": {
@@ -2080,6 +2093,12 @@
       "create": "创建科研项目",
       "open_team_project": "打开项目",
       "archive": "归档",
+      "delete": "删除",
+      "current_projects": "当前项目",
+      "owner_unset": "未设置",
+      "confirm_delete_title": "确认删除项目？",
+      "confirm_delete": "项目“{project}”将从首页及默认列表中移除。研究数据会保留，可在已删除列表中重新激活。",
+      "action_failed": "操作失败，请重试。",
       "restore": "恢复",
       "confirm_archive_title": "确认归档项目？",
       "confirm_archive": "项目“{project}”将从进行中列表移除，后续仍可恢复。",

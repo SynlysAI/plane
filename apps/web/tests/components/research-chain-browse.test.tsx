@@ -5,7 +5,13 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
-const mocks = vi.hoisted(() => ({ getChainPage: vi.fn(), getChains: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getChainPage: vi.fn(),
+  getChains: vi.fn(),
+  deleteChain: vi.fn(),
+  archiveChain: vi.fn(),
+  restoreChain: vi.fn(),
+}));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
@@ -29,7 +35,41 @@ vi.mock("@/services/research/chain.service", () => ({
   ResearchChainService: class {
     getChainPage = mocks.getChainPage;
     getChains = mocks.getChains;
+    deleteChain = mocks.deleteChain;
+    archiveChain = mocks.archiveChain;
+    restoreChain = mocks.restoreChain;
   },
+}));
+vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: { SUCCESS: "SUCCESS" }, setToast: vi.fn() }));
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
+  AlertModalCore: ({
+    isOpen,
+    title,
+    content,
+    handleClose,
+    handleSubmit,
+    isSubmitting,
+    primaryButtonText,
+  }: {
+    isOpen: boolean;
+    title: string;
+    content: React.ReactNode;
+    handleClose: () => void;
+    handleSubmit: () => void;
+    isSubmitting: boolean;
+    primaryButtonText: { default: string };
+  }) =>
+    isOpen ? (
+      <div role="dialog">
+        <h2>{title}</h2>
+        {content}
+        <button onClick={handleClose}>取消</button>
+        <button onClick={handleSubmit} disabled={isSubmitting}>
+          {primaryButtonText.default}
+        </button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
@@ -45,8 +85,8 @@ vi.mock("@/hooks/store/use-member", () => ({
 }));
 vi.mock("@plane/propel/button", () => ({
   getButtonStyling: () => "",
-  Button: ({ children, onClick, disabled }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" onClick={onClick} disabled={disabled}>
+  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" {...props}>
       {children}
     </button>
   ),
@@ -153,6 +193,62 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.getChainPage.mockResolvedValue(page("Graphite first", true));
   mocks.getChains.mockResolvedValue(page("Legacy first").results);
+  mocks.deleteChain.mockResolvedValue(undefined);
+  mocks.archiveChain.mockResolvedValue(undefined);
+  mocks.restoreChain.mockResolvedValue(undefined);
+});
+
+it("requires confirmation before deleting and refreshes the current query", async () => {
+  const response = page("测试课题");
+  Object.assign(response.results[0], { capabilities: { actions: { delete: { allowed: true } } } });
+  mocks.getChainPage.mockResolvedValue(response);
+  await render("/lab/research/chains?q=测试");
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="删除：测试课题"]')?.click());
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("测试课题");
+  expect(mocks.deleteChain).not.toHaveBeenCalled();
+  await click("取消");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="删除：测试课题"]')?.click());
+  await click("删除");
+  expect(mocks.deleteChain).toHaveBeenCalledWith("lab", "测试课题");
+  expect(mocks.getChainPage).toHaveBeenLastCalledWith("lab", { q: "测试" });
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("keeps a failed deletion open with feedback and prevents duplicate submissions", async () => {
+  const response = page("失败课题");
+  Object.assign(response.results[0], { capabilities: { actions: { delete: { allowed: true } } } });
+  mocks.getChainPage.mockResolvedValue(response);
+  const request = pending<void>();
+  mocks.deleteChain.mockReturnValue(request.promise);
+  await render("/lab/research/chains");
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="删除：失败课题"]')?.click());
+  await click("删除");
+  await click("删除");
+  expect(mocks.deleteChain).toHaveBeenCalledTimes(1);
+  await act(async () => request.resolve());
+  mocks.deleteChain.mockRejectedValue({ error_code: "research_permission_denied" });
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="删除：失败课题"]')?.click());
+  await click("删除");
+  expect(container.querySelector('[role="dialog"] [role="alert"]')?.textContent).toContain("操作失败");
+});
+
+it.each(["ARCHIVED", "DELETED"])("restores %s chains using their server capability", async (status) => {
+  const response = page("历史课题");
+  Object.assign(response.results[0], { status, capabilities: { actions: { restore: { allowed: true } } } });
+  mocks.getChainPage.mockResolvedValue(response);
+  await render(`/lab/research/chains?status=${status}`);
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="恢复：历史课题"]')?.click());
+  await click("恢复");
+  expect(mocks.restoreChain).toHaveBeenCalledWith("lab", "历史课题");
+  expect(mocks.getChainPage).toHaveBeenLastCalledWith("lab", { status });
+});
+
+it("hides unauthorized lifecycle controls and resets the cursor when selecting deleted projects", async () => {
+  await render("/lab/research/chains?cursor=page-2");
+  expect(container.querySelector('[aria-label^="删除："]')).toBeNull();
+  await change('select[aria-label="研究链状态"]', "DELETED");
+  expect(mocks.getChainPage).toHaveBeenLastCalledWith("lab", { status: "DELETED" });
 });
 
 it("consumes server-side chain summary fields without issuing node requests", async () => {
