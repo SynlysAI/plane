@@ -39,6 +39,10 @@ def sd_session(db, settings):
     owner = make_user(first_name="SD owner")
     workspace = make_workspace(owner)
     enable_research(workspace, research_agent_enabled=True, research_chain_enabled=True)
+    # 215a0f8d04 起所有 research 视图要求科研组织树有效成员。
+    from plane.tests.research_fixtures import make_org_member
+
+    make_org_member(workspace, owner)
     suffix = uuid4().hex[:6]
     project = Project.objects.create(
         workspace=workspace,
@@ -103,6 +107,18 @@ def sd_session(db, settings):
         payload_hash=uuid4().hex,
         created_by=owner,
     )
+    # 唯一连接来源是用户级连接（§5）：夹具直接挂一条真实加密连接。
+    from plane.license.utils.encryption import encrypt_data
+
+    session.backend_connection = ResearchAgentBackendConnection.objects.create(
+        workspace=workspace,
+        user=owner,
+        base_url="http://192.168.1.10:5300",
+        credential_encrypted=encrypt_data("sd-secret-token"),
+        is_enabled=True,
+        created_by=owner,
+    )
+    session.save(update_fields=["backend_connection", "updated_at"])
     return session
 
 
@@ -191,7 +207,7 @@ def test_science_discovery_permission_required_waits_approval(sd_session):
     assert sd_session.status == ResearchAgentSession.Status.WAITING_APPROVAL
 
 
-def test_science_discovery_approval_bridge_translates_and_forwards(sd_session, monkeypatch, settings):
+def test_science_discovery_approval_bridge_translates_and_forwards(sd_session, monkeypatch):
     project_science_discovery_events(
         sd_session,
         [
@@ -214,8 +230,6 @@ def test_science_discovery_approval_bridge_translates_and_forwards(sd_session, m
         return {"ok": True}
 
     monkeypatch.setattr(ScienceDiscoveryClient, "answer_approval", fake_answer_approval)
-    settings.SCIENCE_DISCOVERY_BASE_URL = "http://127.0.0.1:5300"
-    settings.SCIENCE_DISCOVERY_AUTH_TOKEN = "test-token"
 
     client = APIClient()
     client.force_authenticate(user=sd_session.user)
@@ -237,7 +251,7 @@ def test_science_discovery_approval_bridge_translates_and_forwards(sd_session, m
     assert sd_session.run_events.filter(event_type="HUMAN_DECISION", payload__decision="APPROVED_ALWAYS").exists()
 
 
-def test_science_discovery_file_upload_reconciles_hash_and_records_chain(sd_session, monkeypatch, settings):
+def test_science_discovery_file_upload_reconciles_hash_and_records_chain(sd_session, monkeypatch):
     import hashlib
 
     content = b"spec,data\n1,2\n"
@@ -261,8 +275,6 @@ def test_science_discovery_file_upload_reconciles_hash_and_records_chain(sd_sess
         }
 
     monkeypatch.setattr(ScienceDiscoveryClient, "upload_workspace_file", fake_upload)
-    settings.SCIENCE_DISCOVERY_BASE_URL = "http://127.0.0.1:5300"
-    settings.SCIENCE_DISCOVERY_AUTH_TOKEN = "test-token"
 
     client = APIClient()
     client.force_authenticate(user=sd_session.user)
@@ -292,7 +304,7 @@ def test_science_discovery_file_upload_reconciles_hash_and_records_chain(sd_sess
     assert chain_event.refs[0]["id"] == str(upload.id)
 
 
-def test_science_discovery_file_upload_rejects_hash_mismatch(sd_session, monkeypatch, settings):
+def test_science_discovery_file_upload_rejects_hash_mismatch(sd_session, monkeypatch):
     def fake_upload(self, *, session_id, file_name, content):
         return {
             "uploaded": [
@@ -303,8 +315,6 @@ def test_science_discovery_file_upload_rejects_hash_mismatch(sd_session, monkeyp
         }
 
     monkeypatch.setattr(ScienceDiscoveryClient, "upload_workspace_file", fake_upload)
-    settings.SCIENCE_DISCOVERY_BASE_URL = "http://127.0.0.1:5300"
-    settings.SCIENCE_DISCOVERY_AUTH_TOKEN = "test-token"
 
     client = APIClient()
     client.force_authenticate(user=sd_session.user)
@@ -320,7 +330,7 @@ def test_science_discovery_file_upload_rejects_hash_mismatch(sd_session, monkeyp
     assert not ResearchChainUpload.objects.filter(file_name="bad.csv").exists()
 
 
-def test_science_discovery_artifact_content_proxies_seen_versions(sd_session, monkeypatch, settings):
+def test_science_discovery_artifact_content_proxies_seen_versions(sd_session, monkeypatch):
     project_science_discovery_events(
         sd_session,
         [
@@ -348,8 +358,6 @@ def test_science_discovery_artifact_content_proxies_seen_versions(sd_session, mo
         return "# 报告正文".encode("utf-8"), "text/markdown"
 
     monkeypatch.setattr(ScienceDiscoveryClient, "artifact_content", fake_content)
-    settings.SCIENCE_DISCOVERY_BASE_URL = "http://127.0.0.1:5300"
-    settings.SCIENCE_DISCOVERY_AUTH_TOKEN = "test-token"
 
     client = APIClient()
     client.force_authenticate(user=sd_session.user)
@@ -415,6 +423,8 @@ def test_backend_connection_crud_stores_token_encrypted(sd_session, settings):
     assert listed.json()["connection"]["has_credential"] is True
     assert "sd-secret-token" not in str(listed.json())
 
+    # 会话以 PROTECT 引用连接：删除连接前先解除本测试工作区的引用。
+    ResearchAgentSession.objects.filter(workspace=workspace).update(backend_connection=None)
     removed = client.delete(f"/api/research/workspaces/{workspace.slug}/agent/backend-connections/")
     assert removed.status_code == 204
     assert not ResearchAgentBackendConnection.objects.filter(workspace=workspace, user=owner).exists()
@@ -422,18 +432,9 @@ def test_backend_connection_crud_stores_token_encrypted(sd_session, settings):
 
 def test_backend_connection_test_updates_health(sd_session, monkeypatch):
     """测试连接走 GET /api/models，成功更新健康状态（§5）。"""
-    from plane.license.utils.encryption import encrypt_data
-
     workspace = sd_session.workspace
     owner = sd_session.user
-    connection = ResearchAgentBackendConnection.objects.create(
-        workspace=workspace,
-        user=owner,
-        base_url="http://192.168.1.10:5300",
-        credential_encrypted=encrypt_data("sd-secret-token"),
-        is_enabled=True,
-        created_by=owner,
-    )
+    connection = sd_session.backend_connection
     monkeypatch.setattr(ScienceDiscoveryClient, "list_models", lambda self: [{"id": "m1"}, {"id": "m2"}])
     client = APIClient()
     client.force_authenticate(user=owner)
@@ -450,14 +451,9 @@ def test_provider_resolution_honours_governance_and_enablement(sd_session):
     workspace = sd_session.workspace
     owner = sd_session.user
     setting, _ = WorkspaceResearchSetting.objects.get_or_create(workspace=workspace)
-    connection = ResearchAgentBackendConnection.objects.create(
-        workspace=workspace,
-        user=owner,
-        base_url="http://192.168.1.10:5300",
-        credential_encrypted="cipher",
-        is_enabled=True,
-        created_by=owner,
-    )
+    connection = sd_session.backend_connection
+    connection.is_enabled = True
+    connection.save(update_fields=["is_enabled", "updated_at"])
 
     setting.research_agent_user_backend_enabled = False
     setting.save()

@@ -49,6 +49,10 @@ def env(db, settings):
     other = make_user(first_name="Other member")
     workspace = make_workspace(owner)
     add_workspace_member(workspace, other)
+    from plane.tests.research_fixtures import make_org_member
+
+    make_org_member(workspace, owner)
+    make_org_member(workspace, other, org_role="REVIEWER")
     enable_research(workspace, research_agent_enabled=True, research_chain_enabled=True)
     suffix = uuid4().hex[:6]
     project = Project.objects.create(

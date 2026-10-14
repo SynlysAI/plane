@@ -113,44 +113,73 @@ beforeEach(() => {
 afterEach(() => {
   root.unmount();
   container.remove();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
-it("merges cursor events, reconnects after the latest sequence, and stops generation", async () => {
+it("merges cursor events, opens the runtime drawer, stops generation, and saves an SD artifact", async () => {
   const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
   await act(async () => {
     root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
   });
   await act(async () => undefined);
 
-  expect(container.textContent).toContain("最后事件 #1");
-  expect(container.textContent).toContain("research-general");
-  expect(container.textContent).toContain("knowledge.search");
+  // 初始加载与游标合并：重复事件只拉一次。
   expect(mocks.getEvents).toHaveBeenCalledWith("lab", "run-1");
-  expect(container.querySelectorAll("article").length).toBe(1);
+  expect(container.querySelector('[aria-live="polite"]')).not.toBeNull();
 
+  // 运行详情抽屉：装配摘要与工具在抽屉内可达。
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "重新连接")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("运行详情"))?.click();
   });
-  expect(mocks.getEvents).toHaveBeenLastCalledWith("lab", "run-1", 1);
-  expect(container.textContent).toContain("最后事件 #2");
-  expect(container.querySelectorAll("article").length).toBe(2);
-  expect(container.textContent).toContain("工具调用");
+  const drawer = container.querySelector('aside[role="dialog"][aria-modal="true"]');
+  expect(drawer).not.toBeNull();
+  expect(drawer?.textContent).toContain("research-general");
+  expect(drawer?.textContent).toContain("knowledge.search");
 
+  // 停止按钮仅在 STREAMING 出现，点击后取消远端运行。
+  await act(async () => {
+    root.render(null);
+  });
+  mocks.createSession.mockResolvedValueOnce({ ...session, status: "STREAMING" });
+  await act(async () => {
+    root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
+  });
+  await act(async () => undefined);
   await act(async () => {
     [...container.querySelectorAll("button")].find((button) => button.textContent === "停止生成")?.click();
   });
   expect(mocks.cancelRun).toHaveBeenCalledWith("lab", "run-1");
-  expect(container.textContent).toContain("已关闭");
 
+  // SD 产物卡：保存到节点 → 抽屉表单 → 确认保存。
   await act(async () => {
     root.render(null);
   });
-  root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
-  await act(async () => undefined);
-  await act(async () => undefined);
+  mocks.createSession.mockResolvedValueOnce({
+    ...session,
+    provider: "SCIENCE_DISCOVERY",
+    status: "READY",
+  });
+  mocks.getEvents.mockResolvedValue({
+    results: [
+      {
+        ...event(5, "INTERMEDIATE_ARTIFACT"),
+        payload: {
+          remote_type: "artifact.upserted",
+          artifact: { name: "综述报告.md", kind: "report" },
+          version: { id: "ver-1", mediaType: "text/markdown" },
+        },
+      },
+    ],
+    count: 1,
+    latest_seq: 5,
+  });
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "预览产物")?.click();
+    root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
+  });
+  await act(async () => undefined);
+  expect(container.textContent).toContain("综述报告.md");
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "保存到研究链")?.click();
   });
   const textarea = [...container.querySelectorAll("textarea")].at(-1);
   expect(textarea).not.toBeNull();
@@ -164,7 +193,7 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
     (checkbox as HTMLInputElement | null)?.click();
   });
   await act(async () => {
-    const saveButton = [...container.querySelectorAll("button")].find(
+    const saveButton = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
       (button) => button.textContent === "保存到研究链"
     );
     expect(saveButton?.disabled).toBe(false);
@@ -173,9 +202,12 @@ it("merges cursor events, reconnects after the latest sequence, and stops genera
   expect(mocks.saveArtifact).toHaveBeenCalledWith(
     "lab",
     "session-1",
-    expect.objectContaining({ artifact_type: "ANALYSIS_SUMMARY", confirmed: true })
+    expect.objectContaining({
+      artifact_type: "ANALYSIS_SUMMARY",
+      confirmed: true,
+      source_versions: expect.arrayContaining([expect.objectContaining({ version_id: "ver-1" })]),
+    })
   );
-  expect(container.textContent).toContain("ANALYSIS_RESULT v2");
 });
 
 it("shows the Chinese degradation path when Synlora session creation fails", async () => {
@@ -194,7 +226,7 @@ it("shows the Chinese degradation path when Synlora session creation fails", asy
   expect(container.textContent).not.toContain("你没有访问当前科研对象的权限");
 });
 
-it("renders structured approval cards and submits an idempotent Agent decision", async () => {
+it("renders an inline approval card and submits an idempotent Agent decision", async () => {
   const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
   mocks.createSession.mockResolvedValue({ ...session, status: "WAITING_APPROVAL" });
   mocks.getEvents.mockResolvedValue({
@@ -221,54 +253,39 @@ it("renders structured approval cards and submits an idempotent Agent decision",
   });
   await act(async () => undefined);
 
-  expect(container.textContent).toContain("knowledge.search");
-  expect(container.textContent).toContain("等待审批");
+  // 审批以消息流内联卡呈现：工具名、说明、三个决策按钮。
+  expect(container.textContent).toContain("需要审批");
   expect(container.textContent).toContain("检索聚合物 Tg 文献");
-  expect(container.textContent).toContain("Polymer Tg dataset");
-  expect(container.textContent).not.toContain('{"tool_name"');
-  expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+  expect(container.textContent).toContain("批准一次");
+  expect(container.textContent).toContain("批准并记住");
   expect(container.querySelector('[aria-live="polite"]')).not.toBeNull();
-  expect(container.querySelectorAll('select[aria-label="事件类型"]').length).toBe(1);
-  expect(container.querySelectorAll('select[aria-label="事件状态"]').length).toBe(1);
 
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "处理审批")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "批准一次")?.click();
   });
-  await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "通过")?.click();
-  });
-
   expect(mocks.decideApproval).toHaveBeenCalledWith(
     "lab",
     "run-1",
     expect.objectContaining({ decision: "APPROVED", tool_call_id: "2", reason: undefined })
   );
-  expect(container.textContent).toContain("审批已通过，Agent 可继续执行。");
+  expect(container.textContent).toContain("已通过");
 });
 
-it("keeps reconnection and collapsed runtime reachable in the side-panel layout", async () => {
+it("keeps the side-panel layout condensed with collapsed runtime details", async () => {
   const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
   await act(async () => {
     root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" variant="panel" />);
   });
   await act(async () => undefined);
 
-  expect(container.textContent).toContain("上下文范围");
+  // 侧栏精简：一行上下文 + 折叠的运行详情；无最后事件计数。
+  expect(container.textContent).toContain("project-1 · node-1");
   expect(container.textContent).not.toContain("最后事件");
-
-  await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "重新连接")?.click();
-  });
-  expect(mocks.getEvents).toHaveBeenLastCalledWith("lab", "run-1", 1);
 
   const runtimeDetails = [...container.querySelectorAll("details")].find((details) =>
     details.querySelector("summary")?.textContent?.includes("运行详情")
   );
   expect(runtimeDetails).not.toBeNull();
-  expect(runtimeDetails?.textContent).toContain("运行详情");
   runtimeDetails?.setAttribute("open", "true");
   expect(runtimeDetails?.textContent).toContain("research-general");
-  expect(runtimeDetails?.textContent).toContain("需确认");
-  expect(runtimeDetails?.textContent).toContain("不可用");
-  expect(runtimeDetails?.textContent).toContain("Trace");
 });

@@ -1551,7 +1551,13 @@
       "load_failed": "The paper review could not be loaded. Please retry later.",
       "refresh": "Refresh",
       "review_switch": "Paper reviews on this node",
-      "status": "Review status",
+      "status": {
+        "open": "Open",
+        "waiting_review": "Waiting for review",
+        "needs_revision": "Needs revision",
+        "accepted": "Accepted",
+        "withdrawn": "Withdrawn"
+      },
       "final_reviewer": "Final reviewer",
       "due_at": "Due",
       "final_confirmation": "Final confirmation",
@@ -1583,13 +1589,6 @@
       "confirm": "Confirm",
       "server_rejected": "The server rejected this action. Check the scope and permissions, then retry.",
       "file_failed": "The paper file could not be opened.",
-      "status": {
-        "open": "Open",
-        "waiting_review": "Waiting for review",
-        "needs_revision": "Needs revision",
-        "accepted": "Accepted",
-        "withdrawn": "Withdrawn"
-      },
       "version_status": {
         "submitted": "Submitted",
         "superseded": "Superseded",
@@ -1746,7 +1745,16 @@
         "DEGRADED": "Degraded",
         "ERROR": "Error",
         "CLOSED": "Closed"
-      }
+      },
+      "thinking_process": "Thinking",
+      "file_change": "File",
+      "approval_title": "Approval required",
+      "approval_once": "Approve once",
+      "approval_always": "Approve & remember (this session)",
+      "close_runtime": "Close runtime details",
+      "report_context": "Report context",
+      "assembly_summary": "Assembly",
+      "assembly_tool_count": "{count} tools"
     },
     "status": {
       "workspace": "Current workspace: {workspace}",

@@ -93,11 +93,6 @@ AGENT_MANIFEST = {
 }
 
 
-def _science_discovery_configured():
-    """Whether the dev-time direct ScienceDiscovery connection is enabled."""
-    return ScienceDiscoveryClient().configured
-
-
 def _sd_client_for_session(session):
     """Build the pinned ScienceDiscovery client for one session."""
     return ScienceDiscoveryClient(connection=session.backend_connection)
@@ -375,10 +370,10 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
                     scope_kind="REVIEW",
                     scope_source="direct_advisor_or_main_pi",
                 )
-            # provider 解析（§5）：用户自配且启用的 SD 连接优先（P5 正式入口），
-            # 其次开发期环境变量直连（P1），否则回落平台默认 Synlora。
+            # provider 解析（§5）：仅认「治理开关开 + 用户自配且启用」的 SD 连接，
+            # 否则回落平台默认 Synlora；连接信息只来自设置页，不走环境变量。
             backend_connection = resolve_science_discovery_connection(workspace, request.user)
-            if backend_connection is not None or _science_discovery_configured():
+            if backend_connection is not None:
                 orchestrated = create_science_discovery_session(
                     connection=backend_connection, **orchestration_kwargs
                 )
@@ -403,7 +398,7 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
                 synlora_session_id=orchestrated.get("synlora_session_id", ""),
                 provider=(
                     ResearchAgentSession.Provider.SCIENCE_DISCOVERY
-                    if backend_connection is not None or _science_discovery_configured()
+                    if backend_connection is not None
                     else ResearchAgentSession.Provider.SYNLORA
                 ),
                 backend_connection=backend_connection,

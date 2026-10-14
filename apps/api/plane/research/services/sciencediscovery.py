@@ -33,23 +33,19 @@ class ScienceDiscoveryClient:
     """
 
     def __init__(self, connection=None):
-        """Build a client from one user connection, or the dev-time env config.
+        """Build a client from one user backend connection (the only source).
 
         Args:
-            connection: An optional ``ResearchAgentBackendConnection``; when
-                absent the client falls back to environment settings (P1 dev path).
+            connection: The ``ResearchAgentBackendConnection`` created from the
+                settings UI. Without a connection the client stays unconfigured.
         """
-        if connection is not None:
-            self.base_url = str(connection.base_url or "").rstrip("/")
-            self.auth_token = decrypt_data(connection.credential_encrypted or "")
-        else:
-            self.base_url = str(getattr(settings, "SCIENCE_DISCOVERY_BASE_URL", "")).rstrip("/")
-            self.auth_token = str(getattr(settings, "SCIENCE_DISCOVERY_AUTH_TOKEN", ""))
+        self.base_url = str(connection.base_url or "").rstrip("/") if connection is not None else ""
+        self.auth_token = decrypt_data(connection.credential_encrypted or "") if connection is not None else ""
         self.timeout = float(getattr(settings, "SCIENCE_DISCOVERY_TIMEOUT_SECONDS", 10))
 
     @property
     def configured(self):
-        """Whether the dev-time direct connection is usable."""
+        """Whether a usable user connection is attached."""
         return bool(self.base_url and self.auth_token)
 
     def _headers(self):

@@ -390,9 +390,7 @@ SYNLORA_BASE_URL = os.environ.get("SYNLORA_BASE_URL", "")
 SYNLORA_SERVICE_TOKEN = os.environ.get("SYNLORA_SERVICE_TOKEN", "")
 SYNLORA_TIMEOUT_SECONDS = float(os.environ.get("SYNLORA_TIMEOUT_SECONDS", 5))
 
-# ScienceDiscovery runtime provider（开发期环境变量直连；正式入口见 P5 用户级连接）
-SCIENCE_DISCOVERY_BASE_URL = os.environ.get("SCIENCE_DISCOVERY_BASE_URL", "")
-SCIENCE_DISCOVERY_AUTH_TOKEN = os.environ.get("SCIENCE_DISCOVERY_AUTH_TOKEN", "")
+# ScienceDiscovery runtime provider 的服务端治理参数（连接信息一律走用户级连接 UI，§5）
 SCIENCE_DISCOVERY_TIMEOUT_SECONDS = float(os.environ.get("SCIENCE_DISCOVERY_TIMEOUT_SECONDS", 10))
 # SD 分析通道单文件上限（任意类型；大文件后续改流式，先保守设 100MB）
 SCIENCE_DISCOVERY_MAX_UPLOAD_BYTES = int(os.environ.get("SCIENCE_DISCOVERY_MAX_UPLOAD_BYTES", 104857600))

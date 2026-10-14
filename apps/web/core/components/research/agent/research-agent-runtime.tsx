@@ -23,6 +23,19 @@ export function ResearchAgentRuntime({ api }: Props) {
   return (
     <>
       <section className="border-b border-subtle p-4">
+        <h3 className="text-12 font-semibold text-primary">{t("research.agent.assembly_summary")}</h3>
+        <p className="mt-2 text-11 text-secondary">
+          {api.session?.assembly.persona ?? "-"} ·{" "}
+          {t("research.agent.assembly_tool_count", { count: api.session?.assembly.allowed_tools.length ?? 0 })}
+          {api.session?.assembly.policy_id && ` · ${api.session.assembly.policy_id}`}
+        </p>
+        {Boolean(api.session?.assembly.allowed_tools.length) && (
+          <p className="mt-1 text-11 break-words text-tertiary">
+            {(api.session?.assembly.allowed_tools ?? []).join(" · ")}
+          </p>
+        )}
+      </section>
+      <section className="border-b border-subtle p-4">
         <h3 className="text-12 font-semibold text-primary">{t("research.agent.tools_title")}</h3>
         {api.toolEvents.length ? (
           <ul className="mt-2 space-y-2" role="list">

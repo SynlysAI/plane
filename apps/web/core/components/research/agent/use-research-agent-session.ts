@@ -356,9 +356,9 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   );
 
   const decideApproval = useCallback(
-    async (decision: TAgentApprovalDecision) => {
+    async (decision: TAgentApprovalDecision, targetEvent?: TAgentRunEvent) => {
       const current = sessionRef.current;
-      const target = approvalFor;
+      const target = targetEvent ?? approvalFor;
       if (!current || !target || approvalBusy) return;
       setApprovalBusy(true);
       setApprovalError("");
