@@ -2813,5 +2813,26 @@
     "archives": {
       "title": "归档"
     }
+  },
+  "aiAssistant": {
+    "title": "AI 助手",
+    "open": "打开 AI 助手",
+    "close": "关闭",
+    "placeholder": "询问当前页面、项目或知识库…",
+    "send": "发送",
+    "stop": "停止",
+    "new_conversation": "新会话",
+    "thinking": "思考中",
+    "working": "处理中",
+    "queued": "排队中",
+    "retrieving": "正在检索知识库",
+    "empty_greeting": "你好，我是 AI 助手",
+    "empty_hint": "可以问我当前页面、项目或知识库相关的问题。",
+    "error_generic": "出错了，请重试。",
+    "error_unavailable": "AI 服务暂时不可用。",
+    "retry": "重试",
+    "session_expired": "上一个会话已失效，已开启新会话。",
+    "interrupt_notice": "运行已中断并需要审批，审批功能即将上线。",
+    "shortcut_hint": "Cmd+J"
   }
 }

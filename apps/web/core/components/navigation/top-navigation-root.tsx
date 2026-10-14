@@ -7,6 +7,7 @@
 // components
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
+import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 import { TopNavPowerK } from "@/components/navigation";
 import { HelpMenuRoot } from "@/components/workspace/sidebar/help-section/root";
@@ -17,17 +18,24 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 import { InboxOutline } from "@makeplane/propel/icons";
 import useSWR from "swr";
+import { Sparkles } from "lucide-react";
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { FeedbackDialog } from "@/components/research/feedback/feedback-dialog";
+import { AssistantService } from "@/services/assistant";
+import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
+
+const assistantService = new AssistantService();
 
 export const TopNavigationRoot = observer(function TopNavigationRoot() {
   // router
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   // store hooks
   const { unreadNotificationsCount, getUnreadNotificationsCount } = useWorkspaceNotifications();
   const { preferences } = useAppRailPreferences();
+  const assistant = useAIAssistant();
 
   const showLabel = preferences.displayMode === "icon_with_label";
 
@@ -35,6 +43,12 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
   useSWR(
     workspaceSlug ? "WORKSPACE_UNREAD_NOTIFICATION_COUNT" : null,
     workspaceSlug ? () => getUnreadNotificationsCount(workspaceSlug.toString()) : null
+  );
+
+  // Fetch assistant availability
+  const { data: assistantStatus } = useSWR(
+    workspaceSlug ? `AI_ASSISTANT_STATUS_${workspaceSlug}` : null,
+    workspaceSlug ? () => assistantService.getStatus(workspaceSlug.toString()) : null
   );
 
   // Calculate notification count
@@ -60,6 +74,18 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
       {/* Additional Actions */}
       <div className="flex flex-1 shrink-0 items-center justify-end gap-1">
         {workspaceSlug && <FeedbackDialog workspaceSlug={workspaceSlug.toString()} />}
+        {workspaceSlug && assistantStatus?.enabled && (
+          <Tooltip label={t("aiAssistant.open")} side="bottom">
+            <button
+              type="button"
+              onClick={() => assistant.toggle()}
+              aria-label={t("aiAssistant.open")}
+              className="flex size-8 items-center justify-center rounded-md text-secondary transition hover:bg-layer-1-hover hover:text-primary"
+            >
+              <Sparkles className="size-4" />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip label="Inbox" side="bottom">
           <AppSidebarItem
             variant="link"

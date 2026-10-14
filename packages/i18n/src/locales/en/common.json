@@ -2783,5 +2783,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "AI Assistant",
+    "open": "Open AI assistant",
+    "close": "Close",
+    "placeholder": "Ask about this page, a project, or your knowledge bases…",
+    "send": "Send",
+    "stop": "Stop",
+    "new_conversation": "New conversation",
+    "thinking": "Thinking",
+    "working": "Working",
+    "queued": "Queued",
+    "retrieving": "Searching knowledge bases",
+    "empty_greeting": "Hi, I'm your AI assistant",
+    "empty_hint": "Ask me about the current page, a project, or your knowledge bases.",
+    "error_generic": "Something went wrong. Please try again.",
+    "error_unavailable": "The AI service is not available right now.",
+    "retry": "Retry",
+    "session_expired": "The previous session expired. A new session has started.",
+    "interrupt_notice": "The run was interrupted and needs approval. Approval handling is coming soon.",
+    "shortcut_hint": "Cmd+J"
   }
 }

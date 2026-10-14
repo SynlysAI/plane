@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "AI asistent",
+    "open": "Otevřít AI asistenta",
+    "close": "Zavřít",
+    "placeholder": "Zeptejte se na tuto stránku, projekt nebo znalostní báze…",
+    "send": "Odeslat",
+    "stop": "Zastavit",
+    "new_conversation": "Nová konverzace",
+    "thinking": "Přemýšlím",
+    "working": "Zpracovává se",
+    "queued": "Ve frontě",
+    "retrieving": "Prohledávání znalostních bází",
+    "empty_greeting": "Dobrý den, jsem váš AI asistent",
+    "empty_hint": "Zeptejte se mě na aktuální stránku, projekt nebo znalostní báze.",
+    "error_generic": "Něco se pokazilo. Zkuste to znovu.",
+    "error_unavailable": "Služba AI není momentálně dostupná.",
+    "retry": "Zkusit znovu",
+    "session_expired": "Předchozí relace vypršela, byla spuštěna nová.",
+    "interrupt_notice": "Běh byl přerušen a vyžaduje schválení. Podpora schvalování brzy přibude.",
+    "shortcut_hint": "Cmd+J"
   }
 }

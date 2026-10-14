@@ -880,5 +880,26 @@
     "archives": {
       "title": "アーカイブ"
     }
+  },
+  "aiAssistant": {
+    "title": "AI アシスタント",
+    "open": "AI アシスタントを開く",
+    "close": "閉じる",
+    "placeholder": "このページ、プロジェクト、ナレッジベースについて質問してください……",
+    "send": "送信",
+    "stop": "停止",
+    "new_conversation": "新しい会話",
+    "thinking": "思考中",
+    "working": "処理中",
+    "queued": "待機中",
+    "retrieving": "ナレッジベースを検索中",
+    "empty_greeting": "こんにちは、AI アシスタントです。",
+    "empty_hint": "現在のページ、プロジェクト、ナレッジベースについてお気軽にお尋ねください。",
+    "error_generic": "エラーが発生しました。もう一度お試しください。",
+    "error_unavailable": "AI サービスは現在利用できません。",
+    "retry": "再試行",
+    "session_expired": "前のセッションの有効期限が切れたため、新しいセッションを開始しました。",
+    "interrupt_notice": "実行が中断され、承認が必要です。承認機能は近日提供予定です。",
+    "shortcut_hint": "Cmd+J"
   }
 }

@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "Asystent AI",
+    "open": "Otwórz asystenta AI",
+    "close": "Zamknij",
+    "placeholder": "Zapytaj o tę stronę, projekt lub bazy wiedzy…",
+    "send": "Wyślij",
+    "stop": "Zatrzymaj",
+    "new_conversation": "Nowa rozmowa",
+    "thinking": "Analiza",
+    "working": "Przetwarzanie",
+    "queued": "W kolejce",
+    "retrieving": "Przeszukiwanie baz wiedzy",
+    "empty_greeting": "Dzień dobry, jestem asystentem AI",
+    "empty_hint": "Zapytaj mnie o bieżącą stronę, projekt lub bazy wiedzy.",
+    "error_generic": "Coś poszło nie tak. Spróbuj ponownie.",
+    "error_unavailable": "Usługa AI jest obecnie niedostępna.",
+    "retry": "Spróbuj ponownie",
+    "session_expired": "Poprzednia sesja wygasła, rozpoczęto nową.",
+    "interrupt_notice": "Działanie zostało przerwane i wymaga zatwierdzenia. Obsługa zatwierdzeń wkrótce będzie dostępna.",
+    "shortcut_hint": "Cmd+J"
   }
 }

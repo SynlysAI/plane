@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "AI asistanı",
+    "open": "AI asistanını aç",
+    "close": "Kapat",
+    "placeholder": "Bu sayfa, bir proje veya bilgi tabanlarınız hakkında soru sorun…",
+    "send": "Gönder",
+    "stop": "Durdur",
+    "new_conversation": "Yeni sohbet",
+    "thinking": "Düşünüyor",
+    "working": "İşleniyor",
+    "queued": "Sırada",
+    "retrieving": "Bilgi tabanlarında aranıyor",
+    "empty_greeting": "Merhaba, ben AI asistanınız",
+    "empty_hint": "Geçerli sayfa, bir proje veya bilgi tabanlarınız hakkında bana soru sorabilirsiniz.",
+    "error_generic": "Bir sorun oluştu. Lütfen tekrar deneyin.",
+    "error_unavailable": "AI hizmeti şu anda kullanılamıyor.",
+    "retry": "Tekrar dene",
+    "session_expired": "Önceki oturumun süresi doldu. Yeni bir oturum başlatıldı.",
+    "interrupt_notice": "Çalışma kesintiye uğradı ve onay gerektiriyor. Onay yönetimi yakında kullanıma sunulacak.",
+    "shortcut_hint": "Cmd+J"
   }
 }
