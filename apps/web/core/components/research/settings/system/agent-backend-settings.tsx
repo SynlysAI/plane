@@ -7,18 +7,6 @@ import { ResearchAgentService } from "@/services/research/agent.service";
 
 const agentService = new ResearchAgentService();
 
-/** 判断用户填写的是否为本机回环地址，用于显示转发说明。 */
-function isLoopbackScienceDiscoveryUrl(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  try {
-    const host = new URL(trimmed).hostname.toLowerCase();
-    return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
-  } catch {
-    return false;
-  }
-}
-
 type TBackendConnection = {
   id: string;
   base_url: string;
@@ -174,9 +162,6 @@ export function AgentBackendSettings({
           className="focus:border-accent-primary rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
         />
         <span className="text-11 text-tertiary">{t("research.agent_backend.server_address_hint")}</span>
-        {isLoopbackScienceDiscoveryUrl(baseUrl) && (
-          <span className="text-11 text-tertiary">{t("research.agent_backend.loopback_forward_hint")}</span>
-        )}
       </label>
       <label className="flex flex-col gap-1 text-11 text-secondary">
         {t("research.agent_backend.token")}

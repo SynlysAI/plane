@@ -183,21 +183,16 @@ it("reloads once after save, test, and delete without starting a load loop", asy
   expect(service.deleteBackendConnection).toHaveBeenCalledTimes(1);
 });
 
-it("uses the loopback placeholder and shows a forwarder hint only for 127.0.0.1", async () => {
+it("uses a generic service URL placeholder and deployment forwarding hint", async () => {
   service.getBackendConnection.mockResolvedValue({ connection: null, governance_enabled: true });
   await renderForm();
   const baseUrlInput = container.querySelector("input:not([type])") as HTMLInputElement;
-  expect(baseUrlInput.placeholder).toBe("http://127.0.0.1:4310/");
-  expect(container.textContent).toContain("本机 ScienceDiscovery 请填 http://127.0.0.1:4310/");
-  expect(container.textContent).not.toContain("将通过本机转发访问此实例");
+  expect(baseUrlInput.placeholder).toBe("http(s)://<ScienceDiscovery 服务地址>");
+  expect(container.textContent).toContain("填写你的本地智能体访问地址；Plane 后端会按部署配置解析转发。");
+  expect(container.textContent).not.toContain("127.0.0.1:4310");
 
   await fill(baseUrlInput, "http://127.0.0.1:4310/");
-  expect(container.textContent).toContain("将通过本机转发访问此实例，无需改成其他地址。");
-  expect(container.textContent).not.toContain("172.19");
-  expect(container.textContent).not.toContain("14310");
-
-  await fill(baseUrlInput, "http://172.19.0.1:14310");
-  expect(container.textContent).not.toContain("将通过本机转发访问此实例");
+  expect(container.textContent).toContain("填写你的本地智能体访问地址；Plane 后端会按部署配置解析转发。");
 });
 it("saves and redisplays the entered 127.0.0.1 address without rewriting the form", async () => {
   service.getBackendConnection.mockResolvedValue({ connection: null, governance_enabled: true });
@@ -215,13 +210,12 @@ it("saves and redisplays the entered 127.0.0.1 address without rewriting the for
     is_enabled: true,
   });
   expect((container.querySelector("input:not([type])") as HTMLInputElement).value).toBe("http://127.0.0.1:4310");
-  expect(container.textContent).toContain("将通过本机转发访问此实例");
 });
 it("does not show the forwarder hint for a saved private LAN address", async () => {
   await renderForm();
   expect((container.querySelector("input:not([type])") as HTMLInputElement).value).toBe("http://172.19.0.1:14310");
-  expect(container.textContent).toContain("本机 ScienceDiscovery 请填 http://127.0.0.1:4310/");
-  expect(container.textContent).not.toContain("将通过本机转发访问此实例");
+  expect(container.textContent).toContain("填写你的本地智能体访问地址；Plane 后端会按部署配置解析转发。");
+  expect(container.textContent).not.toContain("127.0.0.1:4310");
 });
 
 it("keeps the form visible while a save refresh is in flight", async () => {
