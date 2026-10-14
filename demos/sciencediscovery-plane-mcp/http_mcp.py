@@ -1,14 +1,16 @@
 """Authenticated Streamable HTTP transport for the existing Plane MCP tools.
 
 Each configured client gets a separate official STDIO upstream, MCP server and
-draft directory. HTTP never accepts Plane credentials or commands from callers.
+draft directory. MCP calls cannot override credentials or commands; the optional
+/connect portal accepts personal Plane tokens only for verified account binding.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 import hashlib
 import hmac
@@ -18,6 +20,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import time
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -32,6 +35,7 @@ from agent_mcp import create_server as create_agent_server
 from agent_workflow import AgentWorkflow
 from plane_client import PlaneConfig, PlaneError
 from read_only_mcp import ReadOnlyPlaneProxy, UPSTREAM_PACKAGE, UPSTREAM_VERSION, create_server as create_read_only_server
+from self_service import CredentialStore, PortalError, SelfServicePortal, SelfServiceSettings, parse_settings, verify_plane
 
 
 class HttpConfigError(ValueError):
@@ -56,6 +60,7 @@ class HttpConfig:
     port: int = 8765
     allowed_hosts: tuple[str, ...] = ("127.0.0.1:*", "localhost:*", "[::1]:*")
     allowed_origins: tuple[str, ...] = ()
+    self_service: SelfServiceSettings | None = None
 
 
 def load_http_config(path: Path) -> HttpConfig:
@@ -81,9 +86,10 @@ def load_http_config(path: Path) -> HttpConfig:
         state_dir = Path(state).expanduser()
         if not state_dir.is_absolute():
             state_dir = path.resolve().parent / state_dir
-        entries = values.get("clients")
-        if not isinstance(entries, list) or not 1 <= len(entries) <= 50:
-            raise HttpConfigError("Configure between 1 and 50 HTTP clients.")
+        self_service = parse_settings(values.get("self_service"))
+        entries = values.get("clients", [])
+        if not isinstance(entries, list) or not (0 if self_service else 1) <= len(entries) <= 50:
+            raise HttpConfigError("Configure HTTP clients or enable self-service; at most 50 static clients are supported.")
         clients, names, tokens = [], set(), set()
         for entry in entries:
             if not isinstance(entry, dict):
@@ -107,7 +113,7 @@ def load_http_config(path: Path) -> HttpConfig:
             names.add(name)
             tokens.add(token_digest)
             clients.append(HttpClient(name, token_digest, plane, ui_origin, mode, publish))
-        return HttpConfig(tuple(clients), state_dir.resolve(), host, port, tuple(hosts), tuple(origins))
+        return HttpConfig(tuple(clients), state_dir.resolve(), host, port, tuple(hosts), tuple(origins), self_service)
     except HttpConfigError:
         raise
     except (OSError, UnicodeError, ValueError, TypeError, PlaneError):
@@ -140,14 +146,101 @@ async def open_server(client: HttpClient, state_dir: Path):
                     yield create_agent_server(workflow)
 
 
+@dataclass
+class RuntimeEntry:
+    ready: asyncio.Event = field(default_factory=asyncio.Event)
+    stop: asyncio.Event = field(default_factory=asyncio.Event)
+    manager: StreamableHTTPSessionManager | None = None
+    task: asyncio.Task | None = None
+    active: int = 0
+    used: float = field(default_factory=time.monotonic)
+
+
+class DynamicRuntimes:
+    """Each task owns its upstream and SDK cancel scopes for their full lifetime."""
+
+    def __init__(self, config: HttpConfig, factory, security, store):
+        self.config, self.factory, self.security = config, factory, security
+        self.store = store
+        self.entries: dict[str, RuntimeEntry] = {}
+        self.tasks: set[asyncio.Task] = set()
+        self.lock = asyncio.Lock()
+
+    async def run(self, client: HttpClient, entry: RuntimeEntry):
+        try:
+            async with self.factory(client, self.config.state_dir) as server:
+                manager = StreamableHTTPSessionManager(server, stateless=True, json_response=True, security_settings=self.security)
+                async with manager.run():
+                    entry.manager = manager
+                    entry.ready.set()
+                    await entry.stop.wait()
+        except Exception:
+            # No upstream diagnostics, credentials or task data go into logs.
+            pass
+        finally:
+            entry.manager = None
+            entry.ready.set()
+            async with self.lock:
+                if self.entries.get(client.name) is entry:
+                    self.entries.pop(client.name)
+
+    @asynccontextmanager
+    async def lease(self, client: HttpClient):
+        async with self.lock:
+            entry = self.entries.get(client.name)
+            if entry is not None and entry.stop.is_set():
+                self.entries.pop(client.name)
+                entry = None
+            if entry is None:
+                if len(self.tasks) >= self.config.self_service.max_runtimes:
+                    raise PortalError("MCP service is at capacity; retry later.", 503)
+                entry = RuntimeEntry()
+                self.entries[client.name] = entry
+                entry.task = asyncio.create_task(self.run(client, entry))
+                self.tasks.add(entry.task)
+                entry.task.add_done_callback(self.tasks.discard)
+            entry.active += 1
+            entry.used = time.monotonic()
+        try:
+            await asyncio.wait_for(entry.ready.wait(), timeout=45)
+            if entry.manager is None:
+                raise PortalError("MCP upstream is unavailable; retry later.", 503)
+            yield entry.manager
+        finally:
+            async with self.lock:
+                entry.active -= 1
+                entry.used = time.monotonic()
+
+    async def reap(self):
+        while True:
+            await asyncio.sleep(15)
+            self.store.cleanup()
+            async with self.lock:
+                for entry in self.entries.values():
+                    if not entry.active and time.monotonic() - entry.used > 300:
+                        entry.stop.set()
+
+    async def close(self):
+        async with self.lock:
+            entries = list(self.entries.values())
+            for entry in entries:
+                entry.stop.set()
+            tasks = list(self.tasks)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+
 class AuthenticatedMCP:
-    def __init__(self, config: HttpConfig):
+    def __init__(self, config: HttpConfig, store: CredentialStore | None = None, dynamic: DynamicRuntimes | None = None):
         self.config = config
+        self.store, self.dynamic = store, dynamic
         self.managers: dict[str, StreamableHTTPSessionManager] = {}
+        self.ready = False
 
     async def __call__(self, scope, receive, send):
         headers = [value for key, value in scope.get("headers", []) if key.lower() == b"authorization"]
         principal = None
+        dynamic_client = None
         if len(headers) == 1:
             parts = headers[0].split(b" ")
             if len(parts) == 2 and parts[0].lower() == b"bearer" and 32 <= len(parts[1]) <= 256:
@@ -155,9 +248,29 @@ class AuthenticatedMCP:
                 for client in self.config.clients:
                     if hmac.compare_digest(candidate, client.token_digest):
                         principal = client.name
-        if principal is None:
+                if principal is None and self.store is not None:
+                    try:
+                        record = self.store.authenticate(candidate.hex())
+                        settings = self.config.self_service
+                        if record is not None and record["workspace"] in settings.workspaces:
+                            publish = bool(record["publish"]) and settings.allow_publish
+                            # Stable account/workspace/credential scope lets a
+                            # user's renewed token reconcile their own drafts.
+                            binding = hashlib.sha256(json.dumps([record["owner"], record["workspace"], record["pat"], publish]).encode()).hexdigest()
+                            dynamic_client = HttpClient("self-" + binding, candidate, PlaneConfig(settings.plane_base_url, record["workspace"], record["pat"]), settings.plane_ui_url, "agent", publish)
+                    except Exception:
+                        await JSONResponse({"error": "Credential service unavailable."}, status_code=503)(scope, receive, send)
+                        return
+        if principal is None and dynamic_client is None:
             response = JSONResponse({"error": "Bearer authentication required."}, status_code=401, headers={"WWW-Authenticate": 'Bearer realm="plane-mcp"', "Cache-Control": "no-store"})
             await response(scope, receive, send)
+            return
+        if dynamic_client is not None:
+            try:
+                async with self.dynamic.lease(dynamic_client) as manager:
+                    await manager.handle_request(scope, receive, send)
+            except (PortalError, TimeoutError) as error:
+                await JSONResponse({"error": "MCP service unavailable; retry later."}, status_code=getattr(error, "status", 503))(scope, receive, send)
             return
         manager = self.managers.get(principal)
         if manager is None:
@@ -166,12 +279,15 @@ class AuthenticatedMCP:
         await manager.handle_request(scope, receive, send)
 
 
-def create_app(config: HttpConfig, *, server_factory=open_server) -> Starlette:
-    endpoint = AuthenticatedMCP(config)
+def create_app(config: HttpConfig, *, server_factory=open_server, plane_verifier=verify_plane) -> Starlette:
     security = TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=list(config.allowed_hosts), allowed_origins=list(config.allowed_origins))
+    store = CredentialStore(config.state_dir) if config.self_service else None
+    dynamic = DynamicRuntimes(config, server_factory, security, store) if config.self_service else None
+    endpoint = AuthenticatedMCP(config, store, dynamic)
 
     @asynccontextmanager
     async def lifespan(app):
+        reaper = None
         try:
             async with AsyncExitStack() as stack:
                 for client in config.clients:
@@ -179,20 +295,34 @@ def create_app(config: HttpConfig, *, server_factory=open_server) -> Starlette:
                     manager = StreamableHTTPSessionManager(server, stateless=True, json_response=True, security_settings=security)
                     await stack.enter_async_context(manager.run())
                     endpoint.managers[client.name] = manager
+                if dynamic:
+                    reaper = asyncio.create_task(dynamic.reap())
+                endpoint.ready = True
                 yield
         except Exception:
             raise RuntimeError("Plane HTTP MCP lifecycle failed; check private configuration, dependencies and upstream availability. Raw details withheld.") from None
         finally:
+            endpoint.ready = False
+            if reaper:
+                reaper.cancel()
+                await asyncio.gather(reaper, return_exceptions=True)
+            if dynamic:
+                await dynamic.close()
             endpoint.managers.clear()
 
     async def health(request):
-        return JSONResponse({"status": "ok" if endpoint.managers else "unavailable"}, status_code=200 if endpoint.managers else 503)
+        return JSONResponse({"status": "ok" if endpoint.ready else "unavailable"}, status_code=200 if endpoint.ready else 503)
 
-    return Starlette(debug=False, lifespan=lifespan, routes=[
+    routes = [
         Route("/healthz", health, methods=["GET"]),
         Route("/mcp", endpoint, methods=["GET", "POST", "DELETE"]),
         Route("/mcp/", endpoint, methods=["GET", "POST", "DELETE"]),
-    ])
+    ]
+    if config.self_service:
+        routes.extend(SelfServicePortal(config.self_service, store, verifier=plane_verifier).routes())
+    app = Starlette(debug=False, lifespan=lifespan, routes=routes)
+    app.state.credential_store = store
+    return app
 
 
 def main() -> int:

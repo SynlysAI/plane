@@ -4,3 +4,8 @@ output/
 tests/
 *.local.json
 .env
+*.sqlite3
+*.sqlite3-*
+encryption.key
+*.private.json
+*.private.toml

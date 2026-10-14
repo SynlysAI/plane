@@ -1,0 +1,20 @@
+{
+  "host": "0.0.0.0",
+  "port": 8765,
+  "state_dir": "/app/data",
+  "allowed_hosts": ["127.0.0.1:*", "localhost:*", "10.26.15.92:*", "plane-mcp-http:*"],
+  "allowed_origins": [],
+  "clients": [],
+  "self_service": {
+    "enabled": true,
+    "public_url": "http://10.26.15.92:8765",
+    "plane_base_url": "http://10.26.15.92:3300",
+    "plane_ui_url": "http://10.26.15.92:3300",
+    "workspaces": ["public"],
+    "allow_publish": false,
+    "allow_insecure_http": true,
+    "max_token_days": 90,
+    "max_tokens_per_user": 10,
+    "max_runtimes": 20
+  }
+}

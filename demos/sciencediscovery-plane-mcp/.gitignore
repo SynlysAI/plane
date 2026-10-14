@@ -3,3 +3,8 @@ __pycache__/
 output/
 *.local.json
 .env
+*.sqlite3
+*.sqlite3-*
+encryption.key
+*.private.json
+*.private.toml

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent 接入 · Plane MCP</title>
+    <link rel="stylesheet" href="/connect/assets/connect.css" />
+    <script src="/connect/assets/connect.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a href="/connect" class="brand"><span class="brand-mark">π</span> Plane MCP</a
+      ><span class="topbar-note">个人 Agent 接入</span>
+    </header>
+    <main>
+      <div class="intro">
+        <p class="eyebrow">YOUR WORK, CONNECTED</p>
+        <h1>把 Plane 任务带入你的 Agent</h1>
+        <p>绑定个人账号，为 Codex 或 ScienceDiscovery 生成专属连接配置。首次配置后，即可在会话中读取任务、整理进展。</p>
+      </div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section id="login-card" class="card">
+        <div class="section-title">
+          <span class="step">1</span>
+          <div>
+            <h2>验证 Plane 账号</h2>
+            <p>在 Plane 个人设置中创建个人访问令牌，然后填写到这里。</p>
+          </div>
+        </div>
+        <form id="login-form">
+          <label for="plane-token">Plane 个人访问令牌</label>
+          <input
+            id="plane-token"
+            type="password"
+            maxlength="1024"
+            autocomplete="off"
+            required
+            placeholder="粘贴你的个人访问令牌"
+          />
+          <p class="hint">无需提供账号密码。个人令牌加密保存，生成的 Agent 配置只包含独立 MCP 令牌。</p>
+          <div class="actions">
+            <button type="submit" class="primary">验证并继续</button
+            ><a id="plane-settings" href="#" target="_blank" rel="noreferrer">打开 Plane 个人设置 ↗</a>
+          </div>
+        </form>
+      </section>
+      <div id="account-area" hidden>
+        <div class="account">
+          <span>当前账号：<strong id="account-name"></strong></span
+          ><button id="logout" class="quiet">退出接入页面</button>
+        </div>
+        <section class="card">
+          <div class="section-title">
+            <span class="step">2</span>
+            <div>
+              <h2>创建个人连接</h2>
+              <p>为每台设备命名，方便以后识别和撤销。</p>
+            </div>
+          </div>
+          <form id="create-form">
+            <div class="form-grid">
+              <div>
+                <label for="connection-name">连接名称</label
+                ><input id="connection-name" required maxlength="64" placeholder="例如：我的电脑 · Codex" />
+              </div>
+              <div>
+                <label for="workspace">工作区</label
+                ><select id="workspace" required></select>
+              </div>
+              <div>
+                <label for="days">有效期</label
+                ><select id="days" required></select>
+              </div>
+            </div>
+            <label id="publish-option" class="checkbox" hidden
+              ><input id="publish" type="checkbox" />允许准备进展草稿并发布评论（发布前仍需本人审阅）</label
+            >
+            <p class="hint">默认只读。可访问的数据由你在 Plane 中的账号权限决定。</p>
+            <button type="submit" class="primary">生成连接配置</button>
+          </form>
+        </section>
+        <section id="result-card" class="card result" hidden>
+          <div class="section-title">
+            <span class="step">3</span>
+            <div>
+              <h2>连接你的 Agent</h2>
+              <p>完整配置只在生成时展示。请保存到个人目录，不要提交 Git 或分享给其他人。</p>
+            </div>
+          </div>
+          <h3>Codex</h3>
+          <p class="hint">
+            将下方片段合并到个人 <code>~/.codex/config.toml</code>，保留已有的其他配置，然后重新连接或重启 Codex。
+          </p>
+          <label for="codex-config" class="sr-only">Codex 配置</label
+          ><textarea id="codex-config" rows="6" readonly spellcheck="false"></textarea>
+          <div class="actions">
+            <button id="copy-codex" class="secondary">复制 Codex 配置</button
+            ><button id="download-codex" class="quiet">下载 TOML 片段</button>
+          </div>
+          <details>
+            <summary>使用 ScienceDiscovery 或查看 HTTP 配置</summary>
+            <p class="hint">在系统设置的自定义 MCP 中导入 JSON，测试连接后全局启用，并在目标会话中选择该连接器。</p>
+            <label for="science-config" class="sr-only">ScienceDiscovery 配置</label
+            ><textarea id="science-config" rows="10" readonly spellcheck="false"></textarea>
+            <div class="actions">
+              <button id="copy-science" class="secondary">复制 JSON</button
+              ><button id="download-science" class="quiet">下载 JSON</button>
+            </div>
+          </details>
+          <p class="hint">连接后可直接说：“请使用 Plane MCP 读取我指定的任务，整理目标、当前进展和下一步。”</p>
+        </section>
+        <section class="card">
+          <div class="list-heading">
+            <div>
+              <h2>我的连接</h2>
+              <p>令牌过期或撤销后，需要重新创建连接。</p>
+            </div>
+            <button id="refresh" class="quiet">刷新</button>
+          </div>
+          <div id="connections" class="connections" aria-live="polite"></div>
+        </section>
+      </div>
+      <footer>此页面由独立 MCP 服务提供。退出页面不会撤销已经生成的 Agent 连接。</footer>
+    </main>
+  </body>
+</html>

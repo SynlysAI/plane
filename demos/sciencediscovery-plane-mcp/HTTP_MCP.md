@@ -1,5 +1,7 @@
 # Plane Demo 的 HTTP 接入
 
+需要用户自行绑定账号、生成 Codex 或 ScienceDiscovery 连接配置时，可启用 [个人 Agent 自助接入](SELF_SERVICE.md)。该模式新增独立 `/connect` 页面，原静态令牌接入继续可用。
+
 本目录新增 `http_mcp.py`，通过 MCP SDK 的 Streamable HTTP 提供 `/mcp`。
 原有 `read_only_mcp.py`、`agent_mcp.py` 和 STDIO 配置继续可用，不需要迁移。
 这是独立服务，部署它不会自动升级或重启 Plane / ScienceDiscovery。
