@@ -65,23 +65,23 @@ export const IntegrationConnectionModal = observer(function IntegrationConnectio
   };
 
   return (
-    <ModalCore isOpen width={EModalWidth.XL} handleClose={() => !busy && onClose()}>
-      <div className="flex w-full flex-col gap-4 p-5">
+    <ModalCore isOpen width={EModalWidth.MD} handleClose={() => !busy && onClose()}>
+      <div className="flex w-full flex-col gap-3 p-4">
         <h3 className="text-sm font-medium text-primary">
           {connection
             ? `${t("research.integrations.edit_title")} · ${t(INTEGRATION_SYSTEM_LABELS[system as TIntegrationSystem] ?? system)}`
             : `${t("research.integrations.configure_title")} · ${t(INTEGRATION_SYSTEM_LABELS[system as TIntegrationSystem] ?? system)}`}
         </h3>
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <ListFilterField label={t("research.integrations.display_name")}>
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <ListFilterField label={t("research.integrations.display_name")} className="w-full">
               <ListFilterInput
                 value={displayName}
                 placeholder={t("research.integrations.display_name")}
                 onChange={(event) => setDisplayName(event.target.value)}
               />
             </ListFilterField>
-            <ListFilterField label={t("research.integrations.columns.credential_mode")}>
+            <ListFilterField label={t("research.integrations.columns.credential_mode")} className="w-full">
               <ListFilterSelect
                 value={credentialMode}
                 onChange={(event) => {
@@ -94,7 +94,7 @@ export const IntegrationConnectionModal = observer(function IntegrationConnectio
               </ListFilterSelect>
             </ListFilterField>
           </div>
-          <ListFilterField label={t("research.integrations.columns.base_url")}>
+          <ListFilterField label={t("research.integrations.columns.base_url")} className="w-full">
             <ListFilterInput
               value={baseUrl}
               placeholder={baseUrl ? "" : t("research.integrations.base_url_hint")}
@@ -102,7 +102,7 @@ export const IntegrationConnectionModal = observer(function IntegrationConnectio
             />
           </ListFilterField>
           {credentialMode === "SHARED" && (
-            <ListFilterField label="访问 Token">
+            <ListFilterField label="访问 Token" className="w-full">
               <ListFilterInput
                 type="password"
                 value={credential}
