@@ -45,8 +45,6 @@ type Props = {
   adminOnly?: boolean;
   /** Platform settings must stay reachable while the workspace switch is off. */
   allowDisabled?: boolean;
-  /** 嵌入行政通道时仍做身份与权限校验，但不渲染页头与管理页签。 */
-  embedded?: boolean;
   actions?: ReactNode;
   children: ReactNode;
 };
@@ -66,7 +64,6 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   navKey,
   adminOnly = false,
   allowDisabled = false,
-  embedded = false,
   actions,
   children,
 }: Props) {
@@ -137,15 +134,6 @@ export const ResearchPageShell = observer(function ResearchPageShell({
           : "section_disabled"
       : "permission_denied";
     return <ResearchStatusPanel status={status} workspaceSlug={workspaceSlug} workspaceName={workspaceName} />;
-  }
-
-  if (embedded) {
-    return (
-      <>
-        <PageHead title={t(titleKey)} />
-        <div className="flex h-full min-h-0 flex-col overflow-hidden">{children}</div>
-      </>
-    );
   }
 
   return (

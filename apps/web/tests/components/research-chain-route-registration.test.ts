@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { coreRoutes } from "../../app/routes/core";
@@ -64,17 +61,5 @@ describe("research chain route registration", () => {
       path: ":workspaceSlug/research/settings/integrations",
       file: "./(all)/[workspaceSlug]/(projects)/research/settings/integrations/page.tsx",
     });
-  });
-
-  it("keeps /research/projects on the administrative channel when IA v2 is on", () => {
-    const page = readFileSync(
-      resolve(
-        dirname(fileURLToPath(import.meta.url)),
-        "../../app/(all)/[workspaceSlug]/(projects)/research/projects/page.tsx"
-      ),
-      "utf8"
-    );
-    expect(page).not.toContain("ResearchIaV2Redirect");
-    expect(page).toContain("embedded={research.isIaV2Enabled}");
   });
 });
