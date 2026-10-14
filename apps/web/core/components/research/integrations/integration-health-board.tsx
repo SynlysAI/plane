@@ -4,23 +4,43 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { observer } from "mobx-react";
+import { RefreshCw } from "lucide-react";
 // plane imports
 import { INTEGRATION_HEALTH_LABELS, INTEGRATION_SYSTEM_LABELS } from "@plane/constants";
 import type { TIntegrationConnection } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
+// hooks
+import { useResearch } from "@/hooks/store/use-research";
 
 type Props = {
+  workspaceSlug: string;
   connections: TIntegrationConnection[];
   health: Array<Record<string, unknown>>;
 };
 
 /** Connection health: normal / degraded / unavailable / unconfigured (P1-INT-10). */
-export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({ connections, health }: Props) {
+export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
+  workspaceSlug,
+  connections,
+  health,
+}: Props) {
   const { t, currentLocale } = useTranslation();
+  const research = useResearch();
+  const [probing, setProbing] = useState(false);
+  const probe = async () => {
+    setProbing(true);
+    try {
+      await research.probeIntegrationHealth(workspaceSlug);
+    } finally {
+      setProbing(false);
+    }
+  };
   const statusBySystem = new Map(health.map((entry) => [String(entry.system), entry]));
   const rows = connections.length
     ? connections
@@ -31,6 +51,12 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
 
   return (
     <ResearchTableSurface>
+      <div className="mb-2 flex justify-end">
+        <Button variant="secondary" size="sm" onClick={() => void probe()} disabled={probing}>
+          <RefreshCw className={`size-3 ${probing ? "animate-spin" : ""}`} />
+          {t("research.integrations.refresh_health")}
+        </Button>
+      </div>
       <Table>
         <TableHeader>
           <TableRow className="text-tertiary">

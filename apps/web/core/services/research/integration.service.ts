@@ -67,6 +67,14 @@ export class ResearchIntegrationService extends APIService {
       });
   }
 
+  async probeHealth(workspaceSlug: string, system?: string) {
+    const response = await this.post(
+      `/api/research/workspaces/${workspaceSlug}/integrations/health/probe/`,
+      system ? { system } : {}
+    );
+    return response.data;
+  }
+
   async getHealth(workspaceSlug: string) {
     return this.get(researchEndpoints.integrationHealth(workspaceSlug))
       .then((res) => res?.data as { results: Array<Record<string, unknown>>; count: number })

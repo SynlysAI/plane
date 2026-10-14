@@ -2733,7 +2733,8 @@
         "latency": "Latency (ms)",
         "error": "Error",
         "time": "Time"
-      }
+      },
+      "refresh_health": "Re-check now"
     },
     "timeline": {
       "description": "Thinking chain, development chain and the full project timeline.",

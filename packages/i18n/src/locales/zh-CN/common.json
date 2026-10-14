@@ -2763,7 +2763,8 @@
         "latency": "耗时（毫秒）",
         "error": "错误码",
         "time": "时间"
-      }
+      },
+      "refresh_health": "立即检测"
     },
     "timeline": {
       "description": "思维链、研发链与项目全流程时间线。",

@@ -480,6 +480,7 @@ export interface IResearchStore {
     items: TIntegrationConnectionPayload[]
   ) => Promise<TIntegrationConnection[]>;
   fetchIntegrationHealth: (workspaceSlug: string) => Promise<Array<Record<string, unknown>>>;
+  probeIntegrationHealth: (workspaceSlug: string) => Promise<Array<Record<string, unknown>>>;
   fetchIntegrationCallLogs: (workspaceSlug: string) => Promise<TIntegrationCallLog[]>;
   searchIntegration: (workspaceSlug: string, system: string, query: string) => Promise<TIntegrationSearchResult>;
   searchIntegrationEndpoint: (endpoint: string, query: string) => Promise<TIntegrationSearchResult>;
@@ -803,6 +804,7 @@ export class ResearchStore implements IResearchStore {
       fetchIntegrations: action,
       updateIntegrations: action,
       fetchIntegrationHealth: action,
+      probeIntegrationHealth: action,
       fetchIntegrationCallLogs: action,
       searchIntegration: action,
       searchIntegrationEndpoint: action,
@@ -2240,6 +2242,13 @@ export class ResearchStore implements IResearchStore {
     runInAction(() => {
       this.integrationHealth = response.results;
     });
+    return response.results;
+  };
+
+  probeIntegrationHealth = async (workspaceSlug: string) => {
+    const response = await this.integrationService.probeHealth(workspaceSlug);
+    await this.fetchIntegrations(workspaceSlug).catch(() => undefined);
+    await this.fetchIntegrationHealth(workspaceSlug).catch(() => undefined);
     return response.results;
   };
 

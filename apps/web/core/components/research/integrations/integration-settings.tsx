@@ -52,7 +52,11 @@ export const IntegrationSettings = observer(function IntegrationSettings({ works
             );
           }}
         />
-        <IntegrationHealthBoard connections={research.integrationConnections} health={research.integrationHealth} />
+        <IntegrationHealthBoard
+          workspaceSlug={workspaceSlug}
+          connections={research.integrationConnections}
+          health={research.integrationHealth}
+        />
       </ResearchDetailSurface>
 
       <ResearchDetailSurface title={t("research.integrations.references_title")}>
