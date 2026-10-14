@@ -26,8 +26,6 @@ from .pi_workspace import ResearchPiAggregateEndpoint
 from .context import (
     ResearchContextEndpoint,
     ResearchContextResourceEndpoint,
-    ResearchContextTokenEndpoint,
-    ResearchContextTokenRevokeEndpoint,
 )
 from .account_links import (
     ResearchAccountLinkConflictEndpoint,
@@ -387,8 +385,6 @@ __all__ = [
     "ResearchUserProfileListEndpoint",
     "ResearchPiAggregateEndpoint",
     "ResearchContextEndpoint",
-    "ResearchContextTokenEndpoint",
-    "ResearchContextTokenRevokeEndpoint",
     "ResearchAccountLinkListCreateEndpoint",
     "ResearchAccountLinkConfirmEndpoint",
     "ResearchAccountLinkUnlinkEndpoint",
