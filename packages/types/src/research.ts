@@ -1314,7 +1314,7 @@ export type TIntegrationConnection = {
   display_name: string;
   base_url?: string;
   auth_mode?: "HMAC" | "BEARER" | "OIDC_CLIENT" | "NONE";
-  credential_ref?: string;
+  credential_mode?: "SHARED" | "PERSONAL";
   has_credential?: boolean;
   configured?: boolean;
   timeout_seconds?: number;

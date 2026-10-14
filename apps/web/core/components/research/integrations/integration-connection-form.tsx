@@ -21,13 +21,14 @@ type Props = {
   onSave: (items: Array<Record<string, unknown>>) => Promise<void>;
 };
 
-/** Connection editor: secrets are write-only and never echoed back (P1-INT-01/02). */
+/** Connection editor: the token is written directly and never echoed back (P1-INT-01/02). */
 export const IntegrationConnectionForm = observer(function IntegrationConnectionForm({ connections, onSave }: Props) {
   const { t } = useTranslation();
   const [system, setSystem] = useState<string>("RAGPORTAL");
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-  const [credentialRef, setCredentialRef] = useState("");
+  const [credentialMode, setCredentialMode] = useState<"SHARED" | "PERSONAL">("SHARED");
+  const [credential, setCredential] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [errorKey, setErrorKey] = useState<string | null>(null);
 
@@ -44,7 +45,8 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
               const next = connections.find((connection) => connection.system === event.target.value);
               setDisplayName(next?.display_name ?? "");
               setBaseUrl(next?.base_url ?? "");
-              setCredentialRef("");
+              setCredentialMode(next?.credential_mode ?? "SHARED");
+              setCredential("");
               setEnabled(Boolean(next?.is_enabled));
             }}
           >
@@ -69,13 +71,29 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
             onChange={(event) => setBaseUrl(event.target.value)}
           />
         </ListFilterField>
-        <ListFilterField label={t("research.integrations.credential_ref")} className="w-full sm:w-56">
-          <ListFilterInput
-            value={credentialRef}
-            placeholder={t("research.integrations.credential_ref")}
-            onChange={(event) => setCredentialRef(event.target.value)}
-          />
+        <ListFilterField label="凭证模式" className="w-full sm:w-40">
+          <ListFilterSelect
+            value={credentialMode}
+            onChange={(event) => {
+              setCredentialMode(event.target.value as "SHARED" | "PERSONAL");
+              setCredential("");
+            }}
+          >
+            <option value="SHARED">公共凭证</option>
+            <option value="PERSONAL">个人凭证</option>
+          </ListFilterSelect>
         </ListFilterField>
+        {credentialMode === "SHARED" && (
+          <ListFilterField label="访问 Token" className="w-full sm:w-64">
+            <ListFilterInput
+              type="password"
+              value={credential}
+              placeholder={existing?.has_credential ? "已配置，留空保持不变" : "直接填写服务访问 Token"}
+              onChange={(event) => setCredential(event.target.value)}
+              autoComplete="off"
+            />
+          </ListFilterField>
+        )}
         <ListFilterCheckbox
           label={t("research.integrations.enabled")}
           checked={enabled}
@@ -92,11 +110,12 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
                   system,
                   display_name: displayName || system,
                   base_url: baseUrl.trim(),
-                  credential_ref: credentialRef,
+                  credential_mode: credentialMode,
+                  ...(credentialMode === "SHARED" && credential.trim() ? { credential: credential.trim() } : {}),
                   is_enabled: enabled,
                 },
               ]);
-              setCredentialRef("");
+              setCredential("");
               setErrorKey(null);
             } catch (error) {
               setErrorKey(getResearchErrorKey(error));
@@ -108,9 +127,11 @@ export const IntegrationConnectionForm = observer(function IntegrationConnection
       </ResearchFilterToolbar>
       {errorKey && <p className="text-12 text-danger-primary">{t(errorKey)}</p>}
       <p className="text-11 text-tertiary">
-        {existing?.has_credential
-          ? t("research.integrations.credential_configured")
-          : t("research.integrations.credential_hint")}
+        {credentialMode === "PERSONAL"
+          ? "个人凭证模式：每位成员在个人设置里配置自己的 Token，公共连接不再保存密钥。"
+          : existing?.has_credential
+            ? t("research.integrations.credential_configured")
+            : t("research.integrations.credential_hint")}
       </p>
     </div>
   );

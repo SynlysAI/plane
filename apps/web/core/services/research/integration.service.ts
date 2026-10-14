@@ -14,7 +14,8 @@ export type TIntegrationConnectionPayload = {
   display_name?: string;
   base_url?: string;
   auth_mode?: string;
-  credential_ref?: string;
+  credential_mode?: "SHARED" | "PERSONAL";
+  credential?: string;
   timeout_seconds?: number;
   cache_ttl_seconds?: number;
   degraded_mode?: string;
