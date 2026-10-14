@@ -8,118 +8,23 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from plane.db.models import (
-    Project,
     ResearchAgentBackendConnection,
     ResearchAgentSession,
     ResearchAgentRunEvent,
-    ResearchChain,
     ResearchChainEvent,
-    ResearchChainNode,
     ResearchChainUpload,
-    ResearchProjectProfile,
     WorkspaceResearchSetting,
 )
-from plane.research.services.agent_orchestrator import AgentAssembly, issue_agent_context
 from plane.research.services.backend_connections import (
     BackendConnectionError,
+    resolve_backend_request_url,
     resolve_science_discovery_connection,
     validate_backend_base_url,
 )
 from plane.research.services.chain_projection import project_science_discovery_events
 from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
-from plane.tests.research_fixtures import enable_research, make_user, make_workspace
 
 pytestmark = pytest.mark.contract
-
-
-@pytest.fixture
-def sd_session(db, settings):
-    """Build one Agent session pinned to the ScienceDiscovery provider."""
-    settings.RESEARCH_MODULE_ENABLED = True
-    owner = make_user(first_name="SD owner")
-    workspace = make_workspace(owner)
-    enable_research(workspace, research_agent_enabled=True, research_chain_enabled=True)
-    # 215a0f8d04 起所有 research 视图要求科研组织树有效成员。
-    from plane.tests.research_fixtures import make_org_member
-
-    make_org_member(workspace, owner)
-    suffix = uuid4().hex[:6]
-    project = Project.objects.create(
-        workspace=workspace,
-        name=f"SD {suffix}",
-        identifier=f"SD{suffix}",
-        network=0,
-        created_by=owner,
-    )
-    profile = ResearchProjectProfile.objects.create(
-        project=project,
-        workspace=workspace,
-        owner=owner,
-        chain_kind=ResearchProjectProfile.ChainKind.RESEARCH_CHAIN,
-        created_by=owner,
-    )
-    chain = ResearchChain.objects.create(
-        project=project,
-        workspace=workspace,
-        owner=owner,
-        request_id=f"chain-{uuid4().hex}",
-        payload_hash=uuid4().hex,
-        created_by=owner,
-    )
-    node = ResearchChainNode.objects.create(
-        chain=chain,
-        node_type="GENERAL_RESEARCH",
-        title="SD node",
-        request_id=f"node-{uuid4().hex}",
-        payload_hash=uuid4().hex,
-        created_by=owner,
-    )
-    assembly = AgentAssembly(
-        persona="research-general",
-        enabled_plugins=[],
-        allowed_tools=["read_file", "list_files"],
-        allowed_knowledge_base_ids=[],
-        allowed_file_ids=[],
-        unavailable_reasons=[],
-        policy_id=f"plane-node:{node.id}",
-    )
-    grant, _token = issue_agent_context(
-        workspace=workspace,
-        user=owner,
-        profile=profile,
-        node=node,
-        assembly=assembly,
-        request_id=f"agent:{uuid4().hex}",
-    )
-    session = ResearchAgentSession.objects.create(
-        workspace=workspace,
-        user=owner,
-        project_id=project.id,
-        chain_node=node,
-        context_grant=grant,
-        status=ResearchAgentSession.Status.STREAMING,
-        provider=ResearchAgentSession.Provider.SCIENCE_DISCOVERY,
-        sd_project_id="sd-project-1",
-        sd_session_id="sd-session-1",
-        sd_run_id="sd-run-1",
-        assembly={},
-        request_id=f"session-{uuid4().hex}",
-        payload_hash=uuid4().hex,
-        created_by=owner,
-    )
-    # 唯一连接来源是用户级连接（§5）：夹具直接挂一条真实加密连接。
-    from plane.license.utils.encryption import encrypt_data
-
-    session.backend_connection = ResearchAgentBackendConnection.objects.create(
-        workspace=workspace,
-        user=owner,
-        base_url="http://192.168.1.10:5300",
-        credential_encrypted=encrypt_data("sd-secret-token"),
-        is_enabled=True,
-        created_by=owner,
-    )
-    session.save(update_fields=["backend_connection", "updated_at"])
-    return session
 
 
 def test_science_discovery_projection_maps_types_payloads_and_converges_status(sd_session):
@@ -159,7 +64,7 @@ def test_science_discovery_projection_is_idempotent(sd_session):
 
     assert projected[0].pk == replayed[0].pk
     assert ResearchAgentSession.objects.get(pk=sd_session.pk).run_events.count() == 1
-    assert ResearchChainEvent.objects.filter(request_id=f"chain:sd:sd-session-1:1").count() == 1
+    assert ResearchChainEvent.objects.filter(request_id="chain:sd:sd-session-1:1").count() == 1
 
 
 def test_science_discovery_cancelled_maps_degraded_agent_and_human_decision_chain(sd_session):
@@ -167,7 +72,7 @@ def test_science_discovery_cancelled_maps_degraded_agent_and_human_decision_chai
 
     projected = project_science_discovery_events(sd_session, remote_page)
     sd_session.refresh_from_db()
-    chain_event = ResearchChainEvent.objects.get(request_id=f"chain:sd:sd-session-1:1")
+    chain_event = ResearchChainEvent.objects.get(request_id="chain:sd:sd-session-1:1")
 
     assert projected[0].event_type == "DEGRADED"
     assert chain_event.event_type == "HUMAN_DECISION"
@@ -296,9 +201,7 @@ def test_science_discovery_file_upload_reconciles_hash_and_records_chain(sd_sess
     event = ResearchAgentRunEvent.objects.get(payload__action="workspace.upload")
     assert event.event_type == "DATA_CHANGE"
     assert event.payload["sd_hash"] == file_hash
-    chain_event = ResearchChainEvent.objects.get(
-        request_id=f"chain:sdfile:{upload_request_id}"
-    )
+    chain_event = ResearchChainEvent.objects.get(request_id=f"chain:sdfile:{upload_request_id}")
     assert chain_event.event_type == "DATA_CHANGE"
     assert chain_event.refs[0]["kind"] == "chain_upload"
     assert chain_event.refs[0]["id"] == str(upload.id)
@@ -387,10 +290,11 @@ def test_backend_base_url_ssrf_validation_rejects_unsafe_targets(settings):
     """用户自填 URL 必须过 SSRF 防线：仅 http/https、拒回环/metadata/白名单外（§5）。"""
     settings.SCIENCE_DISCOVERY_ALLOWED_CIDRS = ["192.168.0.0/16", "10.0.0.0/8"]
     settings.SCIENCE_DISCOVERY_ALLOW_LOOPBACK = False
+    settings.SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM = ""
 
     with pytest.raises(BackendConnectionError, match="http/https"):
         validate_backend_base_url("ftp://192.168.1.10:5300")
-    with pytest.raises(BackendConnectionError, match="Loopback"):
+    with pytest.raises(BackendConnectionError, match="本机地址"):
         validate_backend_base_url("http://127.0.0.1:5300")
     with pytest.raises(BackendConnectionError, match="not allowed"):
         validate_backend_base_url("http://169.254.169.254:5300")
@@ -398,6 +302,50 @@ def test_backend_base_url_ssrf_validation_rejects_unsafe_targets(settings):
         validate_backend_base_url("http://8.8.8.8:5300")
     validate_backend_base_url("http://192.168.1.10:5300")
     validate_backend_base_url("http://10.26.15.93:5300")
+
+
+def test_backend_loopback_url_rewrites_to_configured_upstream(settings):
+    """配置转发上游后，回环地址通过校验并改写为上游；库存仍由调用方保存原文。"""
+    settings.SCIENCE_DISCOVERY_ALLOWED_CIDRS = ["172.16.0.0/12", "192.168.0.0/16"]
+    settings.SCIENCE_DISCOVERY_ALLOW_LOOPBACK = False
+    settings.SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM = "http://172.19.0.1:14310"
+
+    validate_backend_base_url("http://127.0.0.1:4310")
+    validate_backend_base_url("http://192.168.1.10:5300")
+    assert resolve_backend_request_url("http://127.0.0.1:4310") == "http://172.19.0.1:14310"
+    assert resolve_backend_request_url("http://127.0.0.1:4310/") == "http://172.19.0.1:14310"
+    assert resolve_backend_request_url("http://192.168.1.10:5300") == "http://192.168.1.10:5300"
+    with pytest.raises(BackendConnectionError, match="not allowed"):
+        validate_backend_base_url("http://169.254.169.254:5300")
+    with pytest.raises(BackendConnectionError, match="outside"):
+        validate_backend_base_url("http://8.8.8.8:5300")
+
+
+def test_backend_connection_persists_loopback_url_and_client_uses_upstream(sd_session, settings):
+    """POST 回环地址库存原文；客户端实际请求打到 LOOPBACK_UPSTREAM。"""
+    workspace = sd_session.workspace
+    owner = sd_session.user
+    settings.SCIENCE_DISCOVERY_ALLOWED_CIDRS = ["172.16.0.0/12", "192.168.0.0/16"]
+    settings.SCIENCE_DISCOVERY_ALLOW_LOOPBACK = False
+    settings.SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM = "http://172.19.0.1:14310"
+    client = APIClient()
+    client.force_authenticate(user=owner)
+
+    created = client.post(
+        f"/api/research/workspaces/{workspace.slug}/agent/backend-connections/",
+        {"base_url": "http://127.0.0.1:4310/", "is_enabled": True},
+        format="json",
+    )
+    assert created.status_code == 201, created.content.decode()
+    assert created.json()["base_url"] == "http://127.0.0.1:4310"
+
+    connection = ResearchAgentBackendConnection.objects.get(workspace=workspace, user=owner)
+    assert connection.base_url == "http://127.0.0.1:4310"
+
+    listed = client.get(f"/api/research/workspaces/{workspace.slug}/agent/backend-connections/")
+    assert listed.status_code == 200
+    assert listed.json()["connection"]["base_url"] == "http://127.0.0.1:4310"
+    assert ScienceDiscoveryClient(connection).base_url == "http://172.19.0.1:14310"
 
 
 def test_backend_connection_crud_stores_token_encrypted(sd_session, settings):
@@ -521,7 +469,12 @@ def test_specialist_id_for_node_maps_and_fails_open(monkeypatch):
     from plane.research.services.specialist_catalog import specialist_id_for_node
 
     def fake_sync(client):
-        return {"学术研究助手": "sp-ars", "科技文献检索专家": "sp-sci", "谱图解析专家": "sp-spec", "高分子性能预测专家": "sp-poly"}
+        return {
+            "学术研究助手": "sp-ars",
+            "科技文献检索专家": "sp-sci",
+            "谱图解析专家": "sp-spec",
+            "高分子性能预测专家": "sp-poly",
+        }
 
     monkeypatch.setattr("plane.research.services.specialist_catalog.sync_specialists", fake_sync)
     assert specialist_id_for_node(None, "LITERATURE_REVIEW") == "sp-sci"

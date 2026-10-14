@@ -104,26 +104,27 @@ def _workspace_id(workspace):
 
 
 def is_research_admin(user, workspace) -> bool:
-    """Configuration rights: instance or workspace administrator.
+    """Return whether a seated actor is an instance or workspace administrator.
 
-    This is the gate for the six administrator surfaces (organisation,
-    report templates, identity mappings, platform configuration, audit and
-    the account lifecycle pages). It deliberately does **not** grant access
-    to research business data - that stays with the organisation ACL.
+    Administrators are the top research tier and may access research data and
+    management actions without an OrgUnitMember assignment. The actor must
+    still hold an active membership in the requested workspace; this check
+    does not create or imply an organisation relation.
     """
     if user is None or not getattr(user, "is_authenticated", False):
         return False
-    if is_instance_admin(user):
-        return True
     workspace_id = _workspace_id(workspace)
     if workspace_id is None:
         return False
-    return WorkspaceMember.objects.filter(
+    membership = WorkspaceMember.objects.filter(
         workspace_id=workspace_id,
         member=user,
-        role=WORKSPACE_ADMIN_ROLE,
         is_active=True,
-    ).exists()
+        deleted_at__isnull=True,
+    ).first()
+    if membership is None:
+        return False
+    return membership.role == WORKSPACE_ADMIN_ROLE or is_instance_admin(user)
 
 
 def has_admin_duty(user, role) -> bool:

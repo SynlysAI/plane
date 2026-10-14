@@ -130,6 +130,18 @@ it("shows both trees for an active research organization member", async () => {
   expect(container.textContent).not.toContain("legacy-projects-list");
 });
 
+it("shows the research tree for an ADMIN without organisation membership", async () => {
+  mocks.research.identity.capabilities = {
+    level: "ADMIN",
+    nav: ["research_chain", "projects", "management", "platform", "audit"],
+  };
+  await act(async () => root.render(<AppSidebar />));
+
+  expect(container.querySelector("[data-tree-scope='RESEARCH']")).not.toBeNull();
+  expect(container.querySelector("[data-tree-scope='ADMINISTRATIVE']")).not.toBeNull();
+  expect(container.textContent).not.toContain("legacy-projects-list");
+});
+
 it("restores the ordinary projects list when IA v2 is disabled", async () => {
   mocks.research.identity.research_ia_v2 = false;
   mocks.research.identity.capabilities = {

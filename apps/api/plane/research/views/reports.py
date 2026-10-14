@@ -58,6 +58,7 @@ from plane.research.utils.notifications import (
     notify_report_submitted,
 )
 from plane.research.utils.periods import InvalidPeriod, current_period, parse_period
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, is_editable, report_resource, visible_reports_queryset
 from plane.research.utils.settings import default_visibility_for, get_workspace_research_settings
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
@@ -660,7 +661,9 @@ class ResearchReportSubmitEndpoint(ResearchAPIView):
         target = PeriodicReport.Status.SUBMITTED
         with transaction.atomic():
             report = report_queryset(workspace).select_for_update(of=("self",)).filter(pk=report_id).first()
-            if report is None or report.owner_id != request.user.id:
+            if report is None or (
+                report.owner_id != request.user.id and not is_research_admin(request.user, workspace.id)
+            ):
                 return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
             if report.org_unit_id is None:
                 return research_error(

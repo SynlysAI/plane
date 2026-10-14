@@ -176,6 +176,107 @@ def test_student_keeps_reports_and_projects_but_not_the_approval_queue(env):
     assert client.get(f"/api/research/workspaces/{env['workspace'].slug}/approval-requests/").status_code == 403
 
 
+@pytest.mark.django_db
+def test_workspace_admin_without_org_relation_has_full_research_project_access(env):
+    """工作区管理员无需加入科研组织即可浏览并管理所有科研项目。"""
+    from plane.db.models import ResearchChain
+
+    enable_research(env["workspace"], research_chain_enabled=True)
+    admin = make_user(first_name="Workspace admin without research unit")
+    add_workspace_member(env["workspace"], admin, role=20)
+    project = Project.objects.create(
+        workspace=env["workspace"],
+        name="管理员可见课题",
+        identifier="ADMIN01",
+        created_by=admin,
+    )
+    profile = ResearchProjectProfile.objects.create(
+        workspace=env["workspace"],
+        project=project,
+        owner=env["student"],
+        org_unit=env["group"],
+        chain_kind=ResearchProjectProfile.ChainKind.RESEARCH_CHAIN,
+        chain_visibility=ResearchProjectProfile.ChainVisibility.PRIVATE,
+        workflow_status=ResearchProjectProfile.WorkflowStatus.ACTIVE,
+        created_by=admin,
+    )
+    chain = ResearchChain.objects.create(
+        workspace=env["workspace"],
+        project=project,
+        owner=env["student"],
+        visibility=profile.chain_visibility,
+        request_id="admin-without-org-chain",
+        payload_hash="admin-without-org-chain",
+        created_by=admin,
+    )
+    admin_client = client_for(admin)
+
+    identity = identity_of(env, admin)
+    assert identity["user"]["org_units"] == []
+    assert identity["user"]["research_level"] == "ADMIN"
+    assert "research_chain" in identity["capabilities"]["nav"]
+    project_list = admin_client.get(env["projects_url"])
+    assert project_list.status_code == 200
+    assert project.name in str(project_list.json())
+
+    tree = admin_client.get(
+        f"/api/research/workspaces/{env['workspace'].slug}/navigation/categories/",
+        {"scope": "RESEARCH"},
+    )
+    assert tree.status_code == 200
+    assert project.name in str(tree.json())
+
+    chains = admin_client.get(f"/api/research/workspaces/{env['workspace'].slug}/chains/")
+    assert chains.status_code == 200
+    assert str(chain.id) in [row["id"] for row in chains.json()["results"]]
+
+    update = admin_client.patch(
+        f"/api/research/workspaces/{env['workspace'].slug}/projects/{project.id}/",
+        {"name": "管理员已更新课题"},
+        format="json",
+    )
+    assert update.status_code == 200, update.json()
+
+
+@pytest.mark.django_db
+def test_seated_instance_admin_has_top_research_capabilities_without_org_assignment(env):
+    """已加入工作区的实例管理员无科研组织关系也拥有最高科研级别。"""
+    from plane.license.models import Instance, InstanceAdmin
+
+    enable_research(env["workspace"], research_chain_enabled=True)
+    instance = Instance.objects.create(
+        instance_name="Research navigation test",
+        instance_id="research-admin-capabilities",
+        current_version="test",
+    )
+    admin = make_user(first_name="Seated instance admin")
+    add_workspace_member(env["workspace"], admin)
+    InstanceAdmin.objects.create(instance=instance, user=admin)
+
+    identity = identity_of(env, admin)
+    assert identity["user"]["org_units"] == []
+    assert identity["user"]["research_level"] == "ADMIN"
+    assert {"research_chain", "projects", "platform", "audit"}.issubset(identity["capabilities"]["nav"])
+
+
+@pytest.mark.django_db
+def test_instance_admin_without_workspace_seat_cannot_access_research_workspace(env):
+    """实例管理员仍须是当前工作区成员，不能跨工作区读取科研数据。"""
+    from plane.license.models import Instance, InstanceAdmin
+
+    instance = Instance.objects.create(
+        instance_name="Unseated research admin test",
+        instance_id="unseated-research-admin",
+        current_version="test",
+    )
+    admin = make_user(first_name="Unseated instance admin")
+    InstanceAdmin.objects.create(instance=instance, user=admin)
+
+    response = client_for(admin).get(env["identity_url"])
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "research_workspace_not_found"
+
+
 def test_review_inbox_opens_for_the_assigned_reviewer(env):
     from plane.db.models import StageReviewerAssignment
 

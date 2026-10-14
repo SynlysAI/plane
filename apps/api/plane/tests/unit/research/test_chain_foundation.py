@@ -158,8 +158,8 @@ def test_workspace_visible_chain_stays_closed_to_non_org_members(env):
     assert denied.status_code == 403
 
 
-def test_workspace_admin_does_not_automatically_become_chain_writer(env):
-    """Workspace administration is not a research-chain writer grant."""
+def test_workspace_admin_can_write_chain_without_org_relation(env):
+    """工作区管理员无需科研组织关系即可写入研究链。"""
     env["project"].research_profile.chain_visibility = "WORKSPACE"
     env["project"].research_profile.save(update_fields=["chain_visibility", "updated_at"])
     created, _ = create_chain(env)
@@ -179,11 +179,11 @@ def test_workspace_admin_does_not_automatically_become_chain_writer(env):
             "request_id": f"admin-event-{uuid4().hex}",
             "event_id": f"admin-event-{uuid4().hex}",
             "event_type": "RESEARCH_NOTE",
-            "summary": "Admin should not write",
+            "summary": "Admin can write",
         },
         format="json",
     )
-    assert response.status_code == 403
+    assert response.status_code == 201, response.json()
 
 
 def test_chain_create_is_idempotent_and_detects_payload_conflict(env):

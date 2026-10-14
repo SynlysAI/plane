@@ -38,7 +38,11 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@plane/propel/button", () => ({
-  Button: ({ children }: { children?: React.ReactNode }) => <button type="button">{children}</button>,
+  Button: ({ children, onClick }: { children?: React.ReactNode; onClick?: () => void }) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
+  ),
 }));
 vi.mock("@plane/ui", async () => ({
   ...(await vi.importActual("@plane/ui")),
@@ -59,6 +63,7 @@ const settings = {
   report_enabled: true,
   approval_enabled: true,
   research_chain_enabled: true,
+  research_agent_user_backend_enabled: true,
   research_ia_v2: true,
   allow_multiple_projects: false,
   default_report_visibility: "DIRECT_ADVISOR",
@@ -167,6 +172,7 @@ describe("platform settings main PI field", () => {
     expect(container.textContent).not.toContain(LONG_ID);
     const numbers = Array.from(container.querySelectorAll('input[type="number"]'));
     expect(numbers).toHaveLength(5);
+    expect(container.textContent).toContain("允许科研成员使用个人智能体后端");
     numbers.forEach((item) => {
       expect(item.className).toContain("h-8");
       expect(item.className).toContain("leading-[30px]");
@@ -181,6 +187,31 @@ describe("platform settings main PI field", () => {
     const panels = Array.from(container.querySelectorAll("section"));
     expect(panels).toHaveLength(5);
     expect(panels.every((panel) => panel.classList.contains("shrink-0"))).toBe(true);
+  });
+
+  it("saves the personal Agent backend governance switch with workspace settings", async () => {
+    await renderForm();
+    const toggle = Array.from(container.querySelectorAll("label"))
+      .find((label) => label.textContent?.includes("允许科研成员使用个人智能体后端"))
+      ?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle).toBeDefined();
+    expect(toggle.checked).toBe(true);
+    await act(async () => {
+      toggle.click();
+    });
+    const save = Array.from(container.querySelectorAll("button")).find((item) => item.textContent?.includes("保存"));
+    expect(save).toBeDefined();
+    expect(save?.disabled).toBe(false);
+    await act(async () => {
+      save?.click();
+      await Promise.resolve();
+    });
+    expect(research.updateSettings).toHaveBeenCalledWith(
+      "lab",
+      expect.objectContaining({
+        research_agent_user_backend_enabled: false,
+      })
+    );
   });
 
   it("shows that a changed account was not found and does not use the raw id as a name", async () => {
@@ -210,6 +241,12 @@ describe("platform settings main PI field", () => {
     await replaceValue(mainPiInput(), "");
     expect(mainPiInput().value).toBe("");
     expect(resolvedName()).toBeNull();
+  });
+
+  it("does not wrap every platform toggle in a divider and keeps the backend hint", async () => {
+    await renderForm();
+    expect(container.querySelector(".border-b.border-subtle.pb-3")).toBeNull();
+    expect(container.textContent).toContain("仅控制当前工作区的新会话是否使用成员自助配置的 ScienceDiscovery 实例。");
   });
 
   it("hides the appointment field from anyone who is not a system administrator", async () => {

@@ -103,6 +103,7 @@
       "preferences": "Preferences",
       "notifications": "Notifications",
       "api-tokens": "Personal Access Tokens",
+      "agent-configuration": "Agent configuration",
       "connections": "Connections"
     },
     "tabs": {

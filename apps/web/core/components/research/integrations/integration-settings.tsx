@@ -59,7 +59,7 @@ export const IntegrationSettings = observer(function IntegrationSettings({ works
         <ExternalReferencePicker workspaceSlug={workspaceSlug} />
       </ResearchDetailSurface>
 
-      {loaded && research.isWorkspaceAdmin && (
+      {loaded && research.isResearchAdmin && (
         <ResearchDetailSurface title={t("research.integrations.call_logs_title")} collapsible>
           <ExternalCallLogTable logs={research.integrationCallLogs} />
         </ResearchDetailSurface>

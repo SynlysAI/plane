@@ -143,9 +143,9 @@ def revoke_context_grant(*, workspace, context_id, actor):
     grant = ResearchContextGrant.objects.filter(workspace=workspace, context_id=context_id).first()
     if grant is None:
         return None
-    from plane.research.utils.org import is_workspace_admin
+    from plane.research.utils.roles import is_research_admin
 
-    if grant.user_id != actor.id and not is_workspace_admin(actor, workspace.id):
+    if grant.user_id != actor.id and not is_research_admin(actor, workspace.id):
         return False
     if grant.revoked_at is None:
         grant.revoked_at = timezone.now()

@@ -395,13 +395,15 @@ SCIENCE_DISCOVERY_TIMEOUT_SECONDS = float(os.environ.get("SCIENCE_DISCOVERY_TIME
 # SD 分析通道单文件上限（任意类型；大文件后续改流式，先保守设 100MB）
 SCIENCE_DISCOVERY_MAX_UPLOAD_BYTES = int(os.environ.get("SCIENCE_DISCOVERY_MAX_UPLOAD_BYTES", 104857600))
 # 用户级 SD 连接的 SSRF 防线：仅允许解析到这些网段的地址（§5）；
-# 云 metadata(169.254.0.0/16) 与回环(127.0.0.0/8, ::1) 永远拒绝（回环可用开关放行供本机联调）。
+# 云 metadata(169.254.0.0/16) 与回环(127.0.0.0/8, ::1) 默认拒绝。
+# 回环可经 SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM 改写成宿主机可达地址后再校验。
 SCIENCE_DISCOVERY_ALLOWED_CIDRS = [
     item.strip()
     for item in os.environ.get("SCIENCE_DISCOVERY_ALLOWED_CIDRS", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16").split(",")
     if item.strip()
 ]
 SCIENCE_DISCOVERY_ALLOW_LOOPBACK = os.environ.get("SCIENCE_DISCOVERY_ALLOW_LOOPBACK", "0") == "1"
+SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM = os.environ.get("SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM", "").rstrip("/")
 
 # Unsplash Access key
 UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")

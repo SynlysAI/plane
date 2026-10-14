@@ -24,6 +24,13 @@ vi.mock("@/components/research/common/research-tab-link", () => ({
 vi.mock("@/components/research/chains/research-chain-board", () => ({
   ResearchChainBoard: () => <output>chain-board</output>,
 }));
+vi.mock("@/components/research/projects/research-project-list", () => ({
+  ResearchProjectList: ({ workspaceSlug, currentUserId }: { workspaceSlug: string; currentUserId: string }) => (
+    <output>
+      research-project-list:{workspaceSlug}:{currentUserId}
+    </output>
+  ),
+}));
 vi.mock("@/components/research/reports/report-list", () => ({
   ResearchReportList: () => <output>report-outcome-workbench</output>,
 }));
@@ -35,6 +42,7 @@ vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
     isIaV2Enabled: true,
     isWorkspaceAdmin: true,
+    isResearchAdmin: true,
     identity: { user: { org_units: [] } },
   }),
 }));
@@ -93,12 +101,12 @@ it("legacy reports 视图继续渲染报告与成果工作台", async () => {
   expect(container.textContent).not.toContain("chain-board");
 });
 
-it("legacy project 视图回退到课题列表，不再渲染行政或权威 Project 列表", async () => {
+it("project 视图显示科研项目列表，而非行政项目列表", async () => {
   await render("/lab/research/chains?view=projects");
 
-  expect(container.textContent).toContain("chain-board");
-  expect(container.textContent).not.toContain("project-list");
-  expect(container.textContent).not.toContain("research.chains.views.projects");
+  expect(container.textContent).toContain("research-project-list:lab:user-1");
+  expect(container.textContent).not.toContain("chain-board");
+  expect(container.textContent).not.toContain("administrative.projects.title");
 });
 
 it("课题视图保留创建科研项目入口，报告与成果视图不显示", async () => {

@@ -42,8 +42,8 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.org import active_membership_q, is_workspace_admin, is_workspace_member
-from plane.research.utils.roles import configured_main_pi_id
+from plane.research.utils.org import active_membership_q, is_workspace_member
+from plane.research.utils.roles import configured_main_pi_id, is_research_admin
 from plane.research.services.stage_service import ensure_stage_instances
 from plane.research.views.base import ResearchAPIView, parse_date, resolve_user
 
@@ -204,6 +204,9 @@ def profile_queryset(workspace):
 
 def visible_profile_queryset(workspace, user):
     """Research metadata visible without granting Plane project write access."""
+    if is_research_admin(user, workspace.id):
+        return profile_queryset(workspace)
+
     today = timezone.localdate()
     managed_unit_ids = managing_org_units_for(user, workspace.id, today)
     advised_owner_ids = (
@@ -250,6 +253,9 @@ def can_read_project_research_metadata(workspace, user, profile):
     and the configured main PI may enter the project's research surfaces. A
     public Plane network alone does not expose research metadata.
     """
+    if is_research_admin(user, workspace.id):
+        return True
+
     today = timezone.localdate()
     if profile.owner_id == user.id:
         return True
@@ -400,7 +406,7 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
         if error:
             return error
 
-        is_admin = is_workspace_admin(request.user, workspace.id)
+        is_admin = is_research_admin(request.user, workspace.id)
         requested_owner = resolve_user(request.data.get("owner")) if request.data.get("owner") else None
         if request.data.get("owner") and requested_owner is None:
             return research_error(ResearchErrorCode.USER_NOT_FOUND, "Owner not found.")
@@ -652,7 +658,7 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
         profile = self._get_profile(workspace, project_id)
         if profile is None:
             return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
-        if not is_workspace_admin(request.user, workspace.id) and profile.owner_id != request.user.id:
+        if not is_research_admin(request.user, workspace.id) and profile.owner_id != request.user.id:
             return research_permission_denied()
         delete_research_project(profile, request)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -665,7 +671,7 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
         if profile is None:
             return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
 
-        is_admin = is_workspace_admin(request.user, workspace.id)
+        is_admin = is_research_admin(request.user, workspace.id)
         if not is_admin and profile.owner_id != request.user.id:
             return research_permission_denied()
 
@@ -800,7 +806,7 @@ class ResearchProjectArchiveEndpoint(ResearchAPIView):
         profile = visible_profile_queryset(workspace, request.user).filter(project_id=project_id).first()
         if profile is None:
             return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
-        is_admin = is_workspace_admin(request.user, workspace.id)
+        is_admin = is_research_admin(request.user, workspace.id)
         if not is_admin and profile.owner_id != request.user.id:
             return research_permission_denied()
 
@@ -837,7 +843,7 @@ class ResearchProjectRestoreEndpoint(ResearchAPIView):
         profile = visible_profile_queryset(workspace, request.user).filter(project_id=project_id).first()
         if profile is None:
             return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
-        is_admin = is_workspace_admin(request.user, workspace.id)
+        is_admin = is_research_admin(request.user, workspace.id)
         if not is_admin and profile.owner_id != request.user.id:
             return research_permission_denied()
 

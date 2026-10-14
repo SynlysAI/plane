@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { coreRoutes } from "../../app/routes/core";
@@ -14,6 +17,12 @@ function flattenRoutes(routes: FlatRoute[]): FlatRoute[] {
 }
 
 describe("research chain route registration", () => {
+  it("registers the personal agent backend compatibility page", () => {
+    expect(flattenRoutes(coreRoutes)).toContainEqual({
+      path: ":workspaceSlug/research/settings/agent-backend",
+      file: "./(all)/[workspaceSlug]/(projects)/research/settings/agent-backend/page.tsx",
+    });
+  });
   it("registers the cross-component todo center page", () => {
     const routes = flattenRoutes(coreRoutes);
 
@@ -55,5 +64,17 @@ describe("research chain route registration", () => {
       path: ":workspaceSlug/research/settings/integrations",
       file: "./(all)/[workspaceSlug]/(projects)/research/settings/integrations/page.tsx",
     });
+  });
+
+  it("keeps /research/projects on the administrative channel when IA v2 is on", () => {
+    const page = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../app/(all)/[workspaceSlug]/(projects)/research/projects/page.tsx"
+      ),
+      "utf8"
+    );
+    expect(page).not.toContain("ResearchIaV2Redirect");
+    expect(page).toContain("embedded={research.isIaV2Enabled}");
   });
 });

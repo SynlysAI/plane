@@ -47,6 +47,7 @@ from plane.research.utils.projects import (
     can_manage_team_content,
     delegated_change_metadata,
 )
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.resource_projections import outcome_resource
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.projects import can_read_project_research_metadata, profile_queryset
@@ -67,7 +68,7 @@ def research_project(workspace, project_id):
 
 
 def can_manage_outcomes(actor, workspace, profile) -> bool:
-    return bool(profile and profile.owner_id == actor.id)
+    return bool(profile and (profile.owner_id == actor.id or is_research_admin(actor, workspace)))
 
 
 def can_manage_outcome(actor, workspace, profile, outcome) -> bool:

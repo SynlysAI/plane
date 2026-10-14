@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     },
     isIaV2Enabled: true,
     isWorkspaceAdmin: false,
+    isResearchAdmin: false,
     canSee: (key: string) => key !== "reviews",
     getOrgUnits: () => [],
     fetchOrgUnits: async () => undefined,
@@ -33,7 +34,10 @@ vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
   useSearchParams: () => [new URLSearchParams(mocks.view ? `view=${mocks.view}` : "")],
 }));
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "zh-CN",
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("@/components/research/approvals/approval-list", () => ({
   ResearchApprovalList: () => <div>office-approvals</div>,
 }));
@@ -54,6 +58,9 @@ vi.mock("@/components/research/reviews/review-inbox", () => ({
 }));
 vi.mock("@/components/research/chains/research-chain-board", () => ({
   ResearchChainBoard: () => <div>chain-board</div>,
+}));
+vi.mock("@/components/research/projects/research-project-list", () => ({
+  ResearchProjectList: () => <div>research-project-list</div>,
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
 vi.mock("@/hooks/store/user", () => ({ useUser: () => ({ data: { id: "user-1" } }) }));
@@ -99,13 +106,13 @@ it("keeps the office approval page when IA v2 is disabled", async () => {
   expect(container.textContent).toContain("office-approvals");
 });
 
-it("falls back the legacy project view to the chain list without embedding Project", async () => {
+it("在 IA v2 中将项目视图呈现为科研项目列表", async () => {
   mocks.view = "projects";
   await act(async () => root.render(<ResearchChainWorkbench workspaceSlug="lab" />));
 
-  expect(container.textContent).toContain("chain-board");
-  expect(container.textContent).not.toContain("project-list");
-  expect(container.textContent).not.toContain("research.chains.views.projects");
+  expect(container.textContent).toContain("research-project-list");
+  expect(container.textContent).not.toContain("chain-board");
+  expect(container.textContent).toContain("research.nav.projects");
 
   mocks.research.isIaV2Enabled = false;
   await act(async () => root.render(<ResearchChainWorkbench key="ia-off" workspaceSlug="lab" />));

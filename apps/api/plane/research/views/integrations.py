@@ -44,7 +44,7 @@ from plane.research.utils.integrations import (
     reference_allowed,
     set_cached,
 )
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reference_targets import resolve_target
 from plane.research.views.base import ResearchAPIView
 
@@ -131,7 +131,7 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         items = request.data.get("items")
         if not isinstance(items, list) or not items:
@@ -243,7 +243,7 @@ class ResearchIntegrationCallLogEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         query = IntegrationCallLog.objects.filter(workspace=workspace)
         if request.GET.get("system"):

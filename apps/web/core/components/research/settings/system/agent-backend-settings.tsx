@@ -1,11 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 // services
 import { ResearchAgentService } from "@/services/research/agent.service";
 
 const agentService = new ResearchAgentService();
+
+/** 判断用户填写的是否为本机回环地址，用于显示转发说明。 */
+function isLoopbackScienceDiscoveryUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  try {
+    const host = new URL(trimmed).hostname.toLowerCase();
+    return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
+  } catch {
+    return false;
+  }
+}
 
 type TBackendConnection = {
   id: string;
@@ -18,8 +30,16 @@ type TBackendConnection = {
 };
 
 /** 学生自助接入本地 ScienceDiscovery 实例的设置面板（§5）。 */
-export function AgentBackendSettings({ workspaceSlug }: { workspaceSlug: string }) {
+export function AgentBackendSettings({
+  workspaceSlug,
+  workspaceName = workspaceSlug,
+}: {
+  workspaceSlug: string;
+  workspaceName?: string;
+}) {
   const { t } = useTranslation();
+  const translateRef = useRef(t);
+  translateRef.current = t;
   const [connection, setConnection] = useState<TBackendConnection | null>(null);
   const [governanceEnabled, setGovernanceEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
@@ -28,25 +48,53 @@ export function AgentBackendSettings({ workspaceSlug }: { workspaceSlug: string 
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const loadSequence = useRef(0);
+  const workspaceSequence = useRef(0);
 
+  /** 仅在工作区变化时重建，避免翻译函数引用变化触发重复加载。 */
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    setLoading(true);
     try {
       const data = await agentService.getBackendConnection(workspaceSlug);
+      if (sequence !== loadSequence.current) return;
       setConnection(data.connection);
       setGovernanceEnabled(data.governance_enabled);
       setBaseUrl(data.connection?.base_url ?? "");
       setEnabled(data.connection?.is_enabled ?? true);
     } catch {
-      setError(t("research.agent_backend.load_failed"));
+      if (sequence === loadSequence.current) setError(translateRef.current("research.agent_backend.load_failed"));
+    } finally {
+      if (sequence === loadSequence.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
-  }, [t, workspaceSlug]);
+  }, [workspaceSlug]);
 
   useEffect(() => {
+    workspaceSequence.current += 1;
+    setHasLoaded(false);
+    setConnection(null);
+    setGovernanceEnabled(false);
+    setBaseUrl("");
+    setToken("");
+    setEnabled(true);
+    setStatus("");
+    setError("");
+    setBusy(false);
     void load();
+    return () => {
+      workspaceSequence.current += 1;
+      loadSequence.current += 1;
+    };
   }, [load]);
 
   const save = useCallback(async () => {
     if (!baseUrl.trim()) return;
+    const sequence = workspaceSequence.current;
     setBusy(true);
     setError("");
     setStatus("");
@@ -56,22 +104,26 @@ export function AgentBackendSettings({ workspaceSlug }: { workspaceSlug: string 
         ...(token.trim() ? { token: token.trim() } : {}),
         is_enabled: enabled,
       });
+      if (sequence !== workspaceSequence.current) return;
       setToken("");
       setStatus(t("research.agent_backend.saved"));
       await load();
     } catch (failure) {
-      setError((failure as { message?: string })?.message ?? t("research.agent_backend.save_failed"));
+      if (sequence === workspaceSequence.current)
+        setError((failure as { message?: string })?.message ?? t("research.agent_backend.save_failed"));
     } finally {
-      setBusy(false);
+      if (sequence === workspaceSequence.current) setBusy(false);
     }
   }, [baseUrl, enabled, load, t, token, workspaceSlug]);
 
   const test = useCallback(async () => {
+    const sequence = workspaceSequence.current;
     setBusy(true);
     setError("");
     setStatus("");
     try {
       const result = await agentService.testBackendConnection(workspaceSlug);
+      if (sequence !== workspaceSequence.current) return;
       setStatus(
         result.ok
           ? t("research.agent_backend.test_ok", { count: String(result.models ?? 0) })
@@ -79,40 +131,52 @@ export function AgentBackendSettings({ workspaceSlug }: { workspaceSlug: string 
       );
       await load();
     } catch (failure) {
-      setError((failure as { message?: string })?.message ?? t("research.agent_backend.test_failed_generic"));
+      if (sequence === workspaceSequence.current)
+        setError((failure as { message?: string })?.message ?? t("research.agent_backend.test_failed_generic"));
     } finally {
-      setBusy(false);
+      if (sequence === workspaceSequence.current) setBusy(false);
     }
   }, [load, t, workspaceSlug]);
 
   const remove = useCallback(async () => {
+    const sequence = workspaceSequence.current;
     setBusy(true);
     setError("");
     try {
       await agentService.deleteBackendConnection(workspaceSlug);
+      if (sequence !== workspaceSequence.current) return;
       setStatus(t("research.agent_backend.removed"));
       await load();
     } catch {
-      setError(t("research.agent_backend.remove_failed"));
+      if (sequence === workspaceSequence.current) setError(t("research.agent_backend.remove_failed"));
     } finally {
-      setBusy(false);
+      if (sequence === workspaceSequence.current) setBusy(false);
     }
   }, [load, t, workspaceSlug]);
+
+  if (loading && !hasLoaded) return <p className="text-12 text-tertiary">{t("research.common.loading")}</p>;
 
   return (
     <section className="max-w-2xl space-y-4">
       <div className="border-y border-subtle py-3 text-12 text-secondary">
-        <p>{t("research.agent_backend.default_runtime")}</p>
-        {!governanceEnabled && <p className="mt-2 text-danger-primary">{t("research.agent_backend.governance_off")}</p>}
+        <p>{t("research.agent_backend.workspace", { name: workspaceName })}</p>
+        <p className="mt-2">{t("research.agent_backend.default_runtime")}</p>
+        {!governanceEnabled && (
+          <p className="mt-2 text-danger-primary">{t("research.agent_backend.governance_off_new_sessions")}</p>
+        )}
       </div>
       <label className="flex flex-col gap-1 text-11 text-secondary">
         {t("research.agent_backend.base_url")}
         <input
           value={baseUrl}
           onChange={(changeEvent) => setBaseUrl(changeEvent.target.value)}
-          placeholder="http://192.168.1.10:5300"
+          placeholder={t("research.agent_backend.base_url_placeholder")}
           className="focus:border-accent-primary rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
         />
+        <span className="text-11 text-tertiary">{t("research.agent_backend.server_address_hint")}</span>
+        {isLoopbackScienceDiscoveryUrl(baseUrl) && (
+          <span className="text-11 text-tertiary">{t("research.agent_backend.loopback_forward_hint")}</span>
+        )}
       </label>
       <label className="flex flex-col gap-1 text-11 text-secondary">
         {t("research.agent_backend.token")}

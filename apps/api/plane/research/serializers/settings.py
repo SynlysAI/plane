@@ -25,6 +25,7 @@ class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
             "approval_enabled",
             "research_chain_enabled",
             "research_agent_enabled",
+            "research_agent_user_backend_enabled",
             "research_trace_enabled",
             "research_account_link_enabled",
             "research_external_rag_enabled",

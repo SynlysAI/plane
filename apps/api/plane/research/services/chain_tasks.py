@@ -36,7 +36,8 @@ from plane.research.utils.collaboration_notifications import (
     notify_task_returned,
     notify_task_submitted,
 )
-from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q, is_workspace_admin
+from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q
+from plane.research.utils.roles import is_research_admin
 
 ORG_SCOPE = "ORG_SCOPE"
 COLLABORATOR_SCOPE = "COLLABORATOR"
@@ -76,7 +77,7 @@ def chain_manager(workspace, user, chain) -> bool:
     Returns:
         True when the caller owns the chain or has an active project admin role.
     """
-    if chain.owner_id == user.id:
+    if is_research_admin(user, workspace.id) or chain.owner_id == user.id:
         return True
     return ProjectMember.objects.filter(
         project_id=chain.project_id,
@@ -101,7 +102,7 @@ def chain_lifecycle_manager(workspace, user, chain, *, workspace_admin=None) -> 
         active administrator of the chain's workspace.
     """
     if workspace_admin is None:
-        workspace_admin = is_workspace_admin(user, workspace.id)
+        workspace_admin = is_research_admin(user, workspace.id)
     return workspace_admin or chain_manager(workspace, user, chain)
 
 
@@ -131,6 +132,11 @@ def chain_resource(chain) -> ResearchResource:
 def review_only_actor(workspace, user, chain) -> bool:
     """Return whether an actor has review scope without mutable Chain rights.
 
+    Research administrators are never review-only: they hold both write and
+    review authority even without an organisation assignment. This check must
+    run before the main-PI short-circuit so a seated administrator who is also
+    the configured main PI is not locked into a read-only review role.
+
     Args:
         workspace: Workspace that owns the chain.
         user: Caller whose review-only status is checked.
@@ -140,6 +146,8 @@ def review_only_actor(workspace, user, chain) -> bool:
         True when the caller may review but not mutate the chain.
     """
     if chain.owner_id == user.id:
+        return False
+    if is_research_admin(user, workspace.id):
         return False
     context = build_actor_context(user, workspace.id)
     if context.is_main_pi:
@@ -162,6 +170,8 @@ def chain_writer(workspace, user, chain) -> bool:
     Returns:
         True when the caller owns, manages, or belongs to the project.
     """
+    if is_research_admin(user, workspace.id):
+        return True
     if review_only_actor(workspace, user, chain):
         return False
     if chain_manager(workspace, user, chain):
@@ -339,10 +349,12 @@ def actor_can_review_task(workspace, task, actor) -> bool:
         actor: User requesting a review action.
 
     Returns:
-        True when the actor has review-only research authority.
+        True when the actor is a research administrator or a review-only reviewer.
     """
     if actor is None or not getattr(actor, "is_authenticated", False):
         return False
+    if is_research_admin(actor, workspace.id):
+        return True
     return review_only_actor(workspace, actor, task.chain)
 
 
@@ -944,7 +956,7 @@ def return_task(*, task, actor, reason, request_id, content_hash, request=None):
 
 def _require_review_permission(task, actor):
     """Recheck review authority after related ACL inputs may have changed."""
-    if not review_only_actor(task.workspace, actor, task.chain):
+    if not actor_can_review_task(task.workspace, task, actor):
         raise ChainTaskPermissionError("Only research reviewers can manage submitted tasks.")
 
 

@@ -10,7 +10,7 @@ from plane.db.models import IntegrationCallLog, IntegrationSystem, ResearchAgent
 from plane.research.services.integrations import client_for
 from plane.research.utils.audit import ResearchAuditAction
 from plane.research.utils.capabilities import NAV_PLATFORM
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.settings import workspace_research_sections
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.integrations import connection_map
@@ -25,7 +25,7 @@ class ResearchObservabilityEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section="org")
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace.id):
+        if not is_research_admin(request.user, workspace.id):
             return Response({"error_code": "research_permission_denied"}, status=status.HTTP_403_FORBIDDEN)
 
         now = timezone.now()
@@ -83,7 +83,7 @@ class ResearchExternalHealthProbeEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section="integrations")
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace.id):
+        if not is_research_admin(request.user, workspace.id):
             return Response({"error_code": "research_permission_denied"}, status=status.HTTP_403_FORBIDDEN)
         requested = str(request.data.get("system") or request.GET.get("system") or "").upper()
         systems = [requested] if requested else list(IntegrationSystem.values)

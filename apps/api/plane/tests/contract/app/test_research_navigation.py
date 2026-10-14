@@ -341,7 +341,7 @@ def test_project_move_rejects_wrong_scope_without_changing_relationship(navigati
 
 
 @pytest.mark.django_db
-def test_category_manager_still_cannot_move_an_invisible_project(navigation_env):
+def test_workspace_admin_can_move_a_private_research_project(navigation_env):
     hidden_project = Project.objects.create(
         workspace=navigation_env["workspace"],
         name="私有课题",
@@ -365,16 +365,14 @@ def test_category_manager_still_cannot_move_an_invisible_project(navigation_env)
     )
     assert category.status_code == 201
 
-    tree = navigation_env["admin_client"].get(navigation_env["url"], {"scope": "RESEARCH"})
     response = navigation_env["admin_client"].post(
         f"{navigation_env['move_url']}{hidden_project.id}/move/",
         {"scope": "RESEARCH", "category": category.json()["id"]},
         format="json",
     )
     hidden_project.refresh_from_db()
-    assert response.status_code == 403
-    assert hidden_project.navigation_category is None
-    assert "私有课题" not in str(tree.json())
+    assert response.status_code == 200
+    assert str(hidden_project.navigation_category_id) == category.json()["id"]
 
 
 @pytest.mark.django_db

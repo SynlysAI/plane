@@ -178,8 +178,10 @@ export interface IResearchStore {
   /** Whether the Phase 1 four-entry information architecture is enabled. */
   isIaV2Enabled: boolean;
   isWorkspaceAdmin: boolean;
-  /** Configuration rights: workspace administrator or administrator tag. */
+  /** Highest research administration rights; organisation membership is not required. */
   isResearchAdmin: boolean;
+  /** 科研组织成员或科研管理员可配置个人智能体后端。 */
+  canConfigurePersonalAgentBackend: boolean;
   /**
    * Visibility tier published by the backend (v2.5.0). ``null`` means the
    * payload predates the capability layer.
@@ -681,6 +683,7 @@ export class ResearchStore implements IResearchStore {
       isIaV2Enabled: computed,
       isWorkspaceAdmin: computed,
       isResearchAdmin: computed,
+      canConfigurePersonalAgentBackend: computed,
       researchLevel: computed,
       visibleNavKeys: computed,
       isOrgSectionEnabled: computed,
@@ -845,12 +848,20 @@ export class ResearchStore implements IResearchStore {
   }
 
   /**
-   * Administrator surfaces (organisation, templates, identity mappings,
-   * platform configuration, audit and the account pages) open for workspace
-   * administrators and for holders of an instance administrator tag.
+   * Highest research administration rights for the current workspace. Seated
+   * workspace administrators and seated instance administrators hold this
+   * even without an organisation-tree assignment.
    */
   get isResearchAdmin() {
     return Boolean(this.identity?.user?.is_research_admin ?? this.identity?.user?.is_workspace_admin);
+  }
+
+  /**
+   * 当前工作区已开启科研，且调用方是科研管理员或至少属于一个科研组织时，
+   * 可以配置个人智能体后端。identity 未加载时为 false。
+   */
+  get canConfigurePersonalAgentBackend() {
+    return Boolean(this.isEnabled && (this.isResearchAdmin || (this.identity?.user?.org_units.length ?? 0) > 0));
   }
 
   /**

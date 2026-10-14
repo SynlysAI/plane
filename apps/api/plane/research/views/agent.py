@@ -1373,7 +1373,10 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
             workspace=workspace, user=request.user
         ).first()
         if connection is not None:
-            connection.delete(soft=False)
+            # Retain credential material for historical sessions pinned to this
+            # connection; soft-deletion excludes it from new sessions and permits
+            # a replacement connection for the same member and workspace.
+            connection.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

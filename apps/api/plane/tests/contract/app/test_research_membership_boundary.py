@@ -160,7 +160,8 @@ def test_administrative_officer_keeps_plane_and_administrative_access_only(env):
     assert chains.status_code == 403
 
 
-def test_workspace_administrator_without_org_relation_cannot_research(env):
+def test_workspace_administrator_without_org_relation_has_research_admin_access(env):
+    """工作区管理员无需科研组织关系即拥有科研最高权限。"""
     client = client_for(env["plain_admin"])
 
     identity = client.get(env["identity_url"])
@@ -170,11 +171,12 @@ def test_workspace_administrator_without_org_relation_cannot_research(env):
 
     assert identity.status_code == 200
     assert identity.json()["user"]["is_workspace_admin"] is True
-    assert identity.json()["user"]["is_research_admin"] is False
-    assert identity.json()["capabilities"]["level"] == "NONE"
-    assert research_tree.status_code == 403
-    assert research_projects.status_code == 403
-    assert chains.status_code == 403
+    assert identity.json()["user"]["is_research_admin"] is True
+    assert identity.json()["user"]["org_units"] == []
+    assert identity.json()["capabilities"]["level"] == "ADMIN"
+    assert research_tree.status_code == 200
+    assert research_projects.status_code == 200
+    assert chains.status_code == 200
 
 
 def test_active_org_member_keeps_research_access(env):

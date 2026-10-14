@@ -75,7 +75,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const pagination = research.projectPaginationByWorkspace[workspaceSlug];
   const orgUnitName = (unitId: string | null | undefined) => orgUnits.find((unit) => unit.id === unitId)?.name ?? "-";
   const canCreateProject = Boolean(
-    currentUserId && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
+    currentUserId && (research.identity?.user.org_units.length || research.isResearchAdmin)
   );
   const shouldAutoOpenCreate = query.get("create") === "1";
   useEffect(() => {
@@ -330,7 +330,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                   </TableCell>
                   <TableCell className="text-tertiary tabular-nums">{project.research?.started_at ?? "-"}</TableCell>
                   <TableCell className="text-right">
-                    {(project.research?.owner === currentUserId || research.isWorkspaceAdmin) && (
+                    {(project.research?.owner === currentUserId || research.isResearchAdmin) && (
                       <ResearchDeleteButton
                         name={project.name}
                         onDelete={async () => {
@@ -354,7 +354,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                         {t("research.nav.stages")}
                       </Link>
                     )}
-                    {(project.research?.owner === currentUserId || research.isWorkspaceAdmin) &&
+                    {(project.research?.owner === currentUserId || research.isResearchAdmin) &&
                       (!["ARCHIVED", "DELETED"].includes(project.research?.workflow_status ?? "") ? (
                         <Button
                           variant="ghost"
@@ -374,7 +374,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                           {t("research.projects.restore")}
                         </Button>
                       ))}
-                    {(project.research?.owner === currentUserId || research.isWorkspaceAdmin) &&
+                    {(project.research?.owner === currentUserId || research.isResearchAdmin) &&
                       project.research?.workflow_status !== "DELETED" && (
                         <Button
                           variant="ghost"

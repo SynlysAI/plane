@@ -149,11 +149,11 @@ def test_legacy_main_pi_label_does_not_grant_business_or_admin_access(env):
     assert capabilities["management"]["accounts"] is False
 
 
-def test_workspace_administrator_requires_an_active_org_relation(env):
+def test_workspace_administrator_is_research_admin_without_org_relation(env):
     administrator = make_user(first_name="UnregisteredAdmin")
     add_workspace_member(env["workspace"], administrator, role=20)
 
-    assert research_level(administrator, env["workspace"]) == ResearchLevel.NONE
+    assert research_level(administrator, env["workspace"]) == ResearchLevel.ADMIN
 
     member_of(env, administrator, org_role=OrgUnitMember.OrgRole.UNIT_ADMIN)
     assert research_level(administrator, env["workspace"]) == ResearchLevel.ADMIN

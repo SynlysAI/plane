@@ -53,7 +53,7 @@ def _can_manage(user, workspace):
     Returns:
         True for a workspace or research administrator.
     """
-    return is_workspace_admin(user, workspace.id) or is_research_admin(user, workspace.id)
+    return is_research_admin(user, workspace.id)
 
 
 def _depth(category):

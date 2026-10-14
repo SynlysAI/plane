@@ -35,7 +35,7 @@ EXPECTED = {
         "advisor": True,
         "unit_member": False,
         "ancestor_pi": True,
-        "admin": False,
+        "admin": True,
         "stranger": False,
     },
     "DIRECT_ADVISOR": {
@@ -43,7 +43,7 @@ EXPECTED = {
         "advisor": True,
         "unit_member": False,
         "ancestor_pi": True,
-        "admin": False,
+        "admin": True,
         "stranger": False,
     },
     "UNIT": {
@@ -51,7 +51,7 @@ EXPECTED = {
         "advisor": True,
         "unit_member": True,
         "ancestor_pi": True,
-        "admin": False,
+        "admin": True,
         "stranger": False,
     },
     "ANCESTRY": {
@@ -59,7 +59,7 @@ EXPECTED = {
         "advisor": True,
         "unit_member": False,
         "ancestor_pi": True,
-        "admin": False,
+        "admin": True,
         "stranger": False,
     },
     "WORKSPACE": {
@@ -75,7 +75,7 @@ EXPECTED = {
         "advisor": True,
         "unit_member": True,
         "ancestor_pi": True,
-        "admin": False,
+        "admin": True,
         "stranger": False,
     },
 }
@@ -211,7 +211,7 @@ class TestActionPermissions:
         resource = self._resource(acl_env)
         assert check_access(acl_env["owner"], "edit", resource) is True
         assert check_access(acl_env["advisor"], "edit", resource) is False
-        assert check_access(acl_env["admin"], "edit", resource) is False
+        assert check_access(acl_env["admin"], "edit", resource) is True
 
     def test_direct_advisor_and_node_manager_can_review(self, acl_env):
         resource = self._resource(acl_env)
@@ -227,12 +227,12 @@ class TestActionPermissions:
         assert check_access(acl_env["ancestor_pi"], "review", resource) is True
         assert check_access(acl_env["unit_member"], "review", resource) is False
         assert check_access(acl_env["owner"], "review", resource) is False
-        assert check_access(acl_env["admin"], "review", resource) is False
+        assert check_access(acl_env["admin"], "review", resource) is True
 
     def test_manage_access_is_owner_only(self, acl_env):
         resource = self._resource(acl_env)
         assert check_access(acl_env["owner"], "manage_access", resource) is True
-        assert check_access(acl_env["admin"], "manage_access", resource) is False
+        assert check_access(acl_env["admin"], "manage_access", resource) is True
         assert check_access(acl_env["unit_member"], "manage_access", resource) is False
 
     def test_module_switch_off_denies_everything(self, acl_env, settings):
@@ -307,4 +307,22 @@ def test_main_pi_and_mentor_can_view_private_student_topic(db, settings):
     )
     assert visibility_allows(build_actor_context(main_pi, workspace.id), resource) is True
     assert visibility_allows(build_actor_context(mentor, workspace.id), resource) is True
-    assert visibility_allows(build_actor_context(admin, workspace.id), resource) is False
+    assert visibility_allows(build_actor_context(admin, workspace.id), resource) is True
+
+@pytest.mark.django_db
+def test_admin_context_from_another_workspace_does_not_short_circuit(acl_env):
+    """跨工作区管理员 context 不能靠短路放行本工作区科研资源。"""
+    outsider = make_user()
+    other_workspace = make_workspace(outsider)
+    enable_research(other_workspace)
+    resource = ResearchResource(
+        kind="report",
+        workspace_id=acl_env["workspace"].id,
+        owner_id=acl_env["owner"].id,
+        org_unit_id=acl_env["group"].id,
+        visibility="PRIVATE",
+    )
+    other_context = build_actor_context(outsider, other_workspace.id)
+    assert other_context.is_workspace_admin is True
+    assert check_access(outsider, "view", resource, context=other_context) is False
+    assert check_access(outsider, "edit", resource, context=other_context) is False

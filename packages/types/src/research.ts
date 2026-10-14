@@ -126,6 +126,7 @@ export type TWorkspaceResearchSetting = {
   approval_enabled: boolean;
   research_chain_enabled?: boolean;
   research_agent_enabled?: boolean;
+  research_agent_user_backend_enabled?: boolean;
   research_trace_enabled?: boolean;
   research_account_link_enabled?: boolean;
   research_external_rag_enabled?: boolean;

@@ -163,16 +163,10 @@ def test_chain_collaborator_lifecycle_and_audit(env):
     ).exists()
 
 
-def test_workspace_admin_can_manage_visible_chain_lifecycle(env):
-    """工作区管理员可管理可见研究链，但不会获得科研内容写权限。"""
+def test_workspace_admin_has_full_research_chain_administration_without_org_relation(env):
+    """工作区管理员无需科研组织关系即可完整管理私有研究链。"""
     workspace_admin = make_user(first_name="Workspace admin")
     add_workspace_member(env["workspace"], workspace_admin, role=20)
-    OrgUnitMember.objects.create(
-        workspace=env["workspace"],
-        org_unit=env["group"],
-        user=workspace_admin,
-        org_role=OrgUnitMember.OrgRole.REVIEWER,
-    )
     admin_client = _client(workspace_admin)
     private = _create_chain(env["owner_client"], env["workspace"], env["private_project"])
     created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
@@ -191,11 +185,11 @@ def test_workspace_admin_can_manage_visible_chain_lifecycle(env):
     assert actions["archive"]["allowed"]
     assert actions["delete"]["allowed"]
     assert not actions["restore"]["allowed"]
-    assert not actions["edit"]["allowed"]
-    assert not actions["upload"]["allowed"]
-    assert admin_client.get(private_url).status_code == 404
-    assert admin_client.post(f"{private_url}archive/", {}, format="json").status_code == 404
-    assert admin_client.delete(private_url).status_code == 404
+    assert actions["edit"]["allowed"]
+    assert actions["upload"]["allowed"]
+    assert admin_client.get(private_url).status_code == 200
+    assert admin_client.post(f"{private_url}archive/", {}, format="json").status_code == 200
+    assert admin_client.post(f"{private_url}restore/", {}, format="json").status_code == 200
     collaborator_actions = (
         env["collaborator_client"].get(detail_url).json()["data"]["capabilities"]["actions"]
     )
@@ -203,15 +197,17 @@ def test_workspace_admin_can_manage_visible_chain_lifecycle(env):
     assert not collaborator_actions["delete"]["allowed"]
     assert env["collaborator_client"].post(f"{detail_url}archive/", {}, format="json").status_code == 403
     assert env["collaborator_client"].delete(detail_url).status_code == 403
-    assert admin_client.delete(f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node_id}/").status_code == 403
-    assert admin_client.post(
-        f"{detail_url}members/", {"user_id": str(env["collaborator"].id)}, format="json"
-    ).status_code == 403
     assert admin_client.post(
         f"{detail_url}nodes/{node_id}/tasks/",
         {"request_id": uuid4().hex, "title": "管理员任务"},
         format="json",
-    ).status_code == 403
+    ).status_code == 201
+    assert admin_client.post(
+        f"{detail_url}members/", {"user_id": str(env["collaborator"].id)}, format="json"
+    ).status_code == 201
+    # The task created above blocks node deletion, so this conflict proves the
+    # request passed authorization and reached the node lifecycle rule.
+    assert admin_client.delete(f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node_id}/").status_code == 409
 
     archived = admin_client.post(f"{detail_url}archive/", {}, format="json")
     assert archived.status_code == 200, archived.json()
@@ -247,8 +243,8 @@ def test_chain_project_admin_can_manage_lifecycle(env):
     assert project_admin_client.delete(detail_url).status_code == 204
 
 
-def test_instance_admin_alone_cannot_manage_chain_lifecycle(env):
-    """实例管理员身份本身不授予研究链生命周期或内容写权限。"""
+def test_instance_admin_has_full_research_chain_administration(env):
+    """实例管理员无需加入科研组织即可读取并管理研究链。"""
     instance_admin = make_user(first_name="Instance admin")
     add_workspace_member(env["workspace"], instance_admin)
     ResearchUserProfile.objects.create(
@@ -266,9 +262,10 @@ def test_instance_admin_alone_cannot_manage_chain_lifecycle(env):
     created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
     detail_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{created.json()['data']['id']}/"
 
-    assert admin_client.get(detail_url).status_code == 403
-    assert admin_client.post(f"{detail_url}archive/", {}, format="json").status_code == 403
-    assert admin_client.delete(detail_url).status_code == 403
+    assert admin_client.get(detail_url).status_code == 200
+    assert admin_client.post(f"{detail_url}archive/", {}, format="json").status_code == 200
+    assert admin_client.post(f"{detail_url}restore/", {}, format="json").status_code == 200
+    assert admin_client.delete(detail_url).status_code == 204
 
 
 def test_archived_chain_is_replayable_and_readonly(env):

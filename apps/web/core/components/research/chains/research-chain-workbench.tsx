@@ -15,6 +15,7 @@ import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { useResearchBrowseQuery } from "@/components/research/common/browse-query";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
+import { ResearchProjectList } from "@/components/research/projects/research-project-list";
 import { ResearchProjectCreateDialog } from "@/components/research/projects/research-project-create-dialog";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 // hooks
@@ -25,11 +26,10 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ChainView = "chains" | "reports" | "outcomes";
+type ChainView = "chains" | "reports" | "outcomes" | "projects";
 
 /**
- * IA v2 research container. It only renders research chains (topics), reports,
- * and the legacy outcomes query; administrative Projects stay out of this channel.
+ * IA v2 research container for research chains, project records, and reports.
  */
 export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({ workspaceSlug }: Props) {
   const { t } = useTranslation();
@@ -40,7 +40,7 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const requestedView = searchParams.get("view") as ChainView | null;
   const canCreateProject = Boolean(
-    currentUser?.id && (research.identity?.user.org_units.length || research.isWorkspaceAdmin)
+    currentUser?.id && (research.identity?.user.org_units.length || research.isResearchAdmin)
   );
   const shouldAutoOpenCreate = query.get("create") === "1";
 
@@ -56,13 +56,14 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
 
   const views = [
     { id: "chains" as const, labelKey: "research.chains.views.chains" },
+    { id: "projects" as const, labelKey: "research.nav.projects" },
     { id: "reports" as const, labelKey: "research.chains.views.reports" },
   ];
   const activeView =
     requestedView && (requestedView === "outcomes" || views.some((view) => view.id === requestedView))
       ? requestedView
       : "chains";
-  const activeTabId = activeView === "chains" ? "chains" : "reports";
+  const activeTabId = activeView === "outcomes" ? "reports" : activeView;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -94,6 +95,9 @@ export const ResearchChainWorkbench = observer(function ResearchChainWorkbench({
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeView === "chains" && <ResearchChainBoard workspaceSlug={workspaceSlug} />}
+        {activeView === "projects" && (
+          <ResearchProjectList workspaceSlug={workspaceSlug} currentUserId={currentUser?.id ?? ""} />
+        )}
         {(activeView === "reports" || activeView === "outcomes") && (
           <ResearchReportList workspaceSlug={workspaceSlug} />
         )}

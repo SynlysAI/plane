@@ -134,13 +134,13 @@ class TestResearchPaperReviewApi:
 
         ProjectMember.objects.create(
             project=env["project"],
-            member=env["workspace_admin"],
+            member=env["group_member"],
             role=15,
         )
 
-        denied = env["admin_client"].post(
+        denied = _client(env["group_member"]).post(
             _version_url(env, review["id"], 1, "return"),
-            {"request_id": f"admin-return-{uuid4()}", "comment": "Workspace admin cannot review."},
+            {"request_id": f"member-return-{uuid4()}", "comment": "Ordinary member cannot review."},
             format="json",
         )
         assert denied.status_code == 403
@@ -200,6 +200,21 @@ class TestResearchPaperReviewApi:
             ).values_list("data__action", flat=True)
         )
         assert notification_actions == {"submitted": 2, "returned": 1, "accepted": 1}
+
+    def test_workspace_admin_can_review_without_org_relation(self, env):
+        """工作区管理员无需组织关系即可退回论文评审。"""
+        review = _create_review(env)
+        _submit_version(env, review["id"], "paper-admin.pdf", "提交初稿。")
+
+        returned = env["admin_client"].post(
+            _version_url(env, review["id"], 1, "return"),
+            {"request_id": f"admin-return-{uuid4()}", "comment": "管理员退回补充对照实验。"},
+            format="json",
+        )
+
+        assert returned.status_code == 200, returned.json()
+        assert returned.json()["data"]["status"] == "SUBMITTED"
+        assert env["student_client"].get(_review_url(env, review["id"])).json()["data"]["status"] == "NEEDS_REVISION"
 
     def test_owner_can_withdraw_an_open_review(self, env):
         review = _create_review(env)
