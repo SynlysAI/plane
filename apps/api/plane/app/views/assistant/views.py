@@ -15,6 +15,7 @@ from uuid import uuid4
 import httpx
 from django.http import StreamingHttpResponse
 from rest_framework import status
+from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
 
 from plane.app.permissions import ROLE, allow_permission
@@ -31,6 +32,20 @@ from .client import (
 
 UPSTREAM_UNAVAILABLE = "synlora_unavailable"
 UPSTREAM_ERROR = "synlora_error"
+
+
+class IgnoreAcceptNegotiation(BaseContentNegotiation):
+    """Browsers ask for ``text/event-stream`` on the run-events endpoint.
+
+    DRF's default negotiator only knows the JSON renderer and would reject
+    that Accept header with a 406 before the streaming view runs.
+    """
+
+    def select_parser(self, request, parsers):
+        return parsers[0]
+
+    def select_renderer(self, request, renderers, format_suffix=None):
+        return (renderers[0], renderers[0].media_type)
 
 
 def _workspace_or_none(slug: str):
@@ -139,6 +154,8 @@ class AssistantChatEndpoint(BaseAPIView):
 
 class AssistantRunEventsEndpoint(BaseAPIView):
     """``GET /api/workspaces/<slug>/assistant/runs/<run_id>/events/`` — SSE pass-through."""
+
+    content_negotiation_class = IgnoreAcceptNegotiation
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def get(self, request, slug, run_id):

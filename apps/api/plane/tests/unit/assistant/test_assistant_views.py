@@ -157,7 +157,7 @@ def test_events_stream_passes_bytes_through_with_sse_headers(env):
     with patch("plane.app.views.assistant.client.httpx.stream", side_effect=fake_stream):
         response = client.get(
             f"/api/workspaces/{env['workspace'].slug}/assistant/runs/00000000-0000-0000-0000-000000000001/events/",
-            headers={"Last-Event-ID": "1789-0"},
+            headers={"Last-Event-ID": "1789-0", "Accept": "text/event-stream"},
         )
     assert response.status_code == 200
     assert response["Content-Type"] == "text/event-stream"
