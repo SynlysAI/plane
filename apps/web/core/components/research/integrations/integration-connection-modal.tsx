@@ -11,6 +11,7 @@ import { INTEGRATION_SYSTEM_LABELS } from "@plane/constants";
 import type { TIntegrationConnection, TIntegrationSystem } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { ModalCore, ListFilterField, ListFilterInput, ListFilterSelect, ListFilterCheckbox } from "@plane/ui";
+import { EModalWidth } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 // store
@@ -64,39 +65,41 @@ export const IntegrationConnectionModal = observer(function IntegrationConnectio
   };
 
   return (
-    <ModalCore isOpen handleClose={() => !busy && onClose()}>
-      <div className="flex w-full flex-col gap-3 p-6">
+    <ModalCore isOpen width={EModalWidth.XL} handleClose={() => !busy && onClose()}>
+      <div className="flex w-full flex-col gap-4 p-5">
         <h3 className="text-sm font-medium text-primary">
           {connection
             ? `${t("research.integrations.edit_title")} · ${t(INTEGRATION_SYSTEM_LABELS[system as TIntegrationSystem] ?? system)}`
             : `${t("research.integrations.configure_title")} · ${t(INTEGRATION_SYSTEM_LABELS[system as TIntegrationSystem] ?? system)}`}
         </h3>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <ListFilterField label={t("research.integrations.display_name")}>
-            <ListFilterInput
-              value={displayName}
-              placeholder={t("research.integrations.display_name")}
-              onChange={(event) => setDisplayName(event.target.value)}
-            />
-          </ListFilterField>
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <ListFilterField label={t("research.integrations.display_name")}>
+              <ListFilterInput
+                value={displayName}
+                placeholder={t("research.integrations.display_name")}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </ListFilterField>
+            <ListFilterField label={t("research.integrations.columns.credential_mode")}>
+              <ListFilterSelect
+                value={credentialMode}
+                onChange={(event) => {
+                  setCredentialMode(event.target.value as "SHARED" | "PERSONAL");
+                  setCredential("");
+                }}
+              >
+                <option value="SHARED">{t("research.integrations.credential_mode_shared")}</option>
+                <option value="PERSONAL">{t("research.integrations.credential_mode_personal")}</option>
+              </ListFilterSelect>
+            </ListFilterField>
+          </div>
           <ListFilterField label={t("research.integrations.columns.base_url")}>
             <ListFilterInput
               value={baseUrl}
               placeholder={baseUrl ? "" : t("research.integrations.base_url_hint")}
               onChange={(event) => setBaseUrl(event.target.value)}
             />
-          </ListFilterField>
-          <ListFilterField label={t("research.integrations.columns.credential_mode")}>
-            <ListFilterSelect
-              value={credentialMode}
-              onChange={(event) => {
-                setCredentialMode(event.target.value as "SHARED" | "PERSONAL");
-                setCredential("");
-              }}
-            >
-              <option value="SHARED">{t("research.integrations.credential_mode_shared")}</option>
-              <option value="PERSONAL">{t("research.integrations.credential_mode_personal")}</option>
-            </ListFilterSelect>
           </ListFilterField>
           {credentialMode === "SHARED" && (
             <ListFilterField label="访问 Token">
