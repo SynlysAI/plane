@@ -23,6 +23,25 @@ from plane.utils.administrative_projects import (
 )
 
 
+class AdministrativeAPIView(ResearchAPIView):
+    """不依赖科研模块开关与科研组织身份的行政接口基类。"""
+
+    research_module_required = False
+    research_membership_required = False
+
+    def get_workspace(self, **kwargs):
+        """解析行政接口工作区，并关闭科研工作区开关依赖。
+
+        Args:
+            **kwargs: 透传给科研基础视图的工作区参数。
+
+        Returns:
+            ``(workspace, error_response)``，二者恰好一个为空。
+        """
+        kwargs.setdefault("require_enabled", False)
+        return super().get_workspace(**kwargs)
+
+
 def _workspace_admin(user, workspace):
     """判断用户是否为工作区管理员或平台管理员。"""
     membership = WorkspaceMember.objects.filter(
@@ -71,7 +90,7 @@ def _serialize_organization(organization, user, can_manage=None, visible_project
     }
 
 
-class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
+class AdministrativeOrganizationListCreateEndpoint(AdministrativeAPIView):
     """列出、创建并重命名工作区内的行政组织。"""
 
     nav_capability = None
@@ -150,7 +169,7 @@ class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
         return Response(_serialize_organization(organization, request.user), status=201)
 
 
-class AdministrativeOrganizationDetailEndpoint(ResearchAPIView):
+class AdministrativeOrganizationDetailEndpoint(AdministrativeAPIView):
     """更新或删除非默认组织；删除前必须迁移其项目。"""
 
     nav_capability = None
@@ -208,7 +227,7 @@ class AdministrativeOrganizationDetailEndpoint(ResearchAPIView):
         return Response(status=204)
 
 
-class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
+class AdministrativeOrganizationMemberEndpoint(AdministrativeAPIView):
     """列出、添加、修改和移除组织成员。"""
 
     nav_capability = None
@@ -352,7 +371,7 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
         return Response(status=204)
 
 
-class AdministrativeOrganizationAssignableMembersEndpoint(ResearchAPIView):
+class AdministrativeOrganizationAssignableMembersEndpoint(AdministrativeAPIView):
     """返回可加入指定组织的工作区成员。"""
 
     nav_capability = None
@@ -392,7 +411,7 @@ class AdministrativeOrganizationAssignableMembersEndpoint(ResearchAPIView):
         )
 
 
-class AdministrativeProjectOrganizationEndpoint(ResearchAPIView):
+class AdministrativeProjectOrganizationEndpoint(AdministrativeAPIView):
     """更改行政项目的组织归属。"""
 
     nav_capability = None

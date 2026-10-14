@@ -22,7 +22,7 @@ from plane.research.utils.errors import (
     research_permission_denied,
 )
 from plane.research.utils.org import effective_mentee_ids, effective_mentor_ids, is_workspace_admin
-from plane.research.utils.roles import ADMIN_ROLES, admin_roles, is_main_pi, is_research_admin, is_system_admin
+from plane.research.utils.roles import ADMIN_ROLES, admin_roles, is_research_admin, is_system_admin
 from plane.research.utils.settings import (
     get_workspace_research_settings,
     workspace_research_enabled,
@@ -43,6 +43,9 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
     ``capabilities`` says which of them this caller may reach: the menu is the
     intersection of both and the API enforces exactly the same list.
     """
+
+    research_module_required = False
+    research_membership_required = False
 
     def get(self, request, slug):
         workspace, error = self.get_workspace(require_enabled=False)
@@ -93,9 +96,9 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
                 "user": {
                     "id": str(request.user.id),
                     "is_workspace_admin": is_workspace_admin(request.user, workspace.id),
-                    "is_research_admin": is_research_admin(request.user, workspace.id),
+                    "is_research_admin": capabilities["management"]["workspace"],
                     "is_system_admin": is_system_admin(request.user),
-                    "is_main_pi": is_main_pi(request.user, workspace),
+                    "is_main_pi": capabilities["is_main_pi"],
                     "research_level": capabilities["level"],
                     "admin_roles": roles_held,
                     "admin_role_catalog": list(ADMIN_ROLES),

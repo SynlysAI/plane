@@ -58,6 +58,12 @@ def env(db):
 
     root = create_unit(workspace, "Root", None, OrgUnit.UnitType.ROOT)
     group = create_unit(workspace, "Group", root, OrgUnit.UnitType.GROUP)
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
+        user=admin,
+        org_role=OrgUnitMember.OrgRole.OWNER,
+    )
     OrgUnitMember.objects.create(workspace=workspace, org_unit=group, user=pi_user, org_role=OrgUnitMember.OrgRole.PI)
     OrgUnitMember.objects.create(
         workspace=workspace, org_unit=group, user=advisor, org_role=OrgUnitMember.OrgRole.ADVISOR

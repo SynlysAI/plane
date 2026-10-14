@@ -20,6 +20,7 @@ from plane.app.views.base import BaseAPIView
 from plane.db.models import User, Workspace, WorkspaceMember
 from plane.research.utils.capabilities import (
     build_research_capabilities,
+    has_active_research_org_relation,
     nav_allowed,
     research_signals,
 )
@@ -38,6 +39,7 @@ from plane.research.utils.roles import user_can_access_private_workspace
 # Sentinel telling ``get_workspace`` to fall back to the class level
 # ``nav_capability`` instead of an explicit per call requirement.
 _NAV_FROM_CLASS = object()
+_RESEARCH_MEMBER_FROM_CLASS = object()
 
 
 def resolve_user(value):
@@ -120,12 +122,17 @@ class ResearchAPIView(BaseAPIView):
     ``get_workspace(..., nav=...)``, and pass ``nav=None`` for endpoints that
     must stay reachable for every workspace member (the identity endpoint and
     the read only organisation tree the project list depends on).
+    Research business endpoints additionally require an active research
+    organisation membership; shared identity/administrative surfaces opt out
+    explicitly.
     """
 
     nav_capability = None
+    research_module_required = True
+    research_membership_required = True
 
     def initial(self, request, *args, **kwargs):
-        if not research_module_enabled():
+        if self.research_module_required and not research_module_enabled():
             raise ResearchAPIException(
                 ResearchErrorCode.MODULE_DISABLED,
                 "Research module is not enabled.",
@@ -166,6 +173,7 @@ class ResearchAPIView(BaseAPIView):
         section=None,
         require_enabled=True,
         nav=_NAV_FROM_CLASS,
+        research_member=_RESEARCH_MEMBER_FROM_CLASS,
     ):
         """Resolve the workspace and verify the caller's membership.
 
@@ -220,6 +228,12 @@ class ResearchAPIView(BaseAPIView):
                 )
         if roles is not None and membership.role not in roles:
             self._record_security_denial(workspace, "workspace_role_denied")
+            return None, research_permission_denied()
+        required_membership = (
+            self.research_membership_required if research_member is _RESEARCH_MEMBER_FROM_CLASS else research_member
+        )
+        if required_membership and not has_active_research_org_relation(self.request.user, workspace):
+            self._record_security_denial(workspace, "research_membership_missing")
             return None, research_permission_denied()
         required_nav = self.nav_capability if nav is _NAV_FROM_CLASS else nav
         if required_nav is not None and not nav_allowed(

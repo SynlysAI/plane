@@ -8,6 +8,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
+    OrgUnit,
+    OrgUnitMember,
     Project,
     ResearchChain,
     ResearchChainEvent,
@@ -18,7 +20,12 @@ from plane.db.models import (
     WorkspaceResearchSetting,
 )
 from plane.research.services.idempotency import payload_hash
-from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
+from plane.tests.research_fixtures import (
+    add_workspace_member,
+    enable_research,
+    make_user,
+    make_workspace,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -34,10 +41,43 @@ def env(db, settings):
     settings.RESEARCH_MODULE_ENABLED = True
     owner = make_user(first_name="Chain owner")
     outsider = make_user(first_name="Chain outsider")
+    external = make_user(first_name="Non-research outsider")
     workspace = make_workspace(owner)
     add_workspace_member(workspace, outsider)
+    add_workspace_member(workspace, external)
     enable_research(workspace, research_chain_enabled=True, research_agent_enabled=True)
     suffix = uuid4().hex[:6]
+    root = OrgUnit.objects.create(
+        workspace=workspace,
+        name="科研根节点",
+        unit_type=OrgUnit.UnitType.ROOT,
+        depth=0,
+        path="",
+    )
+    root.path = f"/{root.id.hex}/"
+    root.save(update_fields=["path"])
+    group = OrgUnit.objects.create(
+        workspace=workspace,
+        name="链路课题组",
+        parent=root,
+        unit_type=OrgUnit.UnitType.GROUP,
+        depth=1,
+        path="",
+    )
+    group.path = f"{root.path}{group.id.hex}/"
+    group.save(update_fields=["path"])
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
+        user=owner,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
+        user=outsider,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
     project = Project.objects.create(
         workspace=workspace,
         name=f"Chain project {suffix}",
@@ -56,10 +96,12 @@ def env(db, settings):
     return {
         "owner": owner,
         "outsider": outsider,
+        "external": external,
         "workspace": workspace,
         "project": project,
         "client": _client(owner),
         "outsider_client": _client(outsider),
+        "external_client": _client(external),
     }
 
 
@@ -85,8 +127,8 @@ def test_chain_requires_request_id_and_switch(env):
     WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(research_chain_enabled=True)
 
 
-def test_workspace_visible_chain_is_readable_without_research_nav(env):
-    """A NONE member may read WORKSPACE chains while the research nav stays hidden."""
+def test_workspace_visible_chain_stays_closed_to_non_org_members(env):
+    """无科研组织关系的成员即使链路声明 WORKSPACE 可见也不能进入科研链 API。"""
     env["project"].research_profile.chain_visibility = "WORKSPACE"
     env["project"].research_profile.save(update_fields=["chain_visibility", "updated_at"])
     created, _ = create_chain(env)
@@ -100,15 +142,15 @@ def test_workspace_visible_chain_is_readable_without_research_nav(env):
         payload_hash=uuid4().hex,
     )
 
-    assert env["outsider_client"].get(chains_url(env)).status_code == 200
-    assert env["outsider_client"].get(f"{chains_url(env)}{chain_id}/").status_code == 200
+    assert env["external_client"].get(chains_url(env)).status_code == 403
+    assert env["external_client"].get(f"{chains_url(env)}{chain_id}/").status_code == 403
     assert (
-        env["outsider_client"]
+        env["external_client"]
         .get(f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node.id}/events/")
         .status_code
-        == 200
+        == 403
     )
-    denied = env["outsider_client"].post(
+    denied = env["external_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node.id}/events/",
         {"request_id": f"event-{uuid4().hex}", "event_id": f"event-{uuid4().hex}", "event_type": "RESEARCH_NOTE"},
         format="json",
@@ -261,6 +303,24 @@ def test_chain_list_returns_aggregated_summary_without_per_row_node_requests(env
         request_id=f"chain-second-{uuid4().hex}",
         payload_hash=uuid4().hex,
         created_by=env["owner"],
+    )
+    second_node = ResearchChainNode.objects.create(
+        chain_id=ResearchChain.objects.get(project=second_project).id,
+        node_type="ANALYSIS",
+        title="第二条链路节点",
+        status="ACTIVE",
+        request_id=f"node-second-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+    )
+    ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain_id=second_node.chain_id,
+        node=second_node,
+        title="第二条链路任务",
+        status="ASSIGNED",
+        due_at=timezone.now() + timedelta(days=2),
+        request_id=f"task-second-{uuid4().hex}",
+        payload_hash=uuid4().hex,
     )
 
     with CaptureQueriesContext(connection) as second_capture:

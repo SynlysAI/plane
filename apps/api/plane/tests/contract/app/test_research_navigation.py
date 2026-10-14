@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from plane.db.models import (
     OrgUnit,
+    OrgUnitMember,
     Project,
     ProjectMember,
     ProjectNavigationCategory,
@@ -74,6 +75,18 @@ def navigation_env(db):
     root = create_unit(workspace, "前沿材料研究院")
     lab = create_unit(workspace, "分子材料实验室", root)
     group = create_unit(workspace, "界面催化组", lab)
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
+        user=admin,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
+        user=member,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
 
     research_project = Project.objects.create(
         workspace=workspace,

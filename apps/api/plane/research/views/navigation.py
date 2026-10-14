@@ -547,12 +547,30 @@ class ProjectNavigationTreeEndpoint(ResearchAPIView):
 
     nav_capability = None
 
+    def initial(self, request, *args, **kwargs):
+        """按 GET 的 scope 决定该次导航树是否依赖科研模块。
+
+        Args:
+            request: 当前 HTTP 请求。
+            *args: DRF initial 额外参数。
+            **kwargs: DRF initial 额外关键字参数。
+        """
+        scope = _scope(request.GET.get("scope")) if request.method == "GET" else None
+        self.research_module_required = scope != ProjectNavigationCategory.Scope.ADMINISTRATIVE
+        self.research_membership_required = scope != ProjectNavigationCategory.Scope.ADMINISTRATIVE
+        return super().initial(request, *args, **kwargs)
+
     def get(self, request, slug):
         """Return one scoped tree using existing project visibility rules."""
-        workspace, error = self.get_workspace(nav=None)
+        scope = _scope(request.GET.get("scope"))
+        is_research_scope = scope == ProjectNavigationCategory.Scope.RESEARCH
+        workspace, error = self.get_workspace(
+            nav=None,
+            require_enabled=is_research_scope,
+            research_member=is_research_scope,
+        )
         if error:
             return error
-        scope = _scope(request.GET.get("scope"))
         if scope is None:
             return Response(
                 {"error_code": "navigation_scope_invalid", "message": "scope is required."},

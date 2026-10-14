@@ -236,8 +236,32 @@ def _org_roles(user, workspace_id, on_date):
             active_membership_q(on_date),
             workspace_id=workspace_id,
             user=user,
+            org_unit__workspace_id=workspace_id,
+            org_unit__deleted_at__isnull=True,
+            org_unit__is_active=True,
         ).values_list("org_role", flat=True)
     )
+
+
+def has_active_research_org_relation(user, workspace, on_date=None):
+    """判断用户是否为当前工作区科研组织树的有效成员。
+
+    Args:
+        user: 当前请求用户。
+        workspace: URL 对应的工作区或工作区主键。
+        on_date: 用于生效期判断的日期，默认当天。
+
+    Returns:
+        存在未删除、生效中且所属组织节点有效的成员关系时为 True。
+    """
+    if user is None or not getattr(user, "is_authenticated", False) or workspace is None:
+        return False
+    signal_workspace = org_signal_workspace(workspace)
+    signal_workspace_id = getattr(signal_workspace, "id", None)
+    if signal_workspace_id is None:
+        return False
+    on_date = on_date or timezone.localdate()
+    return bool(_org_roles(user, signal_workspace_id, on_date))
 
 
 def _is_mentor(user, workspace_id, on_date):
@@ -281,25 +305,28 @@ def research_signals(user, workspace, on_date=None, now=None) -> ResearchSignals
     signal_workspace_id = getattr(signal_workspace, "id", None)
 
     roles = _org_roles(user, signal_workspace_id, on_date) if signal_workspace_id else set()
+    has_org_relation = bool(roles)
     is_principal = bool(roles & set(PRINCIPAL_ORG_ROLES))
     is_mentor = bool(roles & set(MENTOR_ORG_ROLES)) or (
-        _is_mentor(user, signal_workspace_id, on_date) if signal_workspace_id else False
+        has_org_relation and _is_mentor(user, signal_workspace_id, on_date)
     )
-    is_stage_reviewer = _is_stage_reviewer(user, signal_workspace_id, now) if signal_workspace_id else False
+    is_stage_reviewer = (
+        has_org_relation and _is_stage_reviewer(user, signal_workspace_id, now) if signal_workspace_id else False
+    )
 
     return ResearchSignals(
-        # Administrators are always resolved against the workspace in the URL:
-        # a tag or a workspace seat is what opens the configuration surfaces.
-        is_admin=is_research_admin(user, workspace.id),
-        is_main_pi=is_main_pi(user, workspace),
+        # A workspace seat or an administrator tag only changes the tier inside
+        # an effective research organisation relation. It never creates one.
+        is_admin=has_org_relation and is_research_admin(user, workspace.id),
+        is_main_pi=has_org_relation and is_main_pi(user, workspace),
         is_principal=is_principal,
         is_mentor=is_mentor,
         is_stage_reviewer=is_stage_reviewer,
-        has_org_relation=bool(roles),
-        has_profile=_has_profile(user),
-        can_configure_integrations=can_configure_integrations(user, workspace),
-        can_operate_workspace=can_operate_workspace(user, workspace),
-        can_manage_accounts=is_account_compat_admin(user, workspace),
+        has_org_relation=has_org_relation,
+        has_profile=has_org_relation and _has_profile(user),
+        can_configure_integrations=has_org_relation and can_configure_integrations(user, workspace),
+        can_operate_workspace=has_org_relation and can_operate_workspace(user, workspace),
+        can_manage_accounts=has_org_relation and is_account_compat_admin(user, workspace),
     )
 
 
