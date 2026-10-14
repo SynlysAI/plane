@@ -7,7 +7,6 @@ import type { TResearchIdentity } from "@plane/types";
 import { StoreProvider } from "@/lib/store-context";
 import { WorkspaceHomeWorkbench } from "../../core/components/home/workbench";
 import { ResearchApprovalCenter } from "../../core/components/research/approvals/research-approval-center";
-import { ResearchAgentService } from "../../core/services/research/agent.service";
 import { ResearchChainService } from "../../core/services/research/chain.service";
 import { ResearchPlatformService } from "../../core/services/research/platform.service";
 import { ResearchReportService } from "../../core/services/research/report.service";
@@ -27,7 +26,6 @@ const identity = {
     approvals: true,
     stages: true,
     research_chain: true,
-    research_agent: true,
   },
   user: {
     id: "student-1",
@@ -70,7 +68,6 @@ ResearchChainService.prototype.getChains = async () => [
     updated_at: now,
   },
 ];
-ResearchAgentService.prototype.getApprovals = async () => ({ results: [], count: 0 });
 ResearchReportService.prototype.getSummary = async () => ({
   period_key: "2026-W41",
   period_start: "2026-10-05",
@@ -107,7 +104,7 @@ function SharedTodoFixture() {
   return (
     <StoreProvider>
       <TranslationProvider>
-        <MemoryRouter initialEntries={["/isolated-test?todo_scope=to_me&tab=agent_approval"]}>
+        <MemoryRouter initialEntries={["/isolated-test?todo_scope=to_me&tab=shared_todos"]}>
           <Routes>
             <Route
               path="/:workspaceSlug"

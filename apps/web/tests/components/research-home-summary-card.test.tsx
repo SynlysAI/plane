@@ -71,11 +71,6 @@ vi.mock("@/services/research/approval.service", () => ({
     getApprovalRequests = vi.fn().mockResolvedValue({ results: [], count: 0 });
   },
 }));
-vi.mock("@/services/research/agent.service", () => ({
-  ResearchAgentService: class {
-    getApprovals = vi.fn().mockResolvedValue({ results: [], count: 0 });
-  },
-}));
 vi.mock("@/services/research/integration.service", () => ({
   ResearchIntegrationService: class {
     getConnections = vi.fn().mockResolvedValue({ results: [] });

@@ -7,7 +7,6 @@ import type { TResearchTodoEnvelope, TResearchTodoEnvelopeList } from "@plane/ty
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
-  collectResearchTodos: vi.fn(),
   getResearchTodos: vi.fn(),
   getChainNodes: vi.fn(),
   getKnowledgeUploads: vi.fn(),
@@ -37,9 +36,6 @@ vi.mock("@/services/research/chain.service", () => ({
     getChainNodes = mocks.getChainNodes;
     getKnowledgeUploads = mocks.getKnowledgeUploads;
   },
-}));
-vi.mock("@/components/research/common/research-todo-source", () => ({
-  collectResearchTodos: mocks.collectResearchTodos,
 }));
 
 const { ResearchTodoEnvelopeList } = await import("@/components/research/common/research-todo-index");
@@ -176,7 +172,6 @@ it("uses one server aggregate request and never polls chain upload status", asyn
   expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
   expect(mocks.getChainNodes).not.toHaveBeenCalled();
   expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
-  expect(mocks.collectResearchTodos).not.toHaveBeenCalled();
   const rows = [...container.querySelectorAll("li")];
   expect(rows[0]?.textContent).toContain("补充实验数据");
   expect(rows[0]?.textContent).toContain("处理人一");
@@ -272,10 +267,9 @@ it("restores the URL scope after a refresh and keeps the layout inside the viewp
 });
 
 it("shows partial degradation while retaining the available server projection", async () => {
-  mocks.getResearchTodos.mockResolvedValue(todoList([todoEnvelope()], 1, ["AGENT_APPROVAL"]));
+  mocks.getResearchTodos.mockResolvedValue(todoList([todoEnvelope()], 1, ["PAPER_REVIEW"]));
   await renderTodo("/lab?todo_scope=to_me");
 
-  expect(container.textContent).toContain("Agent 审批");
   expect(container.textContent).toContain("报告需修订 · 2026-W38");
 });
 

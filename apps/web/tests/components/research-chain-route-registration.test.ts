@@ -23,7 +23,7 @@ describe("research chain route registration", () => {
     });
   });
 
-  it("registers the chain board, detail, and node agent pages", () => {
+  it("registers the chain board and detail pages", () => {
     const routes = flattenRoutes(coreRoutes);
 
     expect(routes).toContainEqual({
@@ -33,10 +33,6 @@ describe("research chain route registration", () => {
     expect(routes).toContainEqual({
       path: ":workspaceSlug/research/chains/:chainId",
       file: "./(all)/[workspaceSlug]/(projects)/research/chains/[chainId]/page.tsx",
-    });
-    expect(routes).toContainEqual({
-      path: ":workspaceSlug/research/chains/:chainId/nodes/:nodeId/agent",
-      file: "./(all)/[workspaceSlug]/(projects)/research/chains/[chainId]/nodes/[nodeId]/agent/page.tsx",
     });
   });
 

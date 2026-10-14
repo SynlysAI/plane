@@ -25,16 +25,7 @@ type Props = {
   breadcrumbs?: ReactNode;
   /** Metadata row kept separate from actions (owner, period, updated time, scope). */
   metadata?: ReactNode;
-  section?:
-    | "org"
-    | "reports"
-    | "approvals"
-    | "stages"
-    | "experiments"
-    | "code"
-    | "integrations"
-    | "research_chain"
-    | "research_agent";
+  section?: "org" | "reports" | "approvals" | "stages" | "experiments" | "code" | "integrations" | "research_chain";
   /**
    * Navigation key this page belongs to (v2.5.0). The backend publishes the
    * keys the caller may reach, so the page guard and the sidebar entry can

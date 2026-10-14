@@ -6,7 +6,7 @@ import translations from "../../../../packages/i18n/src/locales/zh-CN/common.jso
 
 const mocks = vi.hoisted(() => ({
   research: {
-    identity: { sections: { research_agent: true, research_chain: true } },
+    identity: { sections: { research_chain: true } },
     canSee: () => true,
   },
   getChain: vi.fn(),

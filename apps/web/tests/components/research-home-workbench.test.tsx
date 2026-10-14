@@ -6,7 +6,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
-  collectResearchTodos: vi.fn(),
   fetchIdentity: vi.fn(),
   getChainNodes: vi.fn(),
   getKnowledgeUploads: vi.fn(),
@@ -87,9 +86,6 @@ vi.mock("@/services/research/report.service", () => ({
   ResearchReportService: class {
     getSummary = mocks.getReportSummary;
   },
-}));
-vi.mock("@/components/research/common/research-todo-source", () => ({
-  collectResearchTodos: mocks.collectResearchTodos,
 }));
 vi.mock("@/components/home/widgets/recents", () => ({
   RecentActivityWidget: (props: unknown) => {
@@ -352,7 +348,6 @@ it("uses the shared server todo projection and preserves URL scope changes", asy
   expect(mocks.getResearchTodos).toHaveBeenNthCalledWith(1, "lab", { scope: "visible", limit: 100 });
   expect(container.textContent).toContain("报告需修订 · 2026-W38");
   expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
-  expect(mocks.collectResearchTodos).not.toHaveBeenCalled();
   expect(mocks.getChainNodes).not.toHaveBeenCalled();
   expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
 

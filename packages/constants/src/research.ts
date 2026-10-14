@@ -717,18 +717,6 @@ export const researchEndpoints = {
   chainUploadDetail: (slug: string, chainId: string, uploadId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/uploads/${uploadId}/`,
   chainReferences: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/references/`,
-  agentManifest: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/manifest/`,
-  agentSessions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/`,
-  agentSession: (slug: string, sessionId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/`,
-  agentSessionClose: (slug: string, sessionId: string) =>
-    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/close/`,
-  agentMessages: (slug: string, sessionId: string) =>
-    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/messages/`,
-  agentRunEvents: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/events/`,
-  agentRunCancel: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/cancel/`,
-  agentApprovals: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/approvals/`,
-  agentApproval: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/approvals/`,
-  agentArtifacts: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/artifacts/`,
   workspaceAsset: (slug: string) => `/api/workspaces/${slug}/assets/`,
   workspaceAssetDetail: (slug: string, assetId: string) => `/api/workspaces/${slug}/assets/${assetId}/`,
   identityMappings: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/mappings/`,

@@ -62,7 +62,6 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
   const activeCount = chains.filter((chain) => chain.status === "ACTIVE").length;
   const ragportal = connections.find((connection) => connection.system === "RAGPORTAL");
   const ragStatus = ragportal?.is_enabled ? (ragportal.health_status ?? "UNKNOWN") : ("UNKNOWN" as const);
-  const agentAvailable = Boolean(research.identity?.sections?.research_agent);
   const updatedLabel = currentChain ? formatResearchDateTime(currentChain.updated_at, currentLocale) : "";
 
   return (
@@ -172,21 +171,6 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
           <h4 className="text-12 font-medium text-primary">{t("research.portal.snapshot_title")}</h4>
           <p className="mt-2 text-11 text-tertiary">{t("research.portal.snapshot_empty")}</p>
         </div>
-
-        <div className="rounded-lg border border-subtle bg-surface-1 p-4">
-          <h4 className="text-12 font-medium text-primary">{t("research.portal.agent_title")}</h4>
-          <p className="mt-2 text-11 text-tertiary">
-            {agentAvailable ? t("research.portal.agent_hint") : t("research.portal.agent_unavailable")}
-          </p>
-          {agentAvailable && currentChain && (
-            <Link
-              href={`/${workspaceSlug}/research/chains/${currentChain.id}`}
-              className="mt-3 inline-block rounded-md border border-subtle px-3 py-1.5 text-12 text-secondary hover:bg-surface-2"
-            >
-              {t("research.portal.open_agent")}
-            </Link>
-          )}
-        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -198,15 +182,6 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
             </span>
           </div>
           <p className="mt-2 text-11 text-tertiary">{t("research.portal.ragportal_hint")}</p>
-        </div>
-        <div className="rounded-lg border border-subtle bg-surface-1 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="text-12 font-medium text-primary">Synlora</h4>
-            <span className="rounded bg-surface-2 px-2 py-1 text-11 text-tertiary">
-              {agentAvailable ? t("research.portal.status_ok") : t("research.portal.status_unknown")}
-            </span>
-          </div>
-          <p className="mt-2 text-11 text-tertiary">{t("research.portal.synlora_hint")}</p>
         </div>
       </div>
     </section>

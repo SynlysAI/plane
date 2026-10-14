@@ -12,7 +12,6 @@ import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 // components
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
-import { ResearchAgentApprovalQueue } from "@/components/research/approvals/research-agent-approval-queue";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
 import { ResearchReportList } from "@/components/research/reports/report-list";
@@ -24,7 +23,7 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ApprovalTab = "shared_todos" | "stage_review" | "report_review" | "agent_approval" | "office";
+type ApprovalTab = "shared_todos" | "stage_review" | "report_review" | "office";
 
 type ApprovalShell = {
   titleKey: string;
@@ -101,11 +100,6 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
       visible: Boolean(sections?.reports) && research.canSee("reports"),
     },
     {
-      id: "agent_approval" as const,
-      labelKey: "research.approvals.tabs.agent_approval",
-      visible: Boolean(sections?.research_agent) && research.canSee("research_chain"),
-    },
-    {
       id: "office" as const,
       labelKey: "research.approvals.tabs.office",
       visible: Boolean(sections?.approvals) && research.canSee("approvals"),
@@ -150,7 +144,6 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
           {activeTab === "office" && (
             <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isWorkspaceAdmin} />
           )}
-          {activeTab === "agent_approval" && <ResearchAgentApprovalQueue workspaceSlug={workspaceSlug} />}
         </div>
       </div>
     </ResearchPageShell>

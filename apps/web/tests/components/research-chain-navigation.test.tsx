@@ -47,7 +47,6 @@ const mocks = vi.hoisted(() => ({
         code: true,
         integrations: true,
         research_chain: false,
-        research_agent: false,
       },
     },
     isEnabled: true,
@@ -186,7 +185,6 @@ vi.mock("@plane/ui", () => ({
 }));
 
 const { ResearchSidebarItems } = await import("@/components/research/navigation/research-sidebar-items");
-const { ResearchPageShell } = await import("@/components/research/common/research-page-shell");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
@@ -267,9 +265,8 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-function setSwitches(researchChain: boolean, researchAgent = false, iaV2 = false) {
+function setSwitches(researchChain: boolean, iaV2 = false) {
   mocks.research.identity.sections.research_chain = researchChain;
-  mocks.research.identity.sections.research_agent = researchAgent;
   mocks.research.isIaV2Enabled = iaV2;
   mocks.research.identity.research_ia_v2 = iaV2;
 }
@@ -313,7 +310,7 @@ it("shows 研究链 only when the workspace chain switch is on", async () => {
 });
 
 it("collapses research to the IA v2 project channels when IA v2 is enabled", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   await act(async () => root.render(<ResearchSidebarItems />));
   await act(async () => {});
 
@@ -341,7 +338,7 @@ it("collapses research to the IA v2 project channels when IA v2 is enabled", asy
 });
 
 it("shows the management destination only for callers with a management tab", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   const originalCanSee = mocks.research.canSee;
   mocks.research.canSee = (key: string) => key === "overview" || key === "research_chain" || key === "approvals";
   await act(async () => root.render(<ResearchSidebarItems />));
@@ -351,7 +348,7 @@ it("shows the management destination only for callers with a management tab", as
 });
 
 it("短科研列表使用自然高度，让行政项目紧跟其后", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   researchContentHeight = 80;
   administrativeContentHeight = 80;
   await act(async () => root.render(<ResearchSidebarItems />));
@@ -365,7 +362,7 @@ it("短科研列表使用自然高度，让行政项目紧跟其后", async () =
 });
 
 it("内容变长或窗口变矮时恢复科研区伸展，空间足够时恢复紧凑排列", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   researchContentHeight = 80;
   administrativeContentHeight = 80;
   await act(async () => root.render(<ResearchSidebarItems />));
@@ -392,7 +389,7 @@ it("内容变长或窗口变矮时恢复科研区伸展，空间足够时恢复�
 });
 
 it("将科研区收起后释放的高度交给行政区，并保留展开状态", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   await act(async () => root.render(<ResearchSidebarItems />));
   const researchTree = container.querySelector('[data-navigation-scope="RESEARCH"]');
   const administrativeTree = container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]');
@@ -420,7 +417,7 @@ it("将科研区收起后释放的高度交给行政区，并保留展开状态"
 });
 
 it("科研区不可见时行政区使用剩余高度", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   const originalNavKeys = mocks.research.visibleNavKeys;
   mocks.research.visibleNavKeys = originalNavKeys.filter((key) => key !== "research_chain");
   try {
@@ -433,34 +430,11 @@ it("科研区不可见时行政区使用剩余高度", async () => {
 });
 
 it("行政区收起时科研区继续占用剩余高度", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   await act(async () => root.render(<ResearchSidebarItems />));
   const collapseButton = container.querySelector<HTMLButtonElement>('button[aria-label="收起行政项目"]');
   if (!collapseButton) throw new Error("未找到行政区收起按钮");
   await act(async () => collapseButton.click());
   expect(container.querySelector('[data-navigation-scope="RESEARCH"]')?.classList.contains("grow")).toBe(true);
   expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.textContent).not.toContain("年度采购");
-});
-
-it("guards the agent route with the independent workspace switch", async () => {
-  setSwitches(true, false);
-  await act(async () =>
-    root.render(
-      <ResearchPageShell titleKey="research.nav.research_chain" section="research_agent" navKey="research_chain">
-        <div>agent-body</div>
-      </ResearchPageShell>
-    )
-  );
-  expect(container.textContent).toContain("status-panel");
-  expect(container.textContent).not.toContain("agent-body");
-
-  setSwitches(true, true);
-  await act(async () =>
-    root.render(
-      <ResearchPageShell titleKey="research.nav.research_chain" section="research_agent" navKey="research_chain">
-        <div>agent-body</div>
-      </ResearchPageShell>
-    )
-  );
-  expect(container.textContent).toContain("agent-body");
 });
