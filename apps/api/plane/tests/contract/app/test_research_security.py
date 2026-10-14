@@ -8,6 +8,8 @@ These cases are the release gate for the §9.1 "安全测试" row: page bypass,
 snapshot download, external credentials, cache isolation and audit immutability.
 """
 
+from unittest.mock import patch
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -214,7 +216,14 @@ class TestSnapshotAndCredentialHandling:
         )
 
     def test_connection_credentials_are_write_only(self, env):
-        response = env["admin_client"].patch(
+        class FakeProbeResponse:
+            status_code = 200
+
+            def json(self):
+                return {}
+
+        with patch("httpx.get", return_value=FakeProbeResponse()):
+            response = env["admin_client"].patch(
             f"/api/research/workspaces/{env['workspace'].slug}/integrations/",
             {
                 "items": [

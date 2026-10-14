@@ -126,24 +126,33 @@ class TestConnectionConfiguration:
         assert phase_two["registration_status"] == "PHASE_NOT_ENABLED"
 
     def test_admin_configures_a_connection_without_echoing_credentials(self, env):
-        response = env["admin_client"].patch(
-            integrations_url(env),
-            {
-                "items": [
-                    {
-                        "system": "RAGPORTAL",
-                        "display_name": "Knowledge portal",
-                        "base_url": "https://ragportal.example.com",
-                        "auth_mode": "HMAC",
-                        "credential": "ragportal_shared_secret",
-                        "timeout_seconds": 2,
-                        "cache_ttl_seconds": 120,
-                        "is_enabled": True,
-                    }
-                ]
-            },
-            format="json",
-        )
+        class FakeProbeResponse:
+            status_code = 200
+
+            def json(self):
+                return {}
+
+        with patch("httpx.get", return_value=FakeProbeResponse()) as fake_probe:
+            response = env["admin_client"].patch(
+                integrations_url(env),
+                {
+                    "items": [
+                        {
+                            "system": "RAGPORTAL",
+                            "display_name": "Knowledge portal",
+                            "base_url": "https://ragportal.example.com",
+                            "auth_mode": "HMAC",
+                            "credential": "ragportal_shared_secret",
+                            "timeout_seconds": 2,
+                            "cache_ttl_seconds": 120,
+                            "is_enabled": True,
+                        }
+                    ]
+                },
+                format="json",
+            )
+        # saving an enabled connection re-probes it immediately
+        assert any(call.args[0].startswith("https://ragportal.example.com") for call in fake_probe.call_args_list)
         assert response.status_code == 200, response.json()
         body = response.json()["results"][0]
         assert body["has_credential"] is True

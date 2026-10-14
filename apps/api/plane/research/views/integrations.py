@@ -186,6 +186,15 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
             if has_credential:
                 connection.set_credential(str(entry.get("credential") or ""))
                 connection.save(update_fields=["credential", "updated_at"])
+            if connection.is_enabled:
+                # Re-check reachability immediately so the health board shows
+                # the state of the configuration that was just saved, not the
+                # previously cached health row.
+                try:
+                    client_for(system, connection).health()
+                except Exception:  # best-effort: probe failures keep the old row
+                    pass
+                connection.refresh_from_db()
             updated.append(connection)
             record_audit_event(
                 workspace=workspace,
