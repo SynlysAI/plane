@@ -11,8 +11,14 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("mobx-react", () => ({
+  enableStaticRendering: () => undefined,
+  observer: (component: unknown) => component,
+}));
+vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "en",
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("@plane/propel/tab-navigation", () => ({
   TabNavigationList: ({ children }: { children: React.ReactNode }) => <nav>{children}</nav>,
 }));

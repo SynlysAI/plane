@@ -65,7 +65,7 @@ def _serialize_organization(organization, user, can_manage=None, visible_project
                 "email": item.member.email,
                 "role": item.role,
             }
-            for item in (member_relations if can_manage else [])
+            for item in (member_relations if can_manage and not organization.is_default else [])
         ],
         "project_ids": [str(project_id) for project_id in visible_project_ids],
     }
@@ -132,7 +132,7 @@ class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
         if not _workspace_admin(request.user, workspace):
             return Response({"message": "Only workspace administrators can create organizations."}, status=403)
         name = str(request.data.get("name") or "").strip()
-        if not name or len(name) > 255 or name == "默认":
+        if not name or len(name) > 255 or name == AdministrativeOrganization.PUBLIC_NAME:
             return Response({"message": "Organization name is invalid."}, status=422)
         try:
             with transaction.atomic():
@@ -229,6 +229,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
             return Response({"message": "Organization not found."}, status=404)
         if not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         return Response(_serialize_organization(organization, request.user)["members"])
 
     def post(self, request, slug, organization_id):
@@ -240,6 +245,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
             return Response({"message": "Organization not found."}, status=404)
         if not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         member_id, error = parse_uuid(request.data.get("member"), "member")
         if error:
             return error
@@ -292,6 +302,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
             request.user, slug, organization.id
         ):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         relation = AdministrativeOrganizationMember.objects.filter(
             workspace=workspace,
             organization=organization,
@@ -315,6 +330,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
         organization = self._organization(workspace, organization_id)
         if organization is None or not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         relation = AdministrativeOrganizationMember.objects.filter(
             workspace=workspace,
             organization=organization,
@@ -348,6 +368,11 @@ class AdministrativeOrganizationAssignableMembersEndpoint(ResearchAPIView):
             return Response({"message": "Organization not found."}, status=404)
         if not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         current_member_ids = organization.members.filter(is_active=True, deleted_at__isnull=True).values("member_id")
         members = (
             User.objects.filter(

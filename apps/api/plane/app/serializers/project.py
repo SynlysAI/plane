@@ -151,7 +151,11 @@ class ProjectSerializer(BaseSerializer):
                         )
                     }
                 )
-            if not new_organization_name or len(new_organization_name) > 255 or new_organization_name == "默认":
+            if (
+                not new_organization_name
+                or len(new_organization_name) > 255
+                or new_organization_name == AdministrativeOrganization.PUBLIC_NAME
+            ):
                 raise serializers.ValidationError({"new_administrative_organization": "Organization name is invalid."})
             if AdministrativeOrganization.objects.filter(
                 workspace_id=self.context["workspace_id"],
@@ -177,6 +181,10 @@ class ProjectSerializer(BaseSerializer):
                     {"new_administrative_organization": ("Only workspace administrators can create an organization.")}
                 )
             data["new_administrative_organization"] = new_organization_name
+        elif self.instance is None and organization is None:
+            raise serializers.ValidationError(
+                {"administrative_organization": "An administrative project must select an organization."}
+            )
         if organization is None and "administrative_organization" in data and self.instance is not None:
             organization = get_or_create_default_administrative_organization(
                 Workspace.objects.filter(pk=self.context["workspace_id"]).first()
@@ -250,13 +258,6 @@ class ProjectSerializer(BaseSerializer):
                 created_by=creator,
             )
             validated_data["administrative_organization"] = organization
-        if validated_data.get("administrative_organization") is None:
-            default_organization = get_or_create_default_administrative_organization(
-                Workspace.objects.filter(pk=workspace_id).first()
-            )
-            if default_organization is not None:
-                validated_data["administrative_organization"] = default_organization
-
         project = Project.objects.create(**validated_data, workspace_id=workspace_id)
 
         ProjectIdentifier.objects.create(name=project.identifier, project=project, workspace_id=workspace_id)

@@ -101,6 +101,7 @@ vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ projectMap: {
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => mocks.workspace }));
 vi.mock("@/services/research/navigation.service", () => ({
   ResearchNavigationService: class {
+    getAdministrativeOrganizations = async () => [];
     getTree = (_workspaceSlug: string, scope: string) =>
       Promise.resolve(
         scope === "RESEARCH"

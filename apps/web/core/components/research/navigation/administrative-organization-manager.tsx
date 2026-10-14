@@ -264,9 +264,9 @@ export function AdministrativeOrganizationManager({
               onChange={(event) => setDeleteTarget(event.target.value)}
             >
               {defaultOrganization ? (
-                <option value={defaultOrganization.id}>默认</option>
+                <option value={defaultOrganization.id}>公共</option>
               ) : (
-                <option value="uncategorized">默认</option>
+                <option value="uncategorized">公共</option>
               )}
               {organizations
                 .filter((item) => !item.is_default && item.id !== organization.id)

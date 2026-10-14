@@ -446,7 +446,12 @@ def _tree(workspace, user, scope, projects, can_manage=False):
                 for payload in project_by_org.get(str(organization.id), [])
                 if payload["id"] in visible_project_ids
             ]
-            if organization_projects or str(organization.id) in organization_ids or can_manage:
+            if (
+                organization.is_default
+                or organization_projects
+                or str(organization.id) in organization_ids
+                or can_manage
+            ):
                 org_nodes[str(organization.id)] = {
                     "id": f"admin-org:{organization.id}",
                     "name": organization.name,

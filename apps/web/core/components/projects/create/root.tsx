@@ -16,7 +16,7 @@ import ProjectCommonAttributes from "@/components/project/create/common-attribut
 import ProjectCreateHeader from "@/components/project/create/header";
 import ProjectCreateButtons from "@/components/project/create/project-create-buttons";
 // hooks
-import { getCoverImageType, uploadCoverImage } from "@/helpers/cover-image.helper";
+import { getCoverImageType, uploadCoverImage } from "../../../../helpers/cover-image.helper";
 import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web types
@@ -56,8 +56,10 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   // states
   const [shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier] = useState(true);
   const [organizations, setOrganizations] = useState<TAdministrativeOrganization[]>([]);
-  const [organizationChoice, setOrganizationChoice] = useState("default");
+  const [organizationChoice, setOrganizationChoice] = useState("");
   const [newOrganizationName, setNewOrganizationName] = useState("");
+  const [organizationsLoaded, setOrganizationsLoaded] = useState(false);
+  const [organizationLoadFailed, setOrganizationLoadFailed] = useState(false);
   // form info
   const methods = useForm<TProject>({
     defaultValues: { ...getProjectFormValues(), ...data },
@@ -68,14 +70,19 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
 
   useEffect(() => {
     if (!administrative) return;
+    setOrganizations([]);
+    setOrganizationChoice("");
+    setOrganizationsLoaded(false);
+    setOrganizationLoadFailed(false);
     void navigationService
       .getAdministrativeOrganizations(workspaceSlug)
       .then((items) => {
         setOrganizations(items);
-        setOrganizationChoice(items.find((item) => item.is_default)?.id ?? "default");
+        setOrganizationChoice(items.find((item) => item.is_default)?.id ?? "");
         return undefined;
       })
-      .catch(() => undefined);
+      .catch(() => setOrganizationLoadFailed(true))
+      .finally(() => setOrganizationsLoaded(true));
   }, [administrative, workspaceSlug]);
   const handleAddToFavorites = (projectId: string) => {
     if (!workspaceSlug) return;
@@ -121,12 +128,10 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
       }
     }
 
-    const administrativeOrganization = organizationChoice;
     if (administrative && organizationChoice === "new") {
       formData.new_administrative_organization = newOrganizationName.trim();
-    }
-    if (administrative && administrativeOrganization !== "default") {
-      formData.administrative_organization = administrativeOrganization;
+    } else if (administrative) {
+      formData.administrative_organization = organizationChoice;
     }
     return createProject(workspaceSlug.toString(), formData)
       .then(async (res) => {
@@ -225,25 +230,37 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
               <label className="flex flex-col gap-1 text-12 text-secondary">
                 行政组织
                 <select
+                  id="administrative-organization"
                   className="rounded-md border border-subtle bg-surface-1 px-2 py-2 text-13 text-primary"
                   value={organizationChoice}
                   onChange={(event) => setOrganizationChoice(event.target.value)}
+                  disabled={!organizationsLoaded || organizationLoadFailed}
+                  required
                 >
                   {organizations
                     .filter((organization) => !organization.is_default)
                     .map((organization) => (
-                      <option key={organization.id} value={organization.id}>
+                      <option key={organization.id} value={organization.id} disabled={!organization.can_manage}>
                         {organization.name}
+                        {organization.can_manage ? "" : "（需组织管理员权限）"}
                       </option>
                     ))}
-                  <option value={organizations.find((item) => item.is_default)?.id ?? "default"}>默认</option>
+                  {organizations
+                    .filter((organization) => organization.is_default)
+                    .map((organization) => (
+                      <option key={organization.id} value={organization.id}>
+                        {organization.name || "公共"}
+                      </option>
+                    ))}
                   {research.isWorkspaceAdmin && <option value="new">＋ 新建组织</option>}
                 </select>
+                {organizationLoadFailed && <span className="text-12 text-secondary">组织加载失败，请稍后重试。</span>}
               </label>
               {organizationChoice === "new" && (
                 <label className="flex flex-col gap-1 text-12 text-secondary">
                   新组织名称
                   <input
+                    id="new-administrative-organization"
                     className="rounded-md border border-subtle bg-surface-1 px-2 py-2 text-13 text-primary"
                     value={newOrganizationName}
                     maxLength={255}
@@ -256,7 +273,10 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
           )}
           <ProjectAttributes isMobile={isMobile} />
         </div>
-        <ProjectCreateButtons handleClose={handleClose} />
+        <ProjectCreateButtons
+          handleClose={handleClose}
+          disabled={administrative && (!organizationsLoaded || organizationLoadFailed || !organizationChoice)}
+        />
       </form>
     </FormProvider>
   );

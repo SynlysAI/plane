@@ -14,6 +14,8 @@ from plane.db.models.workspace import Workspace, WorkspaceMember
 class AdministrativeOrganization(BaseModel):
     """工作区内行政项目的平级组织。"""
 
+    PUBLIC_NAME = "公共"
+
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="administrative_organizations")
     name = models.CharField(max_length=255)
     is_default = models.BooleanField(default=False)
@@ -69,7 +71,7 @@ def create_default_administrative_organization(sender, instance, created, **kwar
         AdministrativeOrganization.objects.get_or_create(
             workspace=instance,
             is_default=True,
-            defaults={"name": "默认", "created_by": instance.owner},
+            defaults={"name": AdministrativeOrganization.PUBLIC_NAME, "created_by": instance.owner},
         )
     except IntegrityError:
         # 并发创建时以数据库唯一约束中的已有默认组织为准。

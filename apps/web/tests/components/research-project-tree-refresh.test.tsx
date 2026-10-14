@@ -6,10 +6,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TNavigationTree } from "@/services/research/navigation.service";
 
 const mocks = vi.hoisted(() => ({
-  projectMap: {} as Record<string, { id: string }>,
+  projectMap: {} as Record<string, { id: string; name: string; identifier: string }>,
   researchProjects: {} as Record<string, { id: string }>,
   tree: null as TNavigationTree | null,
   getTree: vi.fn(),
+  getAdministrativeOrganizations: vi.fn(),
 }));
 
 /** 渲染导航树测试使用的最小图标替身。 */
@@ -114,6 +115,7 @@ vi.mock("@/hooks/use-local-storage", () => ({
 vi.mock("@/services/research/navigation.service", () => ({
   ResearchNavigationService: class {
     getTree = mocks.getTree;
+    getAdministrativeOrganizations = mocks.getAdministrativeOrganizations;
   },
 }));
 
@@ -132,7 +134,7 @@ function TreeHarness() {
         type="button"
         onClick={() => {
           runInAction(() => {
-            mocks.projectMap["project-2"] = { id: "project-2" };
+            mocks.projectMap["project-2"] = { id: "project-2", name: "test2", identifier: "TEST2" };
           });
         }}
       >
@@ -146,8 +148,20 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  mocks.projectMap = observable({ "project-1": { id: "project-1" } });
+  mocks.projectMap = observable({
+    "project-1": { id: "project-1", name: "test1", identifier: "TEST1" },
+  });
   mocks.researchProjects = observable({});
+  mocks.getAdministrativeOrganizations.mockReset().mockImplementation(async () => [
+    {
+      id: "public-id",
+      name: "公共",
+      is_default: true,
+      can_manage: false,
+      project_ids: Object.keys(mocks.projectMap),
+      members: [],
+    },
+  ]);
   mocks.tree = {
     scope: "ADMINISTRATIVE",
     can_manage: false,
@@ -181,8 +195,17 @@ it("refreshes the administrative tree when a created project enters the project 
   const createButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "创建项目");
   await act(async () => createButton?.click());
   await act(async () => undefined);
+  await act(async () => undefined);
 
   expect(mocks.getTree).toHaveBeenCalledTimes(2);
   expect(mocks.getTree).toHaveBeenLastCalledWith("lab", "ADMINISTRATIVE");
   expect(container.textContent).toContain("test2");
+});
+
+it("labels the default administrative organization as public without member management", async () => {
+  await act(async () => root.render(<TreeHarness />));
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("公共");
+  expect(container.textContent).not.toContain("成员管理");
 });

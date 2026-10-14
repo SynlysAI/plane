@@ -17,6 +17,7 @@ from plane.db.models import (
     ProjectMember,
     ProjectNavigationCategory,
     ResearchProjectProfile,
+    State,
     WorkspaceMember,
 )
 from plane.tests.research_fixtures import (
@@ -30,6 +31,13 @@ pytestmark = [pytest.mark.contract, pytest.mark.django_db]
 
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[4] / "plane" / "db" / "migrations" / "0171_administrative_organizations.py"
+)
+PUBLIC_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "plane"
+    / "db"
+    / "migrations"
+    / "0175_rename_default_administrative_organization.py"
 )
 
 
@@ -198,7 +206,7 @@ def test_migration_creates_default_and_flattens_legacy_categories(workspace, cre
     defaults = AdministrativeOrganization.objects.filter(workspace=workspace, is_default=True)
     assert defaults.count() == 1
     default = defaults.get()
-    assert default.name == "默认"
+    assert default.name == "公共"
     root_project.refresh_from_db()
     child_project.refresh_from_db()
     default_project.refresh_from_db()
@@ -216,6 +224,110 @@ def test_migration_creates_default_and_flattens_legacy_categories(workspace, cre
         scope=ProjectNavigationCategory.Scope.ADMINISTRATIVE,
         deleted_at__isnull=True,
     ).exists()
+
+
+def test_public_migration_renames_default_and_disables_its_members(workspace, create_user):
+    """公共组织迁移处理名称冲突并移除无效的默认组织成员。"""
+    default = AdministrativeOrganization.objects.get(workspace=workspace, is_default=True)
+    default.name = "默认"
+    default.save(update_fields=["name", "updated_at"])
+    conflicting = AdministrativeOrganization.objects.create(
+        workspace=workspace,
+        name="公共",
+        created_by=create_user,
+    )
+    for organization in (default, conflicting):
+        AdministrativeOrganizationMember.objects.create(
+            workspace=workspace,
+            organization=organization,
+            member=create_user,
+            role=AdministrativeOrganizationMember.Role.ADMIN,
+            created_by=create_user,
+        )
+
+    migration = runpy.run_path(str(PUBLIC_MIGRATION_PATH))
+    migration["rename_default_administrative_organizations"](apps, None)
+
+    default.refresh_from_db()
+    conflicting.refresh_from_db()
+    assert default.name == "公共"
+    assert conflicting.name == "公共 (2)"
+    assert not AdministrativeOrganizationMember.objects.filter(
+        organization=default, is_active=True, deleted_at__isnull=True
+    ).exists()
+    assert AdministrativeOrganizationMember.objects.filter(
+        organization=conflicting, is_active=True, deleted_at__isnull=True
+    ).exists()
+
+
+def test_public_organization_grants_every_workspace_member_edit_role(env):
+    """公共组织项目对所有有效工作区成员呈现为可编辑成员角色。"""
+    public_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="公共行政项目",
+        identifier=f"PU{uuid4().hex[:6].upper()}",
+        administrative_organization=env["default"],
+        created_by=env["owner"],
+    )
+    slug = env["workspace"].slug
+
+    detail = env["ordinary_client"].get(f"/api/workspaces/{slug}/projects/{public_project.id}/")
+    assert detail.status_code == 200, detail.data
+
+    projects = env["ordinary_client"].get(f"/api/workspaces/{slug}/projects/", {"scope": "administrative"})
+    assert projects.status_code == 200, projects.data
+    row = next(item for item in projects.data if str(item["id"]) == str(public_project.id))
+    assert row["member_role"] == 15
+
+    renamed = env["ordinary_client"].patch(
+        f"/api/workspaces/{slug}/projects/{public_project.id}/",
+        {"description": "普通成员不能获得项目管理员权限"},
+        format="json",
+    )
+    assert renamed.status_code == 403
+
+    State.objects.create(
+        name="Todo",
+        project=public_project,
+        workspace=env["workspace"],
+        group="unstarted",
+        default=True,
+    )
+    with (
+        patch("plane.app.views.issue.base.issue_activity.delay"),
+        patch("plane.app.views.issue.base.model_activity.delay"),
+        patch("plane.app.views.issue.base.issue_description_version_task.delay"),
+    ):
+        issue = env["ordinary_client"].post(
+            f"/api/workspaces/{slug}/projects/{public_project.id}/issues/",
+            {"name": "公共项目工作项"},
+            format="json",
+        )
+    assert issue.status_code == 201, issue.data
+
+
+def test_public_organization_rejects_member_management(env):
+    """公共组织权限来自工作区成员身份，不再提供成员管理。"""
+    slug = env["workspace"].slug
+    members_url = f"/api/research/workspaces/{slug}/administrative-organizations/{env['default'].id}/members/"
+
+    assert env["owner_client"].get(members_url).status_code == 409
+    assert (
+        env["owner_client"]
+        .post(
+            members_url,
+            {"member": str(env["ordinary_member"].id), "role": "MEMBER"},
+            format="json",
+        )
+        .status_code
+        == 409
+    )
+
+    organizations = env["owner_client"].get(f"/api/research/workspaces/{slug}/administrative-organizations/")
+    assert organizations.status_code == 200
+    public = next(item for item in organizations.data if item["is_default"])
+    assert public["name"] == "公共"
+    assert public["members"] == []
 
 
 def test_organization_membership_grants_and_revokes_inherited_read_access(env):
@@ -283,11 +395,23 @@ def test_project_organization_assignment_requires_organization_admin(env):
         {
             "name": "默认归属项目",
             "identifier": f"AD{uuid4().hex[:6].upper()}",
+            "administrative_organization": str(env["default"].id),
         },
         format="json",
     )
     assert default_project.status_code == 201, default_project.json()
     assert Project.objects.get(pk=default_project.json()["id"]).administrative_organization == env["default"]
+
+    missing_organization = env["ordinary_client"].post(
+        f"/api/workspaces/{slug}/projects/",
+        {
+            "name": "缺少归属项目",
+            "identifier": f"MI{uuid4().hex[:6].upper()}",
+        },
+        format="json",
+    )
+    assert missing_organization.status_code == 400
+    assert "administrative_organization" in missing_organization.json()
 
 
 def test_project_and_new_organization_are_created_atomically(env):

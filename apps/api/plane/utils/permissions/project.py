@@ -9,11 +9,22 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 from plane.db.models import ProjectMember, WorkspaceMember
 from plane.db.models.project import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
-from plane.utils.administrative_projects import administrative_organization_project_ids
+from plane.utils.administrative_projects import (
+    administrative_organization_project_ids,
+    public_administrative_project_ids,
+)
 
 
 def _passes_workspace_access_gate(request, view):
     return user_can_access_workspace(request.user, workspace_slug=view.workspace_slug)
+
+
+def _is_public_administrative_project(request, workspace_slug, project_id=None, project_identifier=None):
+    """判断当前请求是否访问全员可编辑的公共行政项目。"""
+    projects = public_administrative_project_ids(request.user, workspace_slug)
+    if project_identifier is not None:
+        return projects.filter(project__identifier=project_identifier).exists()
+    return projects.filter(id=project_id).exists()
 
 
 class ProjectBasePermission(BasePermission):
@@ -44,9 +55,12 @@ class ProjectBasePermission(BasePermission):
             project_id=view.project_id,
             is_active=True,
         )
-        if request.method in SAFE_METHODS and administrative_organization_project_ids(
-            request.user, view.workspace_slug
-        ).filter(id=view.project_id).exists():
+        if (
+            request.method in SAFE_METHODS
+            and administrative_organization_project_ids(request.user, view.workspace_slug)
+            .filter(id=view.project_id)
+            .exists()
+        ):
             return True
 
         ## Only project admins or workspace admin who is part of the project can access
@@ -74,14 +88,18 @@ class ProjectMemberPermission(BasePermission):
 
         ## Safe Methods -> Handle the filtering logic in queryset
         if request.method in SAFE_METHODS:
-            return ProjectMember.objects.filter(
-                workspace__slug=view.workspace_slug,
-                member=request.user,
-                project_id=view.project_id,
-                is_active=True,
-            ).exists() or administrative_organization_project_ids(
-                request.user, view.workspace_slug
-            ).filter(id=view.project_id).exists()
+            return (
+                ProjectMember.objects.filter(
+                    workspace__slug=view.workspace_slug,
+                    member=request.user,
+                    project_id=view.project_id,
+                    is_active=True,
+                ).exists()
+                or administrative_organization_project_ids(request.user, view.workspace_slug)
+                .filter(id=view.project_id)
+                .exists()
+                or _is_public_administrative_project(request, view.workspace_slug, project_id=view.project_id)
+            )
         ## Only workspace owners or admins can create the projects
         if request.method == "POST":
             return WorkspaceMember.objects.filter(
@@ -98,7 +116,7 @@ class ProjectMemberPermission(BasePermission):
             role__in=[ROLE.ADMIN.value, ROLE.MEMBER.value],
             project_id=view.project_id,
             is_active=True,
-        ).exists()
+        ).exists() or _is_public_administrative_project(request, view.workspace_slug, project_id=view.project_id)
 
 
 class ProjectEntityPermission(BasePermission):
@@ -111,25 +129,35 @@ class ProjectEntityPermission(BasePermission):
         # Handle requests based on project__identifier
         if hasattr(view, "project_identifier") and view.project_identifier:
             if request.method in SAFE_METHODS:
-                return ProjectMember.objects.filter(
-                    workspace__slug=view.workspace_slug,
-                    member=request.user,
-                    project__identifier=view.project_identifier,
-                    is_active=True,
-                ).exists() or administrative_organization_project_ids(
-                    request.user, view.workspace_slug
-                ).filter(project__identifier=view.project_identifier).exists()
+                return (
+                    ProjectMember.objects.filter(
+                        workspace__slug=view.workspace_slug,
+                        member=request.user,
+                        project__identifier=view.project_identifier,
+                        is_active=True,
+                    ).exists()
+                    or administrative_organization_project_ids(request.user, view.workspace_slug)
+                    .filter(project__identifier=view.project_identifier)
+                    .exists()
+                    or _is_public_administrative_project(
+                        request, view.workspace_slug, project_identifier=view.project_identifier
+                    )
+                )
 
         ## Safe Methods -> Handle the filtering logic in queryset
         if request.method in SAFE_METHODS:
-            return ProjectMember.objects.filter(
-                workspace__slug=view.workspace_slug,
-                member=request.user,
-                project_id=view.project_id,
-                is_active=True,
-            ).exists() or administrative_organization_project_ids(
-                request.user, view.workspace_slug
-            ).filter(id=view.project_id).exists()
+            return (
+                ProjectMember.objects.filter(
+                    workspace__slug=view.workspace_slug,
+                    member=request.user,
+                    project_id=view.project_id,
+                    is_active=True,
+                ).exists()
+                or administrative_organization_project_ids(request.user, view.workspace_slug)
+                .filter(id=view.project_id)
+                .exists()
+                or _is_public_administrative_project(request, view.workspace_slug, project_id=view.project_id)
+            )
 
         ## Only project members or admins can create and edit the project attributes
         return ProjectMember.objects.filter(
@@ -138,7 +166,7 @@ class ProjectEntityPermission(BasePermission):
             role__in=[ROLE.ADMIN.value, ROLE.MEMBER.value],
             project_id=view.project_id,
             is_active=True,
-        ).exists()
+        ).exists() or _is_public_administrative_project(request, view.workspace_slug, project_id=view.project_id)
 
 
 class ProjectAdminPermission(BasePermission):
@@ -169,4 +197,4 @@ class ProjectLitePermission(BasePermission):
             member=request.user,
             project_id=view.project_id,
             is_active=True,
-        ).exists()
+        ).exists() or _is_public_administrative_project(request, view.workspace_slug, project_id=view.project_id)
