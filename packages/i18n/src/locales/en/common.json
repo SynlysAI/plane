@@ -2732,9 +2732,20 @@
         "outcome": "Outcome",
         "latency": "Latency (ms)",
         "error": "Error",
-        "time": "Time"
+        "time": "Time",
+        "base_url": "Service URL",
+        "credential_mode": "Credential mode",
+        "actions": "Actions"
       },
-      "refresh_health": "Re-check now"
+      "refresh_health": "Re-check now",
+      "credential_mode_shared": "Shared credential",
+      "credential_mode_personal": "Personal credential",
+      "edit": "Edit",
+      "configure": "Configure",
+      "enable": "Enable",
+      "disable": "Disable",
+      "edit_title": "Edit connection",
+      "configure_title": "Configure connection"
     },
     "timeline": {
       "description": "Thinking chain, development chain and the full project timeline.",

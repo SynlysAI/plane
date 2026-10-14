@@ -2762,9 +2762,20 @@
         "outcome": "结果",
         "latency": "耗时（毫秒）",
         "error": "错误码",
-        "time": "时间"
+        "time": "时间",
+        "base_url": "服务地址",
+        "credential_mode": "凭证模式",
+        "actions": "操作"
       },
-      "refresh_health": "立即检测"
+      "refresh_health": "立即检测",
+      "credential_mode_shared": "公共凭证",
+      "credential_mode_personal": "个人凭证",
+      "edit": "修改",
+      "configure": "配置",
+      "enable": "启用",
+      "disable": "停用",
+      "edit_title": "编辑连接",
+      "configure_title": "配置连接"
     },
     "timeline": {
       "description": "思维链、研发链与项目全流程时间线。",
