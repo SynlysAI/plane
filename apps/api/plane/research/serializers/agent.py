@@ -39,6 +39,7 @@ class ResearchAgentSessionSerializer(serializers.ModelSerializer):
             "last_error",
             "synlora_session_id",
             "synlora_run_id",
+            "provider",
             "delegated_subject",
             "assembly",
             "scope_kind",

@@ -114,6 +114,14 @@ export const ResearchAgentPlugin = function ResearchAgentPlugin({
               </button>
               <button
                 type="button"
+                onClick={() => void api.decideApproval("APPROVED_ALWAYS")}
+                disabled={api.approvalBusy}
+                className="rounded-md border border-accent-strong/40 px-3 py-1.5 text-12 text-accent-primary disabled:opacity-50"
+              >
+                {t("research.approvals.approve_always")}
+              </button>
+              <button
+                type="button"
                 onClick={() => void api.decideApproval("APPROVED")}
                 disabled={api.approvalBusy}
                 className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color disabled:opacity-50"

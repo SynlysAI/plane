@@ -92,10 +92,29 @@ export function ResearchAgentRuntime({ api }: Props) {
         <ul className="mt-3 space-y-2" role="list">
           {api.artifactEvents.map((event) => {
             const summary = agentPayloadText(event.payload, ["summary", "content", "artifact_type", "action"]);
+            const versionId = String((event.payload.version as { id?: string } | undefined)?.id ?? "");
             return (
               <li key={`artifact-${event.run_id}-${event.seq}`} className="rounded-md border border-subtle p-3">
                 <p className="text-11 font-medium text-primary">{agentEventLabel(event.event_type, t)}</p>
                 {summary && <p className="mt-1 text-11 text-secondary">{summary}</p>}
+                {api.session?.provider === "SCIENCE_DISCOVERY" && versionId && (
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void api.downloadArtifact(event)}
+                      className="text-11 text-accent-primary hover:underline"
+                    >
+                      {t("research.agent.artifact_download")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => api.prepareArtifactSave(event)}
+                      className="text-11 text-accent-primary hover:underline"
+                    >
+                      {t("research.agent.save_artifact")}
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })}

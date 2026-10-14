@@ -100,6 +100,7 @@ class WorkspaceResearchSetting(BaseModel):
     integration_enabled = models.BooleanField(default=True)
     research_chain_enabled = models.BooleanField(default=False)
     research_agent_enabled = models.BooleanField(default=False)
+    research_agent_user_backend_enabled = models.BooleanField(default=False)
     research_trace_enabled = models.BooleanField(default=False)
     research_account_link_enabled = models.BooleanField(default=False)
     research_external_rag_enabled = models.BooleanField(default=False)

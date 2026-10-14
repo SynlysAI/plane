@@ -115,6 +115,7 @@ from .research import (
     ResearchContextGrant,
     ResearchAgentRunEvent,
     ResearchAgentSession,
+    ResearchAgentBackendConnection,
     CodeArtifact,
     ProjectCodeRepository,
     LiteratureEntry,

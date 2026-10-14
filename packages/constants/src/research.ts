@@ -724,9 +724,17 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/close/`,
   agentMessages: (slug: string, sessionId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/messages/`,
+  agentSessionFiles: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/files/`,
+  agentSessionArtifacts: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/artifacts/`,
+  agentSessionArtifactContent: (slug: string, sessionId: string, versionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/artifact-versions/${versionId}/content/`,
   agentRunEvents: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/events/`,
   agentRunCancel: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/cancel/`,
   agentApprovals: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/approvals/`,
+  agentBackendConnections: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/backend-connections/`,
+  agentBackendConnectionTest: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/backend-connections/test/`,
   agentApproval: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/approvals/`,
   agentArtifacts: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/artifacts/`,
   workspaceAsset: (slug: string) => `/api/workspaces/${slug}/assets/`,

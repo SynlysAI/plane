@@ -539,6 +539,7 @@ export type TResearchAgentSession = {
   last_error: string;
   synlora_session_id: string;
   synlora_run_id: string;
+  provider: "SYNLORA" | "SCIENCE_DISCOVERY";
   delegated_subject: string;
   assembly: {
     persona: string;

@@ -61,6 +61,33 @@ export function ResearchAgentConversation({ api }: Props) {
         }}
       >
         <ReportContextSelector api={api} />
+        {api.session?.provider === "SCIENCE_DISCOVERY" && (
+          <div className="mt-2 flex items-center gap-3 text-11 text-secondary">
+            <label className="cursor-pointer rounded-md border border-subtle px-2 py-1 hover:bg-surface-2">
+              {api.uploadingFile ? t("research.agent.file_uploading") : t("research.agent.file_attach")}
+              <input
+                type="file"
+                className="hidden"
+                disabled={!api.session || api.session.status === "CLOSED" || api.uploadingFile}
+                onChange={(changeEvent) => {
+                  const file = changeEvent.target.files?.[0];
+                  changeEvent.target.value = "";
+                  if (file) void api.uploadFile(file);
+                }}
+              />
+            </label>
+            {api.uploadedFile && (
+              <span className="text-success-primary">
+                {t("research.agent.file_uploaded", { name: api.uploadedFile })}
+              </span>
+            )}
+            {api.uploadError && (
+              <span className="text-danger-primary" role="alert">
+                {api.uploadError}
+              </span>
+            )}
+          </div>
+        )}
         <label htmlFor="research-agent-message" className="text-11 font-medium text-secondary">
           {t("research.agent.input_label")}
         </label>

@@ -7,3 +7,4 @@
 export * from "./invite-code-manager";
 export * from "./user-import-panel";
 export * from "./admin-role-summary";
+export * from "./agent-backend-settings";

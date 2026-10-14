@@ -322,6 +322,7 @@ Plane
 
 - Synlora 作为唯一云端通用 Agent Runtime，承载会话、模型路由、工具调用、审批、插件、沙箱、SSE、运行事件和 Trace。
 - ScienceDiscovery 作为本地或可信网络工作站，承载本地科研连接器、MCP、长任务、证据链、CAS/Artifact 和可复现执行参考。
+- Agent 后端接入采用 **runtime provider 扩展点**：Synlora 是平台默认云端 provider；ScienceDiscovery 可作为内网重型科研执行 runtime，经 Plane BFF 同一套 `agent-plugin.v1` 契约接入，成员可自助接入自有 runtime（需 workspace 治理开关放行），Plane 负责课题标识、权限与 Chain 留痕主线。
 - 两者不在第一阶段重复提供同一套云端 Agent UI；需要统一时，以 Plane 的课题标识和 Synlora 的云端 Agent Trace 为一期主线。
 - Poly_Agent、Spec_Agent、SpecLabOS 等垂类系统只提供专业能力和原始执行事实，不各自建设面向用户的科研管理层。
 
