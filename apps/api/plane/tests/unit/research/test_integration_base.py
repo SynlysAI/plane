@@ -45,21 +45,27 @@ def env(db):
         display_name="RAGPortal",
         base_url="https://ragportal.example.com",
         auth_mode="HMAC",
-        credential_ref="ragportal_shared_secret",
         timeout_seconds=1,
         cache_ttl_seconds=60,
         is_enabled=True,
     )
+    connection.set_credential("top-secret")
+    connection.save(update_fields=["credential"])
     return {"workspace": workspace, "admin": admin, "member": member, "connection": connection}
 
 
-def test_secret_resolution_prefers_the_secret_store(env, settings):
-    settings.RAGPORTAL_SHARED_SECRET = "top-secret"
+def test_secret_resolution_reads_the_stored_credential(env):
     assert resolve_secret(env["connection"]) == "top-secret"
+    assert env["connection"].credential != "top-secret"
 
 
-def test_hmac_headers_never_expose_the_secret(env, settings):
-    settings.RAGPORTAL_SHARED_SECRET = "top-secret"
+def test_personal_mode_has_no_shared_secret(env):
+    env["connection"].credential_mode = "PERSONAL"
+    env["connection"].save(update_fields=["credential_mode"])
+    assert resolve_secret(env["connection"]) is None
+
+
+def test_hmac_headers_never_expose_the_secret(env):
     # RAGPortal overrides HMAC with its AI4MS bearer-token contract; use a
     # generic adapter here to keep this test focused on shared HMAC behavior.
     client = client_for("SPECLABOS", env["connection"])

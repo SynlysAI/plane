@@ -223,7 +223,7 @@ class TestSnapshotAndCredentialHandling:
                         "display_name": "SpecLabOS",
                         "base_url": "https://speclabos.example.com",
                         "auth_mode": "HMAC",
-                        "credential_ref": "speclabos_auth_secret",
+                        "credential": "speclabos_auth_secret",
                         "is_enabled": True,
                     }
                 ]
@@ -234,7 +234,8 @@ class TestSnapshotAndCredentialHandling:
         assert body["has_credential"] is True
         assert "auth_secret" not in str(body).replace("speclabos_auth_secret", "")
         connection = ExternalSystemConnection.objects.get(system="SPECLABOS")
-        assert connection.credential_ref == "speclabos_auth_secret"
+        assert connection.credential != "speclabos_auth_secret"
+        assert connection.get_credential() == "speclabos_auth_secret"
         # the health endpoint reports status, never the credential
         health = env["admin_client"].get(
             f"/api/research/workspaces/{env['workspace'].slug}/integrations/health/"

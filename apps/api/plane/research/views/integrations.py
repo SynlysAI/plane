@@ -116,7 +116,7 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
                     "configured": False,
                     "is_enabled": False,
                     "health_status": "UNKNOWN",
-                    "credential_ref": "",
+                    "credential_mode": "SHARED",
                     "has_credential": False,
                     **registration_metadata(system, connection),
                 })
@@ -155,8 +155,15 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
             for field in ("auth_mode", "degraded_mode"):
                 if entry.get(field):
                     defaults[field] = str(entry[field]).upper()
-            if entry.get("credential_ref") is not None:
-                defaults["credential_ref"] = str(entry.get("credential_ref") or "")
+            credential_mode = str(entry.get("credential_mode") or "").upper()
+            if credential_mode:
+                if credential_mode not in ExternalSystemConnection.CredentialMode.values:
+                    return research_error(
+                        ResearchErrorCode.INTEGRATION_INVALID,
+                        "credential_mode must be SHARED or PERSONAL.",
+                    )
+                defaults["credential_mode"] = credential_mode
+            has_credential = "credential" in entry
             for field in ("timeout_seconds", "cache_ttl_seconds"):
                 if entry.get(field) is not None:
                     try:
@@ -176,6 +183,9 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
                     ResearchErrorCode.INTEGRATION_CONNECTION_EXISTS,
                     "A connection for this system already exists.",
                 )
+            if has_credential:
+                connection.set_credential(str(entry.get("credential") or ""))
+                connection.save(update_fields=["credential", "updated_at"])
             updated.append(connection)
             record_audit_event(
                 workspace=workspace,
@@ -186,7 +196,7 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
                 metadata={
                     "system": system,
                     "is_enabled": connection.is_enabled,
-                    "credential_changed": "credential_ref" in entry,
+                    "credential_changed": has_credential,
                 },
                 request=request,
             )

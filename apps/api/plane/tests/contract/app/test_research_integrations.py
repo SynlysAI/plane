@@ -135,7 +135,7 @@ class TestConnectionConfiguration:
                         "display_name": "Knowledge portal",
                         "base_url": "https://ragportal.example.com",
                         "auth_mode": "HMAC",
-                        "credential_ref": "ragportal_shared_secret",
+                        "credential": "ragportal_shared_secret",
                         "timeout_seconds": 2,
                         "cache_ttl_seconds": 120,
                         "is_enabled": True,
@@ -147,10 +147,12 @@ class TestConnectionConfiguration:
         assert response.status_code == 200, response.json()
         body = response.json()["results"][0]
         assert body["has_credential"] is True
-        assert body["credential_ref"] == "ragportal_shared_secret"
-        assert {"secret", "token", "credential_value"} & set(body) == set()
+        assert body["credential_mode"] == "SHARED"
+        assert {"secret", "token", "credential", "credential_value"} & set(body) == set()
+        connection = ExternalSystemConnection.objects.get(system="RAGPORTAL", is_enabled=True)
+        assert connection.credential != "ragportal_shared_secret"
+        assert connection.get_credential() == "ragportal_shared_secret"
         assert body["timeout_seconds"] == 2
-        assert ExternalSystemConnection.objects.filter(system="RAGPORTAL", is_enabled=True).exists()
 
     def test_only_admins_may_configure(self, env):
         response = env["owner_client"].patch(
