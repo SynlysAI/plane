@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.db.models import IntegrationCallLog, IntegrationSystem, ResearchAgentSession, ResearchAuditEvent, ResearchChainEvent
+from plane.db.models import IntegrationCallLog, IntegrationSystem, ResearchAuditEvent, ResearchChainEvent
 from plane.research.services.integrations import client_for
 from plane.research.utils.audit import ResearchAuditAction
 from plane.research.utils.capabilities import NAV_PLATFORM
@@ -32,29 +32,23 @@ class ResearchObservabilityEndpoint(ResearchAPIView):
         day_ago = now - timedelta(days=1)
         audits = ResearchAuditEvent.objects.filter(workspace=workspace)
         calls = IntegrationCallLog.objects.filter(workspace=workspace)
-        sessions = ResearchAgentSession.objects.filter(workspace=workspace)
         denials_24h = audits.filter(action=ResearchAuditAction.SECURITY_DENIED, created_at__gte=day_ago).count()
-        degraded_total = calls.filter(outcome="DEGRADED").count() + sessions.filter(status="DEGRADED").count()
-        agent_errors = sessions.filter(status__in=("ERROR", "DEGRADED")).count()
+        degraded_total = calls.filter(outcome="DEGRADED").count()
 
         metrics = {
             "schema_version": "research-observability.v1",
             "api_requests_total": audits.count(),
-            "agent_runs_total": sessions.count(),
             "external_calls_total": calls.count(),
             "external_degraded_total": calls.filter(outcome="DEGRADED").count(),
-            "agent_degraded_total": sessions.filter(status="DEGRADED").count(),
             "security_denials_total": audits.filter(action=ResearchAuditAction.SECURITY_DENIED).count(),
             "security_denials_24h": denials_24h,
             "context_reads_total": audits.filter(action=ResearchAuditAction.CONTEXT_READ).count(),
             "chain_events_total": ResearchChainEvent.objects.filter(chain__workspace=workspace).count(),
-            "agent_errors_total": agent_errors,
             "degraded_total": degraded_total,
         }
         alerts = {
             "external_degraded": degraded_total > 0,
             "security_denial_spike": denials_24h > 100,
-            "agent_error_rate": agent_errors > 0 and sessions.count() > 0 and agent_errors / sessions.count() > 0.2,
         }
         return Response(
             {

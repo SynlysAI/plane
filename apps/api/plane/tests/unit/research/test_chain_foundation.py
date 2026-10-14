@@ -36,7 +36,7 @@ def env(db, settings):
     outsider = make_user(first_name="Chain outsider")
     workspace = make_workspace(owner)
     add_workspace_member(workspace, outsider)
-    enable_research(workspace, research_chain_enabled=True, research_agent_enabled=True)
+    enable_research(workspace, research_chain_enabled=True)
     suffix = uuid4().hex[:6]
     project = Project.objects.create(
         workspace=workspace,

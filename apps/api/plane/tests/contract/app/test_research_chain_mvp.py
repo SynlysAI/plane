@@ -77,7 +77,7 @@ def env(db, settings):
     workspace = make_workspace(owner)
     add_workspace_member(workspace, collaborator)
     ResearchUserProfile.objects.create(user=collaborator, category=ResearchUserProfile.Category.STUDENT, student_no=f"chain-{uuid4().hex[:12]}")
-    enable_research(workspace, research_chain_enabled=True, research_agent_enabled=True)
+    enable_research(workspace, research_chain_enabled=True)
     public_project, public_profile = _research_project(workspace, owner, "Public", "WORKSPACE")
     private_project, private_profile = _research_project(workspace, owner, "Private", "PRIVATE")
     return {

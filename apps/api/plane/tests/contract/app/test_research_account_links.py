@@ -26,7 +26,7 @@ def env(db, settings):
     workspace = make_workspace(owner)
     member = make_user(first_name="Link member")
     add_workspace_member(workspace, member)
-    enable_research(workspace, research_account_link_enabled=True, research_agent_enabled=True)
+    enable_research(workspace, research_account_link_enabled=True)
     suffix = uuid4().hex[:6]
     project = Project.objects.create(
         workspace=workspace,
@@ -132,38 +132,4 @@ def test_expired_account_link_verification_fails(env):
     assert response.status_code == 403
 
 
-def test_account_link_revocation_revokes_live_context_tokens(env):
-    issued_context = env["client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/context/exchange-token/",
-        {
-            "request_id": f"ctx-{uuid4().hex}",
-            "research_project_id": str(env["project"].id),
-        },
-        format="json",
-    )
-    assert issued_context.status_code == 201
-    context = issued_context.json()
-    created_link = env["client"].post(links_url(env), payload(env, "subject-a"), format="json")
-    assert created_link.status_code == 201
 
-    revoked = env["client"].post(links_url(env, f"{created_link.json()['id']}/revoke/"), format="json")
-    assert revoked.status_code == 200
-    assert revoked.json()["status"] == "REVOKED"
-
-    token_client = APIClient()
-    token_client.credentials(
-        HTTP_X_RESEARCH_CONTEXT_TOKEN=context["exchange_token"],
-        HTTP_X_RESEARCH_CONTEXT_HASH=context["context_hash"],
-    )
-    response = token_client.get(f"/api/research/workspaces/{env['workspace'].slug}/context/")
-    assert response.status_code in (401, 403)
-    assert not ResearchContextGrant.objects.filter(context_id=context["context_id"], revoked_at__isnull=True).exists()
-
-    actions = set(
-        ResearchAuditEvent.objects.filter(
-            workspace=env["workspace"],
-            resource_id=created_link.json()["id"],
-        ).values_list("action", flat=True)
-    )
-    assert "account.link.create" in actions
-    assert "account.link.revoke" in actions

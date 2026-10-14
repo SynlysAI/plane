@@ -339,7 +339,6 @@ def export_research_history(output_dir: Path) -> dict[str, int]:
     output_dir.mkdir(parents=True, exist_ok=True)
     model_names = (
         "ResearchAuditEvent",
-        "ResearchAgentRunEvent",
         "ResearchContextGrant",
         "IntegrationCallLog",
     )

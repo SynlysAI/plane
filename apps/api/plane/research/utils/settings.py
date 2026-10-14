@@ -79,7 +79,6 @@ def get_workspace_research_settings(workspace):
         "code_enabled": bool(setting.code_enabled),
         "integration_enabled": bool(setting.integration_enabled),
         "research_chain_enabled": bool(setting.research_chain_enabled),
-        "research_agent_enabled": bool(setting.research_agent_enabled),
         "research_trace_enabled": bool(setting.research_trace_enabled),
         "research_account_link_enabled": bool(setting.research_account_link_enabled),
         "research_external_rag_enabled": bool(setting.research_external_rag_enabled),
@@ -111,7 +110,6 @@ def workspace_research_sections(workspace):
         "code": bool(enabled and settings["code_enabled"]),
         "integrations": bool(enabled and settings["integration_enabled"]),
         "research_chain": bool(enabled and settings["research_chain_enabled"]),
-        "research_agent": bool(enabled and settings["research_agent_enabled"]),
     }
 
 

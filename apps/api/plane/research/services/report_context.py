@@ -4,11 +4,20 @@ from django.db.models import Q
 from django.utils import timezone
 
 from plane.db.models import PeriodicReport
-from plane.research.services.synlora import SynloraError
 from plane.research.utils.acl import build_actor_context, check_access
 from plane.research.utils.reports import report_resource
 
 MAX_REPORT_CHARACTERS = 50000
+
+
+class ResearchReportContextError(Exception):
+    """正式报告上下文组装过程中的受控错误。"""
+
+    def __init__(self, code, message, status_code=503):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
 
 
 def selected_report_content(*, workspace, actor, project_id, selections):
@@ -24,7 +33,7 @@ def selected_report_content(*, workspace, actor, project_id, selections):
         正式正文和 manifest 清单；版本漂移、越权或超限抛出受控错误。
     """
     if not isinstance(selections, list) or len(selections) > 50:
-        raise SynloraError("report_context_invalid", "最多选择 50 份正式报告。", 422)
+        raise ResearchReportContextError("report_context_invalid", "最多选择 50 份正式报告。", 422)
     context = build_actor_context(actor, workspace.id)
     result = []
     seen = set()
@@ -46,14 +55,14 @@ def selected_report_content(*, workspace, actor, project_id, selections):
                 .first()
             )
         except (TypeError, ValueError, KeyError):
-            raise SynloraError("report_context_invalid", "报告选择或版本格式无效。", 422) from None
+            raise ResearchReportContextError("report_context_invalid", "报告选择或版本格式无效。", 422) from None
         if report is None or not check_access(actor, "view", report_resource(report), context=context):
-            raise SynloraError("report_context_denied", "报告已不可见或不属于当前课题。", 403)
+            raise ResearchReportContextError("report_context_denied", "报告已不可见或不属于当前课题。", 403)
         snapshot = report.official_snapshots.order_by("-version_no").first()
         if snapshot is None:
-            raise SynloraError("report_context_draft", "草稿没有可供 Agent 读取的正式版本。", 409)
+            raise ResearchReportContextError("report_context_draft", "草稿没有可供 Agent 读取的正式版本。", 409)
         if snapshot.version_no != version:
-            raise SynloraError("report_context_version_changed", "正式版本已变化，请重新选择报告。", 409)
+            raise ResearchReportContextError("report_context_version_changed", "正式版本已变化，请重新选择报告。", 409)
         result.append(
             {
                 "report_id": str(report.id),
@@ -70,7 +79,7 @@ def selected_report_content(*, workspace, actor, project_id, selections):
             }
         )
     if sum(len(item["text"]) for item in result) > MAX_REPORT_CHARACTERS:
-        raise SynloraError("report_context_too_large", "报告正文总量超过 50,000 字符，请调整选择。", 422)
+        raise ResearchReportContextError("report_context_too_large", "报告正文总量超过 50,000 字符，请调整选择。", 422)
     return result
 
 
@@ -86,9 +95,9 @@ def content_for_grant(grant):
     from plane.research.views.projects import visible_profile_queryset
 
     if grant.revoked_at or grant.expires_at <= timezone.now():
-        raise SynloraError("report_context_expired", "报告上下文授权已撤销或过期。", 403)
+        raise ResearchReportContextError("report_context_expired", "报告上下文授权已撤销或过期。", 403)
     if not visible_profile_queryset(grant.workspace, grant.user).filter(project_id=grant.project_id).exists():
-        raise SynloraError("report_context_denied", "当前课题已不可见。", 403)
+        raise ResearchReportContextError("report_context_denied", "当前课题已不可见。", 403)
     return selected_report_content(
         workspace=grant.workspace,
         actor=grant.user,

@@ -109,7 +109,6 @@ def env(db, settings):
     enable_research(
         workspace,
         research_chain_enabled=True,
-        research_agent_enabled=True,
         research_external_rag_enabled=True,
     )
     ExternalSystemConnection.objects.create(

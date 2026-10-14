@@ -3,8 +3,11 @@
 from rest_framework.response import Response
 
 from plane.db.models import PeriodicReport, ResearchChainNode, ResearchContextGrant
-from plane.research.services.report_context import content_for_grant, selected_report_content
-from plane.research.services.synlora import SynloraError
+from plane.research.services.report_context import (
+    ResearchReportContextError,
+    content_for_grant,
+    selected_report_content,
+)
 from plane.research.views.base import ResearchAPIView, parse_uuid
 from plane.research.views.context import ContextAuthenticationMixin, _validate_context_grant
 from plane.research.views.projects import visible_profile_queryset
@@ -15,7 +18,7 @@ class ResearchFormalReportOptionsEndpoint(ResearchAPIView):
 
     def get(self, request, slug):
         """根据课题或研究链节点返回正式报告选择项。"""
-        workspace, error = self.get_workspace(section="research_agent", nav=None)
+        workspace, error = self.get_workspace(section="reports", nav=None)
         if error:
             return error
         project_id, error = parse_uuid(request.GET.get("project_id"), "project_id")
@@ -53,7 +56,7 @@ class ResearchFormalReportOptionsEndpoint(ResearchAPIView):
                 content = selected_report_content(
                     workspace=workspace, actor=request.user, project_id=project_id, selections=[selection]
                 )[0]
-            except SynloraError as failure:
+            except ResearchReportContextError as failure:
                 if failure.code != "report_context_too_large":
                     continue
                 content = {
@@ -95,6 +98,6 @@ class ResearchFormalReportContentEndpoint(ContextAuthenticationMixin, ResearchAP
             return Response({"error_code": "report_context_denied", "message": "报告 Context 哈希不匹配。"}, status=403)
         try:
             contents = content_for_grant(grant)
-        except SynloraError as failure:
+        except ResearchReportContextError as failure:
             return Response({"error_code": failure.code, "message": str(failure)}, status=failure.status_code)
         return Response({"context_id": str(grant.context_id), "context_hash": grant.context_hash, "reports": contents})

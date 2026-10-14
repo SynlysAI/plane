@@ -31,7 +31,6 @@ BOOLEAN_FIELDS = (
     "approval_enabled",
     "allow_multiple_projects",
     "research_chain_enabled",
-    "research_agent_enabled",
     "research_trace_enabled",
     "research_account_link_enabled",
     "research_external_rag_enabled",
