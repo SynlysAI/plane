@@ -9,6 +9,8 @@ It stores summaries only - never report bodies - so the write stays cheap and
 inside the caller's transaction.
 """
 
+import json
+
 from plane.db.models import ResearchAuditEvent
 
 
@@ -219,6 +221,10 @@ def record_audit_event(
         if user is not None and getattr(user, "is_authenticated", False):
             actor = user
 
+    # the metadata column is jsonb: normalize model objects (UUIDs, datetimes,
+    # …) so callers can pass raw field values without serialization errors
+    safe_metadata = json.loads(json.dumps(metadata or {}, default=str))
+
     return ResearchAuditEvent.objects.create(
         workspace=workspace,
         actor=actor,
@@ -226,7 +232,7 @@ def record_audit_event(
         resource_type=resource_type,
         resource_id=resource_id,
         org_unit=org_unit,
-        metadata=metadata or {},
+        metadata=safe_metadata,
         ip_address=client["ip_address"],
         user_agent=client["user_agent"],
     )
