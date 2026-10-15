@@ -209,3 +209,35 @@ it("labels the default administrative organization as public without member mana
   expect(container.textContent).toContain("公共");
   expect(container.textContent).not.toContain("成员管理");
 });
+
+it("indents public organization projects inside the hierarchy container", async () => {
+  mocks.getAdministrativeOrganizations.mockReset().mockImplementation(async () => [
+    {
+      id: "public-id",
+      name: "公共",
+      is_default: true,
+      can_manage: false,
+      project_ids: ["project-1"],
+      members: [],
+    },
+    {
+      id: "office-id",
+      name: "行政办公室",
+      is_default: false,
+      can_manage: false,
+      project_ids: ["project-1"],
+      members: [],
+    },
+  ]);
+  await act(async () => root.render(<TreeHarness />));
+  await act(async () => undefined);
+
+  const group = container.querySelector('[role="group"][aria-label="公共"]');
+  const namedGroup = container.querySelector('[role="group"][aria-label="行政办公室"]');
+  expect(group).not.toBeNull();
+  expect(namedGroup).not.toBeNull();
+  expect(group?.className).toBe(namedGroup?.className);
+  expect(group?.className).toContain("ml-3");
+  expect(group?.className).toContain("border-l");
+  expect(group?.textContent).toContain("test1");
+});
