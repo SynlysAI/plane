@@ -172,6 +172,17 @@ def _node_operator(workspace, user, node):
     return _chain_writer(workspace, user, node.chain) or node.assignee_id == user.id
 
 
+def _agent_scope_kind(workspace, user, chain):
+    """Resolve the explicit OWNER or read-only REVIEW Agent scope."""
+    if chain.owner_id == user.id:
+        return "OWNER"
+    if _review_only_actor(workspace, user, chain):
+        return "REVIEW"
+    if _chain_writer(workspace, user, chain):
+        return "OWNER"
+    return None
+
+
 def _event_id_for_request(request_id, kind):
     """Build a deterministic event id from a bounded request id."""
     return payload_hash({"request_id": request_id, "kind": kind})

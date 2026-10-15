@@ -222,12 +222,36 @@ from plane.research.views import (
 )
 
 urlpatterns = [
-    path("research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/assignable-members/", AdministrativeOrganizationAssignableMembersEndpoint.as_view(), name="administrative-organization-assignable-members"),
-    path("research/workspaces/<str:slug>/administrative-organizations/", AdministrativeOrganizationListCreateEndpoint.as_view(), name="administrative-organizations"),
-    path("research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/", AdministrativeOrganizationDetailEndpoint.as_view(), name="administrative-organization"),
-    path("research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/members/", AdministrativeOrganizationMemberEndpoint.as_view(), name="administrative-organization-members"),
-    path("research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/members/<uuid:member_id>/", AdministrativeOrganizationMemberEndpoint.as_view(), name="administrative-organization-member"),
-    path("research/workspaces/<str:slug>/administrative-projects/<uuid:project_id>/organization/", AdministrativeProjectOrganizationEndpoint.as_view(), name="administrative-project-organization"),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/assignable-members/",
+        AdministrativeOrganizationAssignableMembersEndpoint.as_view(),
+        name="administrative-organization-assignable-members",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/",
+        AdministrativeOrganizationListCreateEndpoint.as_view(),
+        name="administrative-organizations",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/",
+        AdministrativeOrganizationDetailEndpoint.as_view(),
+        name="administrative-organization",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/members/",
+        AdministrativeOrganizationMemberEndpoint.as_view(),
+        name="administrative-organization-members",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/members/<uuid:member_id>/",
+        AdministrativeOrganizationMemberEndpoint.as_view(),
+        name="administrative-organization-member",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-projects/<uuid:project_id>/organization/",
+        AdministrativeProjectOrganizationEndpoint.as_view(),
+        name="administrative-project-organization",
+    ),
     path("research/workspaces/<str:slug>/feedback/", ResearchFeedbackEndpoint.as_view(), name="research-feedback"),
     path(
         "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/status/",

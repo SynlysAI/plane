@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from .agent import ResearchAgentRunEventSerializer, ResearchAgentSessionSerializer
 from .audit import ResearchAuditEventSerializer
 from .account import (
     InviteCodeSerializer,
@@ -74,6 +75,8 @@ from .collaboration import (
 )
 
 __all__ = [
+    "ResearchAgentRunEventSerializer",
+    "ResearchAgentSessionSerializer",
     "IdentityMappingSerializer",
     "MentorBindingSerializer",
     "OrgUnitMemberSerializer",
