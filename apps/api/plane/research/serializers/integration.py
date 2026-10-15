@@ -24,7 +24,7 @@ class ExternalSystemConnectionSerializer(serializers.ModelSerializer):
             "display_name",
             "base_url",
             "auth_mode",
-            "credential_ref",
+            "credential_mode",
             "has_credential",
             "timeout_seconds",
             "cache_ttl_seconds",
@@ -50,7 +50,7 @@ class ExternalSystemConnectionSerializer(serializers.ModelSerializer):
 
     def get_has_credential(self, obj):
         """Credentials are never echoed, only their presence (P1-INT-02)."""
-        return bool(obj.credential_ref)
+        return obj.has_credential
 
 
 class ExternalReferenceLinkSerializer(serializers.ModelSerializer):

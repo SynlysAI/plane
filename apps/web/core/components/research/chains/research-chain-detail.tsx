@@ -16,6 +16,7 @@ import type { TResearchChain, TResearchChainMember, TResearchChainNode, TResearc
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 import { useResearch } from "@/hooks/store/use-research";
+import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
@@ -100,6 +101,7 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
 export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug, chainId }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
+  const assistant = useAIAssistant();
   const navigate = useNavigate();
   const memberStore = useMember();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -347,6 +349,14 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   ];
   const selectedNodeActions = selected ? (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={() => assistant.openWithLocal(String(selected.node.id))}
+        aria-label={t("research.chains.open_agent")}
+        className="inline-flex h-8 items-center rounded-md border border-subtle px-3 text-12 font-medium text-secondary hover:bg-surface-1 hover:text-accent-primary"
+      >
+        {t("research.chains.open_agent")}
+      </button>
       {selected.node.capabilities?.actions.delete?.allowed && (
         <ResearchDeleteButton
           name={selected.node.title}

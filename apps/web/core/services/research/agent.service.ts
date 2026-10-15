@@ -22,7 +22,7 @@ type TAgentMessageResponse = {
   events: TAgentRunEvent[];
 };
 
-export type TAgentApprovalDecision = "APPROVED" | "REJECTED";
+export type TAgentApprovalDecision = "APPROVED" | "APPROVED_ALWAYS" | "REJECTED";
 
 function request_id() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -99,9 +99,36 @@ export class ResearchAgentService extends APIService {
       });
   }
 
+  /** 上传一个分析文件到 ScienceDiscovery 会话工作区。 */
+  async uploadSessionFile(workspaceSlug: string, sessionId: string, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("request_id", request_id());
+    return this.post(researchEndpoints.agentSessionFiles(workspaceSlug, sessionId), formData)
+      .then(
+        (res) =>
+          res?.data as {
+            upload?: { file_name: string; file_hash: string; sd_path: string };
+            event?: TAgentRunEvent;
+            idempotent?: boolean;
+          }
+      )
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
   async getEvents(workspaceSlug: string, runId: string, afterSeq = 0) {
     return this.get(researchEndpoints.agentRunEvents(workspaceSlug, runId), { params: { after_seq: afterSeq } })
-      .then((res) => res?.data as { results: TAgentRunEvent[]; count: number; latest_seq: number })
+      .then(
+        (res) =>
+          res?.data as {
+            results: TAgentRunEvent[];
+            count: number;
+            latest_seq: number;
+            session?: TResearchAgentSession;
+          }
+      )
       .catch((err) => {
         throw err?.response?.data;
       });
@@ -110,6 +137,17 @@ export class ResearchAgentService extends APIService {
   async getApprovals(workspaceSlug: string) {
     return this.get(researchEndpoints.agentApprovals(workspaceSlug))
       .then((res) => res?.data as { results: TResearchAgentApproval[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** 下载一个 ScienceDiscovery 产物版本的内容字节流。 */
+  async downloadArtifactContent(workspaceSlug: string, sessionId: string, versionId: string) {
+    return this.get(researchEndpoints.agentSessionArtifactContent(workspaceSlug, sessionId, versionId), {
+      responseType: "blob",
+    })
+      .then((res) => res?.data as Blob)
       .catch((err) => {
         throw err?.response?.data;
       });
@@ -139,6 +177,7 @@ export class ResearchAgentService extends APIService {
       artifact_type: string;
       summary: string;
       confirmed: boolean;
+      source_versions?: Array<Record<string, unknown>>;
       method?: string;
       metrics?: Record<string, unknown>;
       conclusion?: string;
@@ -152,6 +191,59 @@ export class ResearchAgentService extends APIService {
       request_id: request_id(),
     })
       .then((res) => res?.data)
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  /** 读取当前用户的智能体后端连接与治理开关状态（system: SCIENCE_DISCOVERY | SYNLORA）。 */
+  async getBackendConnection(workspaceSlug: string, system = "SCIENCE_DISCOVERY") {
+    return this.get(`${researchEndpoints.agentBackendConnections(workspaceSlug)}?system=${system}`)
+      .then(
+        (res) =>
+          res?.data as {
+            connection: {
+              id: string;
+              base_url: string;
+              is_enabled: boolean;
+              has_credential: boolean;
+              health_status: string;
+              last_health_at?: string;
+              last_error: string;
+            } | null;
+            governance_enabled: boolean;
+          }
+      )
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  /** 保存（新增或更新）当前用户的智能体连接。 */
+  async saveBackendConnection(
+    workspaceSlug: string,
+    payload: { base_url: string; token?: string; is_enabled: boolean; system?: string }
+  ) {
+    return this.post(researchEndpoints.agentBackendConnections(workspaceSlug), payload)
+      .then((res) => res?.data as { id: string; base_url: string; is_enabled: boolean })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  /** 测试已保存的连接。 */
+  async testBackendConnection(workspaceSlug: string, system = "SCIENCE_DISCOVERY") {
+    return this.post(researchEndpoints.agentBackendConnectionTest(workspaceSlug), { system })
+      .then((res) => res?.data as { ok: boolean; models?: number; error?: string })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  /** 删除当前用户的智能体连接。 */
+  async deleteBackendConnection(workspaceSlug: string, system = "SCIENCE_DISCOVERY") {
+    return this.delete(`${researchEndpoints.agentBackendConnections(workspaceSlug)}?system=${system}`)
+      .then(() => true)
       .catch((err) => {
         throw err?.response?.data ?? err;
       });

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "Plane Demo (read only)": {
+      "type": "stdio",
+      "command": "/app/data/scientific-envs/plane-mcp-demo/.venv/bin/python",
+      "args": ["/app/data/plane-mcp-demo/read_only_mcp.py"],
+      "env": {
+        "PLANE_BASE_URL": "http://pilab-windows-api-1:8000",
+        "PLANE_WORKSPACE_SLUG": "REPLACE_WITH_TEST_WORKSPACE_SLUG",
+        "PLANE_API_KEY": "REPLACE_LOCALLY",
+        "LOG_PAYLOADS": "false",
+        "LOG_USER_INFO": "false"
+      },
+      "timeoutSeconds": 60
+    }
+  }
+}

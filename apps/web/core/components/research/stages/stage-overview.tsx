@@ -84,7 +84,7 @@ export const StageOverview = observer(function StageOverview({ workspaceSlug, pr
               workspaceSlug={workspaceSlug}
               projectId={projectId}
               stage={selected}
-              isWorkspaceAdmin={research.isWorkspaceAdmin}
+              isResearchAdmin={research.isResearchAdmin}
             />
           ) : (
             <p className="p-5 text-13 text-tertiary">{t("research.stages.empty")}</p>

@@ -35,6 +35,10 @@ class ExternalSystemConnection(BaseModel):
         OIDC_CLIENT = "OIDC_CLIENT", "OIDC client credentials"
         NONE = "NONE", "None"
 
+    class CredentialMode(models.TextChoices):
+        SHARED = "SHARED", "Shared credential"
+        PERSONAL = "PERSONAL", "Per-user credential"
+
     class DegradedMode(models.TextChoices):
         LINK_ONLY = "LINK_ONLY", "Link only"
         HIDDEN = "HIDDEN", "Hidden"
@@ -54,8 +58,13 @@ class ExternalSystemConnection(BaseModel):
     display_name = models.CharField(max_length=255)
     base_url = models.URLField(max_length=500)
     auth_mode = models.CharField(max_length=16, choices=AuthMode.choices, default=AuthMode.HMAC)
-    # only the name of a secret manager entry is stored (P1-INT-02)
-    credential_ref = models.CharField(max_length=128, blank=True, default="")
+    # the credential itself is stored encrypted; it never leaves the backend (P1-INT-02)
+    credential = models.TextField(blank=True, default="")
+    credential_mode = models.CharField(
+        max_length=16,
+        choices=CredentialMode.choices,
+        default=CredentialMode.SHARED,
+    )
     timeout_seconds = models.PositiveSmallIntegerField(default=3)
     cache_ttl_seconds = models.PositiveIntegerField(default=300)
     degraded_mode = models.CharField(
@@ -87,6 +96,22 @@ class ExternalSystemConnection(BaseModel):
 
     def __str__(self):
         return f"{self.workspace_id} <{self.system}>"
+
+    def set_credential(self, raw):
+        """Encrypt and store the shared credential; an empty value clears it."""
+        from plane.license.utils.encryption import encrypt_data
+
+        self.credential = encrypt_data(raw) if raw else ""
+
+    def get_credential(self):
+        """Return the decrypted shared credential (empty string when unset)."""
+        from plane.license.utils.encryption import decrypt_data
+
+        return decrypt_data(self.credential)
+
+    @property
+    def has_credential(self):
+        return bool(self.credential)
 
 
 class ResearchExternalReference(BaseModel):

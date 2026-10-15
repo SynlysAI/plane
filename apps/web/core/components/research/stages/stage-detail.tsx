@@ -28,7 +28,7 @@ type Props = {
   workspaceSlug: string;
   projectId: string;
   stage: TStageInstance;
-  isWorkspaceAdmin: boolean;
+  isResearchAdmin: boolean;
 };
 
 type TErrorLike = { error_code?: string; message?: string; blockers?: TStageGateItem[] };
@@ -37,7 +37,7 @@ type TErrorLike = { error_code?: string; message?: string; blockers?: TStageGate
  * One stage: gate checklist, material checklist, actions and immutable history
  * (P1-UI-02). Blockers are rendered item by item, never as a generic error.
  */
-export const StageDetail = observer(function StageDetail({ workspaceSlug, projectId, stage, isWorkspaceAdmin }: Props) {
+export const StageDetail = observer(function StageDetail({ workspaceSlug, projectId, stage, isResearchAdmin }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
   const { data: currentUser } = useUser();
@@ -135,7 +135,7 @@ export const StageDetail = observer(function StageDetail({ workspaceSlug, projec
 
       <StageActions
         stage={stage}
-        isWorkspaceAdmin={isWorkspaceAdmin}
+        isResearchAdmin={isResearchAdmin}
         onEnter={() => handle(() => research.enterStage(workspaceSlug, stage.id))}
         onSubmit={() => handle(() => research.submitStage(workspaceSlug, stage.id))}
         onReturn={(reason) => handle(() => research.returnStage(workspaceSlug, stage.id, reason))}
@@ -189,7 +189,7 @@ export const StageDetail = observer(function StageDetail({ workspaceSlug, projec
           workspaceSlug={workspaceSlug}
           assignments={assignments}
           reviews={reviews}
-          canManage={isWorkspaceAdmin || hasAssignment}
+          canManage={isResearchAdmin || hasAssignment}
           currentUserId={currentUser?.id}
           myReview={myReview}
           onRemind={(assignmentId) => {

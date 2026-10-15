@@ -126,6 +126,13 @@ class Project(BaseModel):
         null=True,
         blank=True,
     )
+    administrative_organization = models.ForeignKey(
+        "db.AdministrativeOrganization",
+        on_delete=models.PROTECT,
+        related_name="projects",
+        null=True,
+        blank=True,
+    )
 
     def __init__(self, *args, **kwargs):
         # Track if timezone is provided, if so, don't override it with the workspace timezone when saving
@@ -153,18 +160,12 @@ class Project(BaseModel):
     class Meta:
         unique_together = [
             ["identifier", "workspace", "deleted_at"],
-            ["name", "workspace", "deleted_at"],
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["identifier", "workspace"],
                 condition=Q(deleted_at__isnull=True),
                 name="project_unique_identifier_workspace_when_deleted_at_null",
-            ),
-            models.UniqueConstraint(
-                fields=["name", "workspace"],
-                condition=Q(deleted_at__isnull=True),
-                name="project_unique_name_workspace_when_deleted_at_null",
             ),
         ]
         verbose_name = "Project"

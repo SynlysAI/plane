@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "Trợ lý AI",
+    "open": "Mở trợ lý AI",
+    "close": "Đóng",
+    "placeholder": "Hỏi về trang này, một dự án hoặc cơ sở kiến thức của bạn…",
+    "send": "Gửi",
+    "stop": "Dừng",
+    "new_conversation": "Cuộc trò chuyện mới",
+    "thinking": "Đang suy nghĩ",
+    "working": "Đang xử lý",
+    "queued": "Đang xếp hàng",
+    "retrieving": "Đang tìm kiếm cơ sở kiến thức",
+    "empty_greeting": "Xin chào, tôi là trợ lý AI của bạn",
+    "empty_hint": "Hãy hỏi tôi về trang hiện tại, một dự án hoặc cơ sở kiến thức.",
+    "error_generic": "Đã xảy ra lỗi. Vui lòng thử lại.",
+    "error_unavailable": "Dịch vụ AI hiện không khả dụng.",
+    "retry": "Thử lại",
+    "session_expired": "Phiên trước đã hết hạn, phiên mới đã bắt đầu.",
+    "interrupt_notice": "Quá trình chạy bị gián đoạn và cần phê duyệt. Tính năng phê duyệt sắp ra mắt.",
+    "shortcut_hint": "Cmd+J"
   }
 }

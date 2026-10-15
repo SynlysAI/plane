@@ -5,10 +5,12 @@
  */
 
 import { observer } from "mobx-react";
+import { Pencil, Power, Settings2 } from "lucide-react";
 // plane imports
 import { INTEGRATION_HEALTH_LABELS, INTEGRATION_SYSTEM_LABELS } from "@plane/constants";
 import type { TIntegrationConnection } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ResearchTableSurface } from "@/components/research/common/research-data-surface";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
@@ -16,10 +18,19 @@ import { formatResearchDateTime } from "@/components/research/common/research-fo
 type Props = {
   connections: TIntegrationConnection[];
   health: Array<Record<string, unknown>>;
+  onEdit: (system: string) => void;
+  onToggle: (connection: TIntegrationConnection) => void;
+  toggling: string | null;
 };
 
 /** Connection health: normal / degraded / unavailable / unconfigured (P1-INT-10). */
-export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({ connections, health }: Props) {
+export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
+  connections,
+  health,
+  onEdit,
+  onToggle,
+  toggling,
+}: Props) {
   const { t, currentLocale } = useTranslation();
   const statusBySystem = new Map(health.map((entry) => [String(entry.system), entry]));
   const rows = connections.length
@@ -36,8 +47,11 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
           <TableRow className="text-tertiary">
             <TableHead>{t("research.integrations.columns.system")}</TableHead>
             <TableHead>{t("research.integrations.columns.status")}</TableHead>
+            <TableHead>{t("research.integrations.columns.base_url")}</TableHead>
+            <TableHead>{t("research.integrations.columns.credential_mode")}</TableHead>
             <TableHead className="text-right">{t("research.integrations.columns.last_success")}</TableHead>
             <TableHead>{t("research.integrations.columns.reason")}</TableHead>
+            <TableHead className="text-right">{t("research.integrations.columns.actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -48,6 +62,7 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
             const phaseOnly = registrationStatus === "PHASE_NOT_ENABLED";
             const proxy = registrationStatus === "PROXY";
             const showDisabled = registrationStatus === "REGISTERED_DISABLED";
+            const credentialMode = connection.credential_mode === "PERSONAL" ? "personal" : "shared";
             return (
               <TableRow key={connection.system}>
                 <TableCell className="text-secondary">
@@ -79,6 +94,12 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
                             : t(INTEGRATION_HEALTH_LABELS[status] ?? INTEGRATION_HEALTH_LABELS.UNKNOWN)}
                   </span>
                 </TableCell>
+                <TableCell className="max-w-56 truncate text-tertiary" title={connection.base_url ?? ""}>
+                  {connection.base_url || "-"}
+                </TableCell>
+                <TableCell className="text-tertiary">
+                  {connection.base_url ? t(`research.integrations.credential_mode_${credentialMode}`) : "-"}
+                </TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">
                   {entry.last_success_at ? formatResearchDateTime(String(entry.last_success_at), currentLocale) : "-"}
                 </TableCell>
@@ -86,6 +107,34 @@ export const IntegrationHealthBoard = observer(function IntegrationHealthBoard({
                   {proxy
                     ? t("research.integrations.health.proxy_detail")
                     : String(entry.degraded_reason ?? connection.last_error ?? "") || "-"}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    {connection.base_url ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onToggle(connection)}
+                          disabled={toggling === connection.system}
+                        >
+                          <Power className="size-3" />
+                          {connection.is_enabled
+                            ? t("research.integrations.disable")
+                            : t("research.integrations.enable")}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => onEdit(String(connection.system))}>
+                          <Pencil className="size-3" />
+                          {t("research.integrations.edit")}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="ghost" size="sm" onClick={() => onEdit(String(connection.system))}>
+                        <Settings2 className="size-3" />
+                        {t("research.integrations.configure")}
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             );

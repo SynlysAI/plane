@@ -216,7 +216,7 @@ class TestResearchChainNodeTaskApi:
             format="json",
         )
         persisted_task = ResearchChainNodeTask.objects.get(pk=task["id"])
-        assert not actor_can_review_task(env["workspace"], persisted_task, env["workspace_admin"])
+        assert actor_can_review_task(env["workspace"], persisted_task, env["workspace_admin"])
         response = env["member_client"].post(
             _action_url(env, task["id"], "return"),
             {"request_id": f"unauthorized-return-{uuid4()}", "reason": "Current assignee."},

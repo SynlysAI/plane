@@ -80,7 +80,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
     research.identity?.module_enabled &&
     research.identity?.workspace_enabled &&
     research.identity?.sections?.research_chain &&
-    research.canSee("research_chain")
+    (research.canSee("research_chain") || research.isResearchAdmin)
   );
 
   useEffect(() => {

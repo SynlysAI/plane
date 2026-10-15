@@ -12,6 +12,10 @@ from .append_only import AppendOnlyModel
 class ResearchAgentSession(BaseModel):
     """A scoped Plane BFF session; the browser never receives its context token."""
 
+    class Provider(models.TextChoices):
+        SYNLORA = "SYNLORA", "Synlora"
+        SCIENCE_DISCOVERY = "SCIENCE_DISCOVERY", "ScienceDiscovery"
+
     class Status(models.TextChoices):
         INITIALIZING = "INITIALIZING", "Initializing"
         READY = "READY", "Ready"
@@ -37,6 +41,21 @@ class ResearchAgentSession(BaseModel):
     last_error = models.CharField(max_length=255, blank=True, default="")
     synlora_session_id = models.CharField(max_length=128, blank=True, default="")
     synlora_run_id = models.CharField(max_length=128, blank=True, default="")
+    provider = models.CharField(
+        max_length=32,
+        choices=Provider.choices,
+        default=Provider.SYNLORA,
+    )
+    backend_connection = models.ForeignKey(
+        "ResearchAgentBackendConnection",
+        on_delete=models.PROTECT,
+        related_name="agent_sessions",
+        null=True,
+        blank=True,
+    )
+    sd_project_id = models.CharField(max_length=128, blank=True, default="")
+    sd_session_id = models.CharField(max_length=128, blank=True, default="")
+    sd_run_id = models.CharField(max_length=128, blank=True, default="")
     delegated_subject = models.CharField(max_length=255, blank=True, default="")
     assembly = models.JSONField(default=dict, blank=True)
     request_id = models.CharField(max_length=128, unique=True)

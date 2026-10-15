@@ -16,7 +16,7 @@ import { getResearchErrorKey } from "@/components/research/common/error-messages
 
 type Props = {
   stage: TStageInstance;
-  isWorkspaceAdmin: boolean;
+  isResearchAdmin: boolean;
   onEnter: () => Promise<void>;
   onSubmit: () => Promise<void>;
   onReturn: (reason: string) => Promise<void>;
@@ -31,7 +31,7 @@ type Props = {
  */
 export const StageActions = observer(function StageActions({
   stage,
-  isWorkspaceAdmin,
+  isResearchAdmin,
   onEnter,
   onSubmit,
   onReturn,
@@ -88,7 +88,7 @@ export const StageActions = observer(function StageActions({
             {t("research.stages.action_reenter")}
           </Button>
         )}
-        {stage.status === "PASSED" && isWorkspaceAdmin && (
+        {stage.status === "PASSED" && isResearchAdmin && (
           <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDialog("reopen")}>
             {t("research.stages.action_reopen")}
           </Button>

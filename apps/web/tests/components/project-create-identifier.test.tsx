@@ -37,7 +37,7 @@ afterEach(async () => {
   container.replaceChildren();
 });
 
-function TestForm() {
+function TestForm({ showIdentifier }: { showIdentifier?: boolean }) {
   const methods = useForm<TProject>({ defaultValues: { name: "", identifier: "", description: "" } });
   const [autoSync, setAutoSync] = useState(true);
   return (
@@ -47,6 +47,7 @@ function TestForm() {
         isMobile={false}
         shouldAutoSyncIdentifier={autoSync}
         setShouldAutoSyncIdentifier={setAutoSync}
+        showIdentifier={showIdentifier}
       />
     </FormProvider>
   );
@@ -73,4 +74,13 @@ it("fills a valid project code from a Chinese name and preserves a manual edit",
   await enter("identifier", "CUSTOM");
   await enter("name", "另一个中文项目");
   expect(identifier.value).toBe("CUSTOM");
+});
+
+it("hides the identifier input when requested", async () => {
+  root = createRoot(container);
+  await act(async () => root.render(<TestForm showIdentifier={false} />));
+
+  expect(container.querySelector("#identifier")).toBeNull();
+  await enter("name", "同名行政项目");
+  expect(container.querySelector("#identifier")).toBeNull();
 });

@@ -116,6 +116,37 @@ def make_research_org_unit(workspace, name, parent=None, unit_type=OrgUnit.UnitT
     return unit
 
 
+def make_org_member(workspace, user, unit=None, org_role=OrgUnitMember.OrgRole.OWNER):
+    """Give one user an active research organisation membership.
+
+    Args:
+        workspace: Workspace that owns the organisation tree.
+        user: The member-to-be.
+        unit: Optional existing org unit; a group under a fresh root is created when omitted.
+        org_role: Organisation role, OWNER by default.
+
+    Returns:
+        The created active ``OrgUnitMember``.
+    """
+    if unit is None:
+        root = OrgUnit.objects.filter(
+            workspace=workspace, parent__isnull=True, deleted_at__isnull=True
+        ).first()
+        if root is None:
+            root = make_research_org_unit(workspace, "Fixture Root", None, OrgUnit.UnitType.ROOT)
+        unit = (
+            OrgUnit.objects.filter(workspace=workspace, parent=root, deleted_at__isnull=True).first()
+            or make_research_org_unit(workspace, "Fixture Group", root, OrgUnit.UnitType.GROUP)
+        )
+    return OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=unit,
+        user=user,
+        org_role=org_role,
+        is_primary=True,
+    )
+
+
 def make_research_boundary_fixture():
     """Build the Phase 1.6 collaboration-boundary fixture from current models.
 

@@ -724,9 +724,17 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/close/`,
   agentMessages: (slug: string, sessionId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/messages/`,
+  agentSessionFiles: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/files/`,
+  agentSessionArtifacts: (slug: string, sessionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/artifacts/`,
+  agentSessionArtifactContent: (slug: string, sessionId: string, versionId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/agent/sessions/${sessionId}/artifact-versions/${versionId}/content/`,
   agentRunEvents: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/events/`,
   agentRunCancel: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/cancel/`,
   agentApprovals: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/approvals/`,
+  agentBackendConnections: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/backend-connections/`,
+  agentBackendConnectionTest: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/backend-connections/test/`,
   agentApproval: (slug: string, runId: string) => `${RESEARCH_API_ROOT}/${slug}/agent/runs/${runId}/approvals/`,
   agentArtifacts: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/agent/artifacts/`,
   workspaceAsset: (slug: string) => `/api/workspaces/${slug}/assets/`,
@@ -748,6 +756,17 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/navigation/categories/${categoryId}/`,
   navigationProjectMove: (slug: string, projectId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/navigation/projects/${projectId}/move/`,
+  administrativeOrganizations: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/`,
+  administrativeOrganization: (slug: string, id: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/`,
+  administrativeOrganizationMembers: (slug: string, id: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/members/`,
+  administrativeOrganizationAssignableMembers: (slug: string, id: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/assignable-members/`,
+  administrativeOrganizationMember: (slug: string, id: string, memberId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-organizations/${id}/members/${memberId}/`,
+  administrativeProjectOrganization: (slug: string, projectId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/administrative-projects/${projectId}/organization/`,
   project: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/`,
   projectArchive: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/archive/`,
   projectRestore: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/restore/`,

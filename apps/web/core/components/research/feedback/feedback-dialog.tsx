@@ -102,7 +102,10 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const idempotency = useRef(createIdempotencyKey());
   const queryVersion = useRef(0);
   const canManage = Boolean(
-    identity?.user.is_main_pi || identity?.user.is_workspace_admin || identity?.user.is_system_admin
+    identity?.user.is_main_pi ||
+    identity?.user.is_research_admin ||
+    identity?.user.is_workspace_admin ||
+    identity?.user.is_system_admin
   );
   const managementDenied = managementOnly && identityKnown && !canManage;
   useEffect(() => {

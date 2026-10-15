@@ -14,7 +14,7 @@ export type TUserImportRowStatus = "OK" | "PENDING" | "ERROR";
 export type TUserImportReviewDecision = "PENDING" | "INCLUDED" | "EXCLUDED";
 export type TUserImportBatchStatus = "PENDING_REVIEW" | "PENDING" | "IMPORTED" | "REJECTED" | "FAILED";
 export type TResearchProfileCategory = "STUDENT" | "POSTDOC" | "ADVISOR" | "PI" | "STAFF" | "OTHER";
-export type TResearchProfileDegree = "MS" | "PHD" | "";
+export type TResearchProfileDegree = "BS" | "MS" | "PHD" | "";
 /**
  * Research visibility tier derived by the backend from the organisation tree,
  * mentor bindings, reviewer assignments and administrator tags (v2.5.0).
@@ -126,6 +126,7 @@ export type TWorkspaceResearchSetting = {
   approval_enabled: boolean;
   research_chain_enabled?: boolean;
   research_agent_enabled?: boolean;
+  research_agent_user_backend_enabled?: boolean;
   research_trace_enabled?: boolean;
   research_account_link_enabled?: boolean;
   research_external_rag_enabled?: boolean;
@@ -539,6 +540,7 @@ export type TResearchAgentSession = {
   last_error: string;
   synlora_session_id: string;
   synlora_run_id: string;
+  provider: "SYNLORA" | "SCIENCE_DISCOVERY";
   delegated_subject: string;
   assembly: {
     persona: string;
@@ -1387,7 +1389,7 @@ export type TIntegrationConnection = {
   display_name: string;
   base_url?: string;
   auth_mode?: "HMAC" | "BEARER" | "OIDC_CLIENT" | "NONE";
-  credential_ref?: string;
+  credential_mode?: "SHARED" | "PERSONAL";
   has_credential?: boolean;
   configured?: boolean;
   timeout_seconds?: number;

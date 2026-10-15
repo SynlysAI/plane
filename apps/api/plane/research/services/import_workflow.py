@@ -93,7 +93,7 @@ def create_single(workspace, actor, payload):
     }
     if any(len(fields[key]) > limit for key, limit in limits.items()):
         invalid("录入字段超过允许长度。")
-    if fields["degree"] not in ("", "MS", "PHD"):
+    if fields["degree"] and fields["degree"] not in ResearchUserProfile.Degree.values:
         invalid("请选择有效学位。")
     names, emails = [], []
     for item in advisors:

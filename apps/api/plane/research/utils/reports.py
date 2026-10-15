@@ -66,6 +66,8 @@ def report_resource(report) -> ResearchResource:
 
 def visible_reports_queryset(queryset, context):
     """Apply the complete report visibility matrix in SQL before pagination."""
+    if context.is_workspace_admin:
+        return queryset
     owner_scope = Q(owner_id=context.user_id)
     formal = Q(submitted_at__isnull=False)
     if context.is_main_pi:

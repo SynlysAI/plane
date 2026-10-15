@@ -103,6 +103,7 @@
       "preferences": "偏好设置",
       "notifications": "通知",
       "api-tokens": "个人访问令牌",
+      "agent-configuration": "智能体配置",
       "connections": "连接"
     },
     "tabs": {

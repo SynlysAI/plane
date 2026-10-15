@@ -32,6 +32,7 @@ from plane.research.utils.collaboration_notifications import (
     notify_paper_version_submitted,
 )
 from plane.research.utils.files import inspect_uploaded_asset, validate_attachment
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.settings import get_workspace_research_settings
 from plane.settings.storage import S3Storage
 
@@ -76,7 +77,10 @@ def actor_can_submit_paper(workspace, review, actor) -> bool:
 
 
 def actor_can_review_paper(workspace, review, actor) -> bool:
-    """Return scientific review authority without honouring workspace admin.
+    """Return whether the actor may issue a scientific paper-review decision.
+
+    Research administrators hold review authority even when they are not the
+    named final reviewer and have no organisation assignment.
 
     Args:
         workspace: Workspace that owns the review.
@@ -84,12 +88,15 @@ def actor_can_review_paper(workspace, review, actor) -> bool:
         actor: User requesting the decision.
 
     Returns:
-        True for the explicit final reviewer or a research-scope reviewer.
+        True for a research administrator, the explicit final reviewer, or a
+        research-scope reviewer.
     """
     if actor is None or not getattr(actor, "is_authenticated", False):
         return False
     if review.owner_id == actor.id:
         return False
+    if is_research_admin(actor, workspace.id):
+        return True
     return review.final_reviewer_id == actor.id or review_only_actor(workspace, actor, review.chain)
 
 

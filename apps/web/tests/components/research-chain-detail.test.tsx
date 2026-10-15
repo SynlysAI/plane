@@ -6,7 +6,7 @@ import translations from "../../../../packages/i18n/src/locales/zh-CN/common.jso
 
 const mocks = vi.hoisted(() => ({
   research: {
-    identity: { sections: { research_agent: true, research_chain: true } },
+    identity: { sections: { research_chain: true } },
     canSee: () => true,
   },
   getChain: vi.fn(),
@@ -242,7 +242,9 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   ).toBe("page");
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(["概览", "节点", "成员"]);
-  expect(container.textContent).not.toContain("请智能体分析");
+  expect(container.querySelector('a[href="/lab/research/chains/chain-1/nodes/node-1/agent"]')?.textContent).toContain(
+    "请智能体分析"
+  );
   expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-node")).toBe("node-1");
   expect(container.querySelector('[data-testid="paper-review-panel"]')).toBeNull();
   expect(container.textContent).not.toContain("记录与知识库");

@@ -21,16 +21,12 @@ from plane.db.models import (
     Page,
     PeriodicReport,
     ProjectMember,
-    ResearchAgentRunEvent,
-    ResearchAgentSession,
     ResearchChainNodeTask,
-    ResearchContextGrant,
     ResearchPaperReview,
     ResearchStageInstance,
     ReviewerRole,
     StageReviewerAssignment,
     StageType,
-    WorkspaceResearchSetting,
 )
 from plane.tests.research_fixtures import make_research_boundary_fixture
 
@@ -161,51 +157,10 @@ def _office_approval(env):
     )
 
 
-def _agent_approval(env):
-    grant = ResearchContextGrant.objects.create(
-        workspace=env["workspace"],
-        user=env["student"],
-        project=env["project"],
-        chain_node=env["paper_node"],
-        visibility_scope="ORG",
-        context_hash=_digest("context", uuid4()),
-        allowed_tools=["knowledge.search"],
-        scope_kind="OWNER",
-        token_hash=_digest("token", uuid4()),
-        expires_at=timezone.now() + timedelta(hours=2),
-        request_id=f"todo-context-{uuid4()}",
-    )
-    session = ResearchAgentSession.objects.create(
-        workspace=env["workspace"],
-        user=env["student"],
-        project=env["project"],
-        chain_node=env["paper_node"],
-        context_grant=grant,
-        status=ResearchAgentSession.Status.WAITING_APPROVAL,
-        request_id=f"todo-agent-{uuid4()}",
-        payload_hash=_digest(uuid4()),
-    )
-    ResearchAgentRunEvent.objects.create(
-        session=session,
-        run_id=session.run_id,
-        seq=1,
-        event_type="TOOL_CALL",
-        payload={
-            "tool_call_id": "todo-tool-1",
-            "input_summary": "Search polymer literature",
-            "risk_level": "MEDIUM",
-            "capability_scope": "knowledge.search",
-        },
-        request_id=f"todo-agent-event-{uuid4()}",
-    )
-    return session
-
-
 @pytest.fixture
 def env(db, settings):
     settings.RESEARCH_MODULE_ENABLED = True
     fixture = make_research_boundary_fixture()
-    WorkspaceResearchSetting.objects.filter(workspace=fixture["workspace"]).update(research_agent_enabled=True)
     now = timezone.now()
     fixture.update(
         {
@@ -232,7 +187,6 @@ def env(db, settings):
             "revision_report": _revision_report(fixture),
             "stage": _stage(fixture),
             "office_approval": _office_approval(fixture),
-            "agent_approval": _agent_approval(fixture),
             "student_client": _client(fixture["student"]),
             "member_client": _client(fixture["group_member"]),
             "advisor_client": _client(fixture["advisor"]),
@@ -283,7 +237,6 @@ class TestResearchTodoScopesAndAcl:
             "REPORT",
             "PAPER_REVIEW",
             "STAGE_REVIEW",
-            "AGENT_APPROVAL",
             "OFFICE_APPROVAL",
         }
         assert all(item["schema_version"] == "research-todo.v2" for item in _items(payload))
@@ -312,7 +265,6 @@ class TestResearchTodoScopesAndAcl:
             "REPORT",
             "PAPER_REVIEW",
             "STAGE_REVIEW",
-            "AGENT_APPROVAL",
             "OFFICE_APPROVAL",
         }
         assert all(item["requester"]["id"] == str(env["student"].id) for item in _items(payload))
@@ -331,17 +283,17 @@ class TestResearchTodoScopesAndAcl:
         response = client.get(f"/api/research/workspaces/{env['workspace'].slug}/research-todos/")
         assert response.status_code == 403
 
-    def test_workspace_admin_does_not_automatically_gain_research_review_rights(self, env):
+    def test_workspace_admin_has_research_review_rights_without_org_relation(self, env):
         payload = _payload(_get(env, "admin", "?scope=visible"))
-        research_sources = {"CHAIN_TASK", "PAPER_REVIEW", "STAGE_REVIEW"}
+        sources = _by_source(_items(payload))
 
-        assert not research_sources.intersection(_by_source(_items(payload)))
-        assert all(
-            not decision["allowed"]
-            for item in _items(payload)
-            if item["source"] in research_sources
-            for decision in item["capabilities"]["actions"].values()
-        )
+        assert "CHAIN_TASK" in sources
+        assert "PAPER_REVIEW" in sources
+
+        submitted = next(item for item in _items(payload) if item["object_id"] == str(env["submitted_task"].id))
+        waiting = next(item for item in _items(payload) if item["object_id"] == str(env["waiting_paper"].id))
+        assert submitted["capabilities"]["actions"]["review"]["allowed"] is True
+        assert waiting["capabilities"]["actions"]["review"]["allowed"] is True
 
     def test_expired_org_member_and_invalid_project_member_cannot_act(self, env):
         OrgUnitMember.objects.filter(user=env["group_member"]).update(
@@ -432,7 +384,6 @@ class TestResearchTodoProjectionContract:
 
         assert items[str(env["submitted_task"].id)]["urgency"] == "OVERDUE"
         assert items[str(env["assigned_task"].id)]["urgency"] == "DUE_SOON"
-        assert student_items[str(env["agent_approval"].session_id)]["urgency"] == "NORMAL"
 
     def test_cursor_continues_without_overlap(self, env):
         first = _payload(_get(env, "student", "?scope=visible&limit=2"))
@@ -475,7 +426,6 @@ class TestResearchTodoProjectionContract:
             ("REPORT", "collect_report_todos"),
             ("PAPER_REVIEW", "collect_paper_review_todos"),
             ("STAGE_REVIEW", "collect_stage_review_todos"),
-            ("AGENT_APPROVAL", "collect_agent_approval_todos"),
             ("OFFICE_APPROVAL", "collect_office_approval_todos"),
         ],
     )

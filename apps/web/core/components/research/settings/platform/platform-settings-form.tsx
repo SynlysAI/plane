@@ -32,6 +32,11 @@ const TOGGLES: { field: keyof TWorkspaceResearchSetting; labelKey: string }[] = 
   { field: "approval_enabled", labelKey: "research.platform.approval_enabled" },
   { field: "research_chain_enabled", labelKey: "research.platform.research_chain_enabled" },
   { field: "research_ia_v2", labelKey: "research.platform.research_ia_v2" },
+  { field: "research_agent_enabled", labelKey: "research.platform.research_agent_enabled" },
+  {
+    field: "research_agent_user_backend_enabled",
+    labelKey: "research.platform.research_agent_user_backend_enabled",
+  },
 ];
 
 const LIMITS: { field: keyof TWorkspaceResearchSetting; labelKey: string }[] = [
@@ -128,7 +133,9 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
         report_enabled: draft.report_enabled,
         approval_enabled: draft.approval_enabled,
         research_chain_enabled: Boolean(draft.research_chain_enabled),
+        research_agent_enabled: Boolean(draft.research_agent_enabled),
         research_ia_v2: Boolean(draft.research_ia_v2),
+        research_agent_user_backend_enabled: Boolean(draft.research_agent_user_backend_enabled),
         default_report_visibility: draft.default_report_visibility,
         weekly_default_visibility: draft.weekly_default_visibility ?? null,
         monthly_default_visibility: draft.monthly_default_visibility ?? null,
@@ -216,14 +223,21 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
       <ResearchDetailSurface title={t("research.platform.switches")}>
         <div className="mt-3 flex flex-col gap-3">
           {TOGGLES.map((item) => (
-            <label key={item.field} className="flex items-center justify-between gap-4 text-12 text-secondary">
-              <span>{t(item.labelKey)}</span>
-              <input
-                type="checkbox"
-                checked={Boolean(draft[item.field])}
-                onChange={(event) => setDraft({ ...draft, [item.field]: event.target.checked })}
-              />
-            </label>
+            <div key={item.field}>
+              <label className="flex items-center justify-between gap-4 text-12 text-secondary">
+                <span>{t(item.labelKey)}</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft[item.field])}
+                  onChange={(event) => setDraft({ ...draft, [item.field]: event.target.checked })}
+                />
+              </label>
+              {item.field === "research_agent_user_backend_enabled" && (
+                <p className="mt-1 text-11 text-tertiary">
+                  {t("research.platform.research_agent_user_backend_enabled_hint")}
+                </p>
+              )}
+            </div>
           ))}
         </div>
       </ResearchDetailSurface>

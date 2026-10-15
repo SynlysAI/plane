@@ -26,8 +26,7 @@ from plane.db.models import (
 from plane.research.utils.acl import active_org_units_for, managing_org_units_for
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.errors import ResearchErrorCode, ResearchAPIException
-from plane.research.utils.org import is_workspace_admin
-from plane.research.utils.roles import is_instance_admin, is_main_pi
+from plane.research.utils.roles import is_instance_admin, is_main_pi, is_research_admin
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
 
@@ -333,10 +332,10 @@ def _management_queryset(user, workspace):
     queryset = ResearchFeedback.objects.filter(workspace=workspace, deleted_at__isnull=True)
     if is_instance_admin(user):
         return queryset
+    if is_research_admin(user, workspace.id):
+        return queryset
     if is_main_pi(user, workspace):
         return queryset.filter(org_unit_id__in=managing_org_units_for(user, workspace.id))
-    if is_workspace_admin(user, workspace.id):
-        return queryset
     return None
 
 

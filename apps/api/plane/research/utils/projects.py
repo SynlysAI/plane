@@ -9,6 +9,7 @@ import json
 from django.core.serializers.json import DjangoJSONEncoder
 
 from plane.db.models import ProjectMember, ResearchProjectProfile
+from plane.research.utils.roles import is_research_admin
 
 PROJECT_ADMIN_ROLE = 20
 PROJECT_MEMBER_ROLE = 15
@@ -54,6 +55,8 @@ def can_create_research_content(actor, workspace, profile) -> bool:
     """Cultivation owners and active team members create their own content."""
     if profile is None:
         return False
+    if is_research_admin(actor, workspace):
+        return True
     if profile.owner_id == actor.id:
         return True
     return is_active_team_project_member(actor, profile)
@@ -61,6 +64,8 @@ def can_create_research_content(actor, workspace, profile) -> bool:
 
 def can_manage_authored_team_content(actor, profile, instance) -> bool:
     """Team members may maintain content they created, never another author's."""
+    if profile is not None and is_research_admin(actor, profile.workspace_id):
+        return True
     return bool(
         is_active_team_project_member(actor, profile)
         and instance.created_by_id == actor.id
@@ -69,6 +74,10 @@ def can_manage_authored_team_content(actor, profile, instance) -> bool:
 
 def can_manage_team_content(actor, profile, instance) -> bool:
     """Allow own content, the project owner, or an explicitly promoted admin."""
+    if profile is None:
+        return False
+    if is_research_admin(actor, profile.workspace_id):
+        return True
     if not is_team_project(profile):
         return False
     if profile.owner_id == getattr(actor, "id", None):

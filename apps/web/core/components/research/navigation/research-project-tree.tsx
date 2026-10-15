@@ -11,6 +11,10 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomMenu, EModalWidth, Input, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
+import {
+  AdministrativeOrganizationManager,
+  type AdministrativeOrganizationManagerAction,
+} from "./administrative-organization-manager";
 import { collectBlockedIds, flattenCategories, projectHref } from "./research-project-tree.utils";
 import { useProject } from "@/hooks/store/use-project";
 import { useResearch } from "@/hooks/store/use-research";
@@ -21,6 +25,7 @@ import {
   type TNavigationProject,
   type TNavigationScope,
   type TNavigationTree,
+  type TAdministrativeOrganization,
 } from "@/services/research/navigation.service";
 
 const service = new ResearchNavigationService();
@@ -43,6 +48,7 @@ type CategoryEditor =
   | { mode: "rename"; name: string; category: TNavigationCategory };
 type DeleteEditor = { category: TNavigationCategory; target: string };
 type MoveEditor = { project: TNavigationProject; currentCategory: string | null; target: string };
+type OrganizationManager = { organizationId: string; action: AdministrativeOrganizationManagerAction };
 /** 从服务端错误中提取可读消息。 */
 function errorMessage(error: unknown) {
   if (error && typeof error === "object" && "message" in error) {
@@ -219,6 +225,8 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   const [categoryEditor, setCategoryEditor] = useState<CategoryEditor | null>(null);
   const [deleteEditor, setDeleteEditor] = useState<DeleteEditor | null>(null);
   const [moveEditor, setMoveEditor] = useState<MoveEditor | null>(null);
+  const [organizations, setOrganizations] = useState<TAdministrativeOrganization[]>([]);
+  const [organizationManager, setOrganizationManager] = useState<OrganizationManager | null>(null);
   const { storedValue: storedOpen, setValue: setStoredOpen } = useLocalStorage<boolean>(
     `research_navigation_${scope.toLowerCase()}_open`,
     true
@@ -283,7 +291,14 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
     setIsLoading(true);
     setLoadFailed(false);
     try {
-      setTree(await service.getTree(workspaceSlug.toString(), scope));
+      const [nextTree, nextOrganizations] = await Promise.all([
+        service.getTree(workspaceSlug.toString(), scope),
+        scope === "ADMINISTRATIVE"
+          ? service.getAdministrativeOrganizations(workspaceSlug.toString())
+          : Promise.resolve([]),
+      ]);
+      setTree(nextTree);
+      setOrganizations(nextOrganizations);
     } catch {
       setTree({ ...EMPTY_TREE, scope });
       setLoadFailed(true);
@@ -296,6 +311,13 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
     void refreshTree();
   }, [projectSignature, refreshTree]);
 
+  useEffect(() => {
+    if (scope !== "ADMINISTRATIVE") return;
+    const refresh = () => void refreshTree();
+    window.addEventListener("administrative-organizations-updated", refresh);
+    return () => window.removeEventListener("administrative-organizations-updated", refresh);
+  }, [refreshTree, scope]);
+
   /** 切换分类节点的持久化展开状态。 */
   const toggleExpanded = useCallback(
     (id: string) => setExpandedValue({ ...expanded, [id]: !(expanded?.[id] ?? true) }),
@@ -303,6 +325,16 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   );
 
   const flatCategories = useMemo(() => flattenCategories(tree.categories), [tree.categories]);
+  const navigationCategories = useMemo(
+    () =>
+      scope === "ADMINISTRATIVE" ? tree.categories.filter((category) => category.kind === "CUSTOM") : tree.categories,
+    [scope, tree.categories]
+  );
+  const defaultOrganization = organizations.find((organization) => organization.is_default);
+  const namedOrganizations = organizations.filter((organization) => !organization.is_default);
+  const defaultProjectIds = defaultOrganization
+    ? defaultOrganization.project_ids
+    : tree.uncategorized.map((project) => project.id);
 
   /** 执行分类写操作并统一处理刷新与错误提示。 */
   const runMutation = useCallback(
@@ -404,6 +436,26 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
     return flatCategories.filter((item) => item.category.id !== moveEditor.currentCategory);
   }, [flatCategories, moveEditor]);
 
+  /** 将行政项目移动到另一个组织。 */
+  const submitAdministrativeMove = async () => {
+    if (!workspaceSlug || !moveEditor) return;
+    setIsMutating(true);
+    try {
+      await service.moveAdministrativeProject(
+        workspaceSlug.toString(),
+        moveEditor.project.id,
+        moveEditor.target === "uncategorized" ? null : moveEditor.target
+      );
+      setMoveEditor(null);
+      await refreshTree();
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "项目已移动", message: "项目成员和原有权限保持不变。" });
+    } catch (error) {
+      setToast({ type: TOAST_TYPE.ERROR, title: "项目移动失败", message: errorMessage(error) });
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   if (!workspaceSlug) return null;
 
   return (
@@ -433,7 +485,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
         >
           {title}
         </Link>
-        {canManageTree && (
+        {canManageTree && scope === "RESEARCH" && (
           <IconButton
             variant="ghost"
             size="sm"
@@ -451,16 +503,20 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
             {!isLoading && loadFailed && (
               <span className="px-2 py-1 text-11 text-placeholder">分类暂不可用，可稍后刷新。</span>
             )}
-            {!isLoading && !loadFailed && tree.categories.length === 0 && tree.uncategorized.length === 0 && (
-              <span className="px-2 py-1 text-11 text-placeholder">暂无可见项目。</span>
-            )}
-            {tree.categories.map((category) => (
+            {!isLoading &&
+              !loadFailed &&
+              navigationCategories.length === 0 &&
+              namedOrganizations.length === 0 &&
+              defaultProjectIds.length === 0 && (
+                <span className="px-2 py-1 text-11 text-placeholder">暂无可见项目。</span>
+              )}
+            {navigationCategories.map((category) => (
               <CategoryNode
                 key={category.id}
                 category={category}
                 expanded={expanded ?? {}}
                 toggleExpanded={toggleExpanded}
-                siblings={tree.categories}
+                siblings={navigationCategories}
                 canManage={canManageTree}
                 onCreateChild={beginCreate}
                 onRename={(item) => setCategoryEditor({ mode: "rename", name: item.name, category: item })}
@@ -471,7 +527,98 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                 }
               />
             ))}
-            {!isLoading && (tree.uncategorized.length > 0 || canManageTree) && (
+            {!isLoading &&
+              scope === "ADMINISTRATIVE" &&
+              namedOrganizations.map((organization) => (
+                <div key={organization.id} className="mb-1">
+                  <div className="group flex items-center gap-1 rounded-sm px-2 py-1 text-12 text-tertiary hover:bg-layer-transparent-hover">
+                    <span className="min-w-0 flex-1 truncate font-medium">{organization.name}</span>
+                    {organization.can_manage && (
+                      <CustomMenu
+                        customButton={<MoreHorizontalOutline className="size-3" aria-hidden="true" />}
+                        customButtonClassName="grid place-items-center rounded-sm p-0.5"
+                        className="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                        placement="bottom-start"
+                        ariaLabel={`管理组织 ${organization.name}`}
+                      >
+                        <CustomMenu.MenuItem
+                          onClick={() => setOrganizationManager({ organizationId: organization.id, action: "members" })}
+                        >
+                          成员管理…
+                        </CustomMenu.MenuItem>
+                        <CustomMenu.MenuItem
+                          onClick={() => setOrganizationManager({ organizationId: organization.id, action: "rename" })}
+                        >
+                          重命名…
+                        </CustomMenu.MenuItem>
+                        <CustomMenu.MenuItem
+                          onClick={() => setOrganizationManager({ organizationId: organization.id, action: "delete" })}
+                        >
+                          删除…
+                        </CustomMenu.MenuItem>
+                      </CustomMenu>
+                    )}
+                  </div>
+                  <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label={organization.name}>
+                    {organization.project_ids.map((projectId) => {
+                      const project = projectMap[projectId];
+                      return project ? (
+                        <ProjectLink
+                          key={projectId}
+                          project={{
+                            id: projectId,
+                            name: project.name,
+                            identifier: project.identifier,
+                            kind: "ADMINISTRATIVE",
+                          }}
+                          currentCategoryId={organization.id}
+                          canManage={organization.can_manage}
+                          onMove={(item) =>
+                            setMoveEditor({ project: item, currentCategory: organization.id, target: organization.id })
+                          }
+                        />
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              ))}
+            {!isLoading &&
+              scope === "ADMINISTRATIVE" &&
+              (() => {
+                return (
+                  defaultOrganization && (
+                    <div className="mt-1 border-t border-subtle pt-1">
+                      <div className="group flex items-center gap-1 px-2 py-1 text-11 text-tertiary">
+                        <span className="min-w-0 flex-1 truncate">公共</span>
+                      </div>
+                      {defaultProjectIds.map((projectId) => {
+                        const project = projectMap[projectId];
+                        return project ? (
+                          <ProjectLink
+                            key={projectId}
+                            project={{
+                              id: projectId,
+                              name: project.name,
+                              identifier: project.identifier,
+                              kind: "ADMINISTRATIVE",
+                            }}
+                            currentCategoryId={defaultOrganization?.id ?? null}
+                            canManage={defaultOrganization?.can_manage ?? canManageTree}
+                            onMove={(item) =>
+                              setMoveEditor({
+                                project: item,
+                                currentCategory: defaultOrganization?.id ?? null,
+                                target: defaultOrganization?.id ?? "uncategorized",
+                              })
+                            }
+                          />
+                        ) : null;
+                      })}
+                    </div>
+                  )
+                );
+              })()}
+            {!isLoading && scope === "RESEARCH" && (tree.uncategorized.length > 0 || canManageTree) && (
               <div className="mt-1 border-t border-subtle pt-1">
                 <span className="px-2 text-11 text-tertiary">未分类</span>
                 {tree.uncategorized.map((project) => (
@@ -481,11 +628,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                     currentCategoryId={null}
                     canManage={canManageTree}
                     onMove={(item, currentCategory) =>
-                      setMoveEditor({
-                        project: item,
-                        currentCategory,
-                        target: currentCategory ?? "uncategorized",
-                      })
+                      setMoveEditor({ project: item, currentCategory, target: currentCategory ?? "uncategorized" })
                     }
                   />
                 ))}
@@ -536,6 +679,18 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
           </div>
         </form>
       </ModalCore>
+      {organizationManager && (
+        <AdministrativeOrganizationManager
+          key={`${organizationManager.organizationId}:${organizationManager.action}`}
+          action={organizationManager.action}
+          organizationId={organizationManager.organizationId}
+          workspaceSlug={workspaceSlug.toString()}
+          organizations={organizations}
+          defaultOrganization={defaultOrganization}
+          onClose={() => setOrganizationManager(null)}
+          onUpdated={refreshTree}
+        />
+      )}
 
       <ModalCore
         isOpen={deleteEditor !== null}
@@ -587,7 +742,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
             {moveEditor?.project.name}
           </p>
           <label htmlFor="navigation-move-target" className="mt-4 flex flex-col gap-1 text-12 text-secondary">
-            目标分类
+            {scope === "ADMINISTRATIVE" ? "目标组织" : "目标分类"}
             <select
               id="navigation-move-target"
               className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
@@ -596,19 +751,39 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                 setMoveEditor((current) => (current ? { ...current, target: event.target.value } : current))
               }
             >
-              <option value="uncategorized">未分类</option>
-              {moveTargets.map(({ category, depth }) => (
-                <option key={category.id} value={category.id}>
-                  {`${"— ".repeat(depth)}${category.name}`}
-                </option>
-              ))}
+              {scope === "ADMINISTRATIVE" ? (
+                <>
+                  {defaultOrganization ? (
+                    <option value={defaultOrganization.id}>公共</option>
+                  ) : (
+                    <option value="uncategorized">公共</option>
+                  )}
+                  {namedOrganizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <option value="uncategorized">未分类</option>
+                  {moveTargets.map(({ category, depth }) => (
+                    <option key={category.id} value={category.id}>{`${"— ".repeat(depth)}${category.name}`}</option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="secondary" size="sm" disabled={isMutating} onClick={() => setMoveEditor(null)}>
               取消
             </Button>
-            <Button variant="primary" size="sm" loading={isMutating} onClick={() => void submitMove()}>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={isMutating}
+              onClick={() => void (scope === "ADMINISTRATIVE" ? submitAdministrativeMove() : submitMove())}
+            >
               移动项目
             </Button>
           </div>

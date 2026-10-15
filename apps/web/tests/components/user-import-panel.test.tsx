@@ -279,6 +279,43 @@ describe("member import errors", () => {
     expect(button("审批导入").disabled).toBe(true);
   });
 
+  it("submits a student with a bachelor's degree and preserves it in pending review", async () => {
+    service.getAccountProvisioningOptions.mockResolvedValueOnce({
+      org_units: [
+        { id: "org-1", display_path: "学院 / 学生小组", unit_type: "TEAM", business_category: "BASIC_RESEARCH" },
+      ],
+      advisors: [],
+      profile_categories: [],
+    });
+    service.createSingleImport.mockResolvedValueOnce({ ...batch, rows: [{ ...batch.rows[0], degree: "BS" }] });
+    root = createRoot(container);
+    await act(async () => root.render(<ResearchUserImportPanel workspaceSlug="lab" />));
+    await act(async () => button("单条录入").click());
+    await change(labeledControl("姓名"), "本科学生");
+    await change(labeledControl("邮箱"), "student@example.com");
+    await change(labeledControl("学号"), "1");
+    await change(labeledControl("主归属小组"), "org-1");
+    const degree = labeledControl("学位") as HTMLSelectElement;
+    expect(Array.from(degree.options, (option) => option.textContent)).toEqual(["暂未指定", "本科", "硕士", "博士"]);
+    await change(degree, "BS");
+    await change(labeledControl("主导师"), "new");
+    await change(labeledControl("导师姓名"), "导师");
+    await change(labeledControl("导师邮箱"), "advisor@example.com");
+    await act(async () => button("提交并预览").click());
+    expect(service.createSingleImport).toHaveBeenCalledWith("lab", {
+      category: "STUDENT",
+      display_name: "本科学生",
+      email: "student@example.com",
+      student_no: "1",
+      org_unit: "org-1",
+      degree: "BS",
+      advisors: [{ name: "导师", email: "advisor@example.com" }],
+    });
+    await act(async () => button("编辑").click());
+    expect(labeledControl("学位").value).toBe("BS");
+    expect(service.approveUserImport).not.toHaveBeenCalled();
+  });
+
   it("submits a standalone advisor without student-only fields and opens pending review", async () => {
     service.getAccountProvisioningOptions.mockResolvedValueOnce({
       org_units: [

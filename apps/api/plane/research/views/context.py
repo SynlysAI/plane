@@ -40,7 +40,6 @@ from plane.research.utils.resource_projections import experiment_resource, outco
 from plane.research.utils.stages import default_stage_visibility, material_resource, stage_resource
 from plane.research.services.context_tokens import (
     ResearchContextTokenAuthentication,
-    issue_context_token,
     revoke_context_grant,
 )
 from plane.research.views.base import ResearchAPIView
@@ -396,11 +395,6 @@ def _resource_response(kind, resource_id, version, resource_status, updated_at, 
     )
 
 
-def _agent_context_enabled(workspace):
-    setting = getattr(workspace, "research_setting", None)
-    return bool(setting and setting.research_agent_enabled)
-
-
 def _request_id(request):
     return str(request.headers.get("X-Request-Id") or request.data.get("request_id") or "").strip()
 
@@ -473,140 +467,6 @@ def _validate_context_grant(request, workspace):
 class ContextAuthenticationMixin:
     authentication_classes = [ResearchContextTokenAuthentication, BaseSessionAuthentication, APIKeyAuthentication]
     nav_capability = NAV_PROJECTS
-
-
-class ContextOwnerAuthenticationMixin:
-    authentication_classes = [BaseSessionAuthentication, APIKeyAuthentication]
-    nav_capability = NAV_PROJECTS
-
-
-class ResearchContextTokenEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIView):
-    """Issue a short-lived, project-scoped Agent Context exchange token."""
-
-    def post(self, request, slug):
-        workspace, error = self.get_workspace()
-        if error:
-            return error
-        if not _agent_context_enabled(workspace):
-            return research_error(
-                ResearchErrorCode.SUBMODULE_DISABLED,
-                "The research agent switch is disabled for this workspace.",
-                status.HTTP_403_FORBIDDEN,
-            )
-        request_id = _request_id(request)
-        if not request_id:
-            return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "request_id is required.")
-        project_id, error = _parse_project_id(request.data.get("research_project_id") or request.data.get("project_id"))
-        if error:
-            return error
-        profile = visible_profile_queryset(workspace, request.user).filter(project_id=project_id).first()
-        if profile is None:
-            return _context_not_found()
-        chain_node = None
-        raw_node_id = request.data.get("chain_node_id")
-        if raw_node_id:
-            try:
-                chain_node = ResearchChainNode.objects.select_related("chain__project").get(pk=raw_node_id)
-            except (ResearchChainNode.DoesNotExist, TypeError, ValueError):
-                return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "chain_node_id is invalid.")
-            if chain_node.chain.workspace_id != workspace.id or chain_node.chain.project_id != profile.project_id:
-                return research_error(
-                    ResearchErrorCode.CONTEXT_ACCESS_DENIED,
-                    "chain_node_id belongs to another scope.",
-                    status.HTTP_403_FORBIDDEN,
-                )
-        from plane.research.services.report_context import selected_report_content
-        from plane.research.services.synlora import SynloraError
-
-        selections = request.data.get("reports", [])
-        try:
-            selected_report_content(
-                workspace=workspace, actor=request.user, project_id=profile.project_id, selections=selections
-            )
-        except SynloraError as failure:
-            return Response({"error_code": failure.code, "message": str(failure)}, status=failure.status_code)
-        grant, raw_token = issue_context_token(
-            workspace=workspace,
-            user=request.user,
-            profile=profile,
-            chain_node=chain_node,
-            request_id=request_id,
-            allowed_reports=selections,
-        )
-        record_audit_event(
-            workspace=workspace,
-            action=ResearchAuditAction.CONTEXT_TOKEN_ISSUE,
-            resource_type=ResearchResourceType.CONTEXT,
-            resource_id=grant.context_id,
-            actor=request.user,
-            metadata={
-                "project_id": str(profile.project_id),
-                "chain_node_id": str(chain_node.id) if chain_node else None,
-                "expires_at": grant.expires_at.isoformat(),
-            },
-            request=request,
-        )
-        return Response(
-            {
-                "schema_version": AGENT_CONTEXT_SCHEMA_VERSION,
-                "context_id": str(grant.context_id),
-                "exchange_token": raw_token,
-                "token_type": "opaque",
-                "expires_at": grant.expires_at.isoformat(),
-                "context_hash": grant.context_hash,
-                "scope": {
-                    "workspace_id": str(workspace.id),
-                    "research_project_id": str(profile.project_id),
-                    "chain_node_id": str(chain_node.id) if chain_node else None,
-                    "visibility_scope": grant.visibility_scope,
-                    "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
-                    "allowed_file_ids": grant.allowed_file_ids,
-                    "allowed_plugins": grant.allowed_plugins,
-                    "allowed_tools": grant.allowed_tools,
-                    "policy_id": grant.policy_id,
-                    "policy_hash": grant.policy_hash,
-                    "scope_kind": grant.scope_kind,
-                    "scope_source": grant.scope_source,
-                    "policy_version": grant.policy_version,
-                },
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-
-class ResearchContextTokenRevokeEndpoint(ContextOwnerAuthenticationMixin, ResearchAPIView):
-    """Revoke a previously issued context token by its context id."""
-
-    def post(self, request, slug):
-        workspace, error = self.get_workspace()
-        if error:
-            return error
-        if not _agent_context_enabled(workspace):
-            return research_error(
-                ResearchErrorCode.SUBMODULE_DISABLED,
-                "The research agent switch is disabled for this workspace.",
-                status.HTTP_403_FORBIDDEN,
-            )
-        raw_context_id = request.data.get("context_id")
-        try:
-            context_id = UUID(str(raw_context_id))
-        except (TypeError, ValueError):
-            return research_error(ResearchErrorCode.CONTEXT_RESOURCE_INVALID, "context_id must be a valid UUID.")
-        grant = revoke_context_grant(workspace=workspace, context_id=context_id, actor=request.user)
-        if grant is False:
-            return research_permission_denied()
-        if grant is None:
-            return _context_not_found()
-        record_audit_event(
-            workspace=workspace,
-            action=ResearchAuditAction.CONTEXT_TOKEN_REVOKE,
-            resource_type=ResearchResourceType.CONTEXT,
-            resource_id=context_id,
-            actor=request.user,
-            metadata={"project_id": str(grant.project_id)},
-            request=request,
-        )
-        return Response({"revoked": True, "context_id": str(context_id)}, status=status.HTTP_200_OK)
 
 
 class ResearchContextEndpoint(ContextAuthenticationMixin, ResearchAPIView):

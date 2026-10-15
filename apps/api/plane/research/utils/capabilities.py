@@ -11,15 +11,17 @@ Whether a research surface is reachable is decided by two independent axes:
 * the caller's research level says how much of that surface the person may
   reach.
 
-The level is derived from relations the platform already stores - instance
-administrator tags, the workspace seat, the organisation tree, mentor
-bindings, stage reviewer assignments and the research profile. Nothing extra is
-written, so editing the organisation tree changes the menu on the next request.
+The level is derived from relations the platform already stores - the seated
+workspace or instance administrator, the organisation tree, mentor bindings,
+stage reviewer assignments and the research profile. OPS/DEV/MAIN_PI tags do
+not raise the caller to ADMIN. Nothing extra is written, so editing the
+organisation tree changes the menu on the next request.
 
 Levels, highest first:
 
 ``ADMIN``
-    instance administrator tag or workspace administrator.
+    seated workspace administrator (role 20) or seated instance administrator.
+    Organisation membership is not required.
 ``PRINCIPAL``
     a managing organisation role (node owner, principal investigator, unit
     administrator) on an effective node.
@@ -236,8 +238,38 @@ def _org_roles(user, workspace_id, on_date):
             active_membership_q(on_date),
             workspace_id=workspace_id,
             user=user,
+            org_unit__workspace_id=workspace_id,
+            org_unit__deleted_at__isnull=True,
+            org_unit__is_active=True,
         ).values_list("org_role", flat=True)
     )
+
+
+def has_active_research_org_relation(user, workspace, on_date=None):
+    """判断调用方是否可通过科研 API 的组织关系门禁。
+
+    科研管理员即使没有 OrgUnitMember 也会在此处返回 True，仅用于 API 门禁旁路，
+    不会伪造 identity 中的 org_units 列表。
+
+    Args:
+        user: 当前请求用户。
+        workspace: URL 对应的工作区或工作区主键。
+        on_date: 用于生效期判断的日期，默认当天。
+
+    Returns:
+        科研管理员，或存在未删除、生效中且所属组织节点有效的成员关系时为 True。
+    """
+    if user is None or not getattr(user, "is_authenticated", False) or workspace is None:
+        return False
+    workspace_id = getattr(workspace, "id", workspace)
+    if is_research_admin(user, workspace_id):
+        return True
+    signal_workspace = org_signal_workspace(workspace)
+    signal_workspace_id = getattr(signal_workspace, "id", None)
+    if signal_workspace_id is None:
+        return False
+    on_date = on_date or timezone.localdate()
+    return bool(_org_roles(user, signal_workspace_id, on_date))
 
 
 def _is_mentor(user, workspace_id, on_date):
@@ -281,25 +313,29 @@ def research_signals(user, workspace, on_date=None, now=None) -> ResearchSignals
     signal_workspace_id = getattr(signal_workspace, "id", None)
 
     roles = _org_roles(user, signal_workspace_id, on_date) if signal_workspace_id else set()
+    has_org_relation = bool(roles)
+    is_admin = is_research_admin(user, workspace.id)
     is_principal = bool(roles & set(PRINCIPAL_ORG_ROLES))
     is_mentor = bool(roles & set(MENTOR_ORG_ROLES)) or (
-        _is_mentor(user, signal_workspace_id, on_date) if signal_workspace_id else False
+        has_org_relation and _is_mentor(user, signal_workspace_id, on_date)
     )
-    is_stage_reviewer = _is_stage_reviewer(user, signal_workspace_id, now) if signal_workspace_id else False
+    is_stage_reviewer = (
+        has_org_relation and _is_stage_reviewer(user, signal_workspace_id, now) if signal_workspace_id else False
+    )
 
     return ResearchSignals(
-        # Administrators are always resolved against the workspace in the URL:
-        # a tag or a workspace seat is what opens the configuration surfaces.
-        is_admin=is_research_admin(user, workspace.id),
-        is_main_pi=is_main_pi(user, workspace),
+        # Workspace and instance administrators retain research access even
+        # without an organisation-unit assignment.
+        is_admin=is_admin,
+        is_main_pi=has_org_relation and is_main_pi(user, workspace),
         is_principal=is_principal,
         is_mentor=is_mentor,
         is_stage_reviewer=is_stage_reviewer,
-        has_org_relation=bool(roles),
-        has_profile=_has_profile(user),
-        can_configure_integrations=can_configure_integrations(user, workspace),
-        can_operate_workspace=can_operate_workspace(user, workspace),
-        can_manage_accounts=is_account_compat_admin(user, workspace),
+        has_org_relation=has_org_relation,
+        has_profile=has_org_relation and _has_profile(user),
+        can_configure_integrations=is_admin or (has_org_relation and can_configure_integrations(user, workspace)),
+        can_operate_workspace=is_admin or (has_org_relation and can_operate_workspace(user, workspace)),
+        can_manage_accounts=is_admin or (has_org_relation and is_account_compat_admin(user, workspace)),
     )
 
 

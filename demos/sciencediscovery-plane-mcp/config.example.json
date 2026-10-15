@@ -1,0 +1,10 @@
+{
+  "PLANE_BASE_URL": "http://127.0.0.1:8001",
+  "PLANE_WORKSPACE_SLUG": "science-mcp-demo",
+  "PLANE_API_KEY": "REPLACE_LOCALLY",
+  "SCIENCEDISCOVERY_BASE_URL": "http://127.0.0.1:14310",
+  "SCIENCE_AGENT_AUTH_TOKEN": "REPLACE_LOCALLY",
+  "PLANE_MCP_BASE_URL": "http://pilab-windows-api-1:8000",
+  "PLANE_MCP_PYTHON": "/app/data/scientific-envs/plane-mcp-demo/.venv/bin/python",
+  "PLANE_MCP_READ_ONLY_SCRIPT": "/app/data/plane-mcp-demo/read_only_mcp.py"
+}

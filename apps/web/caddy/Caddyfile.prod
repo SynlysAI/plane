@@ -40,8 +40,16 @@
 		file_server
 	}
 
+	# index.html must always be revalidated: it references hashed assets, so a
+	# cached copy pins users to stale bundles after a deploy. Hashed assets
+	# under /assets/ are immutable and cache freely.
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
 	handle {
 		try_files {path} /index.html
+		header Cache-Control "no-cache"
 		file_server
 	}
 

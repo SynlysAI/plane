@@ -1,0 +1,41 @@
+services:
+  api:
+    image: pilab-windows-api:latest
+    command: !override ["/bin/bash", "./bin/docker-entrypoint-api-local.sh"]
+    ports: !override
+      - "127.0.0.1:8001:8000"
+  worker:
+    image: pilab-windows-worker:latest
+    # Keep local memory use predictable on this 16 GB Windows machine.
+    command: !override
+      - /bin/bash
+      - -c
+      - python manage.py wait_for_db && python manage.py wait_for_migrations && celery -A plane worker -l info --concurrency=2
+  beat-worker:
+    image: pilab-windows-beat-worker:latest
+    command: !override ["/bin/bash", "./bin/docker-entrypoint-beat.sh"]
+  migrator:
+    image: pilab-windows-migrator:latest
+    command: !override ["/bin/bash", "./bin/docker-entrypoint-migrator.sh", "--settings=plane.settings.local"]
+  plane-db:
+    ports: !override
+      - "127.0.0.1:3543:5432"
+  plane-redis:
+    ports: !override
+      - "127.0.0.1:3637:6379"
+  plane-minio:
+    # Upstream binary/container endpoints are unavailable; build official source.
+    image: pilab-minio-source:RELEASE.2025-10-15T17-29-55Z
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: deployments/windows/Minio.Dockerfile
+    entrypoint: !override ["/usr/local/bin/minio"]
+    command: !override ["server", "/export", "--console-address", ":9090"]
+    ports: !override
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9091:9090"
+
+networks:
+  dev_env:
+    name: pilab_windows_local

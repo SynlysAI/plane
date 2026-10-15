@@ -3,10 +3,12 @@
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
     OrgUnit,
+    OrgUnitMember,
     Project,
     ProjectMember,
     ProjectNavigationCategory,
@@ -74,6 +76,18 @@ def navigation_env(db):
     root = create_unit(workspace, "前沿材料研究院")
     lab = create_unit(workspace, "分子材料实验室", root)
     group = create_unit(workspace, "界面催化组", lab)
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
+        user=admin,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
+        user=member,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
 
     research_project = Project.objects.create(
         workspace=workspace,
@@ -91,9 +105,7 @@ def navigation_env(db):
         workflow_status=ResearchProjectProfile.WorkflowStatus.ACTIVE,
         created_by=member,
     )
-    ProjectMember.objects.create(
-        project=research_project, workspace=workspace, member=member, role=15
-    )
+    ProjectMember.objects.create(project=research_project, workspace=workspace, member=member, role=15)
     research_chain = ResearchChain.objects.create(
         project=research_project,
         workspace=workspace,
@@ -205,7 +217,8 @@ def test_category_scope_isolation_and_member_write_is_denied(navigation_env):
         {"scope": "ADMINISTRATIVE", "name": "采购与资产"},
         format="json",
     )
-    assert created.status_code == 201
+    assert created.status_code == 409
+    assert created.json()["error_code"] == "navigation_category_readonly"
 
     denied = navigation_env["member_client"].post(
         navigation_env["url"],
@@ -226,17 +239,41 @@ def test_category_scope_isolation_and_member_write_is_denied(navigation_env):
     assert empty_research_category.status_code == 201
 
     research_tree = navigation_env["member_client"].get(navigation_env["url"], {"scope": "RESEARCH"})
-    administrative_tree = navigation_env["member_client"].get(
-        navigation_env["url"], {"scope": "ADMINISTRATIVE"}
-    )
+    administrative_tree = navigation_env["member_client"].get(navigation_env["url"], {"scope": "ADMINISTRATIVE"})
+    administrator_tree = navigation_env["admin_client"].get(navigation_env["url"], {"scope": "ADMINISTRATIVE"})
     assert research_tree.status_code == 200
     assert administrative_tree.status_code == 200
+    assert administrator_tree.status_code == 200
     assert tree_node(research_tree.json()["categories"], "前沿材料研究院") is not None
     assert "空组织分类" not in str(research_tree.json()["categories"])
     assert administrative_tree.json()["categories"] == []
-    assert administrative_tree.json()["uncategorized"][0]["id"] == str(
-        navigation_env["administrative_project"].id
+    assert administrative_tree.json()["uncategorized"] == []
+    assert administrator_tree.json()["uncategorized"][0]["id"] == str(navigation_env["administrative_project"].id)
+
+
+@pytest.mark.django_db
+def test_soft_deleted_research_chain_stays_out_of_administrative_tree(navigation_env):
+    """软删除研究链的宿主项目不能在管理员行政树中重新出现。"""
+    project = Project.objects.create(
+        workspace=navigation_env["workspace"],
+        name="软删除研究链宿主",
+        identifier=uuid4().hex[:10].upper(),
+        created_by=navigation_env["admin"],
     )
+    chain = ResearchChain.objects.create(
+        project=project,
+        workspace=navigation_env["workspace"],
+        owner=navigation_env["admin"],
+        request_id=f"soft-tree-{uuid4()}",
+        payload_hash=f"soft-tree-{uuid4()}",
+    )
+    chain.deleted_at = timezone.now()
+    chain.save(update_fields=["deleted_at", "updated_at"])
+
+    tree = navigation_env["admin_client"].get(navigation_env["url"], {"scope": "ADMINISTRATIVE"})
+
+    assert tree.status_code == 200
+    assert all(item["id"] != str(project.id) for item in tree.json()["uncategorized"])
 
 
 @pytest.mark.django_db
@@ -268,47 +305,39 @@ def test_category_depth_and_duplicate_rules(navigation_env):
 
 
 @pytest.mark.django_db
-def test_non_empty_category_requires_explicit_uncategorized_migration(navigation_env):
-    created = navigation_env["admin_client"].post(
-        navigation_env["url"],
-        {"scope": "ADMINISTRATIVE", "name": "非空分类"},
-        format="json",
+def test_administrative_category_writes_are_retired(navigation_env):
+    category = ProjectNavigationCategory.objects.create(
+        workspace=navigation_env["workspace"],
+        scope=ProjectNavigationCategory.Scope.ADMINISTRATIVE,
+        name="Legacy category",
     )
-    assert created.status_code == 201
-    category_id = created.json()["id"]
+    category_id = str(category.id)
     move_url = f"{navigation_env['move_url']}{navigation_env['administrative_project'].id}/move/"
     moved = navigation_env["admin_client"].post(
         move_url,
         {"scope": "ADMINISTRATIVE", "category": category_id},
         format="json",
     )
-    assert moved.status_code == 200
+    assert moved.status_code == 409
+    assert moved.json()["error_code"] == "navigation_category_readonly"
 
-    blocked = navigation_env["admin_client"].delete(f"{navigation_env['url']}{category_id}/")
-    assert blocked.status_code == 409
-    assert ProjectNavigationCategory.objects.filter(pk=category_id, deleted_at__isnull=True).exists()
-
-    member_count = ProjectMember.objects.count()
-    deleted = navigation_env["admin_client"].delete(
-        f"{navigation_env['url']}{category_id}/?move_to=uncategorized"
+    renamed = navigation_env["admin_client"].patch(
+        f"{navigation_env['url']}{category_id}/", {"name": "New name"}, format="json"
     )
-    assert deleted.status_code == 204
-    navigation_env["administrative_project"].refresh_from_db()
-    assert navigation_env["administrative_project"].navigation_category is None
-    assert not ProjectNavigationCategory.objects.filter(
-        pk=category_id, deleted_at__isnull=True
-    ).exists()
-    assert ProjectMember.objects.count() == member_count
+    deleted = navigation_env["admin_client"].delete(f"{navigation_env['url']}{category_id}/")
+    assert renamed.status_code == 409
+    assert deleted.status_code == 409
+    assert ProjectNavigationCategory.objects.filter(pk=category_id, deleted_at__isnull=True).exists()
 
 
 @pytest.mark.django_db
 def test_delete_rejects_self_and_descendant_targets(navigation_env):
     root = navigation_env["admin_client"].post(
-        navigation_env["url"], {"scope": "ADMINISTRATIVE", "name": "根分类"}, format="json"
+        navigation_env["url"], {"scope": "RESEARCH", "name": "根分类"}, format="json"
     )
     child = navigation_env["admin_client"].post(
         navigation_env["url"],
-        {"scope": "ADMINISTRATIVE", "name": "子分类", "parent": root.json()["id"]},
+        {"scope": "RESEARCH", "name": "子分类", "parent": root.json()["id"]},
         format="json",
     )
     assert root.status_code == 201
@@ -326,16 +355,10 @@ def test_delete_rejects_self_and_descendant_targets(navigation_env):
 
 @pytest.mark.django_db
 def test_project_move_rejects_wrong_scope_without_changing_relationship(navigation_env):
-    category = navigation_env["admin_client"].post(
-        navigation_env["url"],
-        {"scope": "ADMINISTRATIVE", "name": "采购与资产"},
-        format="json",
-    )
-    assert category.status_code == 201
     before = navigation_env["research_project"].navigation_category_id
     response = navigation_env["admin_client"].post(
         f"{navigation_env['move_url']}{navigation_env['research_project'].id}/move/",
-        {"scope": "ADMINISTRATIVE", "category": category.json()["id"]},
+        {"scope": "ADMINISTRATIVE", "category": str(uuid4())},
         format="json",
     )
     navigation_env["research_project"].refresh_from_db()
@@ -344,7 +367,7 @@ def test_project_move_rejects_wrong_scope_without_changing_relationship(navigati
 
 
 @pytest.mark.django_db
-def test_category_manager_still_cannot_move_an_invisible_project(navigation_env):
+def test_workspace_admin_can_move_a_private_research_project(navigation_env):
     hidden_project = Project.objects.create(
         workspace=navigation_env["workspace"],
         name="私有课题",
@@ -368,16 +391,14 @@ def test_category_manager_still_cannot_move_an_invisible_project(navigation_env)
     )
     assert category.status_code == 201
 
-    tree = navigation_env["admin_client"].get(navigation_env["url"], {"scope": "RESEARCH"})
     response = navigation_env["admin_client"].post(
         f"{navigation_env['move_url']}{hidden_project.id}/move/",
         {"scope": "RESEARCH", "category": category.json()["id"]},
         format="json",
     )
     hidden_project.refresh_from_db()
-    assert response.status_code == 403
-    assert hidden_project.navigation_category is None
-    assert "私有课题" not in str(tree.json())
+    assert response.status_code == 200
+    assert str(hidden_project.navigation_category_id) == category.json()["id"]
 
 
 @pytest.mark.django_db
@@ -400,17 +421,11 @@ def test_active_legacy_research_project_keeps_its_existing_route(navigation_env)
         created_by=navigation_env["member"],
     )
 
-    research_tree = navigation_env["member_client"].get(
-        navigation_env["url"], {"scope": "RESEARCH"}
-    )
-    administrative_tree = navigation_env["member_client"].get(
-        navigation_env["url"], {"scope": "ADMINISTRATIVE"}
-    )
+    research_tree = navigation_env["member_client"].get(navigation_env["url"], {"scope": "RESEARCH"})
+    administrative_tree = navigation_env["member_client"].get(navigation_env["url"], {"scope": "ADMINISTRATIVE"})
     group = find_node(research_tree.json()["categories"], "界面催化组")
     assert group is not None
-    legacy_payload = next(
-        (project for project in group["projects"] if project["id"] == str(legacy.id)), None
-    )
+    legacy_payload = next((project for project in group["projects"] if project["id"] == str(legacy.id)), None)
     assert legacy_payload == {
         "id": str(legacy.id),
         "name": "博士培养项目",

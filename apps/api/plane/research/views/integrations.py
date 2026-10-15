@@ -44,7 +44,7 @@ from plane.research.utils.integrations import (
     reference_allowed,
     set_cached,
 )
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reference_targets import resolve_target
 from plane.research.views.base import ResearchAPIView
 
@@ -116,7 +116,7 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
                     "configured": False,
                     "is_enabled": False,
                     "health_status": "UNKNOWN",
-                    "credential_ref": "",
+                    "credential_mode": "SHARED",
                     "has_credential": False,
                     **registration_metadata(system, connection),
                 })
@@ -131,7 +131,7 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         items = request.data.get("items")
         if not isinstance(items, list) or not items:
@@ -155,8 +155,15 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
             for field in ("auth_mode", "degraded_mode"):
                 if entry.get(field):
                     defaults[field] = str(entry[field]).upper()
-            if entry.get("credential_ref") is not None:
-                defaults["credential_ref"] = str(entry.get("credential_ref") or "")
+            credential_mode = str(entry.get("credential_mode") or "").upper()
+            if credential_mode:
+                if credential_mode not in ExternalSystemConnection.CredentialMode.values:
+                    return research_error(
+                        ResearchErrorCode.INTEGRATION_INVALID,
+                        "credential_mode must be SHARED or PERSONAL.",
+                    )
+                defaults["credential_mode"] = credential_mode
+            has_credential = "credential" in entry
             for field in ("timeout_seconds", "cache_ttl_seconds"):
                 if entry.get(field) is not None:
                     try:
@@ -176,6 +183,18 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
                     ResearchErrorCode.INTEGRATION_CONNECTION_EXISTS,
                     "A connection for this system already exists.",
                 )
+            if has_credential:
+                connection.set_credential(str(entry.get("credential") or ""))
+                connection.save(update_fields=["credential", "updated_at"])
+            if connection.is_enabled:
+                # Re-check reachability immediately so the health board shows
+                # the state of the configuration that was just saved, not the
+                # previously cached health row.
+                try:
+                    client_for(system, connection).health()
+                except Exception:  # best-effort: probe failures keep the old row
+                    pass
+                connection.refresh_from_db()
             updated.append(connection)
             record_audit_event(
                 workspace=workspace,
@@ -186,7 +205,7 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
                 metadata={
                     "system": system,
                     "is_enabled": connection.is_enabled,
-                    "credential_changed": "credential_ref" in entry,
+                    "credential_changed": has_credential,
                 },
                 request=request,
             )
@@ -243,7 +262,7 @@ class ResearchIntegrationCallLogEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         query = IntegrationCallLog.objects.filter(workspace=workspace)
         if request.GET.get("system"):

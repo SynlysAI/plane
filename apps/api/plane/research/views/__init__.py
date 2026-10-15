@@ -26,8 +26,6 @@ from .pi_workspace import ResearchPiAggregateEndpoint
 from .context import (
     ResearchContextEndpoint,
     ResearchContextResourceEndpoint,
-    ResearchContextTokenEndpoint,
-    ResearchContextTokenRevokeEndpoint,
 )
 from .account_links import (
     ResearchAccountLinkConflictEndpoint,
@@ -42,9 +40,14 @@ from .agent import (
     ResearchAgentArtifactEndpoint,
     ResearchAgentChainEventEndpoint,
     ResearchAgentManifestEndpoint,
+    ResearchAgentBackendConnectionEndpoint,
+    ResearchAgentBackendConnectionTestEndpoint,
     ResearchAgentMessageEndpoint,
     ResearchAgentRunEventEndpoint,
     ResearchAgentRunCancelEndpoint,
+    ResearchAgentSessionFileEndpoint,
+    ResearchAgentSessionArtifactListEndpoint,
+    ResearchAgentSessionArtifactContentEndpoint,
     ResearchAgentSessionCloseEndpoint,
     ResearchAgentSessionCreateEndpoint,
     ResearchAgentSessionDetailEndpoint,
@@ -68,6 +71,13 @@ from .approvals import (
     ResearchApprovalRequestListCreateEndpoint,
 )
 from .health import ResearchHealthEndpoint
+from .administrative_organizations import (
+    AdministrativeOrganizationDetailEndpoint,
+    AdministrativeOrganizationListCreateEndpoint,
+    AdministrativeOrganizationMemberEndpoint,
+    AdministrativeOrganizationAssignableMembersEndpoint,
+    AdministrativeProjectOrganizationEndpoint,
+)
 from .settings import ResearchSettingsEndpoint
 from .observability import ResearchExternalHealthProbeEndpoint, ResearchObservabilityEndpoint
 from .summary import ResearchReportSummaryEndpoint
@@ -393,19 +403,22 @@ __all__ = [
     "ResearchUserProfileListEndpoint",
     "ResearchPiAggregateEndpoint",
     "ResearchContextEndpoint",
-    "ResearchContextTokenEndpoint",
-    "ResearchContextTokenRevokeEndpoint",
     "ResearchAccountLinkListCreateEndpoint",
     "ResearchAccountLinkConfirmEndpoint",
     "ResearchAccountLinkUnlinkEndpoint",
     "ResearchAccountLinkRevokeEndpoint",
     "ResearchAccountLinkConflictEndpoint",
     "ResearchAgentManifestEndpoint",
+    "ResearchAgentBackendConnectionEndpoint",
+    "ResearchAgentBackendConnectionTestEndpoint",
     "ResearchAgentSessionCreateEndpoint",
     "ResearchAgentSessionDetailEndpoint",
     "ResearchAgentSessionCloseEndpoint",
     "ResearchAgentMessageEndpoint",
     "ResearchAgentRunEventEndpoint",
+    "ResearchAgentSessionFileEndpoint",
+    "ResearchAgentSessionArtifactListEndpoint",
+    "ResearchAgentSessionArtifactContentEndpoint",
     "ResearchAgentRunCancelEndpoint",
     "ResearchAgentApprovalEndpoint",
     "ResearchAgentApprovalListEndpoint",

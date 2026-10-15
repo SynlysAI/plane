@@ -20,6 +20,20 @@ import {
 
 const agentService = new ResearchAgentService();
 
+/** SD 十类产物 kind → Plane 六类快照类型的默认收敛（§15.3，可按真实样本调整）。 */
+const SD_ARTIFACT_TYPE_MAP: Record<string, string> = {
+  report: "ANALYSIS_SUMMARY",
+  markdown: "ANALYSIS_SUMMARY",
+  html: "ANALYSIS_SUMMARY",
+  latex: "RESEARCH_PLAN_DRAFT",
+  dataset: "EXPERIMENT_DATA",
+  json: "EXPERIMENT_DATA",
+  structure: "EXPERIMENT_DATA",
+  figure: "EXPERIMENT_DATA",
+  notebook: "EXPERIMENT_RECORD",
+  other: "PROCESS_NOTE",
+};
+
 /**
  * Own the Research Agent session lifecycle: context creation, event merging,
  * messaging, reconnection, approvals and artifact saving.
@@ -41,6 +55,9 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   const [reportError, setReportError] = useState("");
   const [sending, setSending] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
   const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(false);
   const [artifactDraft, setArtifactDraft] = useState("");
   const [artifactType, setArtifactType] = useState("ANALYSIS_SUMMARY");
@@ -57,6 +74,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   const [traceStatusFilter, setTraceStatusFilter] = useState("");
   const sessionRef = useRef<TResearchAgentSession | null>(null);
   const approvalRequestIdsRef = useRef<Record<string, string>>({});
+  const pendingArtifactSourceRef = useRef<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -109,6 +127,8 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   }, [chainNodeId, workspaceSlug]);
 
   const latestSeq = useMemo(() => events.at(-1)?.seq ?? 0, [events]);
+  const pollingRunId = session?.run_id;
+  const pollingStatus = session?.status;
   const toolEvents = useMemo(() => events.filter((event) => event.event_type.toUpperCase().includes("TOOL")), [events]);
   const artifactEvents = useMemo(
     () => events.filter((event) => ["DATA_CHANGE", "INTERMEDIATE_ARTIFACT", "OUTPUT"].includes(event.event_type)),
@@ -116,10 +136,12 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   );
   const approvalEvents = useMemo(
     () =>
-      toolEvents.filter(
-        (event) => event.payload.requires_approval === true || agentToolStatus(event.payload) === "WAITING_APPROVAL"
+      events.filter(
+        (event) =>
+          (event.event_type.toUpperCase().includes("TOOL") || event.event_type === "APPROVAL") &&
+          (event.payload.requires_approval === true || agentToolStatus(event.payload) === "WAITING_APPROVAL")
       ),
-    [toolEvents]
+    [events]
   );
   const activeApproval =
     approvalFor ??
@@ -135,6 +157,46 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
       ),
     [events, traceStatusFilter, traceTypeFilter]
   );
+
+  // SD 异步链路：STREAMING 时自动轮询增量事件；指数退避（1s 起、无新事件翻倍、30s 封顶）。
+  // Synlora 同步链路天然不受影响——其响应已带全量事件，session 不会停在 STREAMING。
+  const pollBusyRef = useRef(false);
+  useEffect(() => {
+    if (!pollingRunId || pollingStatus !== "STREAMING") return;
+    let cancelled = false;
+    let delay = 1000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      if (cancelled || pollBusyRef.current) return;
+      const active = sessionRef.current;
+      if (!active) return;
+      pollBusyRef.current = true;
+      let received = 0;
+      try {
+        const result = await agentService.getEvents(workspaceSlug, active.run_id, latestSeq);
+        if (cancelled) return;
+        received = result.results.length;
+        if (received > 0) setEvents((previous) => mergeAgentEvents(previous, result.results));
+        if (result.session) {
+          sessionRef.current = result.session;
+          setSession(result.session);
+          setState(researchAgentSessionState(result.session));
+          if (result.session.status !== "STREAMING") return;
+        }
+      } catch {
+        // 单次轮询失败不打断会话；退避后自动重试。
+      } finally {
+        pollBusyRef.current = false;
+      }
+      delay = received > 0 ? 1000 : Math.min(delay * 2, 30000);
+      timer = setTimeout(tick, delay);
+    };
+    timer = setTimeout(tick, delay);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [latestSeq, pollingRunId, pollingStatus, workspaceSlug]);
 
   const close = useCallback(async () => {
     const current = sessionRef.current;
@@ -198,6 +260,27 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     }
   }, [message, sending, workspaceSlug, reports]);
 
+  /** 上传一个分析文件到当前会话的 ScienceDiscovery 工作区（任意类型，§9）。 */
+  const uploadFile = useCallback(
+    async (file: File) => {
+      const current = sessionRef.current;
+      if (!current || uploadingFile) return;
+      setUploadingFile(true);
+      setUploadError("");
+      setUploadedFile(null);
+      try {
+        const result = await agentService.uploadSessionFile(workspaceSlug, current.session_id, file);
+        if (result.event) setEvents((previous) => mergeAgentEvents(previous, [result.event!]));
+        setUploadedFile(result.upload?.file_name ?? file.name);
+      } catch (failure) {
+        setUploadError((failure as { message?: string })?.message ?? t("research.agent.file_upload_error"));
+      } finally {
+        setUploadingFile(false);
+      }
+    },
+    [t, uploadingFile, workspaceSlug]
+  );
+
   const saveArtifact = useCallback(async () => {
     const current = sessionRef.current;
     if (!current || !artifactDraft.trim() || !artifactConfirmed || savingArtifact) return;
@@ -208,6 +291,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
         artifact_type: artifactType,
         summary: artifactDraft.trim(),
         confirmed: artifactConfirmed,
+        source_versions: pendingArtifactSourceRef.current ? [pendingArtifactSourceRef.current] : [],
         method: "AI assisted analysis",
       });
       setSavedArtifact(
@@ -216,6 +300,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
       if (result?.event) setEvents((previous) => mergeAgentEvents(previous, [result.event]));
       setArtifactDraft("");
       setArtifactConfirmed(false);
+      pendingArtifactSourceRef.current = null;
     } catch {
       setArtifactError(t("research.agent.artifact_error"));
     } finally {
@@ -223,10 +308,59 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     }
   }, [artifactConfirmed, artifactDraft, artifactType, savingArtifact, t, workspaceSlug]);
 
-  const decideApproval = useCallback(
-    async (decision: TAgentApprovalDecision) => {
+  /** 从产物卡预填「保存到节点」抽屉，并携带 SD 版本引用（§8 第三层）。 */
+  const prepareArtifactSave = useCallback((event: TAgentRunEvent) => {
+    const artifact = (event.payload.artifact ?? {}) as { name?: string; kind?: string; description?: string };
+    const version = (event.payload.version ?? {}) as {
+      id?: string;
+      mediaType?: string;
+      content?: { hash?: string };
+    };
+    setArtifactType(SD_ARTIFACT_TYPE_MAP[String(artifact.kind ?? "")] ?? "ANALYSIS_SUMMARY");
+    setArtifactDraft(String(artifact.description || artifact.name || "").slice(0, 2000));
+    setArtifactConfirmed(false);
+    setArtifactDrawerOpen(true);
+    pendingArtifactSourceRef.current = version.id
+      ? {
+          provider: "SCIENCE_DISCOVERY",
+          session_id: sessionRef.current?.session_id ?? "",
+          artifact_name: artifact.name ?? "",
+          artifact_kind: artifact.kind ?? "",
+          version_id: version.id,
+          media_type: version.mediaType ?? "",
+          content_hash: version.content?.hash ?? "",
+        }
+      : null;
+  }, []);
+
+  /** 通过 BFF 代理下载 SD 产物内容（Plane 不存字节，§8 第二层）。 */
+  const downloadArtifact = useCallback(
+    async (event: TAgentRunEvent) => {
       const current = sessionRef.current;
-      const target = approvalFor;
+      const version = (event.payload.version ?? {}) as { id?: string };
+      const artifact = (event.payload.artifact ?? {}) as { name?: string };
+      const versionId = String(version.id ?? "");
+      if (!current || !versionId) return;
+      setArtifactError("");
+      try {
+        const blob = await agentService.downloadArtifactContent(workspaceSlug, current.session_id, versionId);
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = artifact.name || versionId;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        setArtifactError(t("research.agent.artifact_download_error"));
+      }
+    },
+    [t, workspaceSlug]
+  );
+
+  const decideApproval = useCallback(
+    async (decision: TAgentApprovalDecision, targetEvent?: TAgentRunEvent) => {
+      const current = sessionRef.current;
+      const target = targetEvent ?? approvalFor;
       if (!current || !target || approvalBusy) return;
       setApprovalBusy(true);
       setApprovalError("");
@@ -247,7 +381,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
         setEvents((previous) => mergeAgentEvents(previous, [result.event]));
         setState(researchAgentSessionState(result.session));
         setApprovalResult(
-          decision === "APPROVED" ? t("research.agent.approval_approved") : t("research.agent.approval_rejected")
+          decision === "REJECTED" ? t("research.agent.approval_rejected") : t("research.agent.approval_approved")
         );
       } catch {
         setApprovalError(t("research.agent.approval_error"));
@@ -292,6 +426,9 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     setMessage,
     sending,
     reconnecting,
+    uploadingFile,
+    uploadError,
+    uploadedFile,
     artifactDrawerOpen,
     setArtifactDrawerOpen,
     artifactDraft,
@@ -318,7 +455,10 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     stop,
     reconnect,
     send,
+    uploadFile,
     saveArtifact,
+    prepareArtifactSave,
+    downloadArtifact,
     decideApproval,
     jumpToEvent,
   };

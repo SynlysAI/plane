@@ -10,22 +10,18 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
-    AccountLink,
     ExternalSystemConnection,
     MentorBinding,
     OrgUnit,
     OrgUnitMember,
     Project,
-    ResearchAgentSession,
     ResearchChainEvent,
     ResearchChainSnapshot,
     ResearchGroupKnowledgeBinding,
     ResearchProjectProfile,
     ResearchUserProfile,
 )
-from plane.research.services.agent_orchestrator import AgentAssembly, context_metadata, issue_agent_context
 from plane.research.services.integrations.base import IntegrationResult
-from plane.research.views import agent as agent_view
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
 pytestmark = pytest.mark.contract
@@ -96,7 +92,6 @@ def env(db, settings, monkeypatch):
     enable_research(
         workspace,
         research_chain_enabled=True,
-        research_agent_enabled=True,
         research_account_link_enabled=True,
         research_external_rag_enabled=True,
     )
@@ -108,85 +103,15 @@ def env(db, settings, monkeypatch):
         auth_mode="NONE",
         is_enabled=True,
     )
-    link = AccountLink.objects.create(
-        local_user=student,
-        provider="SYNLORA",
-        canonical_identity=f"synlora-{uuid4().hex}",
-        external_subject="u_student",
-        status=AccountLink.Status.ACTIVE,
-        verified_at=timezone.now(),
-        request_id=f"link-{uuid4().hex}",
-        payload_hash=sha256(b"link").hexdigest(),
-        created_by=student,
-    )
     team = _team(workspace, student)
     project_a, profile_a = _profile(workspace, student, "Public", "WORKSPACE", team)
     project_b, profile_b = _profile(workspace, student, "Private", "PRIVATE", team)
 
-    def fake_create_synlora_session(
-        *, workspace, user, node, request_id, client=None, scope_kind="OWNER", scope_source="chain_owner"
-    ):
-        assembly = AgentAssembly(
-            persona="research-general",
-            enabled_plugins=[],
-            allowed_tools=["knowledge.search", "file.read"],
-            allowed_knowledge_base_ids=["kb-1"],
-            allowed_file_ids=[],
-            unavailable_reasons=[],
-            policy_id=f"policy-{node.id}",
-            scope_kind=scope_kind,
-            scope_source=scope_source,
-        )
-        grant, _token = issue_agent_context(
-            workspace=workspace,
-            user=user,
-            profile=node.chain.project.research_profile,
-            node=node,
-            assembly=assembly,
-            request_id=f"agent:{request_id}",
-        )
-        return {
-            "grant": grant,
-            "context_metadata": context_metadata(
-                workspace=workspace,
-                profile=node.chain.project.research_profile,
-                node=node,
-                grant=grant,
-                assembly=assembly,
-            ),
-            "delegated_token": "delegated-token",
-            "delegated_subject": "u_student",
-            "synlora_session_id": f"synlora-{request_id[:12]}",
-            "assembly": assembly.__dict__,
-        }
-
-    class FakeSynloraClient:
-        def exchange_delegated_token(self, **_kwargs):
-            return {"token": "delegated-token", "subject": "u_student"}
-
-        def send_message(self, **_kwargs):
-            return [
-                {"seq": 1, "type": "turn/start", "payload": {"run_id": "remote-run-1"}},
-                {"seq": 2, "type": "assistant/message", "payload": {"text": "analysis"}},
-            ]
-
-        def events(self, **_kwargs):
-            return []
-
-        def cancel(self, **_kwargs):
-            return {"ok": True}
-
-        def close(self, **_kwargs):
-            return {"ok": True}
-
-    monkeypatch.setattr(agent_view, "create_synlora_session", fake_create_synlora_session)
-    monkeypatch.setattr(agent_view, "SynloraClient", FakeSynloraClient)
     return {
         "student": student,
         "mentor": mentor,
         "guest": guest,
         "workspace": workspace,
-        "link": link,
         "project_a": project_a,
         "profile_a": profile_a,
         "project_b": project_b,
@@ -282,59 +207,19 @@ def test_phase1_student_research_loop_and_guardrails(env):
         )
     assert uploaded.status_code == 201, uploaded.json()
 
-    session = (
-        env["student_client"]
-        .post(
-            f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/",
-            {"request_id": f"session-{uuid4().hex}", "chain_node_id": node_a["id"]},
-            format="json",
-        )
-        .json()
-    )
-    message = env["student_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/{session['session_id']}/messages/",
-        {"request_id": f"message-{uuid4().hex}", "content": "summarize polymer literature"},
-        format="json",
-    )
-    assert message.status_code == 200, message.json()
-
-    review_session = (
-        env["mentor_client"]
-        .post(
-            f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/",
-            {"request_id": f"review-session-{uuid4().hex}", "chain_node_id": node_a["id"]},
-            format="json",
-        )
-        .json()
-    )
-    assert review_session["scope_kind"] == "REVIEW"
-    review_draft = env["mentor_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/agent/artifacts/",
-        {
-            "request_id": f"review-draft-{uuid4().hex}",
-            "session_id": review_session["session_id"],
-            "artifact_type": "ANALYSIS_SUMMARY",
-            "summary": "Mentor review draft",
-            "confirmed": False,
-        },
-        format="json",
-    )
-    assert review_draft.status_code == 201, review_draft.json()
-    assert review_draft.json()["status"] == "DRAFT"
-
     plan = env["student_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/agent/artifacts/",
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_a['id']}/analyses/",
         {
             "request_id": f"artifact-{uuid4().hex}",
-            "session_id": session["session_id"],
-            "artifact_type": "RESEARCH_PLAN_DRAFT",
+            "node_id": node_a["id"],
+            "method": "research plan consolidation",
             "summary": "Confirmed research plan",
+            "metrics": {},
             "confirmed": True,
         },
         format="json",
     )
     assert plan.status_code == 201, plan.json()
-    assert plan.json()["snapshot_type"] == "PAPER_RESEARCH"
     analysis = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_a['id']}/analyses/",
         {
@@ -348,19 +233,6 @@ def test_phase1_student_research_loop_and_guardrails(env):
         format="json",
     )
     assert analysis.status_code == 201, analysis.json()
-
-    denied_review_confirmation = env["mentor_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/agent/artifacts/",
-        {
-            "request_id": f"review-confirmed-{uuid4().hex}",
-            "session_id": review_session["session_id"],
-            "artifact_type": "ANALYSIS_SUMMARY",
-            "summary": "Should stay draft",
-            "confirmed": True,
-        },
-        format="json",
-    )
-    assert denied_review_confirmation.status_code == 403
 
     experiment = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/projects/{env['project_b'].id}/experiments/",
@@ -401,16 +273,4 @@ def test_phase1_student_research_loop_and_guardrails(env):
     assert body.index("NODE_CREATED") < body.index("Confirmed research plan")
     assert exported["X-Research-Chain-SHA256"] == sha256(exported.content).hexdigest()
 
-    AccountLink.objects.filter(pk=env["link"].pk).update(
-        status=AccountLink.Status.UNLINKED,
-        unlinked_at=timezone.now(),
-    )
-    blocked = env["student_client"].post(
-        f"/api/research/workspaces/{env['workspace'].slug}/agent/sessions/{session['session_id']}/messages/",
-        {"request_id": f"message-{uuid4().hex}", "content": "continue"},
-        format="json",
-    )
-    assert blocked.status_code == 403
-    assert ResearchAgentSession.objects.get(session_id=session["session_id"]).status == "DEGRADED"
     assert ResearchChainSnapshot.objects.filter(snapshot_type="ANALYSIS_RESULT").exists()
-    assert ResearchChainEvent.objects.filter(source_system="SYNLORA").exists()

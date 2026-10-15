@@ -40,6 +40,7 @@ from plane.research.utils.projects import (
     delegated_change_metadata,
     is_active_team_project_member,
 )
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.resource_projections import repository_resource
 from plane.research.utils.settings import get_workspace_research_settings
 from plane.research.views.base import ResearchAPIView
@@ -54,7 +55,7 @@ def research_project(workspace, project_id):
 
 
 def can_manage_code(actor, workspace, profile) -> bool:
-    return bool(profile and profile.owner_id == actor.id)
+    return bool(profile and (profile.owner_id == actor.id or is_research_admin(actor, workspace)))
 
 
 def can_manage_repository(actor, workspace, profile, repository) -> bool:

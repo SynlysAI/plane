@@ -15,11 +15,11 @@ const mocks = vi.hoisted(() => ({
         approvals: true,
         stages: true,
         research_chain: true,
-        research_agent: true,
       },
     },
     isIaV2Enabled: true,
     isWorkspaceAdmin: false,
+    isResearchAdmin: false,
     canSee: (key: string) => key !== "reviews",
     getOrgUnits: () => [],
     fetchOrgUnits: async () => undefined,
@@ -33,12 +33,12 @@ vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
   useSearchParams: () => [new URLSearchParams(mocks.view ? `view=${mocks.view}` : "")],
 }));
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "zh-CN",
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("@/components/research/approvals/approval-list", () => ({
   ResearchApprovalList: () => <div>office-approvals</div>,
-}));
-vi.mock("@/components/research/approvals/research-agent-approval-queue", () => ({
-  ResearchAgentApprovalQueue: () => <div>agent-approval-queue</div>,
 }));
 vi.mock("@/components/research/common/research-page-shell", () => ({
   ResearchPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -82,7 +82,6 @@ it("renders the IA v2 approval queue with capability-filtered tabs", async () =>
 
   expect(container.textContent).toContain("research.approvals.tabs.shared_todos");
   expect(container.textContent).toContain("research.approvals.tabs.report_review");
-  expect(container.textContent).toContain("research.approvals.tabs.agent_approval");
   expect(container.textContent).toContain("research.approvals.tabs.office");
   expect(container.textContent).not.toContain("research.approvals.tabs.stage_review");
   expect(container.textContent).toContain("shared-todos");
