@@ -19,6 +19,7 @@ from plane.db.models import (
     ApprovalRequest,
     MentorBinding,
     PeriodicReport,
+    ResearchAgentSession,
     ResearchChainNodeTask,
     ResearchPaperReview,
     ResearchStageInstance,
@@ -589,6 +590,85 @@ def collect_stage_review_todos(workspace, user, scope):
     return result
 
 
+def collect_agent_approval_todos(workspace, user, scope):
+    """Project waiting Agent sessions using the existing Agent operator boundary."""
+    setting = getattr(workspace, "research_setting", None)
+    if not setting or not setting.research_agent_enabled or not _chain_feature_enabled(workspace):
+        return []
+    sessions = (
+        ResearchAgentSession.objects.filter(
+            workspace=workspace,
+            status=ResearchAgentSession.Status.WAITING_APPROVAL,
+            deleted_at__isnull=True,
+            context_grant__revoked_at__isnull=True,
+            context_grant__expires_at__gt=timezone.now(),
+        )
+        .select_related(
+            "user",
+            "project",
+            "project__research_profile",
+            "chain_node",
+            "chain_node__chain__project__research_profile",
+            "context_grant",
+        )
+        .order_by("-updated_at", "-created_at")
+    )
+    result = []
+    for session in sessions:
+        if session.chain_node.chain.status != "ACTIVE":
+            continue
+        profile = getattr(session.project, "research_profile", None)
+        visible = session.user_id == user.id or (
+            profile is not None and can_read_project_research_metadata(workspace, user, profile)
+        )
+        if not visible or (scope == "mine" and session.user_id != user.id):
+            continue
+        can_decide = (
+            chain_writer(workspace, user, session.chain_node.chain) and session.context_grant.scope_kind != "REVIEW"
+        )
+        latest_event = session.run_events.filter(event_type__in=("TOOL_CALL", "AI_ACTION")).order_by("-seq").first()
+        payload = latest_event.payload if latest_event is not None else {}
+        summary = next(
+            (
+                str(value)
+                for value in (
+                    payload.get("input_summary"),
+                    payload.get("query"),
+                    payload.get("summary"),
+                    payload.get("action"),
+                )
+                if value
+            ),
+            session.chain_node.title,
+        )
+        todo = _todo(
+            source="AGENT_APPROVAL",
+            object_id=session.session_id,
+            title=f"Agent 审批 · {session.chain_node.title}",
+            context=summary,
+            requester=_participant(session.user),
+            assignees=_participants([session.user] if can_decide else []),
+            business_status=session.status,
+            handling_status="IN_PROGRESS" if can_decide else "BLOCKED",
+            next_action="APPROVE",
+            due_at=None,
+            href=f"/{workspace.slug}/research/approvals?tab=agent_approval",
+            capabilities=capability_map(
+                ("view", "approve", "reject"),
+                {"view": True, "approve": can_decide, "reject": can_decide},
+            ),
+            trace_ref={
+                "resource_type": "research_agent_session",
+                "resource_id": str(session.session_id),
+                "event_id": str(latest_event.id) if latest_event is not None else None,
+            },
+            updated_at=session.updated_at,
+        )
+        if scope != "to_me" or _has_action(todo):
+            result.append(todo)
+    return result
+
+
 def collect_office_approval_todos(workspace, user, scope):
     """Project pending approval requests and their current flow-step approvers."""
     if not workspace_research_sections(workspace).get("approvals"):
@@ -680,7 +760,8 @@ def collect_research_todos(workspace, user, scope, request_id=None):
         ("REPORT", collect_report_todos),
         ("PAPER_REVIEW", collect_paper_review_todos),
         ("STAGE_REVIEW", collect_stage_review_todos),
-            ("OFFICE_APPROVAL", collect_office_approval_todos),
+        ("AGENT_APPROVAL", collect_agent_approval_todos),
+        ("OFFICE_APPROVAL", collect_office_approval_todos),
     )
     todos = []
     degraded = []

@@ -27,27 +27,27 @@ from plane.db.models import (
 )
 from plane.api.middleware.api_authentication import APIKeyAuthentication
 from plane.authentication.session import BaseSessionAuthentication
+import httpx
+
 from plane.license.utils.encryption import encrypt_data
 from plane.research.serializers import ResearchAgentRunEventSerializer, ResearchAgentSessionSerializer
 from plane.research.services.agent_orchestrator import (
     AgentAssembly,
-    active_synlora_link,
     create_science_discovery_session,
-    create_synlora_session,
     issue_agent_context,
-    context_metadata,
 )
 from plane.research.services.backend_connections import (
     BackendConnectionError,
     resolve_science_discovery_connection,
     validate_backend_base_url,
 )
-from plane.research.services.chain_projection import (
-    project_science_discovery_events,
-    project_synlora_events,
+from plane.research.services.report_context import ResearchReportContextError
+from plane.research.services.agent_runtime import (
+    SynloraRuntimeError,
+    resolve_synlora_runtime,
 )
+from plane.research.services.chain_projection import project_science_discovery_events
 from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
-from plane.research.services.synlora import SynloraClient, SynloraError
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.capabilities import NAV_PROJECTS
@@ -96,6 +96,55 @@ AGENT_MANIFEST = {
 def _sd_client_for_session(session):
     """Build the pinned ScienceDiscovery client for one session."""
     return ScienceDiscoveryClient(connection=session.backend_connection)
+
+
+def create_synlora_runtime_session(
+    *, workspace, user, node, request_id, scope_kind="OWNER", scope_source="chain_owner"
+):
+    """Create a cloud Synlora thread plus the same grant/assembly envelope."""
+    runtime = resolve_synlora_runtime(workspace)
+    if runtime is None:
+        raise SynloraRuntimeError(
+            "synlora_not_configured",
+            "No enabled Synlora integration connection is configured for this workspace.",
+            503,
+        )
+    assembly = AgentAssembly(
+        persona="research-general",
+        enabled_plugins=[],
+        allowed_tools=[],
+        allowed_knowledge_base_ids=[],
+        allowed_file_ids=[],
+        unavailable_reasons=[],
+        policy_id=f"policy-{node.id}",
+        scope_kind=scope_kind,
+        scope_source=scope_source,
+    )
+    grant, _token = issue_agent_context(
+        workspace=workspace,
+        user=user,
+        profile=node.chain.project.research_profile,
+        node=node,
+        assembly=assembly,
+        request_id=f"agent:{request_id}",
+    )
+    thread_id = runtime.create_session(title=node.title or "Research agent")
+    return {
+        "grant": grant,
+        "synlora_session_id": thread_id,
+        "delegated_subject": "",
+        "assembly": assembly.__dict__,
+        "sd_project_id": "",
+        "sd_session_id": "",
+    }
+
+
+def _synlora_runtime_for_session(workspace, session):
+    """Build the runtime client pinned to a Synlora provider session."""
+    runtime = resolve_synlora_runtime(workspace)
+    if runtime is None:
+        raise SynloraRuntimeError("synlora_not_configured", "Synlora runtime is not configured.", 503)
+    return runtime
 
 AGENT_CHAIN_EVENT_TYPES = frozenset(
     {
@@ -378,8 +427,8 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
                     connection=backend_connection, **orchestration_kwargs
                 )
             else:
-                orchestrated = create_synlora_session(**orchestration_kwargs)
-        except (SynloraError, ScienceDiscoveryError) as exc:
+                orchestrated = create_synlora_runtime_session(**orchestration_kwargs)
+        except (SynloraRuntimeError, ScienceDiscoveryError) as exc:
             error_code = (
                 ResearchErrorCode.AGENT_SCOPE_INVALID
                 if exc.status_code == 403
@@ -479,21 +528,13 @@ class ResearchAgentSessionCloseEndpoint(AgentPluginMixin):
             return error
         if session.status == ResearchAgentSession.Status.CLOSED:
             return Response(ResearchAgentSessionSerializer(session).data)
-        if session.synlora_session_id:
-            link = active_synlora_link(request.user)
-            if link is not None:
-                try:
-                    client = SynloraClient(workspace=workspace)
-                    delegated = client.exchange_delegated_token(
-                        account_link=link, workspace=workspace, user=request.user
-                    )
-                    client.close(
-                        delegated_token=str(delegated.get("token") or ""),
-                        session_id=session.synlora_session_id,
-                    )
-                except SynloraError:
-                    # Closing must still revoke Plane context even if Synlora is briefly down.
-                    pass
+        if session.provider == ResearchAgentSession.Provider.SYNLORA and session.synlora_session_id:
+            try:
+                runtime = _synlora_runtime_for_session(workspace, session)
+                runtime.close_session(thread_id=session.synlora_session_id)
+            except (SynloraRuntimeError, httpx.HTTPError):
+                # Closing must still revoke Plane context even if Synlora is briefly down.
+                pass
         session.status = ResearchAgentSession.Status.CLOSED
         session.last_error = ""
         session.updated_by = request.user
@@ -561,7 +602,7 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
                 project_id=session.project_id,
                 selections=selections,
             )
-        except SynloraError as failure:
+        except ResearchReportContextError as failure:
             return Response({"error_code": failure.code, "message": failure.message}, status=failure.status_code)
         content_hash = (
             payload_hash({"content": content, "reports": selections})
@@ -659,53 +700,20 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
                 },
                 status=status.HTTP_200_OK,
             )
+        # Synlora 异步分支：提交 run 拿号即返回，增量事件由 getEvents 轮询拉取并投影。
         try:
-            link = active_synlora_link(request.user)
-            if link is None:
-                raise SynloraError("synlora_account_link_inactive", "Synlora AccountLink is inactive.", 403)
-            client = SynloraClient(workspace=workspace)
-            delegated = client.exchange_delegated_token(account_link=link, workspace=workspace, user=request.user)
-            delegated_token = str(delegated.get("token") or "")
-            if not delegated_token:
-                raise SynloraError("synlora_delegated_auth_failed", "Synlora delegated token exchange failed.", 502)
-            assembly = AgentAssembly(**session.assembly)
-            grant, context_token = issue_agent_context(
-                workspace=workspace,
-                user=request.user,
-                profile=session.project.research_profile,
-                node=session.chain_node,
-                assembly=assembly,
-                request_id=f"message:{request_id}",
-                allowed_reports=selections,
-            )
-            metadata = context_metadata(
-                workspace=workspace,
-                profile=session.project.research_profile,
-                node=session.chain_node,
-                grant=grant,
-                assembly=assembly,
-            )
-            remote_events = client.send_message(
-                delegated_token=delegated_token,
-                session_id=session.synlora_session_id,
-                context_token=context_token,
-                context_metadata=metadata,
+            runtime = _synlora_runtime_for_session(workspace, session)
+            synlora_run_id = runtime.start_run(
+                thread_id=session.synlora_session_id,
                 content=inject_report_content(content, report_contents),
                 request_id=request_id,
             )
-            session.context_grant = grant
-            session.status = ResearchAgentSession.Status.READY
+            session.synlora_run_id = synlora_run_id
+            session.status = ResearchAgentSession.Status.STREAMING
             session.last_error = ""
             session.updated_by = request.user
-            session.save(update_fields=["context_grant", "status", "last_error", "updated_by", "updated_at"])
-            projected = project_synlora_events(session, remote_events)
-            for remote in remote_events:
-                remote_run = str((remote.get("payload") or {}).get("run_id") or "")
-                if remote_run:
-                    session.synlora_run_id = remote_run
-                    session.save(update_fields=["synlora_run_id", "updated_at"])
-                    break
-        except SynloraError as exc:
+            session.save(update_fields=["synlora_run_id", "status", "last_error", "updated_by", "updated_at"])
+        except SynloraRuntimeError as exc:
             session.status = ResearchAgentSession.Status.DEGRADED
             session.last_error = exc.code
             session.updated_by = request.user
@@ -729,7 +737,7 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
             )
 
         communication = ResearchAgentRunEvent.objects.filter(request_id=request_id).first()
-        events = [event for event in (communication, *projected) if event is not None]
+        events = [communication] if communication is not None else []
         record_audit_event(
             workspace=workspace,
             action=ResearchAuditAction.AGENT_MESSAGE,
@@ -931,26 +939,44 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
             after_seq = -1
         if after_seq < 0:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "after_seq must be a non-negative integer.")
-        if session.synlora_session_id:
-            link = active_synlora_link(request.user)
-            if link is not None:
-                try:
-                    client = SynloraClient(workspace=workspace)
-                    delegated = client.exchange_delegated_token(
-                        account_link=link, workspace=workspace, user=request.user
-                    )
-                    remote_after = max(
-                        [int(event.payload.get("remote_seq") or 0) for event in session.run_events.all()] or [0]
-                    )
-                    remote_page = client.events(
-                        delegated_token=str(delegated.get("token") or ""),
-                        session_id=session.synlora_session_id,
-                        after_seq=remote_after,
-                    )
-                    project_synlora_events(session, remote_page)
-                except SynloraError:
-                    # Local events remain replayable when the cursor refresh is unavailable.
-                    pass
+        if (
+            session.provider == ResearchAgentSession.Provider.SYNLORA
+            and session.synlora_session_id
+            and session.synlora_run_id
+            and session.status == ResearchAgentSession.Status.STREAMING
+        ):
+            # Synlora 分支：按游标有界拉取 SSE，翻译成 SD 事件词汇后共用同一投影器。
+            try:
+                runtime = _synlora_runtime_for_session(workspace, session)
+                last_event = (
+                    session.run_events.order_by("-seq")
+                    .values_list("payload", flat=True)
+                    .first()
+                )
+                cursor = (last_event or {}).get("remote_event_id")
+                sequence_base = max(
+                    [
+                        int((e or {}).get("remote_seq") or 0)
+                        for e in session.run_events.values_list("payload", flat=True)
+                    ]
+                    or [0]
+                )
+                events_batch, cursor_after, terminal = runtime.pull_events(
+                    run_id=session.synlora_run_id,
+                    last_event_id=cursor,
+                    sequence_base=sequence_base,
+                )
+                if events_batch:
+                    for entry in events_batch:
+                        entry["event"]["remote_event_id"] = cursor_after
+                    project_science_discovery_events(session, events_batch, source_system="SYNLORA")
+                    session.refresh_from_db()
+                if terminal == "interrupted":
+                    session.status = ResearchAgentSession.Status.WAITING_APPROVAL
+                    session.save(update_fields=["status", "updated_at"])
+            except (SynloraRuntimeError, ScienceDiscoveryError):
+                # Local events remain replayable when the cursor refresh is unavailable.
+                pass
         elif (
             session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY
             and session.sd_session_id
@@ -978,8 +1004,11 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
             "count": events.count(),
             "latest_seq": events.last().seq if events.exists() else after_seq,
         }
-        if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
-            # SD 异步链路随轮询回传最新会话状态，驱动前端收敛（§6.1）。
+        if session.provider in (
+            ResearchAgentSession.Provider.SCIENCE_DISCOVERY,
+            ResearchAgentSession.Provider.SYNLORA,
+        ):
+            # 异步链路（SD/Synlora）随轮询回传最新会话状态，驱动前端收敛（§6.1）。
             response_data["session"] = ResearchAgentSessionSerializer(session).data
         return Response(response_data)
 
@@ -1013,21 +1042,16 @@ class ResearchAgentRunCancelEndpoint(AgentPluginMixin):
                     except ScienceDiscoveryError:
                         # 本地仍 fail-closed 关闭；远端取消由 SD 队列终态兜底。
                         pass
-            if session.synlora_run_id:
-                link = active_synlora_link(request.user)
-                if link is not None:
-                    try:
-                        client = SynloraClient(workspace=workspace)
-                        delegated = client.exchange_delegated_token(
-                            account_link=link, workspace=workspace, user=request.user
-                        )
-                        client.cancel(
-                            delegated_token=str(delegated.get("token") or ""),
-                            run_id=session.synlora_run_id,
-                        )
-                    except SynloraError:
-                        # A stopped UI must still fail closed locally; Synlora can be retried later.
-                        pass
+            if (
+                session.provider == ResearchAgentSession.Provider.SYNLORA
+                and session.synlora_run_id
+            ):
+                try:
+                    runtime = _synlora_runtime_for_session(workspace, session)
+                    runtime.cancel(run_id=session.synlora_run_id)
+                except (SynloraRuntimeError, httpx.HTTPError):
+                    # A stopped UI must still fail closed locally; Synlora can be retried later.
+                    pass
             session.status = ResearchAgentSession.Status.CLOSED
             session.last_error = ""
             session.updated_by = request.user
@@ -1232,6 +1256,18 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
                 client.answer_approval(request_id=sd_request_id, decision=sd_decision)
             except ScienceDiscoveryError as exc:
                 return Response({"error_code": exc.code, "message": exc.message}, status=exc.status_code)
+        elif session.provider == ResearchAgentSession.Provider.SYNLORA and session.synlora_run_id:
+            # Synlora 审批桥接：interrupt 的 run 通过 resume 决策继续执行。
+            try:
+                runtime = _synlora_runtime_for_session(workspace, session)
+                runtime.resume(
+                    run_id=session.synlora_run_id,
+                    approved=decision in ("APPROVED", "APPROVED_ALWAYS"),
+                    request_id=request_id,
+                )
+            except (SynloraRuntimeError, httpx.HTTPError) as exc:
+                code = getattr(exc, "code", "synlora_resume_failed")
+                return Response({"error_code": code, "message": "Synlora resume failed."}, status=502)
 
         event = _append_event(
             session,
@@ -1239,8 +1275,11 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             {"decision": decision, "tool_call_id": tool_call_id, "reason": reason},
             request_id,
         )
-        if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY:
-            # SD run 在审批后继续执行：回到 STREAMING，终态由轮询收敛（§6.1）。
+        if session.provider in (
+            ResearchAgentSession.Provider.SCIENCE_DISCOVERY,
+            ResearchAgentSession.Provider.SYNLORA,
+        ):
+            # 异步 run 在审批后继续执行：回到 STREAMING，终态由轮询收敛（§6.1）。
             session.status = ResearchAgentSession.Status.STREAMING
         else:
             session.status = (

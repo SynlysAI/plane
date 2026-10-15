@@ -4,11 +4,10 @@ from dataclasses import asdict, dataclass
 
 from django.utils import timezone
 
-from plane.db.models import AccountLink, ResearchChainUpload
+from plane.db.models import ResearchChainUpload
 from plane.research.services.context_tokens import issue_context_token
 from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
 from plane.research.services.specialist_catalog import specialist_id_for_node
-from plane.research.services.synlora import SynloraClient, SynloraError
 
 SYNLORA_PROVIDER = "SYNLORA"
 PERSONA_BY_NODE_TYPE = {
@@ -49,16 +48,6 @@ class AgentAssembly:
     scope_kind: str = "OWNER"
     scope_source: str = "chain_owner"
     policy_version: str = "research-agent-policy.v1"
-
-
-def active_synlora_link(user):
-    """Return the user's active Synlora AccountLink or ``None``."""
-    return AccountLink.objects.filter(
-        local_user=user,
-        provider=SYNLORA_PROVIDER,
-        status=AccountLink.Status.ACTIVE,
-        deleted_at__isnull=True,
-    ).first()
 
 
 def _tool_policy(node_type):
@@ -151,53 +140,6 @@ def context_metadata(*, workspace, profile, node, grant, assembly):
         "policy_version": grant.policy_version,
     }
 
-
-def create_synlora_session(
-    *, workspace, user, node, request_id, client=None, scope_kind="OWNER", scope_source="chain_owner"
-):
-    """Run the complete fail-closed Synlora session assembly pipeline."""
-    link = active_synlora_link(user)
-    if link is None:
-        raise SynloraError("synlora_account_link_inactive", "An active Synlora account link is required.", 403)
-    synlora = client or SynloraClient(workspace=workspace)
-    delegated = synlora.exchange_delegated_token(account_link=link, workspace=workspace, user=user)
-    token = str(delegated.get("token") or "")
-    if not token:
-        raise SynloraError("synlora_delegated_auth_failed", "Synlora delegated token exchange failed.", 502)
-    manifest = synlora.capabilities(token)
-    assembly = assemble_agent(node=node, manifest=manifest, scope_kind=scope_kind, scope_source=scope_source)
-    profile = node.chain.project.research_profile
-    grant, context_token = issue_agent_context(
-        workspace=workspace,
-        user=user,
-        profile=profile,
-        node=node,
-        assembly=assembly,
-        request_id=f"agent:{request_id}",
-    )
-    metadata = context_metadata(workspace=workspace, profile=profile, node=node, grant=grant, assembly=assembly)
-    remote = synlora.create_session(
-        delegated_token=token,
-        context_token=context_token,
-        payload={
-            "title": f"{profile.project.name} · {node.title}"[:120],
-            "enabled_plugins": assembly.enabled_plugins,
-            "research_context": metadata,
-        },
-    )
-    remote_session_id = str(remote.get("_id") or remote.get("id") or "")
-    if not remote_session_id:
-        grant.revoked_at = timezone.now()
-        grant.save(update_fields=["revoked_at", "updated_at"])
-        raise SynloraError("synlora_session_failed", "Synlora did not return a session id.", 502)
-    return {
-        "grant": grant,
-        "context_metadata": metadata,
-        "delegated_token": token,
-        "delegated_subject": str(delegated.get("subject") or link.external_subject),
-        "synlora_session_id": remote_session_id,
-        "assembly": asdict(assembly),
-    }
 
 
 def create_science_discovery_session(

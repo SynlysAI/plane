@@ -15,6 +15,7 @@ def node_deletion_reason(node):
         "analysis_results",
         "reflections",
         "paper_reviews",
+        "agent_sessions",
         "context_grants",
     ):
         if getattr(node, name).exists():
@@ -61,6 +62,7 @@ def project_deletion_reason(project):
         "experimentrecord",
         "projectcoderepository",
         "approvalrequest",
+        "researchagentsession",
         "draftissue",
     }
     for relation in project._meta.related_objects:

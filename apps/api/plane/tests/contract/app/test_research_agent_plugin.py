@@ -24,8 +24,7 @@ from plane.db.models import (
     ResearchUserProfile,
     WorkspaceResearchSetting,
 )
-from plane.research.services.agent_orchestrator import AgentAssembly, context_metadata, issue_agent_context
-from plane.research.services.chain_projection import project_synlora_events
+from plane.research.services.chain_projection import project_science_discovery_events
 from plane.research.views import agent as agent_view
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
@@ -105,66 +104,42 @@ def env(db, settings):
 
 @pytest.fixture(autouse=True)
 def synlora_orchestration(env, monkeypatch):
-    """Provide a deterministic in-process Synlora contract fixture."""
+    """Provide a deterministic in-process Synlora runtime fixture."""
 
-    def fake_create_synlora_session(*, workspace, user, node, request_id, client=None):
-        assembly = AgentAssembly(
-            persona="research-general",
-            enabled_plugins=[],
-            allowed_tools=["knowledge.search", "knowledge.list", "file.read"],
-            allowed_knowledge_base_ids=["kb-1"],
-            allowed_file_ids=[],
-            unavailable_reasons=[],
-            policy_id=f"plane-node:{node.id}",
-        )
-        grant, _token = issue_agent_context(
-            workspace=workspace,
-            user=user,
-            profile=node.chain.project.research_profile,
-            node=node,
-            assembly=assembly,
-            request_id=f"agent:{request_id}",
-        )
-        metadata = context_metadata(
-            workspace=workspace,
-            profile=node.chain.project.research_profile,
-            node=node,
-            grant=grant,
-            assembly=assembly,
-        )
-        return {
-            "grant": grant,
-            "context_metadata": metadata,
-            "delegated_token": "delegated-token",
-            "delegated_subject": "u_synlora",
-            "synlora_session_id": f"synlora-{request_id[:12]}",
-            "assembly": assembly.__dict__,
-        }
+    class FakeSynloraRuntime:
+        def __init__(self):
+            self.pulled = False
 
-    class FakeSynloraClient:
-        def __init__(self, **_kwargs):
-            """接受真实客户端初始化参数，保持外部服务边界一致。"""
+        def create_session(self, *, title):
+            return "synlora-thread-1"
 
-        def exchange_delegated_token(self, **_kwargs):
-            return {"token": "delegated-token", "subject": "u_synlora"}
+        def start_run(self, *, thread_id, content, request_id):
+            return "synlora-run-1"
 
-        def send_message(self, **_kwargs):
-            return [
-                {"seq": 1, "type": "turn/start", "payload": {"run_id": "synlora-run-1"}},
-                {"seq": 2, "type": "tool/call", "payload": {"name": "knowledge.search"}},
-            ]
+        def pull_events(self, *, run_id, last_event_id=None, sequence_base=0):
+            if self.pulled:
+                return [], last_event_id, None
+            self.pulled = True
+            return (
+                [
+                    {"sequence": sequence_base + 1, "event": {"type": "assistant.delta", "delta": "分析完成"}},
+                    {"sequence": sequence_base + 2, "event": {"type": "tool.started", "name": "knowledge.search"}},
+                    {"sequence": sequence_base + 3, "event": {"type": "run.completed", "message": {"content": ""}}},
+                ],
+                "cursor-1",
+                "completed",
+            )
 
-        def events(self, **_kwargs):
-            return []
+        def cancel(self, *, run_id):
+            return None
 
-        def cancel(self, **_kwargs):
-            return {"ok": True}
+        def close_session(self, *, thread_id):
+            return None
 
-        def close(self, **_kwargs):
-            return {"ok": True}
+        def resume(self, *, run_id, approved, request_id):
+            return None
 
-    monkeypatch.setattr(agent_view, "create_synlora_session", fake_create_synlora_session)
-    monkeypatch.setattr(agent_view, "SynloraClient", FakeSynloraClient)
+    monkeypatch.setattr(agent_view, "resolve_synlora_runtime", lambda workspace: FakeSynloraRuntime())
 
 
 def agent_url(env, suffix=""):
@@ -317,17 +292,18 @@ def test_agent_message_projects_events_and_does_not_store_content(env):
         format="json",
     )
     assert message.status_code == 200, message.json()
-    assert message.json()["session"]["status"] == "READY"
+    assert message.json()["session"]["status"] == "STREAMING"
     assert message.json()["session"]["synlora_run_id"] == "synlora-run-1"
-    assert {event["event_type"] for event in message.json()["events"]} >= {"COMMUNICATION", "tool/call"}
+
+    events = env["client"].get(agent_url(env, f"runs/{session['run_id']}/events/?after_seq=0"))
+    assert events.status_code == 200
+    # the polling pull projects the runtime batch, converging the session
+    assert {event["event_type"] for event in events.json()["results"]} >= {"OUTPUT", "TOOL_CALL"}
     assert ResearchChainEvent.objects.filter(
         node=env["node"],
         source_system="SYNLORA",
         event_type="TOOL_CALL",
     ).exists()
-
-    events = env["client"].get(agent_url(env, f"runs/{session['run_id']}/events/?after_seq=0"))
-    assert events.status_code == 200
     assert all("confidential research message" not in str(event) for event in events.json()["results"])
 
 
@@ -359,20 +335,16 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
     artifact_conflict = env["client"].post(agent_url(env, "artifacts/"), changed_artifact, format="json")
     assert artifact_conflict.status_code == 409
 
-    remote_event = {
-        "seq": 10,
-        "type": "tool/call",
-        "payload": {"name": "knowledge.search", "remote_seq": 999},
-    }
+    remote_event = {"sequence": 10, "event": {"type": "tool.started", "name": "knowledge.search"}}
     session_record = ResearchAgentSession.objects.select_related("chain_node").get(session_id=session["session_id"])
-    projected = project_synlora_events(session_record, [remote_event])
-    replayed = project_synlora_events(session_record, [remote_event])
+    projected = project_science_discovery_events(session_record, [remote_event], source_system="SYNLORA")
+    replayed = project_science_discovery_events(session_record, [remote_event], source_system="SYNLORA")
 
     assert projected[0].pk == replayed[0].pk
     assert projected[0].payload["remote_seq"] == 10
     assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"], payload__remote_seq=10).count() == 1
     assert (
-        ResearchChainEvent.objects.filter(request_id=f"chain:synlora:{session_record.synlora_session_id}:10").count()
+        ResearchChainEvent.objects.filter(request_id=f"chain:run:{session_record.synlora_session_id}:10").count()
         == 1
     )
 
@@ -631,21 +603,16 @@ def test_agent_events_are_isolated_between_old_and_new_sessions(env):
     assert all("old session message" not in str(event) for event in second_events.json()["results"])
 
 
-def test_unlinked_synlora_account_blocks_next_message(env):
-    """An existing session cannot continue after its ACTIVE AccountLink disappears."""
-    session = _create_agent_session(env)
-    AccountLink.objects.filter(local_user=env["owner"], provider="SYNLORA").update(
-        status=AccountLink.Status.UNLINKED,
-        unlinked_at=timezone.now(),
-    )
-    message = env["client"].post(
-        agent_url(env, f"sessions/{session['session_id']}/messages/"),
-        {"request_id": f"message-{uuid4().hex}", "content": "continue"},
+def test_unconfigured_synlora_runtime_blocks_session(env, monkeypatch):
+    """Without an enabled workspace Synlora connection the session fails closed."""
+    monkeypatch.setattr(agent_view, "resolve_synlora_runtime", lambda workspace: None)
+    created = env["client"].post(
+        agent_url(env, "sessions/"),
+        {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},
         format="json",
     )
-    assert message.status_code == 403
-    assert message.json()["session"]["status"] == "DEGRADED"
-    assert message.json()["session"]["last_error"] == "synlora_account_link_inactive"
+    assert created.status_code == 503
+    assert created.json()["error_code"] == "AGENT_UPSTREAM_NOT_CONFIGURED"
 
 
 def test_rejected_agent_approval_fails_closed(env):
