@@ -33,7 +33,6 @@ export function AgentBackendSettings({
   const [governanceEnabled, setGovernanceEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
-  const [enabled, setEnabled] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,7 +51,6 @@ export function AgentBackendSettings({
       setConnection(data.connection);
       setGovernanceEnabled(data.governance_enabled);
       setBaseUrl(data.connection?.base_url ?? "");
-      setEnabled(data.connection?.is_enabled ?? true);
     } catch {
       if (sequence === loadSequence.current) setError(translateRef.current("research.agent_backend.load_failed"));
     } finally {
@@ -70,7 +68,6 @@ export function AgentBackendSettings({
     setGovernanceEnabled(false);
     setBaseUrl("");
     setToken("");
-    setEnabled(true);
     setStatus("");
     setError("");
     setBusy(false);
@@ -93,7 +90,7 @@ export function AgentBackendSettings({
         system,
         base_url: system === "SCIENCE_DISCOVERY" ? baseUrl.trim() : "",
         ...(token.trim() ? { token: token.trim() } : {}),
-        is_enabled: enabled,
+        is_enabled: true,
       });
       if (sequence !== workspaceSequence.current) return;
       setToken("");
@@ -105,7 +102,7 @@ export function AgentBackendSettings({
     } finally {
       if (sequence === workspaceSequence.current) setBusy(false);
     }
-  }, [baseUrl, connection?.has_credential, enabled, load, system, t, token, workspaceSlug]);
+  }, [baseUrl, connection?.has_credential, load, system, t, token, workspaceSlug]);
 
   const test = useCallback(async () => {
     const sequence = workspaceSequence.current;
@@ -113,11 +110,13 @@ export function AgentBackendSettings({
     setError("");
     setStatus("");
     try {
-      const result = await agentService.testBackendConnection(workspaceSlug);
+      const result = await agentService.testBackendConnection(workspaceSlug, system);
       if (sequence !== workspaceSequence.current) return;
       setStatus(
         result.ok
-          ? t("research.agent_backend.test_ok", { count: String(result.models ?? 0) })
+          ? system === "SYNLORA"
+            ? t("research.agent_backend.cloud_test_ok")
+            : t("research.agent_backend.test_ok", { count: String(result.models ?? 0) })
           : t("research.agent_backend.test_failed", { error: result.error ?? "" })
       );
       await load();
@@ -127,14 +126,14 @@ export function AgentBackendSettings({
     } finally {
       if (sequence === workspaceSequence.current) setBusy(false);
     }
-  }, [load, t, workspaceSlug]);
+  }, [load, system, t, workspaceSlug]);
 
   const remove = useCallback(async () => {
     const sequence = workspaceSequence.current;
     setBusy(true);
     setError("");
     try {
-      await agentService.deleteBackendConnection(workspaceSlug);
+      await agentService.deleteBackendConnection(workspaceSlug, system);
       if (sequence !== workspaceSequence.current) return;
       setStatus(t("research.agent_backend.removed"));
       await load();
@@ -143,7 +142,7 @@ export function AgentBackendSettings({
     } finally {
       if (sequence === workspaceSequence.current) setBusy(false);
     }
-  }, [load, t, workspaceSlug]);
+  }, [load, system, t, workspaceSlug]);
 
   if (loading && !hasLoaded) return <p className="text-12 text-tertiary">{t("research.common.loading")}</p>;
 
@@ -152,7 +151,7 @@ export function AgentBackendSettings({
       <div className="border-y border-subtle py-3 text-12 text-secondary">
         <p>{t("research.agent_backend.workspace", { name: workspaceName })}</p>
         <p className="mt-2">{t("research.agent_backend.default_runtime")}</p>
-        {!governanceEnabled && (
+        {system === "SCIENCE_DISCOVERY" && !governanceEnabled && (
           <p className="mt-2 text-danger-primary">{t("research.agent_backend.governance_off_new_sessions")}</p>
         )}
       </div>
@@ -168,7 +167,7 @@ export function AgentBackendSettings({
         </select>
         <span className="text-11 text-tertiary">{t("research.agent_backend.system_hint")}</span>
       </label>
-      {system === "SCIENCE_DISCOVERY" ? (
+      {system === "SCIENCE_DISCOVERY" && (
         <label className="flex flex-col gap-1 text-11 text-secondary">
           {t("research.agent_backend.base_url")}
           <input
@@ -179,10 +178,6 @@ export function AgentBackendSettings({
           />
           <span className="text-11 text-tertiary">{t("research.agent_backend.server_address_hint")}</span>
         </label>
-      ) : (
-        <p className="rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-tertiary">
-          {t("research.agent_backend.cloud_address_hint")}
-        </p>
       )}
       <label className="flex flex-col gap-1 text-11 text-secondary">
         {t("research.agent_backend.token")}
@@ -193,10 +188,9 @@ export function AgentBackendSettings({
           placeholder={connection?.has_credential ? t("research.agent_backend.token_kept") : ""}
           className="focus:border-accent-primary rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
         />
-      </label>
-      <label className="flex items-center gap-2 text-11 text-secondary">
-        <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-        {t("research.agent_backend.enabled")}
+        {system === "SYNLORA" && (
+          <span className="text-11 text-tertiary">{t("research.agent_backend.cloud_address_hint")}</span>
+        )}
       </label>
       <div className="flex flex-wrap gap-2">
         <button

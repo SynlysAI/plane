@@ -5,14 +5,28 @@
  */
 
 import { observer } from "mobx-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
-import { Sparkles, ArrowUp, Square, RefreshCw, Plus } from "lucide-react";
+import {
+  Sparkles,
+  ArrowUp,
+  Square,
+  RefreshCw,
+  Plus,
+  X,
+  Maximize2,
+  Minimize2,
+  Link2,
+  ChevronDown,
+  Loader2,
+  Wrench,
+} from "lucide-react";
 import { Button } from "@plane/propel/button";
 import { EPortalPosition, EPortalWidth, ModalPortal } from "@plane/propel/portal";
+import ReactMarkdown from "react-markdown";
 // components
-import { MarkdownRenderer } from "@/components/ui/markdown-to-component";
 import { useAssistantChat } from "./use-assistant-chat";
+import { useWorkbenchChat } from "./use-workbench-chat";
 import { useAssistantPageContext } from "./use-assistant-page-context";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
@@ -21,96 +35,267 @@ type Props = {
   workspaceSlug: string;
 };
 
+/** AI answer rendering with design-spec markdown styles. */
+const AnswerMarkdown = observer(function AnswerMarkdown({ content }: { content: string }) {
+  return (
+    <div className="answer-markdown text-13 leading-relaxed text-primary">
+      <ReactMarkdown
+        components={{
+          pre: ({ children }) => (
+            <pre className="font-mono my-2 overflow-x-auto rounded-lg bg-surface-2 p-3 text-12 text-primary">
+              {children}
+            </pre>
+          ),
+          p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="my-1.5 ml-4 list-disc space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="my-1.5 ml-4 list-decimal space-y-1">{children}</ol>,
+          h1: ({ children }) => <h3 className="mt-3 mb-1 text-14 font-semibold text-primary">{children}</h3>,
+          h2: ({ children }) => <h3 className="mt-3 mb-1 text-14 font-semibold text-primary">{children}</h3>,
+          h3: ({ children }) => <h4 className="mt-2.5 mb-1 text-13 font-semibold text-primary">{children}</h4>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent-primary underline">
+              {children}
+            </a>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="border-accent-primary/50 my-2 border-l-2 pl-3 text-secondary">{children}</blockquote>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
+
+const SuggestionChip = ({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="hover:border-accent-primary/40 flex items-center gap-2 rounded-xl border border-subtle bg-surface-1 px-3 py-2 text-12 text-secondary transition hover:text-primary"
+  >
+    {icon}
+    {label}
+  </button>
+);
+
+const ThinkingBlock = observer(function ThinkingBlock({ text }: { text: string }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex items-center gap-1 text-11 text-tertiary transition hover:text-secondary"
+      >
+        <ChevronDown className={`size-3 transition-transform ${open ? "" : "-rotate-90"}`} />
+        {t("aiAssistant.thinking")}
+      </button>
+      {open && (
+        <p className="border-accent-primary/40 mt-1.5 max-h-48 overflow-y-auto rounded-lg border-l-2 bg-surface-1 p-2.5 text-11 leading-relaxed whitespace-pre-wrap text-tertiary">
+          {text}
+        </p>
+      )}
+    </div>
+  );
+});
+
 export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSlug }: Props) {
   const { t } = useTranslation();
   const assistantStore = useAIAssistant();
   const pageContext = useAssistantPageContext();
-  const { messages, streamingAnswer, streamState, send, stop, reset } = useAssistantChat(workspaceSlug, pageContext);
+  const cloud = useAssistantChat(workspaceSlug, pageContext);
+  const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
-  const busy = streamState.phase === "streaming" || streamState.phase === "queued";
+  const provider = assistantStore.activeProvider;
+  const busy =
+    provider === "cloud" ? cloud.streamState.phase === "streaming" || cloud.streamState.phase === "queued" : local.busy;
+  const localAvailable = Boolean(assistantStore.contextNodeId);
 
-  const handleSend = () => {
-    const query = input;
+  const send = (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed || busy) return;
     setInput("");
-    void send(query);
+    if (provider === "local" && localAvailable) void local.send(trimmed);
+    else void cloud.send(trimmed);
   };
+
+  const reset = () => {
+    if (provider === "local") local.reset();
+    else cloud.reset();
+  };
+
+  const suggestions = useMemo(
+    () => [
+      { key: "aiAssistant.suggest_summary", onClick: () => send("帮我总结当前页面的重点内容") },
+      { key: "aiAssistant.suggest_risk", onClick: () => send("当前工作项有哪些风险？给出改进建议") },
+      { key: "aiAssistant.suggest_knowledge", onClick: () => send("结合知识库检索，回答我关于本项目的问题") },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [provider, busy]
+  );
+
+  const providerSelect = (
+    <select
+      value={provider}
+      onChange={(event) => assistantStore.setProvider(event.target.value as "cloud" | "local")}
+      className="h-7 cursor-pointer rounded-md border border-subtle bg-surface-1 px-2 text-11 text-secondary outline-none hover:text-primary"
+      aria-label={t("aiAssistant.provider")}
+    >
+      <option value="cloud">☁️ {t("aiAssistant.provider_cloud")}</option>
+      <option value="local" disabled={!localAvailable}>
+        💻 {t("aiAssistant.provider_local")}
+      </option>
+    </select>
+  );
 
   return (
     <ModalPortal
       isOpen={assistantStore.isOpen}
       onClose={() => assistantStore.close()}
       position={EPortalPosition.RIGHT}
-      width={EPortalWidth.QUARTER}
-      contentClassName="bg-surface-1 border-l border-subtle flex h-full flex-col"
+      width={assistantStore.expanded ? EPortalWidth.THREE_QUARTER : EPortalWidth.QUARTER}
+      contentClassName="bg-canvas border-l border-subtle flex h-full flex-col"
     >
       <div className="flex h-full min-h-0 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-4 text-primary" />
-            <span className="text-sm font-medium text-primary">{t("aiAssistant.title")}</span>
+        {/* header */}
+        <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-subtle px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-primary text-on-color">
+              <Sparkles className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-15 truncate leading-tight font-semibold text-primary">{t("aiAssistant.title")}</p>
+              <p className="truncate text-11 leading-tight text-tertiary">{t("aiAssistant.subtitle")}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={reset} aria-label={t("aiAssistant.new_conversation")}>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {providerSelect}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => assistantStore.toggleExpanded()}
+              aria-label={assistantStore.expanded ? t("aiAssistant.collapse") : t("aiAssistant.expand")}
+              title={assistantStore.expanded ? t("aiAssistant.collapse") : t("aiAssistant.expand")}
+            >
+              {assistantStore.expanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={reset}
+              aria-label={t("aiAssistant.new_conversation")}
+              title={t("aiAssistant.new_conversation")}
+            >
               <Plus className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => assistantStore.close()}
+              aria-label={t("aiAssistant.close")}
+              title={t("aiAssistant.close")}
+            >
+              <X className="size-3.5" />
             </Button>
           </div>
         </header>
 
-        <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
-          {messages.length === 0 && !streamingAnswer && streamState.phase !== "streaming" && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <Sparkles className="size-6 text-tertiary" />
-              <p className="text-sm font-medium text-secondary">{t("aiAssistant.empty_greeting")}</p>
-              <p className="max-w-56 text-12 text-tertiary">{t("aiAssistant.empty_hint")}</p>
+        {/* context bar */}
+        <div className="mx-4 mt-3 flex shrink-0 items-center gap-2 rounded-lg border border-subtle bg-surface-1 px-3 py-2">
+          <Link2 className="size-3.5 shrink-0 text-accent-primary" />
+          <span className="min-w-0 flex-1 truncate text-11 text-secondary">
+            {pageContext || t("aiAssistant.context_workspace_only")}
+          </span>
+          <span className="shrink-0 rounded bg-success-subtle px-1.5 py-0.5 text-10 text-success-primary">
+            {t("aiAssistant.context_linked")}
+          </span>
+        </div>
+
+        {/* messages */}
+        <div ref={listRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
+          {provider === "cloud" && cloud.messages.length === 0 && !cloud.streamingAnswer && (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-accent-primary/10 text-accent-primary">
+                <Sparkles className="size-5" />
+              </span>
+              <div>
+                <p className="text-14 font-medium text-primary">{t("aiAssistant.empty_greeting")}</p>
+                <p className="mt-1 text-12 text-tertiary">{t("aiAssistant.empty_hint")}</p>
+              </div>
+              <div className="flex flex-col gap-2 pt-1">
+                {suggestions.map((suggestion) => (
+                  <SuggestionChip
+                    key={suggestion.key}
+                    icon={<Sparkles className="size-3 text-accent-primary" />}
+                    label={t(suggestion.key)}
+                    onClick={suggestion.onClick}
+                  />
+                ))}
+              </div>
             </div>
           )}
-          {messages.map((message) =>
-            message.role === "user" ? (
-              <div
-                key={message.id}
-                className="ml-auto max-w-[85%] rounded-lg bg-surface-2 px-3 py-2 text-13 text-primary"
-              >
-                {message.content}
-              </div>
-            ) : (
-              <div key={message.id} className="max-w-full text-13 text-primary">
-                <MarkdownRenderer markdown={message.content} />
-              </div>
-            )
-          )}
-          {(streamState.phase === "streaming" || streamingAnswer) && (
-            <div className="max-w-full text-13 text-primary">
-              {streamingAnswer ? (
-                <MarkdownRenderer markdown={streamingAnswer} />
+
+          {provider === "cloud" &&
+            cloud.messages.map((message) =>
+              message.role === "user" ? (
+                <div key={message.id} className="flex justify-end">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed whitespace-pre-wrap text-on-color">
+                    {message.content}
+                  </div>
+                </div>
               ) : (
-                <span className="animate-pulse">▍</span>
-              )}
+                <div key={message.id} className="flex gap-3">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+                    <Sparkles className="size-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <AnswerMarkdown content={message.content} />
+                  </div>
+                </div>
+              )
+            )}
+
+          {provider === "cloud" && (cloud.streamingAnswer || cloud.streamState.phase === "streaming") && (
+            <div className="flex gap-3">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+                <Sparkles className="size-3.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                {cloud.streamingAnswer ? (
+                  <>
+                    <AnswerMarkdown content={cloud.streamingAnswer} />
+                    <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
+                  </>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-11 text-tertiary">
+                    <Loader2 className="size-3 animate-spin" />
+                    {t("aiAssistant.working")}
+                  </span>
+                )}
+              </div>
             </div>
           )}
-          {streamState.phase === "queued" && <p className="text-12 text-tertiary">{t("aiAssistant.queued")}</p>}
-          {streamState.phase === "streaming" && streamState.status && (
-            <p className="text-12 text-tertiary">
-              {streamState.status === "started" || streamState.status === "working"
-                ? t("aiAssistant.working")
-                : t("aiAssistant.retrieving")}
-            </p>
+
+          {provider === "cloud" && cloud.streamState.phase === "queued" && (
+            <p className="text-11 text-tertiary">{t("aiAssistant.queued")}</p>
           )}
-          {streamState.phase === "loading-history" && <p className="text-12 text-tertiary">…</p>}
-          {streamState.phase === "interrupted" && (
-            <p className="rounded-md bg-surface-2 px-3 py-2 text-12 text-secondary">
+          {provider === "cloud" && cloud.streamState.phase === "interrupted" && (
+            <p className="rounded-lg bg-surface-1 px-3 py-2 text-11 text-secondary">
               {t("aiAssistant.interrupt_notice")}
             </p>
           )}
-          {streamState.phase === "error" && (
-            <div className="flex items-center justify-between gap-2 rounded-md bg-surface-2 px-3 py-2 text-12 text-danger-primary">
+          {provider === "cloud" && cloud.streamState.phase === "error" && (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-danger-subtle/50 px-3 py-2 text-12 text-danger-primary">
               <span>{t("aiAssistant.error_generic")}</span>
-              {streamState.canRetry && (
+              {cloud.streamState.canRetry && (
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => void send(input || (messages[messages.length - 1]?.content ?? ""))}
+                  onClick={() => send(input || cloud.messages[cloud.messages.length - 1]?.content || "")}
                 >
                   <RefreshCw className="size-3" />
                   {t("aiAssistant.retry")}
@@ -118,42 +303,124 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
               )}
             </div>
           )}
+
+          {provider === "local" &&
+            local.items.map((item) => {
+              const key = item.key;
+              switch (item.kind) {
+                case "user":
+                  return (
+                    <div key={key} className="flex justify-end">
+                      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed whitespace-pre-wrap text-on-color">
+                        {item.text}
+                      </div>
+                    </div>
+                  );
+                case "assistant":
+                  return (
+                    <div key={key} className="flex gap-3">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+                        <Sparkles className="size-3.5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <AnswerMarkdown content={item.text} />
+                        {item.streaming && (
+                          <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                case "thinking":
+                  return <ThinkingBlock key={key} text={item.text} />;
+                case "process":
+                  return (
+                    <div key={key} className="flex items-center gap-1.5 text-11 text-tertiary">
+                      <Loader2 className="size-3 animate-spin" />
+                      {item.label}
+                    </div>
+                  );
+                case "tool":
+                  return (
+                    <div key={key} className="flex items-center gap-1.5 text-11 text-tertiary">
+                      <Wrench className="size-3" />
+                      {item.name} · {item.status}
+                    </div>
+                  );
+                case "approval":
+                  return (
+                    <div key={key} className="rounded-lg bg-surface-1 px-3 py-2 text-11 text-secondary">
+                      {t("aiAssistant.approval_pending")}
+                    </div>
+                  );
+                case "notice":
+                  return (
+                    <div
+                      key={key}
+                      className={`rounded-lg px-3 py-2 text-11 ${item.tone === "error" ? "bg-danger-subtle/50 text-danger-primary" : "bg-surface-1 text-secondary"}`}
+                    >
+                      {item.label}
+                    </div>
+                  );
+                default:
+                  return null;
+              }
+            })}
+
+          {provider === "local" && !localAvailable && (
+            <div className="flex h-full items-center justify-center text-center text-12 text-tertiary">
+              {t("aiAssistant.local_unavailable")}
+            </div>
+          )}
+          {provider === "local" && local.error && (
+            <div className="rounded-lg bg-danger-subtle/50 px-3 py-2 text-12 text-danger-primary">{local.error}</div>
+          )}
         </div>
 
-        <footer className="shrink-0 border-t border-subtle p-3">
-          <div className="flex items-end gap-2 rounded-lg border border-subtle bg-surface-2 p-2">
-            <textarea
-              value={input}
-              rows={1}
-              placeholder={t("aiAssistant.placeholder")}
-              aria-label={t("aiAssistant.placeholder")}
-              className="max-h-32 min-h-6 flex-1 resize-none bg-transparent text-13 text-primary outline-none placeholder:text-tertiary"
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  handleSend();
-                }
-              }}
-            />
+        {/* composer */}
+        <div className="focus-within:border-accent-primary mx-4 mb-2 shrink-0 rounded-xl border border-subtle bg-surface-1 p-2.5 transition">
+          <textarea
+            value={input}
+            rows={1}
+            placeholder={t("aiAssistant.placeholder")}
+            aria-label={t("aiAssistant.placeholder")}
+            className="max-h-32 min-h-6 w-full resize-none bg-transparent text-13 text-primary outline-none placeholder:text-tertiary"
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                send(input);
+              }
+            }}
+          />
+          <div className="flex items-center justify-between pt-1.5">
+            <span className="flex items-center gap-1.5 text-10 text-tertiary">
+              <span className="size-1.5 rounded-full bg-accent-primary" />
+              {t("aiAssistant.context_hint")}
+            </span>
             {busy ? (
-              <Button variant="error-fill" size="sm" onClick={() => void stop()} aria-label={t("aiAssistant.stop")}>
-                <Square className="size-3.5" />
-              </Button>
+              <button
+                type="button"
+                onClick={() => (provider === "cloud" ? void cloud.stop() : void local.stop())}
+                aria-label={t("aiAssistant.stop")}
+                className="hover:bg-surface-2-hover flex size-7 items-center justify-center rounded-lg bg-surface-2 text-danger-primary transition"
+              >
+                <Square className="size-3" />
+              </button>
             ) : (
-              <Button
-                variant="primary"
-                size="sm"
+              <button
+                type="button"
+                onClick={() => send(input)}
                 disabled={!input.trim()}
-                onClick={handleSend}
                 aria-label={t("aiAssistant.send")}
+                className="flex size-7 items-center justify-center rounded-lg bg-accent-primary text-on-color transition hover:opacity-90 disabled:opacity-40"
               >
                 <ArrowUp className="size-3.5" />
-              </Button>
+              </button>
             )}
           </div>
-          <p className="mt-1.5 px-1 text-11 text-tertiary">{t("aiAssistant.shortcut_hint")}</p>
-        </footer>
+        </div>
+
+        <p className="shrink-0 pb-3 text-center text-10 text-tertiary">{t("aiAssistant.disclaimer")}</p>
       </div>
     </ModalPortal>
   );

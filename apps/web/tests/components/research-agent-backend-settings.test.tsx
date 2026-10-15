@@ -74,6 +74,7 @@ it("saves without replacing a blank stored token and keeps testing available aft
   expect((container.querySelector('input[type="password"]') as HTMLInputElement).value).toBe("");
   await act(async () => button("保存连接").click());
   expect(service.saveBackendConnection).toHaveBeenCalledWith("public", {
+    system: "SCIENCE_DISCOVERY",
     base_url: connection.base_url,
     is_enabled: true,
   });
@@ -103,7 +104,7 @@ it("removes the connection and allows a new connection to be saved", async () =>
   await renderForm();
   service.getBackendConnection.mockResolvedValue({ connection: null, governance_enabled: true });
   await act(async () => button("删除").click());
-  expect(service.deleteBackendConnection).toHaveBeenCalledWith("public");
+  expect(service.deleteBackendConnection).toHaveBeenCalledWith("public", "SCIENCE_DISCOVERY");
   expect(container.textContent).toContain("连接已删除");
   const baseUrlInput = container.querySelector("input:not([type])") as HTMLInputElement;
   expect(baseUrlInput.value).toBe("");
@@ -125,7 +126,7 @@ it("discards a late save from the previous workspace and clears its unsaved toke
   await act(async () => finishSave({ id: "old" }));
   expect(container.textContent).not.toContain("连接已保存");
   expect((container.querySelector('input[type="password"]') as HTMLInputElement).value).toBe("");
-  expect(service.getBackendConnection.mock.calls.at(-1)).toEqual(["private"]);
+  expect(service.getBackendConnection.mock.calls.at(-1)).toEqual(["private", "SCIENCE_DISCOVERY"]);
 });
 it("discards a late load from the previous workspace", async () => {
   let finishLoad!: (value: { connection: typeof connection; governance_enabled: boolean }) => void;
@@ -141,7 +142,10 @@ it("discards a late load from the previous workspace", async () => {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  expect(service.getBackendConnection.mock.calls).toEqual([["public"], ["private"]]);
+  expect(service.getBackendConnection.mock.calls).toEqual([
+    ["public", "SCIENCE_DISCOVERY"],
+    ["private", "SCIENCE_DISCOVERY"],
+  ]);
   expect((container.querySelector("input:not([type])") as HTMLInputElement).value).toBe("");
   expect(container.textContent).toContain("配置暂不用于新会话");
 });
@@ -156,14 +160,12 @@ it("loads the connection once on first render and does not reload after local ed
   await renderForm();
   expect(service.getBackendConnection).toHaveBeenCalledTimes(1);
   await fill(container.querySelector("input:not([type])")!, "http://172.19.0.1:14311");
-  await act(async () => {
-    (container.querySelector('input[type="checkbox"]') as HTMLInputElement).click();
-  });
+  await fill(container.querySelector('input[type="password"]')!, "personal-token");
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(service.getBackendConnection).toHaveBeenCalledTimes(1);
-  expect(service.getBackendConnection).toHaveBeenCalledWith("public");
+  expect(service.getBackendConnection).toHaveBeenCalledWith("public", "SCIENCE_DISCOVERY");
 });
 it("reloads once after save, test, and delete without starting a load loop", async () => {
   await renderForm();
@@ -205,6 +207,7 @@ it("saves and redisplays the entered 127.0.0.1 address without rewriting the for
   });
   await act(async () => button("保存连接").click());
   expect(service.saveBackendConnection).toHaveBeenCalledWith("public", {
+    system: "SCIENCE_DISCOVERY",
     base_url: "http://127.0.0.1:4310/",
     token: "sd-token",
     is_enabled: true,
@@ -232,4 +235,60 @@ it("keeps the form visible while a save refresh is in flight", async () => {
   expect(container.textContent).toContain("测试连接");
   expect(container.textContent).not.toBe("加载中");
   await act(async () => finishRefresh({ connection, governance_enabled: true }));
+});
+
+it("places the cloud token hint below the password input using the same style as the system hint", async () => {
+  service.getBackendConnection.mockResolvedValue({ connection, governance_enabled: false });
+  await renderForm();
+  expect(container.textContent).not.toContain(translations.research.agent_backend.cloud_address_hint);
+  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(container.textContent).toContain(translations.research.agent_backend.governance_off_new_sessions);
+
+  await act(async () => {
+    const select = container.querySelector("select")!;
+    select.value = "SYNLORA";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  const passwordInput = container.querySelector('input[type="password"]')!;
+  const tokenHint = passwordInput.nextElementSibling!;
+  const systemHint = container.querySelector("select")!.nextElementSibling!;
+  expect(tokenHint.tagName).toBe("SPAN");
+  expect(tokenHint.textContent).toBe(translations.research.agent_backend.cloud_address_hint);
+  expect(tokenHint.className).toBe(systemHint.className);
+  expect(container.querySelector("input:not([type])")).toBeNull();
+  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(container.textContent).not.toContain(translations.research.agent_backend.enabled);
+  expect(container.textContent).not.toContain(translations.research.agent_backend.governance_off_new_sessions);
+});
+
+it.each(["SCIENCE_DISCOVERY", "SYNLORA"])("saves, tests and deletes the selected %s configuration", async (system) => {
+  service.getBackendConnection.mockResolvedValue({
+    connection: { ...connection, is_enabled: false },
+    governance_enabled: true,
+  });
+  await renderForm();
+  if (system === "SYNLORA") {
+    await act(async () => {
+      const select = container.querySelector("select")!;
+      select.value = system;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+  await fill(container.querySelector('input[type="password"]')!, "personal-token");
+  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  await act(async () => button("保存连接").click());
+  expect(service.saveBackendConnection).toHaveBeenCalledWith("public", {
+    system,
+    base_url: system === "SCIENCE_DISCOVERY" ? connection.base_url : "",
+    token: "personal-token",
+    is_enabled: true,
+  });
+  await act(async () => button("测试连接").click());
+  expect(service.testBackendConnection).toHaveBeenCalledWith("public", system);
+  expect(container.textContent).toContain(
+    system === "SYNLORA" ? translations.research.agent_backend.cloud_test_ok : "连接成功，可用模型档案 1 个。"
+  );
+  await act(async () => button("删除").click());
+  expect(service.deleteBackendConnection).toHaveBeenCalledWith("public", system);
 });

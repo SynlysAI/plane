@@ -10,20 +10,29 @@ import { storage } from "@/lib/local-storage";
 
 const THREAD_KEY_PREFIX = "PLANE_AI_ASSISTANT_THREAD_";
 
+export type TAssistantProvider = "cloud" | "local";
+
 export interface IAIAssistantStore {
   // observables
   isOpen: boolean;
   threadWorkspaceSlug: string | null;
   threadId: string | null;
   status: { enabled: boolean; ready: boolean } | null;
+  activeProvider: TAssistantProvider;
+  contextNodeId: string | null;
+  expanded: boolean;
   // actions
   open: () => void;
   close: () => void;
   toggle: (value?: boolean) => void;
+  openWithLocal: (nodeId: string) => void;
   hydrate: (workspaceSlug: string) => void;
   setStatus: (status: { enabled: boolean; ready: boolean } | null) => void;
   setThreadId: (workspaceSlug: string, threadId: string) => void;
   clearThreadId: (workspaceSlug: string) => void;
+  setProvider: (provider: TAssistantProvider) => void;
+  setContextNodeId: (nodeId: string | null) => void;
+  toggleExpanded: (value?: boolean) => void;
 }
 
 export class AIAssistantStore implements IAIAssistantStore {
@@ -31,6 +40,9 @@ export class AIAssistantStore implements IAIAssistantStore {
   threadWorkspaceSlug: string | null = null;
   threadId: string | null = null;
   status: { enabled: boolean; ready: boolean } | null = null;
+  activeProvider: TAssistantProvider = "cloud";
+  contextNodeId: string | null = null;
+  expanded: boolean = false;
 
   constructor() {
     makeObservable(this, {
@@ -38,13 +50,20 @@ export class AIAssistantStore implements IAIAssistantStore {
       threadWorkspaceSlug: observable.ref,
       threadId: observable.ref,
       status: observable.ref,
+      activeProvider: observable.ref,
+      contextNodeId: observable.ref,
+      expanded: observable.ref,
       open: action,
       close: action,
       toggle: action,
+      openWithLocal: action,
       hydrate: action,
       setStatus: action,
       setThreadId: action,
       clearThreadId: action,
+      setProvider: action,
+      setContextNodeId: action,
+      toggleExpanded: action,
     });
   }
 
@@ -58,6 +77,12 @@ export class AIAssistantStore implements IAIAssistantStore {
 
   toggle = (value?: boolean) => {
     this.isOpen = value ?? !this.isOpen;
+  };
+
+  openWithLocal = (nodeId: string) => {
+    this.contextNodeId = nodeId;
+    this.activeProvider = "local";
+    this.isOpen = true;
   };
 
   hydrate = (workspaceSlug: string) => {
@@ -76,6 +101,19 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.threadId = threadId;
     });
     storage.set(`${THREAD_KEY_PREFIX}${workspaceSlug}`, threadId);
+  };
+
+  setProvider = (provider: TAssistantProvider) => {
+    this.activeProvider = provider;
+    if (provider === "cloud") this.contextNodeId = null;
+  };
+
+  setContextNodeId = (nodeId: string | null) => {
+    this.contextNodeId = nodeId;
+  };
+
+  toggleExpanded = (value?: boolean) => {
+    this.expanded = value ?? !this.expanded;
   };
 
   clearThreadId = (workspaceSlug: string) => {
