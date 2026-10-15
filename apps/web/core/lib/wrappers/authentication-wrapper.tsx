@@ -90,6 +90,11 @@ export const AuthenticationWrapper = observer(function AuthenticationWrapper(pro
   if (pageType === EPageTypes.NON_AUTHENTICATED) {
     if (!currentUser?.id) return <>{children}</>;
     else {
+      // Finish the invitation before onboarding a newly registered account.
+      if (nextPath && /^\/workspace-invitations\/?\?/.test(nextPath)) {
+        router.replace(nextPath);
+        return <></>;
+      }
       if (currentUserProfile?.id && isUserOnboard) {
         const currentRedirectRoute = getWorkspaceRedirectionUrl();
         router.push(currentRedirectRoute);

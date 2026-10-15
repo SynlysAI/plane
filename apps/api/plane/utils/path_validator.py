@@ -153,22 +153,14 @@ def get_safe_redirect_url(base_url: str, next_path: str = "", params: dict = {})
     # Add the next path to the parameters
     base_url = base_url.rstrip("/")
 
-    # Prepare the query parameters
-    query_parts = []
-    encoded_params = ""
-
-    # Add the next path to the parameters
-    if validated_path:
-        query_parts.append(f"next_path={validated_path}")
-
-    # Add additional parameters
-    if params:
-        encoded_params = urlencode(params)
-        query_parts.append(encoded_params)
+    # Encode nested query strings so invitation tokens survive authentication.
+    query_params = {"next_path": validated_path} if validated_path else {}
+    query_params.update(params)
+    encoded_params = urlencode(params)
 
     # Construct the url query string
-    if query_parts:
-        query_string = "&".join(query_parts)
+    if query_params:
+        query_string = urlencode(query_params)
         url = f"{base_url}/?{query_string}"
     else:
         url = base_url

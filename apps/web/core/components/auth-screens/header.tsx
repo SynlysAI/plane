@@ -7,6 +7,7 @@
 import React from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
 import { BRAND_NAME } from "@plane/constants";
 import { BrandMark } from "@/components/common/brand-mark";
@@ -19,13 +20,11 @@ const authContentMap = {
     pageTitle: "Sign in",
     text: "auth.common.new_to_plane",
     linkText: "auth.common.create_account",
-    linkHref: "/sign-up",
   },
   [EAuthModes.SIGN_UP]: {
     pageTitle: "Sign up",
     text: "auth.common.already_have_an_account",
     linkText: "auth.common.login",
-    linkHref: "/sign-in",
   },
 };
 
@@ -35,6 +34,10 @@ type AuthHeaderProps = {
 
 export const AuthHeader = observer(function AuthHeader({ type }: AuthHeaderProps) {
   const { t } = useTranslation();
+  const searchParams = useSearchParams();
+  const params = new URLSearchParams(searchParams);
+  params.delete("error_code");
+  const authPath = type === EAuthModes.SIGN_UP ? "/" : "/sign-up";
   // store
   const { config } = useInstance();
   // derived values
@@ -50,7 +53,10 @@ export const AuthHeader = observer(function AuthHeader({ type }: AuthHeaderProps
       additionalAction={
         <div className="flex flex-col items-end text-center text-13 font-medium text-tertiary sm:flex-row sm:items-center sm:gap-2">
           <span className="text-body-sm-regular text-tertiary">{t(authContent.text)}</span>
-          <Link href={authContent.linkHref} className="text-body-sm-semibold text-accent-primary hover:underline">
+          <Link
+            href={`${authPath}${params.size ? `?${params}` : ""}`}
+            className="text-body-sm-semibold text-accent-primary hover:underline"
+          >
             {t(authContent.linkText)}
           </Link>
           {isInviteOnlySignUp && type === EAuthModes.SIGN_IN && (
