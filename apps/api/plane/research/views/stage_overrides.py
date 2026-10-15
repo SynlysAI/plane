@@ -26,7 +26,7 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.stages import material_resource
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.stages import serialize_material
@@ -41,7 +41,7 @@ class ResearchStageMaterialOverrideEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         material = (
             StageMaterial.objects.filter(

@@ -84,7 +84,7 @@ export class ResearchNavigationService extends APIService {
 
   /** 删除分类；非空分类必须显式指定迁移目标。 */
   async deleteCategory(workspaceSlug: string, categoryId: string, moveTo?: string | null): Promise<void> {
-    return this.delete(researchEndpoints.navigationCategory(workspaceSlug, categoryId), {
+    return this.delete(researchEndpoints.navigationCategory(workspaceSlug, categoryId), undefined, {
       params: moveTo ? { move_to: moveTo } : undefined,
     }).then(() => undefined);
   }
@@ -126,7 +126,7 @@ export class ResearchNavigationService extends APIService {
 
   /** 删除组织，并将项目迁移到显式选择的目标组织。 */
   async deleteAdministrativeOrganization(workspaceSlug: string, organizationId: string, moveTo: string): Promise<void> {
-    return this.delete(researchEndpoints.administrativeOrganization(workspaceSlug, organizationId), {
+    return this.delete(researchEndpoints.administrativeOrganization(workspaceSlug, organizationId), undefined, {
       params: { move_to: moveTo },
     }).then(() => undefined);
   }

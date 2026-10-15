@@ -160,18 +160,12 @@ class Project(BaseModel):
     class Meta:
         unique_together = [
             ["identifier", "workspace", "deleted_at"],
-            ["name", "workspace", "deleted_at"],
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["identifier", "workspace"],
                 condition=Q(deleted_at__isnull=True),
                 name="project_unique_identifier_workspace_when_deleted_at_null",
-            ),
-            models.UniqueConstraint(
-                fields=["name", "workspace"],
-                condition=Q(deleted_at__isnull=True),
-                name="project_unique_name_workspace_when_deleted_at_null",
             ),
         ]
         verbose_name = "Project"

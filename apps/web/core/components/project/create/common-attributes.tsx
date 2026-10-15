@@ -26,10 +26,19 @@ type Props = {
   shouldAutoSyncIdentifier: boolean;
   setShouldAutoSyncIdentifier: (value: boolean) => void;
   handleFormOnChange?: () => void;
+  /** 是否展示编号输入；行政项目由后端自动生成，默认展示。 */
+  showIdentifier?: boolean;
 };
 
 function ProjectCommonAttributes(props: Props) {
-  const { setValue, isMobile, shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier, handleFormOnChange } = props;
+  const {
+    setValue,
+    isMobile,
+    shouldAutoSyncIdentifier,
+    setShouldAutoSyncIdentifier,
+    handleFormOnChange,
+    showIdentifier = true,
+  } = props;
   const {
     formState: { errors },
     control,
@@ -41,7 +50,7 @@ function ProjectCommonAttributes(props: Props) {
 
   const handleNameChange =
     (onChange: (event: ChangeEvent<HTMLInputElement>) => void) => (e: ChangeEvent<HTMLInputElement>) => {
-      if (!shouldAutoSyncIdentifier) {
+      if (!shouldAutoSyncIdentifier || !showIdentifier) {
         onChange(e);
         return;
       }
@@ -61,7 +70,7 @@ function ProjectCommonAttributes(props: Props) {
   };
   return (
     <div className="grid grid-cols-1 gap-x-2 gap-y-3 md:grid-cols-4">
-      <div className="md:col-span-3">
+      <div className={showIdentifier ? "md:col-span-3" : "md:col-span-4"}>
         <Controller
           control={control}
           name="name"
@@ -91,52 +100,54 @@ function ProjectCommonAttributes(props: Props) {
         />
         <span className="text-11 text-danger-primary">{errors?.name?.message}</span>
       </div>
-      <div className="relative">
-        <Controller
-          control={control}
-          name="identifier"
-          rules={{
-            required: t("project_id_is_required"),
-            // allow only alphanumeric & non-latin characters
-            validate: (value) =>
-              /^[ÇŞĞIİÖÜA-Z0-9]+$/.test(value.toUpperCase()) || t("only_alphanumeric_non_latin_characters_allowed"),
-            minLength: {
-              value: 1,
-              message: t("project_id_min_char"),
-            },
-            maxLength: {
-              value: 10,
-              message: t("project_id_max_char"),
-            },
-          }}
-          render={({ field: { value, onChange } }) => (
-            <Field name="identifier" invalid={Boolean(errors.identifier)}>
-              <InputGroup size="2xl">
-                <Input
-                  size="2xl"
-                  id="identifier"
-                  name="identifier"
-                  type="text"
-                  value={value}
-                  onChange={handleIdentifierChange(onChange)}
-                  placeholder={t("project_id")}
-                  tabIndex={getIndex("identifier")}
-                />
-              </InputGroup>
-            </Field>
-          )}
-        />
-        <Tooltip
-          label={t("project_id_tooltip_content")}
-          layout="stacked"
-          side="right"
-          align="start"
-          disabled={isMobile}
-        >
-          <InfoOutline className="absolute top-2.5 right-2 h-3 w-3 text-placeholder" />
-        </Tooltip>
-        <span className="text-11 text-danger-primary">{errors?.identifier?.message}</span>
-      </div>
+      {showIdentifier && (
+        <div className="relative">
+          <Controller
+            control={control}
+            name="identifier"
+            rules={{
+              required: t("project_id_is_required"),
+              // allow only alphanumeric & non-latin characters
+              validate: (value) =>
+                /^[ÇŞĞIİÖÜA-Z0-9]+$/.test(value.toUpperCase()) || t("only_alphanumeric_non_latin_characters_allowed"),
+              minLength: {
+                value: 1,
+                message: t("project_id_min_char"),
+              },
+              maxLength: {
+                value: 10,
+                message: t("project_id_max_char"),
+              },
+            }}
+            render={({ field: { value, onChange } }) => (
+              <Field name="identifier" invalid={Boolean(errors.identifier)}>
+                <InputGroup size="2xl">
+                  <Input
+                    size="2xl"
+                    id="identifier"
+                    name="identifier"
+                    type="text"
+                    value={value}
+                    onChange={handleIdentifierChange(onChange)}
+                    placeholder={t("project_id")}
+                    tabIndex={getIndex("identifier")}
+                  />
+                </InputGroup>
+              </Field>
+            )}
+          />
+          <Tooltip
+            label={t("project_id_tooltip_content")}
+            layout="stacked"
+            side="right"
+            align="start"
+            disabled={isMobile}
+          >
+            <InfoOutline className="absolute top-2.5 right-2 h-3 w-3 text-placeholder" />
+          </Tooltip>
+          <span className="text-11 text-danger-primary">{errors?.identifier?.message}</span>
+        </div>
+      )}
       <div className="md:col-span-4">
         <Controller
           name="description"

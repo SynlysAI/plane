@@ -586,30 +586,10 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
               scope === "ADMINISTRATIVE" &&
               (() => {
                 return (
-                  (defaultProjectIds.length > 0 || defaultOrganization?.can_manage || canManageTree) && (
+                  defaultOrganization && (
                     <div className="mt-1 border-t border-subtle pt-1">
                       <div className="group flex items-center gap-1 px-2 py-1 text-11 text-tertiary">
-                        <span className="min-w-0 flex-1 truncate">默认</span>
-                        {defaultOrganization && defaultOrganization.can_manage && (
-                          <CustomMenu
-                            customButton={<MoreHorizontalOutline className="size-3" aria-hidden="true" />}
-                            customButtonClassName="grid place-items-center rounded-sm p-0.5"
-                            className="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
-                            placement="bottom-start"
-                            ariaLabel="管理默认组织"
-                          >
-                            <CustomMenu.MenuItem
-                              onClick={() =>
-                                setOrganizationManager({
-                                  organizationId: defaultOrganization.id,
-                                  action: "members",
-                                })
-                              }
-                            >
-                              成员管理…
-                            </CustomMenu.MenuItem>
-                          </CustomMenu>
-                        )}
+                        <span className="min-w-0 flex-1 truncate">公共</span>
                       </div>
                       {defaultProjectIds.map((projectId) => {
                         const project = projectMap[projectId];
@@ -774,9 +754,9 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
               {scope === "ADMINISTRATIVE" ? (
                 <>
                   {defaultOrganization ? (
-                    <option value={defaultOrganization.id}>默认</option>
+                    <option value={defaultOrganization.id}>公共</option>
                   ) : (
-                    <option value="uncategorized">默认</option>
+                    <option value="uncategorized">公共</option>
                   )}
                   {namedOrganizations.map((organization) => (
                     <option key={organization.id} value={organization.id}>

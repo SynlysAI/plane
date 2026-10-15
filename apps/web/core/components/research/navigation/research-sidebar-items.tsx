@@ -67,12 +67,13 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug]);
 
-  // No research relation at all: nothing to show, not even the overview.
+  // 非 IA v2 且无科研关系时不渲染旧科研菜单；IA v2 下行政项目树仍需保留。
+  const hasResearchIdentity = research.researchLevel !== "NONE" && research.researchLevel !== null;
   if (
     !workspaceSlug ||
     research.identityWorkspaceSlug !== workspaceSlug ||
     !research.isEnabled ||
-    (research.researchLevel === "NONE" && (research.visibleNavKeys?.length ?? 0) === 0)
+    (!hasResearchIdentity && (research.visibleNavKeys?.length ?? 0) === 0 && !research.isIaV2Enabled)
   )
     return null;
 
@@ -181,15 +182,13 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
                     fillAvailableSpace
                   />
                 )}
-                {research.canSee("projects") && (
-                  <ResearchProjectTree
-                    scope="ADMINISTRATIVE"
-                    title="行政项目"
-                    href={`/${workspaceSlug}/projects`}
-                    canManage={research.canSee("management")}
-                    fillAvailableSpace={!research.canSee("research_chain") || !(storedIsResearchTreeOpen ?? true)}
-                  />
-                )}
+                <ResearchProjectTree
+                  scope="ADMINISTRATIVE"
+                  title="行政项目"
+                  href={`/${workspaceSlug}/projects`}
+                  canManage={research.canSee("management")}
+                  fillAvailableSpace={!research.canSee("research_chain") || !(storedIsResearchTreeOpen ?? true)}
+                />
               </>
             ) : (
               [

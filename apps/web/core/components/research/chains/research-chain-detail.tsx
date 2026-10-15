@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
@@ -347,6 +348,13 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   ];
   const selectedNodeActions = selected ? (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      <Link
+        href={`/${workspaceSlug}/research/chains/${chainId}/nodes/${selected.node.id}/agent`}
+        aria-label={t("research.chains.open_agent")}
+        className="inline-flex h-8 items-center rounded-md border border-subtle px-3 text-12 font-medium text-secondary hover:bg-surface-1 hover:text-accent-primary"
+      >
+        {t("research.chains.open_agent")}
+      </Link>
       {selected.node.capabilities?.actions.delete?.allowed && (
         <ResearchDeleteButton
           name={selected.node.title}

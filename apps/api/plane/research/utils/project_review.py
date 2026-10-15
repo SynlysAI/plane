@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from plane.db.models import MentorBinding, OrgUnit, OrgUnitMember, ResearchProjectProfile, Workspace
 from plane.research.utils.acl import models_q_expired
-from plane.research.utils.roles import configured_main_pi_id
+from plane.research.utils.roles import configured_main_pi_id, is_research_admin
 from plane.utils.administrative_projects import user_can_manage_administrative_project
 
 REVIEW_ORG_ROLES = (OrgUnitMember.OrgRole.PI, OrgUnitMember.OrgRole.OWNER)
@@ -80,6 +80,8 @@ def research_review_profiles(workspace, user, on_date=None):
         deleted_at__isnull=True,
         project__deleted_at__isnull=True,
     )
+    if is_research_admin(user, workspace.id):
+        return profiles
     if configured_main_pi_id(workspace) == user.id:
         return profiles
     mentee_ids = MentorBinding.objects.filter(

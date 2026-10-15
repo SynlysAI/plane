@@ -264,12 +264,12 @@ export function AdministrativeOrganizationManager({
               onChange={(event) => setDeleteTarget(event.target.value)}
             >
               {defaultOrganization ? (
-                <option value={defaultOrganization.id}>默认</option>
+                <option value={defaultOrganization.id}>公共</option>
               ) : (
-                <option value="uncategorized">默认</option>
+                <option value="uncategorized">公共</option>
               )}
               {organizations
-                .filter((item) => !item.is_default && item.id !== organization.id)
+                .filter((item) => !item.is_default && item.can_manage && item.id !== organization.id)
                 .map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -281,7 +281,13 @@ export function AdministrativeOrganizationManager({
             <Button type="button" variant="secondary" size="sm" disabled={isSaving} onClick={onClose}>
               取消
             </Button>
-            <Button variant="error-fill" size="sm" loading={isSaving} onClick={() => void submitDelete()}>
+            <Button
+              variant="error-fill"
+              size="sm"
+              loading={isSaving}
+              disabled={deleteTarget === "uncategorized"}
+              onClick={() => void submitDelete()}
+            >
               删除组织
             </Button>
           </div>

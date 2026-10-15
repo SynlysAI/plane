@@ -31,6 +31,7 @@ const SOURCE_LABEL_KEYS: Record<TResearchTodoSource, string> = {
   REPORT: "research.todo.source_report_v2",
   PAPER_REVIEW: "research.todo.source_paper_review",
   STAGE_REVIEW: "research.todo.source_stage_review",
+  AGENT_APPROVAL: "research.todo.source_agent",
   OFFICE_APPROVAL: "research.todo.source_office",
 };
 

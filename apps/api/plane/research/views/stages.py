@@ -63,7 +63,7 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.stages import material_resource, stage_resource
 from plane.research.utils.templates import find_material_template, resolve_variables, template_values
 from plane.research.views.base import ResearchAPIView
@@ -123,7 +123,7 @@ def review_payload(instance):
 
 def serialize_material(material, *, actor):
     data = StageMaterialSerializer(material).data
-    is_author = material.owner_id == actor.id
+    is_author = material.owner_id == actor.id or is_research_admin(actor, material.stage_instance.workspace_id)
     data["can_edit"] = is_author and material_is_editable(material)
     page = material.page
     page_detail = (
@@ -224,7 +224,7 @@ class ResearchProjectStageListCreateEndpoint(ResearchAPIView):
         profile = profile_for(workspace, project_id)
         if profile is None:
             return research_not_found(ResearchErrorCode.PROJECT_NOT_FOUND, "Research project not found.")
-        if profile.owner_id != request.user.id and not is_workspace_admin(request.user, workspace):
+        if profile.owner_id != request.user.id and not is_research_admin(request.user, workspace):
             return research_permission_denied()
 
         instances = list(
@@ -417,7 +417,7 @@ class ResearchStageReopenEndpoint(ResearchStageActionEndpoint):
         workspace, error = self.get_workspace(section=MANAGING_SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         instance, error = self.resolve_stage(request, workspace, stage_id)
         if error:
@@ -674,7 +674,7 @@ class ResearchStageMaterialDetailEndpoint(ResearchAPIView):
 
 def can_edit_material(actor, workspace, material) -> bool:
     """A material draft is maintained by its explicit author."""
-    return material.owner_id == actor.id
+    return material.owner_id == actor.id or is_research_admin(actor, workspace)
 
 
 class ResearchStageMaterialSubmitEndpoint(ResearchAPIView):
@@ -739,7 +739,7 @@ class ResearchStageMaterialVersionsEndpoint(ResearchAPIView):
         if not check_access(request.user, "view", material_resource(material), context=context):
             return research_not_found(ResearchErrorCode.MATERIAL_NOT_FOUND, "Material not found.")
         versions = list(material.versions.select_related("created_by"))
-        if material.owner_id != request.user.id:
+        if material.owner_id != request.user.id and not is_research_admin(request.user, workspace.id):
             versions = [
                 version
                 for version in versions
@@ -806,7 +806,7 @@ class ResearchStageRequirementEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=MANAGING_SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
 
         items = request.data.get("items")
@@ -894,7 +894,7 @@ class ResearchStageRequirementDetailEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=MANAGING_SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         row = self._load(workspace, pk)
         if row is None:
@@ -936,7 +936,7 @@ class ResearchStageRequirementDetailEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=MANAGING_SECTION)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace):
+        if not is_research_admin(request.user, workspace):
             return research_permission_denied()
         row = self._load(workspace, pk)
         if row is None:

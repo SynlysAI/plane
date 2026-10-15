@@ -28,6 +28,8 @@ from .chain import (
     ResearchReflectionLog,
 )
 from .context import ResearchContextGrant
+from .agent import ResearchAgentRunEvent, ResearchAgentSession
+from .backend import ResearchAgentBackendConnection
 from .integration import (
     ExternalReferenceLink,
     ExternalSystemConnection,
@@ -96,6 +98,9 @@ __all__ = [
     "ResearchAnalysisResult",
     "ResearchReflectionLog",
     "ResearchContextGrant",
+    "ResearchAgentSession",
+    "ResearchAgentBackendConnection",
+    "ResearchAgentRunEvent",
     "CodeArtifact",
     "ProjectCodeRepository",
     "LiteratureEntry",

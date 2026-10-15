@@ -70,6 +70,12 @@ def env(db):
     OrgUnitMember.objects.create(
         workspace=workspace,
         org_unit=group,
+        user=admin,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
         user=member,
         org_role=OrgUnitMember.OrgRole.PI,
         is_primary=True,
@@ -439,6 +445,12 @@ class TestResearchProjectCreation:
         manager = make_user(first_name="Direction head")
         for user in (mentor, manager):
             add_workspace_member(env["workspace"], user)
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=env["group"],
+            user=mentor,
+            org_role=OrgUnitMember.OrgRole.ADVISOR,
+        )
         MentorBinding.objects.create(
             workspace=env["workspace"],
             mentee=env["member"],

@@ -87,6 +87,7 @@ vi.mock("@/hooks/store/use-research", () => ({
     },
     isIaV2Enabled: true,
     isWorkspaceAdmin: false,
+    isResearchAdmin: false,
     canSee: () => true,
   }),
 }));

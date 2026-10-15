@@ -5,7 +5,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("db", "0173_remove_research_agent_enabled"),
+        ("db", "0176_allow_duplicate_project_names"),
     ]
 
     operations = [

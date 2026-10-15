@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     },
     isIaV2Enabled: true,
     isWorkspaceAdmin: false,
+    isResearchAdmin: false,
     canSee: (key: string) => key !== "reviews",
     getOrgUnits: () => [],
     fetchOrgUnits: async () => undefined,
@@ -32,7 +33,10 @@ vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
   useSearchParams: () => [new URLSearchParams(mocks.view ? `view=${mocks.view}` : "")],
 }));
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "zh-CN",
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("@/components/research/approvals/approval-list", () => ({
   ResearchApprovalList: () => <div>office-approvals</div>,
 }));

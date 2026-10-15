@@ -111,6 +111,7 @@ build/
 temp/
 scripts/*
 !scripts/rebuild-pi-lab-baseline.sh
+!scripts/sd_p0_smoke.py
 !packages/i18n/scripts/
 
 # i18n auto-generated types (regenerated on every build)

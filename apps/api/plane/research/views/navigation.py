@@ -53,7 +53,7 @@ def _can_manage(user, workspace):
     Returns:
         True for a workspace or research administrator.
     """
-    return is_workspace_admin(user, workspace.id) or is_research_admin(user, workspace.id)
+    return is_research_admin(user, workspace.id)
 
 
 def _depth(category):
@@ -234,6 +234,7 @@ def _project_queryset(workspace, user, scope):
             deleted_at__isnull=True,
         )
         .exclude(research_profile__isnull=False)
+        .exclude(id__in=ResearchChain.all_objects.values("project_id"))
         .select_related("navigation_category", "administrative_organization")
     )
     if is_workspace_admin(user, workspace.id):
@@ -423,7 +424,7 @@ def _tree(workspace, user, scope, projects, can_manage=False):
             managed_projects = (
                 Project.objects.filter(workspace=workspace, id__in=visible_project_ids, deleted_at__isnull=True)
                 .exclude(research_profile__isnull=False)
-                .exclude(id__in=ResearchChain.objects.values("project_id"))
+                .exclude(id__in=ResearchChain.all_objects.values("project_id"))
             )
             for project in managed_projects:
                 if project.administrative_organization_id:
@@ -446,7 +447,12 @@ def _tree(workspace, user, scope, projects, can_manage=False):
                 for payload in project_by_org.get(str(organization.id), [])
                 if payload["id"] in visible_project_ids
             ]
-            if organization_projects or str(organization.id) in organization_ids or can_manage:
+            if (
+                organization.is_default
+                or organization_projects
+                or str(organization.id) in organization_ids
+                or can_manage
+            ):
                 org_nodes[str(organization.id)] = {
                     "id": f"admin-org:{organization.id}",
                     "name": organization.name,
@@ -542,12 +548,30 @@ class ProjectNavigationTreeEndpoint(ResearchAPIView):
 
     nav_capability = None
 
+    def initial(self, request, *args, **kwargs):
+        """按 GET 的 scope 决定该次导航树是否依赖科研模块。
+
+        Args:
+            request: 当前 HTTP 请求。
+            *args: DRF initial 额外参数。
+            **kwargs: DRF initial 额外关键字参数。
+        """
+        scope = _scope(request.GET.get("scope")) if request.method == "GET" else None
+        self.research_module_required = scope != ProjectNavigationCategory.Scope.ADMINISTRATIVE
+        self.research_membership_required = scope != ProjectNavigationCategory.Scope.ADMINISTRATIVE
+        return super().initial(request, *args, **kwargs)
+
     def get(self, request, slug):
         """Return one scoped tree using existing project visibility rules."""
-        workspace, error = self.get_workspace(nav=None)
+        scope = _scope(request.GET.get("scope"))
+        is_research_scope = scope == ProjectNavigationCategory.Scope.RESEARCH
+        workspace, error = self.get_workspace(
+            nav=None,
+            require_enabled=is_research_scope,
+            research_member=is_research_scope,
+        )
         if error:
             return error
-        scope = _scope(request.GET.get("scope"))
         if scope is None:
             return Response(
                 {"error_code": "navigation_scope_invalid", "message": "scope is required."},

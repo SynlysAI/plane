@@ -8,6 +8,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from plane.db.models import (
+    OrgUnit,
+    OrgUnitMember,
     Project,
     ProjectMember,
     ResearchAnalysisResult,
@@ -77,13 +79,35 @@ def env(db, settings):
     workspace = make_workspace(owner)
     add_workspace_member(workspace, collaborator)
     ResearchUserProfile.objects.create(user=collaborator, category=ResearchUserProfile.Category.STUDENT, student_no=f"chain-{uuid4().hex[:12]}")
-    enable_research(workspace, research_chain_enabled=True)
+    enable_research(workspace, research_chain_enabled=True, research_agent_enabled=True)
+    root = OrgUnit.objects.create(
+        workspace=workspace, name="科研组织", parent=None, unit_type=OrgUnit.UnitType.ROOT, depth=0, path=""
+    )
+    root.path = f"/{root.id.hex}/"
+    root.save(update_fields=["path"])
+    group = OrgUnit.objects.create(
+        workspace=workspace,
+        name="链路课题组",
+        parent=root,
+        unit_type=OrgUnit.UnitType.GROUP,
+        depth=1,
+        path="",
+    )
+    group.path = f"{root.path}{group.id.hex}/"
+    group.save(update_fields=["path"])
+    OrgUnitMember.objects.create(
+        workspace=workspace, org_unit=group, user=owner, org_role=OrgUnitMember.OrgRole.PI
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace, org_unit=group, user=collaborator, org_role=OrgUnitMember.OrgRole.REVIEWER
+    )
     public_project, public_profile = _research_project(workspace, owner, "Public", "WORKSPACE")
     private_project, private_profile = _research_project(workspace, owner, "Private", "PRIVATE")
     return {
         "owner": owner,
         "collaborator": collaborator,
         "workspace": workspace,
+        "group": group,
         "public_project": public_project,
         "public_profile": public_profile,
         "private_project": private_project,
@@ -139,8 +163,8 @@ def test_chain_collaborator_lifecycle_and_audit(env):
     ).exists()
 
 
-def test_workspace_admin_can_manage_visible_chain_lifecycle(env):
-    """工作区管理员可管理可见研究链，但不会获得科研内容写权限。"""
+def test_workspace_admin_has_full_research_chain_administration_without_org_relation(env):
+    """工作区管理员无需科研组织关系即可完整管理私有研究链。"""
     workspace_admin = make_user(first_name="Workspace admin")
     add_workspace_member(env["workspace"], workspace_admin, role=20)
     admin_client = _client(workspace_admin)
@@ -161,11 +185,11 @@ def test_workspace_admin_can_manage_visible_chain_lifecycle(env):
     assert actions["archive"]["allowed"]
     assert actions["delete"]["allowed"]
     assert not actions["restore"]["allowed"]
-    assert not actions["edit"]["allowed"]
-    assert not actions["upload"]["allowed"]
-    assert admin_client.get(private_url).status_code == 404
-    assert admin_client.post(f"{private_url}archive/", {}, format="json").status_code == 404
-    assert admin_client.delete(private_url).status_code == 404
+    assert actions["edit"]["allowed"]
+    assert actions["upload"]["allowed"]
+    assert admin_client.get(private_url).status_code == 200
+    assert admin_client.post(f"{private_url}archive/", {}, format="json").status_code == 200
+    assert admin_client.post(f"{private_url}restore/", {}, format="json").status_code == 200
     collaborator_actions = (
         env["collaborator_client"].get(detail_url).json()["data"]["capabilities"]["actions"]
     )
@@ -173,15 +197,17 @@ def test_workspace_admin_can_manage_visible_chain_lifecycle(env):
     assert not collaborator_actions["delete"]["allowed"]
     assert env["collaborator_client"].post(f"{detail_url}archive/", {}, format="json").status_code == 403
     assert env["collaborator_client"].delete(detail_url).status_code == 403
-    assert admin_client.delete(f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node_id}/").status_code == 403
-    assert admin_client.post(
-        f"{detail_url}members/", {"user_id": str(env["collaborator"].id)}, format="json"
-    ).status_code == 403
     assert admin_client.post(
         f"{detail_url}nodes/{node_id}/tasks/",
         {"request_id": uuid4().hex, "title": "管理员任务"},
         format="json",
-    ).status_code == 403
+    ).status_code == 201
+    assert admin_client.post(
+        f"{detail_url}members/", {"user_id": str(env["collaborator"].id)}, format="json"
+    ).status_code == 201
+    # The task created above blocks node deletion, so this conflict proves the
+    # request passed authorization and reached the node lifecycle rule.
+    assert admin_client.delete(f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node_id}/").status_code == 409
 
     archived = admin_client.post(f"{detail_url}archive/", {}, format="json")
     assert archived.status_code == 200, archived.json()
@@ -196,6 +222,12 @@ def test_chain_project_admin_can_manage_lifecycle(env):
     """课题项目管理员仍可管理研究链生命周期。"""
     project_admin = make_user(first_name="Project admin")
     add_workspace_member(env["workspace"], project_admin)
+    OrgUnitMember.objects.create(
+        workspace=env["workspace"],
+        org_unit=env["group"],
+        user=project_admin,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
     ProjectMember.objects.create(
         project=env["public_project"], member=project_admin, role=20, created_by=env["owner"]
     )
@@ -211,8 +243,8 @@ def test_chain_project_admin_can_manage_lifecycle(env):
     assert project_admin_client.delete(detail_url).status_code == 204
 
 
-def test_instance_admin_alone_cannot_manage_chain_lifecycle(env):
-    """实例管理员身份本身不授予研究链生命周期或内容写权限。"""
+def test_instance_admin_has_full_research_chain_administration(env):
+    """实例管理员无需加入科研组织即可读取并管理研究链。"""
     instance_admin = make_user(first_name="Instance admin")
     add_workspace_member(env["workspace"], instance_admin)
     ResearchUserProfile.objects.create(
@@ -229,13 +261,11 @@ def test_instance_admin_alone_cannot_manage_chain_lifecycle(env):
     admin_client = _client(instance_admin)
     created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
     detail_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{created.json()['data']['id']}/"
-    actions = admin_client.get(detail_url).json()["data"]["capabilities"]["actions"]
 
-    assert not actions["archive"]["allowed"]
-    assert not actions["delete"]["allowed"]
-    assert not actions["edit"]["allowed"]
-    assert admin_client.post(f"{detail_url}archive/", {}, format="json").status_code == 403
-    assert admin_client.delete(detail_url).status_code == 403
+    assert admin_client.get(detail_url).status_code == 200
+    assert admin_client.post(f"{detail_url}archive/", {}, format="json").status_code == 200
+    assert admin_client.post(f"{detail_url}restore/", {}, format="json").status_code == 200
+    assert admin_client.delete(detail_url).status_code == 204
 
 
 def test_archived_chain_is_replayable_and_readonly(env):

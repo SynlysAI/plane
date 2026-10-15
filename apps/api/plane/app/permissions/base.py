@@ -7,8 +7,11 @@ from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
 from plane.utils.workspace_access import user_can_access_workspace
-from plane.utils.administrative_projects import user_can_manage_administrative_project
-from plane.utils.administrative_projects import administrative_organization_project_ids
+from plane.utils.administrative_projects import (
+    administrative_organization_project_ids,
+    effective_project_member,
+    user_can_manage_administrative_project,
+)
 
 from enum import Enum
 
@@ -70,11 +73,17 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None, 
                     role__in=allowed_role_values,
                     is_active=True,
                 ).exists()
+                if not is_user_has_allowed_role and kwargs.get("project_id"):
+                    effective_project_member_role = effective_project_member(
+                        request.user, kwargs["slug"], kwargs["project_id"]
+                    )
+                    if effective_project_member_role is not None:
+                        is_user_has_allowed_role = effective_project_member_role.role in allowed_role_values
                 if (
                     request.method in ("GET", "HEAD", "OPTIONS")
-                    and administrative_organization_project_ids(
-                        request.user, kwargs["slug"]
-                    ).filter(id=kwargs["project_id"]).exists()
+                    and administrative_organization_project_ids(request.user, kwargs["slug"])
+                    .filter(id=kwargs["project_id"])
+                    .exists()
                 ):
                     is_user_has_allowed_role = True
 

@@ -24,7 +24,7 @@ from plane.research.utils.acl import (
 from plane.research.utils.capabilities import NAV_SUMMARY
 from plane.research.utils.org import managing_unit_ids
 from plane.research.utils.errors import ResearchErrorCode, research_error
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.periods import InvalidPeriod, parse_period
 from plane.research.utils.reports import report_resource
 from plane.research.views.base import ResearchAPIView
@@ -77,7 +77,7 @@ class ResearchReportSummaryEndpoint(ResearchAPIView):
             return research_error(ResearchErrorCode.REPORT_PERIOD_CONFLICT, str(error))
 
         context = build_actor_context(request.user, workspace.id)
-        is_admin = is_workspace_admin(request.user, workspace.id)
+        is_admin = is_research_admin(request.user, workspace.id)
 
         if is_admin:
             scope_ids = set(

@@ -10,7 +10,6 @@ import { CreateProjectModal } from "@/components/project/create-project-modal";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useResearch } from "@/hooks/store/use-research";
-import { usePathname } from "next/navigation";
 
 export type TWorkspaceLevelModalsProps = {
   workspaceSlug: string;
@@ -21,10 +20,7 @@ export const WorkspaceLevelModals = observer(function WorkspaceLevelModals(props
   // store hooks
   const { isCreateProjectModalOpen, toggleCreateProjectModal } = useCommandPalette();
   const research = useResearch();
-  const pathname = usePathname();
-  const administrative = Boolean(
-    research.isEnabled && research.isIaV2Enabled && pathname === `/${workspaceSlug}/projects`
-  );
+  const administrative = Boolean(research.isEnabled && research.isIaV2Enabled);
 
   return (
     <>

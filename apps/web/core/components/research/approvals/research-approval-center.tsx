@@ -83,7 +83,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
         section="approvals"
         navKey="approvals"
       >
-        <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isWorkspaceAdmin} />
+        <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isResearchAdmin} />
       </ResearchPageShell>
     );
   }
@@ -142,7 +142,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
           {activeTab === "stage_review" && <ReviewInbox workspaceSlug={workspaceSlug} />}
           {activeTab === "report_review" && <ResearchReportList workspaceSlug={workspaceSlug} variant="review" />}
           {activeTab === "office" && (
-            <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isWorkspaceAdmin} />
+            <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isResearchAdmin} />
           )}
         </div>
       </div>

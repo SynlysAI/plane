@@ -1,7 +1,7 @@
 """行政项目组织及组织成员管理接口。"""
 
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework.response import Response
 
@@ -21,6 +21,25 @@ from plane.utils.administrative_projects import (
     user_can_manage_administrative_organization,
     visible_administrative_projects,
 )
+
+
+class AdministrativeAPIView(ResearchAPIView):
+    """不依赖科研模块开关与科研组织身份的行政接口基类。"""
+
+    research_module_required = False
+    research_membership_required = False
+
+    def get_workspace(self, **kwargs):
+        """解析行政接口工作区，并关闭科研工作区开关依赖。
+
+        Args:
+            **kwargs: 透传给科研基础视图的工作区参数。
+
+        Returns:
+            ``(workspace, error_response)``，二者恰好一个为空。
+        """
+        kwargs.setdefault("require_enabled", False)
+        return super().get_workspace(**kwargs)
 
 
 def _workspace_admin(user, workspace):
@@ -65,13 +84,13 @@ def _serialize_organization(organization, user, can_manage=None, visible_project
                 "email": item.member.email,
                 "role": item.role,
             }
-            for item in (member_relations if can_manage else [])
+            for item in (member_relations if can_manage and not organization.is_default else [])
         ],
         "project_ids": [str(project_id) for project_id in visible_project_ids],
     }
 
 
-class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
+class AdministrativeOrganizationListCreateEndpoint(AdministrativeAPIView):
     """列出、创建并重命名工作区内的行政组织。"""
 
     nav_capability = None
@@ -80,9 +99,19 @@ class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(nav=None)
         if error:
             return error
+        workspace_admin = _workspace_admin(request.user, workspace)
+        organizations = AdministrativeOrganization.objects.filter(workspace=workspace, deleted_at__isnull=True)
+        if not workspace_admin:
+            organizations = organizations.filter(
+                Q(is_default=True)
+                | Q(
+                    members__member=request.user,
+                    members__is_active=True,
+                    members__deleted_at__isnull=True,
+                )
+            )
         organizations = (
-            AdministrativeOrganization.objects.filter(workspace=workspace, deleted_at__isnull=True)
-            .select_related("workspace", "created_by")
+            organizations.select_related("workspace", "created_by")
             .prefetch_related(
                 Prefetch(
                     "members",
@@ -92,8 +121,9 @@ class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
                     to_attr="visible_members",
                 )
             )
+            .distinct()
+            .order_by("name", "created_at")
         )
-        workspace_admin = _workspace_admin(request.user, workspace)
         visible_projects_by_organization = {}
         for organization_id, project_id in (
             visible_administrative_projects(request.user, workspace.slug)
@@ -129,10 +159,8 @@ class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(nav=None)
         if error:
             return error
-        if not _workspace_admin(request.user, workspace):
-            return Response({"message": "Only workspace administrators can create organizations."}, status=403)
         name = str(request.data.get("name") or "").strip()
-        if not name or len(name) > 255 or name == "默认":
+        if not name or len(name) > 255 or name == AdministrativeOrganization.PUBLIC_NAME:
             return Response({"message": "Organization name is invalid."}, status=422)
         try:
             with transaction.atomic():
@@ -150,7 +178,7 @@ class AdministrativeOrganizationListCreateEndpoint(ResearchAPIView):
         return Response(_serialize_organization(organization, request.user), status=201)
 
 
-class AdministrativeOrganizationDetailEndpoint(ResearchAPIView):
+class AdministrativeOrganizationDetailEndpoint(AdministrativeAPIView):
     """更新或删除非默认组织；删除前必须迁移其项目。"""
 
     nav_capability = None
@@ -193,7 +221,10 @@ class AdministrativeOrganizationDetailEndpoint(ResearchAPIView):
             return Response({"message": "Not allowed."}, status=403)
         if organization.is_default:
             return Response({"message": "The default organization cannot be deleted."}, status=409)
-        target_id, error = parse_uuid(request.query_params.get("move_to"), "move_to")
+        move_to = request.query_params.get("move_to")
+        if not move_to:
+            return Response({"message": "move_to is required."}, status=400)
+        target_id, error = parse_uuid(move_to, "move_to")
         if error:
             return error
         target = AdministrativeOrganization.objects.filter(
@@ -201,6 +232,12 @@ class AdministrativeOrganizationDetailEndpoint(ResearchAPIView):
         ).first()
         if target is None or target.id == organization.id:
             return Response({"message": "Select a different target organization."}, status=422)
+        workspace_admin = _workspace_admin(request.user, workspace)
+        target_authorized = target.is_default or user_can_administer_administrative_organization(
+            request.user, slug, target.id
+        )
+        if not workspace_admin and not target_authorized:
+            return Response({"message": "Not allowed."}, status=403)
         with transaction.atomic():
             Project.objects.filter(administrative_organization=organization).update(administrative_organization=target)
             organization.deleted_at = timezone.now()
@@ -208,7 +245,7 @@ class AdministrativeOrganizationDetailEndpoint(ResearchAPIView):
         return Response(status=204)
 
 
-class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
+class AdministrativeOrganizationMemberEndpoint(AdministrativeAPIView):
     """列出、添加、修改和移除组织成员。"""
 
     nav_capability = None
@@ -229,6 +266,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
             return Response({"message": "Organization not found."}, status=404)
         if not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         return Response(_serialize_organization(organization, request.user)["members"])
 
     def post(self, request, slug, organization_id):
@@ -240,6 +282,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
             return Response({"message": "Organization not found."}, status=404)
         if not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         member_id, error = parse_uuid(request.data.get("member"), "member")
         if error:
             return error
@@ -292,6 +339,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
             request.user, slug, organization.id
         ):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         relation = AdministrativeOrganizationMember.objects.filter(
             workspace=workspace,
             organization=organization,
@@ -315,6 +367,11 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
         organization = self._organization(workspace, organization_id)
         if organization is None or not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         relation = AdministrativeOrganizationMember.objects.filter(
             workspace=workspace,
             organization=organization,
@@ -332,7 +389,7 @@ class AdministrativeOrganizationMemberEndpoint(ResearchAPIView):
         return Response(status=204)
 
 
-class AdministrativeOrganizationAssignableMembersEndpoint(ResearchAPIView):
+class AdministrativeOrganizationAssignableMembersEndpoint(AdministrativeAPIView):
     """返回可加入指定组织的工作区成员。"""
 
     nav_capability = None
@@ -348,6 +405,11 @@ class AdministrativeOrganizationAssignableMembersEndpoint(ResearchAPIView):
             return Response({"message": "Organization not found."}, status=404)
         if not user_can_manage_administrative_organization(request.user, slug, organization.id):
             return Response({"message": "Not allowed."}, status=403)
+        if organization.is_default:
+            return Response(
+                {"message": "The public organization is available to every workspace member."},
+                status=409,
+            )
         current_member_ids = organization.members.filter(is_active=True, deleted_at__isnull=True).values("member_id")
         members = (
             User.objects.filter(
@@ -367,7 +429,7 @@ class AdministrativeOrganizationAssignableMembersEndpoint(ResearchAPIView):
         )
 
 
-class AdministrativeProjectOrganizationEndpoint(ResearchAPIView):
+class AdministrativeProjectOrganizationEndpoint(AdministrativeAPIView):
     """更改行政项目的组织归属。"""
 
     nav_capability = None
@@ -383,7 +445,7 @@ class AdministrativeProjectOrganizationEndpoint(ResearchAPIView):
                 deleted_at__isnull=True,
                 research_profile__isnull=True,
             )
-            .exclude(id__in=ResearchChain.objects.values("project_id"))
+            .exclude(id__in=ResearchChain.all_objects.values("project_id"))
             .first()
         )
         if project is None:

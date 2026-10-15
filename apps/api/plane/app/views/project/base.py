@@ -61,6 +61,7 @@ from plane.utils.administrative_projects import (
     administrative_projects_for_user,
     restrict_administrative_project_visibility,
     administrative_project_filter,
+    public_administrative_project_ids,
     research_project_ids,
     user_can_manage_administrative_project,
 )
@@ -123,6 +124,7 @@ def _project_member_role_expression(request, slug):
     ).values("project_id")
     return Case(
         When(id__in=administrative_projects_for_user(request.user, slug).values("id"), then=Value(ROLE.ADMIN.value)),
+        When(id__in=public_administrative_project_ids(request.user, slug), then=Value(ROLE.MEMBER.value)),
         When(id__in=explicit_project_ids, then=Subquery(member_role)),
         When(id__in=administrative_organization_project_ids(request.user, slug), then=Value(ROLE.GUEST.value)),
         default=Subquery(member_role),
@@ -146,6 +148,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
     review_ids = _cached_research_review_ids(request, slug)
     administrative_ids = administrative_projects_for_user(user, slug).values("id")
     organization_ids = administrative_organization_project_ids(user, slug)
+    public_ids = public_administrative_project_ids(user, slug)
     if WorkspaceMember.objects.filter(
         member=user,
         workspace__slug=slug,
@@ -159,6 +162,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
             )
             | Q(id__in=review_ids)
             | Q(id__in=administrative_ids)
+            | Q(id__in=public_ids)
             | Q(id__in=organization_ids)
         )
     if WorkspaceMember.objects.filter(
@@ -175,6 +179,7 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
             | Q(network=2)
             | Q(id__in=review_ids)
             | Q(id__in=administrative_ids)
+            | Q(id__in=public_ids)
             | Q(id__in=organization_ids)
         )
     return queryset
@@ -325,11 +330,13 @@ class ProjectViewSet(BaseViewSet):
 
         member_ids = [str(project_member.member_id) for project_member in project.members_list]
         organization_member = administrative_organization_project_ids(request.user, slug).filter(id=pk).exists()
+        public_member = public_administrative_project_ids(request.user, slug).filter(id=pk).exists()
 
         review_reader = getattr(project, "research_access", None) == "review"
         if (
             str(request.user.id) not in member_ids
             and not organization_member
+            and not public_member
             and not review_reader
             and not user_can_manage_administrative_project(request.user, slug, pk)
         ):

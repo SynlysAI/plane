@@ -125,6 +125,8 @@ export type TWorkspaceResearchSetting = {
   report_enabled: boolean;
   approval_enabled: boolean;
   research_chain_enabled?: boolean;
+  research_agent_enabled?: boolean;
+  research_agent_user_backend_enabled?: boolean;
   research_trace_enabled?: boolean;
   research_account_link_enabled?: boolean;
   research_external_rag_enabled?: boolean;
@@ -424,7 +426,13 @@ export type TResearchPaperReviewVersion = {
   content_hash: string;
 };
 
-export type TResearchTodoSource = "CHAIN_TASK" | "REPORT" | "PAPER_REVIEW" | "STAGE_REVIEW" | "OFFICE_APPROVAL";
+export type TResearchTodoSource =
+  | "CHAIN_TASK"
+  | "REPORT"
+  | "PAPER_REVIEW"
+  | "STAGE_REVIEW"
+  | "AGENT_APPROVAL"
+  | "OFFICE_APPROVAL";
 
 export type TResearchTodoScope = "to_me" | "mine" | "visible";
 
@@ -499,6 +507,72 @@ export type TResearchAnalysisResult = {
   operator: string | null;
   tool_version: string;
   status: "DRAFT" | "ACCEPTED";
+  created_at: string;
+  updated_at: string;
+};
+
+export type TAgentPluginManifest = {
+  schema_version: "agent-plugin.v1";
+  plugin_id: string;
+  manifest_version: "agent-plugin.v1";
+  entrypoints: string[];
+  required_scopes: string[];
+  capabilities: string[];
+  ui: { desktop: string; mobile: string };
+  feature_flag: string;
+  ui_states: string[];
+  transport: { events: string; streaming: string; iframe: string };
+  enabled?: boolean;
+};
+
+export type TResearchAgentSession = {
+  schema_version: "agent-plugin.v1";
+  session_id: string;
+  run_id: string;
+  workspace: string;
+  user: string;
+  project: string;
+  chain_node: string;
+  context_id: string;
+  context_hash: string;
+  context_expires_at?: string;
+  status: "INITIALIZING" | "READY" | "STREAMING" | "WAITING_APPROVAL" | "SAVING" | "DEGRADED" | "ERROR" | "CLOSED";
+  last_error: string;
+  synlora_session_id: string;
+  synlora_run_id: string;
+  provider: "SYNLORA" | "SCIENCE_DISCOVERY";
+  delegated_subject: string;
+  assembly: {
+    persona: string;
+    enabled_plugins: string[];
+    allowed_tools: string[];
+    allowed_knowledge_base_ids: string[];
+    allowed_file_ids: string[];
+    unavailable_reasons: string[];
+    policy_id: string;
+  };
+  chain_node_title?: string;
+  project_name?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchAgentApproval = {
+  session_id: string;
+  run_id: string;
+  workspace: string;
+  user: string;
+  user_detail?: TResearchUserLite | null;
+  project: string;
+  project_name?: string;
+  chain: string;
+  chain_node: string;
+  chain_node_title?: string;
+  status: "WAITING_APPROVAL" | "DEGRADED" | "ERROR" | "CLOSED";
+  tool_call_id: string;
+  summary: string;
+  risk_level?: string;
+  capability_scope?: string;
   created_at: string;
   updated_at: string;
 };
@@ -705,6 +779,7 @@ export type TResearchIdentity = {
     code?: boolean;
     integrations?: boolean;
     research_chain?: boolean;
+    research_agent?: boolean;
   };
   /**
    * Which surfaces this caller may reach (v2.5.0). `nav` is already

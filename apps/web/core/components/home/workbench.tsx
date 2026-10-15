@@ -92,7 +92,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     research.identity?.module_enabled &&
     research.identity?.workspace_enabled &&
     research.identity?.sections?.research_chain &&
-    research.canSee("research_chain")
+    (research.canSee("research_chain") || research.isResearchAdmin)
   );
   const reportIdentity = research.identity;
   const canSeeSummary = Boolean(
@@ -100,7 +100,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     research.identity?.module_enabled &&
     research.identity?.workspace_enabled &&
     research.identity?.sections?.reports &&
-    research.canSee("summary")
+    (research.canSee("summary") || research.isResearchAdmin)
   );
 
   useEffect(() => {

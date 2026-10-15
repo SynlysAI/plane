@@ -14,6 +14,12 @@ function flattenRoutes(routes: FlatRoute[]): FlatRoute[] {
 }
 
 describe("research chain route registration", () => {
+  it("registers the personal agent backend compatibility page", () => {
+    expect(flattenRoutes(coreRoutes)).toContainEqual({
+      path: ":workspaceSlug/research/settings/agent-backend",
+      file: "./(all)/[workspaceSlug]/(projects)/research/settings/agent-backend/page.tsx",
+    });
+  });
   it("registers the cross-component todo center page", () => {
     const routes = flattenRoutes(coreRoutes);
 

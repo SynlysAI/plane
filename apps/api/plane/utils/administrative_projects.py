@@ -7,6 +7,7 @@ from plane.db.models import (
     AdministrativeOrganization,
     AdministrativeOrganizationMember,
     Project,
+    ProjectNetwork,
     ProjectMember,
     ResearchChain,
     ResearchProjectProfile,
@@ -102,6 +103,34 @@ def administrative_organization_project_ids(user, workspace_slug):
     )
 
 
+def public_administrative_project_ids(user, workspace_slug):
+    """返回对所有有效工作区成员开放的公共行政项目 ID。
+
+    Args:
+        user: 当前用户。
+        workspace_slug: 工作区别名。
+
+    Returns:
+        公共行政项目 ID 查询集；无效用户返回空查询集。
+    """
+    if user is None or not getattr(user, "is_authenticated", False):
+        return Project.objects.none().values("id")
+    return (
+        Project.objects.filter(
+            workspace__slug=workspace_slug,
+            workspace__workspace_member__member=user,
+            workspace__workspace_member__is_active=True,
+            workspace__workspace_member__deleted_at__isnull=True,
+            administrative_organization__is_default=True,
+            administrative_organization__deleted_at__isnull=True,
+            network=ProjectNetwork.PUBLIC.value,
+            deleted_at__isnull=True,
+        )
+        .exclude(id__in=research_project_ids())
+        .values("id")
+    )
+
+
 def get_or_create_default_administrative_organization(workspace):
     """Return the unique default administrative organization for a workspace.
 
@@ -121,7 +150,11 @@ def get_or_create_default_administrative_organization(workspace):
         return organization
     try:
         with transaction.atomic():
-            return AdministrativeOrganization.objects.create(workspace_id=workspace_id, name="默认", is_default=True)
+            return AdministrativeOrganization.objects.create(
+                workspace_id=workspace_id,
+                name=AdministrativeOrganization.PUBLIC_NAME,
+                is_default=True,
+            )
     except IntegrityError:
         return AdministrativeOrganization.objects.filter(
             workspace_id=workspace_id, is_default=True, deleted_at__isnull=True
@@ -176,6 +209,7 @@ def visible_administrative_projects(user, workspace_slug):
     )
     return projects.filter(
         Q(id__in=member_ids)
+        | Q(id__in=public_administrative_project_ids(user, workspace_slug))
         | Q(id__in=administrative_organization_project_ids(user, workspace_slug))
         | Q(id__in=administrative_projects_for_user(user, workspace_slug).values("id"))
     )
@@ -198,6 +232,7 @@ def restrict_administrative_project_visibility(queryset, user, workspace_slug):
     return queryset.filter(
         Q(id__in=research_project_ids())
         | Q(id__in=member_ids)
+        | Q(id__in=public_administrative_project_ids(user, workspace_slug))
         | Q(id__in=administrative_organization_project_ids(user, workspace_slug))
         | Q(id__in=administrative_projects_for_user(user, workspace_slug).values("id"))
     )
@@ -233,6 +268,7 @@ def effective_project_member(user, workspace_slug, project_id):
     member = ProjectMember.objects.filter(
         workspace__slug=workspace_slug, project_id=project_id, member=user, is_active=True
     ).first()
+    public_member = public_administrative_project_ids(user, workspace_slug).filter(id=project_id).exists()
     organization_member = administrative_organization_project_ids(user, workspace_slug).filter(id=project_id).exists()
     if user_can_manage_administrative_project(user, workspace_slug, project_id):
         return ProjectMember(
@@ -241,6 +277,15 @@ def effective_project_member(user, workspace_slug, project_id):
             project_id=project_id,
             workspace_id=Workspace.objects.values_list("id", flat=True).get(slug=workspace_slug),
             role=ROLE.ADMIN.value,
+        )
+    if public_member:
+        role = max(member.role, ROLE.MEMBER.value) if member is not None else ROLE.MEMBER.value
+        return ProjectMember(
+            id=member.id if member else None,
+            member=user,
+            project_id=project_id,
+            workspace_id=Workspace.objects.values_list("id", flat=True).get(slug=workspace_slug),
+            role=role,
         )
     if organization_member and member is None:
         return ProjectMember(

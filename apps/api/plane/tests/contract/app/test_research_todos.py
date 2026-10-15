@@ -283,17 +283,17 @@ class TestResearchTodoScopesAndAcl:
         response = client.get(f"/api/research/workspaces/{env['workspace'].slug}/research-todos/")
         assert response.status_code == 403
 
-    def test_workspace_admin_does_not_automatically_gain_research_review_rights(self, env):
+    def test_workspace_admin_has_research_review_rights_without_org_relation(self, env):
         payload = _payload(_get(env, "admin", "?scope=visible"))
-        research_sources = {"CHAIN_TASK", "PAPER_REVIEW", "STAGE_REVIEW"}
+        sources = _by_source(_items(payload))
 
-        assert not research_sources.intersection(_by_source(_items(payload)))
-        assert all(
-            not decision["allowed"]
-            for item in _items(payload)
-            if item["source"] in research_sources
-            for decision in item["capabilities"]["actions"].values()
-        )
+        assert "CHAIN_TASK" in sources
+        assert "PAPER_REVIEW" in sources
+
+        submitted = next(item for item in _items(payload) if item["object_id"] == str(env["submitted_task"].id))
+        waiting = next(item for item in _items(payload) if item["object_id"] == str(env["waiting_paper"].id))
+        assert submitted["capabilities"]["actions"]["review"]["allowed"] is True
+        assert waiting["capabilities"]["actions"]["review"]["allowed"] is True
 
     def test_expired_org_member_and_invalid_project_member_cannot_act(self, env):
         OrgUnitMember.objects.filter(user=env["group_member"]).update(
