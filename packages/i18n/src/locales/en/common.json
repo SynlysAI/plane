@@ -2737,7 +2737,7 @@
         "credential_mode": "Credential mode",
         "actions": "Actions"
       },
-      "refresh_health": "Re-check now",
+      "refresh_health": "Re-check",
       "credential_mode_shared": "Shared credential",
       "credential_mode_personal": "Personal credential",
       "edit": "Edit",

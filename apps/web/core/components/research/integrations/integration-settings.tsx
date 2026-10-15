@@ -76,8 +76,8 @@ export const IntegrationSettings = observer(function IntegrationSettings({ works
   return (
     <ResearchListSurface>
       <ResearchDetailSurface title={t("research.integrations.connections_title")}>
-        <div className="mb-2 flex justify-end">
-          <Button variant="secondary" size="sm" onClick={() => void probe()} disabled={probing}>
+        <div className="mb-2 flex justify-start">
+          <Button variant="secondary" size="lg" onClick={() => void probe()} disabled={probing}>
             <RefreshCw className={`size-3 ${probing ? "animate-spin" : ""}`} />
             {t("research.integrations.refresh_health")}
           </Button>
