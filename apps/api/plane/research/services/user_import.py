@@ -1391,8 +1391,6 @@ def validate_row(row):
         return ResearchErrorCode.IMPORT_ROW_INVALID, "姓名 is required."
     if not row.email:
         return ResearchErrorCode.IMPORT_ROW_INVALID, "邮件 is required."
-    if row.category != ResearchUserProfile.Category.ADVISOR and not row.student_no:
-        return ResearchErrorCode.IMPORT_ROW_INVALID, "学号 is required."
     if not row.group:
         return ResearchErrorCode.IMPORT_ROW_INVALID, "小组 is required."
     if row.category != ResearchUserProfile.Category.ADVISOR and not row.primary_advisor_name:

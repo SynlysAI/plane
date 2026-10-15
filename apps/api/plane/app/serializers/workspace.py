@@ -152,6 +152,9 @@ class WorkSpaceMemberInvitePublicSerializer(BaseSerializer):
         fields = [
             "id",
             "email",
+            "display_name",
+            "research_profile_enabled",
+            "research_profile_category",
             "workspace",
             "role",
             "message",
