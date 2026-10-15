@@ -48,14 +48,21 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
       if (events.length > 0) {
         eventsRef.current = [...eventsRef.current, ...events];
         lastSeqRef.current = events[events.length - 1].seq ?? lastSeqRef.current;
-        setItems(mergeAgentMessages(eventsRef.current));
+        // the workbench BFF stores only a content hash for user messages, so
+        // event-derived user items render as "#seq" placeholders — the panel
+        // shows its own optimistic bubble instead. Pure process lines are
+        // runtime noise for a chat surface.
+        setItems(
+          mergeAgentMessages(eventsRef.current).filter((item) => item.kind !== "user" && item.kind !== "process")
+        );
         setHasApprovalItems(eventsRef.current.some((event) => event.event_type === "APPROVAL"));
       }
       const session = (response as { session?: { status?: string } })?.session;
-      const terminal = session && !["STREAMING", "INITIALIZING", "READY"].includes(String(session.status));
-      const waiting = session?.status === "WAITING_APPROVAL";
-      if (waiting) setApprovalPending(true);
-      if (terminal) {
+      const ACTIVE_STATUSES = ["STREAMING", "INITIALIZING", "QUEUED", "PENDING"];
+      const status = String(session?.status ?? "");
+      if (status === "WAITING_APPROVAL") setApprovalPending(true);
+      if (status && !ACTIVE_STATUSES.includes(status)) {
+        // run converged (READY after completion / DEGRADED / CLOSED / …)
         stopPolling();
         setBusy(false);
       }
