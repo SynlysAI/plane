@@ -3026,9 +3026,6 @@
     "context_linked": "已关联",
     "context_workspace_only": "仅工作区上下文——打开项目页面可附带页面信息",
     "context_hint": "回答将结合当前页面上下文",
-    "suggest_summary": "帮我总结当前页面的重点",
-    "suggest_risk": "当前工作项有哪些风险？",
-    "suggest_knowledge": "结合知识库检索本项目相关内容",
     "approval_pending": "本次运行需要审批——请到科研工作台处理。",
     "local_unavailable": "本地智能体仅在科研链节点页可用——打开节点后点击「智能体分析」。",
     "disclaimer": "内容由 AI 生成，请注意甄别"

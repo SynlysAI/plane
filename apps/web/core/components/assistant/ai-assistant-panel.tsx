@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import {
   Sparkles,
@@ -18,6 +18,8 @@ import {
   Minimize2,
   Link2,
   ChevronDown,
+  Cloud,
+  HardDrive,
   Loader2,
   Wrench,
 } from "lucide-react";
@@ -85,17 +87,6 @@ const AnswerMarkdown = observer(function AnswerMarkdown({ content }: { content: 
   );
 });
 
-const SuggestionChip = ({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="hover:border-accent-primary/40 flex items-center gap-2 rounded-xl border border-subtle bg-surface-1 px-3 py-2 text-12 text-secondary transition hover:text-primary"
-  >
-    {icon}
-    {label}
-  </button>
-);
-
 const ThinkingBlock = observer(function ThinkingBlock({ text }: { text: string }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -145,30 +136,27 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
     else cloud.reset();
   };
 
-  const suggestions = useMemo(
-    () => [
-      { key: "aiAssistant.suggest_summary", onClick: () => send("帮我总结当前页面的重点内容") },
-      { key: "aiAssistant.suggest_risk", onClick: () => send("当前工作项有哪些风险？给出改进建议") },
-      { key: "aiAssistant.suggest_knowledge", onClick: () => send("结合知识库检索，回答我关于本项目的问题") },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [provider, busy]
-  );
-
   const providerSelect = (
-    <select
-      value={provider}
-      onChange={(event) => assistantStore.setProvider(event.target.value as "cloud" | "local")}
-      className="h-7 w-full min-w-0 cursor-pointer rounded-md border border-subtle bg-surface-1 px-2 text-11 text-secondary outline-none hover:text-primary"
-      aria-label={t("aiAssistant.provider")}
-    >
-      <option value="cloud">☁️ {t("aiAssistant.provider_cloud")}</option>
-      <option value="local" disabled={!localAvailable}>
-        💻 {t("aiAssistant.provider_local")}
-      </option>
-    </select>
+    <label className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-11 text-secondary transition hover:bg-surface-2">
+      {provider === "cloud" ? (
+        <Cloud className="size-3.5 text-accent-primary" />
+      ) : (
+        <HardDrive className="size-3.5 text-accent-primary" />
+      )}
+      <select
+        value={provider}
+        onChange={(event) => assistantStore.setProvider(event.target.value as "cloud" | "local")}
+        className="cursor-pointer appearance-none bg-transparent pr-0.5 outline-none"
+        aria-label={t("aiAssistant.provider")}
+      >
+        <option value="cloud">{t("aiAssistant.provider_cloud")}</option>
+        <option value="local" disabled={!localAvailable}>
+          {t("aiAssistant.provider_local")}
+        </option>
+      </select>
+      <ChevronDown className="size-3 text-tertiary" />
+    </label>
   );
-
   return (
     <ModalPortal
       isOpen={assistantStore.isOpen}
@@ -179,7 +167,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
     >
       <div className="flex h-full min-h-0 flex-col">
         {/* header */}
-        <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-subtle px-4 py-3">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-subtle px-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-primary text-on-color">
               <Sparkles className="size-4" />
@@ -218,19 +206,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
               <X className="size-3.5" />
             </Button>
           </div>
-          <div className="col-span-2 min-w-0">{providerSelect}</div>
         </header>
-
-        {/* context bar */}
-        <div className="mx-4 mt-3 flex shrink-0 items-center gap-2 rounded-lg border border-subtle bg-surface-1 px-3 py-2">
-          <Link2 className="size-3.5 shrink-0 text-accent-primary" />
-          <span className="min-w-0 flex-1 truncate text-11 text-secondary">
-            {pageContext || t("aiAssistant.context_workspace_only")}
-          </span>
-          <span className="shrink-0 rounded bg-success-subtle px-1.5 py-0.5 text-10 text-success-primary">
-            {t("aiAssistant.context_linked")}
-          </span>
-        </div>
 
         {/* messages */}
         <div ref={listRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
@@ -242,16 +218,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
               <div>
                 <p className="text-14 font-medium text-primary">{t("aiAssistant.empty_greeting")}</p>
                 <p className="mt-1 text-12 text-tertiary">{t("aiAssistant.empty_hint")}</p>
-              </div>
-              <div className="flex flex-col gap-2 pt-1">
-                {suggestions.map((suggestion) => (
-                  <SuggestionChip
-                    key={suggestion.key}
-                    icon={<Sparkles className="size-3 text-accent-primary" />}
-                    label={t(suggestion.key)}
-                    onClick={suggestion.onClick}
-                  />
-                ))}
               </div>
             </div>
           )}
@@ -409,11 +375,16 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
               }
             }}
           />
-          <div className="flex items-center justify-between pt-1.5">
-            <span className="flex items-center gap-1.5 text-10 text-tertiary">
-              <span className="size-1.5 rounded-full bg-accent-primary" />
-              {t("aiAssistant.context_hint")}
-            </span>
+          <div className="flex items-center justify-between gap-2 pt-1.5">
+            <div className="flex min-w-0 items-center gap-1">
+              {providerSelect}
+              {pageContext && (
+                <span className="flex min-w-0 items-center gap-1 text-10 text-tertiary" title={pageContext}>
+                  <Link2 className="size-3 shrink-0 text-accent-primary" />
+                  <span className="truncate">{t("aiAssistant.context_linked")}</span>
+                </span>
+              )}
+            </div>
             {busy ? (
               <button
                 type="button"

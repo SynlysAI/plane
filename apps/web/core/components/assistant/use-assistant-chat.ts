@@ -60,6 +60,9 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
     return session.thread_id;
   }, [assistantStore, workspaceSlug]);
 
+  // NOTE: deps exclude threadId on purpose — reloading history whenever a
+  // send creates a new thread would wipe the in-flight user message (the
+  // "panel flashes back to the empty state" bug). History loads on open only.
   const loadHistory = useCallback(async () => {
     if (historyLoadedRef.current || !assistantStore.threadId) return;
     historyLoadedRef.current = true;
@@ -80,7 +83,7 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
     } finally {
       setStreamState({ phase: "idle" });
     }
-  }, [assistantStore.threadId, workspaceSlug]);
+  }, [assistantStore, workspaceSlug]);
 
   useEffect(() => {
     if (assistantStore.isOpen) void loadHistory();
