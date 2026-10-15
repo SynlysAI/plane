@@ -63,7 +63,7 @@ export function SingleImportForm({
           ["email", "邮箱", true],
           ...(student
             ? [
-                ["student_no", "学号", true],
+                ["student_no", "学号", false],
                 ["grade", "年级", false],
               ]
             : []),

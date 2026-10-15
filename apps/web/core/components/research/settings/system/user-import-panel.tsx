@@ -172,7 +172,7 @@ export function ResearchUserImportPanel({
           </ResearchFilterToolbar>
           <p className="text-11 text-tertiary">
             默认不覆盖已有账号密码。勾选后，本次会为表中的已有账号重新生成初始密码，并要求下次登录修改。下载到的是最近一次发放的初始密码，不是用户改密后的当前密码。已有成员未勾选时不能再次纳入；可引用已有导师。MS、Ph.D
-            按学生导入；电话兼容“手机号”。
+            按学生导入；电话兼容“手机号”。学号可留空，填写后将参与唯一性校验。
           </p>
         </>
       )}

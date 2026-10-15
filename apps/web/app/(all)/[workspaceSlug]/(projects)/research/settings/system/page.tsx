@@ -5,6 +5,7 @@
  */
 
 import { observer } from "mobx-react";
+import { useState } from "react";
 import { useParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -15,6 +16,7 @@ import { ResearchPageShell } from "@/components/research/common/research-page-sh
 import { ResearchAdminRoleSummary } from "@/components/research/settings/system/admin-role-summary";
 import { ResearchInviteCodeManager } from "@/components/research/settings/system/invite-code-manager";
 import { ResearchUserImportPanel } from "@/components/research/settings/system/user-import-panel";
+import { PlainWorkspaceMemberImportPanel } from "@/components/workspace/settings/member-invitation-import-panel";
 import { useMember } from "@/hooks/store/use-member";
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -27,6 +29,7 @@ function WorkspaceResearchSystemSettingsPage() {
   const { t } = useTranslation();
   const memberStore = useMember();
   const research = useResearch();
+  const [memberImportType, setMemberImportType] = useState<"plain" | "research">("plain");
   if (!workspaceSlug) return null;
 
   const refreshImportRelations = async (batch: TUserImportBatch) => {
@@ -51,8 +54,41 @@ function WorkspaceResearchSystemSettingsPage() {
         <ResearchDetailSurface title={t("research.invite_codes.title")}>
           <ResearchInviteCodeManager workspaceSlug={workspaceSlug} />
         </ResearchDetailSurface>
-        <ResearchDetailSurface title={t("research.user_import.title")}>
-          <ResearchUserImportPanel workspaceSlug={workspaceSlug} onRelationsChanged={refreshImportRelations} />
+        <ResearchDetailSurface title="成员导入" hint="普通工作区只发送成员邀请；科研身份导入会创建账号并写入组织关系。">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {(
+                [
+                  ["plain", "普通工作区成员"],
+                  ["research", "科研身份成员"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={memberImportType === value}
+                  className={`h-8 rounded-md px-3 text-13 transition-colors ${
+                    memberImportType === value
+                      ? "bg-surface-2 font-medium text-primary"
+                      : "text-secondary hover:text-primary"
+                  }`}
+                  onClick={() => setMemberImportType(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-11 text-tertiary">
+              {memberImportType === "plain"
+                ? "当前模式仅处理当前工作区成员邀请，不进入科研组织。"
+                : "当前模式沿用科研导入审核，批准后创建或更新账号并写入科研组织关系。"}
+            </p>
+            {memberImportType === "plain" ? (
+              <PlainWorkspaceMemberImportPanel workspaceSlug={workspaceSlug} />
+            ) : (
+              <ResearchUserImportPanel workspaceSlug={workspaceSlug} onRelationsChanged={refreshImportRelations} />
+            )}
+          </div>
         </ResearchDetailSurface>
       </div>
     </ResearchPageShell>
