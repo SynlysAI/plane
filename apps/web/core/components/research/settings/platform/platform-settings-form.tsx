@@ -32,6 +32,7 @@ const TOGGLES: { field: keyof TWorkspaceResearchSetting; labelKey: string }[] = 
   { field: "approval_enabled", labelKey: "research.platform.approval_enabled" },
   { field: "research_chain_enabled", labelKey: "research.platform.research_chain_enabled" },
   { field: "research_ia_v2", labelKey: "research.platform.research_ia_v2" },
+  { field: "research_agent_enabled", labelKey: "research.platform.research_agent_enabled" },
   {
     field: "research_agent_user_backend_enabled",
     labelKey: "research.platform.research_agent_user_backend_enabled",
@@ -132,6 +133,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
         report_enabled: draft.report_enabled,
         approval_enabled: draft.approval_enabled,
         research_chain_enabled: Boolean(draft.research_chain_enabled),
+        research_agent_enabled: Boolean(draft.research_agent_enabled),
         research_ia_v2: Boolean(draft.research_ia_v2),
         research_agent_user_backend_enabled: Boolean(draft.research_agent_user_backend_enabled),
         default_report_visibility: draft.default_report_visibility,

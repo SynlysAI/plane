@@ -2275,7 +2275,8 @@
       "markdown_max_mb": "Markdown limit",
       "office_max_mb": "Office file limit",
       "audit_retention_days": "Audit retention (days, 0 = keep forever)",
-      "limits_hint": "These limits apply to research uploads only and never change the global FILE_SIZE_LIMIT."
+      "limits_hint": "These limits apply to research uploads only and never change the global FILE_SIZE_LIMIT.",
+      "research_agent_enabled": "Research agent (workbench & personal backends)"
     },
     "templates": {
       "description": "Templates used when a report is created.",

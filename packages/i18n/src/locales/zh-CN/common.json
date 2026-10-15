@@ -2300,7 +2300,8 @@
       "markdown_max_mb": "Markdown 限制",
       "office_max_mb": "办公文件限制",
       "audit_retention_days": "审计保留天数（0 表示永久保留）",
-      "limits_hint": "以上限制仅作用于科研上传，不会改变全局 FILE_SIZE_LIMIT。"
+      "limits_hint": "以上限制仅作用于科研上传，不会改变全局 FILE_SIZE_LIMIT。",
+      "research_agent_enabled": "科研智能体（工作台与个人后端）"
     },
     "templates": {
       "description": "创建报告时可套用的正文模板。",
