@@ -288,66 +288,67 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
           )}
 
           {provider === "local" &&
-            local.items.map((item) => {
-              const key = item.key;
-              switch (item.kind) {
-                case "user":
-                  return (
-                    <div key={key} className="flex justify-end">
-                      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed whitespace-pre-wrap text-on-color">
-                        {item.text}
-                      </div>
-                    </div>
-                  );
-                case "assistant":
-                  return (
-                    <div key={key} className="flex gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
-                        <Sparkles className="size-3.5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <AnswerMarkdown content={item.text} />
-                        {item.streaming && (
-                          <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                case "thinking":
-                  return <ThinkingBlock key={key} text={item.text} />;
-                case "process":
-                  return (
-                    <div key={key} className="flex items-center gap-1.5 text-11 text-tertiary">
-                      <Loader2 className="size-3 animate-spin" />
-                      {item.label}
-                    </div>
-                  );
-                case "tool":
-                  return (
-                    <div key={key} className="flex items-center gap-1.5 text-11 text-tertiary">
-                      <Wrench className="size-3" />
-                      {item.name} · {item.status}
-                    </div>
-                  );
-                case "approval":
-                  return (
-                    <div key={key} className="rounded-lg bg-surface-1 px-3 py-2 text-11 text-secondary">
-                      {t("aiAssistant.approval_pending")}
-                    </div>
-                  );
-                case "notice":
-                  return (
-                    <div
-                      key={key}
-                      className={`rounded-lg px-3 py-2 text-11 ${item.tone === "error" ? "bg-danger-subtle/50 text-danger-primary" : "bg-surface-1 text-secondary"}`}
-                    >
-                      {item.label}
-                    </div>
-                  );
-                default:
-                  return null;
-              }
-            })}
+            local.sections.map((section) => (
+              <div key={section.userKey} className="space-y-4">
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed whitespace-pre-wrap text-on-color">
+                    {section.text}
+                  </div>
+                </div>
+                {section.items.map((item) => {
+                  const key = item.key;
+                  switch (item.kind) {
+                    case "assistant":
+                      return (
+                        <div key={key} className="flex gap-3">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+                            <Sparkles className="size-3.5" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <AnswerMarkdown content={item.text} />
+                            {item.streaming && (
+                              <span className="ml-0.5 inline-block animate-pulse text-accent-primary">▍</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    case "thinking":
+                      return <ThinkingBlock key={key} text={item.text} />;
+                    case "process":
+                      return (
+                        <div key={key} className="flex items-center gap-1.5 text-11 text-tertiary">
+                          <Loader2 className="size-3 animate-spin" />
+                          {item.label}
+                        </div>
+                      );
+                    case "tool":
+                      return (
+                        <div key={key} className="flex items-center gap-1.5 text-11 text-tertiary">
+                          <Wrench className="size-3" />
+                          {item.name} · {item.status}
+                        </div>
+                      );
+                    case "approval":
+                      return (
+                        <div key={key} className="rounded-lg bg-surface-1 px-3 py-2 text-11 text-secondary">
+                          {t("aiAssistant.approval_pending")}
+                        </div>
+                      );
+                    case "notice":
+                      return (
+                        <div
+                          key={key}
+                          className={`rounded-lg px-3 py-2 text-11 ${item.tone === "error" ? "bg-danger-subtle/50 text-danger-primary" : "bg-surface-1 text-secondary"}`}
+                        >
+                          {item.label}
+                        </div>
+                      );
+                    default:
+                      return null;
+                  }
+                })}
+              </div>
+            ))}
 
           {provider === "local" && !localAvailable && (
             <div className="flex h-full items-center justify-center text-center text-12 text-tertiary">
@@ -359,7 +360,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
           )}
         </div>
 
-        {provider === "local" && local.approvalPending && (
+        {provider === "local" && local.waitingApproval && (
           <div className="mx-4 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-subtle bg-surface-2 px-3 py-2 text-12 text-secondary">
             <span>{t("aiAssistant.approval_pending")}</span>
             <div className="flex gap-1.5">

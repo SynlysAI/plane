@@ -13,24 +13,37 @@ import { mergeAgentMessages, type TAgentMessageItem } from "@/components/researc
 
 const agentService = new ResearchAgentService();
 const POLL_INTERVAL_MS = 1500;
+/** polls without new events before treating a blocked run as waiting */
+const STALL_POLLS_LIMIT = 3;
+
+type TSection = {
+  userKey: string;
+  text: string;
+  /** index into the raw event log where this section's run begins */
+  startEventCount: number;
+  items: TAgentMessageItem[];
+};
 
 /**
- * Local-agent (ScienceDiscovery workbench) chat mode for the unified panel:
- * one session per chain node, messages via the workbench BFF, incremental
- * events merged with the workbench message merger. Approval/artifact cards
- * stay in the full workbench page; the panel shows a notice for them.
+ * Local-agent (ScienceDiscovery workbench) chat mode for the unified panel.
+ *
+ * Messages are grouped per send: each section keeps its user bubble plus the
+ * merged items of its own run (merged from the raw events captured after the
+ * send), so bubbles never vanish or duplicate across polls. Approvals are
+ * detected from APPROVAL events (the BFF session stays STREAMING while the
+ * SD run is blocked) and can be decided inline, resuming the same section.
  */
 export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | null) => {
-  const [items, setItems] = useState<TAgentMessageItem[]>([]);
+  const [sections, setSections] = useState<TSection[]>([]);
   const [busy, setBusy] = useState(false);
+  const [waitingApproval, setWaitingApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [approvalPending, setApprovalPending] = useState(false);
-  const [hasApprovalItems, setHasApprovalItems] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const runIdRef = useRef<string | null>(null);
   const lastSeqRef = useRef(0);
   const eventsRef = useRef<TAgentRunEvent[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stallRef = useRef(0);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -39,30 +52,45 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
     }
   }, []);
 
+  const applyEvents = useCallback((events: TAgentRunEvent[]) => {
+    setSections((previous) => {
+      if (previous.length === 0) return previous;
+      const next = [...previous];
+      const current = next[next.length - 1];
+      // merge only this section's events; user messages are hash-only on the
+      // server, so event-derived user placeholders are dropped
+      current.items = mergeAgentMessages(events.slice(current.startEventCount)).filter((item) => item.kind !== "user");
+      return next;
+    });
+  }, []);
+
   const refresh = useCallback(async () => {
     const runId = runIdRef.current;
     if (!runId) return;
     try {
       const response = await agentService.getEvents(workspaceSlug, runId, lastSeqRef.current);
       const events = (response?.results ?? []) as TAgentRunEvent[];
+      const session = (response as { session?: { status?: string } })?.session;
       if (events.length > 0) {
+        stallRef.current = 0;
         eventsRef.current = [...eventsRef.current, ...events];
         lastSeqRef.current = events[events.length - 1].seq ?? lastSeqRef.current;
-        // the workbench BFF stores only a content hash for user messages, so
-        // event-derived user items render as "#seq" placeholders — the panel
-        // shows its own optimistic bubble instead. Pure process lines are
-        // runtime noise for a chat surface.
-        setItems(
-          mergeAgentMessages(eventsRef.current).filter((item) => item.kind !== "user" && item.kind !== "process")
-        );
-        setHasApprovalItems(eventsRef.current.some((event) => event.event_type === "APPROVAL"));
+        applyEvents(eventsRef.current);
+      } else {
+        stallRef.current += 1;
       }
-      const session = (response as { session?: { status?: string } })?.session;
-      const ACTIVE_STATUSES = ["STREAMING", "INITIALIZING", "QUEUED", "PENDING"];
+      const hasApproval = eventsRef.current.some((event) => event.event_type === "APPROVAL");
       const status = String(session?.status ?? "");
-      if (status === "WAITING_APPROVAL") setApprovalPending(true);
+      const ACTIVE_STATUSES = ["STREAMING", "INITIALIZING", "QUEUED", "PENDING"];
+      const stalled = stallRef.current >= STALL_POLLS_LIMIT;
+      if (hasApproval && stalled) {
+        // the SD run is blocked on permission — waiting, not working
+        setWaitingApproval(true);
+        setBusy(false);
+        stopPolling();
+        return;
+      }
       if (status && !ACTIVE_STATUSES.includes(status)) {
-        // run converged (READY after completion / DEGRADED / CLOSED / …)
         stopPolling();
         setBusy(false);
       }
@@ -70,15 +98,56 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
       stopPolling();
       setBusy(false);
     }
-  }, [stopPolling, workspaceSlug]);
+  }, [applyEvents, stopPolling, workspaceSlug]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
   const resumePolling = useCallback(() => {
     stopPolling();
+    stallRef.current = 0;
     setBusy(true);
     pollRef.current = setInterval(() => void refresh(), POLL_INTERVAL_MS);
   }, [refresh, stopPolling]);
+
+  const send = useCallback(
+    async (rawQuery: string) => {
+      const query = rawQuery.trim();
+      if (!query || busy || waitingApproval || !chainNodeId) return;
+      setError(null);
+      setSections((previous) => [
+        ...previous,
+        {
+          userKey: `user-${Date.now()}`,
+          text: query,
+          startEventCount: eventsRef.current.length,
+          items: [],
+        },
+      ]);
+      setBusy(true);
+      try {
+        if (!sessionIdRef.current) {
+          const session = await agentService.createSession(workspaceSlug, chainNodeId);
+          sessionIdRef.current = session.session_id;
+          runIdRef.current = session.run_id;
+        }
+        const response = await agentService.sendMessage(workspaceSlug, sessionIdRef.current, query);
+        if (response?.session?.run_id) runIdRef.current = response.session.run_id;
+        resumePolling();
+        await refresh();
+      } catch (failure) {
+        setBusy(false);
+        setError((failure as { message?: string })?.message ?? "workbench_request_failed");
+      }
+    },
+    [busy, chainNodeId, refresh, resumePolling, waitingApproval, workspaceSlug]
+  );
+
+  const stop = useCallback(async () => {
+    stopPolling();
+    setBusy(false);
+    const runId = runIdRef.current;
+    if (runId) void agentService.cancelRun(workspaceSlug, runId).catch(() => undefined);
+  }, [stopPolling, workspaceSlug]);
 
   const decide = useCallback(
     async (approved: boolean) => {
@@ -94,9 +163,9 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
           decision: approved ? "APPROVED" : "REJECTED",
           tool_call_id: toolCallId,
         });
-        setApprovalPending(false);
+        setWaitingApproval(false);
         // the run continues server-side; watch it again so the resumed
-        // answer streams into the panel
+        // answer streams into the same section
         resumePolling();
       } catch (failure) {
         setError((failure as { message?: string })?.message ?? "approval_failed");
@@ -105,61 +174,24 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
     [resumePolling, workspaceSlug]
   );
 
-  const send = useCallback(
-    async (rawQuery: string) => {
-      const query = rawQuery.trim();
-      if (!query || busy || !chainNodeId) return;
-      setError(null);
-      setItems((previous) => [
-        ...previous,
-        { kind: "user", key: `user-${Date.now()}`, text: query, seq: 1e9 + Date.now() },
-      ]);
-      setBusy(true);
-      try {
-        if (!sessionIdRef.current) {
-          const session = await agentService.createSession(workspaceSlug, chainNodeId);
-          sessionIdRef.current = session.session_id;
-          runIdRef.current = session.run_id;
-        }
-        const response = await agentService.sendMessage(workspaceSlug, sessionIdRef.current, query);
-        if (response?.session?.run_id) runIdRef.current = response.session.run_id;
-        stopPolling();
-        pollRef.current = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-        await refresh();
-      } catch (failure) {
-        setBusy(false);
-        setError((failure as { message?: string })?.message ?? "workbench_request_failed");
-      }
-    },
-    [busy, chainNodeId, refresh, stopPolling, workspaceSlug]
-  );
-
-  const stop = useCallback(async () => {
-    stopPolling();
-    setBusy(false);
-    const runId = runIdRef.current;
-    if (runId) void agentService.cancelRun(workspaceSlug, runId).catch(() => undefined);
-  }, [stopPolling, workspaceSlug]);
-
   const reset = useCallback(() => {
     stopPolling();
     sessionIdRef.current = null;
     runIdRef.current = null;
     lastSeqRef.current = 0;
     eventsRef.current = [];
-    setItems([]);
+    stallRef.current = 0;
+    setSections([]);
     setBusy(false);
+    setWaitingApproval(false);
     setError(null);
-    setApprovalPending(false);
-    setHasApprovalItems(false);
   }, [stopPolling]);
 
   return {
-    items,
+    sections,
     busy,
+    waitingApproval,
     error,
-    approvalPending,
-    hasApprovalItems,
     send,
     stop,
     reset,
