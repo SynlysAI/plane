@@ -9,6 +9,12 @@
 
 set -euo pipefail
 
+# The backend (docker-compose-local.yml) and Caddy (docker-compose-prod-web.yml)
+# share the "plane" compose project, so each compose run flags the other half's
+# containers as orphans. The warning is expected; silencing it also guards
+# against a stray --remove-orphans tearing down half the deployment.
+export COMPOSE_IGNORE_ORPHANS=1
+
 log() {
     printf '\n\033[1;34m==> %s\033[0m\n' "$1"
 }
