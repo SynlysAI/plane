@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 from pathlib import Path
+import re
 import runpy
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from plane.db.models import (
     AdministrativeOrganization,
     AdministrativeOrganizationMember,
     Project,
+    ProjectIdentifier,
     ProjectMember,
     ProjectNavigationCategory,
     ResearchProjectProfile,
@@ -330,6 +332,138 @@ def test_public_organization_rejects_member_management(env):
     assert public["members"] == []
 
 
+def test_workspace_members_can_create_organizations_and_become_admins(env):
+    """有效工作区成员可创建行政组织并自动成为组织管理员。"""
+    slug = env["workspace"].slug
+    organizations_url = f"/api/research/workspaces/{slug}/administrative-organizations/"
+
+    created = env["ordinary_client"].post(organizations_url, {"name": "成员自建协作组"}, format="json")
+    assert created.status_code == 201, created.json()
+    organization = AdministrativeOrganization.objects.get(workspace=env["workspace"], name="成员自建协作组")
+    assert created.json()["id"] == str(organization.id)
+    assert created.json()["can_manage"] is True
+    assert AdministrativeOrganizationMember.objects.filter(
+        organization=organization,
+        member=env["ordinary_member"],
+        role=AdministrativeOrganizationMember.Role.ADMIN,
+        is_active=True,
+    ).exists()
+
+    invalid = env["ordinary_client"].post(
+        organizations_url,
+        {"name": AdministrativeOrganization.PUBLIC_NAME},
+        format="json",
+    )
+    assert invalid.status_code == 422
+    duplicated = env["ordinary_client"].post(organizations_url, {"name": "成员自建协作组"}, format="json")
+    assert duplicated.status_code == 409
+
+    assert APIClient().post(organizations_url, {"name": "匿名组织"}, format="json").status_code == 401
+    outsider = client_for(make_user(first_name="Outsider", last_name="Member"))
+    denied = outsider.post(organizations_url, {"name": "外部成员组织"}, format="json")
+    assert denied.status_code == 404
+    assert not AdministrativeOrganization.objects.filter(workspace=env["workspace"], name="外部成员组织").exists()
+
+
+def test_organization_list_visibility_follows_membership(env):
+    """非管理员仅见公共与本人所属组织；组织管理员可管理所属组织。"""
+    slug = env["workspace"].slug
+    organizations_url = f"/api/research/workspaces/{slug}/administrative-organizations/"
+
+    ordinary = env["ordinary_client"].get(organizations_url)
+    assert ordinary.status_code == 200
+    assert [item["name"] for item in ordinary.json()] == ["公共"]
+
+    organization_admin = env["admin_client"].get(organizations_url)
+    assert organization_admin.status_code == 200
+    admin_names = {item["name"] for item in organization_admin.json()}
+    assert admin_names == {"公共", "行政服务中心", "科研保障中心"}
+    managed = {item["name"]: item["can_manage"] for item in organization_admin.json()}
+    assert managed["行政服务中心"] is True
+    assert managed["科研保障中心"] is True
+    assert managed["公共"] is False
+
+    owner = env["owner_client"].get(organizations_url)
+    assert owner.status_code == 200
+    assert {item["name"] for item in owner.json()} == {"公共", "行政服务中心", "科研保障中心"}
+
+
+def test_deleted_project_names_and_identifiers_can_be_reused(env):
+    """软删除项目不再占用名称与标识符。"""
+    slug = env["workspace"].slug
+    first = env["ordinary_client"].post(
+        f"/api/workspaces/{slug}/projects/",
+        {
+            "name": "可复用名称",
+            "identifier": f"RP{uuid4().hex[:4].upper()}",
+            "administrative_organization": str(env["default"].id),
+        },
+        format="json",
+    )
+    assert first.status_code == 201, first.json()
+    deleted_at = timezone.now()
+    Project.objects.filter(pk=first.json()["id"]).update(deleted_at=deleted_at)
+    ProjectIdentifier.objects.filter(project_id=first.json()["id"]).update(deleted_at=deleted_at)
+
+    reused = env["member_client"].post(
+        f"/api/workspaces/{slug}/projects/",
+        {
+            "name": "可复用名称",
+            "identifier": first.json()["identifier"],
+            "administrative_organization": str(env["default"].id),
+        },
+        format="json",
+    )
+    assert reused.status_code == 201, reused.json()
+    Project.objects.filter(pk__in=[first.json()["id"], reused.json()["id"]]).delete()
+
+
+def test_duplicate_names_and_generated_identifiers(env):
+    """同名行政项目允许重复；缺省编号自动生成唯一 PRJ 编号。"""
+    slug = env["workspace"].slug
+    created_ids = []
+    for organization in (env["organization"], env["organization"], env["target"]):
+        response = env["admin_client"].post(
+            f"/api/workspaces/{slug}/projects/",
+            {
+                "name": "同名行政项目",
+                "administrative_organization": str(organization.id),
+            },
+            format="json",
+        )
+        assert response.status_code == 201, response.json()
+        created_ids.append(response.json()["id"])
+        assert re.fullmatch(r"PRJ[0-9A-F]{6}", response.json()["identifier"])
+        assert ProjectIdentifier.objects.filter(
+            workspace=env["workspace"], project_id=response.json()["id"], name=response.json()["identifier"]
+        ).exists()
+
+    identifiers = [Project.objects.get(pk=project_id).identifier for project_id in created_ids]
+    assert len(set(identifiers)) == len(identifiers)
+    Project.objects.filter(id__in=created_ids).delete()
+
+
+def test_explicit_identifier_stays_unique(env):
+    """显式传入的编号仍按工作区查重。"""
+    slug = env["workspace"].slug
+    payload = {
+        "name": "显式编号项目",
+        "identifier": "EXPLCT01",
+        "administrative_organization": str(env["default"].id),
+    }
+    first = env["owner_client"].post(f"/api/workspaces/{slug}/projects/", payload, format="json")
+    assert first.status_code == 201, first.json()
+
+    duplicated = env["owner_client"].post(
+        f"/api/workspaces/{slug}/projects/",
+        {**payload, "name": "显式编号项目二"},
+        format="json",
+    )
+    assert duplicated.status_code == 400
+    assert "identifier" in duplicated.json()
+    Project.objects.filter(pk=first.json()["id"]).delete()
+
+
 def test_organization_membership_grants_and_revokes_inherited_read_access(env):
     """组织成员可读项目但不能编辑；移出后显式项目权限仍保留。"""
     slug = env["workspace"].slug
@@ -414,8 +548,8 @@ def test_project_organization_assignment_requires_organization_admin(env):
     assert "administrative_organization" in missing_organization.json()
 
 
-def test_project_and_new_organization_are_created_atomically(env):
-    """创建项目时新建组织与项目同事务，项目失败不遗留组织。"""
+def test_project_and_new_organization_are_created_atomically_for_members(env):
+    """普通成员创建项目时可新建组织；失败请求不遗留组织。"""
     slug = env["workspace"].slug
     organization_count = AdministrativeOrganization.objects.filter(workspace=env["workspace"]).count()
     payload = {
@@ -442,17 +576,24 @@ def test_project_and_new_organization_are_created_atomically(env):
     assert failed.status_code == 400
     assert AdministrativeOrganization.objects.filter(workspace=env["workspace"]).count() == organization_count + 1
 
-    denied = env["ordinary_client"].post(
+    member_created = env["ordinary_client"].post(
         f"/api/workspaces/{slug}/projects/",
         {
-            "name": "越权原子组织项目",
+            "name": "成员原子组织项目",
             "identifier": f"ND{uuid4().hex[:6].upper()}",
             "new_administrative_organization": "成员自建组织",
         },
         format="json",
     )
-    assert denied.status_code == 400
-    assert not AdministrativeOrganization.objects.filter(workspace=env["workspace"], name="成员自建组织").exists()
+    assert member_created.status_code == 201, member_created.json()
+    member_organization = AdministrativeOrganization.objects.get(workspace=env["workspace"], name="成员自建组织")
+    assert member_organization.projects.filter(pk=member_created.json()["id"]).exists()
+    assert AdministrativeOrganizationMember.objects.filter(
+        organization=member_organization,
+        member=env["ordinary_member"],
+        role=AdministrativeOrganizationMember.Role.ADMIN,
+        is_active=True,
+    ).exists()
 
 
 def test_organization_member_management_and_rejoin(env):
@@ -503,6 +644,26 @@ def test_workspace_removal_deactivates_organization_membership(env):
     relation.refresh_from_db()
     assert relation.is_active is False
     assert relation.deleted_at is not None
+
+
+def test_organization_deletion_requires_and_moves_projects(env):
+    """删除组织必须显式指定迁移目标；成功后项目迁移、组织软删。"""
+    slug = env["workspace"].slug
+    delete_url = f"/api/research/workspaces/{slug}/administrative-organizations/{env['organization'].id}/"
+
+    missing = env["admin_client"].delete(delete_url)
+    assert missing.status_code == 400
+    assert missing.json()["message"] == "move_to is required."
+
+    self_target = env["admin_client"].delete(f"{delete_url}?move_to={env['organization'].id}")
+    assert self_target.status_code == 422
+
+    deleted = env["admin_client"].delete(f"{delete_url}?move_to={env['target'].id}")
+    assert deleted.status_code == 204
+    env["project"].refresh_from_db()
+    assert env["project"].administrative_organization == env["target"]
+    env["organization"].refresh_from_db()
+    assert env["organization"].deleted_at is not None
 
 
 def test_default_organization_and_project_move_boundaries(env):

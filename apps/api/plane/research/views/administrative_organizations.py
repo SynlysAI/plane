@@ -1,7 +1,7 @@
 """行政项目组织及组织成员管理接口。"""
 
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework.response import Response
 
@@ -99,9 +99,19 @@ class AdministrativeOrganizationListCreateEndpoint(AdministrativeAPIView):
         workspace, error = self.get_workspace(nav=None)
         if error:
             return error
+        workspace_admin = _workspace_admin(request.user, workspace)
+        organizations = AdministrativeOrganization.objects.filter(workspace=workspace, deleted_at__isnull=True)
+        if not workspace_admin:
+            organizations = organizations.filter(
+                Q(is_default=True)
+                | Q(
+                    members__member=request.user,
+                    members__is_active=True,
+                    members__deleted_at__isnull=True,
+                )
+            )
         organizations = (
-            AdministrativeOrganization.objects.filter(workspace=workspace, deleted_at__isnull=True)
-            .select_related("workspace", "created_by")
+            organizations.select_related("workspace", "created_by")
             .prefetch_related(
                 Prefetch(
                     "members",
@@ -111,8 +121,9 @@ class AdministrativeOrganizationListCreateEndpoint(AdministrativeAPIView):
                     to_attr="visible_members",
                 )
             )
+            .distinct()
+            .order_by("name", "created_at")
         )
-        workspace_admin = _workspace_admin(request.user, workspace)
         visible_projects_by_organization = {}
         for organization_id, project_id in (
             visible_administrative_projects(request.user, workspace.slug)
@@ -148,8 +159,6 @@ class AdministrativeOrganizationListCreateEndpoint(AdministrativeAPIView):
         workspace, error = self.get_workspace(nav=None)
         if error:
             return error
-        if not _workspace_admin(request.user, workspace):
-            return Response({"message": "Only workspace administrators can create organizations."}, status=403)
         name = str(request.data.get("name") or "").strip()
         if not name or len(name) > 255 or name == AdministrativeOrganization.PUBLIC_NAME:
             return Response({"message": "Organization name is invalid."}, status=422)
@@ -212,7 +221,10 @@ class AdministrativeOrganizationDetailEndpoint(AdministrativeAPIView):
             return Response({"message": "Not allowed."}, status=403)
         if organization.is_default:
             return Response({"message": "The default organization cannot be deleted."}, status=409)
-        target_id, error = parse_uuid(request.query_params.get("move_to"), "move_to")
+        move_to = request.query_params.get("move_to")
+        if not move_to:
+            return Response({"message": "move_to is required."}, status=400)
+        target_id, error = parse_uuid(move_to, "move_to")
         if error:
             return error
         target = AdministrativeOrganization.objects.filter(

@@ -23,7 +23,6 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import type { TProject } from "@plane/types";
 import { ProjectAttributes } from "./attributes";
 import { getProjectFormValues } from "./utils";
-import { useResearch } from "@/hooks/store/use-research";
 import { ResearchNavigationService, type TAdministrativeOrganization } from "@/services/research/navigation.service";
 
 const navigationService = new ResearchNavigationService();
@@ -52,7 +51,6 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   // store
   const { t } = useTranslation();
   const { addProjectToFavorites, createProject, updateProject } = useProject();
-  const research = useResearch();
   // states
   const [shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier] = useState(true);
   const [organizations, setOrganizations] = useState<TAdministrativeOrganization[]>([]);
@@ -99,6 +97,9 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   const onSubmit = async (formData: Partial<TProject>) => {
     // Upper case identifier
     formData.identifier = formData.identifier?.toUpperCase();
+    if (administrative && !formData.identifier) {
+      delete formData.identifier;
+    }
     const coverImage = formData.cover_image_url;
     let uploadedAssetUrl: string | null = null;
 
@@ -161,6 +162,12 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
           const nameError = errorData.name?.includes("PROJECT_NAME_ALREADY_EXIST");
           const identifierError = errorData?.identifier?.includes("PROJECT_IDENTIFIER_ALREADY_EXIST");
           const nameSpecialCharError = errorData?.name?.includes("PROJECT_NAME_CANNOT_CONTAIN_SPECIAL_CHARACTERS");
+          const organizationNameTaken = errorData.new_administrative_organization?.includes(
+            "Organization name is already taken."
+          );
+          const organizationRequired = errorData.administrative_organization?.includes(
+            "An administrative project must select an organization."
+          );
 
           if (nameError || identifierError || nameSpecialCharError) {
             if (nameError) {
@@ -186,6 +193,18 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
                 message: t("project_name_cannot_contain_special_characters"),
               });
             }
+          } else if (organizationNameTaken) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("toast.error"),
+              message: "组织名称已存在，请选择已有组织或更换名称。",
+            });
+          } else if (organizationRequired) {
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("toast.error"),
+              message: "请选择行政组织。",
+            });
           } else {
             setToast({
               type: TOAST_TYPE.ERROR,
@@ -224,6 +243,7 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
             isMobile={isMobile}
             shouldAutoSyncIdentifier={shouldAutoSyncIdentifier}
             setShouldAutoSyncIdentifier={setShouldAutoSyncIdentifier}
+            showIdentifier={!administrative}
           />
           {administrative && (
             <div className="grid max-w-xl grid-cols-1 gap-2 md:grid-cols-2">
@@ -237,6 +257,16 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
                   disabled={!organizationsLoaded || organizationLoadFailed}
                   required
                 >
+                  {!organizationsLoaded && !organizationLoadFailed && (
+                    <option value="" disabled>
+                      组织加载中…
+                    </option>
+                  )}
+                  {organizationLoadFailed && (
+                    <option value="" disabled>
+                      组织加载失败，请重试
+                    </option>
+                  )}
                   {organizations
                     .filter((organization) => !organization.is_default)
                     .map((organization) => (
@@ -252,7 +282,7 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
                         {organization.name || "公共"}
                       </option>
                     ))}
-                  {research.isWorkspaceAdmin && <option value="new">＋ 新建组织</option>}
+                  <option value="new">＋ 新建组织</option>
                 </select>
                 {organizationLoadFailed && <span className="text-12 text-secondary">组织加载失败，请稍后重试。</span>}
               </label>

@@ -34,6 +34,7 @@ from plane.utils.administrative_projects import (
     user_can_manage_administrative_organization,
     research_project_ids,
 )
+from plane.utils.project_identifier import random_identifier, unique_identifier
 
 
 def resolve_is_research_project(obj):
@@ -55,6 +56,7 @@ class ProjectSerializer(BaseSerializer):
     workspace_detail = WorkspaceLiteSerializer(source="workspace", read_only=True)
     inbox_view = serializers.BooleanField(read_only=True, source="intake_view")
     new_administrative_organization = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    identifier = serializers.CharField(required=False, allow_blank=True, max_length=12)
 
     class Meta:
         model = Project
@@ -62,21 +64,8 @@ class ProjectSerializer(BaseSerializer):
         read_only_fields = ["workspace", "deleted_at"]
 
     def validate_name(self, name):
-        project_id = self.instance.id if self.instance else None
-        workspace_id = self.context["workspace_id"]
-
         if re.match(Project.FORBIDDEN_IDENTIFIER_CHARS_PATTERN, name):
             raise serializers.ValidationError(detail="PROJECT_NAME_CANNOT_CONTAIN_SPECIAL_CHARACTERS")
-
-        project = Project.objects.filter(name=name, workspace_id=workspace_id)
-
-        if project_id:
-            project = project.exclude(id=project_id)
-
-        if project.exists():
-            raise serializers.ValidationError(
-                detail="PROJECT_NAME_ALREADY_EXIST",
-            )
 
         return name
 
@@ -84,10 +73,16 @@ class ProjectSerializer(BaseSerializer):
         project_id = self.instance.id if self.instance else None
         workspace_id = self.context["workspace_id"]
 
+        identifier = str(identifier or "").strip().upper()
+        if not identifier:
+            if self.instance is None:
+                return identifier
+            raise serializers.ValidationError(detail="PROJECT_IDENTIFIER_IS_REQUIRED")
+
         if re.match(Project.FORBIDDEN_IDENTIFIER_CHARS_PATTERN, identifier):
             raise serializers.ValidationError(detail="PROJECT_IDENTIFIER_CANNOT_CONTAIN_SPECIAL_CHARACTERS")
 
-        project = Project.objects.filter(identifier=identifier, workspace_id=workspace_id)
+        project = Project.objects.filter(identifier=identifier, workspace_id=workspace_id, deleted_at__isnull=True)
 
         if project_id:
             project = project.exclude(id=project_id)
@@ -165,21 +160,6 @@ class ProjectSerializer(BaseSerializer):
                 raise serializers.ValidationError(
                     {"new_administrative_organization": "Organization name is already taken."}
                 )
-            requester = getattr(self.context.get("request"), "user", None)
-            if (
-                not requester
-                or not requester.is_authenticated
-                or not WorkspaceMember.objects.filter(
-                    workspace_id=self.context["workspace_id"],
-                    member=requester,
-                    role=20,
-                    is_active=True,
-                    deleted_at__isnull=True,
-                ).exists()
-            ):
-                raise serializers.ValidationError(
-                    {"new_administrative_organization": ("Only workspace administrators can create an organization.")}
-                )
             data["new_administrative_organization"] = new_organization_name
         elif self.instance is None and organization is None:
             raise serializers.ValidationError(
@@ -241,6 +221,9 @@ class ProjectSerializer(BaseSerializer):
 
     def create(self, validated_data):
         workspace_id = self.context["workspace_id"]
+        if not validated_data.get("identifier"):
+            workspace = Workspace.objects.filter(pk=workspace_id).first()
+            validated_data["identifier"] = unique_identifier(workspace, random_identifier())
         new_organization_name = validated_data.pop("new_administrative_organization", None)
         if new_organization_name:
             workspace = Workspace.objects.filter(pk=workspace_id).first()

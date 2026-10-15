@@ -4,8 +4,6 @@
 
 import hashlib
 import logging
-import re
-import secrets
 import uuid
 
 from django.db import IntegrityError, transaction
@@ -46,6 +44,7 @@ from plane.research.utils.org import active_membership_q, is_workspace_member
 from plane.research.utils.roles import configured_main_pi_id, is_research_admin
 from plane.research.services.stage_service import ensure_stage_instances
 from plane.research.views.base import ResearchAPIView, parse_date, resolve_user
+from plane.utils.project_identifier import identifier_from, unique_identifier
 
 logger = logging.getLogger("plane.api")
 
@@ -140,47 +139,6 @@ def delete_research_project(profile, request, *, chain=None):
             metadata={"project": str(profile.project_id)},
             request=request,
         )
-
-
-def identifier_from(name):
-    """ASCII short code derived from a name; empty when nothing to derive."""
-    letters = re.sub(r"[^A-Za-z0-9]", "", name or "").upper()
-    return letters[:8]
-
-
-def random_identifier():
-    """Random short code for names without ASCII letters or digits."""
-    return f"PRJ{secrets.token_hex(3).upper()}"
-
-
-def identifier_reserved(workspace, candidate):
-    """Whether ``candidate`` is taken in ``projects`` or ``project_identifiers``.
-
-    The two tables can drift (renaming a project identifier only updates the
-    project row), so both must be checked or the ``ProjectIdentifier`` insert
-    violates its workspace-unique constraint.
-    """
-    return (
-        Project.objects.filter(workspace=workspace, identifier=candidate).exists()
-        or ProjectIdentifier.objects.filter(workspace=workspace, name=candidate, deleted_at__isnull=True).exists()
-    )
-
-
-def unique_identifier(workspace, base):
-    """Return an identifier free in both ``projects`` and ``project_identifiers``."""
-    if not base:
-        # Non-ASCII-only names leave nothing to derive from; a shared constant
-        # fallback would collide workspace-wide, so draw a random short code.
-        while True:
-            candidate = random_identifier()
-            if not identifier_reserved(workspace, candidate):
-                return candidate
-    candidate = base
-    suffix = 0
-    while identifier_reserved(workspace, candidate):
-        suffix += 1
-        candidate = f"{base[:6]}{suffix}"[:12]
-    return candidate
 
 
 def unique_project_name(workspace, base):

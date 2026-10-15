@@ -281,7 +281,13 @@ export function AdministrativeOrganizationManager({
             <Button type="button" variant="secondary" size="sm" disabled={isSaving} onClick={onClose}>
               取消
             </Button>
-            <Button variant="error-fill" size="sm" loading={isSaving} onClick={() => void submitDelete()}>
+            <Button
+              variant="error-fill"
+              size="sm"
+              loading={isSaving}
+              disabled={deleteTarget === "uncategorized"}
+              onClick={() => void submitDelete()}
+            >
               删除组织
             </Button>
           </div>

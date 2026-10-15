@@ -2,6 +2,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { setToast } from "@plane/propel/toast";
 
 const mocks = vi.hoisted(() => ({
   createProject: vi.fn(),
@@ -63,7 +64,7 @@ let root: ReturnType<typeof createRoot>;
 const organizations = [
   { id: "public-id", name: "公共", is_default: true, can_manage: true },
   { id: "managed-id", name: "可管理组织", is_default: false, can_manage: true },
-  { id: "readonly-id", name: "无权限组织", is_default: false, can_manage: false },
+  { id: "readonly-id", name: "仅成员组织", is_default: false, can_manage: false },
 ];
 
 function renderForm() {
@@ -129,14 +130,8 @@ it("submits the explicitly selected organization", async () => {
   );
 });
 
-it("creates a new organization only for workspace administrators", async () => {
+it("lets ordinary members create a new organization while creating a project", async () => {
   mocks.isWorkspaceAdmin = false;
-  await act(async () => renderForm());
-  await act(async () => undefined);
-  expect(container.textContent).not.toContain("新建组织");
-
-  mocks.isWorkspaceAdmin = true;
-  await act(async () => root.render(<div />));
   await act(async () => renderForm());
   await act(async () => undefined);
   selectOrganization("new");
@@ -149,6 +144,42 @@ it("creates a new organization only for workspace administrators", async () => {
     "lab",
     expect.objectContaining({ new_administrative_organization: "综合保障部" })
   );
+  expect(mocks.createProject.mock.calls[0][1]).not.toHaveProperty("identifier");
+});
+
+it("explains when the new organization name is already taken", async () => {
+  mocks.createProject.mockRejectedValue({
+    data: { new_administrative_organization: ["Organization name is already taken."] },
+  });
+  await act(async () => renderForm());
+  await act(async () => undefined);
+  selectOrganization("new");
+  const input = container.querySelector("#new-administrative-organization") as HTMLInputElement;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "已存在组织");
+  act(() => input.dispatchEvent(new Event("input", { bubbles: true })));
+  await act(async () => submitButton().click());
+  await act(async () => undefined);
+
+  expect(setToast).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "组织名称已存在，请选择已有组织或更换名称。",
+    })
+  );
+});
+
+it("shows an explicit loading option before organizations are available", async () => {
+  mocks.getAdministrativeOrganizations.mockReturnValue(new Promise(() => undefined));
+  await act(async () => renderForm());
+  await act(async () => undefined);
+
+  const select = container.querySelector("#administrative-organization") as HTMLSelectElement;
+  const options = [...select.options].map((option) => [option.value, option.textContent, option.disabled]);
+  expect(options).toEqual([
+    ["", "组织加载中…", true],
+    ["new", "＋ 新建组织", false],
+  ]);
+  expect(submitButton().disabled).toBe(true);
 });
 
 it("blocks submission while organizations cannot be loaded", async () => {

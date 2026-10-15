@@ -79,7 +79,7 @@ export const AdministrativeProjectTabs = observer(function AdministrativeProject
             <p className="mt-0.5 text-13 text-tertiary">{t("administrative.projects.description")}</p>
             <p className="text-12 text-tertiary">{t("administrative.projects.boundary")}</p>
           </div>
-          {activeTab === "projects" && research.isWorkspaceAdmin && (
+          {activeTab === "projects" && (
             <Button variant="secondary" size="sm" onClick={() => setIsOrganizationOpen(true)}>
               新建组织
             </Button>
@@ -121,9 +121,13 @@ export const AdministrativeProjectTabs = observer(function AdministrativeProject
                 window.dispatchEvent(new CustomEvent("administrative-organizations-updated"));
                 return undefined;
               })
-              .catch((error) =>
-                setToast({ type: TOAST_TYPE.ERROR, title: "组织创建失败", message: error?.message ?? "请稍后重试" })
-              )
+              .catch((error) => {
+                const message =
+                  error?.message === "An organization with this name already exists."
+                    ? "组织名称已存在，请更换名称。"
+                    : (error?.message ?? "请稍后重试");
+                setToast({ type: TOAST_TYPE.ERROR, title: "组织创建失败", message });
+              })
               .finally(() => setIsSavingOrganization(false));
           }}
         >
