@@ -31,13 +31,13 @@ class AssistantConfig:
     is_enabled: bool
 
 
-def resolve_assistant_config(workspace) -> AssistantConfig:
-    """Resolve the Synlora connection for a workspace.
+def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
+    """Resolve the Synlora connection for a workspace (and optional member).
 
-    Precedence: the workspace integration connection (token from the stored
-    shared credential), with the env base URL as the address fallback. A
-    connection in PERSONAL mode has no shared credential yet — the per-user
-    token source lands with the user-level integration work.
+    SHARED mode reads the stored shared credential. PERSONAL mode reads the
+    requesting member's own connection from the user-level agent backend
+    store (``ResearchAgentBackendConnection`` with ``system=SYNLORA``); its
+    base URL overrides the platform address when provided.
     """
     connection = (
         ExternalSystemConnection.objects.filter(
@@ -54,6 +54,25 @@ def resolve_assistant_config(workspace) -> AssistantConfig:
         credential_mode = connection.credential_mode
         if credential_mode == ExternalSystemConnection.CredentialMode.SHARED:
             token = connection.get_credential()
+        elif credential_mode == ExternalSystemConnection.CredentialMode.PERSONAL and user is not None:
+            from plane.db.models import ResearchAgentBackendConnection
+            from plane.license.utils.encryption import decrypt_data
+
+            personal = (
+                ResearchAgentBackendConnection.objects.filter(
+                    workspace=workspace,
+                    user=user,
+                    system="SYNLORA",
+                    deleted_at__isnull=True,
+                    is_enabled=True,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if personal is not None:
+                token = decrypt_data(personal.credential_encrypted)
+                if personal.base_url:
+                    base_url = personal.base_url.rstrip("/")
     return AssistantConfig(
         base_url=base_url,
         token=token,
@@ -65,9 +84,9 @@ def resolve_assistant_config(workspace) -> AssistantConfig:
     )
 
 
-def resolve_assistant_client(workspace) -> "SynloraAssistantClient":
+def resolve_assistant_client(workspace, user=None) -> "SynloraAssistantClient":
     """Return a ready client or raise AssistantNotConfigured."""
-    config = resolve_assistant_config(workspace)
+    config = resolve_assistant_config(workspace, user=user)
     if not config.base_url or not config.token or not config.is_enabled:
         raise AssistantNotConfigured
     return SynloraAssistantClient(config)

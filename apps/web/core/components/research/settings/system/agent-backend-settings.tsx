@@ -29,6 +29,7 @@ export function AgentBackendSettings({
   const translateRef = useRef(t);
   translateRef.current = t;
   const [connection, setConnection] = useState<TBackendConnection | null>(null);
+  const [system, setSystem] = useState<"SCIENCE_DISCOVERY" | "SYNLORA">("SCIENCE_DISCOVERY");
   const [governanceEnabled, setGovernanceEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
@@ -46,7 +47,7 @@ export function AgentBackendSettings({
     const sequence = ++loadSequence.current;
     setLoading(true);
     try {
-      const data = await agentService.getBackendConnection(workspaceSlug);
+      const data = await agentService.getBackendConnection(workspaceSlug, system);
       if (sequence !== loadSequence.current) return;
       setConnection(data.connection);
       setGovernanceEnabled(data.governance_enabled);
@@ -60,7 +61,7 @@ export function AgentBackendSettings({
         setHasLoaded(true);
       }
     }
-  }, [workspaceSlug]);
+  }, [workspaceSlug, system]);
 
   useEffect(() => {
     workspaceSequence.current += 1;
@@ -81,13 +82,15 @@ export function AgentBackendSettings({
   }, [load]);
 
   const save = useCallback(async () => {
-    if (!baseUrl.trim()) return;
+    if (system === "SCIENCE_DISCOVERY" && !baseUrl.trim()) return;
+    if (system === "SYNLORA" && !baseUrl.trim() && !token.trim() && !connection?.has_credential) return;
     const sequence = workspaceSequence.current;
     setBusy(true);
     setError("");
     setStatus("");
     try {
       await agentService.saveBackendConnection(workspaceSlug, {
+        system,
         base_url: baseUrl.trim(),
         ...(token.trim() ? { token: token.trim() } : {}),
         is_enabled: enabled,
@@ -102,7 +105,7 @@ export function AgentBackendSettings({
     } finally {
       if (sequence === workspaceSequence.current) setBusy(false);
     }
-  }, [baseUrl, enabled, load, t, token, workspaceSlug]);
+  }, [baseUrl, connection?.has_credential, enabled, load, system, t, token, workspaceSlug]);
 
   const test = useCallback(async () => {
     const sequence = workspaceSequence.current;
@@ -154,11 +157,27 @@ export function AgentBackendSettings({
         )}
       </div>
       <label className="flex flex-col gap-1 text-11 text-secondary">
+        {t("research.agent_backend.system")}
+        <select
+          value={system}
+          onChange={(changeEvent) => setSystem(changeEvent.target.value as "SCIENCE_DISCOVERY" | "SYNLORA")}
+          className="focus:border-accent-primary rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
+        >
+          <option value="SCIENCE_DISCOVERY">{t("research.agent_backend.system_local")}</option>
+          <option value="SYNLORA">{t("research.agent_backend.system_cloud")}</option>
+        </select>
+        <span className="text-11 text-tertiary">{t("research.agent_backend.system_hint")}</span>
+      </label>
+      <label className="flex flex-col gap-1 text-11 text-secondary">
         {t("research.agent_backend.base_url")}
         <input
           value={baseUrl}
           onChange={(changeEvent) => setBaseUrl(changeEvent.target.value)}
-          placeholder={t("research.agent_backend.base_url_placeholder")}
+          placeholder={
+            system === "SYNLORA"
+              ? t("research.agent_backend.base_url_optional")
+              : t("research.agent_backend.base_url_placeholder")
+          }
           className="focus:border-accent-primary rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
         />
         <span className="text-11 text-tertiary">{t("research.agent_backend.server_address_hint")}</span>

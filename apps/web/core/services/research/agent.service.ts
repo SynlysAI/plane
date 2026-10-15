@@ -196,9 +196,9 @@ export class ResearchAgentService extends APIService {
       });
   }
 
-  /** 读取当前用户的 ScienceDiscovery 后端连接与治理开关状态。 */
-  async getBackendConnection(workspaceSlug: string) {
-    return this.get(researchEndpoints.agentBackendConnections(workspaceSlug))
+  /** 读取当前用户的智能体后端连接与治理开关状态（system: SCIENCE_DISCOVERY | SYNLORA）。 */
+  async getBackendConnection(workspaceSlug: string, system = "SCIENCE_DISCOVERY") {
+    return this.get(`${researchEndpoints.agentBackendConnections(workspaceSlug)}?system=${system}`)
       .then(
         (res) =>
           res?.data as {
@@ -219,10 +219,10 @@ export class ResearchAgentService extends APIService {
       });
   }
 
-  /** 保存（新增或更新）当前用户的 ScienceDiscovery 连接。 */
+  /** 保存（新增或更新）当前用户的智能体连接。 */
   async saveBackendConnection(
     workspaceSlug: string,
-    payload: { base_url: string; token?: string; is_enabled: boolean }
+    payload: { base_url: string; token?: string; is_enabled: boolean; system?: string }
   ) {
     return this.post(researchEndpoints.agentBackendConnections(workspaceSlug), payload)
       .then((res) => res?.data as { id: string; base_url: string; is_enabled: boolean })
@@ -231,18 +231,18 @@ export class ResearchAgentService extends APIService {
       });
   }
 
-  /** 测试已保存的 ScienceDiscovery 连接。 */
-  async testBackendConnection(workspaceSlug: string) {
-    return this.post(researchEndpoints.agentBackendConnectionTest(workspaceSlug), {})
+  /** 测试已保存的连接。 */
+  async testBackendConnection(workspaceSlug: string, system = "SCIENCE_DISCOVERY") {
+    return this.post(researchEndpoints.agentBackendConnectionTest(workspaceSlug), { system })
       .then((res) => res?.data as { ok: boolean; models?: number; error?: string })
       .catch((err) => {
         throw err?.response?.data ?? err;
       });
   }
 
-  /** 删除当前用户的 ScienceDiscovery 连接。 */
-  async deleteBackendConnection(workspaceSlug: string) {
-    return this.delete(researchEndpoints.agentBackendConnections(workspaceSlug))
+  /** 删除当前用户的智能体连接。 */
+  async deleteBackendConnection(workspaceSlug: string, system = "SCIENCE_DISCOVERY") {
+    return this.delete(`${researchEndpoints.agentBackendConnections(workspaceSlug)}?system=${system}`)
       .then(() => true)
       .catch((err) => {
         throw err?.response?.data ?? err;

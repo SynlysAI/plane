@@ -2939,7 +2939,12 @@
       "removed": "连接已删除。",
       "remove_failed": "删除失败，请重试。",
       "load_failed": "无法读取当前连接。",
-      "health": "健康状态：{status} · 检查于 {at}"
+      "health": "健康状态：{status} · 检查于 {at}",
+      "system": "智能体系统",
+      "system_local": "本地智能体（ScienceDiscovery）",
+      "system_cloud": "云端智能体（Synlora）",
+      "system_hint": "个人凭证按系统分别保存；工作区集成选择个人凭证模式时，将使用这里的云端 Token。",
+      "base_url_optional": "选填：留空使用工作区统一地址"
     },
     "timeline": {
       "description": "思维链、研发链与项目全流程时间线。",

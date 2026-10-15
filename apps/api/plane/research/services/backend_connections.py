@@ -141,13 +141,25 @@ def resolve_science_discovery_connection(workspace, user):
         the platform default runtime). Routing honours the workspace governance
         switch and never silently switches on reachability (§5).
     """
-    setting = WorkspaceResearchSetting.objects.filter(workspace=workspace).first()
-    if setting is None or not setting.research_agent_user_backend_enabled:
-        return None
+    return resolve_backend_connection(workspace, user, system="SCIENCE_DISCOVERY")
+
+
+def resolve_backend_connection(workspace, user, *, system):
+    """Resolve the user's enabled connection for one agent system.
+
+    For SCIENCE_DISCOVERY the workspace governance switch gates self-service;
+    personal cloud-agent credentials (SYNLORA) follow the same storage.
+    """
+    if system == "SCIENCE_DISCOVERY":
+        setting = WorkspaceResearchSetting.objects.filter(workspace=workspace).first()
+        if setting is None or not setting.research_agent_user_backend_enabled:
+            return None
     return (
         ResearchAgentBackendConnection.objects.filter(
             workspace=workspace,
             user=user,
+            system=system,
+            deleted_at__isnull=True,
             is_enabled=True,
         )
         .order_by("-created_at")

@@ -24,7 +24,8 @@ class ResearchAgentBackendConnection(BaseModel):
         on_delete=models.CASCADE,
         related_name="research_agent_backend_connections",
     )
-    base_url = models.URLField(max_length=500)
+    system = models.CharField(max_length=24, default="SCIENCE_DISCOVERY")
+    base_url = models.URLField(max_length=500, blank=True, default="")
     # Fernet ciphertext; never serialized to the browser (§5 令牌安全)。
     credential_encrypted = models.TextField(blank=True, default="")
     is_enabled = models.BooleanField(default=False)
@@ -42,7 +43,7 @@ class ResearchAgentBackendConnection(BaseModel):
         constraints = [
             # 软删除墓碑行不参与唯一性：条件索引避免「删除后无法重建连接」。
             models.UniqueConstraint(
-                fields=["workspace", "user"],
+                fields=["workspace", "user", "system"],
                 condition=Q(deleted_at__isnull=True),
                 name="rsch_agent_backend_uq_ws_user",
             ),

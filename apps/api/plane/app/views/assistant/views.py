@@ -57,7 +57,7 @@ def _client(request, slug: str) -> tuple[SynloraAssistantClient | None, Response
     if workspace is None:
         return None, Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
     try:
-        return resolve_assistant_client(workspace), None
+        return resolve_assistant_client(workspace, user=request.user), None
     except AssistantNotConfigured:
         return None, Response(
             {"error": "assistant_not_configured"},
@@ -79,7 +79,7 @@ class AssistantStatusEndpoint(BaseAPIView):
         workspace = _workspace_or_none(slug)
         if workspace is None:
             return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
-        config = resolve_assistant_config(workspace)
+        config = resolve_assistant_config(workspace, user=request.user)
         enabled = bool(config.base_url and config.token and config.is_enabled)
         ready = False
         if enabled:

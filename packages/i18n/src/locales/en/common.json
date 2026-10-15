@@ -2908,7 +2908,12 @@
       "removed": "Connection removed.",
       "remove_failed": "Removal failed. Please retry.",
       "load_failed": "Could not load the current connection.",
-      "health": "Health: {status} · checked {at}"
+      "health": "Health: {status} · checked {at}",
+      "system": "Agent system",
+      "system_local": "Local agent (ScienceDiscovery)",
+      "system_cloud": "Cloud agent (Synlora)",
+      "system_hint": "Personal credentials are stored per system; the cloud token is used when the workspace integration is in personal-credential mode.",
+      "base_url_optional": "Optional: leave empty to use the workspace address"
     },
     "timeline": {
       "description": "Thinking chain, development chain and the full project timeline.",

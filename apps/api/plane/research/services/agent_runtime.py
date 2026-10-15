@@ -168,9 +168,9 @@ class SynloraRuntimeClient:
         return events, cursor, terminal
 
 
-def resolve_synlora_runtime(workspace: Workspace) -> SynloraRuntimeClient | None:
+def resolve_synlora_runtime(workspace: Workspace, user=None) -> SynloraRuntimeClient | None:
     """Return a configured runtime client, or ``None`` when unavailable."""
-    config = resolve_assistant_config(workspace)
+    config = resolve_assistant_config(workspace, user=user)
     if not config.base_url or not config.token or not config.is_enabled:
         return None
     return SynloraRuntimeClient(config)

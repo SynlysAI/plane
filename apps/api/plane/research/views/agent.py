@@ -102,7 +102,7 @@ def create_synlora_runtime_session(
     *, workspace, user, node, request_id, scope_kind="OWNER", scope_source="chain_owner"
 ):
     """Create a cloud Synlora thread plus the same grant/assembly envelope."""
-    runtime = resolve_synlora_runtime(workspace)
+    runtime = resolve_synlora_runtime(workspace, user=user)
     if runtime is None:
         raise SynloraRuntimeError(
             "synlora_not_configured",
@@ -141,7 +141,7 @@ def create_synlora_runtime_session(
 
 def _synlora_runtime_for_session(workspace, session):
     """Build the runtime client pinned to a Synlora provider session."""
-    runtime = resolve_synlora_runtime(workspace)
+    runtime = resolve_synlora_runtime(workspace, user=session.user)
     if runtime is None:
         raise SynloraRuntimeError("synlora_not_configured", "Synlora runtime is not configured.", 503)
     return runtime
@@ -1315,12 +1315,16 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        connection = ResearchAgentBackendConnection.objects.filter(workspace=workspace, user=request.user).first()
+        system = str(request.query_params.get("system") or "SCIENCE_DISCOVERY").upper()
+        connection = ResearchAgentBackendConnection.objects.filter(
+            workspace=workspace, user=request.user, system=system, deleted_at__isnull=True
+        ).first()
         return Response(
             {
                 "connection": (
                     {
                         "id": str(connection.id),
+                        "system": connection.system,
                         "base_url": connection.base_url,
                         "is_enabled": connection.is_enabled,
                         "has_credential": bool(connection.credential_encrypted),
@@ -1339,6 +1343,9 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
+        system = str(request.data.get("system") or "SCIENCE_DISCOVERY").upper()
+        if system not in ("SCIENCE_DISCOVERY", "SYNLORA"):
+            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "Unknown agent system.")
         base_url = str(request.data.get("base_url") or "").strip().rstrip("/")
         token = str(request.data.get("token") or "").strip()
         raw_enabled = request.data.get("is_enabled", True)
@@ -1347,28 +1354,41 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
             if isinstance(raw_enabled, bool)
             else str(raw_enabled).strip().lower() in ("1", "true", "yes", "on")
         )
-        if not base_url:
-            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "base_url is required.")
-        try:
-            validate_backend_base_url(base_url)
-        except BackendConnectionError as exc:
-            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, str(exc), status.HTTP_400_BAD_REQUEST)
-        connection = ResearchAgentBackendConnection.objects.filter(
-            workspace=workspace, user=request.user
-        ).first()
+        # SD 需要用户自填完整地址；云端 Synlora 个人凭证可留空地址（回落平台统一地址）。
+        if system == "SCIENCE_DISCOVERY":
+            if not base_url:
+                return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "base_url is required.")
+            try:
+                validate_backend_base_url(base_url)
+            except BackendConnectionError as exc:
+                return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, str(exc), status.HTTP_400_BAD_REQUEST)
+        elif not base_url and not token:
+            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "token or base_url is required.")
+        connection = (
+            ResearchAgentBackendConnection.objects.filter(
+                workspace=workspace, user=request.user, system=system, deleted_at__isnull=True
+            )
+            .order_by("-created_at")
+            .first()
+        )
         if connection is None:
-            if not token:
+            existing_row = ResearchAgentBackendConnection.objects.filter(
+                workspace=workspace, user=request.user, system=system
+            ).order_by("-created_at").first()
+            if not token and not (existing_row and existing_row.credential_encrypted):
                 return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "token is required.")
             connection = ResearchAgentBackendConnection.objects.create(
                 workspace=workspace,
                 user=request.user,
+                system=system,
                 base_url=base_url,
-                credential_encrypted=encrypt_data(token),
+                credential_encrypted=encrypt_data(token) if token else "",
                 is_enabled=is_enabled,
                 created_by=request.user,
             )
         else:
-            connection.base_url = base_url
+            if base_url or system == "SCIENCE_DISCOVERY":
+                connection.base_url = base_url
             if token:
                 connection.credential_encrypted = encrypt_data(token)
             connection.is_enabled = is_enabled
@@ -1408,8 +1428,9 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
+        system = str(request.query_params.get("system") or "SCIENCE_DISCOVERY").upper()
         connection = ResearchAgentBackendConnection.objects.filter(
-            workspace=workspace, user=request.user
+            workspace=workspace, user=request.user, system=system, deleted_at__isnull=True
         ).first()
         if connection is not None:
             # Retain credential material for historical sessions pinned to this
