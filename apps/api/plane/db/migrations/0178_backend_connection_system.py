@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
         ),
         migrations.RemoveConstraint(
             model_name="researchagentbackendconnection",
-            constraint="rsch_agent_backend_uq_ws_user",
+            name="rsch_agent_backend_uq_ws_user",
         ),
         migrations.AddConstraint(
             model_name="researchagentbackendconnection",
