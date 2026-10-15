@@ -2914,7 +2914,7 @@
       "system_local": "Local agent (ScienceDiscovery)",
       "system_cloud": "Cloud agent (Synlora)",
       "system_hint": "Personal credentials are stored per system; the cloud token is used when the workspace integration is in personal-credential mode.",
-      "base_url_optional": "Optional: leave empty to use the workspace address"
+      "cloud_address_hint": "Cloud agent uses the workspace Synlora address — only your personal access token is needed here."
     },
     "timeline": {
       "description": "Thinking chain, development chain and the full project timeline.",

@@ -2945,7 +2945,7 @@
       "system_local": "本地智能体（ScienceDiscovery）",
       "system_cloud": "云端智能体（Synlora）",
       "system_hint": "个人凭证按系统分别保存；工作区集成选择个人凭证模式时，将使用这里的云端 Token。",
-      "base_url_optional": "选填：留空使用工作区统一地址"
+      "cloud_address_hint": "云端智能体使用工作区统一的 Synlora 服务地址，这里只需填写你的个人访问 Token。"
     },
     "timeline": {
       "description": "思维链、研发链与项目全流程时间线。",

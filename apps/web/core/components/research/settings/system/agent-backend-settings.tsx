@@ -91,7 +91,7 @@ export function AgentBackendSettings({
     try {
       await agentService.saveBackendConnection(workspaceSlug, {
         system,
-        base_url: baseUrl.trim(),
+        base_url: system === "SCIENCE_DISCOVERY" ? baseUrl.trim() : "",
         ...(token.trim() ? { token: token.trim() } : {}),
         is_enabled: enabled,
       });
@@ -168,20 +168,22 @@ export function AgentBackendSettings({
         </select>
         <span className="text-11 text-tertiary">{t("research.agent_backend.system_hint")}</span>
       </label>
-      <label className="flex flex-col gap-1 text-11 text-secondary">
-        {t("research.agent_backend.base_url")}
-        <input
-          value={baseUrl}
-          onChange={(changeEvent) => setBaseUrl(changeEvent.target.value)}
-          placeholder={
-            system === "SYNLORA"
-              ? t("research.agent_backend.base_url_optional")
-              : t("research.agent_backend.base_url_placeholder")
-          }
-          className="focus:border-accent-primary rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
-        />
-        <span className="text-11 text-tertiary">{t("research.agent_backend.server_address_hint")}</span>
-      </label>
+      {system === "SCIENCE_DISCOVERY" ? (
+        <label className="flex flex-col gap-1 text-11 text-secondary">
+          {t("research.agent_backend.base_url")}
+          <input
+            value={baseUrl}
+            onChange={(changeEvent) => setBaseUrl(changeEvent.target.value)}
+            placeholder={t("research.agent_backend.base_url_placeholder")}
+            className="focus:border-accent-primary rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary outline-none"
+          />
+          <span className="text-11 text-tertiary">{t("research.agent_backend.server_address_hint")}</span>
+        </label>
+      ) : (
+        <p className="rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-tertiary">
+          {t("research.agent_backend.cloud_address_hint")}
+        </p>
+      )}
       <label className="flex flex-col gap-1 text-11 text-secondary">
         {t("research.agent_backend.token")}
         <input
@@ -200,7 +202,7 @@ export function AgentBackendSettings({
         <button
           type="button"
           onClick={() => void save()}
-          disabled={busy || !baseUrl.trim()}
+          disabled={busy || (system === "SCIENCE_DISCOVERY" && !baseUrl.trim())}
           className="rounded-md bg-accent-primary px-3 py-1.5 text-12 text-on-color disabled:opacity-50"
         >
           {busy ? t("research.agent_backend.busy") : t("research.agent_backend.save")}
