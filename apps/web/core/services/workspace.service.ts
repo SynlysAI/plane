@@ -14,6 +14,8 @@ import type {
   IWorkspaceSearchResults,
   IProductUpdateResponse,
   IWorkspaceBulkInviteFormData,
+  IWorkspaceMemberInvitationImportError,
+  IWorkspaceMemberInvitationImportResult,
   IWorkspaceViewProps,
   IUserProjectsRole,
   IWorkspaceView,
@@ -80,6 +82,32 @@ export class WorkspaceService extends APIService {
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
+      });
+  }
+
+  getWorkspaceMemberInvitationTemplateUrl(workspaceSlug: string) {
+    return `/api/workspaces/${workspaceSlug}/invitations/import/template/`;
+  }
+
+  async importWorkspaceMemberInvitations(
+    workspaceSlug: string,
+    payload: {
+      file: File;
+      research_profile_category?: string;
+      research_profile_enabled: boolean;
+    }
+  ): Promise<IWorkspaceMemberInvitationImportResult> {
+    const formData = new FormData();
+    formData.append("file", payload.file);
+    formData.append("research_profile_enabled", payload.research_profile_enabled ? "true" : "false");
+    if (payload.research_profile_enabled && payload.research_profile_category)
+      formData.append("research_profile_category", payload.research_profile_category);
+    return this.post(`/api/workspaces/${workspaceSlug}/invitations/import/`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data as IWorkspaceMemberInvitationImportError;
       });
   }
 

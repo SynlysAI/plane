@@ -346,6 +346,30 @@ describe("member import errors", () => {
     expect(service.approveUserImport).not.toHaveBeenCalled();
   });
 
+  it("allows a student to be submitted without a student number", async () => {
+    service.getAccountProvisioningOptions.mockResolvedValueOnce({
+      org_units: [
+        { id: "org-1", display_path: "学院 / 学生小组", unit_type: "TEAM", business_category: "BASIC_RESEARCH" },
+      ],
+      advisors: [],
+      profile_categories: [],
+    });
+    service.createSingleImport.mockResolvedValueOnce(batch);
+    root = createRoot(container);
+    await act(async () => root.render(<ResearchUserImportPanel workspaceSlug="lab" />));
+    await act(async () => button("单条录入").click());
+    await change(labeledControl("姓名"), "无学号学生");
+    await change(labeledControl("邮箱"), "no-student-no@example.com");
+    expect(labeledControl("学号").required).toBe(false);
+    await change(labeledControl("主归属小组"), "org-1");
+    await change(labeledControl("主导师"), "new");
+    await change(labeledControl("导师姓名"), "导师");
+    await change(labeledControl("导师邮箱"), "advisor@example.com");
+    await act(async () => button("提交并预览").click());
+    const payload = service.createSingleImport.mock.calls[0][1] as { student_no?: string };
+    expect(payload.student_no ?? "").toBe("");
+  });
+
   it("selects all rows and includes the selection in one bulk action", async () => {
     const secondRow = {
       ...batch.rows[0],

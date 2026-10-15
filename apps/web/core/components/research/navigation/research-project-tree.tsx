@@ -591,29 +591,31 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                       <div className="group flex items-center gap-1 px-2 py-1 text-11 text-tertiary">
                         <span className="min-w-0 flex-1 truncate">公共</span>
                       </div>
-                      {defaultProjectIds.map((projectId) => {
-                        const project = projectMap[projectId];
-                        return project ? (
-                          <ProjectLink
-                            key={projectId}
-                            project={{
-                              id: projectId,
-                              name: project.name,
-                              identifier: project.identifier,
-                              kind: "ADMINISTRATIVE",
-                            }}
-                            currentCategoryId={defaultOrganization?.id ?? null}
-                            canManage={defaultOrganization?.can_manage ?? canManageTree}
-                            onMove={(item) =>
-                              setMoveEditor({
-                                project: item,
-                                currentCategory: defaultOrganization?.id ?? null,
-                                target: defaultOrganization?.id ?? "uncategorized",
-                              })
-                            }
-                          />
-                        ) : null;
-                      })}
+                      <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label="公共">
+                        {defaultProjectIds.map((projectId) => {
+                          const project = projectMap[projectId];
+                          return project ? (
+                            <ProjectLink
+                              key={projectId}
+                              project={{
+                                id: projectId,
+                                name: project.name,
+                                identifier: project.identifier,
+                                kind: "ADMINISTRATIVE",
+                              }}
+                              currentCategoryId={defaultOrganization?.id ?? null}
+                              canManage={defaultOrganization?.can_manage ?? canManageTree}
+                              onMove={(item) =>
+                                setMoveEditor({
+                                  project: item,
+                                  currentCategory: defaultOrganization?.id ?? null,
+                                  target: defaultOrganization?.id ?? "uncategorized",
+                                })
+                              }
+                            />
+                          ) : null;
+                        })}
+                      </div>
                     </div>
                   )
                 );
