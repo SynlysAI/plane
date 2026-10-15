@@ -348,8 +348,10 @@ export function ResearchChainTaskPeek(props: Props) {
   const activity = useMemo(() => {
     if (!task) return [];
     const matched = events.length ? eventActivity(events, task, candidates, t) : synthesizedActivity(task, t);
-    const sorted = [...matched].toSorted((left, right) => left.at.localeCompare(right.at));
-    return activityOrder === "asc" ? sorted : [...sorted].toReversed();
+    const direction = activityOrder === "asc" ? 1 : -1;
+    const sorted = [...matched];
+    sorted.sort((left, right) => direction * left.at.localeCompare(right.at));
+    return sorted;
   }, [activityOrder, candidates, events, t, task]);
 
   /**

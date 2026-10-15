@@ -33,12 +33,12 @@ export function groupProjectsByOrganization(
     buckets.set(bucketKey, [...(buckets.get(bucketKey) ?? []), projectId]);
   }
 
+  const namedOrganizations = organizations.filter((organization) => !organization.is_default);
+  // 只排序局部副本，避免依赖当前 TS lib 尚未包含的 toSorted。
+  namedOrganizations.sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN"));
   const orderedOrganizations = [
     ...organizations.filter((organization) => organization.is_default),
-    // oxlint-disable-next-line no-array-sort: 当前 TS lib 目标不支持 toSorted。
-    ...organizations
-      .filter((organization) => !organization.is_default)
-      .toSorted((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN")),
+    ...namedOrganizations,
   ];
 
   const groups: TProjectOrganizationGroup[] = [];

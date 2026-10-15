@@ -7,6 +7,7 @@ from plane.db.models import (
     AdministrativeOrganization,
     AdministrativeOrganizationMember,
     Project,
+    ProjectNetwork,
     ProjectMember,
     ResearchChain,
     ResearchProjectProfile,
@@ -122,6 +123,7 @@ def public_administrative_project_ids(user, workspace_slug):
             workspace__workspace_member__deleted_at__isnull=True,
             administrative_organization__is_default=True,
             administrative_organization__deleted_at__isnull=True,
+            network=ProjectNetwork.PUBLIC.value,
             deleted_at__isnull=True,
         )
         .exclude(id__in=research_project_ids())

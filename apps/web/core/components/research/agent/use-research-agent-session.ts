@@ -127,6 +127,8 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   }, [chainNodeId, workspaceSlug]);
 
   const latestSeq = useMemo(() => events.at(-1)?.seq ?? 0, [events]);
+  const pollingRunId = session?.run_id;
+  const pollingStatus = session?.status;
   const toolEvents = useMemo(() => events.filter((event) => event.event_type.toUpperCase().includes("TOOL")), [events]);
   const artifactEvents = useMemo(
     () => events.filter((event) => ["DATA_CHANGE", "INTERMEDIATE_ARTIFACT", "OUTPUT"].includes(event.event_type)),
@@ -160,7 +162,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   // Synlora 同步链路天然不受影响——其响应已带全量事件，session 不会停在 STREAMING。
   const pollBusyRef = useRef(false);
   useEffect(() => {
-    if (!session || session.status !== "STREAMING") return;
+    if (!pollingRunId || pollingStatus !== "STREAMING") return;
     let cancelled = false;
     let delay = 1000;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -194,7 +196,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [session, latestSeq, workspaceSlug]);
+  }, [latestSeq, pollingRunId, pollingStatus, workspaceSlug]);
 
   const close = useCallback(async () => {
     const current = sessionRef.current;

@@ -87,7 +87,17 @@ class ProjectSerializer(BaseSerializer):
         if project_id:
             project = project.exclude(id=project_id)
 
-        if project.exists():
+        # The identifier ledger can drift when a project code is renamed in
+        # ``projects`` only; check both tables before inserting a ledger row.
+        identifier_ledger = ProjectIdentifier.objects.filter(
+            workspace_id=workspace_id,
+            name=identifier,
+            deleted_at__isnull=True,
+        )
+        if project_id:
+            identifier_ledger = identifier_ledger.exclude(project_id=project_id)
+
+        if project.exists() or identifier_ledger.exists():
             raise serializers.ValidationError(
                 detail="PROJECT_IDENTIFIER_ALREADY_EXIST",
             )

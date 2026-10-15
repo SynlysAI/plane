@@ -83,11 +83,14 @@ def resolve_backend_request_url(base_url):
     raise BackendConnectionError(_LOOPBACK_UNAVAILABLE_MESSAGE)
 
 
-def validate_backend_base_url(base_url):
-    """Validate one user-supplied SD base URL against the SSRF policy.
+def resolve_validated_backend_request_url(base_url):
+    """Resolve one SD base URL and validate it against the current SSRF policy.
 
     Args:
-        base_url: The candidate ``http(s)://host[:port]`` string.
+        base_url: The user-supplied or stored ``http(s)://host[:port]`` string.
+
+    Returns:
+        The request URL after loopback forwarding.
 
     Raises:
         BackendConnectionError: On unsafe scheme, host or resolved address.
@@ -111,6 +114,19 @@ def validate_backend_base_url(base_url):
             raise BackendConnectionError("This address class is not allowed for self-service backends.")
         if allowed and not any(address in network for network in allowed):
             raise BackendConnectionError("The resolved address is outside the allowed network ranges.")
+    return request_url
+
+
+def validate_backend_base_url(base_url):
+    """Validate one user-supplied SD base URL against the SSRF policy.
+
+    Args:
+        base_url: The candidate ``http(s)://host[:port]`` string.
+
+    Raises:
+        BackendConnectionError: On unsafe scheme, host or resolved address.
+    """
+    resolve_validated_backend_request_url(base_url)
 
 
 def resolve_science_discovery_connection(workspace, user):

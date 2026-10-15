@@ -348,6 +348,33 @@ def test_backend_connection_persists_loopback_url_and_client_uses_upstream(sd_se
     assert ScienceDiscoveryClient(connection).base_url == "http://172.19.0.1:14310"
 
 
+def test_backend_client_fails_closed_when_runtime_policy_rejects_loopback(sd_session, settings):
+    """部署撤回回环转发后，历史连接不得回退原始本机地址。"""
+    connection = sd_session.backend_connection
+    connection.base_url = "http://127.0.0.1:4310"
+    connection.save(update_fields=["base_url", "updated_at"])
+    settings.SCIENCE_DISCOVERY_ALLOWED_CIDRS = ["192.168.0.0/16"]
+    settings.SCIENCE_DISCOVERY_ALLOW_LOOPBACK = False
+    settings.SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM = ""
+
+    client = ScienceDiscoveryClient(connection)
+
+    assert client.base_url == ""
+    assert client.configured is False
+
+
+def test_backend_client_fails_closed_when_runtime_cidr_policy_narrows(sd_session, settings):
+    """部署收窄内网白名单后，历史连接不得继续请求旧地址。"""
+    settings.SCIENCE_DISCOVERY_ALLOWED_CIDRS = ["10.0.0.0/8"]
+    settings.SCIENCE_DISCOVERY_ALLOW_LOOPBACK = False
+    settings.SCIENCE_DISCOVERY_LOOPBACK_UPSTREAM = ""
+
+    client = ScienceDiscoveryClient(sd_session.backend_connection)
+
+    assert client.base_url == ""
+    assert client.configured is False
+
+
 def test_backend_connection_crud_stores_token_encrypted(sd_session, settings):
     """连接令牌密文落库，接口只回显已配置（§5 令牌安全）。"""
     workspace = sd_session.workspace

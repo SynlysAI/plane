@@ -234,6 +234,7 @@ def _project_queryset(workspace, user, scope):
             deleted_at__isnull=True,
         )
         .exclude(research_profile__isnull=False)
+        .exclude(id__in=ResearchChain.all_objects.values("project_id"))
         .select_related("navigation_category", "administrative_organization")
     )
     if is_workspace_admin(user, workspace.id):
@@ -423,7 +424,7 @@ def _tree(workspace, user, scope, projects, can_manage=False):
             managed_projects = (
                 Project.objects.filter(workspace=workspace, id__in=visible_project_ids, deleted_at__isnull=True)
                 .exclude(research_profile__isnull=False)
-                .exclude(id__in=ResearchChain.objects.values("project_id"))
+                .exclude(id__in=ResearchChain.all_objects.values("project_id"))
             )
             for project in managed_projects:
                 if project.administrative_organization_id:

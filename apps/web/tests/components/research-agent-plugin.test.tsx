@@ -226,6 +226,42 @@ it("shows the Chinese degradation path when Synlora session creation fails", asy
   expect(container.textContent).not.toContain("你没有访问当前科研对象的权限");
 });
 
+it("keeps polling backoff when an idle run returns an equivalent session payload", async () => {
+  vi.useFakeTimers();
+  mocks.createSession.mockResolvedValue({ ...session, status: "STREAMING" });
+  mocks.getEvents.mockResolvedValue({
+    results: [],
+    count: 0,
+    latest_seq: 0,
+    session: { ...session, status: "STREAMING", updated_at: "2026-10-15T00:00:01Z" },
+  });
+
+  try {
+    const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
+    await act(async () => {
+      root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
+    });
+    expect(mocks.getEvents).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(mocks.getEvents).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(mocks.getEvents).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(mocks.getEvents).toHaveBeenCalledTimes(3);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("renders an inline approval card and submits an idempotent Agent decision", async () => {
   const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
   mocks.createSession.mockResolvedValue({ ...session, status: "WAITING_APPROVAL" });

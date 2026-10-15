@@ -4,7 +4,10 @@ import httpx
 from django.conf import settings
 
 from plane.license.utils.encryption import decrypt_data
-from plane.research.services.backend_connections import BackendConnectionError, resolve_backend_request_url
+from plane.research.services.backend_connections import (
+    BackendConnectionError,
+    resolve_validated_backend_request_url,
+)
 
 
 class ScienceDiscoveryErrorCode:
@@ -43,9 +46,11 @@ class ScienceDiscoveryClient:
         raw_base_url = str(connection.base_url or "").rstrip("/") if connection is not None else ""
         if raw_base_url:
             try:
-                self.base_url = resolve_backend_request_url(raw_base_url)
+                self.base_url = resolve_validated_backend_request_url(raw_base_url)
             except BackendConnectionError:
-                self.base_url = raw_base_url
+                # Runtime policy drift must fail closed instead of falling back
+                # to the user-supplied URL saved under an older deployment.
+                self.base_url = ""
         else:
             self.base_url = ""
         self.auth_token = decrypt_data(connection.credential_encrypted or "") if connection is not None else ""

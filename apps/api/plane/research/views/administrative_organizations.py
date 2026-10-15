@@ -232,6 +232,12 @@ class AdministrativeOrganizationDetailEndpoint(AdministrativeAPIView):
         ).first()
         if target is None or target.id == organization.id:
             return Response({"message": "Select a different target organization."}, status=422)
+        workspace_admin = _workspace_admin(request.user, workspace)
+        target_authorized = target.is_default or user_can_administer_administrative_organization(
+            request.user, slug, target.id
+        )
+        if not workspace_admin and not target_authorized:
+            return Response({"message": "Not allowed."}, status=403)
         with transaction.atomic():
             Project.objects.filter(administrative_organization=organization).update(administrative_organization=target)
             organization.deleted_at = timezone.now()
@@ -439,7 +445,7 @@ class AdministrativeProjectOrganizationEndpoint(AdministrativeAPIView):
                 deleted_at__isnull=True,
                 research_profile__isnull=True,
             )
-            .exclude(id__in=ResearchChain.objects.values("project_id"))
+            .exclude(id__in=ResearchChain.all_objects.values("project_id"))
             .first()
         )
         if project is None:

@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -248,6 +249,31 @@ def test_category_scope_isolation_and_member_write_is_denied(navigation_env):
     assert administrative_tree.json()["categories"] == []
     assert administrative_tree.json()["uncategorized"] == []
     assert administrator_tree.json()["uncategorized"][0]["id"] == str(navigation_env["administrative_project"].id)
+
+
+@pytest.mark.django_db
+def test_soft_deleted_research_chain_stays_out_of_administrative_tree(navigation_env):
+    """软删除研究链的宿主项目不能在管理员行政树中重新出现。"""
+    project = Project.objects.create(
+        workspace=navigation_env["workspace"],
+        name="软删除研究链宿主",
+        identifier=uuid4().hex[:10].upper(),
+        created_by=navigation_env["admin"],
+    )
+    chain = ResearchChain.objects.create(
+        project=project,
+        workspace=navigation_env["workspace"],
+        owner=navigation_env["admin"],
+        request_id=f"soft-tree-{uuid4()}",
+        payload_hash=f"soft-tree-{uuid4()}",
+    )
+    chain.deleted_at = timezone.now()
+    chain.save(update_fields=["deleted_at", "updated_at"])
+
+    tree = navigation_env["admin_client"].get(navigation_env["url"], {"scope": "ADMINISTRATIVE"})
+
+    assert tree.status_code == 200
+    assert all(item["id"] != str(project.id) for item in tree.json()["uncategorized"])
 
 
 @pytest.mark.django_db

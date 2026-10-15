@@ -16,8 +16,10 @@ from plane.db.models import (
     AdministrativeOrganizationMember,
     Project,
     ProjectIdentifier,
+    ProjectNetwork,
     ProjectMember,
     ProjectNavigationCategory,
+    ResearchChain,
     ResearchProjectProfile,
     State,
     WorkspaceMember,
@@ -332,6 +334,26 @@ def test_public_organization_rejects_member_management(env):
     assert public["members"] == []
 
 
+def test_secret_project_in_public_organization_stays_workspace_invisible(env):
+    """公共组织不越过 Plane 项目的 Secret 网络边界。"""
+    secret_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="公共组织私有项目",
+        identifier=f"PS{uuid4().hex[:6].upper()}",
+        network=ProjectNetwork.SECRET.value,
+        administrative_organization=env["default"],
+        created_by=env["owner"],
+    )
+    slug = env["workspace"].slug
+
+    detail = env["ordinary_client"].get(f"/api/workspaces/{slug}/projects/{secret_project.id}/")
+    projects = env["ordinary_client"].get(f"/api/workspaces/{slug}/projects/", {"scope": "administrative"})
+
+    assert detail.status_code == 403
+    assert projects.status_code == 200
+    assert all(str(item["id"]) != str(secret_project.id) for item in projects.data)
+
+
 def test_workspace_members_can_create_organizations_and_become_admins(env):
     """有效工作区成员可创建行政组织并自动成为组织管理员。"""
     slug = env["workspace"].slug
@@ -462,6 +484,37 @@ def test_explicit_identifier_stays_unique(env):
     assert duplicated.status_code == 400
     assert "identifier" in duplicated.json()
     Project.objects.filter(pk=first.json()["id"]).delete()
+
+
+def test_explicit_identifier_checks_project_identifier_ledger_drift(env):
+    """编号表漂移时，显式编号也必须在保存前返回可处理错误。"""
+    slug = env["workspace"].slug
+    first = env["owner_client"].post(
+        f"/api/workspaces/{slug}/projects/",
+        {
+            "name": "编号漂移项目",
+            "identifier": "DRIFT01",
+            "administrative_organization": str(env["default"].id),
+        },
+        format="json",
+    )
+    assert first.status_code == 201, first.json()
+    project = Project.objects.get(pk=first.json()["id"])
+    project.identifier = "DRIFTXX"
+    project.save(update_fields=["identifier", "updated_at"])
+
+    duplicated = env["owner_client"].post(
+        f"/api/workspaces/{slug}/projects/",
+        {
+            "name": "编号漂移复用项目",
+            "identifier": "DRIFT01",
+            "administrative_organization": str(env["default"].id),
+        },
+        format="json",
+    )
+
+    assert duplicated.status_code == 400
+    assert "identifier" in duplicated.json()
 
 
 def test_organization_membership_grants_and_revokes_inherited_read_access(env):
@@ -666,6 +719,25 @@ def test_organization_deletion_requires_and_moves_projects(env):
     assert env["organization"].deleted_at is not None
 
 
+def test_organization_deletion_requires_target_organization_admin(env):
+    """源组织管理员不能把项目迁往自己仅有成员身份的目标组织。"""
+    slug = env["workspace"].slug
+    target_relation = AdministrativeOrganizationMember.objects.get(
+        organization=env["target"], member=env["organization_admin"]
+    )
+    target_relation.role = AdministrativeOrganizationMember.Role.MEMBER
+    target_relation.save(update_fields=["role", "updated_at"])
+    delete_url = f"/api/research/workspaces/{slug}/administrative-organizations/{env['organization'].id}/"
+
+    denied = env["admin_client"].delete(f"{delete_url}?move_to={env['target'].id}")
+
+    assert denied.status_code == 403
+    env["organization"].refresh_from_db()
+    assert env["organization"].deleted_at is None
+    env["project"].refresh_from_db()
+    assert env["project"].administrative_organization == env["organization"]
+
+
 def test_default_organization_and_project_move_boundaries(env):
     """默认组织不可改名或删除；项目移动遵守组织管理边界。"""
     slug = env["workspace"].slug
@@ -686,3 +758,32 @@ def test_default_organization_and_project_move_boundaries(env):
     assert moved_default.status_code == 200, moved_default.json()
     env["project"].refresh_from_db()
     assert env["project"].administrative_organization == env["default"]
+
+
+def test_soft_deleted_research_chain_cannot_join_administrative_organization(env):
+    """研究链软删除后仍保留科研生命周期边界，不能转行政归属。"""
+    project = Project.objects.create(
+        workspace=env["workspace"],
+        name="已归档研究链项目",
+        identifier=f"SC{uuid4().hex[:6].upper()}",
+        created_by=env["owner"],
+    )
+    chain = ResearchChain.objects.create(
+        project=project,
+        workspace=env["workspace"],
+        owner=env["owner"],
+        request_id=f"soft-chain-{uuid4()}",
+        payload_hash=f"soft-chain-{uuid4()}",
+    )
+    chain.deleted_at = timezone.now()
+    chain.save(update_fields=["deleted_at", "updated_at"])
+
+    response = env["owner_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/administrative-projects/{project.id}/organization/",
+        {"organization": str(env["target"].id)},
+        format="json",
+    )
+
+    assert response.status_code == 404
+    project.refresh_from_db()
+    assert project.administrative_organization is None

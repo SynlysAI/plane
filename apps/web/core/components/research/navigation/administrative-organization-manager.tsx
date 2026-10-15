@@ -269,7 +269,7 @@ export function AdministrativeOrganizationManager({
                 <option value="uncategorized">公共</option>
               )}
               {organizations
-                .filter((item) => !item.is_default && item.id !== organization.id)
+                .filter((item) => !item.is_default && item.can_manage && item.id !== organization.id)
                 .map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
