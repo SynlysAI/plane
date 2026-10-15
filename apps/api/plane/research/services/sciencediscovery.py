@@ -213,7 +213,13 @@ class ScienceDiscoveryClient:
             request_id: The SD ``PermissionRequest.id`` from ``permission.required``.
             decision: One of ``allow_once`` / ``allow_matching`` / ``deny``.
         """
-        return self._request("POST", f"/agent/approvals/{request_id}", json_payload={"decision": decision})
+        # 上游 ScienceDiscovery 的决策路由；fyk_dev 旧适配层的
+        # /agent/approvals/{id} 在原版 SD 上不存在（404 HTML）。
+        return self._request(
+            "POST",
+            f"/api/permission-requests/{request_id}/decision",
+            json_payload={"decision": decision},
+        )
 
     def list_artifacts(self, *, session_id):
         """List artifacts produced in one SD session."""
