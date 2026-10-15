@@ -44,6 +44,9 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
   const nextPath = searchParams.get("next_path");
   // states
   const [isExistingEmail, setIsExistingEmail] = useState(false);
+  // A mailbox holding a workspace invitation may register without an invite
+  // code, matching the server-side sign-up gate.
+  const [isInvitedEmail, setIsInvitedEmail] = useState(false);
   // hooks
   const { config } = useInstance();
 
@@ -77,6 +80,8 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
           }
         }
         setIsExistingEmail(response.existing);
+        setIsInvitedEmail(response.invited ?? false);
+        return undefined;
       })
       .catch((error) => {
         const errorhandler = authErrorHandler(error?.error_code?.toString(), data?.email || undefined);
@@ -93,9 +98,9 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
   };
 
   // generating the unique code
-  const generateEmailUniqueCode = async (email: string): Promise<{ code: string } | undefined> => {
+  const generateEmailUniqueCode = async (targetEmail: string): Promise<{ code: string } | undefined> => {
     if (!isSMTPConfigured) return;
-    const payload = { email: email };
+    const payload = { email: targetEmail };
     return await authService
       .generateUniqueCode(payload)
       .then(() => ({ code: "" }))
@@ -128,6 +133,7 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
         isSMTPConfigured={isSMTPConfigured}
         email={email}
         handleEmailClear={handleEmailClear}
+        isEmailInvited={isInvitedEmail}
         handleAuthStep={(step: EAuthSteps) => {
           if (step === EAuthSteps.UNIQUE_CODE) generateEmailUniqueCode(email);
           setAuthStep(step);

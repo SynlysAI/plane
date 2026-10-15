@@ -16,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 ## Module imports
-from plane.db.models import User
+from plane.db.models import User, WorkspaceMemberInvite
 from plane.license.models import Instance
 from plane.authentication.adapter.error import (
     AuthenticationException,
@@ -93,11 +93,17 @@ class EmailCheckEndpoint(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
+        # Keep this predicate identical to the sign-up gate in
+        # ``authentication/adapter/base.py``: a mailbox holding any workspace
+        # invitation may register without an administrator invite code.
+        is_invited = WorkspaceMemberInvite.objects.filter(email=email).exists()
+
         # Else return response
         return Response(
             {
                 "existing": False,
                 "status": ("MAGIC_CODE" if smtp_configured and is_magic_login_enabled else "CREDENTIAL"),
+                "invited": is_invited,
             },
             status=status.HTTP_200_OK,
         )
