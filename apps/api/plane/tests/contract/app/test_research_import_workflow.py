@@ -120,21 +120,23 @@ def test_single_record_remains_pending_without_account_or_relationship_writes(en
     assert approve(env, batch, checked["token"]).status_code == 409
 
 
-def test_student_approval_creates_primary_membership_and_each_advisor_mapping(env):
+@pytest.mark.parametrize("degree", ["", "BS", "MS", "PHD"])
+def test_student_approval_creates_primary_membership_and_each_advisor_mapping(env, degree):
     existing_advisor = env["advisors"]["刘俊扬"]
     add_workspace_member(env["workspace"], existing_advisor)
     original_primary = OrgUnitMember.objects.create(
         workspace=env["workspace"], org_unit=env["group"], user=existing_advisor,
         org_role=OrgUnitMember.OrgRole.ADVISOR, is_primary=True,
     )
-    batch, student = approved_student(env, advisors=[
+    batch, student = approved_student(env, degree=degree, advisors=[
         {"name": "刘俊扬", "email": existing_advisor.email},
         {"name": "新联合导师", "email": "new-co@example.com"},
     ])
 
     assert OrgUnitMember.objects.get(workspace=env["workspace"], user=student, is_primary=True).org_unit == env["team"]
     assert ResearchUserProfile.objects.get(user=student).category == "STUDENT"
-    assert ResearchUserProfile.objects.get(user=student).degree == "MS"
+    assert batch["rows"][0]["degree"] == degree
+    assert ResearchUserProfile.objects.get(user=student).degree == degree
     for email, is_primary in ((existing_advisor.email, True), ("new-co@example.com", False)):
         membership = OrgUnitMember.objects.get(
             workspace=env["workspace"], org_unit=env["team"], user__email=email,

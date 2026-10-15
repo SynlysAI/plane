@@ -113,6 +113,7 @@ export function SingleImportForm({
               onChange={(event) => setFields({ ...fields, degree: event.target.value })}
             >
               <option value="">暂未指定</option>
+              <option value="BS">本科</option>
               <option value="MS">硕士</option>
               <option value="PHD">博士</option>
             </ListFilterSelect>

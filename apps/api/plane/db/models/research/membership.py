@@ -160,6 +160,7 @@ class ResearchUserProfile(BaseModel):
     """Research facing attributes of an account (identity card data)."""
 
     class Degree(models.TextChoices):
+        BS = "BS", "Bachelor"
         MS = "MS", "Master"
         PHD = "PHD", "Doctor"
 

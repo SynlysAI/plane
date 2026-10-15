@@ -14,7 +14,7 @@ export type TUserImportRowStatus = "OK" | "PENDING" | "ERROR";
 export type TUserImportReviewDecision = "PENDING" | "INCLUDED" | "EXCLUDED";
 export type TUserImportBatchStatus = "PENDING_REVIEW" | "PENDING" | "IMPORTED" | "REJECTED" | "FAILED";
 export type TResearchProfileCategory = "STUDENT" | "POSTDOC" | "ADVISOR" | "PI" | "STAFF" | "OTHER";
-export type TResearchProfileDegree = "MS" | "PHD" | "";
+export type TResearchProfileDegree = "BS" | "MS" | "PHD" | "";
 /**
  * Research visibility tier derived by the backend from the organisation tree,
  * mentor bindings, reviewer assignments and administrator tags (v2.5.0).
