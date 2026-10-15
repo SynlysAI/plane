@@ -3028,6 +3028,8 @@
     "context_hint": "回答将结合当前页面上下文",
     "approval_pending": "本次运行需要审批——请到科研工作台处理。",
     "local_unavailable": "本地智能体仅在科研链节点页可用——打开节点后点击「智能体分析」。",
-    "disclaimer": "内容由 AI 生成，仅供参考"
+    "disclaimer": "内容由 AI 生成，仅供参考",
+    "approve": "批准",
+    "reject": "拒绝"
   }
 }

@@ -74,6 +74,37 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
+  const resumePolling = useCallback(() => {
+    stopPolling();
+    setBusy(true);
+    pollRef.current = setInterval(() => void refresh(), POLL_INTERVAL_MS);
+  }, [refresh, stopPolling]);
+
+  const decide = useCallback(
+    async (approved: boolean) => {
+      const runId = runIdRef.current;
+      if (!runId) return;
+      const approvalEvent = eventsRef.current.find((event) => event.event_type === "APPROVAL");
+      const toolCallId = String(
+        ((approvalEvent?.payload as { request?: { id?: string } } | undefined)?.request ?? {}).id ?? ""
+      );
+      try {
+        await agentService.decideApproval(workspaceSlug, runId, {
+          request_id: `panel-${Date.now()}`,
+          decision: approved ? "APPROVED" : "REJECTED",
+          tool_call_id: toolCallId,
+        });
+        setApprovalPending(false);
+        // the run continues server-side; watch it again so the resumed
+        // answer streams into the panel
+        resumePolling();
+      } catch (failure) {
+        setError((failure as { message?: string })?.message ?? "approval_failed");
+      }
+    },
+    [resumePolling, workspaceSlug]
+  );
+
   const send = useCallback(
     async (rawQuery: string) => {
       const query = rawQuery.trim();
@@ -132,5 +163,6 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
     send,
     stop,
     reset,
+    decide,
   };
 };

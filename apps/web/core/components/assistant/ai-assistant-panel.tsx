@@ -359,6 +359,20 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
           )}
         </div>
 
+        {provider === "local" && local.approvalPending && (
+          <div className="mx-4 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-subtle bg-surface-2 px-3 py-2 text-12 text-secondary">
+            <span>{t("aiAssistant.approval_pending")}</span>
+            <div className="flex gap-1.5">
+              <Button variant="primary" size="sm" onClick={() => void local.decide(true)}>
+                {t("aiAssistant.approve")}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => void local.decide(false)}>
+                {t("aiAssistant.reject")}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* composer */}
         <div className="focus-within:border-accent-primary mx-4 mb-2 shrink-0 rounded-xl border border-subtle bg-surface-1 p-2.5 transition">
           <textarea

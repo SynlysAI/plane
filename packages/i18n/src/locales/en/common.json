@@ -2997,6 +2997,8 @@
     "context_hint": "Answers use the current page context",
     "approval_pending": "This run needs approval — handle it in the research workbench.",
     "local_unavailable": "The local agent is available on research chain node pages — open a node and click 智能体分析.",
-    "disclaimer": "AI-generated content, for reference only."
+    "disclaimer": "AI-generated content, for reference only.",
+    "approve": "Approve",
+    "reject": "Reject"
   }
 }
