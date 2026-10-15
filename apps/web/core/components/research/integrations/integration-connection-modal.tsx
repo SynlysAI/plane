@@ -74,14 +74,14 @@ export const IntegrationConnectionModal = observer(function IntegrationConnectio
         </h3>
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
-            <ListFilterField label={t("research.integrations.display_name")} className="w-full">
+            <ListFilterField label={t("research.integrations.display_name")} className="w-full sm:w-full">
               <ListFilterInput
                 value={displayName}
                 placeholder={t("research.integrations.display_name")}
                 onChange={(event) => setDisplayName(event.target.value)}
               />
             </ListFilterField>
-            <ListFilterField label={t("research.integrations.columns.credential_mode")} className="w-full">
+            <ListFilterField label={t("research.integrations.columns.credential_mode")} className="w-full sm:w-full">
               <ListFilterSelect
                 value={credentialMode}
                 onChange={(event) => {
@@ -94,7 +94,7 @@ export const IntegrationConnectionModal = observer(function IntegrationConnectio
               </ListFilterSelect>
             </ListFilterField>
           </div>
-          <ListFilterField label={t("research.integrations.columns.base_url")} className="w-full">
+          <ListFilterField label={t("research.integrations.columns.base_url")} className="w-full sm:w-full">
             <ListFilterInput
               value={baseUrl}
               placeholder={baseUrl ? "" : t("research.integrations.base_url_hint")}
@@ -102,7 +102,7 @@ export const IntegrationConnectionModal = observer(function IntegrationConnectio
             />
           </ListFilterField>
           {credentialMode === "SHARED" && (
-            <ListFilterField label="访问 Token" className="w-full">
+            <ListFilterField label="访问 Token" className="w-full sm:w-full">
               <ListFilterInput
                 type="password"
                 value={credential}
