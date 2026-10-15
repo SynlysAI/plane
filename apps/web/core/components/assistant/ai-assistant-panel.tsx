@@ -24,6 +24,7 @@ import {
 import { Button } from "@plane/propel/button";
 import { EPortalPosition, EPortalWidth, ModalPortal } from "@plane/propel/portal";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 // components
 import { useAssistantChat } from "./use-assistant-chat";
 import { useWorkbenchChat } from "./use-workbench-chat";
@@ -38,9 +39,25 @@ type Props = {
 /** AI answer rendering with design-spec markdown styles. */
 const AnswerMarkdown = observer(function AnswerMarkdown({ content }: { content: string }) {
   return (
-    <div className="answer-markdown text-13 leading-relaxed text-primary">
+    <div className="answer-markdown min-w-0 text-13 leading-relaxed break-words text-primary">
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
+          table: ({ children }) => (
+            <div className="my-2 max-w-full overflow-x-auto rounded-md border border-subtle">
+              <table className="w-full border-collapse text-left text-12">{children}</table>
+            </div>
+          ),
+          th: ({ children, style }) => (
+            <th style={style} className="border-b border-subtle bg-surface-2 px-3 py-2 font-semibold whitespace-nowrap">
+              {children}
+            </th>
+          ),
+          td: ({ children, style }) => (
+            <td style={style} className="min-w-32 border-b border-subtle px-3 py-2 align-top">
+              {children}
+            </td>
+          ),
           pre: ({ children }) => (
             <pre className="font-mono my-2 overflow-x-auto rounded-lg bg-surface-2 p-3 text-12 text-primary">
               {children}
@@ -142,7 +159,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
     <select
       value={provider}
       onChange={(event) => assistantStore.setProvider(event.target.value as "cloud" | "local")}
-      className="h-7 cursor-pointer rounded-md border border-subtle bg-surface-1 px-2 text-11 text-secondary outline-none hover:text-primary"
+      className="h-7 w-full min-w-0 cursor-pointer rounded-md border border-subtle bg-surface-1 px-2 text-11 text-secondary outline-none hover:text-primary"
       aria-label={t("aiAssistant.provider")}
     >
       <option value="cloud">☁️ {t("aiAssistant.provider_cloud")}</option>
@@ -158,11 +175,11 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
       onClose={() => assistantStore.close()}
       position={EPortalPosition.RIGHT}
       width={assistantStore.expanded ? EPortalWidth.THREE_QUARTER : EPortalWidth.QUARTER}
-      contentClassName="bg-canvas border-l border-subtle flex h-full flex-col"
+      contentClassName={`bg-canvas border-l border-subtle flex h-full flex-col ${assistantStore.expanded ? "min-w-[min(24rem,100vw)]" : "min-w-[min(20rem,100vw)]"}`}
     >
       <div className="flex h-full min-h-0 flex-col">
         {/* header */}
-        <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-subtle px-4">
+        <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-subtle px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-primary text-on-color">
               <Sparkles className="size-4" />
@@ -173,7 +190,6 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {providerSelect}
             <Button
               variant="ghost"
               size="sm"
@@ -202,6 +218,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
               <X className="size-3.5" />
             </Button>
           </div>
+          <div className="col-span-2 min-w-0">{providerSelect}</div>
         </header>
 
         {/* context bar */}

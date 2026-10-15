@@ -1,6 +1,7 @@
 """个人智能体配置的治理、权限与已有会话兼容性。"""
 
 import pytest
+import httpx
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -141,3 +142,66 @@ def test_seated_research_admin_without_org_can_configure_backend(settings):
         format="json",
     )
     assert response.status_code == 201
+
+
+def test_cloud_and_local_configs_are_saved_and_removed_independently(sd_session):
+    client = client_for(sd_session.user)
+    url = f"/api/research/workspaces/{sd_session.workspace.slug}/agent/backend-connections/"
+    local = sd_session.backend_connection
+    local_credential = local.credential_encrypted
+    response = client.post(url, {"system": "SYNLORA", "token": "cloud-personal-token"}, format="json")
+    assert response.status_code == 201
+    cloud = ResearchAgentBackendConnection.objects.get(
+        workspace=sd_session.workspace, user=sd_session.user, system="SYNLORA"
+    )
+    assert cloud.is_enabled
+    assert decrypt_data(cloud.credential_encrypted) == "cloud-personal-token"
+    response = client.post(url, {"system": "SYNLORA", "base_url": ""}, format="json")
+    assert response.status_code == 201
+    cloud.refresh_from_db()
+    assert decrypt_data(cloud.credential_encrypted) == "cloud-personal-token"
+    assert client.get(url, {"system": "SYNLORA"}).json()["connection"]["id"] == str(cloud.id)
+    assert client.get(url).json()["connection"]["id"] == str(local.id)
+    assert client.delete(f"{url}?system=SYNLORA").status_code == 204
+    assert client.get(url, {"system": "SYNLORA"}).json()["connection"] is None
+    local.refresh_from_db()
+    assert local.credential_encrypted == local_credential
+
+
+def test_cloud_probe_uses_cloud_token_and_does_not_probe_local(sd_session, settings, monkeypatch):
+    from plane.app.views.assistant.client import SynloraAssistantClient
+    from plane.research.services.sciencediscovery import ScienceDiscoveryClient
+
+    settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
+    client = client_for(sd_session.user)
+    url = f"/api/research/workspaces/{sd_session.workspace.slug}/agent/backend-connections/"
+    client.post(url, {"system": "SYNLORA", "token": "cloud-probe-token"}, format="json")
+    local_probe = []
+    monkeypatch.setattr(ScienceDiscoveryClient, "list_models", lambda self: local_probe.append(True))
+    configs = []
+
+    def health(self):
+        configs.append(self.config)
+        return httpx.Response(200, request=httpx.Request("GET", f"{self.config.base_url}/api/system/ready"))
+
+    monkeypatch.setattr(SynloraAssistantClient, "health", health)
+    response = client.post(f"{url}test/", {"system": "SYNLORA"}, format="json")
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert configs[0].token == "cloud-probe-token"
+    assert configs[0].base_url == settings.SYNLORA_BASE_URL
+    assert local_probe == []
+    cloud = ResearchAgentBackendConnection.objects.get(
+        workspace=sd_session.workspace, user=sd_session.user, system="SYNLORA"
+    )
+    assert cloud.health_status == "OK"
+
+    def unavailable(self):
+        raise httpx.ConnectError("unavailable")
+
+    monkeypatch.setattr(SynloraAssistantClient, "health", unavailable)
+    response = client.post(f"{url}test/", {"system": "SYNLORA"}, format="json")
+    assert response.status_code == 502
+    assert response.json()["ok"] is False
+    cloud.refresh_from_db()
+    assert cloud.health_status == "DOWN"

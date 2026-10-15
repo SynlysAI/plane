@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+from dataclasses import replace
 
 from django.conf import settings as django_settings
 from django.db import transaction
@@ -26,10 +27,11 @@ from plane.db.models import (
     WorkspaceResearchSetting,
 )
 from plane.api.middleware.api_authentication import APIKeyAuthentication
+from plane.app.views.assistant.client import resolve_assistant_config, SynloraAssistantClient
 from plane.authentication.session import BaseSessionAuthentication
 import httpx
 
-from plane.license.utils.encryption import encrypt_data
+from plane.license.utils.encryption import decrypt_data, encrypt_data
 from plane.research.serializers import ResearchAgentRunEventSerializer, ResearchAgentSessionSerializer
 from plane.research.services.agent_orchestrator import (
     AgentAssembly,
@@ -1362,8 +1364,6 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
                 validate_backend_base_url(base_url)
             except BackendConnectionError as exc:
                 return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, str(exc), status.HTTP_400_BAD_REQUEST)
-        elif not base_url and not token:
-            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "token or base_url is required.")
         connection = (
             ResearchAgentBackendConnection.objects.filter(
                 workspace=workspace, user=request.user, system=system, deleted_at__isnull=True
@@ -1441,32 +1441,47 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
 
 
 class ResearchAgentBackendConnectionTestEndpoint(AgentPluginMixin):
-    """Probe the caller's stored connection via ``GET /api/models`` (§5)."""
+    """Probe the caller's stored connection for the selected agent system."""
 
     def post(self, request, slug):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
+        system = str(request.data.get("system") or "SCIENCE_DISCOVERY").upper()
+        if system not in ("SCIENCE_DISCOVERY", "SYNLORA"):
+            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "Unknown agent system.")
         connection = ResearchAgentBackendConnection.objects.filter(
-            workspace=workspace, user=request.user
+            workspace=workspace, user=request.user, system=system, deleted_at__isnull=True
         ).first()
         if connection is None:
             return research_error(
-                ResearchErrorCode.AGENT_SCOPE_INVALID, "No ScienceDiscovery connection is configured."
+                ResearchErrorCode.AGENT_SCOPE_INVALID, "No connection is configured for this agent system."
             )
-        client = ScienceDiscoveryClient(connection=connection)
-        if not client.configured:
-            return research_error(
-                ResearchErrorCode.AGENT_SCOPE_INVALID, "The connection has no stored credential."
-            )
+        if not connection.credential_encrypted:
+            return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "The connection has no stored credential.")
         models = []
         try:
-            models = client.list_models()
+            if system == "SYNLORA":
+                config = resolve_assistant_config(workspace, user=request.user)
+                config = replace(
+                    config,
+                    base_url=connection.base_url.rstrip("/") or config.base_url,
+                    token=decrypt_data(connection.credential_encrypted),
+                )
+                if not config.base_url:
+                    raise ScienceDiscoveryError("synlora_not_configured", "Synlora service URL is not configured.")
+                response = SynloraAssistantClient(config).health()
+                response.raise_for_status()
+            else:
+                models = ScienceDiscoveryClient(connection=connection).list_models()
             connection.health_status = ResearchAgentBackendConnection.HealthStatus.OK
             connection.last_error = ""
         except ScienceDiscoveryError as exc:
             connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
             connection.last_error = exc.message[:255]
+        except httpx.HTTPError:
+            connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
+            connection.last_error = "Synlora connection test failed."
         finally:
             connection.last_health_at = timezone.now()
             connection.updated_by = request.user

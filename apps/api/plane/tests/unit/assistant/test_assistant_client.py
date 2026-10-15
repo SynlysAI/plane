@@ -11,7 +11,8 @@ from plane.app.views.assistant.client import (
     resolve_assistant_client,
     resolve_assistant_config,
 )
-from plane.db.models import ExternalSystemConnection, IntegrationSystem
+from plane.db.models import ExternalSystemConnection, IntegrationSystem, ResearchAgentBackendConnection
+from plane.license.utils.encryption import encrypt_data
 from plane.tests.research_fixtures import make_user, make_workspace
 
 pytestmark = pytest.mark.django_db
@@ -44,6 +45,28 @@ def test_personal_mode_has_no_shared_client(db, settings):
     assert config.token == ""
     with pytest.raises(AssistantNotConfigured):
         resolve_assistant_client(workspace)
+
+
+def test_personal_mode_requires_own_enabled_cloud_credential(settings):
+    owner = make_user()
+    workspace = make_workspace(owner)
+    _connection(workspace, credential="shared-must-not-be-used", credential_mode="PERSONAL")
+    personal = ResearchAgentBackendConnection.objects.create(
+        workspace=workspace,
+        user=owner,
+        system="SYNLORA",
+        base_url="",
+        credential_encrypted=encrypt_data("personal-cloud-token"),
+        is_enabled=True,
+    )
+    assert resolve_assistant_client(workspace, user=owner).config.token == "personal-cloud-token"
+    other = make_user()
+    with pytest.raises(AssistantNotConfigured):
+        resolve_assistant_client(workspace, user=other)
+    personal.is_enabled = False
+    personal.save(update_fields=["is_enabled"])
+    with pytest.raises(AssistantNotConfigured):
+        resolve_assistant_client(workspace, user=owner)
 
 
 def test_shared_credential_and_env_base_url_fallback(db, settings):

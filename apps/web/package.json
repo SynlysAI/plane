@@ -70,6 +70,7 @@
     "react-popper": "catalog:",
     "react-router": "catalog:",
     "recharts": "catalog:",
+    "remark-gfm": "catalog:",
     "serve": "catalog:",
     "smooth-scroll-into-view-if-needed": "catalog:",
     "swr": "catalog:",

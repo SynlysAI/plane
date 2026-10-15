@@ -58,6 +58,13 @@ const SSE_FRAMES = [
   'event: end\ndata: {"payload":{"status":"completed"}}\n\n',
 ];
 
+const MARKDOWN_TABLE = [
+  "| Category | Capability |",
+  "| :--- | ---: |",
+  "| Search | **Full text** |",
+  "| Analysis | `SQL` |",
+].join("\n");
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -117,6 +124,7 @@ async function waitForText(text: string, attempt = 0): Promise<void> {
 describe("AIAssistantPanel", () => {
   beforeEach(() => {
     mocks.getStatus.mockResolvedValue({ enabled: true, ready: true });
+    mocks.getHistory.mockReset();
     mocks.createSession.mockResolvedValue({ thread_id: "thread-1", title: "Plane/lab" });
     mocks.startChat.mockResolvedValue({
       request_id: "r-1",
@@ -160,6 +168,54 @@ describe("AIAssistantPanel", () => {
     renderPanel(store);
 
     await waitForText("之前的回答");
+  });
+
+  it("renders tables and inline markdown in conversation history", async () => {
+    mocks.getHistory.mockResolvedValue([{ role: "assistant", content: MARKDOWN_TABLE }]);
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "thread-9");
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+
+    await waitForText("Full text");
+    const table = document.querySelector(".answer-markdown table");
+    expect(table).not.toBeNull();
+    expect(table?.querySelectorAll("th")).toHaveLength(2);
+    expect(table?.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(table?.querySelector("strong")?.textContent).toBe("Full text");
+    expect(table?.querySelector("code")?.textContent).toBe("SQL");
+    expect(table?.querySelectorAll("th")[1].style.textAlign).toBe("right");
+    expect(table?.parentElement?.classList.contains("overflow-x-auto")).toBe(true);
+  });
+
+  it("renders a streamed table before and after the answer completes", async () => {
+    let completeStream: (() => void) | undefined;
+    mocks.streamRunEvents.mockImplementation(
+      async (_slug: string, _runId: string, options: { onChunk: (chunk: string) => void }) => {
+        for (const content of ["| Category | Capability |\n| :--- | ---: |\n", "| Search | **Full text** |\n"]) {
+          const data = { payload: { items: [{ stream_event: { type: "message_delta", content } }] } };
+          options.onChunk(`event: messages\ndata: ${JSON.stringify(data)}\n\n`);
+        }
+        await new Promise<void>((resolve) => {
+          completeStream = resolve;
+        });
+        options.onChunk('event: end\ndata: {"payload":{"status":"completed"}}\n\n');
+      }
+    );
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+
+    typeAndSend();
+    await waitForText("Full text");
+    expect(document.querySelector(".answer-markdown table strong")?.textContent).toBe("Full text");
+    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).not.toBeNull();
+
+    await act(async () => completeStream?.());
+    expect(document.querySelectorAll(".answer-markdown table")).toHaveLength(1);
+    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).toBeNull();
   });
 
   it("shows an inline error when the stream fails", async () => {

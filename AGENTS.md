@@ -35,3 +35,5 @@ Prereq (once): `./setup.sh` — generates `apps/api/.env` from `.env.example`.
 - Teardown: `docker compose -f docker-compose-test.yml down -v`
 
 See `apps/api/tests/RUNNING_TESTS.md` for the full walkthrough and troubleshooting; see `apps/api/plane/tests/TESTING_GUIDE.md` for test conventions and fixtures.
+
+- 禁用项：`docker-compose-test.yml` 测试栈不要运行（用户明确要求），改好代码，用户自己部署测试，不要自主构建docker测试，构建前需要询问

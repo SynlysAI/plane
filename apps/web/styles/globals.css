@@ -177,14 +177,3 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.75rem;
 }
-.answer-markdown :is(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.5rem 0;
-  font-size: 0.75rem;
-}
-.answer-markdown :is(th, td) {
-  border: 1px solid var(--color-border-subtle, rgba(0, 0, 0, 0.1));
-  padding: 0.3rem 0.5rem;
-  text-align: left;
-}
