@@ -37,16 +37,12 @@ type Props = {
 
 type ReportReadState = "waiting" | "read_pending_review" | "reviewed";
 
-/** Keep the author-facing advisor read signal separate from workflow status. */
-function reportReadState(
-  report: { status: string; owner: string; has_read?: boolean; read_count?: number },
-  currentUserId: string | undefined
-): ReportReadState | null {
+/** Keep the advisor read signal separate from workflow status.
+ * The signal (author's mentors + main PI) is the same for every viewer. */
+function reportReadState(report: { status: string; read_count?: number }): ReportReadState | null {
   if (report.status === "DRAFT") return null;
   if (report.status !== "SUBMITTED") return "reviewed";
-  const isAuthor = report.owner === currentUserId;
-  const hasRead = isAuthor ? (report.read_count ?? 0) > 0 : Boolean(report.has_read);
-  return hasRead ? "read_pending_review" : "waiting";
+  return (report.read_count ?? 0) > 0 ? "read_pending_review" : "waiting";
 }
 
 /**
@@ -73,7 +69,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const history = research.reportHistory[reportId] ?? [];
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? "";
   const currentUserId = research.identity?.user.id;
-  const readState = report ? reportReadState(report, currentUserId) : null;
+  const readState = report ? reportReadState(report) : null;
 
   useEffect(() => {
     void (async () => {

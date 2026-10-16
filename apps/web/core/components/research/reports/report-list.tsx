@@ -60,12 +60,12 @@ type Props = {
 
 type ReportReadState = "waiting" | "read_pending_review" | "reviewed";
 
-/** Derive read state without conflating it with the report review state. */
-function reportReadState(report: TPeriodicReport, isAuthor: boolean): ReportReadState | null {
+/** Derive read state without conflating it with the report review state.
+ * The advisor-read signal (author's mentors + main PI) is the same for every viewer. */
+function reportReadState(report: TPeriodicReport): ReportReadState | null {
   if (report.status === "DRAFT") return null;
   if (report.status !== "SUBMITTED") return "reviewed";
-  const hasRead = isAuthor ? (report.read_count ?? 0) > 0 : Boolean(report.has_read);
-  return hasRead ? "read_pending_review" : "waiting";
+  return (report.read_count ?? 0) > 0 ? "read_pending_review" : "waiting";
 }
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
@@ -101,7 +101,6 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const [templateId, setTemplateId] = useState("");
 
   const reports = research.getReports(workspaceSlug);
-  const currentUserId = research.identity?.user.id;
   const orgUnits = research.getOrgUnits(workspaceSlug);
   const pagination = research.reportPaginationByWorkspace[workspaceSlug];
   const canCreateReport = Boolean(research.identity?.user.org_units.length);
@@ -390,7 +389,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                   </TableCell>
                   <TableCell>
                     {(() => {
-                      const readState = reportReadState(report, report.owner === currentUserId);
+                      const readState = reportReadState(report);
                       if (!readState) return <span className="text-tertiary">-</span>;
                       return (
                         <span className="flex flex-col gap-0.5">
