@@ -82,6 +82,7 @@ def create_single(workspace, actor, payload):
             "review_note",
         )
     }
+    fields["email"] = imports.clean_email(fields["email"])
     limits = {
         "display_name": 255,
         "email": 255,
@@ -113,7 +114,7 @@ def create_single(workspace, actor, payload):
             if user is None:
                 invalid("导师不是当前工作区有效成员。")
         name = user.display_name or user.first_name if user else str(item.get("name") or "").strip()
-        email = user.email if user else str(item.get("email") or "").strip().lower()
+        email = user.email if user else imports.clean_email(item.get("email"))
         if not name or len(name) > 255 or not imports._valid_email(email):
             invalid("请填写导师姓名和有效邮箱。")
         names.append(name)
@@ -123,7 +124,7 @@ def create_single(workspace, actor, payload):
     row = imports.StudentRow(
         row_number=1,
         name=fields["display_name"],
-        email=fields["email"].lower(),
+        email=fields["email"],
         student_no=fields["student_no"],
         phone=fields["phone"],
         grade=fields["grade"],

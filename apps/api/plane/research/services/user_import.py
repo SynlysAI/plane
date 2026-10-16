@@ -223,8 +223,20 @@ class ImportPreview:
         }
 
 
+# 从剪贴板/Excel 复制进邮箱单元格的零宽等不可见字符：既绕得过邮箱校验，
+# 又会让按邮箱匹配既有账号失效（进而开出重复账号），导入入口统一剥离。
+_INVISIBLE_CHARACTERS = dict.fromkeys(
+    map(ord, "\u00ad\u180e\u200b\u200c\u200d\u2060\u2061\u2062\u2063\u2064\ufeff")
+)
+
+
+def clean_email(value):
+    """规范化邮箱：去首尾空白、转小写、剥离零宽等不可见字符。"""
+    return str(value or "").strip().lower().translate(_INVISIBLE_CHARACTERS)
+
+
 def _normalise_header(value):
-    return str(value or "").strip().lower().replace(" ", "").replace("　", "")
+    return str(value or "").strip().lower().replace(" ", "").replace("　", "").translate(_INVISIBLE_CHARACTERS)
 
 
 def _map_exact_headers(header_row, headers):
@@ -358,7 +370,7 @@ def parse_students(payload, filename=""):
             StudentRow(
                 row_number=index,
                 name=cell(row, "name"),
-                email=cell(row, "email").lower(),
+                email=clean_email(cell(row, "email")),
                 student_no=cell(row, "student_no"),
                 grade=cell(row, "grade"),
                 phone=cell(row, "phone"),
@@ -404,7 +416,7 @@ def parse_advisors(payload, filename=""):
     advisors = {}
     for row in rows[1:]:
         name = cell(row, "name")
-        email = cell(row, "email").lower()
+        email = clean_email(cell(row, "email"))
         if not name or not email:
             continue
         key = _normalise_header(name)
@@ -448,7 +460,7 @@ def _remember_advisor_snapshot(batch, email, password):
         return
     options = dict(batch.options or {})
     snapshots = dict(options.get("advisor_password_snapshots") or {})
-    snapshots[str(email).strip().lower()] = password
+    snapshots[clean_email(email)] = password
     options["advisor_password_snapshots"] = snapshots
     batch.options = options
 
@@ -679,6 +691,8 @@ def backfill_initial_passwords(workspace, accounts, *, actor=None, dry_run=False
 
 
 def _valid_email(value):
+    if any(ord(char) in _INVISIBLE_CHARACTERS for char in str(value or "")):
+        return False
     try:
         validate_email(value)
     except ValidationError:
@@ -867,7 +881,7 @@ def _student_row_from_import_row(row):
 
 def _advisor_mapping_for_row(row):
     return {
-        _normalise_header(name): email.strip().lower()
+        _normalise_header(name): clean_email(email)
         for name, email in (
             (row.advisor_name, row.primary_advisor_email),
             (row.co_advisor_1_name, row.co_advisor_1_email),
@@ -1034,7 +1048,7 @@ def update_review_row(workspace, batch_id, row_id, payload):
         if field_name in payload:
             value = str(payload[field_name] or "").strip()
             if field_name.endswith("email") or field_name == "email":
-                value = value.lower()
+                value = clean_email(value)
             if len(value) > UserImportRow._meta.get_field(field_name).max_length:
                 raise AccountError(ResearchErrorCode.IMPORT_ROW_INVALID, f"{field_name} 超过允许长度。")
             changed = changed or getattr(row, field_name) != value
@@ -1278,7 +1292,7 @@ def reject_review_batch(workspace, actor, batch_id, reason, *, request=None):
 
 
 def _identity_email(value):
-    return str(value or "").strip().lower()
+    return clean_email(value)
 
 
 def _identity_conflict_message(conflicts):

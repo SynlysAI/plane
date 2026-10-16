@@ -10,7 +10,13 @@ import pytest
 from openpyxl import Workbook
 
 from plane.research.services.accounts import AccountError
-from plane.research.services.user_import import parse_advisors, parse_students, sheet_rows
+from plane.research.services.user_import import (
+    _valid_email,
+    clean_email,
+    parse_advisors,
+    parse_students,
+    sheet_rows,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -170,3 +176,42 @@ def test_duplicate_advisor_names_in_one_roster_row_are_rejected_by_row_validatio
     error_code, message = validate_row(row)
     assert error_code == "user_import_row_invalid"
     assert "导师不能重复" in message
+
+
+@pytest.mark.parametrize(
+    "invisible",
+    ["\u200b", "\u200c", "\u200d", "\ufeff", "\u00ad", "\u2060"],
+)
+def test_clean_email_strips_invisible_characters(invisible):
+    assert clean_email(f" {invisible}zxc@xmu.edu.cn{invisible} ") == "zxc@xmu.edu.cn"
+
+
+def test_valid_email_rejects_invisible_characters():
+    assert _valid_email("zxc@xmu.edu.cn\u200c") is False
+    assert _valid_email("zxc@xmu.edu.cn") is True
+
+
+def test_roster_email_with_invisible_characters_is_cleaned():
+    payload = ROSTER_HEADER + ROSTER_ROW.replace(
+        "qiuzhixin@stu.xmu.edu.cn", "qiuzhixin@stu.xmu.edu.cn\u200c"
+    )
+
+    rows = parse_students(payload.encode("utf-8"), "roster.csv")
+
+    assert rows[0].email == "qiuzhixin@stu.xmu.edu.cn"
+
+
+def test_advisor_table_email_with_invisible_characters_is_cleaned():
+    payload = "姓名,邮箱\n陈志昕,zxc@xmu.edu.cn\ufeff\n"
+
+    advisors = parse_advisors(payload.encode("utf-8"), "advisors.csv")
+
+    assert advisors == {"陈志昕": "zxc@xmu.edu.cn"}
+
+
+def test_advisor_name_key_ignores_invisible_characters():
+    # 名册里导师姓名若带零宽字符，也应命中导师映射表的同一键。
+    from plane.research.services.user_import import _normalise_header
+
+    assert _normalise_header("\u5218\u200c\u4fca\u200b\u626c") == "刘俊扬"
+
