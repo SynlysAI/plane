@@ -24,8 +24,10 @@ from plane.utils.host import base_host
 from plane.app.permissions.base import allow_permission, ROLE
 from plane.research.utils.project_review import research_review_project_ids_for_slug, user_can_review_research_project
 from plane.utils.administrative_projects import (
+    administrative_organization_project_ids,
     administrative_projects_for_user,
     effective_project_member,
+    public_administrative_project_ids,
     user_can_manage_administrative_project,
 )
 
@@ -402,6 +404,13 @@ class UserProjectRolesEndpoint(BaseAPIView):
         project_members = {str(member["project_id"]): member["role"] for member in project_members}
         for project_id in administrative_projects_for_user(request.user, slug).values_list("id", flat=True):
             project_members[str(project_id)] = ROLE.ADMIN.value
+        # 对齐项目列表 member_role 注解的口径：公共行政项目对全员按 MEMBER 只读
+        # 开放，行政组织关联项目按 GUEST 开放。缺了这两类，前端权限地图会把列表
+        # 里可见的项目误判为不可访问（显示“未找到项目”）。
+        for project_id in public_administrative_project_ids(request.user, slug).values_list("id", flat=True):
+            project_members.setdefault(str(project_id), ROLE.MEMBER.value)
+        for project_id in administrative_organization_project_ids(request.user, slug).values_list("id", flat=True):
+            project_members.setdefault(str(project_id), ROLE.GUEST.value)
         for project_id in research_review_project_ids_for_slug(request.user, slug):
             project_members.setdefault(str(project_id), ROLE.GUEST.value)
         return Response(project_members, status=status.HTTP_200_OK)

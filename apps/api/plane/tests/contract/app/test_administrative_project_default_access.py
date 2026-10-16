@@ -192,3 +192,42 @@ def test_workspace_admin_cannot_bypass_private_workspace_gate(env):
     )
     base = f"/api/workspaces/{env['workspace'].slug}/projects/{env['project'].id}/"
     assert client.get(f"{base}issues/").status_code == 403
+
+
+def test_public_administrative_project_readable_by_every_member(env):
+    """默认公共组织下的公共项目对全体成员只读开放，无需加入项目。"""
+    from plane.db.models.project import ProjectNetwork
+    from plane.utils.administrative_projects import get_or_create_default_administrative_organization
+
+    public_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="公共项目测试",
+        identifier="PUB",
+        network=ProjectNetwork.PUBLIC.value,
+        administrative_organization=get_or_create_default_administrative_organization(env["workspace"]),
+    )
+    state = State.objects.create(
+        project=public_project, workspace=env["workspace"], name="Todo", group="unstarted", default=True
+    )
+    Issue.objects.create(project=public_project, workspace=env["workspace"], name="Public task", state=state)
+    page = Page.objects.create(workspace=env["workspace"], owned_by=env["owner"], name="Public page", access=0)
+    ProjectPage.objects.create(project=public_project, page=page, workspace=env["workspace"])
+
+    _, client = actor_client(env, "member")
+    slug = env["workspace"].slug
+    base = f"/api/workspaces/{slug}/projects/{public_project.id}/"
+
+    # 权限地图必须包含公共项目，否则前端会把列表可见的项目显示成“未找到项目”。
+    roles = client.get(f"/api/users/me/workspaces/{slug}/project-roles/")
+    assert roles.status_code == 200, roles.data
+    assert roles.data[str(public_project.id)] == 15
+
+    detail = client.get(base)
+    assert detail.status_code == 200, detail.data
+    assert detail.data["member_role"] == 15
+    assert client.get(f"{base}issues/").status_code == 200
+    assert client.get(f"{base}states/").status_code == 200
+    assert client.get(f"{base}members/").status_code == 200
+    assert client.get(f"{base}pages/").status_code == 200
+    # 公共行政项目对全员按 MEMBER 开放（effective_project_member 既有口径），可协作创建工作项。
+    assert client.post(f"{base}issues/", {"name": "Public collaboration"}, format="json").status_code == 201
