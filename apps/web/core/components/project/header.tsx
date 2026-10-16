@@ -63,6 +63,15 @@ export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
         <div className="hidden md:flex">
           <HeaderFilters />
         </div>
+        {isAuthorizedUser && usesAdministrativeChannel && !isArchived && (
+          <Button
+            variant="secondary"
+            size="lg"
+            onClick={() => window.dispatchEvent(new CustomEvent("administrative-organization-create"))}
+          >
+            新建组织
+          </Button>
+        )}
         {isAuthorizedUser && !isArchived ? (
           <Button
             variant="primary"

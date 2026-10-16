@@ -11,7 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { Button } from "@plane/propel/button";
 import { ModalCore, EModalWidth, Input } from "@plane/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // components
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
@@ -68,22 +68,25 @@ export const AdministrativeProjectTabs = observer(function AdministrativeProject
   const [isSavingOrganization, setIsSavingOrganization] = useState(false);
   const { fetchProjects } = useProject();
 
+  useEffect(() => {
+    if (activeTab !== "projects") return;
+
+    const openOrganizationModal = () => setIsOrganizationOpen(true);
+    window.addEventListener("administrative-organization-create", openOrganizationModal);
+    return () => window.removeEventListener("administrative-organization-create", openOrganizationModal);
+  }, [activeTab]);
+
   if (!research.isEnabled || !research.isIaV2Enabled) return <>{children}</>;
 
   return (
     <div className="flex min-h-full w-full min-w-0 flex-col bg-surface-1">
       <div className="shrink-0 border-b border-subtle px-5 py-3.5">
-        <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <div className="min-w-0">
             <h2 className="text-22 truncate font-semibold text-primary">{t("administrative.projects.title")}</h2>
             <p className="mt-0.5 text-13 text-tertiary">{t("administrative.projects.description")}</p>
             <p className="text-12 text-tertiary">{t("administrative.projects.boundary")}</p>
           </div>
-          {activeTab === "projects" && (
-            <Button variant="secondary" size="sm" onClick={() => setIsOrganizationOpen(true)}>
-              新建组织
-            </Button>
-          )}
         </div>
       </div>
       <nav

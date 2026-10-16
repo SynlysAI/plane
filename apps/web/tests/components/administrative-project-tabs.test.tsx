@@ -85,7 +85,7 @@ it("renders the four ordinary Plane capabilities in the administrative channel",
   ]);
 });
 
-it("shows organization creation to ordinary workspace members", async () => {
+it("keeps organization creation out of the administrative page heading", async () => {
   await act(async () =>
     root.render(
       <AdministrativeProjectTabs workspaceSlug="lab" activeTab="projects">
@@ -95,7 +95,7 @@ it("shows organization creation to ordinary workspace members", async () => {
   );
 
   const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "新建组织");
-  expect(button).toBeTruthy();
+  expect(button).toBeFalsy();
 });
 
 it("keeps ordinary pages unchanged when IA v2 is disabled", async () => {
