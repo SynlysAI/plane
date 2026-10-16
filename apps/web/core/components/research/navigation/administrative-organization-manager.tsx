@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Combobox } from "@headlessui/react";
 
 import { Button } from "@plane/propel/button";
-import { Combobox } from "@plane/propel/combobox";
 import { ChevronExpandOutline, TickOutline } from "@makeplane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalWidth, Input, ModalCore } from "@plane/ui";
@@ -51,6 +51,7 @@ export function AdministrativeOrganizationManager({
   const [renameName, setRenameName] = useState(organization?.name ?? "");
   const [deleteTarget, setDeleteTarget] = useState(defaultOrganization?.id ?? "uncategorized");
   const [isSaving, setIsSaving] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
   const sortedAssignableMembers = useMemo(
     () =>
       // oxlint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
@@ -61,6 +62,13 @@ export function AdministrativeOrganizationManager({
       ),
     [assignableMembers]
   );
+  const filteredMembers = useMemo(() => {
+    const query = memberQuery.trim().toLowerCase();
+    if (!query) return sortedAssignableMembers;
+    return sortedAssignableMembers.filter(
+      (member) => (member.name || "").toLowerCase().includes(query) || member.email.toLowerCase().includes(query)
+    );
+  }, [memberQuery, sortedAssignableMembers]);
 
   useEffect(() => {
     setManagerAction(action);
@@ -174,46 +182,69 @@ export function AdministrativeOrganizationManager({
           >
             <span id="organization-member-label">工作区成员</span>
             <Combobox
-              multiSelect
+              as="div"
+              multiple
               value={selectedMembers}
-              onValueChange={(value) => setSelectedMembers(value as string[])}
+              onChange={(value: string[]) => {
+                setSelectedMembers(value);
+                setMemberQuery("");
+              }}
             >
-              <Combobox.Button
-                className="flex w-full items-center justify-between rounded-md border border-subtle bg-surface-1 px-2 py-2 text-left text-13 text-primary"
-                aria-labelledby="organization-member-label"
-              >
-                <span className="truncate">
-                  {selectedMembers.length > 0 ? `已选择 ${selectedMembers.length} 位成员` : "选择成员"}
-                </span>
-                <ChevronExpandOutline className="ml-2 size-4 shrink-0 text-tertiary" />
-              </Combobox.Button>
-              <Combobox.Options
-                showSearch
-                searchPlaceholder="搜索姓名或邮箱"
-                emptyMessage="没有找到匹配的成员"
-                maxHeight="md"
-                className="w-[var(--anchor-width)]"
-              >
-                {sortedAssignableMembers.map((member) => {
-                  const isSelected = selectedMembers.includes(member.id);
-                  return (
-                    <Combobox.Option key={member.id} value={member.id} className="flex items-center gap-2 px-2 py-2">
-                      <span
-                        className={`grid size-4 shrink-0 place-items-center rounded border ${
-                          isSelected ? "border-accent-primary bg-accent-primary text-on-color" : "border-strong"
-                        }`}
-                        aria-hidden="true"
-                      >
-                        {isSelected && <TickOutline className="size-3" />}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-13 text-primary">{member.name || member.email}</span>
-                        {member.name && <span className="block truncate text-11 text-tertiary">{member.email}</span>}
-                      </span>
-                    </Combobox.Option>
-                  );
-                })}
-              </Combobox.Options>
+              <div className="relative">
+                <Combobox.Input
+                  aria-labelledby="organization-member-label"
+                  className="w-full rounded-md border border-subtle bg-surface-1 px-2 py-2 pr-8 text-13 text-primary outline-none placeholder:text-placeholder"
+                  placeholder={
+                    selectedMembers.length > 0
+                      ? `已选择 ${selectedMembers.length} 位成员，继续搜索姓名或邮箱`
+                      : "搜索姓名或邮箱"
+                  }
+                  displayValue={() => ""}
+                  value={memberQuery}
+                  onChange={(event) => setMemberQuery(event.target.value)}
+                />
+                <Combobox.Button
+                  className="absolute inset-y-0 right-0 flex items-center px-2 text-tertiary"
+                  aria-label="展开工作区成员"
+                >
+                  <ChevronExpandOutline className="size-4 shrink-0" aria-hidden="true" />
+                </Combobox.Button>
+                <Combobox.Options className="vertical-scrollbar absolute z-10 mt-1 scrollbar-md max-h-48 w-full overflow-auto rounded-md border border-subtle bg-surface-1 p-1 shadow-raised-200">
+                  {filteredMembers.length === 0 ? (
+                    <li className="px-2 py-1.5 text-13 text-placeholder">没有找到匹配的成员</li>
+                  ) : (
+                    filteredMembers.map((member) => {
+                      const isSelected = selectedMembers.includes(member.id);
+                      return (
+                        <Combobox.Option
+                          key={member.id}
+                          value={member.id}
+                          className={({ active }) =>
+                            `flex cursor-pointer items-center gap-2 rounded-sm px-2 py-2 select-none ${
+                              active ? "bg-surface-2" : ""
+                            }`
+                          }
+                        >
+                          <span
+                            className={`grid size-4 shrink-0 place-items-center rounded border ${
+                              isSelected ? "border-accent-primary bg-accent-primary text-on-color" : "border-strong"
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {isSelected && <TickOutline className="size-3" />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-13 text-primary">{member.name || member.email}</span>
+                            {member.name && (
+                              <span className="block truncate text-11 text-tertiary">{member.email}</span>
+                            )}
+                          </span>
+                        </Combobox.Option>
+                      );
+                    })
+                  )}
+                </Combobox.Options>
+              </div>
             </Combobox>
             <span className="text-11 text-tertiary">可搜索并选择多个成员。</span>
           </div>
