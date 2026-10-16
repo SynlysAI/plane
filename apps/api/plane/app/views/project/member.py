@@ -23,6 +23,13 @@ from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
 from plane.app.permissions.base import allow_permission, ROLE
 from plane.research.utils.project_review import research_review_project_ids_for_slug, user_can_review_research_project
+from plane.utils.administrative_projects import (
+    administrative_organization_project_ids,
+    administrative_projects_for_user,
+    effective_project_member,
+    public_administrative_project_ids,
+    user_can_manage_administrative_project,
+)
 
 
 class ProjectMemberViewSet(BaseViewSet):
@@ -171,12 +178,7 @@ class ProjectMemberViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def retrieve(self, request, slug, project_id, pk):
-        requesting_project_member = ProjectMember.objects.get(
-            project_id=project_id,
-            workspace__slug=slug,
-            member=request.user,
-            is_active=True,
-        )
+        requesting_project_member = effective_project_member(request.user, slug, project_id)
 
         project_member = (
             ProjectMember.objects.filter(
@@ -215,7 +217,9 @@ class ProjectMemberViewSet(BaseViewSet):
         requester_workspace_role = WorkspaceMember.objects.get(
             workspace__slug=slug, member=request.user, is_active=True
         ).role
-        is_workspace_admin = requester_workspace_role == ROLE.ADMIN.value
+        is_workspace_admin = requester_workspace_role == ROLE.ADMIN.value or user_can_manage_administrative_project(
+            request.user, slug, project_id
+        )
 
         # Check if the user is not editing their own role if they are not an admin
         if request.user.id == project_member.member_id and not is_workspace_admin:
@@ -224,12 +228,7 @@ class ProjectMemberViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Check while updating user roles
-        requested_project_member = ProjectMember.objects.get(
-            project_id=project_id,
-            workspace__slug=slug,
-            member=request.user,
-            is_active=True,
-        )
+        requested_project_member = effective_project_member(request.user, slug, project_id)
 
         if "role" in request.data:
             # Only Admins can modify roles
@@ -298,12 +297,7 @@ class ProjectMemberViewSet(BaseViewSet):
             is_active=True,
         )
         # check requesting user role
-        requesting_project_member = ProjectMember.objects.get(
-            workspace__slug=slug,
-            member=request.user,
-            project_id=project_id,
-            is_active=True,
-        )
+        requesting_project_member = effective_project_member(request.user, slug, project_id)
         # User cannot remove himself
         if str(project_member.id) == str(requesting_project_member.id):
             return Response(
@@ -352,6 +346,18 @@ class ProjectMemberViewSet(BaseViewSet):
 
 class ProjectMemberUserEndpoint(BaseAPIView):
     def get(self, request, slug, project_id):
+        if user_can_manage_administrative_project(request.user, slug, project_id):
+            return Response(
+                {
+                    "id": None,
+                    "member": str(request.user.id),
+                    "role": ROLE.ADMIN.value,
+                    "original_role": None,
+                    "created_at": None,
+                    "project": str(project_id),
+                },
+                status=status.HTTP_200_OK,
+            )
         project_member = ProjectMember.objects.filter(
             project_id=project_id,
             workspace__slug=slug,
@@ -396,6 +402,15 @@ class UserProjectRolesEndpoint(BaseAPIView):
         ).values("project_id", "role")
 
         project_members = {str(member["project_id"]): member["role"] for member in project_members}
+        for project_id in administrative_projects_for_user(request.user, slug).values_list("id", flat=True):
+            project_members[str(project_id)] = ROLE.ADMIN.value
+        # 对齐项目列表 member_role 注解的口径：公共行政项目对全员按 MEMBER 只读
+        # 开放，行政组织关联项目按 GUEST 开放。缺了这两类，前端权限地图会把列表
+        # 里可见的项目误判为不可访问（显示“未找到项目”）。
+        for project_id in public_administrative_project_ids(request.user, slug).values_list("id", flat=True):
+            project_members.setdefault(str(project_id), ROLE.MEMBER.value)
+        for project_id in administrative_organization_project_ids(request.user, slug).values_list("id", flat=True):
+            project_members.setdefault(str(project_id), ROLE.GUEST.value)
         for project_id in research_review_project_ids_for_slug(request.user, slug):
             project_members.setdefault(str(project_id), ROLE.GUEST.value)
         return Response(project_members, status=status.HTTP_200_OK)

@@ -71,11 +71,6 @@ vi.mock("@/services/research/approval.service", () => ({
     getApprovalRequests = vi.fn().mockResolvedValue({ results: [], count: 0 });
   },
 }));
-vi.mock("@/services/research/agent.service", () => ({
-  ResearchAgentService: class {
-    getApprovals = vi.fn().mockResolvedValue({ results: [], count: 0 });
-  },
-}));
 vi.mock("@/services/research/integration.service", () => ({
   ResearchIntegrationService: class {
     getConnections = vi.fn().mockResolvedValue({ results: [] });
@@ -159,17 +154,28 @@ it("shows the latest visible chain, current node and snapshot", async () => {
   expect(container.querySelector('a[href="/lab/research"]')).toBeNull();
 });
 
-it("reads the todo count from one aggregate request without polling uploads", async () => {
+it("counts only open tasks in visible chains without polling other resources", async () => {
   mocks.getChains.mockResolvedValue([
-    { id: "chain-1", project: "课题一", project_name: "课题一", status: "ACTIVE", updated_at: "2026-09-23T00:00:00Z" },
+    {
+      id: "chain-1",
+      project: "课题一",
+      project_name: "课题一",
+      status: "ACTIVE",
+      open_task_count: 3,
+      updated_at: "2026-09-23T00:00:00Z",
+    },
+    { id: "chain-archived", project: "归档课题", status: "ARCHIVED", open_task_count: 9 },
+    { id: "chain-deleted", project: "删除课题", status: "DELETED", open_task_count: 8 },
   ]);
   mocks.getChainNodes.mockResolvedValue([]);
   mocks.getResearchTodos.mockResolvedValue(emptyTodoList(3));
 
   await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" />));
 
-  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(1);
-  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
+  expect(mocks.getResearchTodos).not.toHaveBeenCalled();
+  expect(mocks.getChainNodes).toHaveBeenCalledTimes(1);
+  expect(container.textContent).not.toContain("归档课题");
+  expect(container.textContent).not.toContain("删除课题");
   expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
   expect(container.textContent).toContain("3");
   expect(container.textContent).toContain("待处理");
@@ -234,7 +240,7 @@ it("shows each supervised chain and the other owner's name", async () => {
   expect(container.textContent).not.toContain("1/2");
 });
 
-it("keeps a student on one row and hides their own name", async () => {
+it("keeps a student on one row and shows their own name", async () => {
   mocks.research.identity = {
     module_enabled: true,
     workspace_enabled: true,
@@ -267,5 +273,15 @@ it("keeps a student on one row and hides their own name", async () => {
 
   expect(container.textContent).toContain("自己的课题");
   expect(container.textContent).not.toContain("另一条自己的课题");
-  expect(container.textContent).not.toContain("学生甲");
+  expect(container.textContent).toContain("负责人：学生甲");
+});
+
+it("shows an empty state when all returned chains are archived or deleted", async () => {
+  mocks.getChains.mockResolvedValue([
+    { id: "archived", status: "ARCHIVED" },
+    { id: "deleted", status: "DELETED" },
+  ]);
+  await act(async () => root.render(<ResearchHomeSummaryCard workspaceSlug="lab" />));
+  expect(container.textContent).toContain("当前还没有可见研究链。");
+  expect(mocks.getChainNodes).not.toHaveBeenCalled();
 });

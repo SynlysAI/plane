@@ -11,11 +11,7 @@ import { useParams, usePathname } from "next/navigation";
 import { ChevronRightOutline } from "@makeplane/propel/icons";
 import { Disclosure, Transition } from "@headlessui/react";
 // plane imports
-import {
-  RESEARCH_IA_V2_NAVIGATION_ITEMS,
-  RESEARCH_NAVIGATION_ITEMS,
-  RESEARCH_SETTINGS_NAVIGATION_ITEMS,
-} from "@plane/constants";
+import { RESEARCH_NAVIGATION_ITEMS, RESEARCH_SETTINGS_NAVIGATION_ITEMS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { cn } from "@plane/utils";
@@ -54,6 +50,8 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
     RESEARCH_MENU_OPEN_KEY,
     true
   );
+  // 同步项目树持久化的展开状态，科研区收起后将剩余高度交给行政区。
+  const { storedValue: storedIsResearchTreeOpen } = useLocalStorage<boolean>("research_navigation_research_open", true);
 
   // default to expanded before the stored value is hydrated
   const isMenuOpen = storedIsMenuOpen ?? true;
@@ -65,12 +63,13 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug]);
 
-  // No research relation at all: nothing to show, not even the overview.
+  // 非 IA v2 且无科研关系时不渲染旧科研菜单；IA v2 下行政项目树仍需保留。
+  const hasResearchIdentity = research.researchLevel !== "NONE" && research.researchLevel !== null;
   if (
     !workspaceSlug ||
     research.identityWorkspaceSlug !== workspaceSlug ||
     !research.isEnabled ||
-    (research.researchLevel === "NONE" && (research.visibleNavKeys?.length ?? 0) === 0)
+    (!hasResearchIdentity && (research.visibleNavKeys?.length ?? 0) === 0 && !research.isIaV2Enabled)
   )
     return null;
 
@@ -84,10 +83,6 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   const visibleSettingsItems = RESEARCH_SETTINGS_NAVIGATION_ITEMS.filter(
     (item) => Boolean(sections?.[item.section]) && research.canSee(item.key)
   );
-  const visibleIaV2Items = RESEARCH_IA_V2_NAVIGATION_ITEMS.filter((item) => {
-    if (item.key === "management") return visibleSettingsItems.length > 0;
-    return Boolean(sections?.[item.section]) && research.canSee(item.key);
-  });
 
   const menuAriaLabel = t(
     isMenuOpen ? "aria_labels.projects_sidebar.close_research_menu" : "aria_labels.projects_sidebar.open_research_menu"
@@ -99,7 +94,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
     const href = path ? `/${workspaceSlug}/research/${path}` : `/${workspaceSlug}/research`;
     const isActive = exact ? pathname === href : pathname === href || pathname?.startsWith(`${href}/`);
     return (
-      <Link key={key} href={href}>
+      <Link key={key} href={href} className="shrink-0">
         <SidebarNavItem isActive={isActive}>
           <span className="flex-1 truncate text-13 leading-5 font-medium whitespace-nowrap">{t(labelKey)}</span>
         </SidebarNavItem>
@@ -110,7 +105,10 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   return (
     <Disclosure
       as="div"
-      className={cn("flex flex-col", research.isIaV2Enabled ? "mt-1" : "mt-3 border-t border-subtle pt-3")}
+      className={cn(
+        "flex flex-col",
+        research.isIaV2Enabled ? "mt-2 min-h-0 flex-1 border-t border-subtle pt-2" : "mt-3 border-t border-subtle pt-3"
+      )}
       defaultOpen={research.isIaV2Enabled || isMenuOpen}
     >
       {!research.isIaV2Enabled && (
@@ -142,6 +140,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
       )}
       <Transition
         as="div"
+        className={cn({ "flex min-h-0 flex-1 flex-col": research.isIaV2Enabled })}
         show={research.isIaV2Enabled || isMenuOpen}
         enter="transition duration-100 ease-out"
         enterFrom="transform scale-95 opacity-0"
@@ -151,33 +150,29 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
         leaveTo="transform scale-95 opacity-0"
       >
         {(research.isIaV2Enabled || isMenuOpen) && (
-          <Disclosure.Panel as="div" className="flex flex-col gap-0.5" static>
+          <Disclosure.Panel
+            as="div"
+            className={cn("flex flex-col", research.isIaV2Enabled ? "min-h-0 flex-1 gap-2" : "gap-0.5")}
+            static
+          >
             {research.isIaV2Enabled ? (
               <>
-                {visibleIaV2Items
-                  .filter((item) => item.key !== "research_chain")
-                  // eslint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
-                  .sort((left, right) => {
-                    const order = ["management", "approvals"];
-                    return order.indexOf(left.key) - order.indexOf(right.key);
-                  })
-                  .map((item) => renderItem(item.key, item.labelKey, item.path))}
                 {research.canSee("research_chain") && (
                   <ResearchProjectTree
                     scope="RESEARCH"
                     title={t("research.nav.research_chain_v2")}
                     href={`/${workspaceSlug}/research/chains`}
                     canManage={research.canSee("management")}
+                    fillAvailableSpace
                   />
                 )}
-                {research.canSee("projects") && (
-                  <ResearchProjectTree
-                    scope="ADMINISTRATIVE"
-                    title="行政项目"
-                    href={`/${workspaceSlug}/projects`}
-                    canManage={research.canSee("management")}
-                  />
-                )}
+                <ResearchProjectTree
+                  scope="ADMINISTRATIVE"
+                  title="行政项目"
+                  href={`/${workspaceSlug}/projects`}
+                  canManage={research.canSee("management")}
+                  fillAvailableSpace={!research.canSee("research_chain") || !(storedIsResearchTreeOpen ?? true)}
+                />
               </>
             ) : (
               [

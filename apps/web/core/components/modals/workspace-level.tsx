@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { CreateProjectModal } from "@/components/project/create-project-modal";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useResearch } from "@/hooks/store/use-research";
 
 export type TWorkspaceLevelModalsProps = {
   workspaceSlug: string;
@@ -18,6 +19,8 @@ export const WorkspaceLevelModals = observer(function WorkspaceLevelModals(props
   const { workspaceSlug } = props;
   // store hooks
   const { isCreateProjectModalOpen, toggleCreateProjectModal } = useCommandPalette();
+  const research = useResearch();
+  const administrative = Boolean(research.isEnabled && research.isIaV2Enabled);
 
   return (
     <>
@@ -25,6 +28,7 @@ export const WorkspaceLevelModals = observer(function WorkspaceLevelModals(props
         isOpen={isCreateProjectModalOpen}
         onClose={() => toggleCreateProjectModal(false)}
         workspaceSlug={workspaceSlug.toString()}
+        administrative={administrative}
       />
     </>
   );

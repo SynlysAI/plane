@@ -4,9 +4,10 @@ from dataclasses import asdict, dataclass
 
 from django.utils import timezone
 
-from plane.db.models import AccountLink, ResearchChainUpload
+from plane.db.models import ResearchChainUpload
 from plane.research.services.context_tokens import issue_context_token
-from plane.research.services.synlora import SynloraClient, SynloraError
+from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
+from plane.research.services.specialist_catalog import specialist_id_for_node
 
 SYNLORA_PROVIDER = "SYNLORA"
 PERSONA_BY_NODE_TYPE = {
@@ -25,6 +26,13 @@ TOOLS_BY_NODE_TYPE = {
 DEFAULT_TOOLS = frozenset({"knowledge.search", "knowledge.list", "file.read"})
 REVIEW_TOOLS = frozenset({"knowledge.search", "knowledge.list", "file.read"})
 
+# ScienceDiscovery 的桥接工具面（read_file/list_files 由 SD 会话工作区原生提供）。
+# P1 不向 SD 下发工具白名单（§11 已知取舍），装配结果仅用于 Plane 侧展示与审计。
+SCIENCE_DISCOVERY_MANIFEST = {
+    "tools": [{"name": "read_file"}, {"name": "list_files"}],
+    "plugins": [],
+}
+
 
 @dataclass
 class AgentAssembly:
@@ -40,16 +48,6 @@ class AgentAssembly:
     scope_kind: str = "OWNER"
     scope_source: str = "chain_owner"
     policy_version: str = "research-agent-policy.v1"
-
-
-def active_synlora_link(user):
-    """Return the user's active Synlora AccountLink or ``None``."""
-    return AccountLink.objects.filter(
-        local_user=user,
-        provider=SYNLORA_PROVIDER,
-        status=AccountLink.Status.ACTIVE,
-        deleted_at__isnull=True,
-    ).first()
 
 
 def _tool_policy(node_type):
@@ -143,22 +141,37 @@ def context_metadata(*, workspace, profile, node, grant, assembly):
     }
 
 
-def create_synlora_session(
-    *, workspace, user, node, request_id, client=None, scope_kind="OWNER", scope_source="chain_owner"
+
+def create_science_discovery_session(
+    *,
+    workspace,
+    user,
+    node,
+    request_id,
+    client=None,
+    connection=None,
+    scope_kind="OWNER",
+    scope_source="chain_owner",
 ):
-    """Run the complete fail-closed Synlora session assembly pipeline."""
-    link = active_synlora_link(user)
-    if link is None:
-        raise SynloraError("synlora_account_link_inactive", "An active Synlora account link is required.", 403)
-    synlora = client or SynloraClient(workspace=workspace)
-    delegated = synlora.exchange_delegated_token(account_link=link, workspace=workspace, user=user)
-    token = str(delegated.get("token") or "")
-    if not token:
-        raise SynloraError("synlora_delegated_auth_failed", "Synlora delegated token exchange failed.", 502)
-    manifest = synlora.capabilities(token)
-    assembly = assemble_agent(node=node, manifest=manifest, scope_kind=scope_kind, scope_source=scope_source)
+    """Run the fail-closed ScienceDiscovery session assembly pipeline.
+
+    Mirrors :func:`create_synlora_session` but needs no delegated token: the
+    single-user SD instance is addressed by the server-side bearer token only.
+    """
+    science_discovery = client or ScienceDiscoveryClient(connection=connection)
+    if not science_discovery.configured:
+        raise ScienceDiscoveryError(
+            "science_discovery_not_configured",
+            "ScienceDiscovery runtime is not configured.",
+        )
+    assembly = assemble_agent(
+        node=node,
+        manifest=SCIENCE_DISCOVERY_MANIFEST,
+        scope_kind=scope_kind,
+        scope_source=scope_source,
+    )
     profile = node.chain.project.research_profile
-    grant, context_token = issue_agent_context(
+    grant, _context_token = issue_agent_context(
         workspace=workspace,
         user=user,
         profile=profile,
@@ -166,26 +179,24 @@ def create_synlora_session(
         assembly=assembly,
         request_id=f"agent:{request_id}",
     )
-    metadata = context_metadata(workspace=workspace, profile=profile, node=node, grant=grant, assembly=assembly)
-    remote = synlora.create_session(
-        delegated_token=token,
-        context_token=context_token,
-        payload={
-            "title": f"{profile.project.name} · {node.title}"[:120],
-            "enabled_plugins": assembly.enabled_plugins,
-            "research_context": metadata,
-        },
-    )
-    remote_session_id = str(remote.get("_id") or remote.get("id") or "")
-    if not remote_session_id:
+    project_name = f"plane-{str(profile.project_id)[:8]}-{profile.project.name}"[:120]
+    try:
+        sd_project_id = science_discovery.create_project(name=project_name)
+        # 专业智能体开箱即用：按节点类型幂等下发目录并取 specialistId（§10）。
+        # 下发失败不阻断会话——SD 默认人设兜底。
+        specialist_id = specialist_id_for_node(science_discovery, node.node_type)
+        sd_session_id = science_discovery.create_session(
+            project_id=sd_project_id,
+            title=f"{profile.project.name} · {node.title}"[:120],
+            **({"specialist_id": specialist_id} if specialist_id else {}),
+        )
+    except ScienceDiscoveryError:
         grant.revoked_at = timezone.now()
         grant.save(update_fields=["revoked_at", "updated_at"])
-        raise SynloraError("synlora_session_failed", "Synlora did not return a session id.", 502)
+        raise
     return {
         "grant": grant,
-        "context_metadata": metadata,
-        "delegated_token": token,
-        "delegated_subject": str(delegated.get("subject") or link.external_subject),
-        "synlora_session_id": remote_session_id,
+        "sd_project_id": sd_project_id,
+        "sd_session_id": sd_session_id,
         "assembly": asdict(assembly),
     }

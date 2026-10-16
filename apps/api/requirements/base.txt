@@ -36,6 +36,7 @@ uvicorn==0.29.0
 channels==4.3.2
 # ai
 openai==1.63.2
+httpx==0.28.1
 # slack
 slack-sdk==3.27.1
 # apm

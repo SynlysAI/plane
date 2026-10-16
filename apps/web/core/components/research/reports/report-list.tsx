@@ -16,7 +16,21 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
+import {
+  EModalPosition,
+  EModalWidth,
+  Input,
+  ModalCore,
+  ListFilterField,
+  ListFilterInput,
+  ListFilterSelect,
+} from "@plane/ui";
+import { Plus } from "lucide-react";
+import {
+  ResearchBrowseHeader,
+  ResearchBrowseRefresh,
+  ResearchBrowseToolbar,
+} from "@/components/research/common/research-browse-toolbar";
 import { ResearchBrowseFilters } from "@/components/research/common/browse-filters";
 import { WorkspaceOutcomes } from "@/components/research/outcomes/workspace-outcomes";
 import {
@@ -28,7 +42,6 @@ import {
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
   ResearchFilterChips,
-  ResearchFilterToolbar,
   ResearchListSurface,
   ResearchTableSurface,
 } from "@/components/research/common/research-data-surface";
@@ -47,12 +60,12 @@ type Props = {
 
 type ReportReadState = "waiting" | "read_pending_review" | "reviewed";
 
-/** Derive read state without conflating it with the report review state. */
-function reportReadState(report: TPeriodicReport, isAuthor: boolean): ReportReadState | null {
+/** Derive read state without conflating it with the report review state.
+ * The advisor-read signal (author's mentors + main PI) is the same for every viewer. */
+function reportReadState(report: TPeriodicReport): ReportReadState | null {
   if (report.status === "DRAFT") return null;
   if (report.status !== "SUBMITTED") return "reviewed";
-  const hasRead = isAuthor ? (report.read_count ?? 0) > 0 : Boolean(report.has_read);
-  return hasRead ? "read_pending_review" : "waiting";
+  return (report.read_count ?? 0) > 0 ? "read_pending_review" : "waiting";
 }
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
@@ -88,7 +101,6 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const [templateId, setTemplateId] = useState("");
 
   const reports = research.getReports(workspaceSlug);
-  const currentUserId = research.identity?.user.id;
   const orgUnits = research.getOrgUnits(workspaceSlug);
   const pagination = research.reportPaginationByWorkspace[workspaceSlug];
   const canCreateReport = Boolean(research.identity?.user.org_units.length);
@@ -248,60 +260,71 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         </div>
       )}
 
-      <ResearchFilterToolbar>
-        {canCreateReport && variant === "default" && (
-          <Button variant="primary" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-            {t("research.reports.create")}
-          </Button>
-        )}
-
-        <select
-          className="ml-auto rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
-        >
-          <option value="">{t("research.reports.all_statuses")}</option>
-          {(["DRAFT", "SUBMITTED", "NEEDS_REVISION", "ACCEPTED"] as const).map((status) => (
-            <option key={status} value={status}>
-              {t(REPORT_STATUS_LABELS[status])}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={t("research.reports.columns.type")}
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value)}
-        >
-          <option value="">{t("research.reports.all_types")}</option>
-          {REPORT_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {t(REPORT_TYPE_LABELS[type])}
-            </option>
-          ))}
-        </select>
-        <Input
-          aria-label={t("research.reports.columns.period")}
-          className="!w-40"
-          placeholder={t("research.reports.period_filter_placeholder")}
-          value={periodFilter}
-          onChange={(event) => setPeriodFilter(event.target.value)}
-        />
-        <select
-          aria-label={t("research.reports.columns.org_unit")}
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={orgFilter}
-          onChange={(event) => setOrgFilter(event.target.value)}
-        >
-          <option value="">{t("research.reports.all_org_units")}</option>
-          {orgUnits.map((unit) => (
-            <option key={unit.id} value={unit.id}>
-              {unit.name}
-            </option>
-          ))}
-        </select>
-        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="reports" />
-      </ResearchFilterToolbar>
+      <ResearchBrowseHeader
+        title={variant === "review" ? "报告评审" : "报告"}
+        actions={
+          canCreateReport &&
+          variant === "default" && (
+            <Button variant="primary" size="xl" prependIcon={<Plus />} onClick={() => setIsCreateDialogOpen(true)}>
+              {t("research.reports.create")}
+            </Button>
+          )
+        }
+      />
+      <ResearchBrowseToolbar>
+        <ListFilterField label="状态">
+          <ListFilterSelect
+            aria-label={t("research.reports.columns.status")}
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="">{t("research.reports.all_statuses")}</option>
+            {(["DRAFT", "SUBMITTED", "NEEDS_REVISION", "ACCEPTED"] as const).map((status) => (
+              <option key={status} value={status}>
+                {t(REPORT_STATUS_LABELS[status])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label="类型">
+          <ListFilterSelect
+            aria-label={t("research.reports.columns.type")}
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+          >
+            <option value="">{t("research.reports.all_types")}</option>
+            {REPORT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {t(REPORT_TYPE_LABELS[type])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label="周期" className="sm:w-36">
+          <ListFilterInput
+            aria-label={t("research.reports.columns.period")}
+            placeholder={t("research.reports.period_filter_placeholder")}
+            value={periodFilter}
+            onChange={(event) => setPeriodFilter(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label="组织节点">
+          <ListFilterSelect
+            aria-label={t("research.reports.columns.org_unit")}
+            value={orgFilter}
+            onChange={(event) => setOrgFilter(event.target.value)}
+          >
+            <option value="">{t("research.reports.all_org_units")}</option>
+            {orgUnits.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="reports" appearance="list" />
+        <ResearchBrowseRefresh onRefresh={() => void load()} disabled={research.reportLoader} />
+      </ResearchBrowseToolbar>
 
       {hasActiveFilters && (
         <ResearchFilterChips
@@ -324,7 +347,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         />
       ) : (
         <ResearchTableSurface>
-          <Table className="min-w-[860px]">
+          <Table className="min-w-240">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("research.reports.columns.period")}</TableHead>
@@ -366,7 +389,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                   </TableCell>
                   <TableCell>
                     {(() => {
-                      const readState = reportReadState(report, report.owner === currentUserId);
+                      const readState = reportReadState(report);
                       if (!readState) return <span className="text-tertiary">-</span>;
                       return (
                         <span className="flex flex-col gap-0.5">
@@ -405,7 +428,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         <div className="flex gap-2">
           <Button
             variant="secondary"
-            size="sm"
+            size="xl"
             disabled={!pagination?.prev_page_results}
             onClick={() => setCursor(pagination?.prev_cursor ?? "")}
           >
@@ -413,7 +436,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
           </Button>
           <Button
             variant="secondary"
-            size="sm"
+            size="xl"
             disabled={!pagination?.next_page_results}
             onClick={() => setCursor(pagination?.next_cursor ?? "")}
           >

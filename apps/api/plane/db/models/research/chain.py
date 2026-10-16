@@ -3,6 +3,7 @@
 import uuid
 
 from django.db import models
+from django.db.models import Q
 
 from plane.db.models.base import BaseModel
 
@@ -16,6 +17,7 @@ class ResearchChain(BaseModel):
         ACTIVE = "ACTIVE", "Active"
         ARCHIVED = "ARCHIVED", "Archived"
         COMPLETED = "COMPLETED", "Completed"
+        DELETED = "DELETED", "Deleted"
 
     project = models.OneToOneField("db.Project", on_delete=models.PROTECT, related_name="research_chain")
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="research_chains")
@@ -56,7 +58,13 @@ class ResearchChainNode(BaseModel):
 
     class Meta:
         db_table = "research_chain_nodes"
-        constraints = [models.UniqueConstraint(fields=["chain", "parent_node", "loop_iteration"], name="rsch_node_uq_loop")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["chain", "parent_node", "loop_iteration"],
+                condition=Q(deleted_at__isnull=True),
+                name="rsch_node_uq_loop",
+            )
+        ]
         indexes = [models.Index(fields=["chain", "status"], name="rsch_node_chain_status_idx")]
 
 

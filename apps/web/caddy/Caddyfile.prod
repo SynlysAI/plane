@@ -14,22 +14,22 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	}
 
-	# Keep the browser-visible Host for Django's CSRF/origin validation.
+	# 保留浏览器 Host 与端口，供 Django 校验来源并生成同源上传地址。
 	handle /api/* {
 		reverse_proxy api:8000 {
-			header_up Host {http.request.host}
+			header_up Host {http.request.hostport}
 		}
 	}
 	handle /auth/* {
 		reverse_proxy api:8000 {
-			header_up Host {http.request.host}
+			header_up Host {http.request.hostport}
 		}
 	}
 
-	# Plane signs MinIO requests with the public host, so preserve Host here too.
+	# MinIO 下载签名包含完整 Host，存储代理也必须保留端口。
 	handle /uploads/* {
 		reverse_proxy plane-minio:9000 {
-			header_up Host {http.request.host}
+			header_up Host {http.request.hostport}
 		}
 	}
 
@@ -40,8 +40,16 @@
 		file_server
 	}
 
+	# index.html must always be revalidated: it references hashed assets, so a
+	# cached copy pins users to stale bundles after a deploy. Hashed assets
+	# under /assets/ are immutable and cache freely.
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
 	handle {
 		try_files {path} /index.html
+		header Cache-Control "no-cache"
 		file_server
 	}
 

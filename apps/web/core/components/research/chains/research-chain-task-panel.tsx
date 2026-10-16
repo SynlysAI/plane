@@ -394,7 +394,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
   return (
     <section className="px-4 py-3" aria-label={t("research.chain_tasks.panel_title")}>
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <h3 className="text-15 flex items-baseline gap-2 font-semibold text-primary">
+        <h3 className="flex items-baseline gap-2 text-13 font-semibold text-primary">
           {t("research.chain_tasks.panel_title")}
           {state === "ready" && <span className="font-normal text-11 text-tertiary">{tasks.length}</span>}
         </h3>

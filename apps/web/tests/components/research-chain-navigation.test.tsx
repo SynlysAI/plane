@@ -2,6 +2,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { clsx } from "clsx";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 const mocks = vi.hoisted(() => ({
   businessItems: [
@@ -46,7 +47,6 @@ const mocks = vi.hoisted(() => ({
         code: true,
         integrations: true,
         research_chain: false,
-        research_agent: false,
       },
     },
     isEnabled: true,
@@ -75,7 +75,6 @@ const mocks = vi.hoisted(() => ({
     isResearchAdmin: false,
   },
   workspace: { getWorkspaceBySlug: () => ({ name: "Lab" }) },
-  stored: true,
 }));
 
 vi.mock("next/link", () => ({
@@ -99,11 +98,9 @@ vi.mock("@plane/i18n", () => ({
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
 vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ projectMap: {} }) }));
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => mocks.workspace }));
-vi.mock("@/hooks/use-local-storage", () => ({
-  default: () => ({ storedValue: mocks.stored, setValue: vi.fn() }),
-}));
 vi.mock("@/services/research/navigation.service", () => ({
   ResearchNavigationService: class {
+    getAdministrativeOrganizations = async () => [];
     getTree = (_workspaceSlug: string, scope: string) =>
       Promise.resolve(
         scope === "RESEARCH"
@@ -164,9 +161,17 @@ vi.mock("@makeplane/propel/icons", () => ({
   TickOutline: () => null,
   WarningTriangleOutline: () => null,
 }));
-vi.mock("@plane/propel/icon-button", () => ({ IconButton: () => <button type="button" /> }));
+vi.mock("@plane/propel/icon-button", () => ({
+  IconButton: ({
+    icon: _icon,
+    iconClassName: _iconClassName,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: unknown; iconClassName?: string }) => (
+    <button type="button" {...props} />
+  ),
+}));
 vi.mock("@plane/utils", () => ({
-  cn: (...values: Array<string | false | undefined>) => values.filter(Boolean).join(" "),
+  cn: clsx,
 }));
 vi.mock("@/components/core/page-title", () => ({ PageHead: () => null }));
 vi.mock("@/components/research/common/research-status-panel", () => ({
@@ -181,12 +186,73 @@ vi.mock("@plane/ui", () => ({
 }));
 
 const { ResearchSidebarItems } = await import("@/components/research/navigation/research-sidebar-items");
-const { ResearchPageShell } = await import("@/components/research/common/research-page-shell");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let availableHeight: number;
+let researchContentHeight: number;
+let administrativeContentHeight: number;
+const resizeCallbacks = new Set<() => void>();
+
+/** 模拟浏览器尺寸通知，验证项目树能在自然高度和受限高度之间切换。 */
+class MockResizeObserver implements ResizeObserver {
+  private readonly notify: () => void;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.notify = () => callback([], this);
+  }
+
+  /** 开始监听尺寸变化。 */
+  observe() {
+    resizeCallbacks.add(this.notify);
+  }
+
+  /** 停止监听尺寸变化。 */
+  unobserve() {
+    resizeCallbacks.delete(this.notify);
+  }
+
+  /** 清理组件卸载或分组切换时的监听。 */
+  disconnect() {
+    resizeCallbacks.delete(this.notify);
+  }
+}
+
+/** 触发已挂载项目树的尺寸重新测量。 */
+async function notifyResize() {
+  await act(async () => {
+    for (const callback of resizeCallbacks) callback();
+  });
+}
+
 beforeEach(() => {
+  localStorage.clear();
+  availableHeight = 600;
+  researchContentHeight = 900;
+  administrativeContentHeight = 900;
+  vi.stubGlobal("ResizeObserver", MockResizeObserver);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(() => availableHeight);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const tree = this.closest("[data-navigation-scope]");
+    const isHeader = this === tree?.firstElementChild;
+    const isContent = this.parentElement?.parentElement === tree;
+    const height = isHeader
+      ? 32
+      : isContent
+        ? tree?.getAttribute("data-navigation-scope") === "RESEARCH"
+          ? researchContentHeight
+          : administrativeContentHeight
+        : 48;
+    return { x: 0, y: 0, top: 0, left: 0, right: 240, bottom: height, width: 240, height, toJSON: () => ({}) };
+  });
+  vi.spyOn(window, "getComputedStyle").mockReturnValue({
+    paddingTop: "8px",
+    borderTopWidth: "1px",
+    marginTop: "8px",
+    marginBottom: "0px",
+    rowGap: "2px",
+  } as CSSStyleDeclaration);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -194,12 +260,14 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  resizeCallbacks.clear();
   vi.clearAllMocks();
 });
 
-function setSwitches(researchChain: boolean, researchAgent = false, iaV2 = false) {
+function setSwitches(researchChain: boolean, iaV2 = false) {
   mocks.research.identity.sections.research_chain = researchChain;
-  mocks.research.identity.sections.research_agent = researchAgent;
   mocks.research.isIaV2Enabled = iaV2;
   mocks.research.identity.research_ia_v2 = iaV2;
 }
@@ -243,21 +311,20 @@ it("shows 研究链 only when the workspace chain switch is on", async () => {
 });
 
 it("collapses research to the IA v2 project channels when IA v2 is enabled", async () => {
-  setSwitches(true, false, true);
+  setSwitches(true, true);
   await act(async () => root.render(<ResearchSidebarItems />));
   await act(async () => {});
 
   const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
   expect(links).toEqual([
-    "/lab/research/settings",
-    "/lab/research/approvals",
     "/lab/research/chains",
     "/lab/research/chains/chain-1?tab=overview",
     "/lab/projects",
     "/lab/projects/admin-1/issues",
   ]);
   expect(container.textContent).toContain("科研项目");
-  expect(container.textContent).toContain("审批中心");
+  expect(container.textContent).not.toContain("审批中心");
+  expect(container.querySelector('a[href="/lab/research/settings"]')).toBeNull();
   expect(container.textContent).toContain("行政项目");
   expect(container.textContent).toContain("重点课题");
   expect(container.textContent).toContain("综合保障");
@@ -270,35 +337,105 @@ it("collapses research to the IA v2 project channels when IA v2 is enabled", asy
   expect(container.querySelectorAll("a[href='/lab/projects/admin-1/issues']")).toHaveLength(1);
 });
 
-it("shows the management destination only for callers with a management tab", async () => {
-  setSwitches(true, false, true);
+it("keeps global destinations out of the project tree block", async () => {
+  setSwitches(true, true);
   const originalCanSee = mocks.research.canSee;
   mocks.research.canSee = (key: string) => key === "overview" || key === "research_chain" || key === "approvals";
   await act(async () => root.render(<ResearchSidebarItems />));
   mocks.research.canSee = originalCanSee;
 
   expect(container.querySelector('a[href="/lab/research/settings"]')).toBeNull();
+  expect(container.querySelector('a[href="/lab/research/approvals"]')).toBeNull();
 });
 
-it("guards the agent route with the independent workspace switch", async () => {
-  setSwitches(true, false);
-  await act(async () =>
-    root.render(
-      <ResearchPageShell titleKey="research.nav.research_chain" section="research_agent" navKey="research_chain">
-        <div>agent-body</div>
-      </ResearchPageShell>
-    )
-  );
-  expect(container.textContent).toContain("status-panel");
-  expect(container.textContent).not.toContain("agent-body");
-
+it("短科研列表使用自然高度，让行政项目紧跟其后", async () => {
   setSwitches(true, true);
-  await act(async () =>
-    root.render(
-      <ResearchPageShell titleKey="research.nav.research_chain" section="research_agent" navKey="research_chain">
-        <div>agent-body</div>
-      </ResearchPageShell>
-    )
-  );
-  expect(container.textContent).toContain("agent-body");
+  researchContentHeight = 80;
+  administrativeContentHeight = 80;
+  await act(async () => root.render(<ResearchSidebarItems />));
+
+  const trees = [...container.querySelectorAll("[data-navigation-scope]")];
+  expect(trees.map((tree) => tree.getAttribute("data-navigation-scope"))).toEqual(["RESEARCH", "ADMINISTRATIVE"]);
+  for (const tree of trees) {
+    expect(tree.classList.contains("grow")).toBe(false);
+    expect(tree.classList.contains("shrink-0")).toBe(true);
+  }
+});
+
+it("内容变长或窗口变矮时恢复科研区伸展，空间足够时恢复紧凑排列", async () => {
+  setSwitches(true, true);
+  researchContentHeight = 80;
+  administrativeContentHeight = 80;
+  await act(async () => root.render(<ResearchSidebarItems />));
+  const researchTree = container.querySelector('[data-navigation-scope="RESEARCH"]');
+  expect(researchTree?.classList.contains("grow")).toBe(false);
+
+  researchContentHeight = 900;
+  await notifyResize();
+  expect(researchTree?.classList.contains("grow")).toBe(true);
+  expect(researchTree?.classList.contains("shrink-0")).toBe(false);
+  expect(researchTree?.querySelector(".overflow-y-auto")).not.toBeNull();
+
+  researchContentHeight = 80;
+  await notifyResize();
+  expect(researchTree?.classList.contains("grow")).toBe(false);
+
+  availableHeight = 240;
+  await notifyResize();
+  expect(researchTree?.classList.contains("grow")).toBe(true);
+
+  availableHeight = 600;
+  await notifyResize();
+  expect(researchTree?.classList.contains("grow")).toBe(false);
+});
+
+it("将科研区收起后释放的高度交给行政区，并保留展开状态", async () => {
+  setSwitches(true, true);
+  await act(async () => root.render(<ResearchSidebarItems />));
+  const researchTree = container.querySelector('[data-navigation-scope="RESEARCH"]');
+  const administrativeTree = container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]');
+  expect(researchTree?.classList.contains("grow")).toBe(true);
+  expect(administrativeTree?.classList.contains("grow")).toBe(false);
+
+  const collapseButton = researchTree?.querySelector<HTMLButtonElement>('button[aria-label="收起科研项目"]');
+  if (!collapseButton) throw new Error("未找到科研区收起按钮");
+  await act(async () => collapseButton.click());
+
+  expect(researchTree?.textContent).not.toContain("新材料课题");
+  expect(administrativeTree?.classList.contains("grow")).toBe(true);
+  expect(localStorage.getItem("research_navigation_research_open")).toBe("false");
+
+  await act(async () => root.render(null));
+  await act(async () => root.render(<ResearchSidebarItems />));
+  expect(container.querySelector('[data-navigation-scope="RESEARCH"]')?.textContent).not.toContain("新材料课题");
+  expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.classList.contains("grow")).toBe(true);
+
+  const expandButton = container.querySelector<HTMLButtonElement>('button[aria-label="展开科研项目"]');
+  if (!expandButton) throw new Error("未找到科研区展开按钮");
+  await act(async () => expandButton.click());
+  expect(container.querySelector('[data-navigation-scope="RESEARCH"]')?.classList.contains("grow")).toBe(true);
+  expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.classList.contains("grow")).toBe(false);
+});
+
+it("科研区不可见时行政区使用剩余高度", async () => {
+  setSwitches(true, true);
+  const originalNavKeys = mocks.research.visibleNavKeys;
+  mocks.research.visibleNavKeys = originalNavKeys.filter((key) => key !== "research_chain");
+  try {
+    await act(async () => root.render(<ResearchSidebarItems />));
+    expect(container.querySelector('[data-navigation-scope="RESEARCH"]')).toBeNull();
+    expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.classList.contains("grow")).toBe(true);
+  } finally {
+    mocks.research.visibleNavKeys = originalNavKeys;
+  }
+});
+
+it("行政区收起时科研区继续占用剩余高度", async () => {
+  setSwitches(true, true);
+  await act(async () => root.render(<ResearchSidebarItems />));
+  const collapseButton = container.querySelector<HTMLButtonElement>('button[aria-label="收起行政项目"]');
+  if (!collapseButton) throw new Error("未找到行政区收起按钮");
+  await act(async () => collapseButton.click());
+  expect(container.querySelector('[data-navigation-scope="RESEARCH"]')?.classList.contains("grow")).toBe(true);
+  expect(container.querySelector('[data-navigation-scope="ADMINISTRATIVE"]')?.textContent).not.toContain("年度采购");
 });

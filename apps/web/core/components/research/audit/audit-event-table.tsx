@@ -9,8 +9,8 @@ import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
-import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput } from "@plane/ui";
+import { ResearchBrowseRefresh } from "@/components/research/common/research-browse-toolbar";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -79,27 +79,31 @@ export const ResearchAuditEventTable = observer(function ResearchAuditEventTable
       )}
 
       <ResearchFilterToolbar>
-        <Input
-          className="!w-52"
-          placeholder={t("research.audit.action_placeholder")}
-          value={action}
-          onChange={(event) => setAction(event.target.value)}
-        />
-        <Input
-          className="!w-52"
-          placeholder={t("research.audit.resource_placeholder")}
-          value={resourceType}
-          onChange={(event) => setResourceType(event.target.value)}
-        />
-        <Input type="date" className="!w-40" value={from} onChange={(event) => setFrom(event.target.value)} />
-        <Input type="date" className="!w-40" value={to} onChange={(event) => setTo(event.target.value)} />
-        <Button variant="secondary" size="sm" onClick={() => void load()}>
-          {t("research.common.refresh")}
-        </Button>
+        <ListFilterField label={t("research.audit.columns.action")} className="w-full sm:w-52">
+          <ListFilterInput
+            placeholder={t("research.audit.action_placeholder")}
+            value={action}
+            onChange={(event) => setAction(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.audit.columns.resource")} className="w-full sm:w-52">
+          <ListFilterInput
+            placeholder={t("research.audit.resource_placeholder")}
+            value={resourceType}
+            onChange={(event) => setResourceType(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.common.date_from")} className="sm:w-40">
+          <ListFilterInput type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+        </ListFilterField>
+        <ListFilterField label={t("research.common.date_to")} className="sm:w-40">
+          <ListFilterInput type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+        </ListFilterField>
+        <ResearchBrowseRefresh onRefresh={() => void load()} />
       </ResearchFilterToolbar>
 
       <ResearchTableSurface>
-        <Table>
+        <Table className="min-w-160">
           <TableHeader>
             <TableRow className="text-tertiary">
               <TableHead className="text-right">{t("research.audit.columns.time")}</TableHead>

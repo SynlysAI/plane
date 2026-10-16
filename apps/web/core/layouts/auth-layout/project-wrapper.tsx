@@ -80,76 +80,112 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   }, []);
 
   // fetching project details
-  const { isLoading: isProjectDetailsLoading, error: projectDetailsError } = useSWR(
-    PROJECT_DETAILS(workspaceSlug, projectId),
-    () => fetchProjectDetails(workspaceSlug, projectId)
-  );
+  const {
+    data: projectDetails,
+    isLoading: isProjectDetailsLoading,
+    error: projectDetailsError,
+    mutate: revalidateProjectDetails,
+  } = useSWR(PROJECT_DETAILS(workspaceSlug, projectId), () => fetchProjectDetails(workspaceSlug, projectId));
+  const isMembershipRequired = projectDetailsError?.data?.code === "PROJECT_MEMBERSHIP_REQUIRED";
+  const canLoadProjectResources = !!projectDetails && hasPermissionToCurrentProject && !projectDetailsError;
   // fetching user project member information
   useSWR(PROJECT_ME_INFORMATION(workspaceSlug, projectId), () => fetchUserProjectInfo(workspaceSlug, projectId));
   // fetching project member preferences
   useSWR(
-    currentUserData?.id ? PROJECT_MEMBER_PREFERENCES(projectId, currentProjectRole) : null,
-    currentUserData?.id ? () => fetchProjectUserProperties(workspaceSlug, projectId) : null,
+    canLoadProjectResources && currentUserData?.id ? PROJECT_MEMBER_PREFERENCES(projectId, currentProjectRole) : null,
+    () => fetchProjectUserProperties(workspaceSlug, projectId),
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
   // fetching project labels
-  useSWR(PROJECT_LABELS(projectId, currentProjectRole), () => fetchProjectLabels(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  useSWR(
+    canLoadProjectResources ? PROJECT_LABELS(projectId, currentProjectRole) : null,
+    () => fetchProjectLabels(workspaceSlug, projectId),
+    {
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+    }
+  );
   // fetching project members
-  useSWR(PROJECT_MEMBERS(projectId, currentProjectRole), () => fetchProjectMembers(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  useSWR(
+    canLoadProjectResources ? PROJECT_MEMBERS(projectId, currentProjectRole) : null,
+    () => fetchProjectMembers(workspaceSlug, projectId),
+    {
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+    }
+  );
   // fetching project states
-  useSWR(PROJECT_STATES(projectId, currentProjectRole), () => fetchProjectStates(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  useSWR(
+    canLoadProjectResources ? PROJECT_STATES(projectId, currentProjectRole) : null,
+    () => fetchProjectStates(workspaceSlug, projectId),
+    {
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+    }
+  );
   // fetching project intake state
-  useSWR(PROJECT_INTAKE_STATE(projectId, currentProjectRole), () => fetchProjectIntakeState(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  useSWR(
+    canLoadProjectResources ? PROJECT_INTAKE_STATE(projectId, currentProjectRole) : null,
+    () => fetchProjectIntakeState(workspaceSlug, projectId),
+    {
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+    }
+  );
   // fetching project estimates
-  useSWR(PROJECT_ESTIMATES(projectId, currentProjectRole), () => getProjectEstimates(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  useSWR(
+    canLoadProjectResources ? PROJECT_ESTIMATES(projectId, currentProjectRole) : null,
+    () => getProjectEstimates(workspaceSlug, projectId),
+    {
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+    }
+  );
   // fetching project cycles
-  useSWR(PROJECT_ALL_CYCLES(projectId, currentProjectRole), () => fetchAllCycles(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  useSWR(
+    canLoadProjectResources ? PROJECT_ALL_CYCLES(projectId, currentProjectRole) : null,
+    () => fetchAllCycles(workspaceSlug, projectId),
+    {
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+    }
+  );
   // fetching project modules
   useSWR(
-    PROJECT_MODULES(projectId, currentProjectRole),
+    canLoadProjectResources ? PROJECT_MODULES(projectId, currentProjectRole) : null,
     async () => {
       await Promise.all([fetchModulesSlim(workspaceSlug, projectId), fetchModules(workspaceSlug, projectId)]);
     },
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
   // fetching project views
-  useSWR(PROJECT_VIEWS(projectId, currentProjectRole), () => fetchViews(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
+  useSWR(
+    canLoadProjectResources ? PROJECT_VIEWS(projectId, currentProjectRole) : null,
+    () => fetchViews(workspaceSlug, projectId),
+    {
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+    }
+  );
 
   // handle join project
   const handleJoinProject = () => {
+    if (isMembershipRequired) return;
     setIsJoiningProject(true);
-    joinProject(workspaceSlug, projectId).finally(() => setIsJoiningProject(false));
+    joinProject(workspaceSlug, projectId)
+      .then(() => revalidateProjectDetails())
+      .finally(() => setIsJoiningProject(false));
   };
 
   const isProjectLoading = (isParentLoading || isProjectDetailsLoading) && !projectDetailsError;
 
   if (isProjectLoading) return null;
 
-  if (!isProjectLoading && hasPermissionToCurrentProject === false) {
+  if (projectDetailsError || hasPermissionToCurrentProject === false) {
     return (
       <ProjectAccessRestriction
         errorStatusCode={projectDetailsError?.status}
+        isMembershipRequired={isMembershipRequired}
         isWorkspaceAdmin={isWorkspaceAdmin}
         handleJoinProject={handleJoinProject}
         isJoinButtonDisabled={isJoiningProject}

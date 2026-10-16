@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "Asistent AI",
+    "open": "Deschideți asistentul AI",
+    "close": "Închideți",
+    "placeholder": "Întrebați despre această pagină, un proiect sau bazele de cunoștințe…",
+    "send": "Trimiteți",
+    "stop": "Oprește",
+    "new_conversation": "Conversație nouă",
+    "thinking": "Reflectez",
+    "working": "Se procesează",
+    "queued": "În coadă",
+    "retrieving": "Se caută în bazele de cunoștințe",
+    "empty_greeting": "Bună ziua, sunt asistentul dvs. AI",
+    "empty_hint": "Întrebați-mă despre pagina curentă, un proiect sau bazele de cunoștințe.",
+    "error_generic": "Ceva nu a funcționat. Încercați din nou.",
+    "error_unavailable": "Serviciul AI nu este disponibil momentan.",
+    "retry": "Încercați din nou",
+    "session_expired": "Sesiunea anterioară a expirat, a început una nouă.",
+    "interrupt_notice": "Rularea a fost întreruptă și necesită aprobare. Gestionarea aprobarilor va fi disponibilă în curând.",
+    "shortcut_hint": "Cmd+J"
   }
 }

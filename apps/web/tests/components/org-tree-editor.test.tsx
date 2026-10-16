@@ -33,7 +33,10 @@ vi.mock("@plane/propel/button", () => ({
     </button>
   ),
 }));
-vi.mock("@plane/ui", () => ({ Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} /> }));
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
+  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+}));
 
 import { ResearchOrgTreeEditor } from "@/components/research/settings/org/org-tree-editor";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });

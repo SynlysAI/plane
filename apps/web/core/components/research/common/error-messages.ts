@@ -9,6 +9,7 @@
  * generic message so a new server side rule never renders an empty toast.
  */
 const RESEARCH_ERROR_KEYS: Record<string, string> = {
+  research_delete_blocked: "research.deletion.blocked",
   research_module_disabled: "research.errors.module_disabled",
   research_module_not_enabled: "research.errors.module_disabled",
   research_workspace_not_found: "research.errors.workspace_not_found",

@@ -14,7 +14,7 @@ export type TUserImportRowStatus = "OK" | "PENDING" | "ERROR";
 export type TUserImportReviewDecision = "PENDING" | "INCLUDED" | "EXCLUDED";
 export type TUserImportBatchStatus = "PENDING_REVIEW" | "PENDING" | "IMPORTED" | "REJECTED" | "FAILED";
 export type TResearchProfileCategory = "STUDENT" | "POSTDOC" | "ADVISOR" | "PI" | "STAFF" | "OTHER";
-export type TResearchProfileDegree = "MS" | "PHD" | "";
+export type TResearchProfileDegree = "BS" | "MS" | "PHD" | "";
 /**
  * Research visibility tier derived by the backend from the organisation tree,
  * mentor bindings, reviewer assignments and administrator tags (v2.5.0).
@@ -28,7 +28,7 @@ export type TReportVisibility = "PRIVATE" | "DIRECT_ADVISOR" | "UNIT" | "ANCESTR
 export type TFeedbackType = "bug" | "ux" | "idea" | "other";
 export type TFeedbackStatus = "open" | "in_progress" | "done" | "closed";
 export type TResearchProjectType = "PHD" | "MASTER" | "POSTDOC" | "RESEARCH_PROJECT";
-export type TResearchProjectStatus = "ACTIVE" | "ARCHIVED" | "COMPLETED";
+export type TResearchProjectStatus = "ACTIVE" | "ARCHIVED" | "COMPLETED" | "DELETED";
 export type TApprovalType = "TASK" | "PURCHASE" | "CUSTOM";
 export type TApprovalRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN" | "CANCELLED";
 export type TStageType = "PRE_OPENING" | "OPENING" | "MIDTERM" | "FINAL";
@@ -126,6 +126,7 @@ export type TWorkspaceResearchSetting = {
   approval_enabled: boolean;
   research_chain_enabled?: boolean;
   research_agent_enabled?: boolean;
+  research_agent_user_backend_enabled?: boolean;
   research_trace_enabled?: boolean;
   research_account_link_enabled?: boolean;
   research_external_rag_enabled?: boolean;
@@ -170,7 +171,7 @@ export type TResearchChain = {
   project_identifier?: string;
   org_unit_name?: string | null;
   capabilities?: TResearchActionCapabilities;
-  status: "ACTIVE" | "ARCHIVED" | "COMPLETED";
+  status: TResearchProjectStatus;
   visibility: "PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE";
   open_task_count?: number;
   next_due_at?: string | null;
@@ -317,6 +318,20 @@ export type TResearchChainNodeTaskCreatePayload = {
 };
 
 export type TResearchChainNodeTaskUpdatePayload = Partial<TResearchChainNodeTaskCreatePayload>;
+
+export type TResearchTaskComment = {
+  id: string;
+  task: string;
+  actor: string;
+  actor_detail: { id: string; display_name: string; avatar_url: string | null };
+  comment_html: string;
+  comment_stripped: string;
+  created_at: string;
+  updated_at: string;
+  edited_at: string | null;
+  can_edit: boolean;
+  can_delete: boolean;
+};
 
 export type TResearchChainNodeTask = {
   schema_version: "research-node-task.v1";
@@ -525,6 +540,7 @@ export type TResearchAgentSession = {
   last_error: string;
   synlora_session_id: string;
   synlora_run_id: string;
+  provider: "SYNLORA" | "SCIENCE_DISCOVERY";
   delegated_subject: string;
   assembly: {
     persona: string;
@@ -596,14 +612,15 @@ export type TPeriodicReport = {
   created_at: string;
   updated_at: string;
   can_edit?: boolean;
+  can_delete?: boolean;
   can_review?: boolean;
   attachment_count?: number;
   latest_official_version: number | null;
   /** Whether the current viewer has read the latest official snapshot. */
   has_read?: boolean;
-  /** Distinct read receipts attached to the latest official snapshot. */
+  /** Read receipts from the author's mentors and the workspace main PI on the latest official snapshot. */
   read_count?: number;
-  /** Latest read time for the latest official snapshot. */
+  /** Latest mentor/main-PI read time for the latest official snapshot. */
   latest_read_at?: string | null;
   /** Frozen submitted body returned to readers other than the author. */
   official_content: TReportOfficialContent | null;
@@ -1328,6 +1345,7 @@ export type TResearchOutcomeLink = {
 };
 
 export type TResearchOutcome = {
+  can_delete?: boolean;
   id: string;
   workspace: string;
   project: string;
@@ -1371,7 +1389,7 @@ export type TIntegrationConnection = {
   display_name: string;
   base_url?: string;
   auth_mode?: "HMAC" | "BEARER" | "OIDC_CLIENT" | "NONE";
-  credential_ref?: string;
+  credential_mode?: "SHARED" | "PERSONAL";
   has_credential?: boolean;
   configured?: boolean;
   timeout_seconds?: number;

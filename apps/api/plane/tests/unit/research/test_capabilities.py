@@ -10,6 +10,8 @@ import pytest
 from django.utils import timezone
 
 from plane.db.models import (
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     MentorBinding,
     OrgUnit,
     OrgUnitMember,
@@ -17,12 +19,11 @@ from plane.db.models import (
     StageReviewerAssignment,
     StageType,
     WorkspaceResearchSetting,
+    WorkspaceMember,
 )
 from plane.research.utils.capabilities import (
     NAV_APPROVALS,
-    NAV_AUDIT,
     NAV_DASHBOARD,
-    NAV_INTEGRATIONS,
     NAV_KEYS,
     NAV_ORG,
     NAV_OVERVIEW,
@@ -31,8 +32,6 @@ from plane.research.utils.capabilities import (
     NAV_REPORTS,
     NAV_REVIEWS,
     NAV_SUMMARY,
-    NAV_SYSTEM,
-    NAV_PLATFORM,
     ResearchLevel,
     build_research_capabilities,
     nav_allowed,
@@ -74,11 +73,18 @@ def env(db):
     enable_research(workspace)
     root = ensure_root_org_unit(workspace, actor=owner)
     group = make_unit(workspace, root, "器件组")
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=root,
+        user=owner,
+        org_role=OrgUnitMember.OrgRole.OWNER,
+    )
     return {"owner": owner, "workspace": workspace, "root": root, "group": group}
 
 
 def member_of(env, user, unit=None, org_role=OrgUnitMember.OrgRole.REVIEWER):
-    add_workspace_member(env["workspace"], user)
+    if not WorkspaceMember.objects.filter(workspace=env["workspace"], member=user, deleted_at__isnull=True).exists():
+        add_workspace_member(env["workspace"], user)
     return OrgUnitMember.objects.create(
         workspace=env["workspace"],
         org_unit=unit or env["group"],
@@ -94,8 +100,7 @@ def test_technical_administrator_tag_does_not_create_a_research_level(env):
 
     assert research_level(admin, env["workspace"]) == ResearchLevel.NONE
     capabilities = build_research_capabilities(admin, env["workspace"])
-    assert NAV_PLATFORM in capabilities["nav"]
-    assert NAV_AUDIT in capabilities["nav"]
+    assert capabilities["nav"] == []
     assert NAV_ORG not in capabilities["nav"]
 
 
@@ -107,12 +112,12 @@ def test_development_duty_only_opens_integrations(env):
     capabilities = build_research_capabilities(developer, env["workspace"])
 
     assert capabilities["level"] == ResearchLevel.NONE
-    assert capabilities["nav"] == [NAV_SYSTEM, NAV_INTEGRATIONS]
-    assert capabilities["management"]["accounts"] is True
-    assert capabilities["management"]["integrations"] is True
+    assert capabilities["nav"] == []
+    assert capabilities["management"]["accounts"] is False
+    assert capabilities["management"]["integrations"] is False
 
 
-def test_configured_main_pi_is_a_principal_without_becoming_an_administrator(env):
+def test_configured_main_pi_requires_an_active_org_relation(env):
     main_pi = make_user(first_name="ConfiguredMainPI")
     add_workspace_member(env["workspace"], main_pi)
     setting = WorkspaceResearchSetting.objects.get(workspace=env["workspace"])
@@ -120,6 +125,9 @@ def test_configured_main_pi_is_a_principal_without_becoming_an_administrator(env
     setting.main_pi = main_pi
     setting.save(update_fields=["purpose", "main_pi", "updated_at"])
 
+    assert build_research_capabilities(main_pi, env["workspace"])["level"] == ResearchLevel.NONE
+
+    member_of(env, main_pi, org_role=OrgUnitMember.OrgRole.PI)
     capabilities = build_research_capabilities(main_pi, env["workspace"])
 
     assert capabilities["level"] == ResearchLevel.PRINCIPAL
@@ -137,12 +145,39 @@ def test_legacy_main_pi_label_does_not_grant_business_or_admin_access(env):
     capabilities = build_research_capabilities(legacy, env["workspace"])
 
     assert capabilities["level"] == ResearchLevel.NONE
-    assert capabilities["nav"] == [NAV_SYSTEM]
-    assert capabilities["management"]["accounts"] is True
+    assert capabilities["nav"] == []
+    assert capabilities["management"]["accounts"] is False
 
 
-def test_workspace_administrator_is_an_administrator(env):
+def test_workspace_administrator_is_research_admin_without_org_relation(env):
+    administrator = make_user(first_name="UnregisteredAdmin")
+    add_workspace_member(env["workspace"], administrator, role=20)
+
+    assert research_level(administrator, env["workspace"]) == ResearchLevel.ADMIN
+
+    member_of(env, administrator, org_role=OrgUnitMember.OrgRole.UNIT_ADMIN)
+    assert research_level(administrator, env["workspace"]) == ResearchLevel.ADMIN
     assert research_level(env["owner"], env["workspace"]) == ResearchLevel.ADMIN
+
+
+def test_administrative_organization_member_is_not_researcher(env):
+    officer = make_user(first_name="AdministrativeOfficer")
+    add_workspace_member(env["workspace"], officer)
+    organization = AdministrativeOrganization.objects.create(
+        workspace=env["workspace"],
+        name="行政办公室",
+        created_by=env["owner"],
+    )
+    AdministrativeOrganizationMember.objects.create(
+        workspace=env["workspace"],
+        organization=organization,
+        member=officer,
+        role=AdministrativeOrganizationMember.Role.ADMIN,
+        created_by=env["owner"],
+    )
+
+    assert research_level(officer, env["workspace"]) == ResearchLevel.NONE
+    assert build_research_capabilities(officer, env["workspace"])["nav"] == []
 
 
 @pytest.mark.parametrize(
@@ -163,14 +198,14 @@ def test_advisor_role_is_mentor(env):
     assert research_level(user, env["workspace"]) == ResearchLevel.MENTOR
 
 
-def test_mentor_binding_without_org_role_is_mentor(env):
+def test_mentor_binding_without_org_relation_is_none(env):
     mentor = make_user(first_name="BoundMentor")
     mentee = make_user(first_name="Mentee")
     add_workspace_member(env["workspace"], mentor)
     member_of(env, mentee)
     MentorBinding.objects.create(workspace=env["workspace"], mentor=mentor, mentee=mentee)
 
-    assert research_level(mentor, env["workspace"]) == ResearchLevel.MENTOR
+    assert research_level(mentor, env["workspace"]) == ResearchLevel.NONE
 
 
 def test_stage_reviewer_assignment_promotes_to_mentor(env):
@@ -192,6 +227,27 @@ def test_stage_reviewer_assignment_promotes_to_mentor(env):
     assert capabilities["level"] == ResearchLevel.MENTOR
     assert capabilities["is_stage_reviewer"] is True
     assert NAV_REVIEWS in capabilities["nav"]
+
+
+def test_stage_reviewer_assignment_without_org_relation_is_none(env):
+    pi_user = make_user(first_name="OrgMainPI")
+    member_of(env, pi_user, org_role=OrgUnitMember.OrgRole.PI)
+    external_reviewer = make_user(first_name="ExternalReviewer")
+    add_workspace_member(env["workspace"], external_reviewer)
+    stage = make_stage(env, pi_user)
+    StageReviewerAssignment.objects.create(
+        stage_instance=stage,
+        reviewer=external_reviewer,
+        reviewer_role="REVIEWER",
+        is_required=False,
+        assignment_kind=StageReviewerAssignment.AssignmentKind.MANUAL,
+    )
+
+    capabilities = build_research_capabilities(external_reviewer, env["workspace"])
+
+    assert capabilities["level"] == ResearchLevel.NONE
+    assert capabilities["is_stage_reviewer"] is False
+    assert capabilities["nav"] == []
 
 
 def make_stage(env, owner):
@@ -258,12 +314,12 @@ def test_student_seat_is_researcher(env):
     assert capabilities["nav"] == [NAV_OVERVIEW, NAV_REPORTS, NAV_PROJECTS]
 
 
-def test_research_profile_alone_is_researcher(env):
+def test_research_profile_alone_is_none(env):
     intern = make_user(first_name="Intern")
     add_workspace_member(env["workspace"], intern)
     ResearchUserProfile.objects.create(user=intern, category=ResearchUserProfile.Category.STUDENT)
 
-    assert research_level(intern, env["workspace"]) == ResearchLevel.RESEARCHER
+    assert research_level(intern, env["workspace"]) == ResearchLevel.NONE
 
 
 def test_account_without_any_relation_is_none(env):
@@ -282,6 +338,32 @@ def test_expired_org_relation_drops_the_level(env):
     membership = member_of(env, student)
     membership.effective_to = timezone.localdate() - timedelta(days=1)
     membership.save(update_fields=["effective_to", "updated_at"])
+
+    assert research_level(student, env["workspace"]) == ResearchLevel.NONE
+
+
+def test_inactive_or_deleted_org_unit_drops_the_level(env):
+    student = make_user(first_name="RetiredGroupStudent")
+    member_of(env, student)
+    env["group"].is_active = False
+    env["group"].save(update_fields=["is_active", "updated_at"])
+
+    assert research_level(student, env["workspace"]) == ResearchLevel.NONE
+
+
+def test_org_unit_from_another_workspace_does_not_grant_access(env):
+    student = make_user(first_name="CrossWorkspaceStudent")
+    add_workspace_member(env["workspace"], student)
+    other_owner = make_user(first_name="OtherOwner")
+    other_workspace = make_workspace(other_owner)
+    other_root = make_unit(other_workspace, None, "外区根节点", OrgUnit.UnitType.ROOT)
+    other_group = make_unit(other_workspace, other_root, "外区课题组")
+    OrgUnitMember.objects.create(
+        workspace=env["workspace"],
+        org_unit=other_group,
+        user=student,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
 
     assert research_level(student, env["workspace"]) == ResearchLevel.NONE
 

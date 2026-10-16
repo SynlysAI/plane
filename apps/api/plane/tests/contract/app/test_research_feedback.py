@@ -222,7 +222,7 @@ def test_lists_and_status_use_own_org_and_workspace_scopes(env, storage):
 
 
 @pytest.mark.django_db
-def test_main_pi_with_workspace_admin_seat_remains_organization_scoped(env, storage):
+def test_main_pi_with_workspace_admin_seat_has_workspace_wide_feedback_management(env, storage):
     from plane.db.models import WorkspaceMember
 
     WorkspaceMember.objects.filter(workspace=env["workspace"], member=env["pi"]).update(role=20)
@@ -239,7 +239,10 @@ def test_main_pi_with_workspace_admin_seat_remains_organization_scoped(env, stor
         payload_hash=uuid4().hex,
     )
     results = client_for(env["pi"]).get(feedback_url(env), {"scope": "manage"}).json()["data"]["results"]
-    assert {item["feedback_id"] for item in results} == {student_feedback["feedback_id"]}
+    assert {item["feedback_id"] for item in results} == {
+        student_feedback["feedback_id"],
+        str(unassigned.id),
+    }
 
     make_instance_admin(env["advisor"])
     administrator_results = (

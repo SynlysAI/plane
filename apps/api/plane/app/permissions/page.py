@@ -5,6 +5,7 @@
 from plane.db.models import ProjectMember, Page
 from plane.app.permissions import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
+from plane.utils.administrative_projects import user_can_manage_administrative_project
 from plane.research.utils.page_guard import get_material_for_page, get_report_for_page
 
 
@@ -100,14 +101,21 @@ class ProjectPagePermission(BasePermission):
         Hook for extended access checking
         Returns: True (allow), False (deny), None (continue with normal flow)
         """
+        if user_can_manage_administrative_project(request.user, slug, project_id):
+            return True, ADMIN
         role = self._check_project_member_access(request, slug, project_id)
         if role:
             return True, role
-        # 研究链只读读者可以读公开页面，但不能获得成员角色或写权限。
         if request.method in SAFE_METHODS and project_id:
+            # 研究链只读读者可以读公开页面，但不能获得成员角色或写权限。
             from plane.research.utils.project_review import user_can_review_research_project
 
             if user_can_review_research_project(request.user, slug, project_id):
+                return True, GUEST
+            # 公共行政项目对全体有效工作区成员只读开放（与项目实体权限口径一致）。
+            from plane.utils.administrative_projects import public_administrative_project_ids
+
+            if public_administrative_project_ids(request.user, slug).filter(id=project_id).exists():
                 return True, GUEST
         return False, None
 

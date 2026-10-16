@@ -34,6 +34,10 @@ vi.mock("@/services/research/chain-task.service", () => ({
   },
 }));
 
+vi.mock("@/components/research/chains/research-task-comments", () => ({
+  ResearchTaskComments: () => <section aria-label="评论">评论</section>,
+}));
+
 const capability = (allowed: boolean) => ({ allowed, reason_code: "", reason: "" });
 
 function task(overrides: Partial<TResearchChainNodeTask> = {}): TResearchChainNodeTask {
@@ -154,6 +158,7 @@ it("shows task metadata, status text, scoped candidates, and the return reason",
   expect(peek?.className).toContain("md:w-1/2");
   expect(peek?.textContent).toContain("属性");
   expect(peek?.textContent).toContain("活动");
+  expect(peek?.textContent).toContain("评论");
   expect(peek?.textContent).toContain("补充近三年实验方法对比。");
   expect(peek?.textContent).toContain("王导师");
   expect(peek?.textContent).toContain("2026/10/9");
@@ -247,6 +252,38 @@ it("requires and submits a return reason", async () => {
     reason: "请补充样本信息",
   });
   expect(container.textContent).toContain("需修订");
+});
+
+it("keeps task cancellation in the header menu and requires a reason before cancelling", async () => {
+  const draft = task({ status: "DRAFT", instruction: "", return_reason: null });
+  draft.capabilities!.actions.return = capability(false);
+  draft.capabilities!.actions.complete = capability(false);
+  draft.capabilities!.actions.cancel = capability(true);
+  mocks.getNodeTasks.mockResolvedValue([draft]);
+  mocks.runNodeTaskAction.mockResolvedValue(task({ status: "CANCELLED", capabilities: undefined }));
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const peek = container.querySelector("aside");
+  expect(peek?.textContent).not.toContain("取消任务");
+  const more = peek?.querySelector<HTMLButtonElement>('button[aria-label="更多"]');
+  expect(more).not.toBeNull();
+  await act(async () => more?.click());
+  const cancel = peek?.querySelector<HTMLButtonElement>('[role="menuitem"]');
+  expect(cancel?.textContent).toBe("取消任务");
+  expect(cancel?.className).toContain("text-danger-primary");
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+  await act(async () => cancel?.click());
+
+  expect(container.querySelector("[data-reason-dialog]")?.textContent).toContain("取消原因");
+  expect(peek?.querySelector('[role="menu"]')).toBeNull();
+  await act(async () => button("确认提交").click());
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+  await setInput("[data-reason-dialog] textarea", "重复创建的任务");
+  await act(async () => button("确认提交").click());
+  expect(mocks.runNodeTaskAction).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "cancel", {
+    reason: "重复创建的任务",
+  });
 });
 
 it("renders empty, forbidden, loading, refresh, and server rejection states", async () => {

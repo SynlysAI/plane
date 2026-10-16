@@ -24,11 +24,11 @@ from plane.app.serializers import (
     ProjectMemberInvitePublicSerializer,
 )
 from plane.app.permissions import allow_permission, ROLE
+from plane.utils.administrative_projects import administrative_projects
 from plane.db.models import (
     ProjectMember,
     Workspace,
     ProjectMemberInvite,
-    User,
     WorkspaceMember,
     Project,
     ProjectUserProperty,
@@ -137,6 +137,15 @@ class UserProjectInvitationsViewset(BaseViewSet):
 
         # Get all the projects
         projects = Project.objects.filter(id__in=project_ids, workspace__slug=slug).only("id", "network")
+        # 批量请求先完成全部准入校验，拒绝时不得激活或创建任何成员。
+        if administrative_projects(slug).filter(id__in=projects.values("id")).exists():
+            return Response(
+                {
+                    "error": "Administrative projects cannot be joined without administrator configuration",
+                    "code": "PROJECT_MEMBERSHIP_REQUIRED",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         # Check if user has permission to join each project
         for project in projects:
             if project.network == ProjectNetwork.SECRET.value and workspace_member.role != ROLE.ADMIN.value:

@@ -11,7 +11,7 @@ import { INTEGRATION_SYSTEM_LABELS, INTEGRATION_SYSTEMS } from "@plane/constants
 import type { TExternalReference } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 // components
 import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 import { ExternalReferenceCard } from "@/components/research/integrations/external-reference-card";
@@ -46,24 +46,23 @@ export const ExternalReferencePicker = observer(function ExternalReferencePicker
   return (
     <div className="flex flex-col gap-2">
       <ResearchFilterToolbar>
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-          value={system}
-          onChange={(event) => setSystem(event.target.value)}
-        >
-          {INTEGRATION_SYSTEMS.map((value) => (
-            <option key={value} value={value}>
-              {t(INTEGRATION_SYSTEM_LABELS[value])}
-            </option>
-          ))}
-        </select>
-        <Input
-          className="!w-64"
-          value={query}
-          placeholder={t("research.integrations.search_placeholder")}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <Button size="sm" variant="secondary" disabled={!query.trim()} onClick={() => void search()}>
+        <ListFilterField label={t("research.integrations.columns.system")} className="w-full sm:w-48">
+          <ListFilterSelect value={system} onChange={(event) => setSystem(event.target.value)}>
+            {INTEGRATION_SYSTEMS.map((value) => (
+              <option key={value} value={value}>
+                {t(INTEGRATION_SYSTEM_LABELS[value])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+        <ListFilterField label="关键词" className="w-full sm:w-64">
+          <ListFilterInput
+            value={query}
+            placeholder={t("research.integrations.search_placeholder")}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </ListFilterField>
+        <Button size="xl" variant="secondary" disabled={!query.trim()} onClick={() => void search()}>
           {t("research.integrations.search")}
         </Button>
       </ResearchFilterToolbar>

@@ -27,6 +27,7 @@ type Props = {
   workspaceSlug: string;
   data?: Partial<TProject>;
   templateId?: string;
+  administrative?: boolean;
 };
 
 enum EProjectCreationSteps {
@@ -35,7 +36,7 @@ enum EProjectCreationSteps {
 }
 
 export function CreateProjectModal(props: Props) {
-  const { isOpen, onClose, setToFavorite = false, workspaceSlug, data, templateId } = props;
+  const { isOpen, onClose, setToFavorite = false, workspaceSlug, data, templateId, administrative = false } = props;
   // states
   const [currentStep, setCurrentStep] = useState<EProjectCreationSteps>(EProjectCreationSteps.CREATE_PROJECT);
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export function CreateProjectModal(props: Props) {
           handleNextStep={handleNextStep}
           data={data}
           templateId={templateId}
+          administrative={administrative}
         />
       )}
       {currentStep === EProjectCreationSteps.FEATURE_SELECTION && (

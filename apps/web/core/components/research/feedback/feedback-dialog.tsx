@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import type { TFeedbackStatus, TResearchFeedback } from "@plane/types";
 import { Button } from "@plane/propel/button";
-import { ModalCore } from "@plane/ui";
+import { ModalCore, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
+import { ResearchBrowseRefresh } from "@/components/research/common/research-browse-toolbar";
 import { MessageSquare } from "lucide-react";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchFeedbackService } from "@/services/research/feedback.service";
@@ -99,7 +102,10 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const idempotency = useRef(createIdempotencyKey());
   const queryVersion = useRef(0);
   const canManage = Boolean(
-    identity?.user.is_main_pi || identity?.user.is_workspace_admin || identity?.user.is_system_admin
+    identity?.user.is_main_pi ||
+    identity?.user.is_research_admin ||
+    identity?.user.is_workspace_admin ||
+    identity?.user.is_system_admin
   );
   const managementDenied = managementOnly && identityKnown && !canManage;
   useEffect(() => {
@@ -252,12 +258,8 @@ export const FeedbackDialog = observer(function FeedbackDialog({
           : "flex max-h-[85vh] min-w-0 flex-col gap-4 overflow-y-auto bg-surface-1 p-5"
       }
     >
-      {managementOnly ? (
-        <header className="shrink-0 border-b border-subtle pb-4">
-          <h1 className="text-22 font-semibold text-primary">反馈管理</h1>
-          <p className="mt-1 text-13 text-tertiary">按状态、分类、模块与时间定位反馈，右侧保留完整提交快照。</p>
-        </header>
-      ) : (
+      {/* 管理页标题由 ResearchPageShell 统一渲染，弹窗形态保留自己的视图页签。 */}
+      {managementOnly ? null : (
         <>
           <h2 className="text-20 font-semibold">反馈</h2>
           <div
@@ -430,108 +432,107 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                     : "flex flex-col gap-4"
                 }
               >
-                <div className={managementOnly ? "rounded-lg bg-surface-2 p-3" : "flex flex-wrap gap-2"}>
-                  <select
-                    aria-label="筛选状态"
-                    className="rounded-md border border-subtle px-2 py-1 text-12"
-                    value={filter.status}
-                    onChange={(event) => {
-                      updateFilter("status", event.target.value);
-                    }}
-                  >
-                    <option value="">全部状态</option>
-                    {Object.entries(STATUS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="筛选分类"
-                    className="rounded-md border border-subtle px-2 py-1 text-12"
-                    value={filter.feedback_type}
-                    onChange={(event) => {
-                      updateFilter("feedback_type", event.target.value);
-                    }}
-                  >
-                    <option value="">全部分类</option>
-                    <option value="bug">缺陷</option>
-                    <option value="ux">体验</option>
-                    <option value="idea">建议</option>
-                    <option value="other">其他</option>
-                  </select>
-                  {(["q", "module"] as const).map((key) => (
-                    <input
-                      key={key}
-                      aria-label={key === "q" ? "反馈关键词" : "反馈模块"}
-                      placeholder={key === "q" ? "关键词" : "模块"}
-                      type="text"
-                      value={filter[key]}
-                      className="min-w-0 rounded-md border border-subtle px-2 py-1 text-12"
+                <ResearchFilterToolbar>
+                  <ListFilterField label="状态">
+                    <ListFilterSelect
+                      aria-label="筛选状态"
+                      value={filter.status}
                       onChange={(event) => {
-                        setFilterDraft((current) => ({ ...current, [key]: event.target.value }));
+                        updateFilter("status", event.target.value);
                       }}
-                    />
+                    >
+                      <option value="">全部状态</option>
+                      {Object.entries(STATUS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </ListFilterSelect>
+                  </ListFilterField>
+                  <ListFilterField label="分类">
+                    <ListFilterSelect
+                      aria-label="筛选分类"
+                      value={filter.feedback_type}
+                      onChange={(event) => {
+                        updateFilter("feedback_type", event.target.value);
+                      }}
+                    >
+                      <option value="">全部分类</option>
+                      <option value="bug">缺陷</option>
+                      <option value="ux">体验</option>
+                      <option value="idea">建议</option>
+                      <option value="other">其他</option>
+                    </ListFilterSelect>
+                  </ListFilterField>
+                  {(["q", "module"] as const).map((key) => (
+                    <ListFilterField
+                      key={key}
+                      label={key === "q" ? "关键词" : "模块"}
+                      className={key === "q" ? "w-full sm:w-48" : undefined}
+                    >
+                      <ListFilterInput
+                        aria-label={key === "q" ? "反馈关键词" : "反馈模块"}
+                        placeholder={key === "q" ? "关键词" : "模块"}
+                        type="text"
+                        value={filter[key]}
+                        onChange={(event) => {
+                          setFilterDraft((current) => ({ ...current, [key]: event.target.value }));
+                        }}
+                      />
+                    </ListFilterField>
                   ))}
-                  <select
-                    aria-label="反馈日期范围"
-                    className="rounded-md border border-subtle px-2 py-1 text-12"
-                    value={datePreset}
-                    onChange={(event) => applyDatePreset(event.target.value as DatePreset)}
-                  >
-                    <option value="any">任意</option>
-                    <option value="7">近 7 天</option>
-                    <option value="30">近 30 天</option>
-                    <option value="custom">自定义区间</option>
-                  </select>
+                  <ListFilterField label="日期">
+                    <ListFilterSelect
+                      aria-label="反馈日期范围"
+                      value={datePreset}
+                      onChange={(event) => applyDatePreset(event.target.value as DatePreset)}
+                    >
+                      <option value="any">任意</option>
+                      <option value="7">近 7 天</option>
+                      <option value="30">近 30 天</option>
+                      <option value="custom">自定义区间</option>
+                    </ListFilterSelect>
+                  </ListFilterField>
                   {datePreset === "custom" && (
                     <>
-                      <input
-                        aria-label="反馈开始日期"
-                        type="date"
-                        value={filter.date_from}
-                        className="rounded-md border border-subtle px-2 py-1 text-12"
-                        onChange={(event) => updateFilter("date_from", event.target.value)}
-                      />
-                      <input
-                        aria-label="反馈结束日期"
-                        type="date"
-                        value={filter.date_to}
-                        className="rounded-md border border-subtle px-2 py-1 text-12"
-                        onChange={(event) => updateFilter("date_to", event.target.value)}
-                      />
+                      <ListFilterField label="开始日期" className="sm:w-40">
+                        <ListFilterInput
+                          aria-label="反馈开始日期"
+                          type="date"
+                          value={filter.date_from}
+                          onChange={(event) => updateFilter("date_from", event.target.value)}
+                        />
+                      </ListFilterField>
+                      <ListFilterField label="结束日期" className="sm:w-40">
+                        <ListFilterInput
+                          aria-label="反馈结束日期"
+                          type="date"
+                          value={filter.date_to}
+                          onChange={(event) => updateFilter("date_to", event.target.value)}
+                        />
+                      </ListFilterField>
                     </>
                   )}
-                  <button
-                    type="button"
-                    className="text-12 text-secondary"
-                    onClick={() => setRefresh((value) => value + 1)}
-                  >
-                    刷新
-                  </button>
+                  <ResearchBrowseRefresh onRefresh={() => setRefresh((value) => value + 1)} disabled={listLoading} />
                   {view !== "submit" && error && (
-                    <button
-                      type="button"
-                      className="text-12 text-secondary"
-                      onClick={() => setRefresh((value) => value + 1)}
-                    >
+                    <Button variant="secondary" size="xl" onClick={() => setRefresh((value) => value + 1)}>
                       重试
-                    </button>
+                    </Button>
                   )}
-                </div>
+                </ResearchFilterToolbar>
                 <div className={managementOnly ? "min-h-0 flex-1 overflow-auto" : "max-w-full overflow-x-auto"}>
-                  <table className="w-full min-w-100 text-left text-13" aria-busy={listLoading}>
-                    <thead>
-                      <tr className="text-secondary">
-                        <th className="p-2">描述</th>
-                        <th>状态</th>
-                        <th>提交时间</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table className="min-w-100" aria-busy={listLoading}>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>描述</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead>提交时间</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {results.map((record) => (
-                        <tr key={record.feedback_id} className="border-t border-subtle">
-                          <td className="p-2">
+                        <TableRow key={record.feedback_id} className="hover:bg-surface-2">
+                          <TableCell>
                             <button
                               onClick={() => {
                                 setSelected(record);
@@ -540,13 +541,13 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                             >
                               {record.content.slice(0, 60)}
                             </button>
-                          </td>
-                          <td>{STATUS[record.status]}</td>
-                          <td>{formatResearchDateTime(record.created_at)}</td>
-                        </tr>
+                          </TableCell>
+                          <TableCell>{STATUS[record.status]}</TableCell>
+                          <TableCell>{formatResearchDateTime(record.created_at)}</TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
                 {listLoading && (
                   <p role="status" className="text-13 text-secondary">
@@ -559,7 +560,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                 <div className={`flex items-center gap-3 text-12 ${managementOnly ? "mt-auto" : ""}`}>
                   <Button
                     variant="secondary"
-                    size="sm"
+                    size="xl"
                     disabled={page === 1}
                     onClick={() => setPage((value) => value - 1)}
                   >
@@ -570,7 +571,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                   </span>
                   <Button
                     variant="secondary"
-                    size="sm"
+                    size="xl"
                     disabled={page * 20 >= count}
                     onClick={() => setPage((value) => value + 1)}
                   >

@@ -9,17 +9,19 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.permissions import ROLE
 from plane.db.models import (
     OrgUnit,
     Project,
     ProjectNavigationCategory,
     ResearchChain,
     ResearchProjectProfile,
-    WorkspaceMember,
 )
 from plane.research.utils.org import is_workspace_admin
 from plane.research.utils.roles import is_research_admin
+from plane.utils.administrative_projects import (
+    administrative_projects_for_user,
+    user_can_manage_administrative_organization,
+)
 from plane.research.views.base import ResearchAPIView, parse_uuid
 from plane.research.views.projects import visible_profile_queryset
 
@@ -51,7 +53,7 @@ def _can_manage(user, workspace):
     Returns:
         True for a workspace or research administrator.
     """
-    return is_workspace_admin(user, workspace.id) or is_research_admin(user, workspace.id)
+    return is_research_admin(user, workspace.id)
 
 
 def _depth(category):
@@ -88,9 +90,9 @@ def _descendant_ids(category):
             continue
         descendant_ids.add(current_id)
         pending.extend(
-            ProjectNavigationCategory.objects.filter(
-                parent_id=current_id, deleted_at__isnull=True
-            ).values_list("id", flat=True)
+            ProjectNavigationCategory.objects.filter(parent_id=current_id, deleted_at__isnull=True).values_list(
+                "id", flat=True
+            )
         )
     return descendant_ids
 
@@ -190,6 +192,17 @@ def _duplicate_response():
     )
 
 
+def _administrative_category_readonly_response():
+    """Return the stable conflict response for retired administrative categories."""
+    return Response(
+        {
+            "error_code": "navigation_category_readonly",
+            "message": "Administrative categories were migrated to organizations.",
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
 def _project_queryset(workspace, user, scope):
     """Return projects visible to the caller in one navigation channel.
 
@@ -215,23 +228,25 @@ def _project_queryset(workspace, user, scope):
             deleted_at__isnull=True,
         ).select_related("navigation_category", "research_profile", "research_chain")
 
-    queryset = Project.objects.filter(
-        workspace=workspace,
-        deleted_at__isnull=True,
-    ).exclude(research_profile__isnull=False).select_related("navigation_category")
+    queryset = (
+        Project.objects.filter(
+            workspace=workspace,
+            deleted_at__isnull=True,
+        )
+        .exclude(research_profile__isnull=False)
+        .exclude(id__in=ResearchChain.all_objects.values("project_id"))
+        .select_related("navigation_category", "administrative_organization")
+    )
     if is_workspace_admin(user, workspace.id):
         return queryset
-    membership = WorkspaceMember.objects.filter(
-        workspace=workspace, member=user, is_active=True
-    ).first()
-    if membership and membership.role == ROLE.GUEST.value:
-        return queryset.filter(
-            project_projectmember__member=user,
-            project_projectmember__is_active=True,
-        ).distinct()
     return queryset.filter(
-        Q(network=Project.NETWORK_CHOICES[1][0])
-        | Q(project_projectmember__member=user, project_projectmember__is_active=True)
+        Q(project_projectmember__member=user, project_projectmember__is_active=True)
+        | Q(
+            administrative_organization__members__member=user,
+            administrative_organization__members__is_active=True,
+            administrative_organization__members__deleted_at__isnull=True,
+        )
+        | Q(id__in=administrative_projects_for_user(user, workspace.slug).values("id"))
     ).distinct()
 
 
@@ -304,13 +319,9 @@ def _organization_nodes(workspace, categories, project_by_org):
     """
     direct_ids = set(project_by_org)
     direct_ids.update(
-        str(category.org_unit_id)
-        for category in categories
-        if category.org_unit_id and category.parent_id is None
+        str(category.org_unit_id) for category in categories if category.org_unit_id and category.parent_id is None
     )
-    direct_units = list(
-        OrgUnit.objects.filter(workspace=workspace, id__in=direct_ids, deleted_at__isnull=True)
-    )
+    direct_units = list(OrgUnit.objects.filter(workspace=workspace, id__in=direct_ids, deleted_at__isnull=True))
     all_unit_ids = set(direct_ids)
     for unit in direct_units:
         all_unit_ids.update(_ancestor_ids_from_path(unit.path))
@@ -318,11 +329,7 @@ def _organization_nodes(workspace, categories, project_by_org):
     pending_ids = set(all_unit_ids)
     units = []
     while pending_ids:
-        fetched_units = list(
-            OrgUnit.objects.filter(
-                workspace=workspace, id__in=pending_ids, deleted_at__isnull=True
-            )
-        )
+        fetched_units = list(OrgUnit.objects.filter(workspace=workspace, id__in=pending_ids, deleted_at__isnull=True))
         units.extend(fetched_units)
         resolved_unit_ids.update(str(unit.id) for unit in fetched_units)
         pending_ids = {
@@ -351,7 +358,7 @@ def _organization_nodes(workspace, categories, project_by_org):
     return nodes
 
 
-def _tree(workspace, scope, projects, can_manage=False):
+def _tree(workspace, user, scope, projects, can_manage=False):
     """Build a channel-specific navigation tree without changing project ACLs.
 
     Args:
@@ -383,6 +390,11 @@ def _tree(workspace, scope, projects, can_manage=False):
     uncategorized = []
     for project in projects:
         category_id = str(project.navigation_category_id) if project.navigation_category_id else None
+        if scope == ProjectNavigationCategory.Scope.ADMINISTRATIVE and project.administrative_organization_id:
+            project_by_org.setdefault(str(project.administrative_organization_id), []).append(
+                _project_payload(project, scope)
+            )
+            continue
         if category_id in active_category_ids:
             project_by_category.setdefault(category_id, []).append(_project_payload(project, scope))
             continue
@@ -393,11 +405,67 @@ def _tree(workspace, scope, projects, can_manage=False):
         else:
             uncategorized.append(_project_payload(project, scope))
 
-    org_nodes = (
-        _organization_nodes(workspace, categories, project_by_org)
-        if scope == ProjectNavigationCategory.Scope.RESEARCH
-        else {}
-    )
+    if scope == ProjectNavigationCategory.Scope.RESEARCH:
+        org_nodes = _organization_nodes(workspace, categories, project_by_org)
+    else:
+        from plane.db.models import AdministrativeOrganization
+
+        org_nodes = {}
+        organizations = AdministrativeOrganization.objects.filter(
+            workspace=workspace, deleted_at__isnull=True
+        ).order_by("name")
+        visible_project_ids = {str(project.id) for project in projects}
+        if can_manage:
+            visible_project_ids.update(
+                str(project_id)
+                for project_id in administrative_projects_for_user(user, workspace.slug).values_list("id", flat=True)
+            )
+        if can_manage:
+            managed_projects = (
+                Project.objects.filter(workspace=workspace, id__in=visible_project_ids, deleted_at__isnull=True)
+                .exclude(research_profile__isnull=False)
+                .exclude(id__in=ResearchChain.all_objects.values("project_id"))
+            )
+            for project in managed_projects:
+                if project.administrative_organization_id:
+                    project_by_org.setdefault(str(project.administrative_organization_id), []).append(
+                        _project_payload(project, scope)
+                    )
+        organization_ids = set(
+            str(organization_id)
+            for organization_id in AdministrativeOrganization.objects.filter(
+                workspace=workspace,
+                members__member=user,
+                members__is_active=True,
+                members__deleted_at__isnull=True,
+                deleted_at__isnull=True,
+            ).values_list("id", flat=True)
+        )
+        for organization in organizations:
+            organization_projects = [
+                payload
+                for payload in project_by_org.get(str(organization.id), [])
+                if payload["id"] in visible_project_ids
+            ]
+            if (
+                organization.is_default
+                or organization_projects
+                or str(organization.id) in organization_ids
+                or can_manage
+            ):
+                org_nodes[str(organization.id)] = {
+                    "id": f"admin-org:{organization.id}",
+                    "name": organization.name,
+                    "kind": "ORG",
+                    "scope": scope,
+                    "parent": None,
+                    "sort_order": 1,
+                    "projects": organization_projects,
+                    "children": [],
+                    "can_manage": user_can_manage_administrative_organization(user, workspace.slug, organization.id),
+                    "org_unit": None,
+                    "organization_id": str(organization.id),
+                }
 
     def build(parent_id):
         """Build active custom child nodes for one parent.
@@ -445,7 +513,7 @@ def _tree(workspace, scope, projects, can_manage=False):
                     org_node["children"].append(custom_node)
         roots = [node for node in org_nodes.values() if node["parent"] is None]
     else:
-        roots = []
+        roots = list(org_nodes.values())
     roots.extend(build(None))
     roots = [node for node in roots if can_manage or node["projects"] or node["children"]]
     return {
@@ -480,12 +548,30 @@ class ProjectNavigationTreeEndpoint(ResearchAPIView):
 
     nav_capability = None
 
+    def initial(self, request, *args, **kwargs):
+        """按 GET 的 scope 决定该次导航树是否依赖科研模块。
+
+        Args:
+            request: 当前 HTTP 请求。
+            *args: DRF initial 额外参数。
+            **kwargs: DRF initial 额外关键字参数。
+        """
+        scope = _scope(request.GET.get("scope")) if request.method == "GET" else None
+        self.research_module_required = scope != ProjectNavigationCategory.Scope.ADMINISTRATIVE
+        self.research_membership_required = scope != ProjectNavigationCategory.Scope.ADMINISTRATIVE
+        return super().initial(request, *args, **kwargs)
+
     def get(self, request, slug):
         """Return one scoped tree using existing project visibility rules."""
-        workspace, error = self.get_workspace(nav=None)
+        scope = _scope(request.GET.get("scope"))
+        is_research_scope = scope == ProjectNavigationCategory.Scope.RESEARCH
+        workspace, error = self.get_workspace(
+            nav=None,
+            require_enabled=is_research_scope,
+            research_member=is_research_scope,
+        )
         if error:
             return error
-        scope = _scope(request.GET.get("scope"))
         if scope is None:
             return Response(
                 {"error_code": "navigation_scope_invalid", "message": "scope is required."},
@@ -493,7 +579,7 @@ class ProjectNavigationTreeEndpoint(ResearchAPIView):
             )
         projects = _project_queryset(workspace, request.user, scope)
         return Response(
-            _tree(workspace, scope, projects, _can_manage(request.user, workspace)),
+            _tree(workspace, request.user, scope, projects, _can_manage(request.user, workspace)),
             status=status.HTTP_200_OK,
         )
 
@@ -513,6 +599,8 @@ class ProjectNavigationTreeEndpoint(ResearchAPIView):
                 {"error_code": "navigation_category_invalid", "message": "scope is required."},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+        if scope == ProjectNavigationCategory.Scope.ADMINISTRATIVE:
+            return _administrative_category_readonly_response()
         name, error = _valid_name(request.data.get("name"))
         if error:
             return error
@@ -552,9 +640,7 @@ class ProjectNavigationTreeEndpoint(ResearchAPIView):
                     },
                     status=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 )
-            org_unit = OrgUnit.objects.filter(
-                pk=org_unit_id, workspace=workspace, deleted_at__isnull=True
-            ).first()
+            org_unit = OrgUnit.objects.filter(pk=org_unit_id, workspace=workspace, deleted_at__isnull=True).first()
             if org_unit is None:
                 return Response(
                     {"error_code": "navigation_org_unit_not_found", "message": "Organisation unit not found."},
@@ -599,6 +685,8 @@ class ProjectNavigationCategoryDetailEndpoint(ResearchAPIView):
                 {"error_code": "navigation_category_not_found", "message": "Category not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        if category.scope == ProjectNavigationCategory.Scope.ADMINISTRATIVE:
+            return _administrative_category_readonly_response()
 
         if "name" in request.data:
             name, error = _valid_name(request.data.get("name"))
@@ -684,6 +772,8 @@ class ProjectNavigationCategoryDetailEndpoint(ResearchAPIView):
                 {"error_code": "navigation_category_not_found", "message": "Category not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        if category.scope == ProjectNavigationCategory.Scope.ADMINISTRATIVE:
+            return _administrative_category_readonly_response()
 
         raw_target = request.query_params.get("move_to")
         if raw_target == UNCATEGORIZED_TARGET:
@@ -767,9 +857,7 @@ class ProjectNavigationMoveProjectEndpoint(ResearchAPIView):
                 {"error_code": "navigation_permission_denied", "message": "Not allowed."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        project = Project.objects.filter(
-            pk=project_id, workspace=workspace, deleted_at__isnull=True
-        ).first()
+        project = Project.objects.filter(pk=project_id, workspace=workspace, deleted_at__isnull=True).first()
         if project is None:
             return Response(
                 {"error_code": "project_not_found", "message": "Project not found."},
@@ -778,15 +866,15 @@ class ProjectNavigationMoveProjectEndpoint(ResearchAPIView):
         scope = _scope(request.data.get("scope"))
         profile = ResearchProjectProfile.objects.filter(project=project).first()
         expected = (
-            ProjectNavigationCategory.Scope.RESEARCH
-            if profile
-            else ProjectNavigationCategory.Scope.ADMINISTRATIVE
+            ProjectNavigationCategory.Scope.RESEARCH if profile else ProjectNavigationCategory.Scope.ADMINISTRATIVE
         )
         if scope is None or scope != expected:
             return Response(
                 {"error_code": "navigation_scope_conflict", "message": "Project does not belong to this channel."},
                 status=status.HTTP_409_CONFLICT,
             )
+        if expected == ProjectNavigationCategory.Scope.ADMINISTRATIVE:
+            return _administrative_category_readonly_response()
         if not _project_queryset(workspace, request.user, scope).filter(pk=project.pk).exists():
             return Response(
                 {"error_code": "navigation_project_hidden", "message": "Project is not visible to this user."},

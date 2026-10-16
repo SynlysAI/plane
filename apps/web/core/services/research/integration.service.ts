@@ -14,7 +14,8 @@ export type TIntegrationConnectionPayload = {
   display_name?: string;
   base_url?: string;
   auth_mode?: string;
-  credential_ref?: string;
+  credential_mode?: "SHARED" | "PERSONAL";
+  credential?: string;
   timeout_seconds?: number;
   cache_ttl_seconds?: number;
   degraded_mode?: string;
@@ -64,6 +65,14 @@ export class ResearchIntegrationService extends APIService {
       .catch((err) => {
         throw err?.response?.data;
       });
+  }
+
+  async probeHealth(workspaceSlug: string, system?: string) {
+    const response = await this.post(
+      `/api/research/workspaces/${workspaceSlug}/integrations/health/probe/`,
+      system ? { system } : {}
+    );
+    return response.data;
   }
 
   async getHealth(workspaceSlug: string) {

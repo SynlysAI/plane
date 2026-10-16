@@ -9,6 +9,8 @@ It stores summaries only - never report bodies - so the write stays cheap and
 inside the caller's transaction.
 """
 
+import json
+
 from plane.db.models import ResearchAuditEvent
 
 
@@ -48,6 +50,7 @@ class ResearchAuditAction:
     FEEDBACK_IMPORT = "feedback.import"
     PROJECT_CREATE = "project.create"
     PROJECT_ARCHIVE = "project.archive"
+    PROJECT_DELETE = "project.delete"
     PROJECT_RESTORE = "project.restore"
     PROJECT_OWNER_CHANGE = "project.owner.change"
     APPROVAL_FLOW_CREATE = "approval.flow.create"
@@ -102,6 +105,7 @@ class ResearchAuditAction:
     OUTCOME_DELETE = "outcome.delete"
     OUTCOME_LINK = "outcome.link"
     CHAIN_ARCHIVE = "chain.archive"
+    CHAIN_DELETE = "chain.delete"
     CHAIN_RESTORE = "chain.restore"
     CHAIN_MEMBER_ADD = "chain.member.add"
     CHAIN_MEMBER_REMOVE = "chain.member.remove"
@@ -217,6 +221,10 @@ def record_audit_event(
         if user is not None and getattr(user, "is_authenticated", False):
             actor = user
 
+    # the metadata column is jsonb: normalize model objects (UUIDs, datetimes,
+    # …) so callers can pass raw field values without serialization errors
+    safe_metadata = json.loads(json.dumps(metadata or {}, default=str))
+
     return ResearchAuditEvent.objects.create(
         workspace=workspace,
         actor=actor,
@@ -224,7 +232,7 @@ def record_audit_event(
         resource_type=resource_type,
         resource_id=resource_id,
         org_unit=org_unit,
-        metadata=metadata or {},
+        metadata=safe_metadata,
         ip_address=client["ip_address"],
         user_agent=client["user_agent"],
     )

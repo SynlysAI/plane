@@ -59,7 +59,7 @@ export class AuthService extends APIService {
       });
   }
 
-  async signOut(baseUrl: string): Promise<any> {
+  async signOut(baseUrl: string, nextPath?: string): Promise<any> {
     await this.requestCSRFToken().then((data) => {
       const csrfToken = data?.csrf_token;
 
@@ -76,9 +76,17 @@ export class AuthService extends APIService {
       element1.type = "hidden";
       form.appendChild(element1);
 
+      if (nextPath) {
+        const nextPathElement = document.createElement("input");
+        nextPathElement.type = "hidden";
+        nextPathElement.name = "next_path";
+        nextPathElement.value = nextPath;
+        form.appendChild(nextPathElement);
+      }
+
       document.body.appendChild(form);
 
-      form.submit();
+      return form.submit();
     });
   }
 }

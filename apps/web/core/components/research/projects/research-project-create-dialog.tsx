@@ -50,16 +50,15 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
     [research.identity]
   );
   const availableOrgUnits = useMemo(
-    () =>
-      research.identity?.user.is_workspace_admin ? orgUnits : orgUnits.filter((unit) => memberOrgUnitIds.has(unit.id)),
-    [memberOrgUnitIds, orgUnits, research.identity?.user.is_workspace_admin]
+    () => (research.isResearchAdmin ? orgUnits : orgUnits.filter((unit) => memberOrgUnitIds.has(unit.id))),
+    [memberOrgUnitIds, orgUnits, research.isResearchAdmin]
   );
   const primaryOrgUnit = useMemo(
     () => research.identity?.user.org_units.find((membership) => membership.is_primary)?.org_unit ?? "",
     [research.identity]
   );
   const isTeamProject = researchType === "RESEARCH_PROJECT";
-  const requiresOrgUnit = !isTeamProject || !research.isWorkspaceAdmin;
+  const requiresOrgUnit = !isTeamProject || !research.isResearchAdmin;
 
   useEffect(() => {
     if (!isOpen || orgUnits.length) return;
@@ -220,7 +219,7 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
         {!primaryOrgUnit && requiresOrgUnit && (
           <p className="mt-2 text-11 text-warning-primary">{t("research.projects.missing_primary_org")}</p>
         )}
-        {!orgUnit && isTeamProject && research.isWorkspaceAdmin && (
+        {!orgUnit && isTeamProject && research.isResearchAdmin && (
           <p className="mt-2 text-11 text-tertiary">{t("research.projects.team_org_optional")}</p>
         )}
         <div className="flex justify-end gap-2">

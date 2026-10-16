@@ -60,7 +60,7 @@ export const ReviewInbox = observer(function ReviewInbox({ workspaceSlug }: Prop
             key={value}
             type="button"
             onClick={() => setScope(value)}
-            className={`rounded px-2 py-1 text-12 ${
+            className={`h-8 rounded-md px-2 text-13 ${
               scope === value ? "bg-surface-2 text-primary" : "text-tertiary hover:bg-surface-2"
             }`}
           >

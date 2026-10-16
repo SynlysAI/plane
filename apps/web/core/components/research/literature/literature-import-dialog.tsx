@@ -48,7 +48,7 @@ export const LiteratureImportDialog = observer(function LiteratureImportDialog({
 
   if (!open) {
     return (
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+      <Button size="xl" variant="secondary" onClick={() => setOpen(true)}>
         {t("research.literature.import")}
       </Button>
     );

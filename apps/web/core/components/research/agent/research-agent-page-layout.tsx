@@ -8,52 +8,50 @@ import type { TResearchAgentSessionApi } from "@/components/research/agent/use-r
 
 type Props = {
   api: TResearchAgentSessionApi;
+  runtimeOpen: boolean;
+  onCloseRuntime: () => void;
 };
 
-/** Full-page Agent workbench: assembly summary, conversation and runtime side column. */
-export function ResearchAgentPageLayout({ api }: Props) {
+/** 全页聊天式布局：居中对话流为主，装配与运行时信息收进「运行详情」抽屉。 */
+export function ResearchAgentPageLayout({ api, runtimeOpen, onCloseRuntime }: Props) {
   const { t } = useTranslation();
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_440px]">
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-subtle px-5 py-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <section>
-              <h3 className="text-11 font-semibold text-secondary">{t("research.agent.assembly_available")}</h3>
-              <ul className="mt-2 space-y-1 text-11 text-secondary" role="list">
-                <li>{api.session?.assembly.persona ?? "-"}</li>
-                {(api.session?.assembly.allowed_tools ?? []).map((tool) => (
-                  <li key={tool}>{tool}</li>
-                ))}
-              </ul>
-            </section>
-            <section>
-              <h3 className="text-11 font-semibold text-secondary">{t("research.agent.assembly_confirmation")}</h3>
-              <p className="mt-2 text-11 text-secondary">
-                {api.session?.assembly.policy_id
-                  ? t("research.agent.policy_confirmation", { policy: api.session.assembly.policy_id })
-                  : t("research.agent.assembly_no_confirmation")}
-              </p>
-            </section>
-            <section>
-              <h3 className="text-11 font-semibold text-secondary">{t("research.agent.assembly_unavailable")}</h3>
-              <ul className="mt-2 space-y-1 text-11 text-secondary" role="list">
-                {(api.session?.assembly.unavailable_reasons ?? []).map((reason) => (
-                  <li key={reason}>{t(`research.agent.reasons.${reason}`)}</li>
-                ))}
-                {!(api.session?.assembly.unavailable_reasons ?? []).length && (
-                  <li>{t("research.agent.assembly_all_available")}</li>
-                )}
-              </ul>
-            </section>
-          </div>
-        </div>
+    <>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ResearchAgentConversation api={api} />
       </div>
-      <aside className="min-h-0 border-subtle xl:border-l">
-        <ResearchAgentRuntime api={api} />
-      </aside>
-    </div>
+      {runtimeOpen && (
+        <>
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={t("research.agent.close_runtime")}
+            onClick={onCloseRuntime}
+            className="fixed inset-0 z-40 bg-black/20"
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("research.agent.runtime_details")}
+            className="fixed top-0 right-0 z-50 flex h-full w-full max-w-md flex-col border-l border-subtle bg-surface-1"
+          >
+            <div className="flex items-center justify-between border-b border-subtle px-4 py-3">
+              <h3 className="text-13 font-semibold text-primary">{t("research.agent.runtime_details")}</h3>
+              <button
+                type="button"
+                onClick={onCloseRuntime}
+                className="rounded-md px-2 py-1 text-12 text-secondary hover:bg-surface-2"
+              >
+                {t("research.agent.close_runtime")}
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <ResearchAgentRuntime api={api} />
+            </div>
+          </aside>
+        </>
+      )}
+    </>
   );
 }

@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from plane.research.services.group_knowledge import ensure_group_knowledge_binding
+from plane.research.utils.org import ensure_root_org_unit
 from plane.db.models import (
     DEFAULT_STATES,
     MentorBinding,
@@ -153,14 +154,10 @@ class Command(BaseCommand):
         direction_name = "基础研究" if business_category == OrgUnit.BusinessCategory.BASIC_RESEARCH else "产业化"
         unit = OrgUnit.objects.filter(workspace=workspace, name=direction_name, unit_type=OrgUnit.UnitType.LAB).first()
         if unit is None:
-            root = OrgUnit.objects.filter(
-                workspace=workspace,
-                unit_type=OrgUnit.UnitType.ROOT,
-                parent__isnull=True,
-                deleted_at__isnull=True,
-            ).first()
-            if root is None:
-                raise CommandError("当前工作区缺少 π-Lab 根节点，请先运行基线迁移")
+            root = ensure_root_org_unit(
+                workspace,
+                actor=workspace.owner or User.objects.filter(is_superuser=True).first(),
+            )
             unit = OrgUnit.objects.create(
                 workspace=workspace,
                 name=direction_name,
@@ -328,6 +325,14 @@ class Command(BaseCommand):
                     created_by=student,
                 )
                 request = ensure_group_knowledge_binding(chain, student)
+                if request is None:
+                    request = ResearchKnowledgeRequest.objects.create(
+                        workspace=workspace,
+                        chain=chain,
+                        request_key=f"phase15:knowledge:{chain.id}",
+                        state=ResearchKnowledgeRequest.State.PENDING_ADMIN,
+                        created_by=student,
+                    )
                 node = ResearchChainNode.objects.create(
                     chain=chain,
                     node_type="LITERATURE_REVIEW",
@@ -341,6 +346,8 @@ class Command(BaseCommand):
                 profile = project.research_profile
                 chain = project.research_chain
                 request = ensure_group_knowledge_binding(chain, student)
+                if request is None:
+                    request = ResearchKnowledgeRequest.objects.filter(chain=chain).first()
                 node = chain.nodes.order_by("created_at").first()
             role_rows = [
                 ("main_pi", main_pi, None),

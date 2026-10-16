@@ -31,6 +31,7 @@ def build_path(unit_id, parent_path):
 
 
 def is_workspace_admin(user, workspace_id) -> bool:
+    """Return whether the user holds the workspace administrator role."""
     if user is None or not getattr(user, "is_authenticated", False):
         return False
     return WorkspaceMember.objects.filter(
@@ -38,6 +39,7 @@ def is_workspace_admin(user, workspace_id) -> bool:
         member=user,
         role=WORKSPACE_ADMIN_ROLE,
         is_active=True,
+        deleted_at__isnull=True,
     ).exists()
 
 

@@ -29,6 +29,7 @@ from .chain import (
 )
 from .context import ResearchContextGrant
 from .agent import ResearchAgentRunEvent, ResearchAgentSession
+from .backend import ResearchAgentBackendConnection
 from .integration import (
     ExternalReferenceLink,
     ExternalSystemConnection,
@@ -47,6 +48,7 @@ from .membership import (
     UserImportRow,
 )
 from .navigation import ProjectNavigationCategory
+from .administrative import AdministrativeOrganization, AdministrativeOrganizationMember
 from .org import MentorBinding, OrgUnit, OrgUnitMember
 from .outcome import ResearchOutcome, ResearchOutcomeAttachment, ResearchOutcomeLink
 from .paper_review import ResearchPaperReview, ResearchPaperReviewVersion
@@ -82,7 +84,7 @@ from .stage import (
     StageTransition,
     StageType,
 )
-from .task import ResearchChainNodeTask
+from .task import ResearchChainNodeTask, ResearchTaskComment
 from .template import ReportTemplate
 
 __all__ = [
@@ -97,6 +99,7 @@ __all__ = [
     "ResearchReflectionLog",
     "ResearchContextGrant",
     "ResearchAgentSession",
+    "ResearchAgentBackendConnection",
     "ResearchAgentRunEvent",
     "CodeArtifact",
     "ProjectCodeRepository",
@@ -154,6 +157,8 @@ __all__ = [
     "OrgUnit",
     "OrgUnitMember",
     "ProjectNavigationCategory",
+    "AdministrativeOrganization",
+    "AdministrativeOrganizationMember",
     "ALL_MATERIAL_TYPES",
     "MATERIAL_SET_COMPLETE_STATES",
     "MATERIAL_TYPES_BY_STAGE",
@@ -167,4 +172,5 @@ __all__ = [
     "StageTransition",
     "StageType",
     "ResearchChainNodeTask",
+    "ResearchTaskComment",
 ]

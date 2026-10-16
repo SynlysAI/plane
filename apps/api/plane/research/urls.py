@@ -10,6 +10,7 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.task_comments import ResearchTaskCommentListEndpoint, ResearchTaskCommentDetailEndpoint
 from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
@@ -21,6 +22,11 @@ from plane.research.views.feedback import (
 )
 
 from plane.research.views import (
+    AdministrativeOrganizationDetailEndpoint,
+    AdministrativeOrganizationListCreateEndpoint,
+    AdministrativeOrganizationMemberEndpoint,
+    AdministrativeOrganizationAssignableMembersEndpoint,
+    AdministrativeProjectOrganizationEndpoint,
     ResearchAccountProvisioningOptionsEndpoint,
     ResearchApprovalFlowDetailEndpoint,
     ResearchApprovalFlowListCreateEndpoint,
@@ -31,19 +37,22 @@ from plane.research.views import (
     ResearchAuditEventListEndpoint,
     ResearchContextEndpoint,
     ResearchContextResourceEndpoint,
-    ResearchContextTokenEndpoint,
-    ResearchContextTokenRevokeEndpoint,
     ResearchAccountLinkListCreateEndpoint,
     ResearchAccountLinkConfirmEndpoint,
     ResearchAccountLinkUnlinkEndpoint,
     ResearchAccountLinkRevokeEndpoint,
     ResearchAccountLinkConflictEndpoint,
     ResearchAgentManifestEndpoint,
+    ResearchAgentBackendConnectionEndpoint,
+    ResearchAgentBackendConnectionTestEndpoint,
     ResearchAgentSessionCreateEndpoint,
     ResearchAgentSessionDetailEndpoint,
     ResearchAgentSessionCloseEndpoint,
     ResearchAgentMessageEndpoint,
     ResearchAgentRunEventEndpoint,
+    ResearchAgentSessionFileEndpoint,
+    ResearchAgentSessionArtifactListEndpoint,
+    ResearchAgentSessionArtifactContentEndpoint,
     ResearchAgentRunCancelEndpoint,
     ResearchAgentApprovalEndpoint,
     ResearchAgentApprovalListEndpoint,
@@ -213,6 +222,36 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/assignable-members/",
+        AdministrativeOrganizationAssignableMembersEndpoint.as_view(),
+        name="administrative-organization-assignable-members",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/",
+        AdministrativeOrganizationListCreateEndpoint.as_view(),
+        name="administrative-organizations",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/",
+        AdministrativeOrganizationDetailEndpoint.as_view(),
+        name="administrative-organization",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/members/",
+        AdministrativeOrganizationMemberEndpoint.as_view(),
+        name="administrative-organization-members",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/members/<uuid:member_id>/",
+        AdministrativeOrganizationMemberEndpoint.as_view(),
+        name="administrative-organization-member",
+    ),
+    path(
+        "research/workspaces/<str:slug>/administrative-projects/<uuid:project_id>/organization/",
+        AdministrativeProjectOrganizationEndpoint.as_view(),
+        name="administrative-project-organization",
+    ),
     path("research/workspaces/<str:slug>/feedback/", ResearchFeedbackEndpoint.as_view(), name="research-feedback"),
     path(
         "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/status/",
@@ -318,6 +357,16 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/",
         ResearchChainNodeTaskDetailEndpoint.as_view(),
         name="research-chain-node-task",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comments/",
+        ResearchTaskCommentListEndpoint.as_view(),
+        name="research-task-comments",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comments/<uuid:comment_id>/",
+        ResearchTaskCommentDetailEndpoint.as_view(),
+        name="research-task-comment",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/<str:action>/",
@@ -427,16 +476,6 @@ urlpatterns = [
         name="research-context",
     ),
     path(
-        "research/workspaces/<str:slug>/context/exchange-token/",
-        ResearchContextTokenEndpoint.as_view(),
-        name="research-context-exchange-token",
-    ),
-    path(
-        "research/workspaces/<str:slug>/context/revoke-token/",
-        ResearchContextTokenRevokeEndpoint.as_view(),
-        name="research-context-revoke-token",
-    ),
-    path(
         "research/workspaces/<str:slug>/account-links/",
         ResearchAccountLinkListCreateEndpoint.as_view(),
         name="research-account-links",
@@ -477,6 +516,16 @@ urlpatterns = [
         name="research-agent-sessions",
     ),
     path(
+        "research/workspaces/<str:slug>/agent/backend-connections/",
+        ResearchAgentBackendConnectionEndpoint.as_view(),
+        name="research-agent-backend-connections",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/backend-connections/test/",
+        ResearchAgentBackendConnectionTestEndpoint.as_view(),
+        name="research-agent-backend-connection-test",
+    ),
+    path(
         "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/",
         ResearchAgentSessionDetailEndpoint.as_view(),
         name="research-agent-session",
@@ -490,6 +539,21 @@ urlpatterns = [
         "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/messages/",
         ResearchAgentMessageEndpoint.as_view(),
         name="research-agent-message",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/files/",
+        ResearchAgentSessionFileEndpoint.as_view(),
+        name="research-agent-session-files",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/artifacts/",
+        ResearchAgentSessionArtifactListEndpoint.as_view(),
+        name="research-agent-session-artifacts",
+    ),
+    path(
+        "research/workspaces/<str:slug>/agent/sessions/<uuid:session_id>/artifact-versions/<str:version_id>/content/",
+        ResearchAgentSessionArtifactContentEndpoint.as_view(),
+        name="research-agent-session-artifact-content",
     ),
     path(
         "research/workspaces/<str:slug>/agent/runs/<uuid:run_id>/events/",

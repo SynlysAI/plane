@@ -20,14 +20,16 @@ import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import { ProjectCard } from "./card";
+import { groupProjectsByOrganization, type TProjectOrganizationOption } from "./project-org-groups";
 
 type TProjectCardListProps = {
   totalProjectIds?: string[];
   filteredProjectIds?: string[];
+  organizations?: TProjectOrganizationOption[];
 };
 
 export const ProjectCardList = observer(function ProjectCardList(props: TProjectCardListProps) {
-  const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps } = props;
+  const { totalProjectIds: totalProjectIdsProps, filteredProjectIds: filteredProjectIdsProps, organizations } = props;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -100,15 +102,40 @@ export const ProjectCardList = observer(function ProjectCardList(props: TProject
       />
     );
 
+  const projectGroups = organizations?.length
+    ? groupProjectsByOrganization(filteredProjectIds, getProjectById, organizations)
+    : undefined;
+
+  const projectCards = (projectIds: string[]) =>
+    projectIds.map((projectId) => {
+      const projectDetails = getProjectById(projectId);
+      if (!projectDetails) return;
+      return <ProjectCard key={projectDetails.id} project={projectDetails} />;
+    });
+
+  if (projectGroups) {
+    return (
+      <ContentWrapper>
+        <div className="space-y-10 pb-8">
+          {projectGroups.map((group) => (
+            <section key={group.id ?? "ungrouped"} aria-label={group.name}>
+              <div className="mb-4 flex items-baseline gap-2 border-b border-subtle pb-2">
+                <h3 className="text-14 font-medium text-secondary">{group.name}</h3>
+                <span className="text-12 text-tertiary">{group.projectIds.length}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+                {projectCards(group.projectIds)}
+              </div>
+            </section>
+          ))}
+        </div>
+      </ContentWrapper>
+    );
+  }
+
   return (
     <ContentWrapper>
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-        {filteredProjectIds.map((projectId) => {
-          const projectDetails = getProjectById(projectId);
-          if (!projectDetails) return;
-          return <ProjectCard key={projectDetails.id} project={projectDetails} />;
-        })}
-      </div>
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">{projectCards(filteredProjectIds)}</div>
     </ContentWrapper>
   );
 });

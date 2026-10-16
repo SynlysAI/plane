@@ -38,7 +38,11 @@ export const AppSidebar = observer(function AppSidebar() {
   const usesResearchProjectTree = research.isEnabled && research.isIaV2Enabled;
 
   return (
-    <SidebarWrapper title="Projects" quickActions={<SidebarQuickActions />}>
+    <SidebarWrapper
+      title="Projects"
+      quickActions={<SidebarQuickActions />}
+      contentLayout={usesResearchProjectTree ? "fill" : "scroll"}
+    >
       <SidebarMenuItems />
       {/* Research module entry - additive, hidden when the module is off */}
       <ResearchSidebarItems />

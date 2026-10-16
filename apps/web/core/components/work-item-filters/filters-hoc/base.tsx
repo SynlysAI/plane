@@ -20,6 +20,7 @@ import { useWorkItemFiltersConfig } from "@/hooks/work-item-filters/use-work-ite
 import type { TSharedWorkItemFiltersHOCProps, TSharedWorkItemFiltersProps } from "./shared";
 
 type TAdditionalWorkItemFiltersProps = {
+  administrativeProjectScopeReady?: boolean;
   saveViewOptions?: TSaveViewOptions<TWorkItemFilterExpression>;
   updateViewOptions?: TUpdateViewOptions<TWorkItemFilterExpression>;
 } & TWorkItemFiltersEntityProps;
@@ -58,6 +59,7 @@ const WorkItemFilterRoot = observer(function WorkItemFilterRoot(props: TWorkItem
     updateFilters,
     updateViewOptions,
     showOnMount,
+    administrativeProjectScopeReady,
     ...entityConfigProps
   } = props;
   // store hooks
@@ -106,6 +108,27 @@ const WorkItemFilterRoot = observer(function WorkItemFilterRoot(props: TWorkItem
     workItemFiltersConfig.areAllConfigsInitialized,
     workItemFiltersConfig.configs,
     workItemLayoutFilter.configManager,
+  ]);
+
+  const projectScopeKey = entityConfigProps.projectIds?.join(",");
+  const projectConditionsKey = JSON.stringify(
+    workItemLayoutFilter.allConditions.filter((condition) => condition.property === "project_id")
+  );
+  useEffect(() => {
+    if (!administrativeProjectScopeReady) return;
+    const allowed = new Set(entityConfigProps.projectIds ?? []);
+    for (const condition of workItemLayoutFilter.allConditions) {
+      if (condition.property !== "project_id") continue;
+      const selected = Array.isArray(condition.value) ? condition.value : [condition.value];
+      const valid = selected.filter((value): value is string => typeof value === "string" && allowed.has(value));
+      if (valid.length !== selected.length) workItemLayoutFilter.updateConditionValue(condition.id, valid);
+    }
+  }, [
+    administrativeProjectScopeReady,
+    projectScopeKey,
+    projectConditionsKey,
+    entityConfigProps.projectIds,
+    workItemLayoutFilter,
   ]);
 
   return <>{typeof children === "function" ? children({ filter: workItemLayoutFilter }) : children}</>;

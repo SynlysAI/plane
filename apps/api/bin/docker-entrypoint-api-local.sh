@@ -15,4 +15,7 @@ python manage.py create_bucket
 # Clear Cache before starting to remove stale values
 python manage.py clear_cache
 
-python manage.py runserver 0.0.0.0:8000 --settings=plane.settings.local
+# --noreload: source stays volume-mounted, but the running service only picks
+# up code changes when the container is recreated (deploy.sh --backend).
+# Editing files on the host must never affect the live process.
+python manage.py runserver 0.0.0.0:8000 --settings=plane.settings.local --noreload

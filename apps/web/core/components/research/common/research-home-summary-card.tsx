@@ -9,17 +9,19 @@ import { Button, getButtonStyling } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
 import type { TResearchChain, TResearchChainNode, TResearchChainSnapshot } from "@plane/types";
 // components
-import { chainOwnerLabel, selectResearchOverviewChains } from "@/components/research/common/research-overview-rows";
+import {
+  chainOwnerLabel,
+  selectResearchOverviewChains,
+  visibleResearchChains,
+} from "@/components/research/common/research-overview-rows";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { pickCurrentChain, pickCurrentNode } from "@/components/research/chains/research-selection";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
-import { ResearchTodoService } from "@/services/research/research-todo.service";
 
 const chainService = new ResearchChainService();
-const todoService = new ResearchTodoService();
 
 /** Node statuses where the most important next action is handling the node itself. */
 const NODE_ACTION_STATUSES = new Set<TResearchChainNode["status"]>(["WAITING_HUMAN", "NEEDS_REVISION", "FAILED"]);
@@ -41,16 +43,10 @@ type TChainSummary = {
 };
 
 /**
- * Read the newest visible chain, active node, snapshot and aggregate todo count.
- *
- * The todo request is issued once beside the chain list and never fans out to
- * individual chain nodes or knowledge-upload endpoints.
+ * 读取未归档、未删除课题的节点及快照，待办数量仅汇总这些课题。
  */
 async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
-  const [chains, todoPayload] = await Promise.all([
-    chainService.getChains(workspaceSlug),
-    todoService.getResearchTodos(workspaceSlug, { scope: "to_me", limit: 100 }).catch(() => null),
-  ]);
+  const chains = visibleResearchChains(await chainService.getChains(workspaceSlug));
   const currentChain = pickCurrentChain(chains);
   if (!currentChain) return { chains, chainDetails: [], todoCount: 0 };
 
@@ -70,7 +66,7 @@ async function loadChainSummary(workspaceSlug: string): Promise<TChainSummary> {
       return { chainId: chain.id, currentNode, latestSnapshot };
     })
   );
-  return { chains, chainDetails, todoCount: todoPayload?.total_count ?? 0 };
+  return { chains, chainDetails, todoCount: chains.reduce((total, chain) => total + (chain.open_task_count ?? 0), 0) };
 }
 
 /** Compact research summary for the regular Plane workspace home. */
@@ -84,7 +80,7 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
     research.identity?.module_enabled &&
     research.identity?.workspace_enabled &&
     research.identity?.sections?.research_chain &&
-    research.canSee("research_chain")
+    (research.canSee("research_chain") || research.isResearchAdmin)
   );
 
   useEffect(() => {
@@ -195,7 +191,9 @@ export const ResearchHomeSummaryCard = observer(function ResearchHomeSummaryCard
                       >
                         {chain.project_name ?? chain.project}
                       </Link>
-                      {ownerLabel && <span className="shrink-0 text-12 text-tertiary">{ownerLabel}</span>}
+                      <span className="min-w-0 text-12 [overflow-wrap:anywhere] break-words text-tertiary">
+                        {t("research.chains.owner")}：{ownerLabel || t("research.projects.owner_unset")}
+                      </span>
                       <ResearchStatusBadge status={chain.status}>
                         {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
                       </ResearchStatusBadge>

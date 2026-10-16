@@ -27,6 +27,7 @@ from plane.db.models import (
     WorkspaceResearchSetting,
 )
 from plane.research.utils.config import research_module_enabled
+from plane.research.utils.roles import is_research_admin
 
 WORKSPACE_ADMIN_ROLE = 20
 
@@ -73,6 +74,7 @@ class ActorContext:
     is_workspace_admin: bool = False
     is_workspace_member: bool = False
     is_main_pi: bool = False
+    main_pi_id: object = None
     unit_ids: frozenset = frozenset()
     managing_unit_ids: frozenset = frozenset()
     advises: frozenset = frozenset()
@@ -195,9 +197,10 @@ def build_actor_context(actor, workspace_id, on_date=None) -> ActorContext:
     return ActorContext(
         user_id=actor.id,
         workspace_id=workspace_id,
-        is_workspace_admin=bool(membership and membership.role == WORKSPACE_ADMIN_ROLE),
+        is_workspace_admin=is_research_admin(actor, workspace_id),
         is_workspace_member=bool(membership),
         is_main_pi=main_pi_id == actor.id,
+        main_pi_id=main_pi_id,
         unit_ids=frozenset(active_org_units_for(actor, workspace_id, on_date)),
         managing_unit_ids=frozenset(managing_org_units_for(actor, workspace_id, on_date)),
         advises=frozenset(advises),
@@ -281,16 +284,21 @@ def visibility_allows(context: ActorContext, resource: ResearchResource, on_date
     """Pure visibility matrix: six levels by the six subject classes."""
     if resource.workspace_id != context.workspace_id:
         return False
-    if not context.is_workspace_member:
+    if not context.is_workspace_member and not context.is_workspace_admin:
         return False
+
+    # The workspace administrator has research-wide visibility without an
+    # organisation-unit assignment; this includes private and draft records.
+    if context.is_workspace_admin:
+        return True
 
     owner_id = resource.owner_id
     if owner_id == context.user_id:
         return True
 
-    # Editable research drafts and private notes never inherit technical or
-    # workspace administrator access. Reviewers and the management chain read
-    # the last immutable submitted snapshot through the owning resource API.
+    # Drafts stay hidden from ordinary reviewers and the management chain.
+    # Research administrators already returned above, so this does not deny
+    # workspace-wide administrative reads.
     if resource.is_draft:
         return False
 
@@ -353,6 +361,16 @@ def check_access(actor, action, resource, context: ActorContext | None = None, o
         return False
 
     context = context or build_actor_context(actor, resource.workspace_id, on_date)
+
+    # Cross-workspace contexts must not ride the administrator short-circuit.
+    if resource.workspace_id != context.workspace_id:
+        return False
+
+    # The workspace administrator is the highest research role. After the
+    # caller's workspace membership and resource workspace are validated,
+    # permit administrative reads and mutations across the research domain.
+    if context.is_workspace_admin:
+        return True
 
     if action in ("view", "download", "export"):
         return visibility_allows(context, resource, on_date)

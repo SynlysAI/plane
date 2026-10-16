@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "AI asistent",
+    "open": "Otvoriť AI asistenta",
+    "close": "Zavrieť",
+    "placeholder": "Spýtajte sa na túto stránku, projekt alebo znalostné bázy…",
+    "send": "Odoslať",
+    "stop": "Zastaviť",
+    "new_conversation": "Nová konverzácia",
+    "thinking": "Premýšľam",
+    "working": "Spracováva sa",
+    "queued": "Vo fronte",
+    "retrieving": "Prehľadávanie znalostných báz",
+    "empty_greeting": "Dobrý deň, som váš AI asistent",
+    "empty_hint": "Spýtajte sa ma na aktuálnu stránku, projekt alebo znalostné bázy.",
+    "error_generic": "Niečo sa pokazilo. Skúste to znova.",
+    "error_unavailable": "Služba AI momentálne nie je dostupná.",
+    "retry": "Skúsiť znova",
+    "session_expired": "Predchádzajúca relácia vypršala, bola spustená nová.",
+    "interrupt_notice": "Beh bol prerušený a vyžaduje schválenie. Podpora schvaľovania čoskoro pribudne.",
+    "shortcut_hint": "Cmd+J"
   }
 }

@@ -155,7 +155,7 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
           </Button>
         </div>
         {!material.can_edit && <p className="text-11 text-tertiary">{t("research.stages.materials.read_only_hint")}</p>}
-        {!material.can_edit && research.isWorkspaceAdmin && (
+        {!material.can_edit && research.isResearchAdmin && (
           <div className="flex flex-col gap-2 rounded border border-subtle p-2">
             <p className="text-12 text-secondary">{t("research.stages.materials.override_hint")}</p>
             <Input

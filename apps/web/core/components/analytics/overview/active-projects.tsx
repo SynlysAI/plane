@@ -22,13 +22,14 @@ const ActiveProjects = observer(function ActiveProjects() {
   const { t } = useTranslation();
   const { fetchProjectAnalyticsCount } = useProject();
   const { workspaceSlug } = useParams();
-  const { selectedDurationLabel } = useAnalytics();
+  const { selectedDurationLabel, selectedProjects } = useAnalytics();
   const { data: projectAnalyticsCount, isLoading: isProjectAnalyticsCountLoading } = useSWR(
-    workspaceSlug ? ["projectAnalyticsCount", workspaceSlug] : null,
+    workspaceSlug ? ["projectAnalyticsCount", workspaceSlug, selectedProjects.join(",")] : null,
     workspaceSlug
       ? () =>
           fetchProjectAnalyticsCount(workspaceSlug.toString(), {
-            fields: "total_work_items,total_completed_work_items",
+            fields: "total_issues,completed_issues",
+            project_ids: selectedProjects.join(","),
           })
       : null
   );
@@ -40,7 +41,9 @@ const ActiveProjects = observer(function ActiveProjects() {
     >
       <div className="flex h-[350px] flex-col gap-4 overflow-auto">
         {isProjectAnalyticsCountLoading &&
-          Array.from({ length: 5 }).map((_, index) => <Loader.Item key={index} height="40px" width="100%" />)}
+          ["first", "second", "third", "fourth", "fifth"].map((row) => (
+            <Loader.Item key={row} height="40px" width="100%" />
+          ))}
         {!isProjectAnalyticsCountLoading &&
           projectAnalyticsCount?.map((project) => <ActiveProjectItem key={project.id} project={project} />)}
       </div>

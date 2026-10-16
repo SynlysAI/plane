@@ -33,6 +33,7 @@ from django.utils import timezone
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
+from plane.research.utils.project_review import project_member_filters
 
 # Module imports
 from plane.app.permissions import (
@@ -779,8 +780,7 @@ class ModuleLinkViewSet(BaseViewSet):
             .filter(project_id=self.kwargs.get("project_id"))
             .filter(module_id=self.kwargs.get("module_id"))
             .filter(
-                project__project_projectmember__member=self.request.user,
-                project__project_projectmember__is_active=True,
+                **project_member_filters(self.request.user, self.kwargs.get("slug"), self.kwargs.get("project_id")),
                 project__archived_at__isnull=True,
             )
             .order_by("-created_at")

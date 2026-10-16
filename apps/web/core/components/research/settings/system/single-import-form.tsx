@@ -1,11 +1,11 @@
 import { useState } from "react";
 import type { TAccountProvisioningOptions, TUserImportBatch } from "@plane/types";
 import { Button } from "@plane/propel/button";
+import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ResearchAccountService } from "@/services/research/account.service";
 
 const service = new ResearchAccountService();
-const fieldClass = "rounded border border-subtle bg-surface-1 px-2 py-1.5 text-12";
 export function SingleImportForm({
   workspaceSlug,
   options,
@@ -52,41 +52,39 @@ export function SingleImportForm({
       }}
     >
       <fieldset disabled={busy} className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <label className="flex flex-col gap-1 text-12">
-          人员类别
-          <select className={fieldClass} value={category} onChange={(event) => setCategory(event.target.value)}>
+        <ListFilterField label="人员类别" className="w-full sm:w-full">
+          <ListFilterSelect value={category} onChange={(event) => setCategory(event.target.value)}>
             <option value="STUDENT">学生</option>
             <option value="ADVISOR">导师</option>
-          </select>
-        </label>
+          </ListFilterSelect>
+        </ListFilterField>
         {[
           ["display_name", "姓名", true],
           ["email", "邮箱", true],
           ...(student
             ? [
-                ["student_no", "学号", true],
+                ["student_no", "学号", false],
                 ["grade", "年级", false],
               ]
             : []),
           ["phone", "电话", false],
         ].map(([key, label, required]) => (
-          <label key={String(key)} className="flex flex-col gap-1 text-12">
-            {String(label)}
-            {required ? " *" : ""}
-            <input
-              className={fieldClass}
+          <ListFilterField
+            key={String(key)}
+            label={`${String(label)}${required ? " *" : ""}`}
+            className="w-full sm:w-full"
+          >
+            <ListFilterInput
               required={Boolean(required)}
               type={key === "email" ? "email" : "text"}
               value={fields[String(key)] || ""}
               onChange={(event) => setFields({ ...fields, [String(key)]: event.target.value })}
             />
-          </label>
+          </ListFilterField>
         ))}
-        <label className="flex flex-col gap-1 text-12">
-          {student ? "主归属小组" : "主归属组织"} *
-          <select
+        <ListFilterField label={`${student ? "主归属小组" : "主归属组织"} *`} className="w-full sm:w-full">
+          <ListFilterSelect
             required
-            className={fieldClass}
             value={fields.org_unit || ""}
             onChange={(event) => setFields({ ...fields, org_unit: event.target.value })}
           >
@@ -98,8 +96,8 @@ export function SingleImportForm({
                   {item.display_path}
                 </option>
               ))}
-          </select>
-        </label>
+          </ListFilterSelect>
+        </ListFilterField>
         <p className="self-end text-12 text-tertiary">
           业务方向：
           {unit?.business_category === "BASIC_RESEARCH"
@@ -109,37 +107,32 @@ export function SingleImportForm({
               : "随组织确定"}
         </p>
         {student && (
-          <label className="flex flex-col gap-1 text-12">
-            学位
-            <select
-              className={fieldClass}
+          <ListFilterField label="学位" className="w-full sm:w-full">
+            <ListFilterSelect
               value={fields.degree || ""}
               onChange={(event) => setFields({ ...fields, degree: event.target.value })}
             >
               <option value="">暂未指定</option>
+              <option value="BS">本科</option>
               <option value="MS">硕士</option>
               <option value="PHD">博士</option>
-            </select>
-          </label>
+            </ListFilterSelect>
+          </ListFilterField>
         )}
-        <label className="flex flex-col gap-1 text-12">
-          备注
-          <input
-            className={fieldClass}
+        <ListFilterField label="备注" className="w-full sm:w-full">
+          <ListFilterInput
             maxLength={500}
             value={fields.review_note || ""}
             onChange={(event) => setFields({ ...fields, review_note: event.target.value })}
           />
-        </label>
+        </ListFilterField>
       </fieldset>
       {student && (
         <fieldset disabled={busy} className="flex flex-col gap-3">
           {advisors.map((advisor, index) => (
-            <div key={advisor.key} className="flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1 text-12">
-                {index === 0 ? "主导师 *" : `联合导师 ${index}`}
-                <select
-                  className={fieldClass}
+            <div key={advisor.key} className="flex flex-wrap items-end gap-3">
+              <ListFilterField label={index === 0 ? "主导师 *" : `联合导师 ${index}`} className="w-full sm:w-40">
+                <ListFilterSelect
                   value={advisor.mode}
                   onChange={(event) =>
                     setAdvisors(
@@ -149,8 +142,8 @@ export function SingleImportForm({
                 >
                   <option value="existing">选择已有导师</option>
                   <option value="new">填写新导师</option>
-                </select>
-              </label>
+                </ListFilterSelect>
+              </ListFilterField>
               {advisor.mode === "existing" ? (
                 <ResearchPersonSelect
                   people={options?.advisors ?? []}
@@ -161,12 +154,14 @@ export function SingleImportForm({
               ) : (
                 <>
                   {["name", "email"].map((key) => (
-                    <label key={key} className="flex flex-col gap-1 text-12">
-                      {key === "name" ? "导师姓名" : "导师邮箱"}
-                      <input
+                    <ListFilterField
+                      key={key}
+                      label={key === "name" ? "导师姓名" : "导师邮箱"}
+                      className="w-full sm:w-48"
+                    >
+                      <ListFilterInput
                         required
                         type={key === "email" ? "email" : "text"}
-                        className={fieldClass}
                         value={advisor[key as "name" | "email"]}
                         onChange={(event) =>
                           setAdvisors(
@@ -174,7 +169,7 @@ export function SingleImportForm({
                           )
                         }
                       />
-                    </label>
+                    </ListFilterField>
                   ))}
                 </>
               )}
@@ -211,7 +206,7 @@ export function SingleImportForm({
       <Button
         type="submit"
         variant="primary"
-        size="sm"
+        size="xl"
         disabled={busy || !options || (student && advisors.some((item) => item.mode === "existing" && !item.id))}
       >
         {busy ? "提交中…" : "提交并预览"}

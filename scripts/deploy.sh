@@ -9,6 +9,12 @@
 
 set -euo pipefail
 
+# The backend (docker-compose-local.yml) and Caddy (docker-compose-prod-web.yml)
+# share the "plane" compose project, so each compose run flags the other half's
+# containers as orphans. The warning is expected; silencing it also guards
+# against a stray --remove-orphans tearing down half the deployment.
+export COMPOSE_IGNORE_ORPHANS=1
+
 log() {
     printf '\n\033[1;34m==> %s\033[0m\n' "$1"
 }
@@ -173,9 +179,11 @@ if [[ "$MODE" != "web" ]]; then
     MIGRATOR_ID="$("${BACKEND_COMPOSE[@]}" ps -aq migrator)"
     [[ -n "$MIGRATOR_ID" ]] || fail "migration container was not created"
 
-    timeout 120 bash -c \
+    # A fresh database has significantly more work than an incremental update.
+    MIGRATION_TIMEOUT_SECONDS="${PLANE_MIGRATION_TIMEOUT_SECONDS:-600}"
+    timeout "$MIGRATION_TIMEOUT_SECONDS" bash -c \
         'while [[ "$(docker inspect --format "{{.State.Status}}" "$1" 2>/dev/null)" == "running" ]]; do sleep 2; done' \
-        _ "$MIGRATOR_ID" || fail "migration timed out after 120 seconds"
+        _ "$MIGRATOR_ID" || fail "migration timed out after ${MIGRATION_TIMEOUT_SECONDS} seconds"
     MIGRATOR_EXIT="$(docker inspect --format '{{.State.ExitCode}}' "$MIGRATOR_ID")"
     [[ "$MIGRATOR_EXIT" == "0" ]] \
         || fail "migration exited with code $MIGRATOR_EXIT; run: docker logs $MIGRATOR_ID"

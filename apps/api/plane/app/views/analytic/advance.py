@@ -5,14 +5,13 @@
 from rest_framework.response import Response
 from rest_framework import status
 from typing import Dict, List, Any
-from django.db.models import QuerySet, Q, Count
+from django.db.models import QuerySet, Q, Count, Max
 from django.http import HttpRequest
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from plane.app.views.base import BaseAPIView
 from plane.app.permissions import ROLE, allow_permission
 from plane.db.models import (
-    WorkspaceMember,
     Project,
     Issue,
     Cycle,
@@ -29,6 +28,27 @@ from plane.utils.date_utils import (
 
 
 class AdvanceAnalyticsBaseView(BaseAPIView):
+    def administrative_members(self, date_filters=None):
+        """按用户合并当前行政项目成员，并取其最高项目角色。
+
+        Args:
+            date_filters: 成员加入时间范围。
+
+        Returns:
+            每个用户一行的有效行政项目成员查询集。
+        """
+        projects = Project.objects.filter(**self.filters["project_filters"]).values("id")
+        members = ProjectMember.objects.filter(
+            workspace__slug=self._workspace_slug,
+            project_id__in=projects,
+            is_active=True,
+            member__is_bot=False,
+            member__is_active=True,
+        )
+        if date_filters:
+            members = members.filter(**date_filters)
+        return members.order_by().values("member_id").annotate(effective_role=Max("role"))
+
     def initialize_workspace(self, slug: str, type: str) -> None:
         self._workspace_slug = slug
         self.filters = get_analytics_filters(
@@ -64,22 +84,17 @@ class AdvanceAnalyticsEndpoint(AdvanceAnalyticsBaseView):
         }
 
     def get_overview_data(self) -> Dict[str, Dict[str, int]]:
-        members_query = WorkspaceMember.objects.filter(
-            workspace__slug=self._workspace_slug, is_active=True, member__is_bot=False
-        )
-
-        if self.request.GET.get("project_ids", None):
-            project_ids = self.request.GET.get("project_ids", None)
-            project_ids = [str(project_id) for project_id in project_ids.split(",")]
-            members_query = ProjectMember.objects.filter(
-                project_id__in=project_ids, is_active=True, member__is_bot=False
-            )
+        date_filters = {}
+        if self.filters["analytics_date_range"]:
+            current = self.filters["analytics_date_range"]["current"]
+            date_filters = {"created_at__gte": current["gte"], "created_at__lte": current["lte"]}
+        members_query = self.administrative_members(date_filters)
 
         return {
-            "total_users": self.get_filtered_counts(members_query),
-            "total_admins": self.get_filtered_counts(members_query.filter(role=ROLE.ADMIN.value)),
-            "total_members": self.get_filtered_counts(members_query.filter(role=ROLE.MEMBER.value)),
-            "total_guests": self.get_filtered_counts(members_query.filter(role=ROLE.GUEST.value)),
+            "total_users": {"count": members_query.count()},
+            "total_admins": {"count": members_query.filter(effective_role=ROLE.ADMIN.value).count()},
+            "total_members": {"count": members_query.filter(effective_role=ROLE.MEMBER.value).count()},
+            "total_guests": {"count": members_query.filter(effective_role=ROLE.GUEST.value).count()},
             "total_projects": self.get_filtered_counts(Project.objects.filter(**self.filters["project_filters"])),
             "total_work_items": self.get_filtered_counts(Issue.issue_objects.filter(**self.filters["base_filters"])),
             "total_cycles": self.get_filtered_counts(Cycle.objects.filter(**self.filters["base_filters"])),
@@ -189,9 +204,7 @@ class AdvanceAnalyticsChartEndpoint(AdvanceAnalyticsBaseView):
         total_intake = Issue.objects.filter(
             issue_intake__isnull=False, **self.filters["base_filters"], **date_filter
         ).count()
-        total_members = WorkspaceMember.objects.filter(
-            workspace__slug=self._workspace_slug, is_active=True, **date_filter
-        ).count()
+        total_members = self.administrative_members(date_filter).count()
         total_pages = ProjectPage.objects.filter(**self.filters["base_filters"], **date_filter).count()
         total_views = IssueView.objects.filter(**self.filters["base_filters"], **date_filter).count()
 

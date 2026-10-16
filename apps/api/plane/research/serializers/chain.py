@@ -11,6 +11,7 @@ from plane.db.models import (
     ResearchChainSnapshot,
     ResearchChainUpload,
 )
+from plane.research.services.chain_tasks import chain_lifecycle_manager, chain_manager, chain_writer
 from plane.research.utils.action_capabilities import capability_map
 from plane.research.utils.acl import ResearchResource, build_actor_context, check_access
 
@@ -25,10 +26,14 @@ CHAIN_ACTIONS = (
     "upload",
     "agent_review",
     "archive",
+    "delete",
     "restore",
 )
-NODE_ACTIONS = ("view", "edit", "transition", "upload", "agent_review")
+NODE_ACTIONS = ("view", "edit", "transition", "upload", "agent_review", "delete")
 OPEN_NODE_TASK_STATUSES = ("DRAFT", "ASSIGNED", "SUBMITTED", "NEEDS_REVISION")
+TASK_COUNT_NODE_STATUSES = tuple(
+    status for status in ResearchChainNode.Status.values if status != ResearchChainNode.Status.ARCHIVED
+)
 
 
 def current_node_order():
@@ -56,6 +61,8 @@ def annotate_chain_summaries(queryset):
     open_tasks = Q(
         node_tasks__status__in=OPEN_NODE_TASK_STATUSES,
         node_tasks__deleted_at__isnull=True,
+        node_tasks__node__deleted_at__isnull=True,
+        node_tasks__node__status__in=TASK_COUNT_NODE_STATUSES,
     )
     return queryset.annotate(
         open_task_count=Count("node_tasks", filter=open_tasks, distinct=True),
@@ -123,22 +130,30 @@ def _capabilities(serializer, obj, *, is_node=False):
         action: check_access(actor, action, resource, context=context)
         for action in ("view", "edit", "review", "accept", "return", "export")
     }
+    writable = chain.status == ResearchChain.Status.ACTIVE
+    for action in ("edit", "review", "accept", "return"):
+        decisions[action] = decisions[action] and writable
     if is_node:
-        from plane.research.views.chain_foundation import _chain_writer, _chain_manager, _node_operator
+        from plane.research.views.chain_foundation import _node_operator
 
         decisions.update(
-            transition=_node_operator(chain.workspace, actor, obj),
-            upload=_chain_writer(chain.workspace, actor, chain),
-            agent_review=decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
+            delete=writable and obj.status == "DRAFT" and chain_manager(chain.workspace, actor, chain),
+            transition=writable and _node_operator(chain.workspace, actor, obj),
+            upload=writable and chain_writer(chain.workspace, actor, chain),
+            agent_review=writable and decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
         )
         return capability_map(NODE_ACTIONS, decisions)
-    from plane.research.views.chain_foundation import _chain_manager, _chain_writer
 
+    workspace_admin = context.is_workspace_admin
     decisions.update(
-        upload=_chain_writer(chain.workspace, actor, chain),
-        archive=_chain_manager(chain.workspace, actor, chain),
-        restore=_chain_manager(chain.workspace, actor, chain),
-        agent_review=decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
+        upload=writable and chain_writer(chain.workspace, actor, chain),
+        archive=chain_lifecycle_manager(chain.workspace, actor, chain, workspace_admin=workspace_admin)
+        and chain.status not in ("ARCHIVED", "DELETED"),
+        delete=chain_lifecycle_manager(chain.workspace, actor, chain, workspace_admin=workspace_admin)
+        and chain.status != "DELETED",
+        restore=chain_lifecycle_manager(chain.workspace, actor, chain, workspace_admin=workspace_admin)
+        and chain.status in ("ARCHIVED", "DELETED"),
+        agent_review=writable and decisions["view"] and (decisions["review"] or actor.id == chain.owner_id),
     )
     return capability_map(CHAIN_ACTIONS, decisions)
 
@@ -206,6 +221,8 @@ class ResearchChainSerializer(serializers.ModelSerializer):
             value = obj.node_tasks.filter(
                 status__in=OPEN_NODE_TASK_STATUSES,
                 deleted_at__isnull=True,
+                node__deleted_at__isnull=True,
+                node__status__in=TASK_COUNT_NODE_STATUSES,
             ).count()
         return value
 
@@ -217,6 +234,8 @@ class ResearchChainSerializer(serializers.ModelSerializer):
                 obj.node_tasks.filter(
                     status__in=OPEN_NODE_TASK_STATUSES,
                     deleted_at__isnull=True,
+                    node__deleted_at__isnull=True,
+                    node__status__in=TASK_COUNT_NODE_STATUSES,
                     due_at__isnull=False,
                 )
                 .order_by("due_at")

@@ -59,10 +59,22 @@ afterEach(async () => {
 });
 
 it("uses administrative channel copy for the ordinary project toolbar", async () => {
+  const openOrganizationModal = vi.fn();
+  window.addEventListener("administrative-organization-create", openOrganizationModal);
   await act(async () => root.render(<ProjectsBaseHeader />));
 
   expect(container.textContent).toContain("administrative.projects.title");
-  expect(container.querySelector("button")?.textContent).toContain("administrative.projects.create");
+  const buttons = Array.from(container.querySelectorAll("button")).map((button) => button.textContent);
+  expect(buttons).toContain("新建组织");
+  expect(buttons.some((label) => label?.includes("administrative.projects.create"))).toBe(true);
+
+  await act(async () => {
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "新建组织")
+      ?.click();
+  });
+  expect(openOrganizationModal).toHaveBeenCalledOnce();
+  window.removeEventListener("administrative-organization-create", openOrganizationModal);
 });
 
 it("keeps the legacy project toolbar copy when IA v2 is disabled", async () => {
@@ -71,5 +83,7 @@ it("keeps the legacy project toolbar copy when IA v2 is disabled", async () => {
   mocks.research.isIaV2Enabled = true;
 
   expect(container.textContent).toContain("workspace_projects.label");
-  expect(container.querySelector("button")?.textContent).toContain("workspace_projects.create.label");
+  const buttons = Array.from(container.querySelectorAll("button")).map((button) => button.textContent);
+  expect(buttons).not.toContain("新建组织");
+  expect(buttons.some((label) => label?.includes("workspace_projects.create.label"))).toBe(true);
 });

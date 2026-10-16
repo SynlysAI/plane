@@ -27,6 +27,16 @@ export type TNavigationTree = {
   categories: TNavigationCategory[];
   uncategorized: TNavigationProject[];
 };
+export type TAdministrativeOrganization = {
+  id: string;
+  name: string;
+  is_default: boolean;
+  can_manage: boolean;
+  created_by: string | null;
+  members: { id: string; name: string; email: string; role: "ADMIN" | "MEMBER" }[];
+  project_ids: string[];
+};
+export type TAssignableOrganizationMember = { id: string; name: string; email: string };
 export type TNavigationCategoryPayload = {
   scope: TNavigationScope;
   name: string;
@@ -74,7 +84,7 @@ export class ResearchNavigationService extends APIService {
 
   /** 删除分类；非空分类必须显式指定迁移目标。 */
   async deleteCategory(workspaceSlug: string, categoryId: string, moveTo?: string | null): Promise<void> {
-    return this.delete(researchEndpoints.navigationCategory(workspaceSlug, categoryId), {
+    return this.delete(researchEndpoints.navigationCategory(workspaceSlug, categoryId), undefined, {
       params: moveTo ? { move_to: moveTo } : undefined,
     }).then(() => undefined);
   }
@@ -89,5 +99,90 @@ export class ResearchNavigationService extends APIService {
     return this.post(researchEndpoints.navigationProjectMove(workspaceSlug, projectId), { scope, category }).then(
       (res) => res?.data
     );
+  }
+
+  /** 获取行政组织及其成员、项目归属。 */
+  async getAdministrativeOrganizations(workspaceSlug: string): Promise<TAdministrativeOrganization[]> {
+    return this.get(researchEndpoints.administrativeOrganizations(workspaceSlug))
+      .then((res) => res?.data as TAdministrativeOrganization[])
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** 创建行政组织。 */
+  async createAdministrativeOrganization(workspaceSlug: string, name: string) {
+    return this.post(researchEndpoints.administrativeOrganizations(workspaceSlug), { name }).then(
+      (res) => res?.data as TAdministrativeOrganization
+    );
+  }
+
+  /** 重命名非默认行政组织。 */
+  async updateAdministrativeOrganization(workspaceSlug: string, organizationId: string, name: string) {
+    return this.patch(researchEndpoints.administrativeOrganization(workspaceSlug, organizationId), {
+      name,
+    }).then((res) => res?.data as TAdministrativeOrganization);
+  }
+
+  /** 删除组织，并将项目迁移到显式选择的目标组织。 */
+  async deleteAdministrativeOrganization(workspaceSlug: string, organizationId: string, moveTo: string): Promise<void> {
+    return this.delete(researchEndpoints.administrativeOrganization(workspaceSlug, organizationId), undefined, {
+      params: { move_to: moveTo },
+    }).then(() => undefined);
+  }
+
+  /** 添加组织成员并授予组织成员或管理员角色。 */
+  async addAdministrativeOrganizationMember(
+    workspaceSlug: string,
+    organizationId: string,
+    member: string,
+    role: "ADMIN" | "MEMBER" = "MEMBER"
+  ) {
+    return this.post(researchEndpoints.administrativeOrganizationMembers(workspaceSlug, organizationId), {
+      member,
+      role,
+    }).then((res) => res?.data);
+  }
+
+  /** 调整组织成员角色。 */
+  async updateAdministrativeOrganizationMember(
+    workspaceSlug: string,
+    organizationId: string,
+    memberId: string,
+    role: "ADMIN" | "MEMBER"
+  ) {
+    return this.patch(researchEndpoints.administrativeOrganizationMember(workspaceSlug, organizationId, memberId), {
+      role,
+    }).then((res) => res?.data);
+  }
+
+  /** 移除组织成员并撤销其继承访问。 */
+  async removeAdministrativeOrganizationMember(
+    workspaceSlug: string,
+    organizationId: string,
+    memberId: string
+  ): Promise<void> {
+    return this.delete(
+      researchEndpoints.administrativeOrganizationMember(workspaceSlug, organizationId, memberId)
+    ).then(() => undefined);
+  }
+
+  /** 获取尚未加入组织的工作区成员。 */
+  async getAssignableAdministrativeOrganizationMembers(
+    workspaceSlug: string,
+    organizationId: string
+  ): Promise<TAssignableOrganizationMember[]> {
+    return this.get(researchEndpoints.administrativeOrganizationAssignableMembers(workspaceSlug, organizationId))
+      .then((res) => res?.data as TAssignableOrganizationMember[])
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** 变更行政项目组织归属。 */
+  async moveAdministrativeProject(workspaceSlug: string, projectId: string, organization: string | null) {
+    return this.post(researchEndpoints.administrativeProjectOrganization(workspaceSlug, projectId), {
+      organization,
+    });
   }
 }

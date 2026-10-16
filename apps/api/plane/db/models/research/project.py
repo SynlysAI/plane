@@ -23,6 +23,7 @@ class ResearchProjectProfile(BaseModel):
         ACTIVE = "ACTIVE", "Active"
         ARCHIVED = "ARCHIVED", "Archived"
         COMPLETED = "COMPLETED", "Completed"
+        DELETED = "DELETED", "Deleted"
 
     class ChainKind(models.TextChoices):
         LEGACY_TRAINING = "LEGACY_TRAINING", "Legacy training"

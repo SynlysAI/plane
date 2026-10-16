@@ -50,6 +50,11 @@ from plane.api.serializers import (
     ProjectUpdateSerializer,
 )
 from plane.app.permissions import ProjectBasePermission, WorkSpaceAdminPermission
+from plane.utils.administrative_projects import (
+    administrative_projects,
+    administrative_projects_for_user,
+    restrict_administrative_project_visibility,
+)
 from plane.utils.openapi import (
     project_docs,
     PROJECT_ID_PARAMETER,
@@ -74,6 +79,24 @@ from plane.utils.openapi import (
 )
 
 
+def _accessible_projects(user, workspace_slug):
+    """返回外部 API 可访问的项目，公开行政项目也须满足成员准入。
+
+    Args:
+        user: 当前 API 用户。
+        workspace_slug: 工作区别名。
+
+    Returns:
+        有效成员项目、默认管理行政项目及沿用原规则的公开科研项目。
+    """
+    projects = Project.objects.filter(workspace__slug=workspace_slug).filter(
+        Q(project_projectmember__member=user, project_projectmember__is_active=True)
+        | Q(network=2)
+        | Q(id__in=administrative_projects_for_user(user, workspace_slug).values("id"))
+    )
+    return restrict_administrative_project_visibility(projects, user, workspace_slug)
+
+
 class ProjectListCreateAPIEndpoint(BaseAPIView):
     """Project List and Create Endpoint"""
 
@@ -85,14 +108,7 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
 
     def get_queryset(self):
         return (
-            Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+            _accessible_projects(self.request.user, self.kwargs.get("slug"))
             .select_related("project_lead")
             .annotate(
                 is_member=Exists(
@@ -348,19 +364,7 @@ class ProjectListLiteAPIEndpoint(BaseAPIView):
     use_read_replica = True
 
     def get_queryset(self):
-        # Projects the user can access: those they are an active member of, plus
-        # public (network=2) ones.
-        return (
-            Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
-            .distinct()
-        )
+        return _accessible_projects(self.request.user, self.kwargs.get("slug")).distinct()
 
     @project_docs(
         operation_id="list_projects_lite",
@@ -439,14 +443,7 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
 
     def get_queryset(self):
         return (
-            Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
-            .filter(
-                Q(
-                    project_projectmember__member=self.request.user,
-                    project_projectmember__is_active=True,
-                )
-                | Q(network=2)
-            )
+            _accessible_projects(self.request.user, self.kwargs.get("slug"))
             .select_related("workspace", "workspace__owner", "default_assignee", "project_lead")
             .annotate(
                 is_member=Exists(
@@ -518,6 +515,17 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
 
         Retrieve details of a specific project.
         """
+        administrative = administrative_projects(slug).filter(pk=pk)
+        if administrative.exists() and not restrict_administrative_project_visibility(
+            administrative, request.user, slug
+        ).exists():
+            return Response(
+                {
+                    "error": "Project membership must be configured by an administrator",
+                    "code": "PROJECT_MEMBERSHIP_REQUIRED",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         project = self.get_queryset().get(workspace__slug=slug, pk=pk)
         serializer = ProjectSerializer(project, fields=self.fields, expand=self.expand)
         return Response(serializer.data, status=status.HTTP_200_OK)

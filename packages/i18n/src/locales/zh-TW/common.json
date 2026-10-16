@@ -880,5 +880,26 @@
     "archives": {
       "title": "封存"
     }
+  },
+  "aiAssistant": {
+    "title": "AI 助理",
+    "open": "開啟 AI 助理",
+    "close": "關閉",
+    "placeholder": "詢問這個頁面、專案或知識庫…",
+    "send": "傳送",
+    "stop": "停止",
+    "new_conversation": "新對話",
+    "thinking": "思考中",
+    "working": "處理中",
+    "queued": "排隊中",
+    "retrieving": "正在檢索知識庫",
+    "empty_greeting": "您好，我是 AI 助理",
+    "empty_hint": "可以問我目前頁面、專案或知識庫相關的問題。",
+    "error_generic": "發生錯誤，請重試。",
+    "error_unavailable": "AI 服務暫時無法使用。",
+    "retry": "重試",
+    "session_expired": "上一個工作階段已失效，已開始新的工作階段。",
+    "interrupt_notice": "執行已中斷且需要核准，核准功能即將推出。",
+    "shortcut_hint": "Cmd+J"
   }
 }

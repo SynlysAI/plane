@@ -123,11 +123,11 @@ class WeKnoraClient(RagPortalClient):
 
 
 class SynloraClientAdapter(BaseIntegrationClient):
-    """Health and reference adapter for the shared Agent Runtime."""
+    """Health adapter for the shared Agent Runtime (Yuxi)."""
 
     system = "SYNLORA"
-    health_path = "/api/health"
-    search_path = "/api/v1/research/capabilities"
+    health_path = "/api/system/ready"
+    search_path = "/api/system/ready"
     external_type = "ANALYSIS_RESULT"
     operation = "fetch_agent_capabilities"
 

@@ -22,7 +22,7 @@ export const ProjectPageRoot = observer(function ProjectPageRoot() {
   // fetching workspace projects
   useSWR(
     workspaceSlug && currentWorkspace ? `WORKSPACE_PROJECTS_${workspaceSlug}` : null,
-    workspaceSlug && currentWorkspace ? () => fetchProjects(workspaceSlug.toString()) : null,
+    workspaceSlug && currentWorkspace ? () => fetchProjects(workspaceSlug.toString(), "administrative") : null,
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
 

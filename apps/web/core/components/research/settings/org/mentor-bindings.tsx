@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TMentorBinding, TOrgUnit } from "@plane/types";
-import { AlertModalCore } from "@plane/ui";
+import { AlertModalCore, ListFilterCheckbox } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
@@ -205,17 +205,14 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
           onChange={setMentorEmail}
           disabled={busy || loading || loadFailed}
         />
-        <label className="flex items-center gap-2 pb-1 text-12 text-secondary">
-          <input
-            type="checkbox"
-            checked={isPrimaryAdvisor}
-            onChange={(event) => setIsPrimaryAdvisor(event.target.checked)}
-          />
-          <span>{t("research.org.primary_advisor")}</span>
-        </label>
+        <ListFilterCheckbox
+          label={t("research.org.primary_advisor")}
+          checked={isPrimaryAdvisor}
+          onChange={(event) => setIsPrimaryAdvisor(event.target.checked)}
+        />
         <Button
           variant="primary"
-          size="sm"
+          size="xl"
           loading={busy && !bindingToDelete}
           disabled={
             busy || loading || loadFailed || !resolvedMentee || !resolvedMentor || !menteeIds.has(resolvedMentee.id)
@@ -246,7 +243,7 @@ export const ResearchMentorBindings = observer(function ResearchMentorBindings({
       )}
 
       <ResearchTableSurface>
-        <Table>
+        <Table className="min-w-160">
           <TableHeader>
             <TableRow className="text-tertiary">
               <TableHead>{t("research.org.columns.mentee")}</TableHead>

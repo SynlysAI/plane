@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "KI-Assistent",
+    "open": "KI-Assistenten öffnen",
+    "close": "Schließen",
+    "placeholder": "Fragen Sie zu dieser Seite, einem Projekt oder Ihren Wissensdatenbanken…",
+    "send": "Senden",
+    "stop": "Stoppen",
+    "new_conversation": "Neue Unterhaltung",
+    "thinking": "Denkphase",
+    "working": "Verarbeitung",
+    "queued": "In der Warteschlange",
+    "retrieving": "Wissensdatenbanken werden durchsucht",
+    "empty_greeting": "Hallo, ich bin Ihr KI-Assistent",
+    "empty_hint": "Fragen Sie mich zur aktuellen Seite, zu einem Projekt oder zu Ihren Wissensdatenbanken.",
+    "error_generic": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+    "error_unavailable": "Der KI-Dienst ist derzeit nicht verfügbar.",
+    "retry": "Erneut versuchen",
+    "session_expired": "Die vorherige Sitzung ist abgelaufen. Eine neue wurde gestartet.",
+    "interrupt_notice": "Die Ausführung wurde unterbrochen und erfordert eine Freigabe. Die Freigabeverwaltung folgt in Kürze.",
+    "shortcut_hint": "Cmd+J"
   }
 }

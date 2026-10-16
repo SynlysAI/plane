@@ -265,6 +265,8 @@ class TestReportStateMachine:
         submitted = env["student_client"].post(f"{detail_url}submit/", {}, format="json")
         assert submitted.status_code == 200
         assert submitted.json()["status"] == "SUBMITTED"
+        # 提交响应必须直接携带正文，否则前端 store 整体替换后正文会闪退成“加载中”。
+        assert submitted.json()["draft_content"] is not None
 
         # a second submit must not create another transition (409, P0-RPT-06)
         again = env["student_client"].post(f"{detail_url}submit/", {}, format="json")
@@ -345,10 +347,10 @@ class TestReportStateMachine:
         assert advisor_detail.json()["official_content"]["description_html"] == "<p>Submitted v1</p>"
         assert advisor_detail.json()["draft_content"] is None
 
-    def test_admin_cannot_read_another_members_draft(self, env):
+    def test_admin_can_read_another_members_draft(self, env):
         report = create_report(env).json()
         response = env["admin_client"].get(f"{env['url']}{report['id']}/")
-        assert response.status_code == 404
+        assert response.status_code == 200
 
     def test_colleague_cannot_review(self, env):
         report = create_report(env).json()
@@ -545,7 +547,7 @@ class TestReportAccessControl:
         assert colleague_list["count"] == 0
 
         admin_list = env["admin_client"].get(env["url"]).json()
-        assert admin_list["count"] == 0
+        assert admin_list["count"] == 2
 
     def test_unit_visibility_is_available_when_the_policy_allows_it(self, env):
         env["admin_client"].patch(
@@ -569,6 +571,12 @@ class TestReportAccessControl:
     def test_joint_advisor_reads_formal_report_but_cannot_review_it(self, env):
         joint = make_user(first_name="JointAdvisor", email="joint@example.com")
         add_workspace_member(env["workspace"], joint)
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=env["group"],
+            user=joint,
+            org_role=OrgUnitMember.OrgRole.ADVISOR,
+        )
         MentorBinding.objects.create(
             workspace=env["workspace"],
             org_unit=env["group"],

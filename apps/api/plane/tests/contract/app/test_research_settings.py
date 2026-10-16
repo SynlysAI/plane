@@ -88,7 +88,6 @@ class TestResearchSettingsEndpoint:
             "code": True,
             "integrations": True,
             "research_chain": False,
-            "research_agent": False,
         }
         assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
 
@@ -198,7 +197,6 @@ class TestResearchSettingsEndpoint:
             "code": False,
             "integrations": False,
             "research_chain": False,
-            "research_agent": False,
         }
 
         blocked = env["member_client"].get(org_units_url(env["workspace"]))
@@ -217,7 +215,6 @@ class TestResearchSettingsEndpoint:
             "code": True,
             "integrations": True,
             "research_chain": False,
-            "research_agent": False,
         }
         assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
 

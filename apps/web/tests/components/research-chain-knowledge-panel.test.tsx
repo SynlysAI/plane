@@ -64,7 +64,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("selects a scoped knowledge base and uploads through the BFF", async () => {
+it("uploads a selected file to the bound group library without a library selector", async () => {
   const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
   await act(async () => {
     root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
@@ -73,8 +73,14 @@ it("selects a scoped knowledge base and uploads through the BFF", async () => {
 
   const input = container.querySelector('input[type="file"]');
   expect(input).not.toBeNull();
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "选择文件")).toBe(true);
-  expect(container.textContent).toContain("未选择任何文件");
+  expect(container.querySelector("h3")?.textContent).toContain("课题资料");
+  expect(container.querySelector("select")).toBeNull();
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "新增资料")).toBe(true);
+  const picker = vi.spyOn(input as HTMLInputElement, "click");
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "新增资料")?.click();
+  });
+  expect(picker).toHaveBeenCalledOnce();
   const file = new File(["# paper"], "paper.md", { type: "text/markdown" });
   await act(async () => {
     Object.defineProperty(input, "files", { value: [file] });
@@ -82,7 +88,7 @@ it("selects a scoped knowledge base and uploads through the BFF", async () => {
   });
   expect(container.textContent).toContain("paper.md");
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "通过 BFF 上传")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.click();
   });
   expect(mocks.uploadKnowledgeFile).toHaveBeenCalledWith(
     "lab",
@@ -151,7 +157,7 @@ it("keeps the upload record available when reference confirmation fails", async 
     input?.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "通过 BFF 上传")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.click();
   });
 
   await act(async () => {
@@ -179,7 +185,7 @@ it("keeps validation failures actionable instead of presenting them as upstream 
     input?.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "通过 BFF 上传")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.click();
   });
 
   expect(container.textContent).toContain("操作未完成，当前记录已保留。");
@@ -204,9 +210,7 @@ it("blocks uploads while the chain knowledge request awaits administrator bindin
   expect(container.textContent).not.toContain("手工建库");
   expect(container.querySelector('input[type="file"]')?.hasAttribute("disabled")).toBe(true);
   expect(
-    [...container.querySelectorAll("button")]
-      .find((button) => button.textContent === "通过 BFF 上传")
-      ?.hasAttribute("disabled")
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.hasAttribute("disabled")
   ).toBe(true);
   expect(mocks.uploadKnowledgeFile).not.toHaveBeenCalled();
 });

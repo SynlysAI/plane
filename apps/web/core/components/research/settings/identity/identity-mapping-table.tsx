@@ -11,7 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 import type { TIdentityMapping } from "@plane/types";
-import { Input } from "@plane/ui";
+import { ListFilterField, ListFilterInput } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
@@ -92,31 +92,34 @@ export const ResearchIdentityMappingTable = observer(function ResearchIdentityMa
       )}
 
       <ResearchFilterToolbar>
-        <Input
-          className="!w-56"
-          placeholder={t("research.identity.user_placeholder")}
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <Input
-          className="!w-64"
-          placeholder={t("research.identity.subject_placeholder")}
-          value={subject}
-          onChange={(event) => setSubject(event.target.value)}
-        />
-        <Input
-          className="!w-40"
-          placeholder={t("research.identity.employee_id_placeholder")}
-          value={employeeId}
-          onChange={(event) => setEmployeeId(event.target.value)}
-        />
-        <Button variant="primary" size="sm" onClick={() => void handleCreate()}>
+        <ListFilterField label={t("research.identity.columns.user")} className="w-full sm:w-56">
+          <ListFilterInput
+            placeholder={t("research.identity.user_placeholder")}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.identity.columns.subject")} className="w-full sm:w-64">
+          <ListFilterInput
+            placeholder={t("research.identity.subject_placeholder")}
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+          />
+        </ListFilterField>
+        <ListFilterField label={t("research.identity.columns.employee_id")} className="sm:w-40">
+          <ListFilterInput
+            placeholder={t("research.identity.employee_id_placeholder")}
+            value={employeeId}
+            onChange={(event) => setEmployeeId(event.target.value)}
+          />
+        </ListFilterField>
+        <Button variant="primary" size="xl" onClick={() => void handleCreate()}>
           {t("research.identity.bind")}
         </Button>
       </ResearchFilterToolbar>
 
       <ResearchTableSurface>
-        <Table>
+        <Table className="min-w-160">
           <TableHeader>
             <TableRow className="text-tertiary">
               <TableHead>{t("research.identity.columns.user")}</TableHead>

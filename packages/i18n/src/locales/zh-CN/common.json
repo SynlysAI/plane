@@ -167,9 +167,9 @@
   "failed_to_remove_project_from_favorites": "无法从收藏中移除项目。请重试。",
   "project_created_successfully": "项目创建成功",
   "project_created_successfully_description": "项目创建成功。您现在可以开始添加工作项了。",
-  "project_name_already_taken": "项目名称已被使用。",
+  "project_name_already_taken": "该工作区已存在同名项目（可能由其他成员创建），请更换名称。",
   "project_name_cannot_contain_special_characters": "项目名称不能包含特殊字符。",
-  "project_identifier_already_taken": "项目标识符已被使用。",
+  "project_identifier_already_taken": "该工作区已存在相同项目标识符，请更换标识符。",
   "project_cover_image_alt": "项目封面图片",
   "name_is_required": "名称为必填项",
   "title_should_be_less_than_255_characters": "标题应少于255个字符",
@@ -864,6 +864,11 @@
     }
   },
   "research": {
+    "deletion": {
+      "delete_named": "删除 {name}",
+      "confirm": "确认删除“{name}”？删除后将从列表移除，无法在此撤销。",
+      "blocked": "此记录已有提交历史或关联数据，暂不能删除。请先解除关联；需要保留历史时请使用归档。"
+    },
     "nav": {
       "group": "科研",
       "overview": "科研总览",
@@ -887,9 +892,11 @@
       "code": "代码管理",
       "outcomes": "论文与成果",
       "integrations": "系统集成",
+      "agent_backend": "智能体后端",
       "timeline": "时间线",
       "dashboard": "科研概览",
       "system": "系统管理",
+      "feedback": "反馈管理",
       "back_to_projects": "返回项目列表",
       "back_to_overview": "返回科研总览"
     },
@@ -1096,9 +1103,16 @@
       "administrative_hint": "采购、报销与普通协作项目。",
       "administrative_empty": "暂无行政项目。",
       "administrative_error": "行政项目摘要暂时不可用，请稍后重试。",
+      "administrative_updated_at": "最近更新：{value}",
+      "administrative_open_issues": "未完成 {count} 项",
+      "administrative_done_issues": "已完成 {count} 项",
+      "administrative_stats_unavailable": "概览暂不可用",
       "all_administrative": "全部行政项目",
       "recent_activity": "最近动态",
       "report_summary": "报告提交摘要",
+      "this_week": "本周",
+      "this_month": "本月",
+      "recent_error": "最近动态暂不可用，请稍后刷新。",
       "report_error": "报告汇总暂不可用，可刷新或直接进入报告视图。",
       "view_summary": "查看汇总",
       "view_todos": "查看全部待办",
@@ -1160,6 +1174,7 @@
       "requester": "发起人",
       "assignees": "处理人",
       "business_status": "原状态",
+      "business_draft": "草稿",
       "business_assigned": "已指派",
       "business_submitted": "已提交",
       "business_needs_revision": "需修订",
@@ -1270,6 +1285,7 @@
       "chain_status": {
         "active": "进行中",
         "archived": "已归档",
+        "deleted": "已删除",
         "completed": "已完成"
       },
       "visibility": "可见范围",
@@ -1307,6 +1323,7 @@
         "unmapped_node": "未映射节点",
         "stage_detail_title": "阶段详情",
         "stage_nodes": "阶段节点",
+        "records_title": "记录",
         "stage_node_count": "关联节点 {count} 个",
         "stage_empty": "该阶段尚未产生实际节点。",
         "stage_snapshot": "阶段快照",
@@ -1442,6 +1459,17 @@
       "org_unit": "所属组织"
     },
     "chain_tasks": {
+      "comments": {
+        "confirm_delete": "确认删除这条评论？",
+        "title": "评论",
+        "placeholder": "添加评论…",
+        "post": "发表评论",
+        "edited": "已编辑",
+        "loading": "正在加载评论…",
+        "load_failed": "评论加载失败，请重试。",
+        "save_failed": "评论保存失败，输入内容已保留，请重试。",
+        "delete_failed": "评论删除失败，请重试。"
+      },
       "panel_title": "科研任务",
       "panel_hint": "任务独立于节点流程，责任人、评审与退回原因在同一处追踪。",
       "loading": "正在加载科研任务…",
@@ -1547,7 +1575,13 @@
       "load_failed": "论文评审加载失败，请稍后重试。",
       "refresh": "刷新",
       "review_switch": "当前节点的论文评审",
-      "status": "评审状态",
+      "status": {
+        "open": "待提交",
+        "waiting_review": "待评审",
+        "needs_revision": "需修订",
+        "accepted": "已确认",
+        "withdrawn": "已撤回"
+      },
       "final_reviewer": "最终评审人",
       "due_at": "截止时间",
       "final_confirmation": "最终确认",
@@ -1579,13 +1613,6 @@
       "confirm": "确认提交",
       "server_rejected": "服务端拒绝了本次操作，请确认范围和权限后重试。",
       "file_failed": "论文文件暂时无法打开。",
-      "status": {
-        "open": "待提交",
-        "waiting_review": "待评审",
-        "needs_revision": "需修订",
-        "accepted": "已确认",
-        "withdrawn": "已撤回"
-      },
       "version_status": {
         "submitted": "已提交",
         "superseded": "已替代",
@@ -1602,6 +1629,9 @@
     },
     "knowledge": {
       "panel_title": "RAGPortal 知识库",
+      "materials_title": "课题资料",
+      "add_material": "新增资料",
+      "upload_file": "上传",
       "reasons": {
         "not_configured": "服务尚未配置",
         "unauthorized": "认证失败",
@@ -1641,6 +1671,12 @@
       "launch": "启动会话",
       "close": "关闭会话",
       "input_label": "消息",
+      "file_attach": "附加分析文件",
+      "file_uploading": "上传中…",
+      "file_uploaded": "已上传 {name}",
+      "file_upload_error": "文件上传失败，请重试。",
+      "artifact_download": "下载",
+      "artifact_download_error": "产物下载失败，请重试。",
       "input_placeholder": "提出一个研究问题",
       "send": "发送",
       "degraded": "智能体运行时尚未配置，研究链功能仍可继续使用。",
@@ -1735,7 +1771,16 @@
         "DEGRADED": "已降级",
         "ERROR": "错误",
         "CLOSED": "已关闭"
-      }
+      },
+      "thinking_process": "思考过程",
+      "file_change": "文件",
+      "approval_title": "需要审批",
+      "approval_once": "批准一次",
+      "approval_always": "批准并记住（本次会话内相同操作不再询问）",
+      "close_runtime": "关闭运行详情",
+      "report_context": "正式报告引用",
+      "assembly_summary": "上下文装配",
+      "assembly_tool_count": "{count} 个工具"
     },
     "status": {
       "workspace": "当前工作区：{workspace}",
@@ -1763,6 +1808,7 @@
       }
     },
     "feedback": {
+      "management_description": "按状态、分类、模块与时间定位反馈，右侧保留完整提交快照。",
       "draft_saved": {
         "title": "草稿已保存",
         "message": "报告正文已更新，可以继续编辑或提交。"
@@ -1794,6 +1840,10 @@
       "project_archived": {
         "title": "项目已归档",
         "message": "项目已移出进行中列表，可随时恢复。"
+      },
+      "project_deleted": {
+        "title": "项目已删除",
+        "message": "研究数据已保留，可在已删除列表中重新激活。"
       },
       "project_restored": {
         "title": "项目已恢复",
@@ -1943,6 +1993,7 @@
     "project_status": {
       "active": "进行中",
       "archived": "已归档",
+      "deleted": "已删除",
       "completed": "已结题"
     },
     "approval_types": {
@@ -2060,6 +2111,12 @@
       "create": "创建科研项目",
       "open_team_project": "打开项目",
       "archive": "归档",
+      "delete": "删除",
+      "current_projects": "当前项目",
+      "owner_unset": "未设置",
+      "confirm_delete_title": "确认删除项目？",
+      "confirm_delete": "项目“{project}”将从首页及默认列表中移除。研究数据会保留，可在已删除列表中重新激活。",
+      "action_failed": "操作失败，请重试。",
       "restore": "恢复",
       "confirm_archive_title": "确认归档项目？",
       "confirm_archive": "项目“{project}”将从进行中列表移除，后续仍可恢复。",
@@ -2192,6 +2249,7 @@
       "mine": "我发起的",
       "completed": "已完成",
       "approve": "通过",
+      "approve_always": "批准并记住（本次会话内相同操作不再询问）",
       "reject": "驳回",
       "withdraw": "撤回",
       "confirm_reject": "确认驳回",
@@ -2217,6 +2275,8 @@
     "platform": {
       "description": "模块开关、上传限制与默认可见级别。",
       "switches": "模块开关",
+      "research_agent_user_backend_enabled": "允许科研成员使用个人智能体后端",
+      "research_agent_user_backend_enabled_hint": "仅控制当前工作区的新会话是否使用成员自助配置的 ScienceDiscovery 实例。",
       "module_enabled": "为本工作区启用科研模块",
       "org_enabled": "组织架构",
       "report_enabled": "周期报告",
@@ -2242,7 +2302,8 @@
       "markdown_max_mb": "Markdown 限制",
       "office_max_mb": "办公文件限制",
       "audit_retention_days": "审计保留天数（0 表示永久保留）",
-      "limits_hint": "以上限制仅作用于科研上传，不会改变全局 FILE_SIZE_LIMIT。"
+      "limits_hint": "以上限制仅作用于科研上传，不会改变全局 FILE_SIZE_LIMIT。",
+      "research_agent_enabled": "科研智能体（工作台与个人后端）"
     },
     "templates": {
       "description": "创建报告时可套用的正文模板。",
@@ -2789,9 +2850,9 @@
       "call_logs_title": "集成调用日志",
       "display_name": "展示名",
       "credential_ref": "凭证引用名（密钥管理）",
-      "credential_hint": "凭证只存后端密钥库，配置项仅保存引用名。",
+      "credential_hint": "凭证只存后端，Token 加密保存在连接上，永不回显。",
       "base_url_hint": "填写该服务从 plane-api 容器可达的基地址",
-      "credential_configured": "已配置凭证；填写新的引用名即可替换。",
+      "credential_configured": "已配置凭证；粘贴新 Token 即可替换。",
       "enabled": "启用",
       "disabled": "已停用",
       "search": "检索",
@@ -2840,8 +2901,54 @@
         "outcome": "结果",
         "latency": "耗时（毫秒）",
         "error": "错误码",
-        "time": "时间"
-      }
+        "time": "时间",
+        "base_url": "服务地址",
+        "credential_mode": "凭证模式",
+        "actions": "操作"
+      },
+      "refresh_health": "重新检测",
+      "edit": "修改",
+      "configure": "配置",
+      "enable": "启用",
+      "disable": "停用",
+      "edit_title": "编辑连接",
+      "configure_title": "配置连接",
+      "credential_mode_shared": "公共凭证",
+      "credential_mode_personal": "个人凭证"
+    },
+    "agent_backend": {
+      "description": "把你的 ScienceDiscovery 实例接入为智能体运行时。",
+      "default_runtime": "平台默认运行时：Synlora（云端）。",
+      "governance_off": "本工作区未开放自助智能体后端，请联系管理员开启。",
+      "governance_off_new_sessions": "本工作区未开放自助智能体后端，配置暂不用于新会话。",
+      "server_address_hint": "填写你的本地智能体访问地址；Plane 后端会按部署配置解析转发。",
+      "base_url_placeholder": "http(s)://<ScienceDiscovery 服务地址>",
+      "workspace": "当前工作区：{name}",
+      "no_workspace": "请先进入科研工作区，再配置个人智能体后端。",
+      "access_denied": "不能配置此工作区的个人智能体后端。",
+      "base_url": "ScienceDiscovery 地址",
+      "token": "访问令牌",
+      "token_kept": "已保存令牌，留空则保持不变。",
+      "enabled": "新智能体会话使用我的 ScienceDiscovery 实例",
+      "busy": "处理中…",
+      "save": "保存连接",
+      "saved": "连接已保存。",
+      "save_failed": "保存失败，请检查地址后重试。",
+      "test": "测试连接",
+      "test_ok": "连接成功，可用模型档案 {count} 个。",
+      "cloud_test_ok": "云端智能体连接成功。",
+      "test_failed": "连接失败：{error}",
+      "test_failed_generic": "连接测试失败。",
+      "remove": "删除",
+      "removed": "连接已删除。",
+      "remove_failed": "删除失败，请重试。",
+      "load_failed": "无法读取当前连接。",
+      "health": "健康状态：{status} · 检查于 {at}",
+      "system": "智能体系统",
+      "system_local": "本地智能体（ScienceDiscovery）",
+      "system_cloud": "云端智能体（Synlora）",
+      "system_hint": "个人凭证按系统分别保存；工作区集成选择个人凭证模式时，将使用这里的云端 Token。",
+      "cloud_address_hint": "云端智能体使用工作区统一的 Synlora 服务地址，这里只需填写你的个人访问 Token。"
     },
     "timeline": {
       "description": "思维链、研发链与项目全流程时间线。",
@@ -2891,5 +2998,40 @@
     "archives": {
       "title": "归档"
     }
+  },
+  "aiAssistant": {
+    "title": "AI 助手",
+    "open": "打开 AI 助手",
+    "close": "关闭",
+    "placeholder": "询问当前页面、项目或知识库…",
+    "send": "发送",
+    "stop": "停止",
+    "new_conversation": "新会话",
+    "thinking": "思考中",
+    "working": "思考中…",
+    "queued": "排队中",
+    "retrieving": "正在检索知识库",
+    "empty_greeting": "你好，我是 AI 助手",
+    "empty_hint": "可以问我当前页面、项目或知识库相关的问题。",
+    "error_generic": "出错了，请重试。",
+    "error_unavailable": "AI 服务暂时不可用。",
+    "retry": "重试",
+    "session_expired": "上一个会话已失效，已开启新会话。",
+    "interrupt_notice": "运行已中断并需要审批，审批功能即将上线。",
+    "shortcut_hint": "Cmd+J",
+    "subtitle": "由 Synlora / ScienceDiscovery 提供支持",
+    "provider": "智能体",
+    "provider_cloud": "云端智能体（Synlora）",
+    "provider_local": "本地智能体（ScienceDiscovery）",
+    "expand": "放大",
+    "collapse": "还原",
+    "context_linked": "已关联",
+    "context_workspace_only": "仅工作区上下文——打开项目页面可附带页面信息",
+    "context_hint": "回答将结合当前页面上下文",
+    "approval_pending": "本次运行需要审批——请到科研工作台处理。",
+    "local_unavailable": "本地智能体仅在科研链节点页可用——打开节点后点击「智能体分析」。",
+    "disclaimer": "内容由 AI 生成，仅供参考",
+    "approve": "批准",
+    "reject": "拒绝"
   }
 }

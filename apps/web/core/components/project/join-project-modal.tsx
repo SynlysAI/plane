@@ -13,6 +13,7 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { projectCanBeJoined } from "@/store/project/project-visibility";
 
 // type
 type TJoinProjectModalProps = {
@@ -32,6 +33,7 @@ export function JoinProjectModal(props: TJoinProjectModalProps) {
   const router = useAppRouter();
 
   const handleJoin = async () => {
+    if (!projectCanBeJoined(project)) return;
     setIsJoiningLoading(true);
 
     await joinProject(workspaceSlug, project.id)
@@ -48,6 +50,8 @@ export function JoinProjectModal(props: TJoinProjectModalProps) {
       });
   };
 
+  if (!projectCanBeJoined(project)) return null;
+
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XL}>
       <div className="space-y-5 px-5 py-8 sm:p-6">
@@ -62,7 +66,7 @@ export function JoinProjectModal(props: TJoinProjectModalProps) {
         <Button variant="secondary" size="lg" onClick={handleClose}>
           Cancel
         </Button>
-        <Button variant="primary" size="lg" tabIndex={1} type="submit" onClick={handleJoin} loading={isJoiningLoading}>
+        <Button variant="primary" size="lg" type="submit" onClick={handleJoin} loading={isJoiningLoading}>
           {isJoiningLoading ? "Joining..." : "Join Project"}
         </Button>
       </div>

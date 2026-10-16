@@ -7,5 +7,5 @@
 export * from "./external-call-log-table";
 export * from "./external-reference-card";
 export * from "./external-reference-picker";
-export * from "./integration-connection-form";
+export * from "./integration-connection-modal";
 export * from "./integration-health-board";

@@ -11,8 +11,14 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("mobx-react", () => ({
+  enableStaticRendering: () => undefined,
+  observer: (component: unknown) => component,
+}));
+vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "en",
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("@plane/propel/tab-navigation", () => ({
   TabNavigationList: ({ children }: { children: React.ReactNode }) => <nav>{children}</nav>,
 }));
@@ -77,6 +83,19 @@ it("renders the four ordinary Plane capabilities in the administrative channel",
     { href: "/lab/analytics/overview/", label: "administrative.analytics.title", active: "false" },
     { href: "/lab/projects/archives", label: "administrative.archives.title", active: "false" },
   ]);
+});
+
+it("keeps organization creation out of the administrative page heading", async () => {
+  await act(async () =>
+    root.render(
+      <AdministrativeProjectTabs workspaceSlug="lab" activeTab="projects">
+        <output>ordinary-plane-body</output>
+      </AdministrativeProjectTabs>
+    )
+  );
+
+  const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "新建组织");
+  expect(button).toBeFalsy();
 });
 
 it("keeps ordinary pages unchanged when IA v2 is disabled", async () => {

@@ -8,7 +8,21 @@ import json
 
 # Django imports
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Case, CharField, Count, Exists, F, OuterRef, Prefetch, Q, Subquery, Value, When
+from django.db import transaction
+from django.db.models import (
+    Case,
+    CharField,
+    Count,
+    Exists,
+    F,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+    When,
+)
 from django.utils import timezone
 
 # Third Party imports
@@ -34,7 +48,6 @@ from plane.db.models import (
     ProjectMember,
     ProjectNetwork,
     ProjectUserProperty,
-    ResearchProjectProfile,
     State,
     DEFAULT_STATES,
     Workspace,
@@ -43,7 +56,15 @@ from plane.db.models import (
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
-
+from plane.utils.administrative_projects import (
+    administrative_organization_project_ids,
+    administrative_projects_for_user,
+    restrict_administrative_project_visibility,
+    administrative_project_filter,
+    public_administrative_project_ids,
+    research_project_ids,
+    user_can_manage_administrative_project,
+)
 
 
 def _cached_research_review_ids(request, slug):
@@ -85,8 +106,34 @@ def _research_access_expression(request, slug):
     )
 
 
+def _project_member_role_expression(request, slug):
+    """生成包含行政项目默认权限的有效项目角色。
+
+    Args:
+        request: 当前请求。
+        slug: 工作区别名。
+
+    Returns:
+        管理身份在行政项目中返回管理员角色，其他情况返回显式成员角色。
+    """
+    member_role = ProjectMember.objects.filter(
+        project_id=OuterRef("pk"), member_id=request.user.id, is_active=True
+    ).values("role")
+    explicit_project_ids = ProjectMember.objects.filter(
+        project_id=OuterRef("pk"), member_id=request.user.id, is_active=True
+    ).values("project_id")
+    return Case(
+        When(id__in=administrative_projects_for_user(request.user, slug).values("id"), then=Value(ROLE.ADMIN.value)),
+        When(id__in=public_administrative_project_ids(request.user, slug), then=Value(ROLE.MEMBER.value)),
+        When(id__in=explicit_project_ids, then=Subquery(member_role)),
+        When(id__in=administrative_organization_project_ids(request.user, slug), then=Value(ROLE.GUEST.value)),
+        default=Subquery(member_role),
+        output_field=IntegerField(),
+    )
+
+
 def _restrict_workspace_project_visibility(queryset, request, slug):
-    """保留原有成员和公开网络规则，并并入研究链只读项目。
+    """限制行政项目成员准入，保留科研项目网络和研究链只读规则。
 
     Args:
         queryset: 工作区项目查询集。
@@ -94,10 +141,14 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
         slug: 工作区别名。
 
     Returns:
-        过滤后的查询集。工作区管理员保持原样，可以看到全部项目。
+        过滤后的查询集，默认管理身份仍可看到全部行政项目。
     """
     user = request.user
+    queryset = restrict_administrative_project_visibility(queryset, user, slug)
     review_ids = _cached_research_review_ids(request, slug)
+    administrative_ids = administrative_projects_for_user(user, slug).values("id")
+    organization_ids = administrative_organization_project_ids(user, slug)
+    public_ids = public_administrative_project_ids(user, slug)
     if WorkspaceMember.objects.filter(
         member=user,
         workspace__slug=slug,
@@ -110,6 +161,9 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
                 project_projectmember__is_active=True,
             )
             | Q(id__in=review_ids)
+            | Q(id__in=administrative_ids)
+            | Q(id__in=public_ids)
+            | Q(id__in=organization_ids)
         )
     if WorkspaceMember.objects.filter(
         member=user,
@@ -117,13 +171,17 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
         is_active=True,
         role=ROLE.MEMBER.value,
     ).exists():
+        # 公开项目的列表可见性与打开权限保持同一口径：默认公共组织（public_ids）
+        # 或挂靠组织成员（organization_ids），非组织成员不再"看得到点不开"。
         return queryset.filter(
             Q(
                 project_projectmember__member=user,
                 project_projectmember__is_active=True,
             )
-            | Q(network=2)
             | Q(id__in=review_ids)
+            | Q(id__in=administrative_ids)
+            | Q(id__in=public_ids)
+            | Q(id__in=organization_ids)
         )
     return queryset
 
@@ -155,16 +213,8 @@ class ProjectViewSet(BaseViewSet):
                     )
                 )
             )
-            .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
-            )
-            .annotate(
-                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
-            )
+            .annotate(member_role=_project_member_role_expression(self.request, self.kwargs.get("slug")))
+            .annotate(research_access=_research_access_expression(self.request, self.kwargs.get("slug")))
             .annotate(
                 anchor=DeployBoard.objects.filter(
                     entity_name="project",
@@ -175,7 +225,7 @@ class ProjectViewSet(BaseViewSet):
             .annotate(sort_order=Subquery(sort_order))
             # additive research flag used by the optional serializer field
             .annotate(
-                is_research_project=Exists(ResearchProjectProfile.objects.filter(project_id=OuterRef("pk")))
+                is_research_project=Exists(Project.all_objects.filter(pk=OuterRef("pk"), id__in=research_project_ids()))
             )
             .prefetch_related(
                 Prefetch(
@@ -194,6 +244,9 @@ class ProjectViewSet(BaseViewSet):
         fields = [field for field in request.GET.get("fields", "").split(",") if field]
         projects = self.get_queryset().order_by("sort_order", "name")
         projects = _restrict_workspace_project_visibility(projects, request, slug)
+
+        if request.GET.get("scope") == "administrative":
+            projects = projects.filter(administrative_project_filter())
 
         if request.GET.get("per_page", False) and request.GET.get("cursor", False):
             return self.paginate(
@@ -221,16 +274,8 @@ class ProjectViewSet(BaseViewSet):
         projects = (
             Project.objects.filter(workspace__slug=self.kwargs.get("slug"))
             .select_related("workspace", "workspace__owner", "default_assignee", "project_lead")
-            .annotate(
-                member_role=ProjectMember.objects.filter(
-                    project_id=OuterRef("pk"),
-                    member_id=self.request.user.id,
-                    is_active=True,
-                ).values("role")
-            )
-            .annotate(
-                research_access=_research_access_expression(self.request, self.kwargs.get("slug"))
-            )
+            .annotate(member_role=_project_member_role_expression(self.request, self.kwargs.get("slug")))
+            .annotate(research_access=_research_access_expression(self.request, self.kwargs.get("slug")))
             .annotate(
                 intake_count=Count(
                     "project_intakeissue",
@@ -243,7 +288,7 @@ class ProjectViewSet(BaseViewSet):
             .annotate(inbox_view=F("intake_view"))
             .annotate(sort_order=Subquery(sort_order))
             .annotate(
-                is_research_project=Exists(ResearchProjectProfile.objects.filter(project_id=OuterRef("pk")))
+                is_research_project=Exists(Project.all_objects.filter(pk=OuterRef("pk"), id__in=research_project_ids()))
             )
             .distinct()
         ).values(
@@ -273,6 +318,8 @@ class ProjectViewSet(BaseViewSet):
         )
 
         projects = _restrict_workspace_project_visibility(projects, request, slug)
+        if request.GET.get("scope") == "administrative":
+            projects = projects.filter(administrative_project_filter())
         return Response(projects, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -283,9 +330,25 @@ class ProjectViewSet(BaseViewSet):
             return Response({"error": "Project does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
         member_ids = [str(project_member.member_id) for project_member in project.members_list]
+        organization_member = administrative_organization_project_ids(request.user, slug).filter(id=pk).exists()
+        public_member = public_administrative_project_ids(request.user, slug).filter(id=pk).exists()
 
         review_reader = getattr(project, "research_access", None) == "review"
-        if str(request.user.id) not in member_ids and not review_reader:
+        if (
+            str(request.user.id) not in member_ids
+            and not organization_member
+            and not public_member
+            and not review_reader
+            and not user_can_manage_administrative_project(request.user, slug, pk)
+        ):
+            if not project.is_research_project:
+                return Response(
+                    {
+                        "error": "Project membership must be configured by an administrator",
+                        "code": "PROJECT_MEMBERSHIP_REQUIRED",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             if project.network == ProjectNetwork.SECRET.value:
                 return Response(
                     {"error": "You do not have permission"},
@@ -312,54 +375,57 @@ class ProjectViewSet(BaseViewSet):
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
 
-        serializer = ProjectSerializer(data={**request.data}, context={"workspace_id": workspace.id})
+        serializer = ProjectSerializer(
+            data={**request.data}, context={"workspace_id": workspace.id, "request": request}
+        )
         if serializer.is_valid():
-            serializer.save()
+            with transaction.atomic():
+                serializer.save()
 
-            # Add the user as Administrator to the project
-            _ = ProjectMember.objects.create(
-                project_id=serializer.data["id"],
-                member=request.user,
-                role=ROLE.ADMIN.value,
-            )
-
-            if serializer.data["project_lead"] is not None and str(serializer.data["project_lead"]) != str(
-                request.user.id
-            ):
-                ProjectMember.objects.create(
+                # Add the user as Administrator to the project
+                _ = ProjectMember.objects.create(
                     project_id=serializer.data["id"],
-                    member_id=serializer.data["project_lead"],
+                    member=request.user,
                     role=ROLE.ADMIN.value,
                 )
 
-            State.objects.bulk_create(
-                [
-                    State(
-                        name=state["name"],
-                        color=state["color"],
-                        project=serializer.instance,
-                        sequence=state["sequence"],
-                        workspace=serializer.instance.workspace,
-                        group=state["group"],
-                        default=state.get("default", False),
-                        created_by=request.user,
+                if serializer.data["project_lead"] is not None and str(serializer.data["project_lead"]) != str(
+                    request.user.id
+                ):
+                    ProjectMember.objects.create(
+                        project_id=serializer.data["id"],
+                        member_id=serializer.data["project_lead"],
+                        role=ROLE.ADMIN.value,
                     )
-                    for state in DEFAULT_STATES
-                ]
-            )
 
-            project = self.get_queryset().filter(pk=serializer.data["id"]).first()
+                State.objects.bulk_create(
+                    [
+                        State(
+                            name=state["name"],
+                            color=state["color"],
+                            project=serializer.instance,
+                            sequence=state["sequence"],
+                            workspace=serializer.instance.workspace,
+                            group=state["group"],
+                            default=state.get("default", False),
+                            created_by=request.user,
+                        )
+                        for state in DEFAULT_STATES
+                    ]
+                )
 
-            # Create the model activity
-            model_activity.delay(
-                model_name="project",
-                model_id=str(project.id),
-                requested_data=request.data,
-                current_instance=None,
-                actor_id=request.user.id,
-                slug=slug,
-                origin=base_host(request=request, is_app=True),
-            )
+                project = self.get_queryset().filter(pk=serializer.data["id"]).first()
+                transaction.on_commit(
+                    lambda: model_activity.delay(
+                        model_name="project",
+                        model_id=str(project.id),
+                        requested_data=request.data,
+                        current_instance=None,
+                        actor_id=request.user.id,
+                        slug=slug,
+                        origin=base_host(request=request, is_app=True),
+                    )
+                )
 
             serializer = ProjectListSerializer(project)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -383,7 +449,11 @@ class ProjectViewSet(BaseViewSet):
         ).exists()
 
         # Return error for if the user is neither workspace admin nor project admin
-        if not is_project_admin and not is_workspace_admin:
+        if (
+            not is_project_admin
+            and not is_workspace_admin
+            and not user_can_manage_administrative_project(request.user, slug, pk)
+        ):
             return Response(
                 {"error": "You don't have the required permissions."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -403,7 +473,7 @@ class ProjectViewSet(BaseViewSet):
         serializer = ProjectSerializer(
             project,
             data={**request.data, "intake_view": intake_view},
-            context={"workspace_id": workspace.id},
+            context={"workspace_id": workspace.id, "request": request},
             partial=True,
         )
 
@@ -435,7 +505,8 @@ class ProjectViewSet(BaseViewSet):
 
     def destroy(self, request, slug, pk):
         if (
-            WorkspaceMember.objects.filter(
+            user_can_manage_administrative_project(request.user, slug, pk)
+            or WorkspaceMember.objects.filter(
                 member=request.user,
                 workspace__slug=slug,
                 is_active=True,

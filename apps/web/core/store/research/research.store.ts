@@ -118,6 +118,7 @@ export interface IResearchStore {
   mentorBindingIdsByWorkspace: Record<string, string[]>;
   reports: Record<string, TPeriodicReport>;
   reportIdsByWorkspace: Record<string, string[]>;
+  deleteReport: (workspaceSlug: string, reportId: string) => Promise<void>;
   reportPaginationByWorkspace: Record<string, TPaginationInfo>;
   reportHistory: Record<string, TReportReviewLog[]>;
   reportAttachments: Record<string, TReportAttachment[]>;
@@ -177,8 +178,10 @@ export interface IResearchStore {
   /** Whether the Phase 1 four-entry information architecture is enabled. */
   isIaV2Enabled: boolean;
   isWorkspaceAdmin: boolean;
-  /** Configuration rights: workspace administrator or administrator tag. */
+  /** Highest research administration rights; organisation membership is not required. */
   isResearchAdmin: boolean;
+  /** 科研组织成员或科研管理员可配置个人智能体后端。 */
+  canConfigurePersonalAgentBackend: boolean;
   /**
    * Visibility tier published by the backend (v2.5.0). ``null`` means the
    * payload predates the capability layer.
@@ -290,6 +293,7 @@ export interface IResearchStore {
   fetchResearchProjects: (workspaceSlug: string, params?: Record<string, string>) => Promise<TResearchProject[]>;
   createResearchProject: (workspaceSlug: string, payload: TResearchProjectCreatePayload) => Promise<TResearchProject>;
   archiveResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
+  deleteResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   restoreResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   fetchApprovalFlows: (workspaceSlug: string) => Promise<TApprovalFlow[]>;
   createApprovalFlow: (
@@ -478,6 +482,7 @@ export interface IResearchStore {
     items: TIntegrationConnectionPayload[]
   ) => Promise<TIntegrationConnection[]>;
   fetchIntegrationHealth: (workspaceSlug: string) => Promise<Array<Record<string, unknown>>>;
+  probeIntegrationHealth: (workspaceSlug: string) => Promise<Array<Record<string, unknown>>>;
   fetchIntegrationCallLogs: (workspaceSlug: string) => Promise<TIntegrationCallLog[]>;
   searchIntegration: (workspaceSlug: string, system: string, query: string) => Promise<TIntegrationSearchResult>;
   searchIntegrationEndpoint: (endpoint: string, query: string) => Promise<TIntegrationSearchResult>;
@@ -679,6 +684,7 @@ export class ResearchStore implements IResearchStore {
       isIaV2Enabled: computed,
       isWorkspaceAdmin: computed,
       isResearchAdmin: computed,
+      canConfigurePersonalAgentBackend: computed,
       researchLevel: computed,
       visibleNavKeys: computed,
       isOrgSectionEnabled: computed,
@@ -712,6 +718,7 @@ export class ResearchStore implements IResearchStore {
       fetchReportAttachments: action,
       uploadReportAttachment: action,
       deleteReportAttachment: action,
+      deleteReport: action,
       importReportMarkdown: action,
       updateReportVisibility: action,
       fetchReportSummary: action,
@@ -723,6 +730,7 @@ export class ResearchStore implements IResearchStore {
       fetchResearchProjects: action,
       createResearchProject: action,
       archiveResearchProject: action,
+      deleteResearchProject: action,
       restoreResearchProject: action,
       fetchApprovalFlows: action,
       createApprovalFlow: action,
@@ -799,6 +807,7 @@ export class ResearchStore implements IResearchStore {
       fetchIntegrations: action,
       updateIntegrations: action,
       fetchIntegrationHealth: action,
+      probeIntegrationHealth: action,
       fetchIntegrationCallLogs: action,
       searchIntegration: action,
       searchIntegrationEndpoint: action,
@@ -841,12 +850,20 @@ export class ResearchStore implements IResearchStore {
   }
 
   /**
-   * Administrator surfaces (organisation, templates, identity mappings,
-   * platform configuration, audit and the account pages) open for workspace
-   * administrators and for holders of an instance administrator tag.
+   * Highest research administration rights for the current workspace. Seated
+   * workspace administrators and seated instance administrators hold this
+   * even without an organisation-tree assignment.
    */
   get isResearchAdmin() {
     return Boolean(this.identity?.user?.is_research_admin ?? this.identity?.user?.is_workspace_admin);
+  }
+
+  /**
+   * 当前工作区已开启科研，且调用方是科研管理员或至少属于一个科研组织时，
+   * 可以配置个人智能体后端。identity 未加载时为 false。
+   */
+  get canConfigurePersonalAgentBackend() {
+    return Boolean(this.isEnabled && (this.isResearchAdmin || (this.identity?.user?.org_units.length ?? 0) > 0));
   }
 
   /**
@@ -1156,7 +1173,14 @@ export class ResearchStore implements IResearchStore {
       if (this.reportRequestVersions[workspaceSlug] !== requestVersion) return response.results;
       runInAction(() => {
         response.results.forEach((report) => {
-          this.reports[report.id] = report;
+          // 列表行不带 draft_content（作者视角），整体替换会清掉详情接口带回的
+          // 正文，导致打开中的报告详情显示“加载中”，这里保留已拿到的正文。
+          const existing = this.reports[report.id];
+          this.reports[report.id] = {
+            ...report,
+            draft_content: report.draft_content ?? existing?.draft_content,
+            official_content: report.official_content ?? existing?.official_content,
+          };
         });
         this.reportIdsByWorkspace[workspaceSlug] = response.results.map((report) => report.id);
         this.reportPaginationByWorkspace[workspaceSlug] = response;
@@ -1417,9 +1441,27 @@ export class ResearchStore implements IResearchStore {
     await this.fetchResearchProjects(workspaceSlug);
   };
 
+  /** 删除科研项目并刷新当前工作区的默认项目列表。 */
+  deleteResearchProject = async (workspaceSlug: string, projectId: string) => {
+    await this.projectService.deleteProject(workspaceSlug, projectId);
+    await this.fetchResearchProjects(workspaceSlug);
+  };
+
   restoreResearchProject = async (workspaceSlug: string, projectId: string) => {
     await this.projectService.restoreProject(workspaceSlug, projectId);
     await this.fetchResearchProjects(workspaceSlug);
+  };
+
+  deleteReport = async (workspaceSlug: string, reportId: string) => {
+    await this.reportService.deleteReport(workspaceSlug, reportId);
+    runInAction(() => {
+      delete this.reports[reportId];
+      delete this.reportHistory[reportId];
+      delete this.reportAttachments[reportId];
+      this.reportIdsByWorkspace[workspaceSlug] = (this.reportIdsByWorkspace[workspaceSlug] ?? []).filter(
+        (id) => id !== reportId
+      );
+    });
   };
 
   // ---------------------------------------------------------------------
@@ -2218,6 +2260,13 @@ export class ResearchStore implements IResearchStore {
     runInAction(() => {
       this.integrationHealth = response.results;
     });
+    return response.results;
+  };
+
+  probeIntegrationHealth = async (workspaceSlug: string) => {
+    const response = await this.integrationService.probeHealth(workspaceSlug);
+    await this.fetchIntegrations(workspaceSlug).catch(() => undefined);
+    await this.fetchIntegrationHealth(workspaceSlug).catch(() => undefined);
     return response.results;
   };
 

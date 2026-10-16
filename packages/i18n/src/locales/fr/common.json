@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "Assistant IA",
+    "open": "Ouvrir l'assistant IA",
+    "close": "Fermer",
+    "placeholder": "Posez une question sur cette page, un projet ou vos bases de connaissances…",
+    "send": "Envoyer",
+    "stop": "Arrêter",
+    "new_conversation": "Nouvelle conversation",
+    "thinking": "Réflexion",
+    "working": "Traitement",
+    "queued": "En file d'attente",
+    "retrieving": "Recherche dans les bases de connaissances",
+    "empty_greeting": "Bonjour, je suis votre assistant IA",
+    "empty_hint": "Interrogez-moi sur la page actuelle, un projet ou vos bases de connaissances.",
+    "error_generic": "Une erreur est survenue. Veuillez réessayer.",
+    "error_unavailable": "Le service IA n'est pas disponible pour le moment.",
+    "retry": "Réessayer",
+    "session_expired": "La session précédente a expiré. Une nouvelle session a commencé.",
+    "interrupt_notice": "L'exécution a été interrompue et nécessite une approbation. La gestion des approbations arrive bientôt.",
+    "shortcut_hint": "Cmd+J"
   }
 }

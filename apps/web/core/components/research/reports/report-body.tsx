@@ -41,20 +41,25 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
       ? (content.description_json as JSONContent)
       : content?.description_html || "<p></p>"
   );
+  const syncedContent = useRef(JSON.stringify(initialContent));
   const imageBase = `/api/research/workspaces/${workspaceSlug}/reports/${report.id}/images/`;
 
   useEffect(() => {
     if (dirtyRef.current || saving || !content) return;
-    setInitialContent(
-      Object.keys(content.description_json ?? {}).length
-        ? (content.description_json as JSONContent)
-        : content.description_html || "<p></p>"
-    );
+    const nextContent = Object.keys(content.description_json ?? {}).length
+      ? (content.description_json as JSONContent)
+      : content.description_html || "<p></p>";
+    const serialized = JSON.stringify(nextContent);
+    if (serialized === syncedContent.current) return;
+    syncedContent.current = serialized;
+    setInitialContent(nextContent);
+    // DocumentEditor consumes value only on mount, so reload pristine server content explicitly.
+    setEditorGeneration((value) => value + 1);
   }, [content, saving]);
 
   useEffect(() => {
-    onBusy(saving || uploadCount > 0);
-  }, [saving, uploadCount, onBusy]);
+    onBusy(!content || saving || uploadCount > 0);
+  }, [content, saving, uploadCount, onBusy]);
 
   /** 先完成图片直传与实际校验，再把资源插入正文。 */
   const uploadImage = useCallback<TFileHandler["upload"]>(
@@ -91,7 +96,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
   /** 显式保存本地版本；保存过程中新增的编辑继续保持未保存状态。 */
   const save = useCallback(async () => {
     if (!editable) return true;
-    if (uploads.current > 0 || saving) return false;
+    if (!content || uploads.current > 0 || saving) return false;
     const document = editor.current?.getDocument();
     if (!document) return false;
     const savedRevision = revision.current;
@@ -118,7 +123,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
     } finally {
       setSaving(false);
     }
-  }, [editable, report.id, research, saving, workspaceSlug]);
+  }, [content, editable, report.id, research, saving, workspaceSlug]);
 
   useImperativeHandle(ref, () => ({ save }), [save]);
 
@@ -175,21 +180,28 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
         <h2 className="text-14 font-semibold text-primary">报告正文</h2>
         <div className="flex flex-wrap items-center gap-2">
           <span role="status" className="text-12 text-secondary">
-            {saving
-              ? "保存中"
-              : uploadCount
-                ? "图片上传中"
-                : saveFailed
-                  ? "保存失败"
-                  : dirty
-                    ? "未保存"
-                    : editable
-                      ? "已保存"
-                      : `正式版本 v${report.official_content?.version_no ?? "—"}`}
+            {!content
+              ? "加载中"
+              : saving
+                ? "保存中"
+                : uploadCount
+                  ? "图片上传中"
+                  : saveFailed
+                    ? "保存失败"
+                    : dirty
+                      ? "未保存"
+                      : editable
+                        ? "已保存"
+                        : `正式版本 v${report.official_content?.version_no ?? "—"}`}
           </span>
           {editable && (
             <>
-              <Button variant="secondary" size="sm" onClick={() => imageInput.current?.click()} disabled={saving}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => imageInput.current?.click()}
+                disabled={!content || saving}
+              >
                 插入图片
               </Button>
               <details className="relative text-12">
@@ -199,7 +211,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
                     variant="ghost"
                     size="sm"
                     onClick={() => markdownInput.current?.click()}
-                    disabled={saving || uploadCount > 0}
+                    disabled={!content || saving || uploadCount > 0}
                   >
                     导入 Markdown
                   </Button>
@@ -208,7 +220,12 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
                   </Button>
                 </div>
               </details>
-              <Button variant="secondary" size="sm" onClick={() => void save()} disabled={saving || uploadCount > 0}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void save()}
+                disabled={!content || saving || uploadCount > 0}
+              >
                 保存
               </Button>
             </>
@@ -263,47 +280,49 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
           event.target.value = "";
         }}
       />
-      <DocumentEditor
-        ref={editor}
-        key={`${report.id}:${editorGeneration}:${editable}`}
-        id={`${report.id}-body`}
-        value={initialContent}
-        workspaceId={workspaceId}
-        workspaceSlug={workspaceSlug}
-        containerClassName="min-h-64 border-none !p-0"
-        editorClassName="pl-0"
-        editable={editable}
-        disabledExtensions={["issue-embed"]}
-        searchMentionCallback={async () => ({})}
-        uploadFile={uploadImage}
-        duplicateFile={async () => {
-          throw new Error("请重新选择图片上传到此报告。");
-        }}
-        fileHandlerOverrides={{
-          getAssetSrc: async (source) =>
-            source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
-          getAssetDownloadSrc: async (source) =>
-            source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
-          delete: async (source) => {
-            if (!source.startsWith(imageBase)) return;
-            const response = await fetch(source, { method: "DELETE" });
-            if (!response.ok) throw new Error("图片移除失败，请重试。");
-          },
-          restore: async (source) => {
-            if (!source.startsWith(imageBase)) return;
-            const response = await fetch(source, { method: "POST" });
-            if (!response.ok) throw new Error("图片恢复失败，请重试。");
-          },
-          validation: { maxFileSize: (research.settings[workspaceSlug]?.image_max_mb ?? 20) * 1024 * 1024 },
-        }}
-        onChange={(_json, _html, options) => {
-          // 编辑器初始化时会补充稳定的块 ID；这类迁移更新不应把刚加载的报告标记为未保存。
-          if (options?.isMigrationUpdate) return;
-          revision.current += 1;
-          dirtyRef.current = true;
-          setDirty(true);
-        }}
-      />
+      {content && (
+        <DocumentEditor
+          ref={editor}
+          key={`${report.id}:${editorGeneration}:${editable}`}
+          id={`${report.id}-body`}
+          value={initialContent}
+          workspaceId={workspaceId}
+          workspaceSlug={workspaceSlug}
+          containerClassName="min-h-64 border-none !p-0"
+          editorClassName="pl-0"
+          editable={editable}
+          disabledExtensions={["issue-embed"]}
+          searchMentionCallback={async () => ({})}
+          uploadFile={uploadImage}
+          duplicateFile={async () => {
+            throw new Error("请重新选择图片上传到此报告。");
+          }}
+          fileHandlerOverrides={{
+            getAssetSrc: async (source) =>
+              source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
+            getAssetDownloadSrc: async (source) =>
+              source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
+            delete: async (source) => {
+              if (!source.startsWith(imageBase)) return;
+              const response = await fetch(source, { method: "DELETE" });
+              if (!response.ok) throw new Error("图片移除失败，请重试。");
+            },
+            restore: async (source) => {
+              if (!source.startsWith(imageBase)) return;
+              const response = await fetch(source, { method: "POST" });
+              if (!response.ok) throw new Error("图片恢复失败，请重试。");
+            },
+            validation: { maxFileSize: (research.settings[workspaceSlug]?.image_max_mb ?? 20) * 1024 * 1024 },
+          }}
+          onChange={(_json, _html, options) => {
+            // 编辑器初始化时会补充稳定的块 ID；这类迁移更新不应把刚加载的报告标记为未保存。
+            if (options?.isMigrationUpdate) return;
+            revision.current += 1;
+            dirtyRef.current = true;
+            setDirty(true);
+          }}
+        />
+      )}
       <ModalCore isOpen={Boolean(replacement)} handleClose={() => setReplacement(null)}>
         <div className="bg-surface-1 p-5">
           <h3 className="text-14 font-semibold">替换未保存正文</h3>

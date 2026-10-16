@@ -24,13 +24,20 @@ vi.mock("@/services/research/feedback.service", () => ({
       }`;
   },
 }));
-vi.mock("@plane/ui", () => ({
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
   ModalCore: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
     isOpen ? <div role="dialog">{children}</div> : null,
 }));
 vi.mock("@plane/propel/button", () => ({
-  Button: ({ children, type, onClick, disabled }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type={type ?? "button"} onClick={onClick} disabled={disabled}>
+  Button: ({
+    children,
+    type,
+    onClick,
+    disabled,
+    "aria-label": ariaLabel,
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type={type ?? "button"} onClick={onClick} disabled={disabled} aria-label={ariaLabel}>
       {children}
     </button>
   ),
@@ -371,7 +378,7 @@ it("列表刷新后清除不在当前结果中的陈旧选中记录", async () =
   mocks.get.mockResolvedValueOnce({ count: 0, results: [] });
   await act(async () =>
     Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent === "刷新")
+      .find((button) => button.getAttribute("aria-label") === "刷新")
       ?.click()
   );
   await act(async () => undefined);
@@ -415,7 +422,8 @@ it("主 PI 进入管理视图，使用管理范围读取并更新状态", async 
     updated_at: "2026-10-08T02:00:00Z",
   });
   await renderManagementPage();
-  expect(container.querySelector("h1")?.textContent).toBe("反馈管理");
+  // 页面标题由 ResearchPageShell 统一渲染，管理视图内部不再重复标题与视图页签。
+  expect(container.querySelector("h1")).toBeNull();
   expect(container.querySelector('[role="tablist"]')).toBeNull();
   expect(container.textContent).toContain("选择左侧任意反馈后");
   expect(mocks.get).toHaveBeenCalledWith(

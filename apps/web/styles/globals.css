@@ -168,3 +168,12 @@
     0 0 4px --alpha(var(--background-color-accent-primary) / 40%) !important;
   will-change: transform, opacity;
 }
+
+/* AI assistant panel answer markdown */
+.answer-markdown :is(code) {
+  border-radius: 4px;
+  background-color: var(--color-surface-2, rgba(0, 0, 0, 0.05));
+  padding: 0.1rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}

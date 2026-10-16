@@ -57,6 +57,7 @@ const NEXT_ACTION_LABEL_KEYS: Record<TResearchTodoNextAction, string> = {
 };
 
 const BUSINESS_STATUS_LABEL_KEYS: Record<string, string> = {
+  DRAFT: "research.todo.business_draft",
   ASSIGNED: "research.todo.business_assigned",
   SUBMITTED: "research.todo.business_submitted",
   NEEDS_REVISION: "research.todo.business_needs_revision",

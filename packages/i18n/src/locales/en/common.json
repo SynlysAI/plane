@@ -167,9 +167,9 @@
   "failed_to_remove_project_from_favorites": "Couldn't remove the project from favorites. Please try again.",
   "project_created_successfully": "Project created successfully",
   "project_created_successfully_description": "Project created successfully. You can now start adding work items to it.",
-  "project_name_already_taken": "The project name is already taken.",
+  "project_name_already_taken": "The project name is already taken in this workspace (possibly by another member). Please use a different name.",
   "project_name_cannot_contain_special_characters": "The project name cannot contain special characters.",
-  "project_identifier_already_taken": "The project identifier is already taken.",
+  "project_identifier_already_taken": "The project identifier is already taken in this workspace. Please use a different identifier.",
   "project_cover_image_alt": "Project cover image",
   "name_is_required": "Name is required",
   "title_should_be_less_than_255_characters": "Title should be less than 255 characters",
@@ -864,6 +864,11 @@
     }
   },
   "research": {
+    "deletion": {
+      "delete_named": "Delete {name}",
+      "confirm": "Delete \"{name}\"? It will be removed from the list. This action cannot be undone here.",
+      "blocked": "This record has submission history or related records. Remove its associations first, or archive it to preserve its history."
+    },
     "nav": {
       "group": "Research",
       "overview": "Research overview",
@@ -887,9 +892,11 @@
       "code": "Code",
       "outcomes": "Outcomes",
       "integrations": "Integrations",
+      "agent_backend": "Agent backend",
       "timeline": "Timeline",
       "dashboard": "Research overview",
       "system": "System management",
+      "feedback": "Feedback management",
       "back_to_projects": "Back to projects",
       "back_to_overview": "Back to research overview"
     },
@@ -1089,9 +1096,16 @@
       "administrative_hint": "Purchasing, reimbursement and general collaboration projects.",
       "administrative_empty": "No administrative project yet.",
       "administrative_error": "The administrative summary is temporarily unavailable. Please retry later.",
+      "administrative_updated_at": "Last updated: {value}",
+      "administrative_open_issues": "{count} open",
+      "administrative_done_issues": "{count} completed",
+      "administrative_stats_unavailable": "Overview unavailable",
       "all_administrative": "All administrative projects",
       "recent_activity": "Recent activity",
       "report_summary": "Report submission summary",
+      "this_week": "This week",
+      "this_month": "This month",
+      "recent_error": "Recent activity is unavailable. Please refresh later.",
       "report_error": "The report summary is unavailable. Refresh or open the report view.",
       "view_summary": "View summary",
       "view_todos": "View all to-dos",
@@ -1153,6 +1167,7 @@
       "requester": "Requester",
       "assignees": "Handlers",
       "business_status": "Source status",
+      "business_draft": "Draft",
       "business_assigned": "Assigned",
       "business_submitted": "Submitted",
       "business_needs_revision": "Needs revision",
@@ -1256,6 +1271,7 @@
       "chain_status": {
         "active": "Active",
         "archived": "Archived",
+        "deleted": "Deleted",
         "completed": "Completed"
       },
       "visibility": "Visibility",
@@ -1383,6 +1399,7 @@
         "unmapped_node": "Unmapped node",
         "stage_detail_title": "Stage detail",
         "stage_nodes": "Stage nodes",
+        "records_title": "Records",
         "stage_node_count": "{count} linked nodes",
         "stage_empty": "No node has been created for this stage yet.",
         "stage_snapshot": "Stage snapshot",
@@ -1419,6 +1436,17 @@
       }
     },
     "chain_tasks": {
+      "comments": {
+        "confirm_delete": "Delete this comment?",
+        "title": "Comments",
+        "placeholder": "Add a comment...",
+        "post": "Post comment",
+        "edited": "Edited",
+        "loading": "Loading comments...",
+        "load_failed": "Comments could not be loaded. Try again.",
+        "save_failed": "The comment could not be saved. Your draft has been preserved. Try again.",
+        "delete_failed": "The comment could not be deleted. Try again."
+      },
       "panel_title": "Research tasks",
       "panel_hint": "Tasks stay independent from node workflow while assignees, reviews, and return reasons stay together.",
       "loading": "Loading research tasks…",
@@ -1524,7 +1552,13 @@
       "load_failed": "The paper review could not be loaded. Please retry later.",
       "refresh": "Refresh",
       "review_switch": "Paper reviews on this node",
-      "status": "Review status",
+      "status": {
+        "open": "Open",
+        "waiting_review": "Waiting for review",
+        "needs_revision": "Needs revision",
+        "accepted": "Accepted",
+        "withdrawn": "Withdrawn"
+      },
       "final_reviewer": "Final reviewer",
       "due_at": "Due",
       "final_confirmation": "Final confirmation",
@@ -1556,13 +1590,6 @@
       "confirm": "Confirm",
       "server_rejected": "The server rejected this action. Check the scope and permissions, then retry.",
       "file_failed": "The paper file could not be opened.",
-      "status": {
-        "open": "Open",
-        "waiting_review": "Waiting for review",
-        "needs_revision": "Needs revision",
-        "accepted": "Accepted",
-        "withdrawn": "Withdrawn"
-      },
       "version_status": {
         "submitted": "Submitted",
         "superseded": "Superseded",
@@ -1578,6 +1605,9 @@
       }
     },
     "knowledge": {
+      "materials_title": "Topic materials",
+      "add_material": "Add file",
+      "upload_file": "Upload",
       "panel_title": "RAGPortal knowledge",
       "reasons": {
         "not_configured": "service is not configured",
@@ -1617,6 +1647,12 @@
       "close": "Close session",
       "input_label": "Message",
       "input_placeholder": "Ask a research question",
+      "file_attach": "Attach analysis file",
+      "file_uploading": "Uploading…",
+      "file_uploaded": "Uploaded {name}",
+      "file_upload_error": "File upload failed. Please retry.",
+      "artifact_download": "Download",
+      "artifact_download_error": "Artifact download failed. Please retry.",
       "send": "Send",
       "degraded": "Agent runtime is not configured. The research chain remains available.",
       "no_session": "No active session.",
@@ -1710,7 +1746,16 @@
         "DEGRADED": "Degraded",
         "ERROR": "Error",
         "CLOSED": "Closed"
-      }
+      },
+      "thinking_process": "Thinking",
+      "file_change": "File",
+      "approval_title": "Approval required",
+      "approval_once": "Approve once",
+      "approval_always": "Approve & remember (this session)",
+      "close_runtime": "Close runtime details",
+      "report_context": "Report context",
+      "assembly_summary": "Assembly",
+      "assembly_tool_count": "{count} tools"
     },
     "status": {
       "workspace": "Current workspace: {workspace}",
@@ -1738,6 +1783,7 @@
       }
     },
     "feedback": {
+      "management_description": "Locate feedback by status, category, module and time; the full submission snapshot stays on the right.",
       "draft_saved": {
         "title": "Draft saved",
         "message": "The report body is up to date. You can continue editing or submit it."
@@ -1769,6 +1815,10 @@
       "project_archived": {
         "title": "Project archived",
         "message": "The project is no longer active and can be restored later."
+      },
+      "project_deleted": {
+        "title": "Project deleted",
+        "message": "Research data is retained. Restore the project from the deleted list."
       },
       "project_restored": {
         "title": "Project restored",
@@ -1918,6 +1968,7 @@
     "project_status": {
       "active": "In progress",
       "archived": "Archived",
+      "deleted": "Deleted",
       "completed": "Completed"
     },
     "approval_types": {
@@ -2035,6 +2086,12 @@
       "create": "Create research project",
       "open_team_project": "Open project",
       "archive": "Archive",
+      "delete": "Delete",
+      "current_projects": "Current projects",
+      "owner_unset": "Not set",
+      "confirm_delete_title": "Delete this project?",
+      "confirm_delete": "“{project}” will leave the home overview and default lists. Research data will be retained and the project can be restored from the deleted list.",
+      "action_failed": "The operation failed. Please try again.",
       "restore": "Restore",
       "confirm_archive_title": "Archive this project?",
       "confirm_archive": "“{project}” will leave the active list and can be restored later.",
@@ -2167,6 +2224,7 @@
       "mine": "Raised by me",
       "completed": "Completed",
       "approve": "Approve",
+      "approve_always": "Approve & remember (skip identical asks this session)",
       "reject": "Reject",
       "withdraw": "Withdraw",
       "confirm_reject": "Confirm rejection",
@@ -2192,6 +2250,8 @@
     "platform": {
       "description": "Module switches, upload limits and default visibility.",
       "switches": "Module switches",
+      "research_agent_user_backend_enabled": "Allow research members to use personal Agent backends",
+      "research_agent_user_backend_enabled_hint": "Controls whether new sessions in this workspace may use a member-configured ScienceDiscovery instance.",
       "module_enabled": "Enable the research module for this workspace",
       "org_enabled": "Organisation structure",
       "report_enabled": "Periodic reports",
@@ -2217,7 +2277,8 @@
       "markdown_max_mb": "Markdown limit",
       "office_max_mb": "Office file limit",
       "audit_retention_days": "Audit retention (days, 0 = keep forever)",
-      "limits_hint": "These limits apply to research uploads only and never change the global FILE_SIZE_LIMIT."
+      "limits_hint": "These limits apply to research uploads only and never change the global FILE_SIZE_LIMIT.",
+      "research_agent_enabled": "Research agent (workbench & personal backends)"
     },
     "templates": {
       "description": "Templates used when a report is created.",
@@ -2758,9 +2819,9 @@
       "call_logs_title": "Integration call log",
       "display_name": "Display name",
       "credential_ref": "Credential reference (secret manager)",
-      "credential_hint": "Secrets stay in the backend; only the reference name is stored.",
+      "credential_hint": "Secrets stay in the backend; the token is stored encrypted on the connection.",
       "base_url_hint": "Base URL reachable from the plane-api container",
-      "credential_configured": "A credential is configured; enter a new reference name to replace it.",
+      "credential_configured": "A credential is configured; paste a new token to replace it.",
       "enabled": "Enabled",
       "disabled": "disabled",
       "search": "Search",
@@ -2809,8 +2870,54 @@
         "outcome": "Outcome",
         "latency": "Latency (ms)",
         "error": "Error",
-        "time": "Time"
-      }
+        "time": "Time",
+        "base_url": "Service URL",
+        "credential_mode": "Credential mode",
+        "actions": "Actions"
+      },
+      "refresh_health": "Re-check",
+      "edit": "Edit",
+      "configure": "Configure",
+      "enable": "Enable",
+      "disable": "Disable",
+      "edit_title": "Edit connection",
+      "configure_title": "Configure connection",
+      "credential_mode_shared": "Shared credential",
+      "credential_mode_personal": "Personal credential"
+    },
+    "agent_backend": {
+      "description": "Connect your own ScienceDiscovery instance as the Agent runtime.",
+      "default_runtime": "Platform default runtime: Synlora (cloud).",
+      "governance_off": "Self-service Agent backends are disabled for this workspace; ask an administrator to enable them.",
+      "governance_off_new_sessions": "This workspace has not enabled personal Agent backends. This connection will not be used for new sessions.",
+      "server_address_hint": "Enter the URL for your local Agent. Plane resolves deployment-specific forwarding on the backend.",
+      "base_url_placeholder": "http(s)://<ScienceDiscovery server URL>",
+      "workspace": "Current workspace: {name}",
+      "no_workspace": "Open a research workspace before configuring a personal Agent backend.",
+      "access_denied": "You cannot configure a personal Agent backend in this workspace.",
+      "base_url": "ScienceDiscovery base URL",
+      "token": "Access token",
+      "token_kept": "A token is stored; leave blank to keep it.",
+      "enabled": "Use my ScienceDiscovery instance for new Agent sessions",
+      "busy": "Working…",
+      "save": "Save connection",
+      "saved": "Connection saved.",
+      "save_failed": "Saving failed. Check the URL and retry.",
+      "test": "Test connection",
+      "test_ok": "Connected. {count} model profiles available.",
+      "cloud_test_ok": "Connected to the cloud agent.",
+      "test_failed": "Connection failed: {error}",
+      "test_failed_generic": "Connection test failed.",
+      "remove": "Remove",
+      "removed": "Connection removed.",
+      "remove_failed": "Removal failed. Please retry.",
+      "load_failed": "Could not load the current connection.",
+      "health": "Health: {status} · checked {at}",
+      "system": "Agent system",
+      "system_local": "Local agent (ScienceDiscovery)",
+      "system_cloud": "Cloud agent (Synlora)",
+      "system_hint": "Personal credentials are stored per system; the cloud token is used when the workspace integration is in personal-credential mode.",
+      "cloud_address_hint": "Cloud agent uses the workspace Synlora address — only your personal access token is needed here."
     },
     "timeline": {
       "description": "Thinking chain, development chain and the full project timeline.",
@@ -2860,5 +2967,40 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "AI Assistant",
+    "open": "Open AI assistant",
+    "close": "Close",
+    "placeholder": "Ask about this page, a project, or your knowledge bases…",
+    "send": "Send",
+    "stop": "Stop",
+    "new_conversation": "New conversation",
+    "thinking": "Thinking",
+    "working": "Thinking…",
+    "queued": "Queued",
+    "retrieving": "Searching knowledge bases",
+    "empty_greeting": "Hi, I'm your AI assistant",
+    "empty_hint": "Ask me about the current page, a project, or your knowledge bases.",
+    "error_generic": "Something went wrong. Please try again.",
+    "error_unavailable": "The AI service is not available right now.",
+    "retry": "Retry",
+    "session_expired": "The previous session expired. A new session has started.",
+    "interrupt_notice": "The run was interrupted and needs approval. Approval handling is coming soon.",
+    "shortcut_hint": "Cmd+J",
+    "subtitle": "Powered by Synlora / ScienceDiscovery",
+    "provider": "Agent",
+    "provider_cloud": "Cloud agent (Synlora)",
+    "provider_local": "Local agent (ScienceDiscovery)",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "context_linked": "Linked",
+    "context_workspace_only": "workspace only — open a project page to attach page context",
+    "context_hint": "Answers use the current page context",
+    "approval_pending": "This run needs approval — handle it in the research workbench.",
+    "local_unavailable": "The local agent is available on research chain node pages — open a node and click 智能体分析.",
+    "disclaimer": "AI-generated content, for reference only.",
+    "approve": "Approve",
+    "reject": "Reject"
   }
 }

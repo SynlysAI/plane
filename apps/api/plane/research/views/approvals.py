@@ -41,7 +41,7 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.views.base import ResearchAPIView, resolve_user, truthy
 
 APPROVAL_TYPES = ("TASK", "PURCHASE", "CUSTOM")
@@ -83,7 +83,7 @@ class ResearchApprovalFlowListCreateEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section="approvals")
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace.id):
+        if not is_research_admin(request.user, workspace.id):
             return research_permission_denied()
 
         name = str(request.data.get("name") or "").strip()
@@ -168,7 +168,7 @@ class ResearchApprovalFlowDetailEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section="approvals")
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace.id):
+        if not is_research_admin(request.user, workspace.id):
             return research_permission_denied()
         flow = flow_queryset(workspace).filter(pk=pk).first()
         if flow is None:
@@ -410,7 +410,7 @@ class ResearchApprovalRequestActionEndpoint(ResearchAPIView):
         comment = str(request.data.get("comment") or "")
 
         if action == "withdraw":
-            if approval_request.requested_by_id != request.user.id and not is_workspace_admin(
+            if approval_request.requested_by_id != request.user.id and not is_research_admin(
                 request.user, workspace.id
             ):
                 return research_permission_denied()

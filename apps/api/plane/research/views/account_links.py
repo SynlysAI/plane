@@ -16,7 +16,7 @@ from plane.research.serializers import AccountLinkSerializer
 from plane.research.services.idempotency import payload_hash, request_id_from
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.errors import ResearchErrorCode, research_conflict, research_error, research_not_found, research_permission_denied
-from plane.research.utils.org import is_workspace_admin
+from plane.research.utils.roles import is_research_admin
 from plane.research.views.base import ResearchAPIView
 
 
@@ -38,7 +38,7 @@ def _hash_code(code):
 
 
 def _can_manage(actor, workspace, link):
-    return link.local_user_id == actor.id or is_workspace_admin(actor, workspace.id)
+    return link.local_user_id == actor.id or is_research_admin(actor, workspace.id)
 
 
 def _revoke_context_grants(actor, link):
@@ -95,7 +95,7 @@ class ResearchAccountLinkListCreateEndpoint(AccountLinkMixin):
             deleted_at__isnull=True,
         ).values("member")
         query = AccountLink.objects.filter(local_user_id__in=workspace_user_ids)
-        if not is_workspace_admin(request.user, workspace.id):
+        if not is_research_admin(request.user, workspace.id):
             query = query.filter(local_user=request.user)
         for field in ("provider", "status", "external_subject", "canonical_identity"):
             if request.GET.get(field):
@@ -126,7 +126,7 @@ class ResearchAccountLinkListCreateEndpoint(AccountLinkMixin):
             deleted_at__isnull=True,
         ).exists():
             return research_not_found(ResearchErrorCode.USER_NOT_FOUND, "Local user is not an active workspace member.")
-        if target_user.id != request.user.id and not is_workspace_admin(request.user, workspace.id):
+        if target_user.id != request.user.id and not is_research_admin(request.user, workspace.id):
             return research_permission_denied()
 
         canonical_identity = str(request.data.get("canonical_identity") or target_user.email).strip().lower()
@@ -273,7 +273,7 @@ class ResearchAccountLinkRevokeEndpoint(AccountLinkMixin):
         workspace, error = self.workspace_or_error(request, slug)
         if error:
             return error
-        if not is_workspace_admin(request.user, workspace.id):
+        if not is_research_admin(request.user, workspace.id):
             return research_permission_denied()
         link, error = self.load_link(workspace, link_id)
         if error:
@@ -320,7 +320,7 @@ class ResearchAccountLinkConflictEndpoint(AccountLinkMixin):
             deleted_at__isnull=True,
         )
         query = query.filter(subject_or_foreign_identity_q(external_subject, canonical_identity))
-        if not is_workspace_admin(request.user, workspace.id):
+        if not is_research_admin(request.user, workspace.id):
             query = query.filter(local_user=request.user)
         links = list(query.order_by("-created_at")[:100])
         return Response({"results": AccountLinkSerializer(links, many=True).data, "count": len(links)})

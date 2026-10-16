@@ -12,7 +12,8 @@ import type { TOrgBusinessCategory, TOrgUnitType } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { TOrgUnit, TResearchOrgIncomplete } from "@plane/types";
-import { Input } from "@plane/ui";
+import { Input, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
+import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 // hooks
@@ -218,12 +219,12 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
   );
 
   return (
-    <div className="flex h-full w-full gap-4 overflow-hidden bg-canvas p-5">
-      <div className="flex w-80 flex-col gap-2 overflow-hidden rounded-xl bg-surface-2 p-2">
+    <div className="flex h-full w-full min-w-0 flex-col gap-4 overflow-hidden bg-canvas p-5 md:flex-row">
+      <div className="flex max-h-48 w-full shrink-0 flex-col gap-2 overflow-hidden rounded-xl bg-surface-2 p-2 md:max-h-none md:w-80">
         <div className="flex items-center justify-between gap-2 px-1">
           <span className="text-13 font-medium text-primary">{t("research.org.title")}</span>
           {tree.length === 0 && (
-            <Button variant="secondary" size="sm" onClick={() => openCreateDialog(null)}>
+            <Button variant="secondary" size="xl" onClick={() => openCreateDialog(null)}>
               {t("research.org.new_root")}
             </Button>
           )}
@@ -287,7 +288,7 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 overflow-hidden rounded-xl bg-surface-1 p-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl bg-surface-1 p-4">
         {errorKey && (
           <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
             {t(errorKey)}
@@ -296,18 +297,18 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
 
         {selectedUnit ? (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Input
-                  className="!w-64"
+            <ResearchFilterToolbar>
+              <ListFilterField label="组织名称" className="w-full sm:w-64">
+                <ListFilterInput
                   value={nameDraft}
                   onChange={(event) => setNameDraft(event.target.value)}
                   onBlur={() => void handleRename(selectedUnit)}
                 />
-                <span className="text-12 text-tertiary">{t("research.org.depth", { depth: selectedUnit.depth })}</span>
-                {selectedUnit.unit_type !== "ROOT" && (
-                  <select
-                    className="rounded border border-subtle bg-surface-1 px-2 py-1 text-12 text-primary"
+              </ListFilterField>
+              <span className="text-12 text-tertiary">{t("research.org.depth", { depth: selectedUnit.depth })}</span>
+              {selectedUnit.unit_type !== "ROOT" && (
+                <ListFilterField label="业务方向" className="sm:w-40">
+                  <ListFilterSelect
                     value={selectedUnit.business_category ?? ""}
                     onChange={(event) =>
                       void handleBusinessCategory(selectedUnit, event.target.value as TOrgBusinessCategory | "")
@@ -319,23 +320,23 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
                         {category.label}
                       </option>
                     ))}
-                  </select>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="primary" size="sm" onClick={() => openCreateDialog(selectedUnit)}>
+                  </ListFilterSelect>
+                </ListFilterField>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="primary" size="xl" onClick={() => openCreateDialog(selectedUnit)}>
                   {t("research.org.add_child")}
                 </Button>
                 <Button
                   variant="error-outline"
-                  size="sm"
+                  size="xl"
                   disabled={selectedUnit.unit_type === "ROOT"}
                   onClick={() => void handleDelete(selectedUnit)}
                 >
                   {t("research.org.delete_node")}
                 </Button>
               </div>
-            </div>
+            </ResearchFilterToolbar>
 
             <div className="flex gap-2 border-b border-subtle">
               {(["members", "mentors"] as const).map((value) => (

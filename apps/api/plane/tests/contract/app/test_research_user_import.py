@@ -450,9 +450,40 @@ def test_required_values_are_row_errors(env):
         row=roster_row(student_no="", co1="", co2=""),
         advisors=advisor_table("刘俊扬"),
     )
-    assert response.data["rows_error"] == 1
-    assert "学号 is required" in response.data["rows"][0]["message"]
+    assert response.data["rows_error"] == 0
+    assert response.data["rows"][0]["student_no"] == ""
     assert not User.objects.filter(email="student@example.com").exists()
+
+
+def test_blank_student_number_can_be_reviewed_and_approved(env):
+    uploaded = post_import(
+        env,
+        row=roster_row(student_no=""),
+        advisors=advisor_table("刘俊扬", "陈志昕", "白杰"),
+    )
+    assert uploaded.status_code == 201
+    assert uploaded.data["rows_ok"] == 1
+    batch_id = uploaded.data["id"]
+    row_id = uploaded.data["rows"][0]["id"]
+    client = client_for(env["admin"])
+    assert (
+        client.patch(
+            user_imports_url(env["workspace"], f"{batch_id}/rows/{row_id}/"),
+            {"review_decision": "INCLUDED"},
+            format="json",
+        ).status_code
+        == 200
+    )
+    approved = client.post(
+        user_imports_url(env["workspace"], f"{batch_id}/approve/"),
+        {"preview_token": approval_token(env, batch_id)},
+        format="json",
+    )
+    assert approved.status_code == 200
+    student = User.objects.get(email="student@example.com")
+    assert ResearchUserProfile.objects.get(user=student).student_no == ""
+    assert OrgUnitMember.objects.filter(workspace=env["workspace"], user=student, is_primary=True).exists()
+    assert MentorBinding.objects.filter(workspace=env["workspace"], mentee=student).count() == 3
 
 
 def test_existing_member_upload_is_reviewable_without_writes(env):

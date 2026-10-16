@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 // plane imports
@@ -18,16 +18,20 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectFilter } from "@/hooks/store/use-project-filter";
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { ResearchNavigationService } from "@/services/research/navigation.service";
 // local imports
 import { ProjectAppliedFiltersList } from "./applied-filters";
 import { ProjectCardList } from "./card-list";
+import type { TProjectOrganizationOption } from "./project-org-groups";
+
+const navigationService = new ResearchNavigationService();
 
 export const ProjectRoot = observer(function ProjectRoot() {
   const { currentWorkspace } = useWorkspace();
-  const research = useResearch();
   const { workspaceSlug } = useParams();
   const pathname = usePathname();
   const { t } = useTranslation();
+  const research = useResearch();
   // store
   const { totalProjectIds, filteredProjectIds, getProjectById } = useProject();
   const {
@@ -44,18 +48,27 @@ export const ProjectRoot = observer(function ProjectRoot() {
     : undefined;
 
   const isArchived = pathname.includes("/archives");
-  const isAdministrativeChannel = research.isEnabled && research.isIaV2Enabled;
 
   /** 只过滤已授权返回值中的科研主线展示对象，不重建 Project 权限。 */
   const administrativeProjectIds = useCallback(
     (projectIds: string[] | undefined) =>
-      projectIds?.filter((projectId) => getProjectById(projectId)?.is_research_project !== true),
+      projectIds?.filter((projectId) => getProjectById(projectId)?.is_research_project === false),
     [getProjectById]
   );
-  const visibleTotalProjectIds = isAdministrativeChannel ? administrativeProjectIds(totalProjectIds) : totalProjectIds;
-  const visibleFilteredProjectIds = isAdministrativeChannel
-    ? administrativeProjectIds(filteredProjectIds)
-    : filteredProjectIds;
+  const visibleTotalProjectIds = administrativeProjectIds(totalProjectIds);
+  const visibleFilteredProjectIds = administrativeProjectIds(filteredProjectIds);
+  const [organizations, setOrganizations] = useState<TProjectOrganizationOption[]>([]);
+  const usesOrganizationGroups = research.isEnabled && research.isIaV2Enabled;
+
+  useEffect(() => {
+    if (!usesOrganizationGroups || !workspaceSlug) return;
+    navigationService
+      .getAdministrativeOrganizations(workspaceSlug.toString())
+      .then((items) =>
+        setOrganizations(items.map((item) => ({ id: item.id, name: item.name, is_default: item.is_default })))
+      )
+      .catch(() => setOrganizations([]));
+  }, [usesOrganizationGroups, workspaceSlug]);
 
   const allowedDisplayFilters =
     currentWorkspaceAppliedDisplayFilters?.filter((filter) => filter !== "archived_projects") ?? [];
@@ -108,7 +121,11 @@ export const ProjectRoot = observer(function ProjectRoot() {
             alwaysAllowEditing
           />
         )}
-        <ProjectCardList totalProjectIds={visibleTotalProjectIds} filteredProjectIds={visibleFilteredProjectIds} />
+        <ProjectCardList
+          totalProjectIds={visibleTotalProjectIds}
+          filteredProjectIds={visibleFilteredProjectIds}
+          organizations={usesOrganizationGroups && organizations.length > 0 ? organizations : undefined}
+        />
       </div>
     </>
   );

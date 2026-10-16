@@ -16,7 +16,7 @@ from plane.research.utils.errors import (
     research_not_found,
     research_permission_denied,
 )
-from plane.research.utils.reports import report_resource
+from plane.research.utils.reports import report_resource, supervisor_reader_ids
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.reports import report_queryset
 
@@ -52,19 +52,22 @@ class ResearchReportReadEndpoint(ResearchAPIView):
                 "An official report version is required before recording a read.",
             )
 
-        latest_receipts = list(
-            PeriodicReportReadReceipt.objects.filter(
+        supervisor_ids = supervisor_reader_ids(report, context)
+        latest_receipts = [
+            receipt
+            for receipt in PeriodicReportReadReceipt.objects.filter(
                 report=report,
                 snapshot_version=receipt.snapshot_version,
             ).order_by("-read_at")
-        )
+            if receipt.reader_id in supervisor_ids
+        ]
         return Response(
             {
                 "has_read": True,
                 "read_at": receipt.read_at,
                 "snapshot_version": receipt.snapshot_version,
                 "read_count": len(latest_receipts),
-                "latest_read_at": latest_receipts[0].read_at,
+                "latest_read_at": latest_receipts[0].read_at if latest_receipts else None,
             },
             status=status.HTTP_200_OK,
         )

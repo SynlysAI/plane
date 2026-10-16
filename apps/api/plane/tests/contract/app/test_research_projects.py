@@ -70,6 +70,12 @@ def env(db):
     OrgUnitMember.objects.create(
         workspace=workspace,
         org_unit=group,
+        user=admin,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=group,
         user=member,
         org_role=OrgUnitMember.OrgRole.PI,
         is_primary=True,
@@ -439,6 +445,12 @@ class TestResearchProjectCreation:
         manager = make_user(first_name="Direction head")
         for user in (mentor, manager):
             add_workspace_member(env["workspace"], user)
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=env["group"],
+            user=mentor,
+            org_role=OrgUnitMember.OrgRole.ADVISOR,
+        )
         MentorBinding.objects.create(
             workspace=env["workspace"],
             mentee=env["member"],
@@ -518,6 +530,58 @@ class TestResearchProjectLifecycle:
         self._create(env, research_type="MASTER")
         response = env["admin_client"].post(f"{env['url']}{created['id']}/restore/", {}, format="json")
         assert response.status_code == 409
+
+    def test_delete_syncs_chain_and_can_be_restored(self, env):
+        """负责人删除保留项目，同步研究链且只记录一次删除审计。"""
+        created = self._create(env, name="可恢复课题", chain_kind="RESEARCH_CHAIN")
+        detail_url = f"{env['url']}{created['id']}/"
+        response = env["member_client"].delete(detail_url)
+        assert response.status_code == 204
+        profile = ResearchProjectProfile.objects.get(project_id=created["id"])
+        assert profile.workflow_status == "DELETED" and not profile.is_active
+        assert ResearchChain.objects.get(project_id=created["id"]).status == "DELETED"
+        assert Project.objects.filter(pk=created["id"]).exists()
+        assert env["admin_client"].delete(detail_url).status_code == 204
+        assert ResearchAuditEvent.objects.filter(action="project.delete", resource_id=profile.id).count() == 1
+        assert env["member_client"].get(env["url"]).json()["results"] == []
+        history = env["member_client"].get(env["url"], {"workflow_status": "DELETED"}).json()
+        assert [row["id"] for row in history["results"]] == [created["id"]]
+        assert history["total_results"] == 1
+        assert env["member_client"].post(f"{detail_url}archive/", {}, format="json").status_code == 409
+        restored = env["member_client"].post(f"{detail_url}restore/", {}, format="json")
+        assert restored.status_code == 200
+        assert restored.json()["research"]["is_active"]
+        assert ResearchChain.objects.get(project_id=created["id"]).status == "ACTIVE"
+
+    def test_unrelated_member_cannot_delete(self, env):
+        """可见课题不自动授予删除权限。"""
+        created = self._create(env, research_type="RESEARCH_PROJECT", chain_visibility="WORKSPACE")
+        viewer = make_user()
+        add_workspace_member(env["workspace"], viewer)
+        response = client_for(viewer).delete(f"{env['url']}{created['id']}/")
+        assert response.status_code == 403
+        assert ResearchProjectProfile.objects.get(project_id=created["id"]).workflow_status == "ACTIVE"
+
+    def test_patch_cannot_bypass_delete_or_restore(self, env):
+        """删除及重新激活必须经过专用接口，删除状态禁止修改档案。"""
+        created = self._create(env, research_type="RESEARCH_PROJECT")
+        detail_url = f"{env['url']}{created['id']}/"
+        client = env["member_client"]
+        assert client.patch(detail_url, {"workflow_status": "DELETED"}, format="json").status_code == 409
+        assert ResearchProjectProfile.objects.get(project_id=created["id"]).workflow_status == "ACTIVE"
+        assert client.delete(detail_url).status_code == 204
+        assert client.patch(detail_url, {"workflow_status": "ACTIVE"}, format="json").status_code == 409
+        assert client.patch(detail_url, {"expected_end_at": "2027-01-01"}, format="json").status_code == 409
+        assert ResearchProjectProfile.objects.get(project_id=created["id"]).workflow_status == "DELETED"
+
+    def test_deleted_cultivation_restore_preserves_active_project_limit(self, env):
+        """删除释放培养项目名额，恢复仍需满足活动项目数量限制。"""
+        created = self._create(env, research_type="PHD")
+        detail_url = f"{env['url']}{created['id']}/"
+        assert env["admin_client"].delete(detail_url).status_code == 204
+        self._create(env, research_type="MASTER")
+        assert env["admin_client"].post(f"{detail_url}restore/", {}, format="json").status_code == 409
+        assert ResearchProjectProfile.objects.get(project_id=created["id"]).workflow_status == "DELETED"
 
     def test_team_project_cannot_be_changed_into_a_second_active_cultivation_project(self, env):
         self._create(env, research_type="PHD")

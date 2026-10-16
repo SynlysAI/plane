@@ -880,5 +880,26 @@
     "archives": {
       "title": "Archives"
     }
+  },
+  "aiAssistant": {
+    "title": "Asisten AI",
+    "open": "Buka asisten AI",
+    "close": "Tutup",
+    "placeholder": "Tanyakan tentang halaman ini, proyek, atau basis pengetahuan Anda…",
+    "send": "Kirim",
+    "stop": "Hentikan",
+    "new_conversation": "Percakapan baru",
+    "thinking": "Berpikir",
+    "working": "Memproses",
+    "queued": "Dalam antrean",
+    "retrieving": "Mencari di basis pengetahuan",
+    "empty_greeting": "Halo, saya asisten AI Anda",
+    "empty_hint": "Tanyakan kepada saya tentang halaman saat ini, proyek, atau basis pengetahuan Anda.",
+    "error_generic": "Terjadi kesalahan. Silakan coba lagi.",
+    "error_unavailable": "Layanan AI saat ini tidak tersedia.",
+    "retry": "Coba lagi",
+    "session_expired": "Sesi sebelumnya telah kedaluwarsa, sesi baru telah dimulai.",
+    "interrupt_notice": "Eksekusi terganggu dan memerlukan persetujuan. Fitur persetujuan akan segera tersedia.",
+    "shortcut_hint": "Cmd+J"
   }
 }

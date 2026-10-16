@@ -5,11 +5,14 @@
  */
 
 import React, { useMemo } from "react";
+import { useParams } from "next/navigation";
 import { observer } from "mobx-react";
 import { ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
 import { Disclosure, Transition } from "@headlessui/react";
 // plane imports
 import {
+  RESEARCH_IA_V2_NAVIGATION_ITEMS,
+  RESEARCH_SETTINGS_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
@@ -30,6 +33,7 @@ import { useResearch } from "@/hooks/store/use-research";
 import { SidebarItemBase } from "./sidebar-item";
 
 export const SidebarMenuItems = observer(function SidebarMenuItems() {
+  const { workspaceSlug } = useParams();
   // routers
   const { setValue: toggleWorkspaceMenu, storedValue: isWorkspaceMenuOpen } = useLocalStorage<boolean>(
     "is_workspace_menu_open",
@@ -50,10 +54,23 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   };
   // IA v2 把项目 / 视图 / 分析 / 归档收敛到行政项目容器。
   const usesResearchIaV2 = research.isEnabled && research.isIaV2Enabled;
+  const sections = research.identity?.sections;
+  const visibleIaV2Items =
+    usesResearchIaV2 && research.identityWorkspaceSlug === workspaceSlug
+      ? RESEARCH_IA_V2_NAVIGATION_ITEMS.filter((item) => {
+          if (item.key === "research_chain") return false;
+          if (item.key === "management") {
+            return RESEARCH_SETTINGS_NAVIGATION_ITEMS.some(
+              (setting) => Boolean(sections?.[setting.section]) && research.canSee(setting.key)
+            );
+          }
+          return Boolean(sections?.[item.section]) && research.canSee(item.key);
+        })
+      : [];
 
   // Filter static navigation items based on personal preferences
   const filteredStaticNavigationItems = useMemo(() => {
-    // Phase 1.6 统一工作区信息架构：首页保留为唯一个人入口，其余四个产品入口由科研侧栏渲染。
+    // IA v2 keeps global destinations together above the scoped project trees.
     if (usesResearchIaV2) return [WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["home"]];
     const items = [...WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS];
     const personalItems: Array<(typeof items)[0] & { sort_order: number }> = [];
@@ -101,10 +118,24 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
 
   return (
     <>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex shrink-0 flex-col gap-0.5">
         {filteredStaticNavigationItems.map((item, _index) => (
           // oxlint-disable-next-line react/no-array-index-key
-          <SidebarItemBase key={`static_${_index}`} item={item} />
+          <SidebarItemBase key={`static_${_index}`} item={item} className={usesResearchIaV2 ? "h-8" : undefined} />
+        ))}
+        {visibleIaV2Items.map((item) => (
+          <SidebarItemBase
+            key={item.key}
+            className="h-8"
+            additionalStaticItems={[item.key]}
+            item={{
+              key: item.key,
+              labelTranslationKey: item.labelKey,
+              href: `/research/${item.path}`,
+              access: WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS.home.access,
+              highlight: (pathname, url) => pathname === url || pathname.startsWith(`${url}/`),
+            }}
+          />
         ))}
       </div>
       {!usesResearchIaV2 && (

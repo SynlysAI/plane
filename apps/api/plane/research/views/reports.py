@@ -58,6 +58,7 @@ from plane.research.utils.notifications import (
     notify_report_submitted,
 )
 from plane.research.utils.periods import InvalidPeriod, current_period, parse_period
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, is_editable, report_resource, visible_reports_queryset
 from plane.research.utils.settings import default_visibility_for, get_workspace_research_settings
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
@@ -79,7 +80,7 @@ def report_queryset(workspace):
     )
 
 
-def serialize_report(report, request, context=None, *, include_draft_content=False):
+def serialize_report(report, request, context=None, *, include_draft_content=False, mentor_cache=None):
     context = context if context is not None else build_actor_context(request.user, report.workspace_id)
     return PeriodicReportSerializer(
         report,
@@ -87,6 +88,7 @@ def serialize_report(report, request, context=None, *, include_draft_content=Fal
             "request": request,
             "actor_context": context,
             "include_draft_content": include_draft_content,
+            "mentor_cache": mentor_cache,
         },
     ).data
 
@@ -360,10 +362,13 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                 visible_queryset = visible_queryset.filter(review_scope)
         elif scope != "all":
             return Response({"error_code": "invalid_scope"}, status=400)
+        mentor_cache = {}
         return self.paginate(
             request=request,
             queryset=visible_queryset,
-            on_results=lambda reports: [serialize_report(report, request, context) for report in reports],
+            on_results=lambda reports: [
+                serialize_report(report, request, context, mentor_cache=mentor_cache) for report in reports
+            ],
             default_per_page=50,
             max_per_page=100,
         )
@@ -614,6 +619,39 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
             status=status.HTTP_200_OK,
         )
 
+    def delete(self, request, slug, report_id):
+        from plane.research.utils.deletion import report_deletion_reason
+
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+        report, error = self._visible_report(request, workspace, report_id, action="delete")
+        if error:
+            return error
+        with transaction.atomic():
+            report = PeriodicReport.objects.select_for_update().get(pk=report.pk)
+            reason = report_deletion_reason(report)
+            if reason:
+                return research_conflict("research_delete_blocked", reason)
+            deleted_at = timezone.now()
+            report.deleted_at = deleted_at
+            report.save(update_fields=["deleted_at", "updated_at"])
+            report.page.deleted_at = deleted_at
+            report.page.save(update_fields=["deleted_at", "updated_at"])
+            report.page.project_pages.update(deleted_at=deleted_at)
+            report.team_project_references.update(deleted_at=deleted_at)
+            report.attachments.update(deleted_at=deleted_at)
+            record_audit_event(
+                workspace=workspace,
+                action="report.delete",
+                resource_type=ResearchResourceType.REPORT,
+                resource_id=report.pk,
+                actor=request.user,
+                metadata={"period_key": report.period_key},
+                request=request,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class ResearchReportSubmitEndpoint(ResearchAPIView):
     """``POST /api/research/workspaces/<slug>/reports/<report_id>/submit/``"""
@@ -627,7 +665,9 @@ class ResearchReportSubmitEndpoint(ResearchAPIView):
         target = PeriodicReport.Status.SUBMITTED
         with transaction.atomic():
             report = report_queryset(workspace).select_for_update(of=("self",)).filter(pk=report_id).first()
-            if report is None or report.owner_id != request.user.id:
+            if report is None or (
+                report.owner_id != request.user.id and not is_research_admin(request.user, workspace.id)
+            ):
                 return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
             if report.org_unit_id is None:
                 return research_error(
@@ -685,7 +725,7 @@ class ResearchReportSubmitEndpoint(ResearchAPIView):
             request=request,
         )
         notify_report_submitted(report, request.user)
-        return Response(serialize_report(report, request), status=status.HTTP_200_OK)
+        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
 class ResearchReportReturnEndpoint(ResearchAPIView):
@@ -743,7 +783,7 @@ class ResearchReportReturnEndpoint(ResearchAPIView):
             request=request,
         )
         notify_report_returned(report, request.user, comment)
-        return Response(serialize_report(report, request), status=status.HTTP_200_OK)
+        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
 class ResearchReportAcceptEndpoint(ResearchAPIView):
@@ -794,7 +834,7 @@ class ResearchReportAcceptEndpoint(ResearchAPIView):
             request=request,
         )
         notify_report_accepted(report, request.user)
-        return Response(serialize_report(report, request), status=status.HTTP_200_OK)
+        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
 class ResearchReportHistoryEndpoint(ResearchAPIView):

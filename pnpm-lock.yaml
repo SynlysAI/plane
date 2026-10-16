@@ -1168,6 +1168,9 @@ importers:
       recharts:
         specifier: 'catalog:'
         version: 2.15.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      remark-gfm:
+        specifier: 'catalog:'
+        version: 4.0.1
       serve:
         specifier: 'catalog:'
         version: 14.2.5

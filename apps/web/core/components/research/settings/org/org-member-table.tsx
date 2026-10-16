@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TOrgUnit, TMentorBinding } from "@plane/types";
-import { AlertModalCore } from "@plane/ui";
+import { AlertModalCore, ListFilterField, ListFilterSelect } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
@@ -261,20 +261,18 @@ export const ResearchOrgMemberTable = observer(function ResearchOrgMemberTable({
           onChange={setNewMemberEmail}
           disabled={busy || loading || loadFailed}
         />
-        <select
-          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-          value={newMemberRole}
-          onChange={(event) => setNewMemberRole(event.target.value)}
-        >
-          {ORG_ROLES.map((role) => (
-            <option key={role} value={role}>
-              {t(ROLE_LABEL_KEYS[role])}
-            </option>
-          ))}
-        </select>
+        <ListFilterField label={t("research.org.columns.role")}>
+          <ListFilterSelect value={newMemberRole} onChange={(event) => setNewMemberRole(event.target.value)}>
+            {ORG_ROLES.map((role) => (
+              <option key={role} value={role}>
+                {t(ROLE_LABEL_KEYS[role])}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
         <Button
           variant="primary"
-          size="sm"
+          size="xl"
           loading={busy && !pendingChange}
           disabled={busy || !resolvedNewMember}
           onClick={() => void handleAdd()}
@@ -297,7 +295,7 @@ export const ResearchOrgMemberTable = observer(function ResearchOrgMemberTable({
       )}
 
       <ResearchTableSurface>
-        <Table>
+        <Table className="min-w-160">
           <TableHeader>
             <TableRow className="text-tertiary">
               <TableHead>{t("research.org.columns.member")}</TableHead>
@@ -411,7 +409,7 @@ export const ResearchOrgMemberTable = observer(function ResearchOrgMemberTable({
       <div className="rounded-md border border-subtle bg-surface-2 p-3">
         <h4 className="text-12 font-medium text-primary">{t("research.org.pi_transfer")}</h4>
         <p className="mt-1 text-11 text-tertiary">{t("research.org.pi_transfer_hint")}</p>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-end gap-3">
           <ResearchPersonSelect
             label="选择本组织成员转移主 PI"
             people={activeMembers.flatMap((member) => (member.member_detail ? [member.member_detail] : []))}
@@ -419,7 +417,7 @@ export const ResearchOrgMemberTable = observer(function ResearchOrgMemberTable({
             onChange={setPiEmail}
             disabled={busy || loading || loadFailed}
           />
-          <Button variant="secondary" size="sm" disabled={busy || !resolvedPiMember} onClick={handleTransferPi}>
+          <Button variant="secondary" size="xl" disabled={busy || !resolvedPiMember} onClick={handleTransferPi}>
             {t("research.org.pi_transfer_action")}
           </Button>
         </div>

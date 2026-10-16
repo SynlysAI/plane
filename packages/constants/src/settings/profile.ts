@@ -49,6 +49,10 @@ export const PROFILE_SETTINGS: Record<
     key: "api-tokens",
     i18n_label: "profile.actions.api-tokens",
   },
+  "agent-configuration": {
+    key: "agent-configuration",
+    i18n_label: "profile.actions.agent-configuration",
+  },
 };
 
 export const PROFILE_SETTINGS_TABS: TProfileSettingsTabs[] = Object.keys(PROFILE_SETTINGS) as TProfileSettingsTabs[];
@@ -63,5 +67,5 @@ export const GROUPED_PROFILE_SETTINGS: Record<
     PROFILE_SETTINGS["notifications"],
     PROFILE_SETTINGS["security"],
   ],
-  [PROFILE_SETTINGS_CATEGORY.DEVELOPER]: [PROFILE_SETTINGS["api-tokens"]],
+  [PROFILE_SETTINGS_CATEGORY.DEVELOPER]: [PROFILE_SETTINGS["api-tokens"], PROFILE_SETTINGS["agent-configuration"]],
 };

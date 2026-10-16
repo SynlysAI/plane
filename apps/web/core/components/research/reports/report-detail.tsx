@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { observer } from "mobx-react";
 // plane imports
 import {
@@ -20,6 +21,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, ModalCore } from "@plane/ui";
 // components
 import { ReportBody, type ReportBodyRef } from "@/components/research/reports/report-body";
+import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ResearchReportAttachments } from "@/components/research/reports/report-attachments";
@@ -35,16 +37,12 @@ type Props = {
 
 type ReportReadState = "waiting" | "read_pending_review" | "reviewed";
 
-/** Keep the author-facing advisor read signal separate from workflow status. */
-function reportReadState(
-  report: { status: string; owner: string; has_read?: boolean; read_count?: number },
-  currentUserId: string | undefined
-): ReportReadState | null {
+/** Keep the advisor read signal separate from workflow status.
+ * The signal (author's mentors + main PI) is the same for every viewer. */
+function reportReadState(report: { status: string; read_count?: number }): ReportReadState | null {
   if (report.status === "DRAFT") return null;
   if (report.status !== "SUBMITTED") return "reviewed";
-  const isAuthor = report.owner === currentUserId;
-  const hasRead = isAuthor ? (report.read_count ?? 0) > 0 : Boolean(report.has_read);
-  return hasRead ? "read_pending_review" : "waiting";
+  return (report.read_count ?? 0) > 0 ? "read_pending_review" : "waiting";
 }
 
 /**
@@ -54,6 +52,7 @@ function reportReadState(
  */
 export const ResearchReportDetail = observer(function ResearchReportDetail({ workspaceSlug, reportId }: Props) {
   const { t, currentLocale } = useTranslation();
+  const navigate = useNavigate();
   const research = useResearch();
   const { getWorkspaceBySlug } = useWorkspace();
   const [returnReason, setReturnReason] = useState("");
@@ -70,7 +69,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const history = research.reportHistory[reportId] ?? [];
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? "";
   const currentUserId = research.identity?.user.id;
-  const readState = report ? reportReadState(report, currentUserId) : null;
+  const readState = report ? reportReadState(report) : null;
 
   useEffect(() => {
     void (async () => {
@@ -213,6 +212,16 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         hint={t(`research.reports.next_step.${report.status.toLowerCase()}`)}
         actions={
           <>
+            {report.can_delete && (
+              <ResearchDeleteButton
+                name={`${report.period_key} · ${t(REPORT_TYPE_LABELS[report.report_type])}`}
+                disabled={pendingAction !== null || bodyBusy}
+                onDelete={async () => {
+                  await research.deleteReport(workspaceSlug, reportId);
+                  navigate(`/${workspaceSlug}/research/reports`);
+                }}
+              />
+            )}
             {report.can_edit && (
               <Button
                 variant="primary"

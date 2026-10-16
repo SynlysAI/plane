@@ -37,7 +37,10 @@ vi.mock("@/services/research/account.service", () => ({
   },
 }));
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
-vi.mock("@plane/constants", () => ({ USER_IMPORT_ROW_STATUS_LABELS: {} }));
+vi.mock("@plane/constants", async () => ({
+  ...(await vi.importActual("@plane/constants")),
+  USER_IMPORT_ROW_STATUS_LABELS: {},
+}));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, string | number>) => {
@@ -59,7 +62,10 @@ vi.mock("@plane/propel/button", () => ({
   ),
 }));
 vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: {}, setToast: vi.fn() }));
-vi.mock("@plane/ui", () => ({ Spinner: () => null }));
+vi.mock("@plane/ui", async () => ({
+  ...(await vi.importActual("@plane/ui")),
+  Spinner: () => null,
+}));
 
 import { ResearchUserImportPanel } from "@/components/research/settings/system/user-import-panel";
 
@@ -129,7 +135,7 @@ async function change(input: HTMLInputElement | HTMLSelectElement, value: string
 
 function labeledControl(label: string) {
   return Array.from(container.querySelectorAll("label"))
-    .find((item) => item.firstChild?.textContent?.trim() === label)!
+    .find((item) => item.firstChild?.textContent?.trim().replace(/\s*\*$/, "") === label.replace(/\s*\*$/, ""))!
     .querySelector("input,select") as HTMLInputElement | HTMLSelectElement;
 }
 
@@ -273,6 +279,43 @@ describe("member import errors", () => {
     expect(button("审批导入").disabled).toBe(true);
   });
 
+  it("submits a student with a bachelor's degree and preserves it in pending review", async () => {
+    service.getAccountProvisioningOptions.mockResolvedValueOnce({
+      org_units: [
+        { id: "org-1", display_path: "学院 / 学生小组", unit_type: "TEAM", business_category: "BASIC_RESEARCH" },
+      ],
+      advisors: [],
+      profile_categories: [],
+    });
+    service.createSingleImport.mockResolvedValueOnce({ ...batch, rows: [{ ...batch.rows[0], degree: "BS" }] });
+    root = createRoot(container);
+    await act(async () => root.render(<ResearchUserImportPanel workspaceSlug="lab" />));
+    await act(async () => button("单条录入").click());
+    await change(labeledControl("姓名"), "本科学生");
+    await change(labeledControl("邮箱"), "student@example.com");
+    await change(labeledControl("学号"), "1");
+    await change(labeledControl("主归属小组"), "org-1");
+    const degree = labeledControl("学位") as HTMLSelectElement;
+    expect(Array.from(degree.options, (option) => option.textContent)).toEqual(["暂未指定", "本科", "硕士", "博士"]);
+    await change(degree, "BS");
+    await change(labeledControl("主导师"), "new");
+    await change(labeledControl("导师姓名"), "导师");
+    await change(labeledControl("导师邮箱"), "advisor@example.com");
+    await act(async () => button("提交并预览").click());
+    expect(service.createSingleImport).toHaveBeenCalledWith("lab", {
+      category: "STUDENT",
+      display_name: "本科学生",
+      email: "student@example.com",
+      student_no: "1",
+      org_unit: "org-1",
+      degree: "BS",
+      advisors: [{ name: "导师", email: "advisor@example.com" }],
+    });
+    await act(async () => button("编辑").click());
+    expect(labeledControl("学位").value).toBe("BS");
+    expect(service.approveUserImport).not.toHaveBeenCalled();
+  });
+
   it("submits a standalone advisor without student-only fields and opens pending review", async () => {
     service.getAccountProvisioningOptions.mockResolvedValueOnce({
       org_units: [
@@ -301,6 +344,30 @@ describe("member import errors", () => {
     });
     expect(container.querySelector('[aria-label="导入审核"]')?.textContent).toContain("待审核");
     expect(service.approveUserImport).not.toHaveBeenCalled();
+  });
+
+  it("allows a student to be submitted without a student number", async () => {
+    service.getAccountProvisioningOptions.mockResolvedValueOnce({
+      org_units: [
+        { id: "org-1", display_path: "学院 / 学生小组", unit_type: "TEAM", business_category: "BASIC_RESEARCH" },
+      ],
+      advisors: [],
+      profile_categories: [],
+    });
+    service.createSingleImport.mockResolvedValueOnce(batch);
+    root = createRoot(container);
+    await act(async () => root.render(<ResearchUserImportPanel workspaceSlug="lab" />));
+    await act(async () => button("单条录入").click());
+    await change(labeledControl("姓名"), "无学号学生");
+    await change(labeledControl("邮箱"), "no-student-no@example.com");
+    expect(labeledControl("学号").required).toBe(false);
+    await change(labeledControl("主归属小组"), "org-1");
+    await change(labeledControl("主导师"), "new");
+    await change(labeledControl("导师姓名"), "导师");
+    await change(labeledControl("导师邮箱"), "advisor@example.com");
+    await act(async () => button("提交并预览").click());
+    const payload = service.createSingleImport.mock.calls[0][1] as { student_no?: string };
+    expect(payload.student_no ?? "").toBe("");
   });
 
   it("selects all rows and includes the selection in one bulk action", async () => {
@@ -475,5 +542,27 @@ describe("member import errors", () => {
     service.importUsers.mockResolvedValueOnce(batch);
     await act(async () => button("上传并预览").click());
     expect(service.importUsers).toHaveBeenLastCalledWith("lab", expect.objectContaining({ reset_passwords: true }));
+  });
+
+  it("offers both bulk import templates next to the mode controls", async () => {
+    root = createRoot(container);
+    await act(async () => root.render(<ResearchUserImportPanel workspaceSlug="lab" />));
+
+    expect(
+      container.querySelector('a[href="/templates/research-student-import-template.xlsx"]')?.textContent
+    ).toContain("下载学生名册模板");
+    expect(
+      container.querySelector('a[href="/templates/research-student-import-template.xlsx"]')?.getAttribute("download")
+    ).toBe("科研身份学生导入模板.xlsx");
+    expect(
+      container.querySelector('a[href="/templates/research-advisor-mapping-template.xlsx"]')?.textContent
+    ).toContain("下载导师映射模板");
+    expect(
+      container.querySelector('a[href="/templates/research-advisor-mapping-template.xlsx"]')?.getAttribute("download")
+    ).toBe("科研身份导师映射模板.xlsx");
+
+    await act(async () => button("单条录入").click());
+    expect(container.querySelector('a[href="/templates/research-student-import-template.xlsx"]')).toBeNull();
+    expect(container.querySelector('a[href="/templates/research-advisor-mapping-template.xlsx"]')).toBeNull();
   });
 });

@@ -11,7 +11,6 @@ to normalise a payload - they never talk to the network themselves.
 
 import hashlib
 import hmac
-import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -84,16 +83,13 @@ class IntegrationResult:
 
 
 def resolve_secret(connection):
-    """Read the credential from the backend secret store, never from the client."""
+    """Read the shared credential stored on the connection, never from the client."""
     if connection is None:
         return None
-    if connection.credential_ref:
-        value = getattr(settings, connection.credential_ref.upper(), None)
-        if value:
-            return value
-        return os.environ.get(connection.credential_ref) or os.environ.get(connection.credential_ref.upper())
-    system = str(connection.system).upper()
-    return getattr(settings, f"{system}_AUTH_SECRET", None) or os.environ.get(f"{system}_AUTH_SECRET")
+    if connection.credential_mode == ExternalSystemConnection.CredentialMode.PERSONAL:
+        # Per-user credentials are resolved per caller by user-level integrations.
+        return None
+    return connection.get_credential() or None
 
 
 class BaseIntegrationClient:

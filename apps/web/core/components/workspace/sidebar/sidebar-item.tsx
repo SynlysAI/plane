@@ -24,12 +24,14 @@ import { getSidebarNavigationItemIcon } from "@/components/workspace/sidebar/hel
 
 type Props = {
   item: IWorkspaceSidebarNavigationItem;
+  className?: string;
   additionalRender?: (itemKey: string, workspaceSlug: string) => ReactNode;
   additionalStaticItems?: string[];
 };
 
 export const SidebarItemBase = observer(function SidebarItemBase({
   item,
+  className,
   additionalRender,
   additionalStaticItems,
 }: Props) {
@@ -66,13 +68,14 @@ export const SidebarItemBase = observer(function SidebarItemBase({
   const itemHref =
     item.key === "your_work" && data?.id ? joinUrlPath(slug, item.href, data?.id) : joinUrlPath(slug, item.href);
   const icon = getSidebarNavigationItemIcon(item.key);
+  const isActive = item.highlight(pathname, itemHref);
 
   return (
-    <Link href={itemHref} onClick={handleLinkClick}>
-      <SidebarNavItem isActive={item.highlight(pathname, itemHref)}>
-        <div className="flex items-center gap-1.5 py-[1px]">
+    <Link href={itemHref} onClick={handleLinkClick} aria-current={isActive ? "page" : undefined}>
+      <SidebarNavItem isActive={isActive} className={className}>
+        <div className="flex min-w-0 items-center gap-1.5 py-[1px]">
           {icon}
-          <p className="text-13 leading-5 font-medium">{t(item.labelTranslationKey)}</p>
+          <p className="truncate text-13 leading-5 font-medium">{t(item.labelTranslationKey)}</p>
         </div>
         {additionalRender?.(item.key, slug)}
       </SidebarNavItem>

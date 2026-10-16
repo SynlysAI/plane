@@ -218,7 +218,14 @@ def collect_chain_task_todos(workspace, user, scope):
         ResearchChainNodeTask.Status.NEEDS_REVISION,
     )
     tasks = (
-        ResearchChainNodeTask.objects.filter(workspace=workspace, status__in=statuses, deleted_at__isnull=True)
+        ResearchChainNodeTask.objects.filter(
+            workspace=workspace,
+            status__in=statuses,
+            deleted_at__isnull=True,
+            chain__status="ACTIVE",
+            chain__project__research_profile__workflow_status="ACTIVE",
+        )
+        .exclude(node__status="ARCHIVED")
         .select_related(
             "chain__project__research_profile",
             "chain__project",

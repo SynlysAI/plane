@@ -8,6 +8,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@/helpers": path.resolve(__dirname, "./helpers"),
       "@": path.resolve(__dirname, "./core"),
       "next/link": path.resolve(__dirname, "app/compat/next/link.tsx"),
       "next/navigation": path.resolve(__dirname, "app/compat/next/navigation.ts"),

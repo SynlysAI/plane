@@ -81,14 +81,15 @@ def test_candidate_messages_do_not_mix_connection_states(db, monkeypatch):
     )
     from plane.db.models import ExternalSystemConnection
 
-    ExternalSystemConnection.objects.create(
+    connection = ExternalSystemConnection.objects.create(
         workspace=workspace,
         system="RAGPORTAL",
         display_name="RAGPortal",
         base_url="http://ragportal.internal:8004",
-        credential_ref="RAGPORTAL_AUTH_SECRET",
         is_enabled=True,
     )
+    connection.set_credential("ragportal-shared-token")
+    connection.save(update_fields=["credential"])
     described = describe_ragportal_candidates(workspace)
     assert described["connection_status"] == "connected"
     assert described["candidates"] == []

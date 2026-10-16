@@ -1,6 +1,6 @@
 # PiLab 文档总索引
 
-> 当前代码事实：`develop` 分支，软件版本 `4.27.0`。本文档按代码、测试和运行证据整理，更新时间：2026-10-12。
+> 当前代码事实：`develop` 分支，软件版本 `4.28.0`。本文档按代码、测试和运行证据整理，更新时间：2026-10-13。
 
 本目录采用分层文档架构。文档不重复争夺同一份“当前状态”，而是分别回答产品为什么做、平台如何协作、代码如何实现、怎样验收和怎样发布。
 
@@ -120,13 +120,14 @@
 | [`research-pi-lab-baseline-runbook.md`](operations/research-pi-lab-baseline-runbook.md)                                                                                      | 真实人员组织基线、备份、重建、恢复和验收                                           |
 | [`evidence/phase-1.5/role-validation/`](./evidence/phase-1.5/role-validation/)                                                                                               | 当前分角色验证证据；历史问题转录见 [`issue0925/`](./evidence/phase-1.5/issue0925/) |
 | [`production-deployment.md`](operations/production-deployment.md)                                                                                                            | 当前生产部署、更新、验证与回滚                                                     |
+| [`dev-environment-rebuild.md`](operations/dev-environment-rebuild.md)                                                                                                        | 本地业务数据重建、测试密码注入与隔离验证                                           |
 | [`research-test-accounts.md`](operations/research-test-accounts.md)、[`research-test-fixtures.md`](operations/research-test-fixtures.md)                                     | 测试身份、夹具和人工验收约束                                                       |
 
 ## 6. 维护约定
 
 1. 实现以代码和测试为准；发现冲突时回写当前契约、发布说明和索引，历史文档只补充取代说明。
 2. 产品 PRD 只定义目标、边界和优先级；开发 PRD 定义实现规格；契约文件定义跨服务交换格式；验收/发布文档记录实际结果。
-3. 版本号与根 `package.json`、各应用/包和 API `pyproject.toml` 同步；当前软件版本为 `4.27.0`，文档版本独立维护。
+3. 版本号与根 `package.json`、各应用/包和 API `pyproject.toml` 同步；当前软件版本为 `4.28.0`，文档版本独立维护。
 4. `public` π-Lab 基线不预造课题；一次性凭据、原始 xlsx、`.runtime/` 备份和 `refer/issue.docx` 不进入 Git。
 5. 真实 OIDC 绑定必须双方完成认证；未完成前只能记录为灰度门禁，不能标记为完全打通。
 6. 首个真实课题创建后，补录 workflow、节点动作、成员回执、KB 上传和 Agent 会话证据；不得为截图向 `public` 写入虚构课题。

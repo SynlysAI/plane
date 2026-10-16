@@ -4,19 +4,26 @@ import hashlib
 from uuid import uuid4
 
 import pytest
-from rest_framework.test import APIClient
 from django.core.files.uploadedfile import SimpleUploadedFile
+from rest_framework.test import APIClient
 
 from plane.db.models import (
+    OrgUnit,
+    OrgUnitMember,
     Project,
+    ProjectMember,
     ResearchAnalysisResult,
     ResearchAuditEvent,
     ResearchChain,
     ResearchChainEvent,
+    ResearchChainNode,
+    ResearchChainNodeTask,
+    ResearchChainSnapshot,
     ResearchChainUpload,
     ResearchProjectProfile,
     ResearchUserProfile,
 )
+from plane.license.models import Instance, InstanceAdmin
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
 pytestmark = pytest.mark.contract
@@ -27,6 +34,7 @@ def _client(user):
     client = APIClient()
     client.force_authenticate(user=user)
     return client
+
 
 
 def _research_project(workspace, owner, name, visibility):
@@ -72,12 +80,34 @@ def env(db, settings):
     add_workspace_member(workspace, collaborator)
     ResearchUserProfile.objects.create(user=collaborator, category=ResearchUserProfile.Category.STUDENT, student_no=f"chain-{uuid4().hex[:12]}")
     enable_research(workspace, research_chain_enabled=True, research_agent_enabled=True)
+    root = OrgUnit.objects.create(
+        workspace=workspace, name="科研组织", parent=None, unit_type=OrgUnit.UnitType.ROOT, depth=0, path=""
+    )
+    root.path = f"/{root.id.hex}/"
+    root.save(update_fields=["path"])
+    group = OrgUnit.objects.create(
+        workspace=workspace,
+        name="链路课题组",
+        parent=root,
+        unit_type=OrgUnit.UnitType.GROUP,
+        depth=1,
+        path="",
+    )
+    group.path = f"{root.path}{group.id.hex}/"
+    group.save(update_fields=["path"])
+    OrgUnitMember.objects.create(
+        workspace=workspace, org_unit=group, user=owner, org_role=OrgUnitMember.OrgRole.PI
+    )
+    OrgUnitMember.objects.create(
+        workspace=workspace, org_unit=group, user=collaborator, org_role=OrgUnitMember.OrgRole.REVIEWER
+    )
     public_project, public_profile = _research_project(workspace, owner, "Public", "WORKSPACE")
     private_project, private_profile = _research_project(workspace, owner, "Private", "PRIVATE")
     return {
         "owner": owner,
         "collaborator": collaborator,
         "workspace": workspace,
+        "group": group,
         "public_project": public_project,
         "public_profile": public_profile,
         "private_project": private_project,
@@ -133,6 +163,111 @@ def test_chain_collaborator_lifecycle_and_audit(env):
     ).exists()
 
 
+def test_workspace_admin_has_full_research_chain_administration_without_org_relation(env):
+    """工作区管理员无需科研组织关系即可完整管理私有研究链。"""
+    workspace_admin = make_user(first_name="Workspace admin")
+    add_workspace_member(env["workspace"], workspace_admin, role=20)
+    admin_client = _client(workspace_admin)
+    private = _create_chain(env["owner_client"], env["workspace"], env["private_project"])
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
+    chain_id = created.json()["data"]["id"]
+    detail_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/"
+    private_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{private.json()['data']['id']}/"
+    node_response = env["owner_client"].post(
+        f"{detail_url}nodes/",
+        {"request_id": uuid4().hex, "node_type": "EXPERIMENT", "title": "实验"},
+        format="json",
+    )
+    assert node_response.status_code == 201, node_response.json()
+    node_id = node_response.json()["data"]["id"]
+
+    actions = admin_client.get(detail_url).json()["data"]["capabilities"]["actions"]
+    assert actions["archive"]["allowed"]
+    assert actions["delete"]["allowed"]
+    assert not actions["restore"]["allowed"]
+    assert actions["edit"]["allowed"]
+    assert actions["upload"]["allowed"]
+    assert admin_client.get(private_url).status_code == 200
+    assert admin_client.post(f"{private_url}archive/", {}, format="json").status_code == 200
+    assert admin_client.post(f"{private_url}restore/", {}, format="json").status_code == 200
+    collaborator_actions = (
+        env["collaborator_client"].get(detail_url).json()["data"]["capabilities"]["actions"]
+    )
+    assert not collaborator_actions["archive"]["allowed"]
+    assert not collaborator_actions["delete"]["allowed"]
+    assert env["collaborator_client"].post(f"{detail_url}archive/", {}, format="json").status_code == 403
+    assert env["collaborator_client"].delete(detail_url).status_code == 403
+    assert admin_client.post(
+        f"{detail_url}nodes/{node_id}/tasks/",
+        {"request_id": uuid4().hex, "title": "管理员任务"},
+        format="json",
+    ).status_code == 201
+    assert admin_client.post(
+        f"{detail_url}members/", {"user_id": str(env["collaborator"].id)}, format="json"
+    ).status_code == 201
+    # The task created above blocks node deletion, so this conflict proves the
+    # request passed authorization and reached the node lifecycle rule.
+    assert admin_client.delete(f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node_id}/").status_code == 409
+
+    archived = admin_client.post(f"{detail_url}archive/", {}, format="json")
+    assert archived.status_code == 200, archived.json()
+    archived_actions = archived.json()["data"]["capabilities"]["actions"]
+    assert archived_actions["restore"]["allowed"]
+    assert not archived_actions["archive"]["allowed"]
+    assert admin_client.post(f"{detail_url}restore/", {}, format="json").status_code == 200
+    assert admin_client.delete(detail_url).status_code == 204
+
+
+def test_chain_project_admin_can_manage_lifecycle(env):
+    """课题项目管理员仍可管理研究链生命周期。"""
+    project_admin = make_user(first_name="Project admin")
+    add_workspace_member(env["workspace"], project_admin)
+    OrgUnitMember.objects.create(
+        workspace=env["workspace"],
+        org_unit=env["group"],
+        user=project_admin,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+    )
+    ProjectMember.objects.create(
+        project=env["public_project"], member=project_admin, role=20, created_by=env["owner"]
+    )
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
+    detail_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{created.json()['data']['id']}/"
+
+    actions = _client(project_admin).get(detail_url).json()["data"]["capabilities"]["actions"]
+    assert actions["archive"]["allowed"]
+    assert actions["delete"]["allowed"]
+    project_admin_client = _client(project_admin)
+    assert project_admin_client.post(f"{detail_url}archive/", {}, format="json").status_code == 200
+    assert project_admin_client.post(f"{detail_url}restore/", {}, format="json").status_code == 200
+    assert project_admin_client.delete(detail_url).status_code == 204
+
+
+def test_instance_admin_has_full_research_chain_administration(env):
+    """实例管理员无需加入科研组织即可读取并管理研究链。"""
+    instance_admin = make_user(first_name="Instance admin")
+    add_workspace_member(env["workspace"], instance_admin)
+    ResearchUserProfile.objects.create(
+        user=instance_admin,
+        category=ResearchUserProfile.Category.STUDENT,
+        student_no=f"instance-admin-{uuid4().hex[:12]}",
+    )
+    instance = Instance.objects.create(
+        instance_name="Research chain test",
+        instance_id=uuid4().hex,
+        current_version="test",
+    )
+    InstanceAdmin.objects.create(instance=instance, user=instance_admin)
+    admin_client = _client(instance_admin)
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
+    detail_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{created.json()['data']['id']}/"
+
+    assert admin_client.get(detail_url).status_code == 200
+    assert admin_client.post(f"{detail_url}archive/", {}, format="json").status_code == 200
+    assert admin_client.post(f"{detail_url}restore/", {}, format="json").status_code == 200
+    assert admin_client.delete(detail_url).status_code == 204
+
+
 def test_archived_chain_is_replayable_and_readonly(env):
     """Archive preserves reads and idempotent replay but blocks new writes."""
     created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
@@ -161,6 +296,95 @@ def test_archived_chain_is_replayable_and_readonly(env):
     restored = env["owner_client"].post(restore_url, {}, format="json")
     assert restored.status_code == 200, restored.json()
     assert restored.json()["data"]["status"] == ResearchChain.Status.ACTIVE
+
+
+def test_deleted_chain_preserves_evidence_is_readonly_and_can_restore(env):
+    """删除保留节点、任务和证据，拒绝新增写入，恢复后继续使用。"""
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"])
+    chain_id = created.json()["data"]["id"]
+    detail_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/{chain_id}/"
+    nodes_url = f"{detail_url}nodes/"
+    payload = {"request_id": uuid4().hex, "node_type": "EXPERIMENT", "title": "保留实验"}
+    node_response = env["owner_client"].post(nodes_url, payload, format="json")
+    assert node_response.status_code == 201, node_response.json()
+    node_id = node_response.json()["data"]["id"]
+    node_url = f"/api/research/workspaces/{env['workspace'].slug}/nodes/{node_id}/"
+    event = env["owner_client"].post(
+        f"{node_url}events/",
+        {"request_id": uuid4().hex, "event_id": uuid4().hex, "event_type": "DATA_CHANGE", "summary": "保留参数"},
+        format="json",
+    )
+    snapshot = env["owner_client"].post(
+        f"{node_url}snapshots/", {"request_id": uuid4().hex, "summary": "保留快照"}, format="json"
+    )
+    assert event.status_code == 201, event.json()
+    assert snapshot.status_code == 201, snapshot.json()
+    task = ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"], chain_id=chain_id, node_id=node_id,
+        title="保留任务", request_id=uuid4().hex, payload_hash="fixture", created_by=env["owner"],
+    )
+    assert env["collaborator_client"].delete(detail_url).status_code == 403
+    assert env["owner_client"].delete(detail_url).status_code == 204
+    chain = ResearchChain.objects.get(pk=chain_id)
+    deleted_at = chain.updated_at
+    assert chain.status == "DELETED"
+    profile = ResearchProjectProfile.objects.get(project=env["public_project"])
+    assert profile.workflow_status == "DELETED"
+    assert not profile.is_active
+    assert Project.objects.filter(pk=env["public_project"].id).exists()
+    assert ResearchChainNode.objects.filter(pk=node_id).exists()
+    assert ResearchChainNodeTask.objects.filter(pk=task.id).exists()
+    assert ResearchChainEvent.objects.filter(chain_id=chain_id).exists()
+    assert ResearchChainSnapshot.objects.filter(chain_id=chain_id).exists()
+    assert env["owner_client"].delete(detail_url).status_code == 204
+    chain.refresh_from_db()
+    assert chain.updated_at == deleted_at
+    assert ResearchAuditEvent.objects.filter(action="chain.delete", resource_id=chain_id).count() == 1
+    detail = env["owner_client"].get(detail_url).json()["data"]
+    assert detail["capabilities"]["actions"]["restore"]["allowed"]
+    for action in ("edit", "upload", "archive", "delete", "agent_review"):
+        assert not detail["capabilities"]["actions"][action]["allowed"]
+    assert env["owner_client"].post(nodes_url, {**payload, "request_id": uuid4().hex}, format="json").status_code == 409
+    assert env["owner_client"].post(f"{detail_url}archive/", {}, format="json").status_code == 409
+    assert env["owner_client"].post(f"{detail_url}restore/", {}, format="json").status_code == 200
+    profile.refresh_from_db()
+    chain.refresh_from_db()
+    assert profile.is_active and profile.workflow_status == chain.status == "ACTIVE"
+    assert env["owner_client"].post(nodes_url, {**payload, "request_id": uuid4().hex}, format="json").status_code == 201
+
+
+@pytest.mark.parametrize("history_status", ["ARCHIVED", "DELETED"])
+def test_chain_default_list_hides_history_but_explicit_filters_keep_acl(env, history_status):
+    """历史状态在分页前排除，显式筛选仍遵循项目可见性。"""
+    public = _create_chain(env["owner_client"], env["workspace"], env["public_project"]).json()["data"]
+    private = _create_chain(env["owner_client"], env["workspace"], env["private_project"]).json()["data"]
+    for row in (public, private):
+        ResearchChain.objects.filter(pk=row["id"]).update(status=history_status)
+        ResearchProjectProfile.objects.filter(project_id=row["project"]).update(workflow_status=history_status, is_active=False)
+    list_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/"
+    empty = env["owner_client"].get(list_url).json()
+    assert empty["results"] == empty["data"] == []
+    assert empty["total_results"] == 0
+    assert not empty["next_page_results"]
+    history = env["collaborator_client"].get(list_url, {"status": history_status}).json()
+    assert [row["id"] for row in history["results"]] == [public["id"]]
+    assert history["total_results"] == 1
+
+
+@pytest.mark.parametrize("deleted_model", ["project", "profile"])
+def test_chain_never_exposes_underlying_deleted_records(env, deleted_model):
+    """底层软删除的项目或档案不能从列表、详情或恢复接口泄漏。"""
+    from django.utils import timezone
+
+    created = _create_chain(env["owner_client"], env["workspace"], env["public_project"]).json()["data"]
+    target = env["public_project"] if deleted_model == "project" else env["public_profile"]
+    target.deleted_at = timezone.now()
+    target.save(update_fields=["deleted_at"])
+    list_url = f"/api/research/workspaces/{env['workspace'].slug}/chains/"
+    assert env["owner_client"].get(list_url).json()["results"] == []
+    assert env["owner_client"].get(list_url, {"status": "ACTIVE"}).json()["results"] == []
+    assert env["owner_client"].get(f"{list_url}{created['id']}/").status_code == 404
+    assert env["owner_client"].post(f"{list_url}{created['id']}/restore/", {}, format="json").status_code == 404
 
 
 def test_node_state_machine_is_service_driven_and_idempotent(env):

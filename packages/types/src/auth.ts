@@ -14,6 +14,8 @@ export interface IEmailCheckResponse {
   status: "MAGIC_CODE" | "CREDENTIAL";
   existing: boolean;
   is_password_autoset: boolean;
+  /** 邮箱已持有工作区邀请时为 true，注册时无需邀请码。 */
+  invited?: boolean;
 }
 
 export interface ILoginTokenResponse {

@@ -38,9 +38,6 @@ vi.mock("@/components/research/stages/stage-overview", () => ({ StageOverview: (
 vi.mock("@/components/research/stages/stage-material-detail", () => ({
   StageMaterialDetail: () => <p>material-detail</p>,
 }));
-vi.mock("@/components/research/agent/research-agent-plugin", () => ({
-  ResearchAgentPlugin: () => <p>agent-plugin</p>,
-}));
 
 const { default: ReportDetailPage } =
   await import("../../app/(all)/[workspaceSlug]/(projects)/research/reports/[reportId]/page");
@@ -50,8 +47,6 @@ const { default: StageDetailPage } =
   await import("../../app/(all)/[workspaceSlug]/(projects)/research/projects/[projectId]/stages/[stageCode]/page");
 const { default: MaterialDetailPage } =
   await import("../../app/(all)/[workspaceSlug]/(projects)/research/projects/[projectId]/stages/[stageCode]/materials/[materialId]/page");
-const { default: AgentDetailPage } =
-  await import("../../app/(all)/[workspaceSlug]/(projects)/research/chains/[chainId]/nodes/[nodeId]/agent/page");
 const { ResearchProjectNav } = await import("@/components/research/navigation/research-project-nav");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
@@ -97,9 +92,6 @@ it("renders one nearest-list back link on every standalone research detail page"
   expect(container.querySelector('a[href="/lab/research/projects/project-1/stages/opening"]')?.textContent).toContain(
     "返回阶段详情"
   );
-
-  await renderPage(<AgentDetailPage />, { workspaceSlug: "lab", chainId: "chain-1", nodeId: "node-1" });
-  expect(container.querySelector('a[href="/lab/research/chains/chain-1"]')?.textContent).toContain("返回课题详情");
 });
 
 it("keeps only the closest project-list entry in project scoped navigation", async () => {

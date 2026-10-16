@@ -56,12 +56,11 @@ def test_kb_list_uses_actual_ragportal_path(client):
     assert get.call_args.args[0].endswith("/api/kb/list")
 
 
-def test_ragportal_hmac_uses_ai4ms_bearer_token(client, settings):
+def test_ragportal_hmac_uses_ai4ms_bearer_token(client):
     """RAGPortal HMAC mode must use the AI4MS bearer-token contract."""
     client.connection.auth_mode = "HMAC"
-    client.connection.credential_ref = "RAGPORTAL_AUTH_SECRET"
-    client.connection.save(update_fields=["auth_mode", "credential_ref"])
-    settings.RAGPORTAL_AUTH_SECRET = "top-secret"
+    client.connection.set_credential("top-secret")
+    client.connection.save(update_fields=["auth_mode", "credential"])
 
     headers = client.headers(path="/api/kb/list")
 

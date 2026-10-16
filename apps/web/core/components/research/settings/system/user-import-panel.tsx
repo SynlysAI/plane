@@ -1,7 +1,9 @@
 /** Copyright (c) 2023-present Plane Software, Inc. and contributors. SPDX-License-Identifier: AGPL-3.0-only */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import type { TAccountProvisioningOptions, TUserImportBatch, TUserImportBatchSummary } from "@plane/types";
 import { Button } from "@plane/propel/button";
+import { ListFilterField, ListFilterInput, ListFilterCheckbox } from "@plane/ui";
 import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 import { ResearchAccountService } from "@/services/research/account.service";
 import { SingleImportForm } from "./single-import-form";
@@ -15,6 +17,11 @@ const statuses: Record<string, string> = {
   PENDING: "待处理",
   FAILED: "导入失败",
 };
+
+const RESEARCH_IMPORT_TEMPLATES = {
+  students: "/templates/research-student-import-template.xlsx",
+  advisors: "/templates/research-advisor-mapping-template.xlsx",
+} as const;
 
 export function ResearchUserImportPanel({
   workspaceSlug,
@@ -111,7 +118,7 @@ export function ResearchUserImportPanel({
               role="tab"
               aria-selected={mode === value}
               disabled={busy || reviewBusy}
-              className={`rounded-md px-3 py-2 text-13 ${
+              className={`h-8 rounded-md px-3 text-13 ${
                 mode === value ? "bg-surface-1 text-accent-primary" : "text-secondary"
               }`}
               onClick={() => setMode(value)}
@@ -120,9 +127,31 @@ export function ResearchUserImportPanel({
             </button>
           ))}
         </ResearchFilterToolbar>
-        <a className="text-12 text-accent-primary" href={service.getAccountInitialPasswordsUrl(workspaceSlug)}>
-          下载全部初始密码
-        </a>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {mode === "bulk" && (
+            <>
+              <a
+                href={RESEARCH_IMPORT_TEMPLATES.students}
+                download="科研身份学生导入模板.xlsx"
+                className="inline-flex h-8 items-center gap-1.5 text-12 text-accent-primary hover:underline"
+              >
+                <Download className="size-3.5 shrink-0" aria-hidden="true" />
+                下载学生名册模板
+              </a>
+              <a
+                href={RESEARCH_IMPORT_TEMPLATES.advisors}
+                download="科研身份导师映射模板.xlsx"
+                className="inline-flex h-8 items-center gap-1.5 text-12 text-accent-primary hover:underline"
+              >
+                <Download className="size-3.5 shrink-0" aria-hidden="true" />
+                下载导师映射模板
+              </a>
+            </>
+          )}
+          <a className="text-12 text-accent-primary" href={service.getAccountInitialPasswordsUrl(workspaceSlug)}>
+            下载全部初始密码
+          </a>
+        </div>
       </div>
       {mode === "single" ? (
         <fieldset disabled={reviewBusy}>
@@ -130,28 +159,23 @@ export function ResearchUserImportPanel({
         </fieldset>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3 rounded-lg bg-surface-2 p-3">
-            <label className="text-12">
-              成员名册
-              <input className="block" ref={students} type="file" accept=".csv,.xlsx" disabled={busy || reviewBusy} />
-            </label>
-            <label className="text-12">
-              导师姓名邮箱表（必传）
-              <input className="block" ref={advisors} type="file" accept=".csv,.xlsx" disabled={busy || reviewBusy} />
-            </label>
-            <label className="flex items-center gap-2 text-12 text-secondary">
-              <input
-                aria-label="为已有账号重新生成初始密码"
-                type="checkbox"
-                checked={resetPasswords}
-                disabled={busy || reviewBusy}
-                onChange={(event) => setResetPasswords(event.target.checked)}
-              />
-              为已有账号重新生成初始密码
-            </label>
+          <ResearchFilterToolbar>
+            <ListFilterField label="成员名册" className="w-full sm:w-64">
+              <ListFilterInput ref={students} type="file" accept=".csv,.xlsx" disabled={busy || reviewBusy} />
+            </ListFilterField>
+            <ListFilterField label="导师姓名邮箱表（必传）" className="w-full sm:w-64">
+              <ListFilterInput ref={advisors} type="file" accept=".csv,.xlsx" disabled={busy || reviewBusy} />
+            </ListFilterField>
+            <ListFilterCheckbox
+              label="为已有账号重新生成初始密码"
+              aria-label="为已有账号重新生成初始密码"
+              checked={resetPasswords}
+              disabled={busy || reviewBusy}
+              onChange={(event) => setResetPasswords(event.target.checked)}
+            />
             <Button
               variant="primary"
-              size="sm"
+              size="xl"
               disabled={busy || reviewBusy}
               onClick={() =>
                 void run(async () => {
@@ -173,10 +197,10 @@ export function ResearchUserImportPanel({
             >
               上传并预览
             </Button>
-          </div>
+          </ResearchFilterToolbar>
           <p className="text-11 text-tertiary">
             默认不覆盖已有账号密码。勾选后，本次会为表中的已有账号重新生成初始密码，并要求下次登录修改。下载到的是最近一次发放的初始密码，不是用户改密后的当前密码。已有成员未勾选时不能再次纳入；可引用已有导师。MS、Ph.D
-            按学生导入；电话兼容“手机号”。
+            按学生导入；电话兼容“手机号”。学号可留空，填写后将参与唯一性校验。
           </p>
         </>
       )}

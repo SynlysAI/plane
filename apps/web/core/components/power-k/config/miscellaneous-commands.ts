@@ -6,6 +6,7 @@
 
 import { useCallback } from "react";
 import { LeftSidePaneOutline, LinkOutline, SearchOutline } from "@makeplane/propel/icons";
+import { Sparkles } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 // plane imports
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
@@ -15,11 +16,13 @@ import type { TPowerKCommandConfig } from "@/components/power-k/core/types";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { usePowerK } from "@/hooks/store/use-power-k";
+import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
 export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
   // store hooks
   const { toggleSidebar } = useAppTheme();
   const { topNavInputRef, topNavSearchInputRef } = usePowerK();
+  const aiAssistant = useAIAssistant();
   // translation
   const { t } = useTranslation();
 
@@ -27,7 +30,7 @@ export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
     const url = new URL(window.location.href);
     copyTextToClipboard(url.href)
       .then(() => {
-        setToast({
+        return setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("power_k.miscellaneous_actions.copy_current_page_url_toast_success"),
         });
@@ -51,6 +54,21 @@ export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
   }, [topNavInputRef, topNavSearchInputRef]);
 
   return [
+    {
+      id: "toggle_ai_assistant",
+      group: "miscellaneous",
+      type: "action",
+      i18n_title: "aiAssistant.open",
+      icon: Sparkles,
+      // the shortcut itself is handled by a document-level listener in the
+      // assistant root, because power-k skips modifier shortcuts while an
+      // input (the assistant composer) is focused
+      action: () => aiAssistant.toggle(),
+      modifierShortcut: "cmd+j",
+      isEnabled: () => true,
+      isVisible: () => Boolean(aiAssistant.status?.enabled),
+      closeOnSelect: true,
+    },
     {
       id: "toggle_app_sidebar",
       group: "miscellaneous",

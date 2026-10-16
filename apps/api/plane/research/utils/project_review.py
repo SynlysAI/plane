@@ -14,7 +14,8 @@ from django.utils import timezone
 
 from plane.db.models import MentorBinding, OrgUnit, OrgUnitMember, ResearchProjectProfile, Workspace
 from plane.research.utils.acl import models_q_expired
-from plane.research.utils.roles import configured_main_pi_id
+from plane.research.utils.roles import configured_main_pi_id, is_research_admin
+from plane.utils.administrative_projects import user_can_manage_administrative_project
 
 REVIEW_ORG_ROLES = (OrgUnitMember.OrgRole.PI, OrgUnitMember.OrgRole.OWNER)
 
@@ -79,6 +80,8 @@ def research_review_profiles(workspace, user, on_date=None):
         deleted_at__isnull=True,
         project__deleted_at__isnull=True,
     )
+    if is_research_admin(user, workspace.id):
+        return profiles
     if configured_main_pi_id(workspace) == user.id:
         return profiles
     mentee_ids = MentorBinding.objects.filter(
@@ -95,7 +98,7 @@ REVIEW_READER_ROLE = 5
 
 
 def project_member_filters(user, slug, project_id, prefix="project__project_projectmember__"):
-    """返回项目成员过滤条件。研究链只读读者不套用成员条件。
+    """返回项目成员过滤条件，默认行政管理员和科研只读读者免除成员过滤。
 
     Args:
         user: 当前查看者。
@@ -104,9 +107,11 @@ def project_member_filters(user, slug, project_id, prefix="project__project_proj
         prefix: ``ProjectMember`` 关系查询前缀。
 
     Returns:
-        只读读者返回空字典。其他人返回有效成员条件。
+        默认行政管理员和科研只读读者返回空字典，其他人返回有效成员条件。
     """
-    if user_can_review_research_project(user, slug, project_id):
+    if user_can_manage_administrative_project(user, slug, project_id) or user_can_review_research_project(
+        user, slug, project_id
+    ):
         return {}
     return {
         f"{prefix}member": user,

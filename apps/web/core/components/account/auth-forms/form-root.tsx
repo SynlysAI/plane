@@ -44,13 +44,18 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
   const nextPath = searchParams.get("next_path");
   // states
   const [isExistingEmail, setIsExistingEmail] = useState(false);
+  // A mailbox holding a workspace invitation may register without an invite
+  // code, matching the server-side sign-up gate.
+  const [isInvitedEmail, setIsInvitedEmail] = useState(false);
   // hooks
   const { config } = useInstance();
 
   const isSMTPConfigured = config?.is_smtp_configured || false;
   // Closed sign-up is invitation-only in this deployment, so the registration
   // form announces the invite code requirement instead of hiding it until submit.
-  const isInviteOnlySignUp = currentAuthMode === EAuthModes.SIGN_UP && !(config?.enable_signup ?? false);
+  const isWorkspaceInvitation = Boolean(searchParams.get("invitation_id") && searchParams.get("slug"));
+  const isInviteOnlySignUp =
+    currentAuthMode === EAuthModes.SIGN_UP && !(config?.enable_signup ?? false) && !isWorkspaceInvitation;
 
   // submit handler- email verification
   const handleEmailVerification = async (data: IEmailCheckData) => {
@@ -77,6 +82,8 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
           }
         }
         setIsExistingEmail(response.existing);
+        setIsInvitedEmail(response.invited ?? false);
+        return undefined;
       })
       .catch((error) => {
         const errorhandler = authErrorHandler(error?.error_code?.toString(), data?.email || undefined);
@@ -89,13 +96,17 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
     setErrorInfo(undefined);
     setEmail("");
     setAuthStep(EAuthSteps.EMAIL);
-    router.push(currentAuthMode === EAuthModes.SIGN_IN ? `/` : "/sign-up");
+    const params = new URLSearchParams(searchParams);
+    params.delete("error_code");
+    params.delete("email");
+    const pathname = currentAuthMode === EAuthModes.SIGN_IN ? "/" : "/sign-up";
+    router.push(`${pathname}${params.size ? `?${params}` : ""}`);
   };
 
   // generating the unique code
-  const generateEmailUniqueCode = async (email: string): Promise<{ code: string } | undefined> => {
+  const generateEmailUniqueCode = async (targetEmail: string): Promise<{ code: string } | undefined> => {
     if (!isSMTPConfigured) return;
-    const payload = { email: email };
+    const payload = { email: targetEmail };
     return await authService
       .generateUniqueCode(payload)
       .then(() => ({ code: "" }))
@@ -128,6 +139,7 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
         isSMTPConfigured={isSMTPConfigured}
         email={email}
         handleEmailClear={handleEmailClear}
+        isEmailInvited={isInvitedEmail}
         handleAuthStep={(step: EAuthSteps) => {
           if (step === EAuthSteps.UNIQUE_CODE) generateEmailUniqueCode(email);
           setAuthStep(step);

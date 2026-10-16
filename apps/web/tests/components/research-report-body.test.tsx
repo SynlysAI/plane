@@ -6,6 +6,8 @@ import type { TPeriodicReport } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  deleteReport: vi.fn(),
   editorMigrationUpdate: false,
   reports: {} as Record<string, TPeriodicReport>,
   reportHistory: {},
@@ -22,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
+vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
@@ -80,7 +83,6 @@ vi.mock("@/components/editor/document/editor", () => ({
     const initial =
       typeof value === "string" ? value : String((value as { body?: string }).body ?? JSON.stringify(value));
     const [body, setBody] = React.useState(initial);
-    React.useEffect(() => setBody(initial), [initial]);
     React.useImperativeHandle(
       ref,
       () => ({
@@ -203,6 +205,39 @@ afterEach(async () => {
 });
 
 describe("报告详情正文保存与替换", () => {
+  it("从列表缓存进入详情时等待正文，详情加载完成后展示已保存内容", async () => {
+    mocks.reports["report-1"] = { ...report(), draft_content: null };
+    await renderDetail();
+
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("加载中");
+    expect(container.querySelector('textarea[aria-label="正文编辑器"]')).toBeNull();
+    expect(button("保存").disabled).toBe(true);
+    expect(button("提交").disabled).toBe(true);
+    expect(mocks.saveReportDraft).not.toHaveBeenCalled();
+
+    mocks.reports["report-1"] = report();
+    await renderDetail();
+
+    expect(editor().value).toBe("<p>服务器正文</p>");
+    expect(button("保存").disabled).toBe(false);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("已保存");
+  });
+
+  it("未编辑时异步返回的最新正文会重新初始化编辑器", async () => {
+    await renderDetail();
+    mocks.reports["report-1"] = {
+      ...report(),
+      draft_content: {
+        description_json: {},
+        description_html: "<p>保存后的最新正文</p>",
+        description_stripped: "保存后的最新正文",
+      },
+    };
+    await renderDetail();
+
+    expect(editor().value).toBe("<p>保存后的最新正文</p>");
+  });
+
   it("编辑器初始化迁移不会把正文标记为未保存", async () => {
     mocks.editorMigrationUpdate = true;
     await renderDetail();

@@ -13,6 +13,7 @@ from plane.db.models import (
     OrgUnitMember,
     PeriodicReport,
     PeriodicReportReadReceipt,
+    WorkspaceResearchSetting,
 )
 from plane.tests.research_fixtures import (
     add_workspace_member,
@@ -196,6 +197,37 @@ class TestResearchReportReadReceipts:
 
         assert response.status_code == 200
         assert response.json()["count"] == 1
+
+    def test_admin_read_does_not_light_the_mentor_read_badge(self, env):
+        admin_read = env["admin_client"].post(env["read_url"], {}, format="json")
+
+        assert admin_read.status_code == 200
+        assert admin_read.json()["read_count"] == 0
+        assert PeriodicReportReadReceipt.objects.count() == 1
+        assert env["admin_client"].get(env["receipts_url"]).json()["count"] == 1
+
+        author_view = env["student_client"].get(env["detail_url"]).json()
+        assert author_view["read_count"] == 0
+        assert author_view["latest_read_at"] is None
+
+        advisor_read = env["advisor_client"].post(env["read_url"], {}, format="json").json()
+        assert advisor_read["read_count"] == 1
+
+        author_view = env["student_client"].get(env["detail_url"]).json()
+        assert author_view["read_count"] == 1
+        assert parse_datetime(author_view["latest_read_at"]) == parse_datetime(advisor_read["read_at"])
+
+    def test_main_pi_read_lights_the_mentor_read_badge(self, env):
+        pi = make_user(first_name="MainPI", email="mainpi@example.com")
+        add_workspace_member(env["workspace"], pi)
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(main_pi=pi)
+
+        read = client_for(pi).post(env["read_url"], {}, format="json")
+
+        assert read.status_code == 200
+        author_view = env["student_client"].get(env["detail_url"]).json()
+        assert author_view["read_count"] == 1
+        assert author_view["latest_read_at"] is not None
 
     def test_draft_report_without_snapshot_conflicts(self, env):
         PeriodicReport.objects.filter(pk=env["report"]["id"]).update(status="DRAFT", submitted_at=None)

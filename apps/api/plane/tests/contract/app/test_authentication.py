@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from plane.authentication.provider.credentials.magic_code import MagicCodeProvider
 from plane.authentication.rate_limit import AuthenticationThrottle
-from plane.db.models import User
+from plane.db.models import User, Workspace, WorkspaceMemberInvite
 from plane.settings.redis import redis_instance
 from plane.license.models import Instance, InstanceConfiguration
 
@@ -88,6 +88,45 @@ def _reset_authentication_throttle():
     cache.clear()
     yield
     cache.clear()
+
+
+@pytest.mark.contract
+class TestEmailCheckInvitationFlag:
+    """邮箱检查接口应暴露工作区邀请状态，驱动注册表单豁免邀请码。"""
+
+    @pytest.fixture
+    def invited_email_setup(self, db, setup_instance):
+        """创建工作区与一条待处理邀请记录。
+
+        Returns:
+            ``(workspace, invited_email, plain_email)`` 三元组。
+        """
+        owner = User.objects.create(email="invite.owner@example.com", username="invite-owner")
+        workspace = Workspace.objects.create(name="邀请测试工作区", slug="invite-check", owner=owner)
+        invited_email = "invited.member@example.com"
+        WorkspaceMemberInvite.objects.create(
+            workspace=workspace,
+            email=invited_email,
+            token="test-invite-token",
+            role=5,
+        )
+        return workspace, invited_email, "plain.person@example.com"
+
+    def test_invited_email_is_flagged(self, django_client, invited_email_setup):
+        _, invited_email, _ = invited_email_setup
+        response = django_client.post(
+            "/auth/email-check/", data=json.dumps({"email": invited_email}), content_type="application/json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["invited"] is True
+
+    def test_plain_email_is_not_flagged(self, django_client, invited_email_setup):
+        _, _, plain_email = invited_email_setup
+        response = django_client.post(
+            "/auth/email-check/", data=json.dumps({"email": plain_email}), content_type="application/json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["invited"] is False
 
 
 @pytest.mark.contract

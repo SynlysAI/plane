@@ -19,3 +19,16 @@ export function projectIsVisibleInSidebar(
     workspace === workspaceId && (!!project.member_role || project.research_access === "review") && !project.archived_at
   );
 }
+
+/**
+ * 判断项目是否允许自行加入；行政项目必须由管理员配置成员。
+ * @param project 项目类型、成员角色和归档状态。
+ * @returns 仅未加入且未归档的科研项目允许自行加入。
+ */
+export function projectCanBeJoined(project: {
+  is_research_project?: boolean;
+  member_role?: unknown;
+  archived_at?: string | null;
+}) {
+  return project.is_research_project === true && !project.member_role && !project.archived_at;
+}
