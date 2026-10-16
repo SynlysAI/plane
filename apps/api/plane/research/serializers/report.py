@@ -11,6 +11,8 @@ from plane.db.models import (
     ReportReviewLog,
 )
 
+from plane.research.utils.reports import supervisor_reader_ids
+
 from .org import ResearchUserSerializer
 
 
@@ -191,11 +193,24 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
         receipts = self._latest_read_receipts(obj)
         return any(receipt.reader_id == request.user.id for receipt in receipts)
 
+    def _supervisor_read_receipts(self, obj):
+        """Receipts from the author's mentors and the main PI — the only
+        readers that light the author-facing mentor-read badge."""
+        receipts = self._latest_read_receipts(obj)
+        if not receipts:
+            return []
+        supervisor_ids = supervisor_reader_ids(
+            obj,
+            self.context.get("actor_context"),
+            mentor_cache=self.context.get("mentor_cache"),
+        )
+        return [receipt for receipt in receipts if receipt.reader_id in supervisor_ids]
+
     def get_read_count(self, obj):
-        return len(self._latest_read_receipts(obj))
+        return len(self._supervisor_read_receipts(obj))
 
     def get_latest_read_at(self, obj):
-        receipts = self._latest_read_receipts(obj)
+        receipts = self._supervisor_read_receipts(obj)
         return max((receipt.read_at for receipt in receipts), default=None)
 
     def get_official_content(self, obj):

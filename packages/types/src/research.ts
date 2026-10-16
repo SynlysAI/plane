@@ -618,9 +618,9 @@ export type TPeriodicReport = {
   latest_official_version: number | null;
   /** Whether the current viewer has read the latest official snapshot. */
   has_read?: boolean;
-  /** Distinct read receipts attached to the latest official snapshot. */
+  /** Read receipts from the author's mentors and the workspace main PI on the latest official snapshot. */
   read_count?: number;
-  /** Latest read time for the latest official snapshot. */
+  /** Latest mentor/main-PI read time for the latest official snapshot. */
   latest_read_at?: string | null;
   /** Frozen submitted body returned to readers other than the author. */
   official_content: TReportOfficialContent | null;

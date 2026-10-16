@@ -74,6 +74,7 @@ class ActorContext:
     is_workspace_admin: bool = False
     is_workspace_member: bool = False
     is_main_pi: bool = False
+    main_pi_id: object = None
     unit_ids: frozenset = frozenset()
     managing_unit_ids: frozenset = frozenset()
     advises: frozenset = frozenset()
@@ -199,6 +200,7 @@ def build_actor_context(actor, workspace_id, on_date=None) -> ActorContext:
         is_workspace_admin=is_research_admin(actor, workspace_id),
         is_workspace_member=bool(membership),
         is_main_pi=main_pi_id == actor.id,
+        main_pi_id=main_pi_id,
         unit_ids=frozenset(active_org_units_for(actor, workspace_id, on_date)),
         managing_unit_ids=frozenset(managing_org_units_for(actor, workspace_id, on_date)),
         advises=frozenset(advises),

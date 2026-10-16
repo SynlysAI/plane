@@ -80,7 +80,7 @@ def report_queryset(workspace):
     )
 
 
-def serialize_report(report, request, context=None, *, include_draft_content=False):
+def serialize_report(report, request, context=None, *, include_draft_content=False, mentor_cache=None):
     context = context if context is not None else build_actor_context(request.user, report.workspace_id)
     return PeriodicReportSerializer(
         report,
@@ -88,6 +88,7 @@ def serialize_report(report, request, context=None, *, include_draft_content=Fal
             "request": request,
             "actor_context": context,
             "include_draft_content": include_draft_content,
+            "mentor_cache": mentor_cache,
         },
     ).data
 
@@ -361,10 +362,13 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                 visible_queryset = visible_queryset.filter(review_scope)
         elif scope != "all":
             return Response({"error_code": "invalid_scope"}, status=400)
+        mentor_cache = {}
         return self.paginate(
             request=request,
             queryset=visible_queryset,
-            on_results=lambda reports: [serialize_report(report, request, context) for report in reports],
+            on_results=lambda reports: [
+                serialize_report(report, request, context, mentor_cache=mentor_cache) for report in reports
+            ],
             default_per_page=50,
             max_per_page=100,
         )

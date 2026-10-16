@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from plane.db.models import ReportAccessGrant
-from plane.research.utils.acl import ResearchResource
+from plane.research.utils.acl import ResearchResource, direct_advisor_ids
 
 # Only the transitions drawn in the PRD state diagram are allowed (P0-RPT-06).
 STATE_TRANSITIONS = {
@@ -62,6 +62,24 @@ def report_resource(report) -> ResearchResource:
         is_draft=report.submitted_at is None,
         grants=active_grants(report),
     )
+
+
+def supervisor_reader_ids(report, actor_context, mentor_cache=None):
+    """Readers whose receipts light the author-facing mentor-read badge.
+
+    Only the report author's active mentors and the workspace main PI count;
+    other readers (e.g. workspace admins) are still recorded, they just stay
+    invisible to the badge. ``mentor_cache`` is an optional per-request
+    ``owner_id -> mentor ids`` dict so list serialisation avoids per-row queries.
+    """
+    cache = mentor_cache if mentor_cache is not None else {}
+    owner_id = report.owner_id
+    if owner_id not in cache:
+        cache[owner_id] = direct_advisor_ids(owner_id, report.workspace_id)
+    reader_ids = set(cache[owner_id])
+    if actor_context is not None and actor_context.main_pi_id is not None:
+        reader_ids.add(actor_context.main_pi_id)
+    return reader_ids
 
 
 def visible_reports_queryset(queryset, context):
