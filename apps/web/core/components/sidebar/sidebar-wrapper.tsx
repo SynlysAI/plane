@@ -74,7 +74,10 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
             "overflow-x-hidden overflow-y-auto",
             fillsAvailableHeight ? "min-h-0 w-full flex-1" : "size-full"
           )}
-          viewportClassName="flex h-full w-full flex-col gap-3 overflow-x-hidden overflow-y-auto px-3 pt-3 pb-0.5"
+          viewportClassName={cn(
+            "flex h-full w-full flex-col overflow-x-hidden overflow-y-auto px-3 pt-3 pb-0.5",
+            fillsAvailableHeight ? "gap-0" : "gap-3"
+          )}
         >
           {children}
         </ScrollArea>

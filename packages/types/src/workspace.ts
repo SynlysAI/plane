@@ -49,6 +49,7 @@ export interface IWorkspaceLite {
 
 export interface IWorkspaceMemberInvitation {
   accepted: boolean;
+  display_name?: string;
   email: string;
   id: string;
   message: string;
@@ -56,6 +57,8 @@ export interface IWorkspaceMemberInvitation {
   role: TUserPermissions;
   token: string;
   invite_link: string;
+  research_profile_category?: string;
+  research_profile_enabled?: boolean;
   workspace: {
     id: string;
     logo_url: string;
@@ -65,7 +68,29 @@ export interface IWorkspaceMemberInvitation {
 }
 
 export interface IWorkspaceBulkInviteFormData {
-  emails: { email: string; role: TUserPermissions }[];
+  emails: {
+    display_name?: string;
+    email: string;
+    research_profile_category?: string;
+    research_profile_enabled?: boolean;
+    role: TUserPermissions;
+  }[];
+}
+
+export interface IWorkspaceMemberInvitationImportResult {
+  created: number;
+  invitations: IWorkspaceMemberInvitation[];
+  message: string;
+}
+
+export interface IWorkspaceMemberInvitationImportError {
+  error?: string;
+  rows?: {
+    email?: string;
+    message: string;
+    name?: string;
+    row_number?: number | null;
+  }[];
 }
 
 export type Properties = {

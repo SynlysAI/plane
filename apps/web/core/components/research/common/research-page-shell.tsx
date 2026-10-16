@@ -41,6 +41,11 @@ type Props = {
    * never disagree. Project scoped pages omit it: they stay on the project ACL.
    */
   navKey?: string;
+  /**
+   * Management tab to highlight when the tab strip is not bound to a backend
+   * capability key (feedback is gated by identity flags, not by NAV_KEYS).
+   */
+  tabKey?: string;
   /** Restricts the page to research configuration rights. */
   adminOnly?: boolean;
   /** Platform settings must stay reachable while the workspace switch is off. */
@@ -49,7 +54,16 @@ type Props = {
   children: ReactNode;
 };
 
-const MANAGEMENT_NAV_KEYS = new Set(["org", "system", "templates", "identity", "platform", "audit", "integrations"]);
+const MANAGEMENT_NAV_KEYS = new Set([
+  "org",
+  "system",
+  "templates",
+  "identity",
+  "platform",
+  "audit",
+  "integrations",
+  "feedback",
+]);
 
 /**
  * Shared shell for research pages: resolves the caller's research identity once
@@ -62,6 +76,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   metadata,
   section = "reports",
   navKey,
+  tabKey,
   adminOnly = false,
   allowDisabled = false,
   actions,
@@ -116,7 +131,9 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   if (!workspaceSlug) return null;
 
   const sectionEnabled = identity.sections?.[section] ?? identity.sections?.reports;
-  const showManagementTabs = research.isIaV2Enabled && navKey !== undefined && MANAGEMENT_NAV_KEYS.has(navKey);
+  const managementTabKey = tabKey ?? navKey;
+  const showManagementTabs =
+    research.isIaV2Enabled && managementTabKey !== undefined && MANAGEMENT_NAV_KEYS.has(managementTabKey);
 
   // Switch off, disabled section or a level that does not open this surface:
   // fall back to the workspace home (P0-UI-07). Pages that stay reachable while
@@ -153,7 +170,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
             {actions}
           </div>
         </div>
-        {showManagementTabs && <ResearchManagementTabs currentKey={navKey} />}
+        {showManagementTabs && <ResearchManagementTabs currentKey={managementTabKey} />}
         <div className="flex-1 overflow-hidden">{children}</div>
       </div>
     </>

@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
@@ -12,7 +13,7 @@ import { BoxesOutline, CloseOutline, TickOutline, UserOutline } from "@makeplane
 import { LogoSpinner } from "@/components/common/logo-spinner";
 import { EmptySpace, EmptySpaceItem } from "@/components/ui/empty-space";
 // constants
-import { WORKSPACE_INVITATION } from "@plane/constants";
+import { API_BASE_URL, WORKSPACE_INVITATION } from "@plane/constants";
 // helpers
 import { EPageTypes } from "@/helpers/authentication.helper";
 // hooks
@@ -21,12 +22,14 @@ import { useAppRouter } from "@/hooks/use-app-router";
 // wrappers
 import { AuthenticationWrapper } from "@/lib/wrappers/authentication-wrapper";
 import { WorkspaceService } from "@/services/workspace.service";
+import { AuthService } from "@/services/auth.service";
 // services
 
 // service initialization
 const workspaceService = new WorkspaceService();
+const authService = new AuthService();
 
-function WorkspaceInvitationPage() {
+const WorkspaceInvitationContent = observer(function WorkspaceInvitationContent() {
   // router
   const router = useAppRouter();
   // query params
@@ -36,88 +39,125 @@ function WorkspaceInvitationPage() {
   const token = searchParams.get("token");
   // store hooks
   const { data: currentUser } = useUser();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const { data: invitationDetail, error } = useSWR(
+  const { data: invitationDetail, error: invitationError } = useSWR(
     invitation_id && slug && WORKSPACE_INVITATION(invitation_id.toString()),
     invitation_id && slug
       ? () => workspaceService.getWorkspaceInvitation(slug.toString(), invitation_id.toString())
       : null
   );
 
-  const handleAccept = () => {
-    if (!invitationDetail) return;
-    workspaceService
-      .joinWorkspace(invitationDetail.workspace.slug, invitationDetail.id, {
-        accepted: true,
-        token: token,
-      })
-      .then(() => {
-        if (invitationDetail.email === currentUser?.email) {
-          return router.push(`/${invitationDetail.workspace.slug}`);
-        } else {
-          return router.push("/");
-        }
-      })
-      .catch((err: unknown) => console.error(err));
+  const invitationParams = new URLSearchParams();
+  if (invitation_id) invitationParams.set("invitation_id", invitation_id);
+  if (slug) invitationParams.set("slug", slug);
+  if (token) invitationParams.set("token", token);
+  const invitationPath = `/workspace-invitations/?${invitationParams}`;
+  const authParams = new URLSearchParams({
+    email: invitationDetail?.email ?? "",
+    invitation_id: invitation_id ?? "",
+    slug: slug ?? "",
+    next_path: invitationPath,
+  });
+  const signupPath = `/sign-up?${authParams}`;
+  const isMatchingUser = currentUser?.email?.toLowerCase() === invitationDetail?.email.toLowerCase();
+
+  useEffect(() => {
+    if (
+      invitation_id &&
+      slug &&
+      !invitationError &&
+      invitationDetail &&
+      !invitationDetail.responded_at &&
+      token &&
+      !currentUser?.id
+    ) {
+      router.replace(signupPath);
+    }
+  }, [currentUser, invitationDetail, invitationError, invitation_id, slug, token, router, signupPath]);
+
+  const handleInvitation = async (accepted: boolean) => {
+    if (!invitationDetail || !token || !currentUser?.id || !isMatchingUser || isSubmitting) return;
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await workspaceService.joinWorkspace(invitationDetail.workspace.slug, invitationDetail.id, { accepted, token });
+      router.push(accepted ? `/${invitationDetail.workspace.slug}` : "/");
+    } catch (error: unknown) {
+      console.error("Failed to respond to workspace invitation", error);
+      setActionError("Unable to respond to this invitation. Please try again.");
+      setIsSubmitting(false);
+    }
   };
 
-  const handleReject = () => {
-    if (!invitationDetail || !token) return;
-    void workspaceService
-      .joinWorkspace(invitationDetail.workspace.slug, invitationDetail.id, {
-        accepted: false,
-        token: token,
-      })
-      .then(() => {
-        return router.push("/");
-      })
-      .catch((err: unknown) => console.error(err));
+  const handleSwitchAccount = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await authService.signOut(API_BASE_URL, invitationPath);
+    } catch (error: unknown) {
+      console.error("Failed to switch invitation account", error);
+      setActionError("Unable to sign out. Please try again.");
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <AuthenticationWrapper pageType={EPageTypes.PUBLIC}>
-      <div className="flex h-full w-full flex-col items-center justify-center px-3">
-        {invitationDetail && !invitationDetail.responded_at ? (
-          error ? (
-            <div className="shadow-2xl flex w-full flex-col space-y-4 rounded-sm border border-subtle bg-surface-1 px-4 py-8 text-center md:w-1/3">
-              <h2 className="text-18 uppercase">INVITATION NOT FOUND</h2>
-            </div>
-          ) : (
-            <EmptySpace
-              title={`You have been invited to ${invitationDetail.workspace.name}`}
-              description="Your workspace is where you'll create projects, collaborate on your work items, and organize different streams of work."
-            >
-              <EmptySpaceItem Icon={TickOutline} title="Accept" action={handleAccept} />
-              <EmptySpaceItem Icon={CloseOutline} title="Ignore" action={handleReject} />
-            </EmptySpace>
-          )
-        ) : error || invitationDetail?.responded_at ? (
-          invitationDetail?.accepted ? (
-            <EmptySpace
-              title={`You are already a member of ${invitationDetail.workspace.name}`}
-              description="Your workspace is where you'll create projects, collaborate on your work items, and organize different streams of work."
-            >
-              <EmptySpaceItem Icon={BoxesOutline} title="Continue to home" href="/" />
-            </EmptySpace>
-          ) : (
-            <EmptySpace
-              title="This invitation link is not active anymore."
-              description="Your workspace is where you'll create projects, collaborate on your work items, and organize different streams of work."
-              link={{ text: "Or start from an empty project", href: "/" }}
-            >
-              {!currentUser ? (
-                <EmptySpaceItem Icon={UserOutline} title="Sign in to continue" href="/" />
-              ) : (
-                <EmptySpaceItem Icon={BoxesOutline} title="Continue to home" href="/" />
-              )}
-            </EmptySpace>
-          )
+    <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 py-8 break-words">
+      {actionError && (
+        <p role="alert" className="w-full max-w-lg text-13 text-danger-primary">
+          {actionError}
+        </p>
+      )}
+      {!invitation_id || !slug || !token || invitationError || invitationDetail?.responded_at ? (
+        <EmptySpace
+          title="This invitation link is not active anymore."
+          description="Please ask your workspace administrator for a new invitation link."
+        >
+          <EmptySpaceItem Icon={BoxesOutline} title="Continue to home" href="/" />
+        </EmptySpace>
+      ) : invitationDetail ? (
+        !currentUser?.id ? (
+          <LogoSpinner />
+        ) : !isMatchingUser ? (
+          <EmptySpace
+            title={`Join ${invitationDetail.workspace.name}`}
+            description={`This invitation is for ${invitationDetail.email}. You are signed in as ${currentUser.email}.`}
+          >
+            <EmptySpaceItem
+              Icon={UserOutline}
+              title={isSubmitting ? "Signing out..." : "Switch account to continue"}
+              action={() => void handleSwitchAccount()}
+            />
+          </EmptySpace>
         ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <LogoSpinner />
-          </div>
-        )}
-      </div>
+          <EmptySpace
+            title={`You have been invited to ${invitationDetail.workspace.name}`}
+            description={invitationDetail.email}
+          >
+            <EmptySpaceItem
+              Icon={TickOutline}
+              title={isSubmitting ? "Please wait..." : "Accept"}
+              action={() => void handleInvitation(true)}
+            />
+            <EmptySpaceItem Icon={CloseOutline} title="Ignore" action={() => void handleInvitation(false)} />
+          </EmptySpace>
+        )
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <LogoSpinner />
+        </div>
+      )}
+    </div>
+  );
+});
+
+function WorkspaceInvitationPage() {
+  return (
+    <AuthenticationWrapper pageType={EPageTypes.PUBLIC}>
+      <WorkspaceInvitationContent />
     </AuthenticationWrapper>
   );
 }

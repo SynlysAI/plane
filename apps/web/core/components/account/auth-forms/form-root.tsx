@@ -53,7 +53,9 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
   const isSMTPConfigured = config?.is_smtp_configured || false;
   // Closed sign-up is invitation-only in this deployment, so the registration
   // form announces the invite code requirement instead of hiding it until submit.
-  const isInviteOnlySignUp = currentAuthMode === EAuthModes.SIGN_UP && !(config?.enable_signup ?? false);
+  const isWorkspaceInvitation = Boolean(searchParams.get("invitation_id") && searchParams.get("slug"));
+  const isInviteOnlySignUp =
+    currentAuthMode === EAuthModes.SIGN_UP && !(config?.enable_signup ?? false) && !isWorkspaceInvitation;
 
   // submit handler- email verification
   const handleEmailVerification = async (data: IEmailCheckData) => {
@@ -94,7 +96,11 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
     setErrorInfo(undefined);
     setEmail("");
     setAuthStep(EAuthSteps.EMAIL);
-    router.push(currentAuthMode === EAuthModes.SIGN_IN ? `/` : "/sign-up");
+    const params = new URLSearchParams(searchParams);
+    params.delete("error_code");
+    params.delete("email");
+    const pathname = currentAuthMode === EAuthModes.SIGN_IN ? "/" : "/sign-up";
+    router.push(`${pathname}${params.size ? `?${params}` : ""}`);
   };
 
   // generating the unique code

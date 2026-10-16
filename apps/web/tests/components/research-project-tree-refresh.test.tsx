@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React, { act, useState } from "react";
+import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { observable, runInAction } from "mobx";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -105,13 +105,6 @@ vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({ researchProjects: mocks.researchProjects }),
 }));
 
-vi.mock("@/hooks/use-local-storage", () => ({
-  default: <T,>(_key: string, initialValue: T) => {
-    const [value, setValue] = useState<T>(initialValue);
-    return { storedValue: value, setValue };
-  },
-}));
-
 vi.mock("@/services/research/navigation.service", () => ({
   ResearchNavigationService: class {
     getTree = mocks.getTree;
@@ -145,6 +138,7 @@ function TreeHarness() {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -208,4 +202,89 @@ it("labels the default administrative organization as public without member mana
 
   expect(container.textContent).toContain("公共");
   expect(container.textContent).not.toContain("成员管理");
+});
+
+it("indents public organization projects inside the hierarchy container", async () => {
+  mocks.getAdministrativeOrganizations.mockReset().mockImplementation(async () => [
+    {
+      id: "public-id",
+      name: "公共",
+      is_default: true,
+      can_manage: false,
+      project_ids: ["project-1"],
+      members: [],
+    },
+    {
+      id: "office-id",
+      name: "行政办公室",
+      is_default: false,
+      can_manage: false,
+      project_ids: ["project-1"],
+      members: [],
+    },
+  ]);
+  await act(async () => root.render(<TreeHarness />));
+  await act(async () => undefined);
+
+  const group = container.querySelector('[role="group"][aria-label="公共"]');
+  const namedGroup = container.querySelector('[role="group"][aria-label="行政办公室"]');
+  expect(group).not.toBeNull();
+  expect(namedGroup).not.toBeNull();
+  expect(group?.className).toBe(namedGroup?.className);
+  expect(group?.className).toContain("ml-3");
+  expect(group?.className).toContain("border-l");
+  expect(group?.textContent).toContain("test1");
+});
+
+it.each([
+  { name: "行政办公室", hasProjects: true },
+  { name: "公共", hasProjects: true },
+  { name: "行政办公室", hasProjects: false },
+  { name: "公共", hasProjects: false },
+])("toggles $name independently and restores its state (has projects: $hasProjects)", async ({ name, hasProjects }) => {
+  mocks.getAdministrativeOrganizations.mockResolvedValue([
+    {
+      id: "public-id",
+      name: "公共",
+      is_default: true,
+      can_manage: false,
+      project_ids: hasProjects ? ["project-1"] : [],
+      members: [],
+    },
+    {
+      id: "office-id",
+      name: "行政办公室",
+      is_default: false,
+      can_manage: false,
+      project_ids: hasProjects ? ["project-1"] : [],
+      members: [],
+    },
+  ]);
+  await act(async () => root.render(<TreeHarness />));
+
+  const otherName = name === "公共" ? "行政办公室" : "公共";
+  const toggle = container.querySelector<HTMLButtonElement>(`button[aria-label="收起${name}"]`);
+  expect(toggle).not.toBeNull();
+  expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+
+  await act(async () => toggle?.click());
+
+  expect(toggle?.getAttribute("aria-label")).toBe(`展开${name}`);
+  expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+  expect(container.querySelector(`[role="group"][aria-label="${name}"]`)).toBeNull();
+  expect(container.querySelector(`[role="group"][aria-label="${otherName}"]`)).not.toBeNull();
+
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="收起行政项目"]')?.click());
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="展开行政项目"]')?.click());
+  expect(container.querySelector(`button[aria-label="展开${name}"]`)).not.toBeNull();
+
+  await act(async () => root.render(null));
+  await act(async () => root.render(<TreeHarness />));
+  expect(container.querySelector(`button[aria-label="展开${name}"]`)).not.toBeNull();
+  expect(container.querySelector(`[role="group"][aria-label="${otherName}"]`)).not.toBeNull();
+
+  await act(async () => container.querySelector<HTMLButtonElement>(`button[aria-label="展开${name}"]`)?.click());
+  const group = container.querySelector(`[role="group"][aria-label="${name}"]`);
+  expect(group).not.toBeNull();
+  expect(group?.querySelectorAll("a").length).toBe(hasProjects ? 1 : 0);
 });

@@ -36,6 +36,8 @@ from plane.app.views import (
     WorkspaceHomePreferenceViewSet,
     WorkspaceStickyViewSet,
     WorkspaceUserPreferenceViewSet,
+    WorkspaceMemberInvitationImportEndpoint,
+    WorkspaceMemberInvitationImportTemplateEndpoint,
 )
 
 
@@ -71,6 +73,16 @@ urlpatterns = [
         "workspaces/<str:slug>/invitations/<uuid:pk>/",
         WorkspaceInvitationsViewset.as_view({"delete": "destroy", "get": "retrieve", "patch": "partial_update"}),
         name="workspace-invitations",
+    ),
+    path(
+        "workspaces/<str:slug>/invitations/import/template/",
+        WorkspaceMemberInvitationImportTemplateEndpoint.as_view(),
+        name="workspace-member-invitation-import-template",
+    ),
+    path(
+        "workspaces/<str:slug>/invitations/import/",
+        WorkspaceMemberInvitationImportEndpoint.as_view(),
+        name="workspace-member-invitation-import",
     ),
     # user workspace invitations
     path(

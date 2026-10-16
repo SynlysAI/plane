@@ -235,11 +235,14 @@ class WorkspaceMember(BaseModel):
 class WorkspaceMemberInvite(BaseModel):
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="workspace_member_invite")
     email = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=255, blank=True, default="")
     accepted = models.BooleanField(default=False)
     token = models.CharField(max_length=255)
     message = models.TextField(null=True)
     responded_at = models.DateTimeField(null=True)
     role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, default=5)
+    research_profile_enabled = models.BooleanField(default=False)
+    research_profile_category = models.CharField(max_length=16, blank=True, default="")
 
     class Meta:
         unique_together = ["email", "workspace", "deleted_at"]

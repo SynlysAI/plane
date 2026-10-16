@@ -211,7 +211,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         <input type="hidden" name="csrfmiddlewaretoken" />
         <input type="hidden" value={passwordFormData.email} name="email" />
         {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
-        {mode === EAuthModes.SIGN_UP && (
+        {mode === EAuthModes.SIGN_UP && !isEmailInvited && (
           <div className="space-y-1">
             <label htmlFor="invite_code" className="text-13 font-medium text-tertiary">
               {t("auth.common.invite_code.label")}

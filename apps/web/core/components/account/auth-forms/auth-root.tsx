@@ -39,6 +39,7 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
   const invitation_id = searchParams.get("invitation_id");
   const workspaceSlug = searchParams.get("slug");
   const error_code = searchParams.get("error_code");
+  const isWorkspaceInvitation = /^\/workspace-invitations\/?\?/.test(searchParams.get("next_path") ?? "");
   // props
   const { authMode: currentAuthMode } = props;
   // states
@@ -65,7 +66,7 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
         // password error handler
         if ([EAuthenticationErrorCodes.AUTHENTICATION_FAILED_SIGN_UP].includes(errorhandler.code)) {
           setAuthMode(EAuthModes.SIGN_UP);
-          setAuthStep(EAuthSteps.PASSWORD);
+          setAuthStep(isWorkspaceInvitation ? EAuthSteps.EMAIL : EAuthSteps.PASSWORD);
         }
         // A registration refused for a missing/unusable invite code has to send
         // the user back to the signup form (invite code field included), not to
@@ -77,7 +78,7 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
           ].includes(errorhandler.code)
         ) {
           setAuthMode(EAuthModes.SIGN_UP);
-          setAuthStep(EAuthSteps.PASSWORD);
+          setAuthStep(isWorkspaceInvitation ? EAuthSteps.EMAIL : EAuthSteps.PASSWORD);
         }
         if ([EAuthenticationErrorCodes.AUTHENTICATION_FAILED_SIGN_IN].includes(errorhandler.code)) {
           setAuthMode(EAuthModes.SIGN_IN);
@@ -110,7 +111,7 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
         setErrorInfo(errorhandler);
       }
     }
-  }, [error_code, authMode]);
+  }, [error_code, authMode, isWorkspaceInvitation]);
 
   if (!authMode) return <></>;
 
@@ -155,10 +156,10 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
           authStep={authStep}
           authMode={authMode}
           email={email}
-          setEmail={(email) => setEmail(email)}
-          setAuthMode={(authMode) => setAuthMode(authMode)}
-          setAuthStep={(authStep) => setAuthStep(authStep)}
-          setErrorInfo={(errorInfo) => setErrorInfo(errorInfo)}
+          setEmail={(nextEmail) => setEmail(nextEmail)}
+          setAuthMode={(nextAuthMode) => setAuthMode(nextAuthMode)}
+          setAuthStep={(nextAuthStep) => setAuthStep(nextAuthStep)}
+          setErrorInfo={(nextErrorInfo) => setErrorInfo(nextErrorInfo)}
           currentAuthMode={currentAuthMode}
         />
       )}

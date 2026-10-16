@@ -422,7 +422,8 @@ it("主 PI 进入管理视图，使用管理范围读取并更新状态", async 
     updated_at: "2026-10-08T02:00:00Z",
   });
   await renderManagementPage();
-  expect(container.querySelector("h1")?.textContent).toBe("反馈管理");
+  // 页面标题由 ResearchPageShell 统一渲染，管理视图内部不再重复标题与视图页签。
+  expect(container.querySelector("h1")).toBeNull();
   expect(container.querySelector('[role="tablist"]')).toBeNull();
   expect(container.textContent).toContain("选择左侧任意反馈后");
   expect(mocks.get).toHaveBeenCalledWith(

@@ -56,10 +56,13 @@ export const useWorkbenchChat = (workspaceSlug: string, chainNodeId: string | nu
     setSections((previous) => {
       if (previous.length === 0) return previous;
       const next = [...previous];
-      const current = next[next.length - 1];
+      const lastIndex = next.length - 1;
+      const current = next[lastIndex];
       // merge only this section's events; user messages are hash-only on the
       // server, so event-derived user placeholders are dropped
-      current.items = mergeAgentMessages(events.slice(current.startEventCount)).filter((item) => item.kind !== "user");
+      const items = mergeAgentMessages(events.slice(current.startEventCount)).filter((item) => item.kind !== "user");
+      // replace the section object instead of mutating it — the array spread alone keeps the old reference
+      next[lastIndex] = { ...current, items };
       return next;
     });
   }, []);

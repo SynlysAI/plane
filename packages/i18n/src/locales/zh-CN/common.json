@@ -896,6 +896,7 @@
       "timeline": "时间线",
       "dashboard": "科研概览",
       "system": "系统管理",
+      "feedback": "反馈管理",
       "back_to_projects": "返回项目列表",
       "back_to_overview": "返回科研总览"
     },
@@ -1807,6 +1808,7 @@
       }
     },
     "feedback": {
+      "management_description": "按状态、分类、模块与时间定位反馈，右侧保留完整提交快照。",
       "draft_saved": {
         "title": "草稿已保存",
         "message": "报告正文已更新，可以继续编辑或提交。"

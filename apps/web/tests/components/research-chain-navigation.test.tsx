@@ -317,15 +317,14 @@ it("collapses research to the IA v2 project channels when IA v2 is enabled", asy
 
   const links = [...container.querySelectorAll("a")].map((link) => link.getAttribute("href"));
   expect(links).toEqual([
-    "/lab/research/settings",
-    "/lab/research/approvals",
     "/lab/research/chains",
     "/lab/research/chains/chain-1?tab=overview",
     "/lab/projects",
     "/lab/projects/admin-1/issues",
   ]);
   expect(container.textContent).toContain("科研项目");
-  expect(container.textContent).toContain("审批中心");
+  expect(container.textContent).not.toContain("审批中心");
+  expect(container.querySelector('a[href="/lab/research/settings"]')).toBeNull();
   expect(container.textContent).toContain("行政项目");
   expect(container.textContent).toContain("重点课题");
   expect(container.textContent).toContain("综合保障");
@@ -338,7 +337,7 @@ it("collapses research to the IA v2 project channels when IA v2 is enabled", asy
   expect(container.querySelectorAll("a[href='/lab/projects/admin-1/issues']")).toHaveLength(1);
 });
 
-it("shows the management destination only for callers with a management tab", async () => {
+it("keeps global destinations out of the project tree block", async () => {
   setSwitches(true, true);
   const originalCanSee = mocks.research.canSee;
   mocks.research.canSee = (key: string) => key === "overview" || key === "research_chain" || key === "approvals";
@@ -346,6 +345,7 @@ it("shows the management destination only for callers with a management tab", as
   mocks.research.canSee = originalCanSee;
 
   expect(container.querySelector('a[href="/lab/research/settings"]')).toBeNull();
+  expect(container.querySelector('a[href="/lab/research/approvals"]')).toBeNull();
 });
 
 it("短科研列表使用自然高度，让行政项目紧跟其后", async () => {
