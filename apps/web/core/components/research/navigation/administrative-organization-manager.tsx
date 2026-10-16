@@ -53,7 +53,8 @@ export function AdministrativeOrganizationManager({
   const [isSaving, setIsSaving] = useState(false);
   const sortedAssignableMembers = useMemo(
     () =>
-      [...assignableMembers].toSorted((a, b) =>
+      // oxlint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
+      [...assignableMembers].sort((a, b) =>
         (a.name || a.email).localeCompare(b.name || b.email, ["zh-Hans", "en"], {
           sensitivity: "base",
         })
@@ -166,17 +167,20 @@ export function AdministrativeOrganizationManager({
           <p className="mt-1 text-12 text-secondary">
             组织成员继承组织内项目的只读权限；项目编辑权限仍由项目角色决定。
           </p>
-          <label htmlFor="organization-member" className="mt-4 flex flex-col gap-1 text-12 text-secondary">
-            工作区成员
+          <div
+            className="mt-4 flex flex-col gap-1 text-12 text-secondary"
+            role="group"
+            aria-labelledby="organization-member-label"
+          >
+            <span id="organization-member-label">工作区成员</span>
             <Combobox
               multiSelect
               value={selectedMembers}
               onValueChange={(value) => setSelectedMembers(value as string[])}
             >
               <Combobox.Button
-                id="organization-member"
                 className="flex w-full items-center justify-between rounded-md border border-subtle bg-surface-1 px-2 py-2 text-left text-13 text-primary"
-                aria-label="选择工作区成员"
+                aria-labelledby="organization-member-label"
               >
                 <span className="truncate">
                   {selectedMembers.length > 0 ? `已选择 ${selectedMembers.length} 位成员` : "选择成员"}
@@ -212,7 +216,7 @@ export function AdministrativeOrganizationManager({
               </Combobox.Options>
             </Combobox>
             <span className="text-11 text-tertiary">可搜索并选择多个成员。</span>
-          </label>
+          </div>
           <label htmlFor="organization-member-role" className="mt-3 flex flex-col gap-1 text-12 text-secondary">
             组织角色
             <select
