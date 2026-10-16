@@ -1,5 +1,6 @@
 /** Copyright (c) 2023-present Plane Software, Inc. and contributors. SPDX-License-Identifier: AGPL-3.0-only */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import type { TAccountProvisioningOptions, TUserImportBatch, TUserImportBatchSummary } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { ListFilterField, ListFilterInput, ListFilterCheckbox } from "@plane/ui";
@@ -16,6 +17,11 @@ const statuses: Record<string, string> = {
   PENDING: "待处理",
   FAILED: "导入失败",
 };
+
+const RESEARCH_IMPORT_TEMPLATES = {
+  students: "/templates/research-student-import-template.xlsx",
+  advisors: "/templates/research-advisor-mapping-template.xlsx",
+} as const;
 
 export function ResearchUserImportPanel({
   workspaceSlug,
@@ -121,9 +127,31 @@ export function ResearchUserImportPanel({
             </button>
           ))}
         </ResearchFilterToolbar>
-        <a className="text-12 text-accent-primary" href={service.getAccountInitialPasswordsUrl(workspaceSlug)}>
-          下载全部初始密码
-        </a>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {mode === "bulk" && (
+            <>
+              <a
+                href={RESEARCH_IMPORT_TEMPLATES.students}
+                download="科研身份学生导入模板.xlsx"
+                className="inline-flex h-8 items-center gap-1.5 text-12 text-accent-primary hover:underline"
+              >
+                <Download className="size-3.5 shrink-0" aria-hidden="true" />
+                下载学生名册模板
+              </a>
+              <a
+                href={RESEARCH_IMPORT_TEMPLATES.advisors}
+                download="科研身份导师映射模板.xlsx"
+                className="inline-flex h-8 items-center gap-1.5 text-12 text-accent-primary hover:underline"
+              >
+                <Download className="size-3.5 shrink-0" aria-hidden="true" />
+                下载导师映射模板
+              </a>
+            </>
+          )}
+          <a className="text-12 text-accent-primary" href={service.getAccountInitialPasswordsUrl(workspaceSlug)}>
+            下载全部初始密码
+          </a>
+        </div>
       </div>
       {mode === "single" ? (
         <fieldset disabled={reviewBusy}>

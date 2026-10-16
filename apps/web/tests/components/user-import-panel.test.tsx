@@ -543,4 +543,26 @@ describe("member import errors", () => {
     await act(async () => button("上传并预览").click());
     expect(service.importUsers).toHaveBeenLastCalledWith("lab", expect.objectContaining({ reset_passwords: true }));
   });
+
+  it("offers both bulk import templates next to the mode controls", async () => {
+    root = createRoot(container);
+    await act(async () => root.render(<ResearchUserImportPanel workspaceSlug="lab" />));
+
+    expect(
+      container.querySelector('a[href="/templates/research-student-import-template.xlsx"]')?.textContent
+    ).toContain("下载学生名册模板");
+    expect(
+      container.querySelector('a[href="/templates/research-student-import-template.xlsx"]')?.getAttribute("download")
+    ).toBe("科研身份学生导入模板.xlsx");
+    expect(
+      container.querySelector('a[href="/templates/research-advisor-mapping-template.xlsx"]')?.textContent
+    ).toContain("下载导师映射模板");
+    expect(
+      container.querySelector('a[href="/templates/research-advisor-mapping-template.xlsx"]')?.getAttribute("download")
+    ).toBe("科研身份导师映射模板.xlsx");
+
+    await act(async () => button("单条录入").click());
+    expect(container.querySelector('a[href="/templates/research-student-import-template.xlsx"]')).toBeNull();
+    expect(container.querySelector('a[href="/templates/research-advisor-mapping-template.xlsx"]')).toBeNull();
+  });
 });
