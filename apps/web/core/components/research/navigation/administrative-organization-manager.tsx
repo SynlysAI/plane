@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@plane/propel/button";
+import { Combobox } from "@plane/propel/combobox";
+import { ChevronExpandOutline, TickOutline } from "@makeplane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalWidth, Input, ModalCore } from "@plane/ui";
 
@@ -44,22 +46,20 @@ export function AdministrativeOrganizationManager({
   const currentOrganizationId = organization?.id;
   const [managerAction, setManagerAction] = useState(action);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [memberSearch, setMemberSearch] = useState("");
   const [memberRole, setMemberRole] = useState<"ADMIN" | "MEMBER">("MEMBER");
   const [assignableMembers, setAssignableMembers] = useState<{ id: string; name: string; email: string }[]>([]);
   const [renameName, setRenameName] = useState(organization?.name ?? "");
   const [deleteTarget, setDeleteTarget] = useState(defaultOrganization?.id ?? "uncategorized");
   const [isSaving, setIsSaving] = useState(false);
-  const sortedAssignableMembers = useMemo(() => {
-    const search = memberSearch.trim().toLocaleLowerCase();
-    return assignableMembers
-      .filter((member) => !search || `${member.name} ${member.email}`.toLocaleLowerCase().includes(search))
-      .toSorted((a, b) =>
+  const sortedAssignableMembers = useMemo(
+    () =>
+      [...assignableMembers].toSorted((a, b) =>
         (a.name || a.email).localeCompare(b.name || b.email, ["zh-Hans", "en"], {
           sensitivity: "base",
         })
-      );
-  }, [assignableMembers, memberSearch]);
+      ),
+    [assignableMembers]
+  );
 
   useEffect(() => {
     setManagerAction(action);
@@ -166,36 +166,52 @@ export function AdministrativeOrganizationManager({
           <p className="mt-1 text-12 text-secondary">
             组织成员继承组织内项目的只读权限；项目编辑权限仍由项目角色决定。
           </p>
-          <label htmlFor="organization-member-search" className="mt-4 flex flex-col gap-1 text-12 text-secondary">
-            搜索成员
-            <Input
-              id="organization-member-search"
-              value={memberSearch}
-              placeholder="按姓名或邮箱搜索"
-              onChange={(event) => setMemberSearch(event.target.value)}
-            />
-          </label>
-          <label htmlFor="organization-member" className="mt-3 flex flex-col gap-1 text-12 text-secondary">
+          <label htmlFor="organization-member" className="mt-4 flex flex-col gap-1 text-12 text-secondary">
             工作区成员
-            <select
-              id="organization-member"
-              className="min-h-24 rounded-md border border-subtle bg-surface-1 px-2 py-2 text-13 text-primary"
-              multiple
+            <Combobox
+              multiSelect
               value={selectedMembers}
-              onChange={(event) =>
-                setSelectedMembers(Array.from(event.target.selectedOptions, (option) => option.value))
-              }
-              aria-describedby="organization-member-help"
+              onValueChange={(value) => setSelectedMembers(value as string[])}
             >
-              {sortedAssignableMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name || member.email}
-                </option>
-              ))}
-            </select>
-            <span id="organization-member-help" className="text-11 text-tertiary">
-              可按住 Ctrl/Cmd 键选择多个成员。
-            </span>
+              <Combobox.Button
+                id="organization-member"
+                className="flex w-full items-center justify-between rounded-md border border-subtle bg-surface-1 px-2 py-2 text-left text-13 text-primary"
+                aria-label="选择工作区成员"
+              >
+                <span className="truncate">
+                  {selectedMembers.length > 0 ? `已选择 ${selectedMembers.length} 位成员` : "选择成员"}
+                </span>
+                <ChevronExpandOutline className="ml-2 size-4 shrink-0 text-tertiary" />
+              </Combobox.Button>
+              <Combobox.Options
+                showSearch
+                searchPlaceholder="搜索姓名或邮箱"
+                emptyMessage="没有找到匹配的成员"
+                maxHeight="md"
+                className="w-[var(--anchor-width)]"
+              >
+                {sortedAssignableMembers.map((member) => {
+                  const isSelected = selectedMembers.includes(member.id);
+                  return (
+                    <Combobox.Option key={member.id} value={member.id} className="flex items-center gap-2 px-2 py-2">
+                      <span
+                        className={`grid size-4 shrink-0 place-items-center rounded border ${
+                          isSelected ? "border-accent-primary bg-accent-primary text-on-color" : "border-strong"
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {isSelected && <TickOutline className="size-3" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-13 text-primary">{member.name || member.email}</span>
+                        {member.name && <span className="block truncate text-11 text-tertiary">{member.email}</span>}
+                      </span>
+                    </Combobox.Option>
+                  );
+                })}
+              </Combobox.Options>
+            </Combobox>
+            <span className="text-11 text-tertiary">可搜索并选择多个成员。</span>
           </label>
           <label htmlFor="organization-member-role" className="mt-3 flex flex-col gap-1 text-12 text-secondary">
             组织角色
