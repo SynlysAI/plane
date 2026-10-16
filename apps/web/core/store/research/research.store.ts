@@ -1173,7 +1173,14 @@ export class ResearchStore implements IResearchStore {
       if (this.reportRequestVersions[workspaceSlug] !== requestVersion) return response.results;
       runInAction(() => {
         response.results.forEach((report) => {
-          this.reports[report.id] = report;
+          // 列表行不带 draft_content（作者视角），整体替换会清掉详情接口带回的
+          // 正文，导致打开中的报告详情显示“加载中”，这里保留已拿到的正文。
+          const existing = this.reports[report.id];
+          this.reports[report.id] = {
+            ...report,
+            draft_content: report.draft_content ?? existing?.draft_content,
+            official_content: report.official_content ?? existing?.official_content,
+          };
         });
         this.reportIdsByWorkspace[workspaceSlug] = response.results.map((report) => report.id);
         this.reportPaginationByWorkspace[workspaceSlug] = response;

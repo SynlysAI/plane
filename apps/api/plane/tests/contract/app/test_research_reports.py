@@ -265,6 +265,8 @@ class TestReportStateMachine:
         submitted = env["student_client"].post(f"{detail_url}submit/", {}, format="json")
         assert submitted.status_code == 200
         assert submitted.json()["status"] == "SUBMITTED"
+        # 提交响应必须直接携带正文，否则前端 store 整体替换后正文会闪退成“加载中”。
+        assert submitted.json()["draft_content"] is not None
 
         # a second submit must not create another transition (409, P0-RPT-06)
         again = env["student_client"].post(f"{detail_url}submit/", {}, format="json")

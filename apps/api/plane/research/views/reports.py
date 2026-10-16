@@ -725,7 +725,7 @@ class ResearchReportSubmitEndpoint(ResearchAPIView):
             request=request,
         )
         notify_report_submitted(report, request.user)
-        return Response(serialize_report(report, request), status=status.HTTP_200_OK)
+        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
 class ResearchReportReturnEndpoint(ResearchAPIView):
@@ -783,7 +783,7 @@ class ResearchReportReturnEndpoint(ResearchAPIView):
             request=request,
         )
         notify_report_returned(report, request.user, comment)
-        return Response(serialize_report(report, request), status=status.HTTP_200_OK)
+        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
 class ResearchReportAcceptEndpoint(ResearchAPIView):
@@ -834,7 +834,7 @@ class ResearchReportAcceptEndpoint(ResearchAPIView):
             request=request,
         )
         notify_report_accepted(report, request.user)
-        return Response(serialize_report(report, request), status=status.HTTP_200_OK)
+        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
 class ResearchReportHistoryEndpoint(ResearchAPIView):
