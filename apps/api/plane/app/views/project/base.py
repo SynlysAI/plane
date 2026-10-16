@@ -171,12 +171,13 @@ def _restrict_workspace_project_visibility(queryset, request, slug):
         is_active=True,
         role=ROLE.MEMBER.value,
     ).exists():
+        # 公开项目的列表可见性与打开权限保持同一口径：默认公共组织（public_ids）
+        # 或挂靠组织成员（organization_ids），非组织成员不再"看得到点不开"。
         return queryset.filter(
             Q(
                 project_projectmember__member=user,
                 project_projectmember__is_active=True,
             )
-            | Q(network=2)
             | Q(id__in=review_ids)
             | Q(id__in=administrative_ids)
             | Q(id__in=public_ids)

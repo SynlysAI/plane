@@ -6,6 +6,8 @@ import pytest
 from rest_framework.test import APIClient
 
 from plane.db.models import (
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     Cycle,
     CycleIssue,
     Issue,
@@ -20,6 +22,7 @@ from plane.db.models import (
     WorkspaceMember,
     WorkspaceResearchSetting,
 )
+from plane.db.models.project import ProjectNetwork
 from plane.license.models import Instance, InstanceAdmin
 from plane.tests.research_fixtures import make_user
 
@@ -196,7 +199,6 @@ def test_workspace_admin_cannot_bypass_private_workspace_gate(env):
 
 def test_public_administrative_project_readable_by_every_member(env):
     """默认公共组织下的公共项目对全体成员只读开放，无需加入项目。"""
-    from plane.db.models.project import ProjectNetwork
     from plane.utils.administrative_projects import get_or_create_default_administrative_organization
 
     public_project = Project.objects.create(
@@ -231,3 +233,46 @@ def test_public_administrative_project_readable_by_every_member(env):
     assert client.get(f"{base}pages/").status_code == 200
     # 公共行政项目对全员按 MEMBER 开放（effective_project_member 既有口径），可协作创建工作项。
     assert client.post(f"{base}issues/", {"name": "Public collaboration"}, format="json").status_code == 201
+
+
+def test_public_org_project_visible_to_org_members_only(env):
+    """公开挂组织项目：组织成员 GUEST 只读可访问；非组织成员列表不可见、详情无权限。"""
+    organization = AdministrativeOrganization.objects.create(
+        workspace=env["workspace"], name="测试组织", created_by=env["owner"]
+    )
+    org_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="公开挂组织",
+        identifier="ORG",
+        network=ProjectNetwork.PUBLIC.value,
+        administrative_organization=organization,
+    )
+    state = State.objects.create(
+        project=org_project, workspace=env["workspace"], name="Todo", group="unstarted", default=True
+    )
+    Issue.objects.create(project=org_project, workspace=env["workspace"], name="Org task", state=state)
+
+    org_member, org_client = actor_client(env, "member")
+    AdministrativeOrganizationMember.objects.create(
+        workspace=env["workspace"],
+        organization=organization,
+        member=org_member,
+        role=AdministrativeOrganizationMember.Role.MEMBER,
+        created_by=env["owner"],
+    )
+    _, outsider_client = actor_client(env, "member")
+    slug = env["workspace"].slug
+    base = f"/api/workspaces/{slug}/projects/{org_project.id}/"
+
+    # 组织成员：角色地图 GUEST，可读项目和工作项，不能创建工作项。
+    roles = org_client.get(f"/api/users/me/workspaces/{slug}/project-roles/")
+    assert roles.status_code == 200, roles.data
+    assert roles.data[str(org_project.id)] == 5
+    assert org_client.get(base).status_code == 200
+    assert org_client.get(f"{base}issues/").status_code == 200
+    assert org_client.post(f"{base}issues/", {"name": "Denied"}, format="json").status_code == 403
+
+    # 非组织成员：列表不可见、详情无权限，不再出现“看得到点不开”。
+    listed = outsider_client.get(f"/api/workspaces/{slug}/projects/")
+    assert all(str(row["id"]) != str(org_project.id) for row in listed.json())
+    assert outsider_client.get(base).status_code == 403

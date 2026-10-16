@@ -135,7 +135,7 @@ export const AdministrativeProjectTabs = observer(function AdministrativeProject
           }}
         >
           <h3 className="text-15 font-semibold">新建行政组织</h3>
-          <p className="mt-1 text-12 text-secondary">组织成员会继承组织内行政项目的只读访问权限。</p>
+          <p className="mt-1 text-12 text-secondary">组织成员会继承组织内公开行政项目的只读访问权限。</p>
           <label htmlFor="administrative-organization-name" className="mt-4 flex flex-col gap-1 text-12 text-secondary">
             组织名称
             <Input

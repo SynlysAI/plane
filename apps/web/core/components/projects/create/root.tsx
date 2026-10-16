@@ -64,6 +64,7 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
     reValidateMode: "onChange",
   });
   const { handleSubmit, reset, setValue } = methods;
+  const network = methods.watch("network");
   const { isMobile } = usePlatformOS();
 
   useEffect(() => {
@@ -285,6 +286,9 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
                   <option value="new">＋ 新建组织</option>
                 </select>
                 {organizationLoadFailed && <span className="text-12 text-secondary">组织加载失败，请稍后重试。</span>}
+                {network === 0 && (
+                  <span className="text-11 text-tertiary">私有项目不向组织成员开放，组织仅作归属分类。</span>
+                )}
               </label>
               {organizationChoice === "new" && (
                 <label className="flex flex-col gap-1 text-12 text-secondary">

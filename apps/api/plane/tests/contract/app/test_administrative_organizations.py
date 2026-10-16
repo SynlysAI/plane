@@ -550,6 +550,37 @@ def test_organization_membership_grants_and_revokes_inherited_read_access(env):
     assert env["member_client"].get(f"/api/workspaces/{slug}/projects/{other_project.id}/").status_code == 403
 
 
+def test_secret_project_in_organization_stays_private_to_members(env):
+    """私有项目不向组织成员开放：组织挂靠只是归属分类，不产生访问权限。"""
+    slug = env["workspace"].slug
+    project = Project.objects.create(
+        workspace=env["workspace"],
+        name="私有挂组织",
+        identifier=f"SP{uuid4().hex[:6].upper()}",
+        network=ProjectNetwork.SECRET.value,
+        administrative_organization=env["organization"],
+        created_by=env["owner"],
+    )
+    base = f"/api/workspaces/{slug}/projects/{project.id}/"
+
+    # 组织成员：不可读、不在角色地图、不出现在项目列表。
+    assert env["member_client"].get(base).status_code == 403
+    roles = env["member_client"].get(f"/api/users/me/workspaces/{slug}/project-roles/")
+    assert str(project.id) not in roles.json()
+    listed = env["member_client"].get(f"/api/workspaces/{slug}/projects/")
+    assert all(str(row["id"]) != str(project.id) for row in listed.json())
+
+    # 显式成员仍然可读（私有项目的访问只来自显式授权）。
+    ProjectMember.objects.create(
+        workspace=env["workspace"],
+        project=project,
+        member=env["organization_member"],
+        role=5,
+        created_by=env["owner"],
+    )
+    assert env["member_client"].get(base).status_code == 200
+
+
 def test_project_organization_assignment_requires_organization_admin(env):
     """普通成员不能把新项目挂到任意组织；组织管理员和默认归属可用。"""
     slug = env["workspace"].slug

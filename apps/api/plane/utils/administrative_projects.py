@@ -86,7 +86,11 @@ def administrative_projects_for_user(user, workspace_slug):
 
 
 def administrative_organization_project_ids(user, workspace_slug):
-    """返回用户通过行政组织成员身份可读取的行政项目 ID。"""
+    """返回用户通过行政组织成员身份可读取的公开行政项目 ID。
+
+    私有项目（SECRET）不向组织成员开放：组织挂靠只是归属分类，
+    访问权限由"公开 + 组织成员"共同决定。
+    """
     if user is None or not getattr(user, "is_authenticated", False):
         return Project.objects.none().values("id")
     return (
@@ -96,6 +100,7 @@ def administrative_organization_project_ids(user, workspace_slug):
             administrative_organization__members__is_active=True,
             administrative_organization__members__deleted_at__isnull=True,
             administrative_organization__deleted_at__isnull=True,
+            network=ProjectNetwork.PUBLIC.value,
             deleted_at__isnull=True,
         )
         .exclude(id__in=research_project_ids())
