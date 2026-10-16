@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -43,12 +43,23 @@ export function AdministrativeOrganizationManager({
   const organization = organizations.find((item) => item.id === organizationId);
   const currentOrganizationId = organization?.id;
   const [managerAction, setManagerAction] = useState(action);
-  const [selectedMember, setSelectedMember] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [memberSearch, setMemberSearch] = useState("");
   const [memberRole, setMemberRole] = useState<"ADMIN" | "MEMBER">("MEMBER");
   const [assignableMembers, setAssignableMembers] = useState<{ id: string; name: string; email: string }[]>([]);
   const [renameName, setRenameName] = useState(organization?.name ?? "");
   const [deleteTarget, setDeleteTarget] = useState(defaultOrganization?.id ?? "uncategorized");
   const [isSaving, setIsSaving] = useState(false);
+  const sortedAssignableMembers = useMemo(() => {
+    const search = memberSearch.trim().toLocaleLowerCase();
+    return assignableMembers
+      .filter((member) => !search || `${member.name} ${member.email}`.toLocaleLowerCase().includes(search))
+      .toSorted((a, b) =>
+        (a.name || a.email).localeCompare(b.name || b.email, ["zh-Hans", "en"], {
+          sensitivity: "base",
+        })
+      );
+  }, [assignableMembers, memberSearch]);
 
   useEffect(() => {
     setManagerAction(action);
@@ -92,13 +103,18 @@ export function AdministrativeOrganizationManager({
   if (!organization) return null;
 
   const submitMember = async () => {
-    if (!selectedMember) return;
+    if (selectedMembers.length === 0) return;
     const succeeded = await runMutation(
-      () => service.addAdministrativeOrganizationMember(workspaceSlug, organization.id, selectedMember, memberRole),
+      () =>
+        Promise.all(
+          selectedMembers.map((memberId) =>
+            service.addAdministrativeOrganizationMember(workspaceSlug, organization.id, memberId, memberRole)
+          )
+        ),
       "成员权限已更新。"
     );
     if (succeeded) {
-      setSelectedMember("");
+      setSelectedMembers([]);
       refreshAssignableMembers();
     }
   };
@@ -150,21 +166,36 @@ export function AdministrativeOrganizationManager({
           <p className="mt-1 text-12 text-secondary">
             组织成员继承组织内项目的只读权限；项目编辑权限仍由项目角色决定。
           </p>
-          <label htmlFor="organization-member" className="mt-4 flex flex-col gap-1 text-12 text-secondary">
+          <label htmlFor="organization-member-search" className="mt-4 flex flex-col gap-1 text-12 text-secondary">
+            搜索成员
+            <Input
+              id="organization-member-search"
+              value={memberSearch}
+              placeholder="按姓名或邮箱搜索"
+              onChange={(event) => setMemberSearch(event.target.value)}
+            />
+          </label>
+          <label htmlFor="organization-member" className="mt-3 flex flex-col gap-1 text-12 text-secondary">
             工作区成员
             <select
               id="organization-member"
-              className="rounded-md border border-subtle bg-surface-1 px-2 py-2 text-13 text-primary"
-              value={selectedMember}
-              onChange={(event) => setSelectedMember(event.target.value)}
+              className="min-h-24 rounded-md border border-subtle bg-surface-1 px-2 py-2 text-13 text-primary"
+              multiple
+              value={selectedMembers}
+              onChange={(event) =>
+                setSelectedMembers(Array.from(event.target.selectedOptions, (option) => option.value))
+              }
+              aria-describedby="organization-member-help"
             >
-              <option value="">选择成员</option>
-              {assignableMembers.map((member) => (
+              {sortedAssignableMembers.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.name || member.email}
                 </option>
               ))}
             </select>
+            <span id="organization-member-help" className="text-11 text-tertiary">
+              可按住 Ctrl/Cmd 键选择多个成员。
+            </span>
           </label>
           <label htmlFor="organization-member-role" className="mt-3 flex flex-col gap-1 text-12 text-secondary">
             组织角色
@@ -179,7 +210,13 @@ export function AdministrativeOrganizationManager({
             </select>
           </label>
           <div className="mt-4 flex justify-end">
-            <Button type="submit" variant="secondary" size="sm" disabled={!selectedMember} loading={isSaving}>
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              disabled={selectedMembers.length === 0}
+              loading={isSaving}
+            >
               添加成员
             </Button>
           </div>
