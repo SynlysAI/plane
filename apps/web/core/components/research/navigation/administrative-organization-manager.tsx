@@ -220,7 +220,7 @@ export function AdministrativeOrganizationManager({
                           key={member.id}
                           value={member.id}
                           className={({ active }) =>
-                            `flex cursor-pointer items-center gap-2 rounded-sm px-2 py-2 select-none ${
+                            `flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 select-none ${
                               active ? "bg-surface-2" : ""
                             }`
                           }
@@ -233,12 +233,12 @@ export function AdministrativeOrganizationManager({
                           >
                             {isSelected && <TickOutline className="size-3" />}
                           </span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-13 text-primary">{member.name || member.email}</span>
-                            {member.name && (
-                              <span className="block truncate text-11 text-tertiary">{member.email}</span>
-                            )}
+                          <span className="min-w-0 shrink truncate text-13 text-primary">
+                            {member.name || member.email}
                           </span>
+                          {member.name && (
+                            <span className="min-w-0 truncate text-11 text-tertiary">{member.email}</span>
+                          )}
                         </Combobox.Option>
                       );
                     })
