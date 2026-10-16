@@ -27,7 +27,6 @@ export function AgentBackendSettings({
 }) {
   const { t } = useTranslation();
   const translateRef = useRef(t);
-  translateRef.current = t;
   const [connection, setConnection] = useState<TBackendConnection | null>(null);
   const [system, setSystem] = useState<"SCIENCE_DISCOVERY" | "SYNLORA">("SCIENCE_DISCOVERY");
   const [governanceEnabled, setGovernanceEnabled] = useState(false);
@@ -40,6 +39,11 @@ export function AgentBackendSettings({
   const [hasLoaded, setHasLoaded] = useState(false);
   const loadSequence = useRef(0);
   const workspaceSequence = useRef(0);
+
+  // 渲染期写 ref 违反 React 纯渲染规则，改为在 effect 中同步最新翻译函数。
+  useEffect(() => {
+    translateRef.current = t;
+  }, [t]);
 
   /** 仅在工作区变化时重建，避免翻译函数引用变化触发重复加载。 */
   const load = useCallback(async () => {

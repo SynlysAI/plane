@@ -99,9 +99,69 @@ describe("plain workspace member import", () => {
     expect(container.textContent).toContain("张三");
     expect(container.textContent).toContain("zhang@example.com");
     expect(container.textContent).toContain("基础科研档案 · 学生");
-    expect(container.textContent).not.toContain("主归属组织");
-    expect(container.textContent).not.toContain("主导师");
-    expect(container.textContent).not.toContain("学号");
+    expect([...container.querySelectorAll("th")].map((cell) => cell.textContent)).toEqual([
+      "名称",
+      "邮箱",
+      "工作区角色",
+      "科研档案",
+    ]);
+    expect([...container.querySelectorAll("tbody td")].map((cell) => cell.textContent)).toEqual([
+      "张三",
+      "zhang@example.com",
+      "成员",
+      "基础科研档案 · 学生",
+    ]);
+    const invitations = container.querySelector('section[aria-label="待处理邀请"]');
+    expect(container.firstElementChild?.lastElementChild).toBe(invitations);
+    expect(button("发送邀请").compareDocumentPosition(invitations!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    await act(async () => button("Excel 导入").click());
+    expect(button("上传并发送邀请").compareDocumentPosition(invitations!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(container.querySelector("table")).not.toBeNull();
+    const fieldLabels = [...container.querySelectorAll("label")].map((label) => label.textContent).join(" ");
+    expect(fieldLabels).not.toContain("主归属组织");
+    expect(fieldLabels).not.toContain("主导师");
+    expect(fieldLabels).not.toContain("学号");
+  });
+
+  it("shows the three-column template with Excel import and preserves profile options between modes", async () => {
+    await renderPanel();
+    expect(container.querySelector('a[href="/template.xlsx"]')).toBeNull();
+    expect(labeledControl("科研档案类别").disabled).toBe(true);
+    await act(async () => labeledCheckbox("同步创建基础科研档案").click());
+    await change(labeledControl("科研档案类别"), "STAFF");
+    await act(async () => button("Excel 导入").click());
+    expect(container.querySelector('a[href="/template.xlsx"]')?.textContent).toContain("下载三列模板");
+    expect(labeledCheckbox("同步创建基础科研档案").checked).toBe(true);
+    expect(labeledControl("科研档案类别").value).toBe("STAFF");
+    expect(labeledControl("科研档案类别").disabled).toBe(false);
+    await act(async () => button("单个邀请").click());
+    expect(labeledControl("科研档案类别").value).toBe("STAFF");
+  });
+
+  it("places the empty invitation state below the form", async () => {
+    await renderPanel();
+    const section = container.querySelector('section[aria-label="待处理邀请"]');
+    expect(section?.textContent).toContain("0 条");
+    expect(section?.textContent).toContain("暂无待处理邀请。");
+    expect(container.querySelector("table")).toBeNull();
+    expect(container.querySelector("form")).not.toBeNull();
+  });
+
+  it("keeps invitation loading and failures in the bottom section", async () => {
+    let rejectLoading!: (reason: Error) => void;
+    memberStore.fetchWorkspaceMemberInvitations.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectLoading = reject;
+      })
+    );
+    await renderPanel();
+    const section = container.querySelector('section[aria-label="待处理邀请"]');
+    expect(section?.querySelector('[role="status"]')?.textContent).toBe("加载中…");
+    expect(section?.textContent).not.toContain("0 条");
+    await act(async () => rejectLoading(new Error("Failed to fetch invitations")));
+    expect(section?.querySelector('[role="alert"]')?.textContent).toBe("待处理邀请加载失败，请刷新重试。");
+    expect(container.querySelector("form")).not.toBeNull();
+    expect(button("发送邀请").disabled).toBe(false);
   });
 
   it("submits one invitation with basic research profile options", async () => {

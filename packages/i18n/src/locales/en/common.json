@@ -896,6 +896,7 @@
       "timeline": "Timeline",
       "dashboard": "Research overview",
       "system": "System management",
+      "feedback": "Feedback management",
       "back_to_projects": "Back to projects",
       "back_to_overview": "Back to research overview"
     },
@@ -1782,6 +1783,7 @@
       }
     },
     "feedback": {
+      "management_description": "Locate feedback by status, category, module and time; the full submission snapshot stays on the right.",
       "draft_saved": {
         "title": "Draft saved",
         "message": "The report body is up to date. You can continue editing or submit it."

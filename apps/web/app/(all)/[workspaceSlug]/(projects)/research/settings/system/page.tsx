@@ -78,11 +78,11 @@ function WorkspaceResearchSystemSettingsPage() {
                 </button>
               ))}
             </div>
-            <p className="text-11 text-tertiary">
-              {memberImportType === "plain"
-                ? "当前模式仅处理当前工作区成员邀请，不进入科研组织。"
-                : "当前模式沿用科研导入审核，批准后创建或更新账号并写入科研组织关系。"}
-            </p>
+            {memberImportType === "research" && (
+              <p className="text-11 text-tertiary">
+                当前模式沿用科研导入审核，批准后创建或更新账号并写入科研组织关系。
+              </p>
+            )}
             {memberImportType === "plain" ? (
               <PlainWorkspaceMemberImportPanel workspaceSlug={workspaceSlug} />
             ) : (

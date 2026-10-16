@@ -11,11 +11,7 @@ import { useParams, usePathname } from "next/navigation";
 import { ChevronRightOutline } from "@makeplane/propel/icons";
 import { Disclosure, Transition } from "@headlessui/react";
 // plane imports
-import {
-  RESEARCH_IA_V2_NAVIGATION_ITEMS,
-  RESEARCH_NAVIGATION_ITEMS,
-  RESEARCH_SETTINGS_NAVIGATION_ITEMS,
-} from "@plane/constants";
+import { RESEARCH_NAVIGATION_ITEMS, RESEARCH_SETTINGS_NAVIGATION_ITEMS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
 import { cn } from "@plane/utils";
@@ -87,10 +83,6 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
   const visibleSettingsItems = RESEARCH_SETTINGS_NAVIGATION_ITEMS.filter(
     (item) => Boolean(sections?.[item.section]) && research.canSee(item.key)
   );
-  const visibleIaV2Items = RESEARCH_IA_V2_NAVIGATION_ITEMS.filter((item) => {
-    if (item.key === "management") return visibleSettingsItems.length > 0;
-    return Boolean(sections?.[item.section]) && research.canSee(item.key);
-  });
 
   const menuAriaLabel = t(
     isMenuOpen ? "aria_labels.projects_sidebar.close_research_menu" : "aria_labels.projects_sidebar.open_research_menu"
@@ -115,7 +107,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
       as="div"
       className={cn(
         "flex flex-col",
-        research.isIaV2Enabled ? "mt-1 min-h-0 flex-1" : "mt-3 border-t border-subtle pt-3"
+        research.isIaV2Enabled ? "mt-2 min-h-0 flex-1 border-t border-subtle pt-2" : "mt-3 border-t border-subtle pt-3"
       )}
       defaultOpen={research.isIaV2Enabled || isMenuOpen}
     >
@@ -160,19 +152,11 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
         {(research.isIaV2Enabled || isMenuOpen) && (
           <Disclosure.Panel
             as="div"
-            className={cn("flex flex-col gap-0.5", { "min-h-0 flex-1": research.isIaV2Enabled })}
+            className={cn("flex flex-col", research.isIaV2Enabled ? "min-h-0 flex-1 gap-2" : "gap-0.5")}
             static
           >
             {research.isIaV2Enabled ? (
               <>
-                {visibleIaV2Items
-                  .filter((item) => item.key !== "research_chain")
-                  // eslint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
-                  .sort((left, right) => {
-                    const order = ["management", "approvals"];
-                    return order.indexOf(left.key) - order.indexOf(right.key);
-                  })
-                  .map((item) => renderItem(item.key, item.labelKey, item.path))}
                 {research.canSee("research_chain") && (
                   <ResearchProjectTree
                     scope="RESEARCH"

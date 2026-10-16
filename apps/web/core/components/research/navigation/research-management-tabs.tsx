@@ -60,7 +60,7 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
           research.isResearchAdmin ||
           research.identity?.user.is_system_admin) && (
           <ResearchTabLink href={`/${workspaceSlug}/research/settings/feedback`} isActive={currentKey === "feedback"}>
-            反馈管理
+            {t("research.nav.feedback")}
           </ResearchTabLink>
         )}
         {visibleTabs.map((item) => {

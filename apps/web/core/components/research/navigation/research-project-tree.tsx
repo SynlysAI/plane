@@ -331,6 +331,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
     [scope, tree.categories]
   );
   const defaultOrganization = organizations.find((organization) => organization.is_default);
+  const defaultOrganizationOpen = defaultOrganization ? (expanded?.[defaultOrganization.id] ?? true) : true;
   const namedOrganizations = organizations.filter((organization) => !organization.is_default);
   const defaultProjectIds = defaultOrganization
     ? defaultOrganization.project_ids
@@ -461,7 +462,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   return (
     <div
       ref={treeRef}
-      className={cn("mt-2 flex flex-col border-t border-subtle pt-2", {
+      className={cn("flex flex-col", {
         "min-h-20": isOpen,
         "shrink-0": !isOpen || fitsNaturalHeight,
         grow: isOpen && fillAvailableSpace && !fitsNaturalHeight,
@@ -529,70 +530,58 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
             ))}
             {!isLoading &&
               scope === "ADMINISTRATIVE" &&
-              namedOrganizations.map((organization) => (
-                <div key={organization.id} className="mb-1">
-                  <div className="group flex items-center gap-1 rounded-sm px-2 py-1 text-12 text-tertiary hover:bg-layer-transparent-hover">
-                    <span className="min-w-0 flex-1 truncate font-medium">{organization.name}</span>
-                    {organization.can_manage && (
-                      <CustomMenu
-                        customButton={<MoreHorizontalOutline className="size-3" aria-hidden="true" />}
-                        customButtonClassName="grid place-items-center rounded-sm p-0.5"
-                        className="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
-                        placement="bottom-start"
-                        ariaLabel={`管理组织 ${organization.name}`}
-                      >
-                        <CustomMenu.MenuItem
-                          onClick={() => setOrganizationManager({ organizationId: organization.id, action: "members" })}
-                        >
-                          成员管理…
-                        </CustomMenu.MenuItem>
-                        <CustomMenu.MenuItem
-                          onClick={() => setOrganizationManager({ organizationId: organization.id, action: "rename" })}
-                        >
-                          重命名…
-                        </CustomMenu.MenuItem>
-                        <CustomMenu.MenuItem
-                          onClick={() => setOrganizationManager({ organizationId: organization.id, action: "delete" })}
-                        >
-                          删除…
-                        </CustomMenu.MenuItem>
-                      </CustomMenu>
-                    )}
-                  </div>
-                  <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label={organization.name}>
-                    {organization.project_ids.map((projectId) => {
-                      const project = projectMap[projectId];
-                      return project ? (
-                        <ProjectLink
-                          key={projectId}
-                          project={{
-                            id: projectId,
-                            name: project.name,
-                            identifier: project.identifier,
-                            kind: "ADMINISTRATIVE",
-                          }}
-                          currentCategoryId={organization.id}
-                          canManage={organization.can_manage}
-                          onMove={(item) =>
-                            setMoveEditor({ project: item, currentCategory: organization.id, target: organization.id })
-                          }
-                        />
-                      ) : null;
-                    })}
-                  </div>
-                </div>
-              ))}
-            {!isLoading &&
-              scope === "ADMINISTRATIVE" &&
-              (() => {
+              namedOrganizations.map((organization) => {
+                const open = expanded?.[organization.id] ?? true;
                 return (
-                  defaultOrganization && (
-                    <div className="mt-1 border-t border-subtle pt-1">
-                      <div className="group flex items-center gap-1 px-2 py-1 text-11 text-tertiary">
-                        <span className="min-w-0 flex-1 truncate">公共</span>
-                      </div>
-                      <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label="公共">
-                        {defaultProjectIds.map((projectId) => {
+                  <div key={organization.id} className="mb-1">
+                    <div className="group flex items-center gap-1 rounded-sm px-2 py-1 text-12 text-tertiary hover:bg-layer-transparent-hover">
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        icon={ChevronRightOutline}
+                        iconClassName={cn("size-3 transition-transform", { "rotate-90": open })}
+                        aria-label={`${open ? "收起" : "展开"}${organization.name}`}
+                        aria-expanded={open}
+                        onClick={() => toggleExpanded(organization.id)}
+                      />
+                      <span className="min-w-0 flex-1 truncate" title={organization.name}>
+                        {organization.name}
+                      </span>
+                      {organization.can_manage && (
+                        <CustomMenu
+                          customButton={<MoreHorizontalOutline className="size-3" aria-hidden="true" />}
+                          customButtonClassName="grid place-items-center rounded-sm p-0.5"
+                          className="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                          placement="bottom-start"
+                          ariaLabel={`管理组织 ${organization.name}`}
+                        >
+                          <CustomMenu.MenuItem
+                            onClick={() =>
+                              setOrganizationManager({ organizationId: organization.id, action: "members" })
+                            }
+                          >
+                            成员管理…
+                          </CustomMenu.MenuItem>
+                          <CustomMenu.MenuItem
+                            onClick={() =>
+                              setOrganizationManager({ organizationId: organization.id, action: "rename" })
+                            }
+                          >
+                            重命名…
+                          </CustomMenu.MenuItem>
+                          <CustomMenu.MenuItem
+                            onClick={() =>
+                              setOrganizationManager({ organizationId: organization.id, action: "delete" })
+                            }
+                          >
+                            删除…
+                          </CustomMenu.MenuItem>
+                        </CustomMenu>
+                      )}
+                    </div>
+                    {open && (
+                      <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label={organization.name}>
+                        {organization.project_ids.map((projectId) => {
                           const project = projectMap[projectId];
                           return project ? (
                             <ProjectLink
@@ -603,19 +592,68 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                                 identifier: project.identifier,
                                 kind: "ADMINISTRATIVE",
                               }}
-                              currentCategoryId={defaultOrganization?.id ?? null}
-                              canManage={defaultOrganization?.can_manage ?? canManageTree}
+                              currentCategoryId={organization.id}
+                              canManage={organization.can_manage}
                               onMove={(item) =>
                                 setMoveEditor({
                                   project: item,
-                                  currentCategory: defaultOrganization?.id ?? null,
-                                  target: defaultOrganization?.id ?? "uncategorized",
+                                  currentCategory: organization.id,
+                                  target: organization.id,
                                 })
                               }
                             />
                           ) : null;
                         })}
                       </div>
+                    )}
+                  </div>
+                );
+              })}
+            {!isLoading &&
+              scope === "ADMINISTRATIVE" &&
+              (() => {
+                return (
+                  defaultOrganization && (
+                    <div className="mt-1 border-t border-subtle pt-1">
+                      <div className="group flex items-center gap-1 rounded-sm px-2 py-1 text-12 text-tertiary hover:bg-layer-transparent-hover">
+                        <IconButton
+                          variant="ghost"
+                          size="sm"
+                          icon={ChevronRightOutline}
+                          iconClassName={cn("size-3 transition-transform", { "rotate-90": defaultOrganizationOpen })}
+                          aria-label={`${defaultOrganizationOpen ? "收起" : "展开"}公共`}
+                          aria-expanded={defaultOrganizationOpen}
+                          onClick={() => toggleExpanded(defaultOrganization.id)}
+                        />
+                        <span className="min-w-0 flex-1 truncate">公共</span>
+                      </div>
+                      {defaultOrganizationOpen && (
+                        <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label="公共">
+                          {defaultProjectIds.map((projectId) => {
+                            const project = projectMap[projectId];
+                            return project ? (
+                              <ProjectLink
+                                key={projectId}
+                                project={{
+                                  id: projectId,
+                                  name: project.name,
+                                  identifier: project.identifier,
+                                  kind: "ADMINISTRATIVE",
+                                }}
+                                currentCategoryId={defaultOrganization?.id ?? null}
+                                canManage={defaultOrganization?.can_manage ?? canManageTree}
+                                onMove={(item) =>
+                                  setMoveEditor({
+                                    project: item,
+                                    currentCategory: defaultOrganization?.id ?? null,
+                                    target: defaultOrganization?.id ?? "uncategorized",
+                                  })
+                                }
+                              />
+                            ) : null;
+                          })}
+                        </div>
+                      )}
                     </div>
                   )
                 );

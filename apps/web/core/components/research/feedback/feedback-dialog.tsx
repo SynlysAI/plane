@@ -258,12 +258,8 @@ export const FeedbackDialog = observer(function FeedbackDialog({
           : "flex max-h-[85vh] min-w-0 flex-col gap-4 overflow-y-auto bg-surface-1 p-5"
       }
     >
-      {managementOnly ? (
-        <header className="shrink-0 border-b border-subtle pb-4">
-          <h1 className="text-22 font-semibold text-primary">反馈管理</h1>
-          <p className="mt-1 text-13 text-tertiary">按状态、分类、模块与时间定位反馈，右侧保留完整提交快照。</p>
-        </header>
-      ) : (
+      {/* 管理页标题由 ResearchPageShell 统一渲染，弹窗形态保留自己的视图页签。 */}
+      {managementOnly ? null : (
         <>
           <h2 className="text-20 font-semibold">反馈</h2>
           <div

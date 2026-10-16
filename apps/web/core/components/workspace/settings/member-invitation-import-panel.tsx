@@ -5,12 +5,14 @@
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
+import { Download } from "lucide-react";
 import type { TResearchProfileCategory } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ListFilterCheckbox, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 // components
-import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
+import { ResearchTableSurface } from "@/components/research/common/research-data-surface";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 // services
@@ -166,76 +168,76 @@ export const PlainWorkspaceMemberImportPanel = observer(function PlainWorkspaceM
     });
   };
 
-  return (
-    <div className="flex flex-col gap-4">
-      <ResearchFilterToolbar>
-        {(
-          [
-            ["single", "单个邀请"],
-            ["excel", "Excel 导入"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={mode === value}
-            disabled={busy}
-            className={`h-8 rounded-md px-3 text-13 transition-colors ${
-              mode === value ? "bg-surface-2 text-primary" : "text-secondary hover:text-primary"
-            }`}
-            onClick={() => changeMode(value)}
+  const profileOptions = (
+    <fieldset disabled={busy} className="flex min-w-0 flex-col gap-2">
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <ListFilterCheckbox
+          label="同步创建基础科研档案"
+          checked={profileEnabled}
+          onChange={(event) => setProfileEnabled(event.target.checked)}
+        />
+        <ListFilterField label="科研档案类别" className="w-full sm:w-64">
+          <ListFilterSelect
+            disabled={!profileEnabled}
+            value={profileCategory}
+            onChange={(event) => setProfileCategory(event.target.value as TResearchProfileCategory)}
           >
-            {label}
-          </button>
-        ))}
-        <a
-          className="text-12 text-accent-primary"
-          href={service.getWorkspaceMemberInvitationTemplateUrl(workspaceSlug)}
-        >
-          下载三列模板
-        </a>
-      </ResearchFilterToolbar>
+            {PROFILE_CATEGORIES.map((category) => (
+              <option key={category.value} value={category.value}>
+                {category.label}
+              </option>
+            ))}
+          </ListFilterSelect>
+        </ListFilterField>
+      </div>
+      <p className="text-11 text-tertiary">仅创建档案，不建立组织关系；完整科研身份请切换到科研身份成员。</p>
+    </fieldset>
+  );
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="普通成员导入方式" className="flex items-center gap-3">
+          {(
+            [
+              ["single", "单个邀请"],
+              ["excel", "Excel 导入"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={mode === value}
+              disabled={busy}
+              className={`h-8 rounded-md px-3 text-13 transition-colors ${
+                mode === value ? "bg-surface-1 text-accent-primary" : "text-secondary hover:text-primary"
+              }`}
+              onClick={() => changeMode(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode === "excel" && (
+          <a
+            className="inline-flex h-8 items-center gap-1.5 text-12 text-accent-primary hover:underline"
+            href={service.getWorkspaceMemberInvitationTemplateUrl(workspaceSlug)}
+          >
+            <Download className="size-3.5 shrink-0" aria-hidden="true" />
+            下载三列模板
+          </a>
+        )}
+      </div>
 
       <p className="text-11 text-tertiary">
         普通工作区导入只发送成员邀请，不创建账号、初始密码或组织关系。受邀人接受后才加入当前工作区。
       </p>
 
-      <section>
-        <div className="flex items-center justify-between">
-          <h4 className="text-13 font-medium text-primary">待处理邀请</h4>
-          <span className="text-11 text-tertiary">{invitations.length} 条</span>
-        </div>
-        <div className="mt-2 divide-y divide-subtle">
-          {loadingInvitations ? (
-            <p className="py-3 text-12 text-tertiary">加载中…</p>
-          ) : loadError ? (
-            <p role="alert" className="py-3 text-12 text-danger-primary">
-              {loadError}
-            </p>
-          ) : invitations.length === 0 ? (
-            <p className="py-3 text-12 text-tertiary">暂无待处理邀请。</p>
-          ) : (
-            invitations.map((invitation) => (
-              <div key={invitation.id} className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[1.2fr_1.6fr_.7fr_.9fr]">
-                <span className="truncate text-12 text-primary">{invitation.display_name || "未填写名称"}</span>
-                <span className="truncate text-12 text-secondary">{invitation.email}</span>
-                <span className="text-12 text-secondary">{roleLabel(invitation.role)}</span>
-                <span className="text-12 text-tertiary">
-                  {invitation.research_profile_enabled
-                    ? `基础科研档案 · ${profileLabel(invitation.research_profile_category ?? "OTHER")}`
-                    : "未开通科研档案"}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
       {mode === "single" ? (
         <form className="flex flex-col gap-4" onSubmit={submitSingle}>
           <fieldset disabled={busy} className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <ListFilterField label="名称 *" className="w-full">
+            <ListFilterField label="名称 *" className="w-full sm:w-full">
               <ListFilterInput
                 required
                 value={displayName}
@@ -243,7 +245,7 @@ export const PlainWorkspaceMemberImportPanel = observer(function PlainWorkspaceM
                 onChange={(event) => setDisplayName(event.target.value)}
               />
             </ListFilterField>
-            <ListFilterField label="邮箱 *" className="w-full">
+            <ListFilterField label="邮箱 *" className="w-full sm:w-full">
               <ListFilterInput
                 required
                 type="email"
@@ -252,7 +254,7 @@ export const PlainWorkspaceMemberImportPanel = observer(function PlainWorkspaceM
                 onChange={(event) => setEmail(event.target.value)}
               />
             </ListFilterField>
-            <ListFilterField label="工作区角色 *" className="w-full">
+            <ListFilterField label="工作区角色 *" className="w-full sm:w-full">
               <ListFilterSelect value={role} onChange={(event) => setRole(Number(event.target.value))}>
                 {Object.entries(WORKSPACE_ROLE_LABELS).map(([value, label]) => (
                   <option key={value} value={Number(value)}>
@@ -262,29 +264,7 @@ export const PlainWorkspaceMemberImportPanel = observer(function PlainWorkspaceM
               </ListFilterSelect>
             </ListFilterField>
           </fieldset>
-          <fieldset disabled={busy} className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <ListFilterCheckbox
-              label="同步创建基础科研档案"
-              checked={profileEnabled}
-              onChange={(event) => setProfileEnabled(event.target.checked)}
-            />
-            <ListFilterField label="科研档案类别" className="w-full">
-              <ListFilterSelect
-                disabled={!profileEnabled}
-                value={profileCategory}
-                onChange={(event) => setProfileCategory(event.target.value as TResearchProfileCategory)}
-              >
-                {PROFILE_CATEGORIES.map((category) => (
-                  <option key={category.value} value={category.value}>
-                    {category.label}
-                  </option>
-                ))}
-              </ListFilterSelect>
-            </ListFilterField>
-            <p className="self-end text-11 text-tertiary">
-              仅创建档案，不建立组织关系；完整科研身份请切换到科研身份成员。
-            </p>
-          </fieldset>
+          {profileOptions}
           {submitError}
           <Button type="submit" variant="primary" size="xl" loading={busy} disabled={busy}>
             发送邀请
@@ -293,37 +273,64 @@ export const PlainWorkspaceMemberImportPanel = observer(function PlainWorkspaceM
       ) : (
         <div className="flex flex-col gap-4">
           <fieldset disabled={busy} className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <ListFilterField label="成员表（名称、邮箱、角色）" className="w-full md:col-span-2">
+            <ListFilterField label="成员表（名称、邮箱、角色）" className="w-full sm:w-full md:col-span-2">
               <ListFilterInput ref={fileInput} type="file" accept=".csv,.xlsx" disabled={busy} />
-            </ListFilterField>
-            <ListFilterCheckbox
-              label="同步创建基础科研档案"
-              checked={profileEnabled}
-              onChange={(event) => setProfileEnabled(event.target.checked)}
-            />
-            <ListFilterField label="科研档案类别" className="w-full">
-              <ListFilterSelect
-                disabled={!profileEnabled}
-                value={profileCategory}
-                onChange={(event) => setProfileCategory(event.target.value as TResearchProfileCategory)}
-              >
-                {PROFILE_CATEGORIES.map((category) => (
-                  <option key={category.value} value={category.value}>
-                    {category.label}
-                  </option>
-                ))}
-              </ListFilterSelect>
             </ListFilterField>
             <p className="text-11 text-tertiary md:col-span-3">
               Excel 保持三列，不采集组织、导师或学号。任一行无效时整批不发送。
             </p>
           </fieldset>
+          {profileOptions}
           {submitError}
           <Button variant="primary" size="xl" loading={busy} disabled={busy} onClick={() => void submitExcel()}>
             上传并发送邀请
           </Button>
         </div>
       )}
+      <section aria-label="待处理邀请" className="flex min-w-0 flex-col gap-3 border-t border-subtle pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-13 font-medium text-primary">待处理邀请</h4>
+          {!loadingInvitations && !loadError && <span className="text-11 text-tertiary">{invitations.length} 条</span>}
+        </div>
+        {loadingInvitations ? (
+          <p role="status" className="py-3 text-12 text-tertiary">
+            加载中…
+          </p>
+        ) : loadError ? (
+          <p role="alert" className="py-3 text-12 text-danger-primary">
+            {loadError}
+          </p>
+        ) : invitations.length === 0 ? (
+          <p className="py-3 text-12 text-tertiary">暂无待处理邀请。</p>
+        ) : (
+          <ResearchTableSurface>
+            <Table aria-label="待处理邀请" className="min-w-160">
+              <TableHeader className="bg-surface-2 text-11 text-tertiary">
+                <TableRow>
+                  <TableHead>名称</TableHead>
+                  <TableHead>邮箱</TableHead>
+                  <TableHead>工作区角色</TableHead>
+                  <TableHead>科研档案</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invitations.map((invitation) => (
+                  <TableRow key={invitation.id}>
+                    <TableCell className="text-primary">{invitation.display_name || "未填写名称"}</TableCell>
+                    <TableCell className="text-secondary">{invitation.email}</TableCell>
+                    <TableCell className="text-secondary">{roleLabel(invitation.role)}</TableCell>
+                    <TableCell className="text-secondary">
+                      {invitation.research_profile_enabled
+                        ? `基础科研档案 · ${profileLabel(invitation.research_profile_category ?? "OTHER")}`
+                        : "未开通科研档案"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ResearchTableSurface>
+        )}
+      </section>
     </div>
   );
 });
