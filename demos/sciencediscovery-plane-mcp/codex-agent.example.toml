@@ -1,0 +1,11 @@
+# Replace paths locally. Keep the API key in the private JSON, not this file.
+# Copy this table into your user-level ~/.codex/config.toml.
+[mcp_servers.plane_agent]
+command = 'D:\plane-main\plane-dev\demos\sciencediscovery-plane-mcp\.venv\Scripts\python.exe'
+args = ['D:\plane-main\plane-dev\demos\sciencediscovery-plane-mcp\agent_mcp.py', '--config', 'C:\Users\STUDENT\.config\plane-agent\config.local.json']
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+enabled_tools = ["read_task_context", "prepare_progress", "publish_progress"]
+# Supported by current Codex clients: prompt for tools not marked read-only.
+# Verify this behavior on your installed client before publishing real results.
+default_tools_approval_mode = "writes"

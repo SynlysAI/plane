@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "Plane Task and Progress": {
+      "type": "stdio",
+      "command": "/app/data/scientific-envs/plane-mcp-demo/.venv/bin/python",
+      "args": ["/app/data/plane-mcp-demo/agent_mcp.py", "--config", "/app/data/plane-mcp-demo/config.local.json"],
+      "timeoutSeconds": 120
+    }
+  }
+}

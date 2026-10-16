@@ -1,5 +1,11 @@
 # ScienceDiscovery × Plane MCP Demo
 
+个人 Agent 自助接入：新增独立 `/connect` 页面，用户使用自己的 Plane 个人访问令牌验证后，生成有期限、可撤销的 MCP 连接配置；优先提供 Codex TOML，兼容 ScienceDiscovery JSON。无需修改 Plane，详见 [自助接入说明](SELF_SERVICE.md)。
+
+远程接入：新增独立 [Streamable HTTP 服务](HTTP_MCP.md)，支持本机和服务器 ScienceDiscovery 访问同一服务器 MCP，包含每使用者 Bearer 认证、默认只读工具及 Docker 部署配置。原有 STDIO 入口继续可用。
+
+新增通用 Agent 入口：按真实 Plane 任务链接读取上下文，由学生审阅后让 Codex、ScienceDiscovery 等 Agent 发布进展评论。接入配置、权限范围和测试方法见 [任务上下文与进展发布 MCP](AGENT_WORKFLOW.md)。原四任务只读 Demo 与独立评论验收继续保留。
+
 本示例用人工构造的项目记录验证：ScienceDiscovery 通过官方 Plane MCP 读取项目和任务，模型总结进展、卡点及建议，再由独立脚本按明确指令添加一条评论并读回。模型运行使用只读代理，不能通过该 MCP 创建、修改或删除 Plane 数据。
 
 ```text
