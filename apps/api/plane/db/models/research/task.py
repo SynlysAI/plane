@@ -79,7 +79,7 @@ class ResearchChainNodeTask(BaseModel):
         ordering = ("-created_at",)
         constraints = [
             models.CheckConstraint(
-                condition=Q(resource_type="NONE", resource_id__isnull=True),
+                condition=~Q(resource_type="NONE") | Q(resource_id__isnull=True),
                 name="rsch_task_resource_none_ck",
             ),
             models.CheckConstraint(

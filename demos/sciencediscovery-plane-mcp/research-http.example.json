@@ -1,0 +1,21 @@
+{
+  "host": "127.0.0.1",
+  "port": 8765,
+  "state_dir": "~/.plane-research-mcp",
+  "allowed_hosts": ["127.0.0.1:*", "localhost:*"],
+  "allowed_origins": [],
+  "clients": [
+    {
+      "name": "research-user",
+      "bearer_token": "REPLACE_WITH_A_RANDOM_TOKEN_GENERATED_LOCALLY",
+      "mode": "research-read-only",
+      "enable_publish": false,
+      "plane": {
+        "PLANE_BASE_URL": "http://localhost:8000",
+        "PLANE_UI_BASE_URL": "http://localhost:3000",
+        "PLANE_WORKSPACE_SLUG": "REPLACE_WITH_WORKSPACE_SLUG",
+        "PLANE_API_KEY": "REPLACE_WITH_THIS_USERS_PERSONAL_API_KEY"
+      }
+    }
+  ]
+}

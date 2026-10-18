@@ -1,5 +1,19 @@
 # ScienceDiscovery × Plane MCP Demo
 
+科研二开接入：新增 [科研链与节点只读 MCP](RESEARCH_MCP.md)，提供链、节点、事件、快照、科研任务/评论和有界资源读取，支持独立 STDIO/HTTP 与内嵌 ScienceDiscovery 节点授权接入。此功能需要部署新增后端代码并开启 RESEARCH_MCP_ENABLED，默认关闭。
+
+整体路线见 [科研链 MCP v2 开发计划](RESEARCH_MCP_V2_PLAN.md)：在 v1 本地只读验收基线上，分期增加 Agent 任务协作、分析草稿、节点迭代及受控流程操作；v2.2/v2.3 仍待实施。
+
+v2.1 受控操作代码与人工审核界面已实现，使用方式及部署边界见 [科研链 MCP v2.1](RESEARCH_MCP_V21.md)。新增迁移 0182 与独立写开关，默认不开放写入；现有只读入口保留。
+
+2026-10-18：本机主 Web/API 已更新、启动并开启后端 MCP 配置；Web 构建及官方类型检查通过。创建科研任务、追加任务评论、追加科研过程记录已完成人工确认、真实 MCP 执行和独立读回；分析草稿和资源关联仍待真实业务验收。见 [验收摘要](../../docs/operations/research-mcp-v21-acceptance.md)。
+
+部署交付请先阅读 [给部署同学的操作说明](../../docs/operations/research-mcp-v21-deployment.md)。v2.1 直接使用 Plane 后端 MCP，不要求部署下文的独立 Demo 网关或启动 ScienceDiscovery；工作区和节点授权需在目标服务器显式开启。
+
+可复用验证步骤见 [科研链 MCP 本地验证方案](LOCAL-VERIFICATION.md)，包含 PowerShell 接口调用、真实 Agent 业务验收、权限边界和隔离测试环境要求。
+
+五类剩余资源已按 [补充验收计划](EXTENDED-ACCEPTANCE-PLAN.md) 完成本地 Plane × Codex 验证；前四类元数据、Agent 公开事件正文通过，详见 [验收摘要](../../docs/operations/research-mcp-v21-acceptance.md)。当前代码包含历史任务关联约束修复迁移 0181，部署需执行 migrate。
+
 个人 Agent 自助接入：新增独立 `/connect` 页面，用户使用自己的 Plane 个人访问令牌验证后，生成有期限、可撤销的 MCP 连接配置；优先提供 Codex TOML，兼容 ScienceDiscovery JSON。无需修改 Plane，详见 [自助接入说明](SELF_SERVICE.md)。
 
 远程接入：新增独立 [Streamable HTTP 服务](HTTP_MCP.md)，支持本机和服务器 ScienceDiscovery 访问同一服务器 MCP，包含每使用者 Bearer 认证、默认只读工具及 Docker 部署配置。原有 STDIO 入口继续可用。

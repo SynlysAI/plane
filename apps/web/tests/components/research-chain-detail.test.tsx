@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getChainMembers: vi.fn(),
   createChainNode: vi.fn(),
   transitionChainNode: vi.fn(),
+  openAssistant: vi.fn(),
   query: "tab=nodes",
   setSearchParams: vi.fn(),
 }));
@@ -42,6 +43,11 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
+vi.mock("@/hooks/store/use-ai-assistant", () => ({ useAIAssistant: () => ({ openWithLocal: mocks.openAssistant }) }));
+vi.mock("@plane/ui", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  ...(await import("../../../../packages/ui/src/list-controls/list-controls")),
+}));
 vi.mock("@/hooks/store/use-member", () => ({
   useMember: () => ({
     workspace: {
@@ -71,6 +77,9 @@ vi.mock("@/components/research/chains/research-chain-task-panel", () => ({
       task-panel
     </div>
   ),
+}));
+vi.mock("@/components/research/chains/research-agent-operations", () => ({
+  ResearchAgentOperations: () => <div>agent-operation-review</div>,
 }));
 vi.mock("@/components/research/chains/research-paper-review-panel", () => ({
   ResearchPaperReviewPanel: ({
@@ -242,9 +251,11 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   ).toBe("page");
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   expect([...container.querySelectorAll("nav a")].map((item) => item.textContent)).toEqual(["概览", "节点", "成员"]);
-  expect(container.querySelector('a[href="/lab/research/chains/chain-1/nodes/node-1/agent"]')?.textContent).toContain(
-    "请智能体分析"
-  );
+  const openAssistant = container.querySelector<HTMLButtonElement>('button[aria-label="请智能体分析"]');
+  expect(openAssistant).not.toBeNull();
+  await act(async () => openAssistant!.click());
+  expect(mocks.openAssistant).toHaveBeenCalledWith("node-1");
+  expect(container.textContent).toContain("agent-operation-review");
   expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-node")).toBe("node-1");
   expect(container.querySelector('[data-testid="paper-review-panel"]')).toBeNull();
   expect(container.textContent).not.toContain("记录与知识库");

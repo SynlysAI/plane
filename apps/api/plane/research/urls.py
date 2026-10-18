@@ -10,6 +10,17 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.agent_operations import (
+    ResearchHumanOperationsEndpoint, ResearchOperationMCPHTTPEndpoint,
+    ResearchOperationToolsEndpoint, ResearchOperationToolEndpoint,
+)
+
+from plane.research.views.agent_access import (
+    ResearchMCPHTTPEndpoint,
+    ResearchReadQueryEndpoint,
+    ResearchReadToolEndpoint,
+    ResearchReadToolsEndpoint,
+)
 from plane.research.views.task_comments import ResearchTaskCommentListEndpoint, ResearchTaskCommentDetailEndpoint
 from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
@@ -222,6 +233,23 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path("research/workspaces/<str:slug>/agent-operations/mcp/", ResearchOperationMCPHTTPEndpoint.as_view(), name="research-operations-mcp"),
+    path("research/workspaces/<str:slug>/agent-operations/tools/", ResearchOperationToolsEndpoint.as_view(), name="research-operation-tools"),
+    path("research/workspaces/<str:slug>/agent-operations/tools/<str:tool_name>/", ResearchOperationToolEndpoint.as_view(), name="research-operation-tool"),
+    path("research/workspaces/<str:slug>/nodes/<uuid:node_id>/agent-operations/", ResearchHumanOperationsEndpoint.as_view(), name="research-human-operations"),
+    path("research/workspaces/<str:slug>/agent-access/tools/", ResearchReadToolsEndpoint.as_view(), name="research-read-tools"),
+    path("research/workspaces/<str:slug>/agent-access/tools/<str:tool_name>/", ResearchReadToolEndpoint.as_view(), name="research-read-tool"),
+    path("research/workspaces/<str:slug>/agent-access/mcp/", ResearchMCPHTTPEndpoint.as_view(), name="research-mcp-http"),
+    path("research/workspaces/<str:slug>/agent-access/chains/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "list_research_chains"}, name="research-read-chains"),
+    path("research/workspaces/<str:slug>/agent-access/chains/<uuid:chain_id>/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "get_research_chain"}, name="research-read-chain"),
+    path("research/workspaces/<str:slug>/agent-access/chains/<uuid:chain_id>/nodes/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "list_research_nodes"}, name="research-read-nodes"),
+    path("research/workspaces/<str:slug>/agent-access/nodes/<uuid:node_id>/context/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "get_research_node_context"}, name="research-read-node-context"),
+    path("research/workspaces/<str:slug>/agent-access/nodes/<uuid:node_id>/events/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "list_research_node_events"}, name="research-read-node-events"),
+    path("research/workspaces/<str:slug>/agent-access/nodes/<uuid:node_id>/snapshots/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "list_research_node_snapshots"}, name="research-read-node-snapshots"),
+    path("research/workspaces/<str:slug>/agent-access/nodes/<uuid:node_id>/tasks/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "list_research_node_tasks"}, name="research-read-node-tasks"),
+    path("research/workspaces/<str:slug>/agent-access/tasks/<uuid:task_id>/comments/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "list_research_task_comments"}, name="research-read-task-comments"),
+    path("research/workspaces/<str:slug>/agent-access/nodes/<uuid:node_id>/resources/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "list_research_node_resources"}, name="research-read-node-resources"),
+    path("research/workspaces/<str:slug>/agent-access/nodes/<uuid:node_id>/resources/<str:kind>/<uuid:resource_id>/content/", ResearchReadQueryEndpoint.as_view(), {"tool_name": "read_research_resource"}, name="research-read-resource"),
     path(
         "research/workspaces/<str:slug>/administrative-organizations/<uuid:organization_id>/assignable-members/",
         AdministrativeOrganizationAssignableMembersEndpoint.as_view(),

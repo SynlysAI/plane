@@ -8,6 +8,9 @@ from rest_framework.response import Response
 from plane.db.models import ResearchChainNodeTask, ResearchTaskComment
 from plane.research.serializers.task_comment import ResearchTaskCommentSerializer
 from plane.research.services.idempotency import request_id_from
+from plane.research.services.chain_mutations import append_task_comment
+from plane.research.services.chain_tasks import ChainTaskStateError
+from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.audit import record_audit_event, ResearchResourceType
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import research_error, research_not_found, research_permission_denied
@@ -59,27 +62,12 @@ class ResearchTaskCommentListEndpoint(ResearchAPIView):
         if not serializer.is_valid():
             return research_error("research_comment_invalid", "A non-empty, valid comment is required.")
         html = serializer.validated_data["comment_html"]
-        with transaction.atomic():
-            ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
-            previous = ResearchTaskComment.all_objects.filter(
-                task=task, actor=request.user, request_id=request_id
-            ).first()
-            if previous:
-                if previous.deleted_at or previous.comment_html != html:
-                    return research_error(
-                        "idempotency_conflict", "This request_id was already used.", status.HTTP_409_CONFLICT
-                    )
-                comment, created = previous, False
-            else:
-                comment = ResearchTaskComment.objects.create(
-                    task=task,
-                    actor=request.user,
-                    request_id=request_id,
-                    comment_html=html,
-                    comment_stripped=strip_tags(html),
-                )
-                created = True
-                comment_audit(task, comment, request, "create")
+        try:
+            comment, created = append_task_comment(task=task, actor=request.user, request_id=request_id, html=html, request=request)
+        except ResearchReadError as exc:
+            return research_error(exc.code, str(exc), exc.status)
+        except ChainTaskStateError as exc:
+            return research_error("state_conflict", str(exc), status.HTTP_409_CONFLICT)
         return Response(serialize(comment, request), status=201 if created else 200)
 
 
