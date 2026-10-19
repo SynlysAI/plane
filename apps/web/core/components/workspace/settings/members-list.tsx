@@ -64,7 +64,8 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
   const searchedInvitationsIds = getSearchedWorkspaceInvitationIds(searchQuery);
   const memberDetails = searchedMemberIds
     ?.map((memberId) => getWorkspaceMemberDetails(memberId))
-    .toSorted((a, b) => {
+    // eslint-disable-next-line unicorn/no-array-sort -- map 已创建新数组，且 Web lib 暂为 ES2022。
+    .sort((a, b) => {
       if (a?.is_active && !b?.is_active) return -1;
       if (!a?.is_active && b?.is_active) return 1;
       return 0;

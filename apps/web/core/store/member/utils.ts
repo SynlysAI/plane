@@ -110,7 +110,8 @@ export const sortMembers = <T>(
 
   const { field, direction } = parseOrderKey(orderBy);
 
-  return [...members].toSorted((a, b) => {
+  // eslint-disable-next-line unicorn/no-array-sort -- 已拷贝输入数组，且 Web lib 暂为 ES2022。
+  return [...members].sort((a, b) => {
     const aKey = getMemberKey(a);
     const bKey = getMemberKey(b);
     const aMemberDetails = memberDetailsMap[aKey];
