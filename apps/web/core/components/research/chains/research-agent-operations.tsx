@@ -40,15 +40,18 @@ const fieldLabels: Record<string, string> = {
   version: "材料版本",
 };
 
-export function ResearchAgentOperations({
-  workspaceSlug,
-  nodeId,
-  operationId,
-}: {
-  workspaceSlug: string;
-  nodeId: string;
-  operationId?: string | null;
-}) {
+type Props = { workspaceSlug: string; nodeId: string; operationId?: string | null };
+
+export function ResearchAgentOperations(props: Props) {
+  return (
+    <ResearchAgentOperationsPanel
+      key={JSON.stringify([props.workspaceSlug, props.nodeId, props.operationId])}
+      {...props}
+    />
+  );
+}
+
+function ResearchAgentOperationsPanel({ workspaceSlug, nodeId, operationId }: Props) {
   const [state, setState] = useState<TAgentOperationState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -109,7 +112,6 @@ export function ResearchAgentOperations({
     }
   }
 
-  if (unavailable) return null;
   return (
     <section aria-label="Agent 操作审核" className="border-t border-subtle p-4 text-13 text-primary">
       <div className="flex items-center justify-between gap-3">
@@ -131,7 +133,12 @@ export function ResearchAgentOperations({
           {error}
         </p>
       )}
-      {!state && !error && <p className="py-3 text-secondary">正在加载…</p>}
+      {unavailable && (
+        <p role="status" className="py-3 text-secondary">
+          当前部署或工作区尚未开放科研节点 MCP 操作。请联系管理员核对科研模块、科研链及 MCP 读取和写入开关。
+        </p>
+      )}
+      {!state && !error && !unavailable && <p className="py-3 text-secondary">正在加载…</p>}
       {state && (
         <>
           {!state.enabled ? (
@@ -150,7 +157,10 @@ export function ResearchAgentOperations({
           ) : (
             <details className="my-3 rounded border border-subtle p-3">
               <summary className="cursor-pointer font-medium">连接 Agent 与管理授权</summary>
-              <p className="my-2 text-secondary">授权只覆盖当前节点。每项变更仍需在下方确认；授权到期后需重新连接。</p>
+              <p className="my-2 text-secondary">
+                授权只覆盖当前节点。连接有效期 {((state.connection_ttl_seconds ?? 604800) / 86400).toLocaleString()}{" "}
+                天，每项变更仍需在下方确认；授权到期后需重新连接。
+              </p>
               <label className="block">
                 Agent 名称
                 <input
@@ -236,7 +246,8 @@ export function ResearchAgentOperations({
               {state.grants.map((grant) => (
                 <div key={grant.context_id} className="mt-2 flex items-center justify-between gap-2">
                   <span>
-                    {grant.agent_label} · 到期 {grant.expires_at}
+                    {grant.agent_label} · 有效至 {grant.expires_at} ·{" "}
+                    {grant.actions.map((action) => labels[action]).join("、")}
                   </span>
                   <Button
                     variant="secondary"
@@ -328,6 +339,12 @@ export function ResearchAgentOperations({
                       ? "对象已有后续修改，请核对"
                       : "等待读回核对"}
                 </p>
+              )}
+              {operation.result.event_id && (
+                <p className="text-12 break-all text-secondary">来源事件：{operation.result.event_id}</p>
+              )}
+              {operation.result.audit_id && (
+                <p className="text-12 break-all text-secondary">审计编号：{operation.result.audit_id}</p>
               )}
             </article>
           ))}

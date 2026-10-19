@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspaceMemberTag, IWorkspaceMemberTagGroup } from "@plane/types";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
@@ -17,6 +18,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
+import { getMemberTagErrorMessage } from "@/components/workspace/settings/member-tag-error";
 import type { Route } from "./+types/page";
 import { MemberTagsWorkspaceSettingsHeader } from "./header";
 
@@ -39,11 +41,24 @@ const MemberTagsSettingsPage = observer(function MemberTagsSettingsPage({ params
   const [newTag, setNewTag] = useState<Record<string, { name: string; color: IWorkspaceMemberTag["color"] }>>({});
   const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
 
-  useSWR(isAdmin ? `WORKSPACE_MEMBER_TAG_GROUPS_${workspaceSlug}` : null, async () => {
-    const result = await workspace.fetchWorkspaceMemberTagGroups(workspaceSlug);
-    setGroups(result);
-    return result;
-  });
+  /** 显示成员标签操作错误。 */
+  const showTagError = (error: unknown) => {
+    setToast({
+      type: TOAST_TYPE.ERROR,
+      title: "成员标签操作失败",
+      message: getMemberTagErrorMessage(error, "成员标签操作失败，请稍后重试。"),
+    });
+  };
+
+  useSWR(
+    isAdmin ? `WORKSPACE_MEMBER_TAG_GROUPS_${workspaceSlug}` : null,
+    async () => {
+      const result = await workspace.fetchWorkspaceMemberTagGroups(workspaceSlug);
+      setGroups(result);
+      return result;
+    },
+    { onError: showTagError }
+  );
 
   useEffect(() => {
     setGroups(workspace.workspaceMemberTagGroups[workspaceSlug] ?? []);
@@ -53,60 +68,84 @@ const MemberTagsSettingsPage = observer(function MemberTagsSettingsPage({ params
 
   const createGroup = async () => {
     if (!groupName.trim()) return;
-    const group = await workspaceService.createWorkspaceMemberTagGroup(workspaceSlug, { name: groupName.trim() });
-    setGroups((current) => [...current, group]);
-    setGroupName("");
+    try {
+      const group = await workspaceService.createWorkspaceMemberTagGroup(workspaceSlug, { name: groupName.trim() });
+      setGroups((current) => [...current, group]);
+      setGroupName("");
+    } catch (error: unknown) {
+      showTagError(error);
+    }
   };
 
   const createTag = async (group: IWorkspaceMemberTagGroup) => {
     const draft = newTag[group.id];
     if (!draft?.name.trim()) return;
-    const tag = await workspaceService.createWorkspaceMemberTag(workspaceSlug, group.id, draft);
-    setGroups((current) =>
-      current.map((item) => (item.id === group.id ? { ...item, tags: [...item.tags, tag] } : item))
-    );
-    setNewTag((current) => ({ ...current, [group.id]: { name: "", color: "sage" } }));
+    try {
+      const tag = await workspaceService.createWorkspaceMemberTag(workspaceSlug, group.id, draft);
+      setGroups((current) =>
+        current.map((item) => (item.id === group.id ? { ...item, tags: [...item.tags, tag] } : item))
+      );
+      setNewTag((current) => ({ ...current, [group.id]: { name: "", color: "sage" } }));
+    } catch (error: unknown) {
+      showTagError(error);
+    }
   };
 
   const deleteGroup = async (group: IWorkspaceMemberTagGroup) => {
     if (!window.confirm(`删除标签组“${group.name}”及其标签？`)) return;
-    await workspaceService.deleteWorkspaceMemberTagGroup(workspaceSlug, group.id);
-    setGroups((current) => current.filter((item) => item.id !== group.id));
+    try {
+      await workspaceService.deleteWorkspaceMemberTagGroup(workspaceSlug, group.id);
+      setGroups((current) => current.filter((item) => item.id !== group.id));
+    } catch (error: unknown) {
+      showTagError(error);
+    }
   };
 
   const deleteTag = async (group: IWorkspaceMemberTagGroup, tag: IWorkspaceMemberTag) => {
     if (!window.confirm(`删除标签“${tag.name}”？`)) return;
-    await workspaceService.deleteWorkspaceMemberTag(workspaceSlug, tag.id);
-    setGroups((current) =>
-      current.map((item) =>
-        item.id === group.id ? { ...item, tags: item.tags.filter((value) => value.id !== tag.id) } : item
-      )
-    );
+    try {
+      await workspaceService.deleteWorkspaceMemberTag(workspaceSlug, tag.id);
+      setGroups((current) =>
+        current.map((item) =>
+          item.id === group.id ? { ...item, tags: item.tags.filter((value) => value.id !== tag.id) } : item
+        )
+      );
+    } catch (error: unknown) {
+      showTagError(error);
+    }
   };
 
   const saveGroup = async (group: IWorkspaceMemberTagGroup) => {
     const name = editingGroupName.trim();
     if (!name) return;
-    const updated = await workspaceService.updateWorkspaceMemberTagGroup(workspaceSlug, group.id, { name });
-    setGroups((current) => current.map((item) => (item.id === group.id ? { ...item, ...updated } : item)));
-    setEditingGroupId(null);
+    try {
+      const updated = await workspaceService.updateWorkspaceMemberTagGroup(workspaceSlug, group.id, { name });
+      setGroups((current) => current.map((item) => (item.id === group.id ? { ...item, ...updated } : item)));
+      setEditingGroupId(null);
+    } catch (error: unknown) {
+      showTagError(error);
+    }
   };
 
   const saveTag = async (group: IWorkspaceMemberTagGroup, tag: IWorkspaceMemberTag) => {
     const name = editingTagName.trim();
     if (!name) return;
-    const updated = await workspaceService.updateWorkspaceMemberTag(workspaceSlug, tag.id, {
-      name,
-      color: editingTagColor,
-    });
-    setGroups((current) =>
-      current.map((item) =>
-        item.id === group.id
-          ? { ...item, tags: item.tags.map((value) => (value.id === tag.id ? updated : value)) }
-          : item
-      )
-    );
-    setEditingTagId(null);
+    try {
+      const updated = await workspaceService.updateWorkspaceMemberTag(workspaceSlug, tag.id, {
+        name,
+        color: editingTagColor,
+      });
+      setGroups((current) =>
+        current.map((item) =>
+          item.id === group.id
+            ? { ...item, tags: item.tags.map((value) => (value.id === tag.id ? updated : value)) }
+            : item
+        )
+      );
+      setEditingTagId(null);
+    } catch (error: unknown) {
+      showTagError(error);
+    }
   };
 
   const moveTag = async (group: IWorkspaceMemberTagGroup, tagId: string, direction: -1 | 1) => {
@@ -118,12 +157,16 @@ const MemberTagsSettingsPage = observer(function MemberTagsSettingsPage({ params
       reorderedTags[destinationIndex],
       reorderedTags[sourceIndex],
     ];
-    const updatedTags = await Promise.all(
-      reorderedTags.map((tag, index) =>
-        workspaceService.updateWorkspaceMemberTag(workspaceSlug, tag.id, { sort_order: (index + 1) * 10000 })
-      )
-    );
-    setGroups((current) => current.map((item) => (item.id === group.id ? { ...item, tags: updatedTags } : item)));
+    try {
+      const updatedTags = await Promise.all(
+        reorderedTags.map((tag, index) =>
+          workspaceService.updateWorkspaceMemberTag(workspaceSlug, tag.id, { sort_order: (index + 1) * 10000 })
+        )
+      );
+      setGroups((current) => current.map((item) => (item.id === group.id ? { ...item, tags: updatedTags } : item)));
+    } catch (error: unknown) {
+      showTagError(error);
+    }
   };
 
   return (

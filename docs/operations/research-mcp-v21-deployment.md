@@ -61,9 +61,10 @@ RESEARCH_MODULE_ENABLED=1
 RESEARCH_MCP_ENABLED=1
 RESEARCH_MCP_WRITE_ENABLED=1
 RESEARCH_CONTEXT_TOKEN_TTL_SECONDS=600
+RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS=604800
 ```
 
-三个功能开关在模板中默认关闭，部署脚本不会自动替管理员开放科研写入。`RESEARCH_CONTEXT_TOKEN_TTL_SECONDS` 可省略，默认 600 秒；它控制节点连接，不是提案有效期。提案有效期为 24 小时。
+三个功能开关在模板中默认关闭，部署脚本不会自动替管理员开放科研写入。显式节点 MCP 连接由 `RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS` 控制，默认 604800 秒（7 天）；旧上下文交换仍由 `RESEARCH_CONTEXT_TOKEN_TTL_SECONDS` 控制，默认 600 秒。提案有效期仍为 24 小时，逐项人工审批、撤销和执行权限重检不变。已有连接不追溯延期，须由用户重新生成。
 
 在同一文件中核对已有的以下配置。把示例 origin 替换成实际入口，保留仍在使用的其他合法来源；不使用通配符绕过人工确认的来源校验：
 
@@ -110,9 +111,11 @@ docker compose -f docker-compose-local.yml exec -T api \
 
 ## 4. 页面授权及 Agent 连接
 
+统一页面更新：个人设置中「MCP 连接」位于 Plane API 与「智能体配置」之间，地址 `/settings/profile/mcp/`；节点工作台「MCP / Agent 操作」携带工作区及节点直接进入设置页。旧 `/mcp/` 和 `/{workspace-slug}/mcp/` 自动跳转并保留定位信息。科研区域复用下述节点授权及逐项人工确认；行政项目区域通过可选 `NATIVE_MCP_PORTAL_URL` 连接现有自助服务。无新增迁移，旧 `review_path` 有效。详情见 [统一 MCP 管理说明](mcp-unified-management.md)。
+
 1. 登录服务器，确认目标工作区科研模块和科研链已开启，并创建/选择活动科研链中的可操作节点。v2.1 不能通过 MCP 创建链和节点。
 2. 选择节点实际所属阶段，再选择节点，例如文献综述节点要在文献综述阶段打开。
-3. 节点工作台向下找到「Agent 操作审核」，由管理员点击「启用工作区 Agent 操作」。
+3. 从节点工作台「MCP / Agent 操作」进入统一页，或打开历史提案审核链接；由管理员显式点击「启用工作区 Agent 操作」。
 4. 用户展开「连接 Agent 与管理授权」，选择需要的动作和正式报告版本，生成连接配置。
 5. 将配置保存到客户端私密设置。使用页面生成的 URL、`X-Research-Context-Token`、`X-Research-Context-Hash`；个人 API Key 或旧只读 grant 不会自动获得写权限。
 
@@ -122,7 +125,7 @@ docker compose -f docker-compose-local.yml exec -T api \
 https://plane-test.example.org/api/research/workspaces/<workspace-slug>/agent-operations/mcp/
 ```
 
-地址必须从 Agent 的运行位置可达。远端 Agent/容器中的 `localhost` 指向自身，不应复制本机开发地址。默认十分钟到期后重新生成同用户、同节点、所需动作范围的连接；已有提案可继续查询和执行，无需重复创建。
+地址必须从 Agent 的运行位置可达。远端 Agent/容器中的 `localhost` 指向自身，不应复制本机开发地址。默认 7 天到期后重新生成同用户、同节点、所需动作范围的连接；已有提案可继续查询和执行，无需重复创建。
 
 ## 5. 上线验收与故障定位
 
@@ -130,15 +133,15 @@ https://plane-test.example.org/api/research/workspaces/<workspace-slug>/agent-op
 
 另检查未确认/拒绝提案不能执行、重复执行原 operation_id 不重复创建、撤销节点授权后调用被拒绝。出现超时先查询原 operation_id；不确定 prepare 是否成功时复用原 request_id 和内容。
 
-| 现象                     | 检查方向                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------ |
-| 看不到「Agent 操作审核」 | 是否部署新前端、是否选择了实际节点及所属阶段；浏览器是否仍缓存旧页面                 |
-| 有面板但无启用按钮       | 当前账号是否为该工作区有效管理员/已入工作区的实例管理员；是否工作区已启用            |
-| 授权/确认返回 403        | 登录会话、CSRF token、真实入口和 `CSRF_TRUSTED_ORIGINS`，不要关闭 CSRF               |
-| MCP 返回 401             | 缺少/过期/撤销的节点 Token，或 Token 与 Hash 不匹配；匿名探测返回 401 是正常保护行为 |
-| MCP 返回 404 / disabled  | 发布版本、科研总开关、读取/写入开关、工作区科研链配置、slug、代理路径                |
-| HTTP 200 但无业务结果    | 继续检查 JSON-RPC `error` 或 `result.isError`，不能只按 HTTP 状态判成功              |
-| 提案确认后执行冲突       | 节点、任务或依据已改变；按错误准备新提案并重新人工确认                               |
+| 现象                    | 检查方向                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| 看不到 MCP / Agent 入口 | 核对实际渲染的节点、网络响应、部署版本和配置；旧组件收到 disabled 会隐藏，不能仅凭截图断言是缓存或权限 |
+| 有面板但无启用按钮      | 当前账号是否为该工作区有效管理员/已入工作区的实例管理员；是否工作区已启用                              |
+| 授权/确认返回 403       | 登录会话、CSRF token、真实入口和 `CSRF_TRUSTED_ORIGINS`，不要关闭 CSRF                                 |
+| MCP 返回 401            | 缺少/过期/撤销的节点 Token，或 Token 与 Hash 不匹配；匿名探测返回 401 是正常保护行为                   |
+| MCP 返回 404 / disabled | 发布版本、科研总开关、读取/写入开关、工作区科研链配置、slug、代理路径                                  |
+| HTTP 200 但无业务结果   | 继续检查 JSON-RPC `error` 或 `result.isError`，不能只按 HTTP 状态判成功                                |
+| 提案确认后执行冲突      | 节点、任务或依据已改变；按错误准备新提案并重新人工确认                                                 |
 
 本地已实际验收三类写入；分析草稿和资源关联仍需补齐真实 MCP 业务验收。详细边界见 [验收摘要](research-mcp-v21-acceptance.md)。测试服务器尚未验收，不把本机结果当成远端结果。
 

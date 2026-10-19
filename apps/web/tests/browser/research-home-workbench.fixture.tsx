@@ -1,28 +1,31 @@
 /** Isolated browser fixture for the bento home workbench; no real account is used. */
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router";
-import { TranslationProvider } from "@plane/i18n";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { setLanguage, TranslationProvider } from "@plane/i18n";
 import { StoreProvider } from "@/lib/store-context";
 import { WorkspaceHomeWorkbench } from "../../core/components/home/workbench";
 import { ResearchChainService } from "../../core/services/research/chain.service";
 import { ResearchPlatformService } from "../../core/services/research/platform.service";
 import { ResearchReportService } from "../../core/services/research/report.service";
-import { ResearchTodoService } from "../../core/services/research/research-todo.service";
+import { ProjectDomainsService } from "../../core/services/project-domains.service";
 import { ProjectService } from "../../core/services/project/project.service";
 import { WorkspaceService } from "../../core/services/workspace.service";
 import type { TResearchChain, TResearchIdentity } from "@plane/types";
 // oxlint-disable-next-line import/no-unassigned-import -- fixture stylesheet
 import "./research-home-workbench.fixture.css";
 
-const now = new Date("2026-10-10T15:00:00.000Z").toISOString();
+const now = new Date().toISOString();
+const role = new URLSearchParams(window.location.search).get("role") ?? "admin";
+const canResearch = role === "admin" || role === "researcher";
+const canSummary = role === "admin" || role === "summary";
 const identity = {
   module_enabled: true,
   workspace_enabled: true,
-  sections: { org: false, reports: true, approvals: false, research_chain: true },
+  sections: { org: false, reports: true, approvals: false, research_chain: canResearch },
   capabilities: {
-    level: "ADMIN",
-    nav: ["research_chain", "summary"],
+    level: role === "admin" ? "ADMIN" : canSummary ? "MENTOR" : canResearch ? "RESEARCHER" : "NONE",
+    nav: [...(canResearch ? ["research_chain"] : []), ...(canSummary ? ["summary"] : [])],
     is_mentor: false,
     is_main_pi: false,
     is_stage_reviewer: false,
@@ -86,12 +89,11 @@ ResearchChainService.prototype.getChains = async () => [
     open_task_count: 88,
   },
 ];
-ResearchTodoService.prototype.getResearchTodos = async () => ({
-  schema_version: "research-todo.v2",
+ProjectDomainsService.prototype.todos = async () => ({
   results: [
     {
-      schema_version: "research-todo.v2",
       id: "CHAIN_TASK:task-1",
+      domain: "RESEARCH",
       source: "CHAIN_TASK",
       object_id: "task-1",
       title: "补充催化剂失活实验图表",
@@ -109,21 +111,45 @@ ResearchTodoService.prototype.getResearchTodos = async () => ({
       updated_at: now,
     },
   ],
-  count: 1,
   total_count: 1,
   next_cursor: null,
   degraded_sources: [],
 });
 ResearchReportService.prototype.getSummary = async (_workspaceSlug, params = {}) => ({
-  period_key: params.report_type === "MONTHLY" ? "2026-10" : "2026-W42",
-  period_start: params.report_type === "MONTHLY" ? "2026-10-01" : "2026-10-12",
-  period_end: params.report_type === "MONTHLY" ? "2026-10-31" : "2026-10-18",
+  period_key:
+    params.report_type === "MONTHLY"
+      ? params.period_offset === -1
+        ? "2026-09"
+        : "2026-10"
+      : params.period_offset === -1
+        ? "2026-W41"
+        : "2026-W42",
+  period_start:
+    params.report_type === "MONTHLY"
+      ? params.period_offset === -1
+        ? "2026-09-01"
+        : "2026-10-01"
+      : params.period_offset === -1
+        ? "2026-10-05"
+        : "2026-10-12",
+  period_end:
+    params.report_type === "MONTHLY"
+      ? params.period_offset === -1
+        ? "2026-09-30"
+        : "2026-10-31"
+      : params.period_offset === -1
+        ? "2026-10-11"
+        : "2026-10-18",
   org_unit: null,
   org_unit_name: null,
   counts:
     params.report_type === "MONTHLY"
-      ? { not_submitted: 93, draft: 1, submitted: 15, needs_revision: 12, accepted: 18 }
-      : { not_submitted: 193, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+      ? params.period_offset === -1
+        ? { not_submitted: 92, draft: 0, submitted: 14, needs_revision: 11, accepted: 17 }
+        : { not_submitted: 93, draft: 1, submitted: 15, needs_revision: 12, accepted: 18 }
+      : params.period_offset === -1
+        ? { not_submitted: 192, draft: 0, submitted: 4, needs_revision: 1, accepted: 7 }
+        : { not_submitted: 193, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
   pending_members: [],
 });
 ProjectService.prototype.getProjects = async () =>
@@ -178,22 +204,30 @@ WorkspaceService.prototype.fetchWorkspaceRecents = async () => [
   },
 ];
 
+await setLanguage("zh-CN");
 createRoot(document.getElementById("root")!).render(
   <StoreProvider>
     <TranslationProvider>
       <MemoryRouter initialEntries={["/isolated-test"]}>
-        <main className="relative h-screen overflow-hidden bg-surface-1">
-          <div className="flex h-11 items-center border-b border-subtle bg-surface-1 px-4 text-12 text-secondary">
-            首页
-          </div>
-          <div className="absolute inset-x-0 top-11 bottom-0 overflow-hidden">
-            <div className="h-full w-full overflow-hidden">
-              <div className="relative flex h-full w-full flex-col overflow-x-hidden overflow-y-auto bg-canvas px-page-x py-page-y">
-                <WorkspaceHomeWorkbench workspaceSlug="isolated-test" />
-              </div>
-            </div>
-          </div>
-        </main>
+        <Routes>
+          <Route
+            path="/:workspaceSlug"
+            element={
+              <main className="relative h-screen overflow-hidden bg-surface-1">
+                <div className="flex h-11 items-center border-b border-subtle bg-surface-1 px-4 text-12 text-secondary">
+                  首页
+                </div>
+                <div className="absolute inset-x-0 top-11 bottom-0 overflow-hidden">
+                  <div className="h-full w-full overflow-hidden">
+                    <div className="relative flex h-full w-full flex-col overflow-x-hidden overflow-y-auto bg-canvas px-page-x py-page-y">
+                      <WorkspaceHomeWorkbench workspaceSlug="isolated-test" />
+                    </div>
+                  </div>
+                </div>
+              </main>
+            }
+          />
+        </Routes>
       </MemoryRouter>
     </TranslationProvider>
   </StoreProvider>

@@ -104,6 +104,7 @@
       "notifications": "通知",
       "api-tokens": "个人访问令牌",
       "agent-configuration": "智能体配置",
+      "mcp": "MCP 连接",
       "connections": "连接"
     },
     "tabs": {

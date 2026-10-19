@@ -14,6 +14,7 @@ export type TProfileSettingsTabs =
   | "notifications"
   | "security"
   | "api-tokens"
+  | "mcp"
   | "agent-configuration";
 
 export type TWorkspaceSettingsTabs = "general" | "members" | "member-tags" | "export" | "webhooks";

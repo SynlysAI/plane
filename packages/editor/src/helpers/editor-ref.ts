@@ -192,7 +192,19 @@ export const getEditorRefHelpers = (args: TArgs): EditorRefApi => {
         editor.chain().focus().deleteRange({ from, to }).insertContent(contentHTML).run();
       }
     },
-    isEditorReadyToDiscard: () => editor?.storage?.utility?.uploadInProgress === false,
+    isEditorReadyToDiscard: () => {
+      if (!editor || editor.storage?.utility?.uploadInProgress) return false;
+
+      let hasIncompleteImage = false;
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === CORE_EXTENSIONS.CUSTOM_IMAGE && !node.attrs.src) {
+          hasIncompleteImage = true;
+          return false;
+        }
+        return !hasIncompleteImage;
+      });
+      return !hasIncompleteImage;
+    },
     isMenuItemActive: (props) => {
       const { itemKey } = props;
       const editorItems = getEditorMenuItems(editor);

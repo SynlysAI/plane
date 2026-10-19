@@ -119,7 +119,6 @@ export const EstimateDropdown = observer(function EstimateDropdown(props: Props)
             </div>
           ),
         };
-      else undefined;
     })
     .filter((estimatePointDropdownOption) => estimatePointDropdownOption != undefined) as DropdownOptions;
   options?.unshift({
@@ -217,6 +216,7 @@ export const EstimateDropdown = observer(function EstimateDropdown(props: Props)
   return (
     <ComboDropDown
       as="div"
+      role="group"
       ref={dropdownRef}
       tabIndex={tabIndex}
       className={cn("h-full w-full", className)}
@@ -229,6 +229,8 @@ export const EstimateDropdown = observer(function EstimateDropdown(props: Props)
     >
       {isOpen && (
         <Combobox.Options
+          // Keep sibling options interactive when the search input is inside the panel.
+          modal={false}
           as="ul"
           className="fixed z-10"
           static

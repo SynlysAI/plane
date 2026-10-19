@@ -1,4 +1,10 @@
 {
+  "research": {
+    "home_workbench": {
+      "last_week": "Geçen hafta",
+      "last_month": "Geçen ay"
+    }
+  },
   "cloud_maintenance_message": {
     "we_are_working_on_this_if_you_need_immediate_assistance": "Bu konuda çalışıyoruz. Acil yardıma ihtiyacınız varsa,",
     "reach_out_to_us": "bize ulaşın",

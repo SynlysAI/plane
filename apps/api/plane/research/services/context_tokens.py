@@ -53,6 +53,7 @@ def issue_context_token(
     scope_kind="OWNER",
     scope_source="chain_owner",
     policy_version="research-agent-policy.v1",
+    ttl_seconds=None,
 ):
     """Create a one-time displayed token and its revocable database grant."""
     if not request_id:
@@ -94,7 +95,7 @@ def issue_context_token(
         if any((allowed_knowledge_base_ids, allowed_file_ids, allowed_plugins, allowed_tools, allowed_reports))
         else base_hash
     )
-    ttl_seconds = max(60, int(getattr(settings, "RESEARCH_CONTEXT_TOKEN_TTL_SECONDS", 600)))
+    ttl_seconds = max(60, int(ttl_seconds if ttl_seconds is not None else getattr(settings, "RESEARCH_CONTEXT_TOKEN_TTL_SECONDS", 600)))
     grant = ResearchContextGrant.objects.create(
         workspace=workspace,
         user=user,

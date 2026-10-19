@@ -47,6 +47,7 @@ export const coreRoutes: RouteConfigEntry[] = [
   // ALL APP ROUTES
   // ========================================================================
   layout("./(all)/layout.tsx", [
+    route("mcp", "./(all)/mcp/page.tsx"),
     // ======================================================================
     // WORKSPACE-SCOPED ROUTES
     // ======================================================================
@@ -55,6 +56,7 @@ export const coreRoutes: RouteConfigEntry[] = [
       // PROJECTS APP SECTION - WORKSPACE LEVEL ROUTES
       // ====================================================================
       layout("./(all)/[workspaceSlug]/(projects)/layout.tsx", [
+        route(":workspaceSlug/mcp", "./(all)/[workspaceSlug]/(projects)/mcp/page.tsx"),
         // --------------------------------------------------------------------
         // WORKSPACE LEVEL ROUTES
         // --------------------------------------------------------------------

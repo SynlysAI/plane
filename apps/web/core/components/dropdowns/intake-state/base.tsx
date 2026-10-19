@@ -213,6 +213,8 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     >
       {isOpen && (
         <Combobox.Options
+          // Keep sibling options interactive when the search input is inside the panel.
+          modal={false}
           as="ul"
           className="fixed z-10"
           static

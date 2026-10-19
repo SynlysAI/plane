@@ -54,7 +54,7 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
   // store hooks
   const { data: currentUser } = useUser();
   const {
-    workspace: { removeMemberFromWorkspace, workspaceMemberTagGroups },
+    workspace: { getWorkspaceMemberDetails, removeMemberFromWorkspace, workspaceMemberTagGroups },
   } = useMember();
   const { leaveWorkspace } = useUserPermissions();
   const { getWorkspaceRedirectionUrl } = useWorkspace();
@@ -124,8 +124,12 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
         <BulkMemberTagsEditor
           workspaceSlug={workspaceSlug}
           memberIds={selectedMemberIds}
+          members={selectedMemberIds
+            .map((memberId) => getWorkspaceMemberDetails(memberId))
+            .filter((member): member is IWorkspaceMember => member !== null)}
           groups={workspaceMemberTagGroups[workspaceSlug] ?? []}
           onClose={() => setIsBulkTagEditorOpen(false)}
+          onSuccess={() => setSelectedMemberIds([])}
         />
       )}
       {removeMemberModal && (

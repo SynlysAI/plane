@@ -55,6 +55,30 @@ def current_period(report_type, reference=None, timezone_name=None):
     raise InvalidPeriod(f"Unknown report type: {report_type}")
 
 
+def period_for_offset(report_type, period_offset, timezone_name=None):
+    """按报告时区解析相对于当前周或月的周期。
+
+    Args:
+        report_type: 报告类型，取值为 ``WEEKLY`` 或 ``MONTHLY``。
+        period_offset: 周期偏移量，负数表示过去，零表示当前，正数表示未来。
+        timezone_name: 用于确定当前日期的工作区报告时区。
+
+    Returns:
+        包含周期标识、开始日期、结束日期的三元组。
+    """
+    try:
+        if report_type == "WEEKLY":
+            _, current_start, _ = weekly_period(timezone_name=timezone_name)
+            return weekly_period(current_start + timedelta(weeks=period_offset))
+        if report_type == "MONTHLY":
+            _, current_start, _ = monthly_period(timezone_name=timezone_name)
+            month_index = current_start.year * 12 + current_start.month - 1 + period_offset
+            return monthly_period(date(month_index // 12, month_index % 12 + 1, 1))
+    except (OverflowError, TypeError, ValueError) as error:
+        raise InvalidPeriod("Period offset is out of range.") from error
+    raise InvalidPeriod(f"Unknown report type: {report_type}")
+
+
 def parse_period(report_type, period_key, timezone_name=None):
     """Resolve an explicit ``period_key`` into ``(key, start, end)``."""
     if not period_key:

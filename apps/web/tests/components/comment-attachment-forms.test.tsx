@@ -16,9 +16,13 @@ vi.mock("@/components/editor/lite-text", () => ({
   LiteTextEditor: React.forwardRef(function Editor(props: any, ref) {
     const [body, setBody] = React.useState(props.initialValue);
     React.useImperativeHandle(ref, () => ({
-      isEditorReadyToDiscard: () => true,
+      isEditorReadyToDiscard: () =>
+        !Array.from(body.matchAll(/<image-component\b([^>]*)>/gi)).some(
+          ([, attributes]) => !/\bsrc\s*=\s*["'][^"']+["']/i.test(attributes)
+        ),
       clearEditor: () => setBody("<p></p>"),
       setEditorValue: setBody,
+      getDocument: () => ({ html: body, json: null, binary: null }),
     }));
     return (
       <div>
@@ -39,13 +43,25 @@ vi.mock("@/components/editor/lite-text", () => ({
           aria-label="选择评论附件"
           onChange={(event) => props.onAttachFiles?.(Array.from(event.target.files ?? []))}
         />
-        <button onClick={() => props.uploadFile("block", new File(["image"], "image.png"))}>图片</button>
+        <button
+          onClick={() =>
+            void props.uploadFile("block", new File(["image"], "image.png")).then((assetId: string) => {
+              const html = `<p><image-component src="${assetId}"></image-component></p>`;
+              setBody(html);
+              props.onChange({}, html);
+              return assetId;
+            })
+          }
+        >
+          图片
+        </button>
         {props.attachmentContent}
         {props.showSubmitButton !== false && (
           <button
             disabled={
               props.isSubmitting ||
               props.isSubmitDisabled ||
+              !ref.current?.isEditorReadyToDiscard() ||
               (!props.hasAttachments && props.initialValue === "<p></p>")
             }
             onClick={props.onEnterKeyPress}
@@ -53,6 +69,15 @@ vi.mock("@/components/editor/lite-text", () => ({
             评论
           </button>
         )}
+        <button
+          onClick={() => {
+            const html = "<p><image-component></image-component></p>";
+            setBody(html);
+            props.onChange({}, html);
+          }}
+        >
+          未完成图片
+        </button>
       </div>
     );
   }),
@@ -137,6 +162,12 @@ it("associates images with the actual comment id and reuses it when association 
   await attach();
   await click("图片");
   await click("评论");
+  expect(ops.createComment).toHaveBeenCalledWith(
+    expect.objectContaining({
+      comment_html: '<p><image-component src="image"></image-component></p>',
+      attachment_ids: ["asset"],
+    })
+  );
   expect(mocks.bulk).toHaveBeenCalledWith("lab", "project", "comment", { asset_ids: ["image"] });
   await click("评论");
   expect(ops.createComment).toHaveBeenCalledOnce();
@@ -167,4 +198,16 @@ it("keeps editing on failure and applies attachment changes only after save", as
   await click("保存评论");
   expect(setEditing).toHaveBeenCalledWith(false);
   expect(ops.updateComment).toHaveBeenLastCalledWith("comment", { comment_html: "<p></p>", attachment_ids: ["asset"] });
+});
+
+it("does not submit while an image placeholder is still pending", async () => {
+  const ops = operations();
+  await mount(<CommentCreate workspaceSlug="lab" projectId="project" entityId="issue" activityOperations={ops} />);
+  await click("未完成图片");
+  await act(async () => {
+    container
+      .querySelector<HTMLTextAreaElement>('textarea[aria-label="评论正文"]')
+      ?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+  });
+  expect(ops.createComment).not.toHaveBeenCalled();
 });

@@ -1,4 +1,10 @@
 {
+  "research": {
+    "home_workbench": {
+      "last_week": "Săptămâna trecută",
+      "last_month": "Luna trecută"
+    }
+  },
   "cloud_maintenance_message": {
     "we_are_working_on_this_if_you_need_immediate_assistance": "Lucrăm la asta. Dacă aveți nevoie de asistență imediată,",
     "reach_out_to_us": "contactați-ne",

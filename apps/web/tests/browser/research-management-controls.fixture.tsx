@@ -72,11 +72,27 @@ const settings = {
   research_chain_enabled: true,
   research_ia_v2: true,
 };
+const feedbackRecords = [
+  {
+    feedback_id: "feedback-fixture",
+    content: "周报周期自动生成后，附件上传入口偶尔没有出现在正文工具栏中。",
+    feedback_type: "bug",
+    status: "open",
+    username: "肖旭",
+    path: "/sample/research/reports",
+    browser: "Microsoft Edge 155.0",
+    module: "research",
+    screenshots: [],
+    history: [],
+    created_at: now,
+    updated_at: now,
+  },
+];
 
 APIService.prototype.get = async (rawUrl) => {
   const path = new URL(rawUrl, window.location.origin).pathname;
   let data: unknown = { results: [], count: 0 };
-  if (path.endsWith("/identity/me/"))
+  if (path.endsWith("/context/"))
     data = {
       module_enabled: true,
       workspace_enabled: true,
@@ -164,6 +180,7 @@ APIService.prototype.get = async (rawUrl) => {
   else if (path.endsWith("/settings/")) data = settings;
   else if (path.endsWith("/integrations/health/")) data = { results: [] };
   else if (path.endsWith("/integrations/")) data = { results: [] };
+  else if (path.endsWith("/feedback/")) data = { data: { results: feedbackRecords, count: feedbackRecords.length } };
   return { data, status: 200, statusText: "OK", headers: {}, config: { headers: new AxiosHeaders() } };
 };
 // Preview controls cannot create, update, or delete persistent records.

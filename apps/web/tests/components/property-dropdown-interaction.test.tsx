@@ -21,10 +21,80 @@ vi.mock("@/hooks/store/use-cycle", () => ({
     fetchAllCycles: vi.fn(),
   }),
 }));
+vi.mock("@/hooks/store/estimates", () => ({
+  useProjectEstimates: () => ({
+    currentActiveEstimateIdByProjectId: () => "estimate-1",
+    getEstimateById: () => ({ type: "POINTS" }),
+    getProjectEstimates: vi.fn(),
+  }),
+}));
+vi.mock("@/hooks/store/estimates/use-estimate", () => ({
+  useEstimate: () => ({ estimatePointIds: ["point-1"], estimatePointById: () => ({ id: "point-1", value: "5" }) }),
+}));
 
 import { ModuleOptions } from "@/components/dropdowns/module/module-options";
 import { CycleOptions } from "@/components/dropdowns/cycle/cycle-options";
 import { IssueLabelSelect } from "@/components/issues/issue-detail/label/select/label-select";
+import { ProjectDropdownBase } from "@/components/dropdowns/project/base";
+import { EstimateDropdown } from "@/components/dropdowns/estimate";
+import { WorkItemStateDropdownBase } from "@/components/dropdowns/intake-state/base";
+
+function EstimateHarness() {
+  const [value, setValue] = useState<string | undefined>();
+  return (
+    <>
+      <EstimateDropdown
+        projectId="project"
+        value={value}
+        onChange={setValue}
+        buttonVariant="border-with-text"
+        placeholder="Estimate"
+      />
+      <output>{value}</output>
+    </>
+  );
+}
+
+function IntakeHarness() {
+  const [value, setValue] = useState("pending");
+  return (
+    <>
+      <WorkItemStateDropdownBase
+        projectId="project"
+        value={value}
+        onChange={setValue}
+        buttonVariant="border-with-text"
+        stateIds={["pending", "accepted"]}
+        getStateById={(id) =>
+          ({ id, name: id === "accepted" ? "Accepted" : "Pending", group: "pending", color: "#999999" }) as never
+        }
+      />
+      <output>{value}</output>
+    </>
+  );
+}
+
+const projects = {
+  first: { id: "first", name: "Public project" },
+  second: { id: "second", name: "Equipment purchase" },
+};
+
+function ProjectHarness() {
+  const [value, setValue] = useState("first");
+  return (
+    <>
+      <ProjectDropdownBase
+        value={value}
+        onChange={setValue}
+        multiple={false}
+        buttonVariant="border-with-text"
+        projectIds={Object.keys(projects)}
+        getProjectById={(id) => projects[id as keyof typeof projects]}
+      />
+      <output>{value}</output>
+    </>
+  );
+}
 
 function ModuleHarness() {
   const [value, setValue] = useState<string[]>([]);
@@ -137,5 +207,27 @@ describe("work item property dropdown interactions", () => {
     expect((await select("Getting Started")).getAttribute("aria-selected")).toBe("true");
     await open();
     expect((await select("cycle.no_cycle")).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("can switch the new work item project while the search input is inside the menu", async () => {
+    await act(async () => root.render(<ProjectHarness />));
+    await open();
+    await act(async () => container.querySelector("button")!.click());
+    await select("Equipment purchase");
+    expect(container.querySelector("output")?.textContent).toBe("second");
+    expect(container.querySelector('[role="option"]')).toBeNull();
+    expect(container.querySelector("button")?.textContent).toContain("Equipment purchase");
+  });
+
+  it.each([
+    ["estimate", EstimateHarness, "5", "point-1"],
+    ["intake state", IntakeHarness, "Accepted", "accepted"],
+  ] as const)("can select %s without making options inert", async (_name, Harness, optionName, expected) => {
+    await act(async () => root.render(<Harness />));
+    await open();
+    await act(async () => container.querySelector("button")!.click());
+    await select(optionName);
+    expect(container.querySelector("output")?.textContent).toBe(expected);
+    expect(container.querySelector('[role="option"]')).toBeNull();
   });
 });

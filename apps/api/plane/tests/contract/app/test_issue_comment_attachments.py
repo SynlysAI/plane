@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from datetime import timedelta
 from django.utils import timezone
+from django.test import override_settings
 from rest_framework.test import APIClient
 
 from plane.db.models import FileAsset, Issue, IssueComment, Project, ProjectMember, State, User, WorkspaceMember
@@ -96,6 +97,30 @@ def test_upload_pptx_and_keep_image_endpoints_restricted(session_client, comment
             ).status_code
             == 400
         )
+
+
+@pytest.mark.django_db
+@override_settings(FILE_SIZE_LIMIT=8 * 1024 * 1024)
+def test_comment_attachment_uses_configured_file_size_limit(session_client, comment_context):
+    """评论附件上传遵循系统 FILE_SIZE_LIMIT，而不是固定 5MB。"""
+    _, _, issue, _ = comment_context
+    payload = {
+        "name": "大型过程材料.pptx",
+        "type": PPTX_TYPE,
+        "size": 6 * 1024 * 1024,
+        "entity_type": "COMMENT_ATTACHMENT",
+        "entity_identifier": str(issue.id),
+    }
+    with patch("plane.app.views.asset.v2.S3Storage") as storage:
+        storage.return_value.generate_presigned_post.return_value = {"url": "https://storage.test", "fields": {}}
+        response = session_client.post(upload_url(comment_context), payload, format="json")
+    assert response.status_code == 200, response.data
+    assert FileAsset.objects.get(id=response.data["asset_id"]).size == payload["size"]
+
+    too_large = session_client.post(
+        upload_url(comment_context), {**payload, "size": 9 * 1024 * 1024}, format="json"
+    )
+    assert too_large.status_code == 400
 
 
 @pytest.mark.django_db

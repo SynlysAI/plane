@@ -90,6 +90,14 @@ it("shows exact proposed content as text and approves the immutable hash with CS
   });
 });
 
+it("shows seven day node connections while keeping each proposal's own approval", async () => {
+  mocks.getState.mockResolvedValue(state({ connection_ttl_seconds: 604800 }));
+  await render();
+  expect(container.textContent).toContain("连接有效期 7 天");
+  expect(button("确认这项变更")).not.toBeNull();
+  expect(mocks.act).not.toHaveBeenCalled();
+});
+
 it("rejects explicitly and never executes a business operation from the approval UI", async () => {
   await render();
   await act(async () => button("拒绝").click());
@@ -155,4 +163,31 @@ it("loads a deep-linked proposal and reports approval failure without showing su
   mocks.act.mockRejectedValue({ message: "提案已到期" });
   await act(async () => button("确认这项变更").click());
   expect(container.querySelector('[role="alert"]')?.textContent).toBe("提案已到期");
+});
+
+it("shows disabled MCP explicitly instead of silently removing the panel", async () => {
+  mocks.getState.mockRejectedValue({ error_code: "disabled" });
+  await render();
+  expect(container.querySelector('[aria-label="Agent 操作审核"]')).not.toBeNull();
+  expect(container.querySelector('[role="status"]')?.textContent).toContain("尚未开放科研节点 MCP");
+  expect(mocks.act).not.toHaveBeenCalled();
+});
+
+it("does not reuse a previous node's credentials or accept its delayed grant response", async () => {
+  let resolveGrant!: (result: unknown) => void;
+  mocks.act.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveGrant = resolve;
+      })
+  );
+  await render("node-1");
+  await act(async () => container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  await act(async () => button("生成当前节点连接配置").click());
+  await render("node-2");
+  await act(async () =>
+    resolveGrant({ headers: { "X-Research-Context-Token": "old-secret" }, mcp_path: "/api/research/mcp/" })
+  );
+  expect(container.querySelector("textarea")).toBeNull();
+  expect(button("生成当前节点连接配置").disabled).toBe(true);
 });

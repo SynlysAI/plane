@@ -22,6 +22,7 @@ from plane.research.services.chain_tasks import (
     actor_can_manage_chain_tasks, create_task, update_task,
 )
 from plane.research.services.context_tokens import issue_context_token
+from plane.research.services.token_lifetimes import node_mcp_token_ttl_seconds
 from plane.research.services.mcp_catalog import ResearchReadError, TOOL_NAMES
 from plane.research.services.operation_catalog import ACTIONS, OPERATION_TOOL_NAMES, RESOURCE_TYPES, validate_operation
 from plane.research.utils.audit import record_audit_event
@@ -103,7 +104,7 @@ def issue_write_grant(*, workspace, user, node_id, actions, agent_label, reports
     grant, raw = issue_context_token(workspace=workspace, user=user, profile=node.chain.project.research_profile,
         chain_node=node, request_id="write-grant:" + timezone.now().isoformat(), allowed_reports=report_selections,
         allowed_tools=sorted(TOOL_NAMES | OPERATION_TOOL_NAMES), policy_version="research-mcp.operations.v2.1",
-        scope_source="human_node_write_grant")
+        scope_source="human_node_write_grant", ttl_seconds=node_mcp_token_ttl_seconds())
     write = ResearchAgentWriteGrant.objects.create(context=grant, allowed_actions=sorted(set(actions)), agent_label=agent_label)
     record_audit_event(workspace=workspace, actor=user, action="research.mcp.grant.issue",
         resource_type="research_context", resource_id=grant.context_id,

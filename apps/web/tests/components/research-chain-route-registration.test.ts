@@ -14,6 +14,14 @@ function flattenRoutes(routes: FlatRoute[]): FlatRoute[] {
 }
 
 describe("research chain route registration", () => {
+  it("registers human MCP management separately from machine protocol routes", () => {
+    const routes = flattenRoutes(coreRoutes);
+    expect(routes).toContainEqual({ path: "mcp", file: "./(all)/mcp/page.tsx" });
+    expect(routes).toContainEqual({
+      path: ":workspaceSlug/mcp",
+      file: "./(all)/[workspaceSlug]/(projects)/mcp/page.tsx",
+    });
+  });
   it("registers the personal agent backend compatibility page", () => {
     expect(flattenRoutes(coreRoutes)).toContainEqual({
       path: ":workspaceSlug/research/settings/agent-backend",

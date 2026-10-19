@@ -104,6 +104,7 @@
       "notifications": "Notifications",
       "api-tokens": "Personal Access Tokens",
       "agent-configuration": "Agent configuration",
+      "mcp": "MCP connections",
       "connections": "Connections"
     },
     "tabs": {

@@ -16,10 +16,11 @@ import { PROFILE_SETTINGS_PAGES_MAP } from "./pages";
 type Props = {
   activeTab: TProfileSettingsTabs;
   className?: string;
+  inModal?: boolean;
 };
 
 export const ProfileSettingsContent = observer(function ProfileSettingsContent(props: Props) {
-  const { activeTab, className } = props;
+  const { activeTab, className, inModal = false } = props;
   const PageComponent = PROFILE_SETTINGS_PAGES_MAP[activeTab];
 
   return (
@@ -31,7 +32,7 @@ export const ProfileSettingsContent = observer(function ProfileSettingsContent(p
       size="sm"
     >
       <Suspense>
-        <PageComponent />
+        <PageComponent inModal={inModal} />
       </Suspense>
     </ScrollArea>
   );

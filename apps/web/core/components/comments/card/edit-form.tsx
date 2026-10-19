@@ -70,12 +70,14 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
     submissionLock.current = true;
     setSubmitError("");
     try {
+      const currentCommentHTML = editorRef.current?.getDocument().html ?? formData.comment_html ?? "<p></p>";
       await activityOperations.updateComment(comment.id, {
         ...formData,
+        comment_html: currentCommentHTML,
         ...(supportsAttachments ? { attachment_ids: attachmentDraft.attachmentIds } : {}),
       });
       attachmentDraft.commit();
-      readOnlyEditorRef?.setEditorValue(formData?.comment_html ?? "<p></p>");
+      readOnlyEditorRef?.setEditorValue(currentCommentHTML);
       setIsEditing(false);
     } catch {
       setSubmitError("评论未保存，输入内容及附件已保留，请重试。");

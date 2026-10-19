@@ -1106,6 +1106,8 @@
       "report_summary": "Report submission summary",
       "this_week": "This week",
       "this_month": "This month",
+      "last_week": "Last week",
+      "last_month": "Last month",
       "recent_error": "Recent activity is unavailable. Please refresh later.",
       "report_error": "The report summary is unavailable. Refresh or open the report view.",
       "view_summary": "View summary",
