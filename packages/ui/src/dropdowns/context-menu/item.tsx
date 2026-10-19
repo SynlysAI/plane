@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import React, { useState, useRef, useContext } from "react";
+import React, { useState, useRef, useContext, useMemo, useCallback } from "react";
 import { usePopper } from "react-popper";
 import { ChevronRightOutline } from "@makeplane/propel/icons";
 // helpers
@@ -31,8 +31,11 @@ export function ContextMenuItem(props: ContextMenuItemProps) {
   const nestedMenuRef = useRef<HTMLDivElement | null>(null);
 
   const contextMenuContext = useContext(ContextMenuContext);
-  const hasNestedItems = item.nestedMenuItems && item.nestedMenuItems.length > 0;
-  const renderedNestedItems = item.nestedMenuItems?.filter((nestedItem) => nestedItem.shouldRender !== false) || [];
+  const renderedNestedItems = useMemo(
+    () => item.nestedMenuItems?.filter((nestedItem) => nestedItem.shouldRender !== false) || [],
+    [item.nestedMenuItems]
+  );
+  const hasNestedItems = renderedNestedItems.length > 0;
 
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: "right-start",
@@ -100,55 +103,50 @@ export function ContextMenuItem(props: ContextMenuItemProps) {
     }
   };
 
-  const handleNestedItemClick = (nestedItem: TContextMenuItem, e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const handleNestedItemClick = useCallback(
+    (nestedItem: TContextMenuItem, e?: React.MouseEvent) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
 
-    nestedItem.action();
-    if (nestedItem.closeOnClick !== false) {
-      handleClose(); // Close the entire context menu
+      nestedItem.action();
+      if (nestedItem.closeOnClick !== false) {
+        handleClose(); // Close the entire context menu
+      }
+    },
+    [handleClose]
+  );
+
+  /** 直接处理传送层上的键盘事件，避免监听早于子菜单挂载。 */
+  const handleNestedKeyDown = (e: React.KeyboardEvent) => {
+    if (!isNestedOpen || !hasNestedItems || renderedNestedItems.length === 0) return;
+    e.stopPropagation();
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveNestedIndex((prev) => (prev + 1) % renderedNestedItems.length);
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveNestedIndex((prev) => (prev - 1 + renderedNestedItems.length) % renderedNestedItems.length);
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const nestedItem = renderedNestedItems[activeNestedIndex];
+      if (nestedItem && !nestedItem.disabled) {
+        handleNestedItemClick(nestedItem);
+      }
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      closeNestedMenu();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      handleClose();
     }
   };
-
-  // Handle keyboard navigation for nested items
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isNestedOpen || !hasNestedItems) return;
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveNestedIndex((prev) => (prev + 1) % renderedNestedItems.length);
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveNestedIndex((prev) => (prev - 1 + renderedNestedItems.length) % renderedNestedItems.length);
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        const nestedItem = renderedNestedItems[activeNestedIndex];
-        if (!nestedItem.disabled) {
-          handleNestedItemClick(nestedItem);
-        }
-      }
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        closeNestedMenu();
-      }
-    };
-
-    if (isNestedOpen && nestedMenuRef.current) {
-      const menuElement = nestedMenuRef.current;
-      menuElement.addEventListener("keydown", handleKeyDown);
-      // Ensure the menu can receive keyboard events
-      menuElement.setAttribute("tabindex", "-1");
-      menuElement.focus();
-      return () => {
-        menuElement.removeEventListener("keydown", handleKeyDown);
-      };
-    }
-  }, [isNestedOpen, activeNestedIndex, renderedNestedItems, hasNestedItems, closeNestedMenu]);
 
   if (item.shouldRender === false) return null;
 
@@ -157,6 +155,9 @@ export function ContextMenuItem(props: ContextMenuItemProps) {
       <button
         ref={setReferenceElement}
         type="button"
+        role="menuitem"
+        aria-haspopup={hasNestedItems ? "menu" : undefined}
+        aria-expanded={hasNestedItems ? isNestedOpen : undefined}
         className={cn(
           "flex w-full items-center gap-2 rounded-sm px-1 py-1.5 text-left text-11 text-secondary select-none",
           {
@@ -199,11 +200,21 @@ export function ContextMenuItem(props: ContextMenuItemProps) {
             className="fixed z-[35] min-w-[12rem] overflow-hidden rounded-md border-[0.5px] border-subtle-1 bg-surface-1 px-2 py-2.5 text-11"
             data-context-submenu="true"
           >
-            <div ref={nestedMenuRef} className="vertical-scrollbar scrollbar-sm max-h-72 overflow-y-scroll">
+            <div
+              ref={(element) => {
+                nestedMenuRef.current = element;
+                element?.focus();
+              }}
+              role="menu"
+              tabIndex={-1}
+              onKeyDown={handleNestedKeyDown}
+              className="vertical-scrollbar scrollbar-sm max-h-72 overflow-y-scroll"
+            >
               {renderedNestedItems.map((nestedItem, index) => (
                 <button
                   key={nestedItem.key}
                   type="button"
+                  role="menuitem"
                   className={cn(
                     "flex w-full items-center gap-2 rounded-sm px-1 py-1.5 text-left text-11 text-secondary select-none",
                     {

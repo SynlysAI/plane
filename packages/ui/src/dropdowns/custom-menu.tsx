@@ -234,6 +234,14 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
       tabIndex={tabIndex}
       className={cn("relative w-min text-left", className)}
       onKeyDown={handleKeyDown}
+      onKeyDownCapture={(event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Escape" && isOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeDropdown();
+          referenceElement?.focus();
+        }
+      }}
       role="presentation"
       onClick={(e) => {
         e.stopPropagation();

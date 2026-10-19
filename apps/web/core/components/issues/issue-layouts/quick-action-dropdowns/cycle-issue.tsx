@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 import { ARCHIVABLE_STATE_GROUPS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import type { TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
 import { ContextMenu, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
@@ -48,6 +49,8 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
   const [_, setDuplicateWorkItemModal] = useState(false);
   // router
   const { workspaceSlug, cycleId } = useParams();
+  const { t } = useTranslation();
+  const menuLabel = t("work_item_actions", { name: `${issue.sequence_id ?? issue.id} ${issue.name}` });
   const { issuesFilter } = useIssues(EIssuesStoreType.CYCLE);
   const { allowPermissions } = useUserPermissions();
   const { getStateById } = useProjectState();
@@ -136,8 +139,9 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
         storeType={EIssuesStoreType.CYCLE}
       />
 
-      <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
+      <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} ariaLabel={menuLabel} />
       <CustomMenu
+        ariaLabel={menuLabel}
         ellipsis
         placement={placements}
         customButton={customActionButton}

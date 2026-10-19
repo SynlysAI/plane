@@ -16,9 +16,9 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssue } from "@plane/types";
-import { Switch } from "@makeplane/propel/components/switch";
 import { renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 // hooks
+import { CreateMoreSwitch } from "@/components/issues/create-more-switch";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -206,15 +206,7 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 rounded-b-lg border-t-[0.5px] border-subtle bg-surface-1 px-5 py-4">
-            <div
-              className="inline-flex cursor-pointer items-center gap-1.5"
-              onClick={() => setCreateMore((prevData) => !prevData)}
-              role="button"
-              tabIndex={getIndex("create_more")}
-            >
-              <Switch size="sm" checked={createMore} onCheckedChange={() => {}} aria-label={t("create_more")} />
-              <span className="text-11">{t("create_more")}</span>
-            </div>
+            <CreateMoreSwitch checked={createMore} onCheckedChange={setCreateMore} tabIndex={getIndex("create_more")} />
             <div className="flex items-center gap-3">
               <Button
                 variant="secondary"

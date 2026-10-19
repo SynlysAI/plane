@@ -20,6 +20,7 @@
   "unknown_user": "Unknown user",
   "description": "Description",
   "search": "Search",
+  "work_item_actions": "Actions for work item {name}",
   "add_member": "Add member",
   "adding_members": "Adding members",
   "remove_member": "Remove member",
