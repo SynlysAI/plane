@@ -44,7 +44,7 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
     onSubmitCallback,
   } = props;
   // states
-  const [uploadedAssetIds, setUploadedAssetIds] = useState<string[]>([]);
+  const uploadedAssetIds = useRef<string[]>([]);
   const [submitError, setSubmitError] = useState("");
   const savedCommentId = useRef<string | null>(null);
   const submissionLock = useRef(false);
@@ -82,8 +82,10 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
     submissionLock.current = true;
     setSubmitError("");
     try {
+      const commentHTML = editorRef.current?.getDocument().html ?? formData.comment_html ?? "<p></p>";
       const payload = {
         ...formData,
+        comment_html: commentHTML,
         ...(supportsAttachments ? { attachment_ids: attachmentDraft.attachmentIds } : {}),
       };
       if (savedCommentId.current) {
@@ -95,22 +97,22 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
       }
       // 文件已归属评论，后续图片关联失败或组件卸载也不应清理这些文件。
       attachmentDraft.markSaved();
-      if (uploadedAssetIds.length > 0) {
+      if (uploadedAssetIds.current.length > 0) {
         if (projectId) {
           await fileService.updateBulkProjectAssetsUploadStatus(
             workspaceSlug,
             projectId.toString(),
             savedCommentId.current,
             {
-              asset_ids: uploadedAssetIds,
+              asset_ids: uploadedAssetIds.current,
             }
           );
         } else {
           await fileService.updateBulkWorkspaceAssetsUploadStatus(workspaceSlug, savedCommentId.current, {
-            asset_ids: uploadedAssetIds,
+            asset_ids: uploadedAssetIds.current,
           });
         }
-        setUploadedAssetIds([]);
+        uploadedAssetIds.current = [];
       }
       onSubmitCallback?.(savedCommentId.current);
       savedCommentId.current = null;
@@ -177,12 +179,12 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
                 }
                 uploadFile={async (blockId, file) => {
                   const { asset_id } = await activityOperations.uploadCommentAsset(blockId, file);
-                  setUploadedAssetIds((prev) => [...prev, asset_id]);
+                  uploadedAssetIds.current.push(asset_id);
                   return asset_id;
                 }}
                 duplicateFile={async (assetId: string) => {
                   const { asset_id } = await activityOperations.duplicateCommentAsset(assetId);
-                  setUploadedAssetIds((prev) => [...prev, asset_id]);
+                  uploadedAssetIds.current.push(asset_id);
                   return asset_id;
                 }}
                 showToolbarInitially={showToolbarInitially}
