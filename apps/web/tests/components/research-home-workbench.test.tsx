@@ -95,7 +95,12 @@ vi.mock("@/components/home/widgets/recents", () => ({
 }));
 
 vi.mock("@/hooks/use-workspace-context", () => ({ useWorkspaceContext: () => ({ context: mocks.researchIdentity }) }));
-vi.mock("@/services/project-domains.service", () => ({ ProjectDomainsService: class { todos = mocks.getResearchTodos; }, domainError: () => "请求失败" }));
+vi.mock("@/services/project-domains.service", () => ({
+  ProjectDomainsService: class {
+    todos = mocks.getResearchTodos;
+  },
+  domainError: () => "请求失败",
+}));
 
 const { WorkspaceHomeWorkbench } = await import("@/components/home/workbench");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
@@ -177,16 +182,28 @@ beforeEach(() => {
   mocks.getReportSummary.mockImplementation(async (_slug, params) =>
     params.report_type === "MONTHLY"
       ? {
-          period_key: "2026-10",
-          period_start: "2026-10-01",
-          period_end: "2026-10-31",
-          counts: { not_submitted: 13, draft: 4, submitted: 15, needs_revision: 12, accepted: 18 },
+          period_key: params.period_offset === -1 ? "2026-09" : "2026-10",
+          period_start: params.period_offset === -1 ? "2026-09-01" : "2026-10-01",
+          period_end: params.period_offset === -1 ? "2026-09-30" : "2026-10-31",
+          counts: {
+            not_submitted: params.period_offset === -1 ? 12 : 13,
+            draft: params.period_offset === -1 ? 3 : 4,
+            submitted: params.period_offset === -1 ? 14 : 15,
+            needs_revision: params.period_offset === -1 ? 11 : 12,
+            accepted: params.period_offset === -1 ? 17 : 18,
+          },
         }
       : {
-          period_key: "2026-W42",
-          period_start: "2026-10-12",
-          period_end: "2026-10-18",
-          counts: { not_submitted: 3, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+          period_key: params.period_offset === -1 ? "2026-W41" : "2026-W42",
+          period_start: params.period_offset === -1 ? "2026-10-05" : "2026-10-12",
+          period_end: params.period_offset === -1 ? "2026-10-11" : "2026-10-18",
+          counts: {
+            not_submitted: params.period_offset === -1 ? 2 : 3,
+            draft: params.period_offset === -1 ? 0 : 1,
+            submitted: params.period_offset === -1 ? 4 : 5,
+            needs_revision: params.period_offset === -1 ? 1 : 2,
+            accepted: params.period_offset === -1 ? 7 : 8,
+          },
         }
   );
   mocks.researchIdentity.module_enabled = true;
@@ -215,7 +232,9 @@ it("renders the action-first bento home information architecture without generic
   }
   expect(container.querySelector('a[href="/lab/todos"]')?.textContent).toBe("查看全部待办");
   expect(container.querySelector('a[href="/lab/research/todos"]')).toBeNull();
-  expect(container.querySelector('a[href="/lab/research/chains/?view=reports"]')).not.toBeNull();
+  expect(
+    container.querySelector('a[href="/lab/research/chains/?view=reports&report_type=WEEKLY&period_key=2026-W42"]')
+  ).not.toBeNull();
   expect(container.textContent).not.toContain("快捷入口");
   expect(container.textContent).not.toContain("我的工作");
   expect(container.textContent).not.toContain("便签");
@@ -352,7 +371,6 @@ it("uses the shared server todo projection and preserves URL scope changes", asy
   const filter = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "行政");
   await act(async () => filter?.click());
   expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", "administrative", undefined);
-
 });
 
 it("shows the compact report submission summary and refreshes the workbench", async () => {
@@ -369,38 +387,62 @@ it("shows the compact report submission summary and refreshes the workbench", as
   expect(mocks.getChains).toHaveBeenCalledTimes(2);
   expect(mocks.fetchProjects).toHaveBeenCalledTimes(2);
   expect(mocks.fetchProjectAnalyticsCount).toHaveBeenCalledTimes(2);
-  expect(mocks.getReportSummary).toHaveBeenCalledTimes(4);
+  expect(mocks.getReportSummary).toHaveBeenCalledTimes(2);
   expect(mocks.fetchReportSummary).not.toHaveBeenCalled();
 });
 
-it("keeps weekly and monthly counts and periods separate", async () => {
+it("switches report periods without changing the global workbench period", async () => {
   await renderHome();
-  expect(mocks.getReportSummary).toHaveBeenCalledWith("lab", { report_type: "WEEKLY" });
-  expect(mocks.getReportSummary).toHaveBeenCalledWith("lab", { report_type: "MONTHLY" });
-  const week = container.querySelector('[role="group"][aria-label="本周"]');
-  const month = container.querySelector('[role="group"][aria-label="本月"]');
-  expect(week?.textContent).toContain("2026-10-12 ~ 2026-10-18");
-  expect(month?.textContent).toContain("2026-10-01 ~ 2026-10-31");
-  expect([...week!.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
+  expect(mocks.getReportSummary).toHaveBeenCalledTimes(1);
+  expect(mocks.getReportSummary).toHaveBeenCalledWith("lab", { report_type: "WEEKLY", period_offset: 0 });
+  const summary = container.querySelector('[role="group"][aria-label="本周"]');
+  expect(summary?.textContent).toContain("2026-W42");
+  expect(summary?.textContent).toContain("2026-10-12 ~ 2026-10-18");
+  expect([...summary!.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
     "未提交3",
     "需修改2",
     "已提交5",
     "已验收8",
   ]);
-  expect([...month!.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
-    "未提交13",
-    "需修改12",
-    "已提交15",
-    "已验收18",
-  ]);
   expect(
-    [...week!.querySelectorAll("a"), ...month!.querySelectorAll("a")].every(
-      (link) => link.getAttribute("href") === "/lab/research/chains/?view=reports"
+    [...summary!.querySelectorAll("a")].every(
+      (link) =>
+        link.getAttribute("href") === "/lab/research/chains/?view=reports&report_type=WEEKLY&period_key=2026-W42"
     )
   ).toBe(true);
+
+  const lastWeek = [...container.querySelectorAll("button")].find((button) => button.textContent === "上周");
+  await act(async () => lastWeek?.click());
+  expect(mocks.getReportSummary).toHaveBeenLastCalledWith("lab", { report_type: "WEEKLY", period_offset: -1 });
+  expect(container.querySelector('[role="group"][aria-label="上周"]')?.textContent).toContain("2026-W41");
+
+  const lastMonth = [...container.querySelectorAll("button")].find((button) => button.textContent === "上月");
+  await act(async () => lastMonth?.click());
+  expect(mocks.getReportSummary).toHaveBeenLastCalledWith("lab", { report_type: "MONTHLY", period_offset: -1 });
+  const month = container.querySelector('[role="group"][aria-label="上月"]');
+  expect(month?.textContent).toContain("2026-09-01 ~ 2026-09-30");
+  expect(
+    [
+      ...month!.querySelectorAll("a[href='/lab/research/chains/?view=reports&report_type=MONTHLY&period_key=2026-09']"),
+    ].map((link) => link.textContent)
+  ).toContain("已验收17");
+
   const allPeriod = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部");
   await act(async () => allPeriod?.click());
-  expect(mocks.getReportSummary).toHaveBeenCalledTimes(2);
+  expect(mocks.getReportSummary).toHaveBeenCalledTimes(3);
+});
+
+it("ignores a pending report response after the period preset changes", async () => {
+  const pending: ((summary: unknown) => void)[] = [];
+  mocks.getReportSummary.mockImplementation(() => new Promise((done) => pending.push(done)));
+  await renderHome();
+  const lastWeek = [...container.querySelectorAll("button")].find((button) => button.textContent === "上周");
+  await act(async () => lastWeek?.click());
+
+  await act(async () => pending[0]({ period_key: "stale-period", counts: { accepted: 999 } }));
+  expect(container.textContent).not.toContain("stale-period");
+  await act(async () => pending[1]({ period_key: "2026-W41", counts: { accepted: 7 } }));
+  expect(container.querySelector('[role="group"][aria-label="上周"]')?.textContent).toContain("2026-W41");
 });
 
 it("places administrative recents before reports and passes scope and refresh", async () => {
@@ -423,11 +465,11 @@ it("places administrative recents before reports and passes scope and refresh", 
   expect(mocks.recentWidget).toHaveBeenLastCalledWith(expect.objectContaining({ refreshToken: 1 }));
 });
 
-it("retains the monthly summary when the weekly request fails", async () => {
+it("shows the selected summary error without inventing counts", async () => {
   mocks.getReportSummary.mockRejectedValueOnce(new Error("unavailable"));
   await renderHome();
-  expect(container.querySelector('[aria-label="本周"]')?.textContent).toContain("暂不可用");
-  expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
+  const summary = container.querySelector('[role="group"][aria-label="本周"]');
+  expect(summary?.textContent).toContain("暂不可用");
   expect(container.querySelector('[aria-label="本周"] a')).toBeNull();
 });
 
@@ -439,19 +481,18 @@ it("does not request or invent counts without summary permission", async () => {
   expect(section).toBeNull();
 });
 
-it("retains monthly counts when the weekly summary is forbidden", async () => {
+it("shows the selected summary forbidden state", async () => {
   mocks.getReportSummary.mockRejectedValueOnce({ error_code: "research_permission_denied" });
   await renderHome();
-  expect(container.querySelector('[aria-label="本周"]')?.textContent).toContain("没有科研数据访问权限");
-  expect(container.querySelector('[aria-label="本周"] a')).toBeNull();
-  expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
+  const summary = container.querySelector('[role="group"][aria-label="本周"]');
+  expect(summary?.textContent).toContain("没有科研数据访问权限");
+  expect(summary?.querySelector("a")).toBeNull();
 });
 
 it("ignores pending summaries when identity permissions change while summary access remains", async () => {
   const originalIdentity = mocks.researchIdentity;
   const pending: ((summary: unknown) => void)[] = [];
-  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
-  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
+  mocks.getReportSummary.mockImplementation(() => new Promise((done) => pending.push(done)));
   try {
     await renderHome();
     mocks.researchIdentity = {
@@ -459,10 +500,11 @@ it("ignores pending summaries when identity permissions change while summary acc
       user: { ...originalIdentity.user, is_workspace_admin: true },
     };
     await renderHome();
-    expect(mocks.getReportSummary).toHaveBeenCalledTimes(4);
-    await act(async () => pending.forEach((done) => done({ period_key: "stale-identity", counts: {} })));
+    expect(mocks.getReportSummary).toHaveBeenCalledTimes(2);
+    await act(async () => pending[0]({ period_key: "stale-identity", counts: {} }));
     expect(container.textContent).not.toContain("stale-identity");
-    expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
+    await act(async () => pending[1]({ period_key: "2026-W42", counts: { accepted: 8 } }));
+    expect(container.querySelector('[role="group"][aria-label="本周"]')?.textContent).toContain("2026-W42");
   } finally {
     mocks.researchIdentity = originalIdentity;
   }
@@ -487,14 +529,14 @@ it("ignores a pending report response after permission is revoked", async () => 
 
 it("ignores report responses from the previous workspace", async () => {
   const pending: ((summary: unknown) => void)[] = [];
-  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
-  mocks.getReportSummary.mockImplementationOnce(() => new Promise((done) => pending.push(done)));
+  mocks.getReportSummary.mockImplementation(() => new Promise((done) => pending.push(done)));
   await renderHome();
   mocks.identityWorkspaceSlug = "other";
   await renderHome("/other", "other");
-  await act(async () => pending.forEach((done) => done({ period_key: "stale-workspace", counts: {} })));
+  await act(async () => pending[0]({ period_key: "stale-workspace", counts: {} }));
   expect(container.textContent).not.toContain("stale-workspace");
-  expect(container.querySelector('[aria-label="本月"]')?.textContent).toContain("已验收18");
+  await act(async () => pending[1]({ period_key: "2026-W42", counts: { accepted: 8 } }));
+  expect(container.querySelector('[role="group"][aria-label="本周"]')?.textContent).toContain("2026-W42");
 });
 
 it("uses a neutral research empty state when the caller has no research access", async () => {

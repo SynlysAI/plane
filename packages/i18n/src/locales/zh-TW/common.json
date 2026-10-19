@@ -1,4 +1,10 @@
 {
+  "research": {
+    "home_workbench": {
+      "last_week": "上週",
+      "last_month": "上個月"
+    }
+  },
   "cloud_maintenance_message": {
     "we_are_working_on_this_if_you_need_immediate_assistance": "我們正在處理此問題。如果您需要緊急協助，",
     "reach_out_to_us": "請聯絡我們",

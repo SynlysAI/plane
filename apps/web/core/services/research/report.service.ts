@@ -220,7 +220,7 @@ export class ResearchReportService extends APIService {
 
   async getSummary(
     workspaceSlug: string,
-    params: { period_key?: string; report_type?: string; org_unit?: string } = {}
+    params: { period_key?: string; period_offset?: number; report_type?: string; org_unit?: string } = {}
   ) {
     return this.get(researchEndpoints.reportSummary(workspaceSlug), { params })
       .then((res) => res?.data as TReportSummary)

@@ -12,6 +12,7 @@ from plane.research.utils.periods import (
     current_period,
     monthly_period,
     parse_period,
+    period_for_offset,
     weekly_period,
 )
 
@@ -65,6 +66,32 @@ class TestMonthlyPeriod:
             parse_period("MONTHLY", "2026-W10")
 
 
+class TestRelativePeriod:
+    @patch("plane.research.utils.periods.today_in")
+    def test_previous_week_crosses_iso_year_boundary(self, today):
+        today.return_value = date(2026, 1, 1)
+
+        key, start, end = period_for_offset("WEEKLY", -1)
+
+        assert key == "2025-W52"
+        assert start == date(2025, 12, 22)
+        assert end == date(2025, 12, 28)
+
+    @patch("plane.research.utils.periods.today_in")
+    def test_previous_month_crosses_calendar_year_boundary(self, today):
+        today.return_value = date(2026, 1, 15)
+
+        key, start, end = period_for_offset("MONTHLY", -1)
+
+        assert key == "2025-12"
+        assert start == date(2025, 12, 1)
+        assert end == date(2025, 12, 31)
+
+    def test_unknown_report_type_is_rejected(self):
+        with pytest.raises(InvalidPeriod):
+            period_for_offset("DAILY", -1)
+
+
 class TestTimezoneHandling:
     def test_current_period_defaults_to_reference_date(self):
         key, _, _ = current_period("WEEKLY", reference=date(2026, 9, 15))
@@ -93,3 +120,13 @@ class TestTimezoneHandling:
         assert key == "2026-W39"
         assert start == date(2026, 9, 21)
         assert end == date(2026, 9, 27)
+
+    @patch("plane.research.utils.periods.django_timezone.now")
+    def test_previous_period_uses_shanghai_date_at_utc_boundary(self, now):
+        now.return_value = datetime(2026, 9, 20, 16, 30, tzinfo=timezone.utc)
+
+        key, start, end = period_for_offset("WEEKLY", -1, timezone_name="Asia/Shanghai")
+
+        assert key == "2026-W38"
+        assert start == date(2026, 9, 14)
+        assert end == date(2026, 9, 20)

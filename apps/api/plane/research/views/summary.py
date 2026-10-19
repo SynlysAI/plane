@@ -24,9 +24,9 @@ from plane.research.utils.acl import (
 from plane.research.utils.capabilities import NAV_SUMMARY
 from plane.research.utils.org import managing_unit_ids
 from plane.research.utils.errors import ResearchErrorCode, research_error
-from plane.research.utils.roles import is_research_admin
-from plane.research.utils.periods import InvalidPeriod, parse_period
+from plane.research.utils.periods import InvalidPeriod, parse_period, period_for_offset
 from plane.research.utils.reports import report_resource
+from plane.research.utils.roles import is_research_admin
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.reports import report_timezone_for
 
@@ -68,12 +68,22 @@ class ResearchReportSummaryEndpoint(ResearchAPIView):
         if report_type not in PeriodicReport.ReportType.values:
             return research_error(ResearchErrorCode.REPORT_PERIOD_CONFLICT, "Unknown report type.")
 
+        requested_period_key = request.GET.get("period_key")
+        requested_period_offset = request.GET.get("period_offset")
+        if requested_period_key is not None and requested_period_offset is not None:
+            return research_error(
+                ResearchErrorCode.REPORT_PERIOD_CONFLICT,
+                "Use either period_key or period_offset, not both.",
+            )
+
         report_timezone = report_timezone_for(workspace)
         try:
-            period_key, period_start, period_end = parse_period(
-                report_type, request.GET.get("period_key"), report_timezone
-            )
-        except InvalidPeriod as error:
+            if requested_period_offset is not None:
+                period_offset = int(requested_period_offset)
+                period_key, period_start, period_end = period_for_offset(report_type, period_offset, report_timezone)
+            else:
+                period_key, period_start, period_end = parse_period(report_type, requested_period_key, report_timezone)
+        except (InvalidPeriod, ValueError) as error:
             return research_error(ResearchErrorCode.REPORT_PERIOD_CONFLICT, str(error))
 
         context = build_actor_context(request.user, workspace.id)

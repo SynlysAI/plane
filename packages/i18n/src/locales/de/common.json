@@ -1,4 +1,10 @@
 {
+  "research": {
+    "home_workbench": {
+      "last_week": "Letzte Woche",
+      "last_month": "Letzter Monat"
+    }
+  },
   "cloud_maintenance_message": {
     "we_are_working_on_this_if_you_need_immediate_assistance": "Wir arbeiten daran. Wenn Sie sofortige Hilfe benötigen,",
     "reach_out_to_us": "kontaktieren Sie uns",

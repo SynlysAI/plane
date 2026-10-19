@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from datetime import date
+from unittest.mock import patch
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -174,6 +177,36 @@ class TestReportSummary:
 
     def test_invalid_period_is_rejected(self, env):
         response = env["pi_client"].get(f"{env['summary_url']}?period_key=2026-99")
+        assert response.status_code == 400
+
+    @patch("plane.research.utils.periods.today_in")
+    def test_missing_offset_keeps_current_period(self, today, env):
+        today.return_value = date(2026, 1, 1)
+
+        response = env["pi_client"].get(env["summary_url"])
+
+        assert response.status_code == 200
+        assert response.json()["period_key"] == "2026-W01"
+
+    @patch("plane.research.utils.periods.today_in")
+    def test_period_offset_resolves_previous_period(self, today, env):
+        today.return_value = date(2026, 1, 1)
+
+        response = env["pi_client"].get(f"{env['summary_url']}?period_offset=-1")
+
+        assert response.status_code == 200
+        assert response.json()["period_key"] == "2025-W52"
+        assert response.json()["period_start"] == "2025-12-22"
+        assert response.json()["period_end"] == "2025-12-28"
+
+    def test_invalid_period_offset_is_rejected(self, env):
+        response = env["pi_client"].get(f"{env['summary_url']}?period_offset=previous")
+
+        assert response.status_code == 400
+
+    def test_period_key_and_offset_conflict_is_rejected(self, env):
+        response = env["pi_client"].get(f"{env['summary_url']}?period_key=2026-W38&period_offset=-1")
+
         assert response.status_code == 400
 
 

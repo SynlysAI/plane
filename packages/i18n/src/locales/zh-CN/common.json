@@ -1113,6 +1113,8 @@
       "report_summary": "报告提交摘要",
       "this_week": "本周",
       "this_month": "本月",
+      "last_week": "上周",
+      "last_month": "上月",
       "recent_error": "最近动态暂不可用，请稍后刷新。",
       "report_error": "报告汇总暂不可用，可刷新或直接进入报告视图。",
       "view_summary": "查看汇总",
