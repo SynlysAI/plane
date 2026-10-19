@@ -102,10 +102,10 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const idempotency = useRef(createIdempotencyKey());
   const queryVersion = useRef(0);
   const canManage = Boolean(
-    identity?.user.is_main_pi ||
-    identity?.user.is_research_admin ||
-    identity?.user.is_workspace_admin ||
-    identity?.user.is_system_admin
+    identity?.user?.is_main_pi ||
+    identity?.user?.is_research_admin ||
+    identity?.user?.is_workspace_admin ||
+    identity?.user?.is_system_admin
   );
   const managementDenied = managementOnly && identityKnown && !canManage;
   useEffect(() => {
@@ -249,6 +249,154 @@ export const FeedbackDialog = observer(function FeedbackDialog({
       setBusy(false);
     }
   };
+
+  const filterToolbar = (
+    <ResearchFilterToolbar>
+      <ListFilterField label="状态">
+        <ListFilterSelect
+          aria-label="筛选状态"
+          value={filter.status}
+          onChange={(event) => {
+            updateFilter("status", event.target.value);
+          }}
+        >
+          <option value="">全部状态</option>
+          {Object.entries(STATUS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </ListFilterSelect>
+      </ListFilterField>
+      <ListFilterField label="分类">
+        <ListFilterSelect
+          aria-label="筛选分类"
+          value={filter.feedback_type}
+          onChange={(event) => {
+            updateFilter("feedback_type", event.target.value);
+          }}
+        >
+          <option value="">全部分类</option>
+          <option value="bug">缺陷</option>
+          <option value="ux">体验</option>
+          <option value="idea">建议</option>
+          <option value="other">其他</option>
+        </ListFilterSelect>
+      </ListFilterField>
+      {(["q", "module"] as const).map((key) => (
+        <ListFilterField
+          key={key}
+          label={key === "q" ? "关键词" : "模块"}
+          className={key === "q" ? "w-full sm:w-48" : undefined}
+        >
+          <ListFilterInput
+            aria-label={key === "q" ? "反馈关键词" : "反馈模块"}
+            placeholder={key === "q" ? "关键词" : "模块"}
+            type="text"
+            value={filter[key]}
+            onChange={(event) => {
+              setFilterDraft((current) => ({ ...current, [key]: event.target.value }));
+            }}
+          />
+        </ListFilterField>
+      ))}
+      <ListFilterField label="日期">
+        <ListFilterSelect
+          aria-label="反馈日期范围"
+          value={datePreset}
+          onChange={(event) => applyDatePreset(event.target.value as DatePreset)}
+        >
+          <option value="any">任意</option>
+          <option value="7">近 7 天</option>
+          <option value="30">近 30 天</option>
+          <option value="custom">自定义区间</option>
+        </ListFilterSelect>
+      </ListFilterField>
+      {datePreset === "custom" && (
+        <>
+          <ListFilterField label="开始日期" className="sm:w-40">
+            <ListFilterInput
+              aria-label="反馈开始日期"
+              type="date"
+              value={filter.date_from}
+              onChange={(event) => updateFilter("date_from", event.target.value)}
+            />
+          </ListFilterField>
+          <ListFilterField label="结束日期" className="sm:w-40">
+            <ListFilterInput
+              aria-label="反馈结束日期"
+              type="date"
+              value={filter.date_to}
+              onChange={(event) => updateFilter("date_to", event.target.value)}
+            />
+          </ListFilterField>
+        </>
+      )}
+      <ResearchBrowseRefresh onRefresh={() => setRefresh((value) => value + 1)} disabled={listLoading} />
+      {view !== "submit" && error && (
+        <Button variant="secondary" size="xl" onClick={() => setRefresh((value) => value + 1)}>
+          重试
+        </Button>
+      )}
+    </ResearchFilterToolbar>
+  );
+
+  const statusForm = selected ? (
+    <form
+      className="grid gap-3 md:grid-cols-[minmax(9rem,0.25fr)_minmax(0,0.75fr)]"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (busy || !comment.trim()) return;
+        setBusy(true);
+        try {
+          const updated = await service.updateStatus(workspaceSlug, selected.feedback_id, {
+            status,
+            comment,
+          });
+          setSelected(updated);
+          setComment("");
+          setRefresh((value) => value + 1);
+          setError("");
+        } catch {
+          setError("处置失败，请刷新后重试。");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <label className="text-12 text-secondary">
+        处置状态
+        <select
+          aria-label="处置状态"
+          className={`${className} mt-1`}
+          value={status}
+          onChange={(event) => setStatus(event.target.value as keyof typeof STATUS)}
+        >
+          {Object.entries(STATUS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-12 text-secondary">
+        处置说明
+        <textarea
+          aria-label="处置说明"
+          className={`${className} mt-1 min-h-24`}
+          required
+          maxLength={2000}
+          value={comment}
+          onChange={(event) => setComment(event.target.value)}
+        />
+      </label>
+      <div className="flex justify-end md:col-span-2">
+        <Button type="submit" variant="primary" size="sm" disabled={busy || !comment.trim()}>
+          更新状态
+        </Button>
+      </div>
+    </form>
+  ) : null;
 
   const body = (
     <section
@@ -417,176 +565,251 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                 </Button>
               </div>
             </form>
-          ) : (
-            <div
-              className={
-                managementOnly
-                  ? "grid min-h-0 flex-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"
-                  : "flex flex-col gap-4"
-              }
-            >
+          ) : managementOnly ? (
+            <>
+              {filterToolbar}
               <div
-                className={
-                  managementOnly
-                    ? "flex min-h-0 flex-col gap-4 overflow-hidden rounded-xl bg-surface-1 p-4"
-                    : "flex flex-col gap-4"
-                }
+                data-testid="feedback-management-split"
+                className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-xl border border-subtle bg-surface-1 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]"
               >
-                <ResearchFilterToolbar>
-                  <ListFilterField label="状态">
-                    <ListFilterSelect
-                      aria-label="筛选状态"
-                      value={filter.status}
-                      onChange={(event) => {
-                        updateFilter("status", event.target.value);
-                      }}
+                <section aria-label="反馈清单" className="flex min-h-0 min-w-0 flex-col border-subtle md:border-r">
+                  <header className="flex shrink-0 items-center justify-between gap-3 border-b border-subtle px-4 py-3">
+                    <h3 className="text-13 font-semibold text-primary">反馈清单</h3>
+                    <p className="text-11 text-tertiary">
+                      第 {page} / {count ? Math.max(1, Math.ceil(count / 20)) : 0} 页 · 共 {count} 条
+                    </p>
+                  </header>
+                  <div
+                    data-testid="feedback-list-scroll"
+                    className="min-h-0 flex-1 overflow-y-auto"
+                    aria-busy={listLoading}
+                  >
+                    {results.length ? (
+                      <ul className="divide-y divide-subtle">
+                        {results.map((record) => {
+                          const active = selected?.feedback_id === record.feedback_id;
+                          return (
+                            <li key={record.feedback_id}>
+                              <button
+                                type="button"
+                                aria-current={active ? "true" : undefined}
+                                className={`flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors ${
+                                  active ? "bg-surface-2" : "hover:bg-surface-2"
+                                }`}
+                                onClick={() => {
+                                  setSelected(record);
+                                  setComment("");
+                                }}
+                              >
+                                <span className="line-clamp-2 text-13 leading-5 whitespace-pre-wrap text-primary">
+                                  {record.content}
+                                </span>
+                                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-11">
+                                  <span className={`text-secondary ${active ? "font-semibold" : "font-medium"}`}>
+                                    {STATUS[record.status]}
+                                  </span>
+                                  <span aria-hidden="true" className="text-tertiary">
+                                    ·
+                                  </span>
+                                  <time className="text-tertiary" dateTime={record.created_at}>
+                                    {formatResearchDateTime(record.created_at)}
+                                  </time>
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                    {listLoading && (
+                      <p role="status" className="px-4 py-3 text-13 text-secondary">
+                        {results.length ? "反馈刷新中…" : "反馈读取中…"}
+                      </p>
+                    )}
+                    {!listLoading && !error && !results.length && (
+                      <p className="px-4 py-3 text-13 text-secondary">当前范围内没有反馈记录。</p>
+                    )}
+                    {!listLoading && error && (
+                      <p className="px-4 py-3 text-13 text-secondary">反馈读取失败，请重试。</p>
+                    )}
+                  </div>
+                  <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-subtle px-3 py-2.5">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page === 1}
+                      onClick={() => setPage((value) => value - 1)}
                     >
-                      <option value="">全部状态</option>
-                      {Object.entries(STATUS).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </ListFilterSelect>
-                  </ListFilterField>
-                  <ListFilterField label="分类">
-                    <ListFilterSelect
-                      aria-label="筛选分类"
-                      value={filter.feedback_type}
-                      onChange={(event) => {
-                        updateFilter("feedback_type", event.target.value);
-                      }}
-                    >
-                      <option value="">全部分类</option>
-                      <option value="bug">缺陷</option>
-                      <option value="ux">体验</option>
-                      <option value="idea">建议</option>
-                      <option value="other">其他</option>
-                    </ListFilterSelect>
-                  </ListFilterField>
-                  {(["q", "module"] as const).map((key) => (
-                    <ListFilterField
-                      key={key}
-                      label={key === "q" ? "关键词" : "模块"}
-                      className={key === "q" ? "w-full sm:w-48" : undefined}
-                    >
-                      <ListFilterInput
-                        aria-label={key === "q" ? "反馈关键词" : "反馈模块"}
-                        placeholder={key === "q" ? "关键词" : "模块"}
-                        type="text"
-                        value={filter[key]}
-                        onChange={(event) => {
-                          setFilterDraft((current) => ({ ...current, [key]: event.target.value }));
-                        }}
-                      />
-                    </ListFilterField>
-                  ))}
-                  <ListFilterField label="日期">
-                    <ListFilterSelect
-                      aria-label="反馈日期范围"
-                      value={datePreset}
-                      onChange={(event) => applyDatePreset(event.target.value as DatePreset)}
-                    >
-                      <option value="any">任意</option>
-                      <option value="7">近 7 天</option>
-                      <option value="30">近 30 天</option>
-                      <option value="custom">自定义区间</option>
-                    </ListFilterSelect>
-                  </ListFilterField>
-                  {datePreset === "custom" && (
-                    <>
-                      <ListFilterField label="开始日期" className="sm:w-40">
-                        <ListFilterInput
-                          aria-label="反馈开始日期"
-                          type="date"
-                          value={filter.date_from}
-                          onChange={(event) => updateFilter("date_from", event.target.value)}
-                        />
-                      </ListFilterField>
-                      <ListFilterField label="结束日期" className="sm:w-40">
-                        <ListFilterInput
-                          aria-label="反馈结束日期"
-                          type="date"
-                          value={filter.date_to}
-                          onChange={(event) => updateFilter("date_to", event.target.value)}
-                        />
-                      </ListFilterField>
-                    </>
-                  )}
-                  <ResearchBrowseRefresh onRefresh={() => setRefresh((value) => value + 1)} disabled={listLoading} />
-                  {view !== "submit" && error && (
-                    <Button variant="secondary" size="xl" onClick={() => setRefresh((value) => value + 1)}>
-                      重试
+                      上一页
                     </Button>
-                  )}
-                </ResearchFilterToolbar>
-                <div className={managementOnly ? "min-h-0 flex-1 overflow-auto" : "max-w-full overflow-x-auto"}>
-                  <Table className="min-w-100" aria-busy={listLoading}>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>描述</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>提交时间</TableHead>
+                    <span className="text-11 text-tertiary">共 {count} 条</span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page * 20 >= count}
+                      onClick={() => setPage((value) => value + 1)}
+                    >
+                      下一页
+                    </Button>
+                  </footer>
+                </section>
+                <section aria-label="反馈详情" className="flex min-h-0 min-w-0 flex-col">
+                  <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-subtle px-5 py-3.5">
+                    <h3 className="text-15 font-semibold text-primary">反馈详情</h3>
+                    {selected && (
+                      <p className="text-12 text-secondary">
+                        {STATUS[selected.status]} · {selected.username}
+                      </p>
+                    )}
+                  </header>
+                  <div data-testid="feedback-detail-scroll" className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                    {selected ? (
+                      <article className="flex flex-col gap-5 text-13">
+                        <section aria-label="反馈描述">
+                          <p className="text-14 leading-6 whitespace-pre-wrap text-primary">{selected.content}</p>
+                        </section>
+                        <section aria-label="提交上下文" className="border-t border-subtle pt-4">
+                          <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-12">
+                            <div className="min-w-0">
+                              <dt className="text-tertiary">分类 / 模块</dt>
+                              <dd className="mt-1 break-words text-secondary">
+                                {FEEDBACK_TYPE_LABELS[selected.feedback_type]} · {selected.module}
+                              </dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-tertiary">提交 / 更新</dt>
+                              <dd className="mt-1 break-words text-secondary">
+                                {formatResearchDateTime(selected.created_at)}
+                                {selected.updated_at ? ` · ${formatResearchDateTime(selected.updated_at)}` : ""}
+                              </dd>
+                            </div>
+                            <div className="col-span-2 min-w-0">
+                              <dt className="text-tertiary">页面路径</dt>
+                              <dd className="mt-1 break-all text-secondary">{selected.path}</dd>
+                            </div>
+                            <div className="col-span-2 min-w-0">
+                              <dt className="text-tertiary">浏览器环境</dt>
+                              <dd className="mt-1 break-words text-secondary">{selected.browser || "—"}</dd>
+                            </div>
+                          </dl>
+                        </section>
+                        {selected.screenshots.length ? (
+                          <section aria-label="反馈截图" className="border-t border-subtle pt-4">
+                            <h4 className="text-12 font-semibold text-primary">截图证据</h4>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {selected.screenshots.map((shot, index) => (
+                                <ScreenshotLink
+                                  key={shot.id}
+                                  index={index}
+                                  url={service.screenshotUrl(workspaceSlug, selected.feedback_id, shot.id, true)}
+                                />
+                              ))}
+                            </div>
+                          </section>
+                        ) : null}
+                        {selected.history.length ? (
+                          <section aria-label="处理历史" className="border-t border-subtle pt-4">
+                            <h4 className="text-12 font-semibold text-primary">处理历史</h4>
+                            <ol className="mt-3 space-y-3">
+                              {selected.history.map((entry) => (
+                                <li
+                                  key={`${entry.created_at}-${entry.to_status}`}
+                                  className="border-l border-subtle pl-3 text-12"
+                                >
+                                  <p className="text-secondary">
+                                    {STATUS[entry.from_status]} → {STATUS[entry.to_status]} · {entry.actor_name}
+                                  </p>
+                                  <p className="mt-1 whitespace-pre-wrap">{entry.comment}</p>
+                                  <time className="mt-1 block text-tertiary" dateTime={entry.created_at}>
+                                    {formatResearchDateTime(entry.created_at)}
+                                  </time>
+                                </li>
+                              ))}
+                            </ol>
+                          </section>
+                        ) : null}
+                        {view === "manage" && (
+                          <section aria-label="状态处置" className="border-t border-subtle pt-4">
+                            <h4 className="text-12 font-semibold text-primary">状态处置</h4>
+                            <div className="mt-3">{statusForm}</div>
+                          </section>
+                        )}
+                      </article>
+                    ) : (
+                      <aside className="max-w-md rounded-lg bg-surface-2 px-4 py-5">
+                        <h3 className="text-13 font-semibold text-primary">反馈快照</h3>
+                        <p className="mt-2 text-12 leading-5 text-secondary">
+                          选择左侧任意反馈后，这里会完整显示描述、提交上下文、截图与处理历史。
+                        </p>
+                      </aside>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {filterToolbar}
+              <div className="max-w-full overflow-x-auto">
+                <Table className="min-w-100" aria-busy={listLoading}>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>描述</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>提交时间</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.map((record) => (
+                      <TableRow key={record.feedback_id} className="hover:bg-surface-2">
+                        <TableCell>
+                          <button
+                            onClick={() => {
+                              setSelected(record);
+                              setComment("");
+                            }}
+                          >
+                            {record.content.slice(0, 60)}
+                          </button>
+                        </TableCell>
+                        <TableCell>{STATUS[record.status]}</TableCell>
+                        <TableCell>{formatResearchDateTime(record.created_at)}</TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {results.map((record) => (
-                        <TableRow key={record.feedback_id} className="hover:bg-surface-2">
-                          <TableCell>
-                            <button
-                              onClick={() => {
-                                setSelected(record);
-                                setComment("");
-                              }}
-                            >
-                              {record.content.slice(0, 60)}
-                            </button>
-                          </TableCell>
-                          <TableCell>{STATUS[record.status]}</TableCell>
-                          <TableCell>{formatResearchDateTime(record.created_at)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                {listLoading && (
-                  <p role="status" className="text-13 text-secondary">
-                    {results.length ? "反馈刷新中…" : "反馈读取中…"}
-                  </p>
-                )}
-                {!listLoading && !error && !results.length && (
-                  <p className="text-13 text-secondary">当前范围内没有反馈记录。</p>
-                )}
-                <div className={`flex items-center gap-3 text-12 ${managementOnly ? "mt-auto" : ""}`}>
-                  <Button
-                    variant="secondary"
-                    size="xl"
-                    disabled={page === 1}
-                    onClick={() => setPage((value) => value - 1)}
-                  >
-                    上一页
-                  </Button>
-                  <span>
-                    {page} · 共 {count} 条
-                  </span>
-                  <Button
-                    variant="secondary"
-                    size="xl"
-                    disabled={page * 20 >= count}
-                    onClick={() => setPage((value) => value + 1)}
-                  >
-                    下一页
-                  </Button>
-                </div>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {listLoading && (
+                <p role="status" className="text-13 text-secondary">
+                  {results.length ? "反馈刷新中…" : "反馈读取中…"}
+                </p>
+              )}
+              {!listLoading && !error && !results.length && (
+                <p className="text-13 text-secondary">当前范围内没有反馈记录。</p>
+              )}
+              <div className="flex items-center gap-3 text-12">
+                <Button
+                  variant="secondary"
+                  size="xl"
+                  disabled={page === 1}
+                  onClick={() => setPage((value) => value - 1)}
+                >
+                  上一页
+                </Button>
+                <span>
+                  {page} · 共 {count} 条
+                </span>
+                <Button
+                  variant="secondary"
+                  size="xl"
+                  disabled={page * 20 >= count}
+                  onClick={() => setPage((value) => value + 1)}
+                >
+                  下一页
+                </Button>
               </div>
               {selected ? (
-                <article
-                  className={
-                    managementOnly
-                      ? "min-h-0 overflow-y-auto rounded-xl bg-surface-1 p-5 text-13"
-                      : "border-t border-subtle pt-4 text-13"
-                  }
-                >
+                <article className="border-t border-subtle pt-4 text-13">
                   <h3 className="font-semibold">
                     {STATUS[selected.status]} · {selected.username}
                   </h3>
@@ -640,61 +863,12 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                     ))}
                   </ol>
                   {view === "manage" && (
-                    <form
-                      className="mt-4 flex flex-col gap-2"
-                      onSubmit={async (event) => {
-                        event.preventDefault();
-                        if (busy || !comment.trim()) return;
-                        setBusy(true);
-                        try {
-                          const updated = await service.updateStatus(workspaceSlug, selected.feedback_id, {
-                            status,
-                            comment,
-                          });
-                          setSelected(updated);
-                          setComment("");
-                          setRefresh((value) => value + 1);
-                          setError("");
-                        } catch {
-                          setError("处置失败，请刷新后重试。");
-                        } finally {
-                          setBusy(false);
-                        }
-                      }}
-                    >
-                      <select
-                        aria-label="处置状态"
-                        className={className}
-                        value={status}
-                        onChange={(event) => setStatus(event.target.value as keyof typeof STATUS)}
-                      >
-                        {Object.entries(STATUS).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                      <textarea
-                        aria-label="处置说明"
-                        className={className}
-                        required
-                        maxLength={2000}
-                        value={comment}
-                        onChange={(event) => setComment(event.target.value)}
-                      />
-                      <Button type="submit" variant="primary" size="sm" disabled={busy || !comment.trim()}>
-                        更新状态
-                      </Button>
-                    </form>
+                    <section aria-label="状态处置" className="mt-4 border-t border-subtle pt-4">
+                      <h4 className="text-12 font-semibold text-primary">状态处置</h4>
+                      <div className="mt-3">{statusForm}</div>
+                    </section>
                   )}
                 </article>
-              ) : managementOnly ? (
-                <aside className="min-h-0 overflow-y-auto rounded-xl bg-surface-1 p-5 text-13">
-                  <h3 className="font-semibold text-primary">反馈快照</h3>
-                  <p className="mt-2 text-secondary">
-                    选择左侧任意反馈后，这里会完整显示描述、提交上下文、截图与处理历史。
-                  </p>
-                </aside>
               ) : null}
             </div>
           )}

@@ -317,6 +317,67 @@ it("普通用户查询本人记录，不显示管理入口且查看四状态与�
   expect(container.querySelector('textarea[aria-label="处置说明"]')).toBeNull();
 });
 
+it("普通弹窗的管理视图继续提供状态处置并使用管理截图范围", async () => {
+  researchState.identity = {
+    user: { is_main_pi: true, is_workspace_admin: false, is_system_admin: false },
+  };
+  mocks.get.mockResolvedValue({
+    count: 1,
+    results: [
+      {
+        feedback_id: "feedback-dialog-manage",
+        content: "Manage from dialog",
+        feedback_type: "ux",
+        status: "open",
+        username: "Student",
+        path: "/lab/research",
+        browser: "Browser",
+        module: "research",
+        created_at: "2026-10-08T00:00:00Z",
+        screenshots: [{ id: "shot-dialog", content_type: "image/png", size: 32 }],
+        history: [],
+      },
+    ],
+  });
+  mocks.patch.mockResolvedValue({
+    feedback_id: "feedback-dialog-manage",
+    content: "Manage from dialog",
+    feedback_type: "ux",
+    status: "in_progress",
+    username: "Student",
+    path: "/lab/research",
+    browser: "Browser",
+    module: "research",
+    created_at: "2026-10-08T00:00:00Z",
+    screenshots: [],
+    history: [],
+  });
+
+  await open();
+  await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(3)')?.click());
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Manage from dialog")
+      ?.click()
+  );
+
+  expect(container.querySelector('img[alt="反馈截图 1"]')?.getAttribute("src")).toContain("?scope=manage");
+  expect(container.querySelector('textarea[aria-label="处置说明"]')).not.toBeNull();
+  const commentBox = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="处置说明"]');
+  if (!commentBox) throw new Error("处置说明未显示");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(commentBox, "Assigned");
+    commentBox.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () =>
+    container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+  );
+  expect(mocks.patch).toHaveBeenCalledWith("/api/research/workspaces/lab/feedback/feedback-dialog-manage/status/", {
+    status: "in_progress",
+    comment: "Assigned",
+  });
+});
+
 it("普通成员直达管理页显示权限态，不发起管理请求", async () => {
   await renderManagementPage();
   await act(async () => undefined);
@@ -426,13 +487,20 @@ it("主 PI 进入管理视图，使用管理范围读取并更新状态", async 
   expect(container.querySelector("h1")).toBeNull();
   expect(container.querySelector('[role="tablist"]')).toBeNull();
   expect(container.textContent).toContain("选择左侧任意反馈后");
+  const split = container.querySelector('[data-testid="feedback-management-split"]');
+  const listPane = container.querySelector('section[aria-label="反馈清单"]');
+  const detailPane = container.querySelector('section[aria-label="反馈详情"]');
+  expect(split?.className).toContain("md:grid-cols-");
+  expect(listPane?.compareDocumentPosition(detailPane as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(container.querySelector('[data-testid="feedback-list-scroll"]')?.className).toContain("overflow-y-auto");
+  expect(container.querySelector('[data-testid="feedback-detail-scroll"]')?.className).toContain("overflow-y-auto");
   expect(mocks.get).toHaveBeenCalledWith(
     "/api/research/workspaces/lab/feedback/",
     expect.objectContaining({ params: expect.objectContaining({ scope: "manage" }) })
   );
   await act(async () =>
     Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent === "Manage this feedback")
+      .find((button) => button.textContent?.includes("Manage this feedback"))
       ?.click()
   );
   expect(container.querySelector('img[alt="反馈截图 1"]')?.getAttribute("src")).toContain("?scope=manage");
