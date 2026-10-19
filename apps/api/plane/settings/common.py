@@ -352,6 +352,10 @@ FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))
 # the module is off, OIDC is unconfigured and local login keeps working.
 # ---------------------------------------------------------------------------
 RESEARCH_MODULE_ENABLED = os.environ.get("RESEARCH_MODULE_ENABLED", "0") == "1"
+RESEARCH_MCP_ENABLED = os.environ.get("RESEARCH_MCP_ENABLED", "0") == "1"
+RESEARCH_MCP_WRITE_ENABLED = os.environ.get("RESEARCH_MCP_WRITE_ENABLED", "0") == "1"
+# Backend origin reachable by the user's ScienceDiscovery instance (no /api suffix).
+RESEARCH_MCP_PUBLIC_BASE_URL = os.environ.get("RESEARCH_MCP_PUBLIC_BASE_URL", "").rstrip("/")
 
 # SSO / OIDC (backend only - the client secret must never reach the browser)
 OIDC_ISSUER_URL = os.environ.get("OIDC_ISSUER_URL")

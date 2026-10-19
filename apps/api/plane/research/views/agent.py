@@ -546,6 +546,13 @@ class ResearchAgentSessionCloseEndpoint(AgentPluginMixin):
             grant.revoked_at = timezone.now()
             grant.updated_by = request.user
             grant.save(update_fields=["revoked_at", "updated_by", "updated_at"])
+        binding = (session.assembly or {}).get("research_mcp")
+        if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY and isinstance(binding, dict):
+            try:
+                _sd_client_for_session(session).remove_research_connector(binding.get("server_id", ""))
+            except ScienceDiscoveryError:
+                # Revocation above is authoritative even while SD is unavailable.
+                pass
         _append_event(
             session,
             "HUMAN_DECISION",

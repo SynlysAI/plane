@@ -5,7 +5,7 @@ RUN python -m pip install --no-cache-dir -r requirements.linux.lock.txt \
     && useradd --create-home --user-group --uid 10001 mcp \
     && mkdir -p /app/data /run/plane-mcp \
     && chown mcp:mcp /app/data
-COPY http_mcp.py self_service.py agent_mcp.py agent_workflow.py read_only_mcp.py plane_client.py /app/
+COPY http_mcp.py self_service.py agent_mcp.py agent_workflow.py read_only_mcp.py plane_client.py research_mcp.py research_client.py research_operations_mcp.py /app/
 COPY portal /app/portal
 USER mcp
 EXPOSE 8765

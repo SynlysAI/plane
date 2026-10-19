@@ -1,5 +1,9 @@
 """Backend-only ScienceDiscovery client for projects, sessions and run cursors."""
 
+import hashlib
+import re
+import time
+
 import httpx
 from django.conf import settings
 
@@ -96,7 +100,7 @@ class ScienceDiscoveryClient:
                 message,
                 502 if response.status_code < 500 else 503,
             )
-        return response.json()
+        return {} if response.status_code == 204 else response.json()
 
     def upload_workspace_file(self, *, session_id, file_name, content):
         """Upload one file into an SD session workspace (multipart, §9 文件通道).
@@ -151,11 +155,13 @@ class ScienceDiscoveryClient:
             )
         return project_id
 
-    def create_session(self, *, project_id, title, specialist_id=None):
+    def create_session(self, *, project_id, title, specialist_id=None, connector_ids=None):
         """Create one SD session mapped to one Plane Agent session."""
         payload = {"title": title}
         if specialist_id:
             payload["specialistId"] = specialist_id
+        if connector_ids is not None:
+            payload["settingsOverrides"] = {"enabledConnectorIds": list(connector_ids)}
         payload = self._request(
             "POST",
             f"/api/projects/{project_id}/sessions",
@@ -169,6 +175,61 @@ class ScienceDiscoveryClient:
                 502,
             )
         return session_id
+
+    def create_research_connector(self, *, workspace, user, grant, token, url):
+        """One encrypted SD server/transport identity per grant, never overwrite a shared header.
+
+        Existing SD custom connectors disable result caching and key transport
+        sessions by server id. A fresh id therefore also isolates concurrent
+        node credentials without a new cross-repository transport protocol.
+        """
+        namespace = hashlib.sha256(f"{workspace.id}:{user.id}".encode()).hexdigest()[:12]
+        prefix = f"plane-research-{namespace}-"
+        existing = self._request("GET", "/api/mcp/servers")
+        if not isinstance(existing, list):
+            raise ScienceDiscoveryError("research_mcp_binding_failed", "Invalid ScienceDiscovery connector response.", 502)
+        for item in existing:
+            if not isinstance(item, dict) or not str(item.get("name", "")).startswith(prefix):
+                continue
+            try:
+                expired = int(item["name"].rsplit("-", 1)[1]) <= int(time.time())
+            except (ValueError, KeyError):
+                expired = False
+            if expired:
+                self.remove_research_connector(item.get("id", ""))
+        created = self._request("POST", "/api/mcp/servers", json_payload={
+            "name": f"{prefix}{grant.context_id.hex}-{int(grant.expires_at.timestamp())}",
+            "description": "Read-only Plane research node. Credential and tools are limited to one revocable context.",
+            "transport": "http", "url": url, "enabled": True,
+            "headers": {"X-Research-Context-Token": token, "X-Research-Context-Hash": grant.context_hash},
+            "timeoutSeconds": 60, "authMode": "headers",
+        })
+        identity = created.get("id", "") if isinstance(created, dict) else ""
+        if not re.fullmatch(r"custom-[a-f0-9]{12}", identity):
+            raise ScienceDiscoveryError("research_mcp_binding_failed", "ScienceDiscovery did not return a connector id.", 502)
+        try:
+            checked = self._request("POST", f"/api/mcp/servers/{identity}/test")
+            discovered = checked.get("tools") if isinstance(checked, dict) else None
+            if (not isinstance(checked, dict) or checked.get("error") or checked.get("status") != "ready"
+                    or checked.get("sourceId") != identity
+                    or not isinstance(discovered, list)
+                    or not all(isinstance(tool, dict) and isinstance(tool.get("name"), str) for tool in discovered)
+                    or {tool["name"] for tool in discovered} != set(grant.allowed_tools)):
+                raise ScienceDiscoveryError("research_mcp_binding_failed", "Scoped research tools could not be discovered.", 502)
+        except ScienceDiscoveryError:
+            try:
+                self.remove_research_connector(identity)
+            except ScienceDiscoveryError:
+                pass
+            raise
+        return {"server_id": identity, "source_id": identity,
+                "context_id": str(grant.context_id), "expires_at": grant.expires_at.isoformat()}
+
+    def remove_research_connector(self, server_id):
+        """Best-effort lifecycle caller; a revoked grant denies reads even if cleanup fails."""
+        if not isinstance(server_id, str) or not re.fullmatch(r"custom-[a-f0-9]{12}", server_id):
+            return
+        self._request("DELETE", f"/api/mcp/servers/{server_id}")
 
     def start_run(self, *, session_id, content):
         """Submit one message; SD queues it and returns the run id immediately."""

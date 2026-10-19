@@ -99,6 +99,7 @@ class WorkspaceResearchSetting(BaseModel):
     code_enabled = models.BooleanField(default=True)
     integration_enabled = models.BooleanField(default=True)
     research_chain_enabled = models.BooleanField(default=False)
+    research_mcp_write_enabled = models.BooleanField(default=False)
     research_agent_enabled = models.BooleanField(default=False)
     research_agent_user_backend_enabled = models.BooleanField(default=False)
     research_trace_enabled = models.BooleanField(default=False)

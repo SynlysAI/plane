@@ -1,7 +1,9 @@
 """Automatic Synlora persona, plugin, tool and resource assembly."""
 
 from dataclasses import asdict, dataclass
+from urllib.parse import quote, urlsplit
 
+from django.conf import settings
 from django.utils import timezone
 
 from plane.db.models import ResearchChainUpload
@@ -27,7 +29,7 @@ DEFAULT_TOOLS = frozenset({"knowledge.search", "knowledge.list", "file.read"})
 REVIEW_TOOLS = frozenset({"knowledge.search", "knowledge.list", "file.read"})
 
 # ScienceDiscovery 的桥接工具面（read_file/list_files 由 SD 会话工作区原生提供）。
-# P1 不向 SD 下发工具白名单（§11 已知取舍），装配结果仅用于 Plane 侧展示与审计。
+# General SD workspace tools; research tools use a separate scoped connector.
 SCIENCE_DISCOVERY_MANIFEST = {
     "tools": [{"name": "read_file"}, {"name": "list_files"}],
     "plugins": [],
@@ -171,16 +173,44 @@ def create_science_discovery_session(
         scope_source=scope_source,
     )
     profile = node.chain.project.research_profile
-    grant, _context_token = issue_agent_context(
+    research_enabled = bool(getattr(settings, "RESEARCH_MCP_ENABLED", False))
+    report_selections = None
+    if research_enabled:
+        from plane.research.services.chain_context import node_report_selections
+        from plane.research.services.mcp_catalog import TOOL_NAMES
+
+        assembly.allowed_tools = sorted(TOOL_NAMES)
+        assembly.unavailable_reasons = []
+        assembly.policy_version = "research-mcp.read.v1"
+        report_selections = node_report_selections(workspace, user, node)
+    grant, context_token = issue_agent_context(
         workspace=workspace,
         user=user,
         profile=profile,
         node=node,
         assembly=assembly,
         request_id=f"agent:{request_id}",
+        allowed_reports=report_selections,
     )
     project_name = f"plane-{str(profile.project_id)[:8]}-{profile.project.name}"[:120]
+    research_binding = None
     try:
+        if research_enabled:
+            origin = str(getattr(settings, "RESEARCH_MCP_PUBLIC_BASE_URL", "") or "").rstrip("/")
+            try:
+                parts = urlsplit(origin)
+                valid = (parts.scheme in {"http", "https"} and parts.hostname
+                         and parts.username is None and parts.password is None and not parts.query and not parts.fragment
+                         and parts.path in ("", "/") and parts.port != 0
+                         and not any(char.isspace() for char in origin))
+            except ValueError:
+                valid = False
+            if not valid:
+                raise ScienceDiscoveryError("research_mcp_not_configured", "Set a backend RESEARCH_MCP_PUBLIC_BASE_URL reachable from ScienceDiscovery.", 503)
+            research_binding = science_discovery.create_research_connector(
+                workspace=workspace, user=user, grant=grant, token=context_token,
+                url=f"{origin}/api/research/workspaces/{quote(workspace.slug, safe='')}/agent-access/mcp/",
+            )
         sd_project_id = science_discovery.create_project(name=project_name)
         # 专业智能体开箱即用：按节点类型幂等下发目录并取 specialistId（§10）。
         # 下发失败不阻断会话——SD 默认人设兜底。
@@ -189,14 +219,20 @@ def create_science_discovery_session(
             project_id=sd_project_id,
             title=f"{profile.project.name} · {node.title}"[:120],
             **({"specialist_id": specialist_id} if specialist_id else {}),
+            **({"connector_ids": [research_binding["source_id"]]} if research_binding else {}),
         )
     except ScienceDiscoveryError:
         grant.revoked_at = timezone.now()
         grant.save(update_fields=["revoked_at", "updated_at"])
+        if research_binding:
+            try:
+                science_discovery.remove_research_connector(research_binding["server_id"])
+            except ScienceDiscoveryError:
+                pass
         raise
     return {
         "grant": grant,
         "sd_project_id": sd_project_id,
         "sd_session_id": sd_session_id,
-        "assembly": asdict(assembly),
+        "assembly": {**asdict(assembly), **({"research_mcp": research_binding} if research_binding else {})},
     }

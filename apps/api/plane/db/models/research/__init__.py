@@ -28,6 +28,7 @@ from .chain import (
     ResearchReflectionLog,
 )
 from .context import ResearchContextGrant
+from .agent_operation import ResearchAgentOperation, ResearchAgentOperationApproval, ResearchAgentWriteGrant
 from .agent import ResearchAgentRunEvent, ResearchAgentSession
 from .backend import ResearchAgentBackendConnection
 from .integration import (
@@ -88,6 +89,9 @@ from .task import ResearchChainNodeTask, ResearchTaskComment
 from .template import ReportTemplate
 
 __all__ = [
+    "ResearchAgentOperation",
+    "ResearchAgentOperationApproval",
+    "ResearchAgentWriteGrant",
     "IdentityMapping",
     "AccountLink",
     "ResearchChain",

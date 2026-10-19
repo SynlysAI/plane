@@ -32,6 +32,7 @@ import {
   type TResearchChainStageNodeDetail,
 } from "@/components/research/chains/research-chain-workflow-stage-detail";
 import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
+import { ResearchAgentOperations } from "@/components/research/chains/research-agent-operations";
 import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -674,6 +675,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                         workspaceSlug={workspaceSlug}
                         chainId={chainId}
                         nodeId={selected.node.id}
+                      />
+                      <ResearchAgentOperations
+                        workspaceSlug={workspaceSlug}
+                        nodeId={selected.node.id}
+                        operationId={searchParams.get("operation")}
                       />
                       <ResearchChainKnowledgePanel
                         workspaceSlug={workspaceSlug}

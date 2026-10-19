@@ -9,6 +9,9 @@ from rest_framework.response import Response
 from plane.db.models import ResearchChain, ResearchAnalysisResult, ResearchChainEvent, ResearchChainSnapshot
 from plane.research.serializers import ResearchAnalysisResultSerializer
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
+from plane.research.services.chain_mutations import save_analysis_draft
+from plane.research.services.chain_tasks import ChainTaskStateError
+from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.views.base import ResearchAPIView
@@ -68,6 +71,15 @@ class ResearchChainAnalysisListCreateEndpoint(ResearchAPIView):
             )
         confirmed = str(request.data.get("confirmed", "")).lower() in ("1", "true", "yes")
         digest = payload_hash(request.data)
+        if not confirmed:
+            try:
+                result, created = save_analysis_draft(workspace=workspace, node=node, actor=request.user,
+                    payload={**request.data, "method": method, "summary": summary}, request_id=request_id, digest=digest)
+            except ResearchReadError as exc:
+                return research_error(exc.code, str(exc), exc.status)
+            except ChainTaskStateError as exc:
+                return research_error("state_conflict", str(exc), status.HTTP_409_CONFLICT)
+            return Response(ResearchAnalysisResultSerializer(result).data, status=201 if created else 200)
         existing = ResearchAnalysisResult.objects.filter(request_id=request_id).first()
         if existing is not None:
             if existing.node_id != node.id or existing.payload_hash != digest:

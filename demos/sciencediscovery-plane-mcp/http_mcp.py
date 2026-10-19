@@ -108,8 +108,8 @@ def load_http_config(path: Path) -> HttpConfig:
             plane = PlaneConfig(*(plane_values[key] for key in ("PLANE_BASE_URL", "PLANE_WORKSPACE_SLUG", "PLANE_API_KEY")))
             ui_origin = PlaneConfig(plane_values["PLANE_UI_BASE_URL"], plane.workspace_slug, plane.api_key).base_url
             mode, publish = entry.get("mode", "read-only"), entry.get("enable_publish", False)
-            if mode not in ("read-only", "agent") or type(publish) is not bool or (mode == "read-only" and publish):
-                raise HttpConfigError("Use mode read-only or agent; publishing is a boolean available only in agent mode.")
+            if mode not in ("read-only", "agent", "research-read-only") or type(publish) is not bool or (mode != "agent" and publish):
+                raise HttpConfigError("Use read-only, research-read-only or agent mode; publishing is available only in agent mode.")
             names.add(name)
             tokens.add(token_digest)
             clients.append(HttpClient(name, token_digest, plane, ui_origin, mode, publish))
@@ -122,6 +122,12 @@ def load_http_config(path: Path) -> HttpConfig:
 
 @asynccontextmanager
 async def open_server(client: HttpClient, state_dir: Path):
+    if client.mode == "research-read-only":
+        from research_client import ResearchClient
+        from research_mcp import create_server as create_research_server
+
+        yield await create_research_server(ResearchClient(client.plane))
+        return
     if version(UPSTREAM_PACKAGE) != UPSTREAM_VERSION:
         raise HttpConfigError("Install the pinned official MCP dependencies first.")
     # Explicit per-client values take precedence over the host's environment.

@@ -2,6 +2,8 @@
 
 本文记录 `10.26.15.53` 上正在使用的部署方式、首次配置、日常更新、验证与回滚步骤。该环境不是仓库根目录 `docker-compose.yml` 定义的完整生产栈，而是一套过渡性的混合部署：前端在宿主机通过 pnpm 构建，Caddy 容器托管静态产物；API、Worker 和基础设施由 `docker-compose-local.yml` 启动。
 
+科研链 MCP v2.1 的增量部署见 [给部署同学的操作说明](research-mcp-v21-deployment.md)，当前能力及验收边界见 [验收摘要](research-mcp-v21-acceptance.md)。本文中的历史 IP 不代表本次测试服务器的最终地址，部署前以实际对外入口为准。
+
 ## 1. 当前架构
 
 项目目录：
