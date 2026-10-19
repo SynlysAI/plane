@@ -6,6 +6,7 @@
 
 import useSWR from "swr";
 import { DEFAULT_TIMEZONE } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { TTimezoneObject } from "@plane/types";
 // services
 import timezoneService from "@/services/timezone.service";
@@ -34,6 +35,7 @@ const groupTimezones = (timezones: TTimezoneObject[]): TTimezoneObject[] => {
 };
 
 const useTimezone = () => {
+  const { t } = useTranslation();
   // fetching the timezone from the server
   const {
     data: timezones,
@@ -48,6 +50,13 @@ const useTimezone = () => {
 
   const getTimeZoneLabel = (timezone: TTimezoneObject | undefined) => {
     if (!timezone) return undefined;
+    if (timezone.value === DEFAULT_TIMEZONE) {
+      return (
+        <span>
+          {t("beijing_time")} ({timezone.utc_offset})
+        </span>
+      );
+    }
     return (
       <div className="flex gap-1.5">
         <span className="text-placeholder">{timezone.utc_offset}</span>
@@ -56,7 +65,7 @@ const useTimezone = () => {
     );
   };
   const options = [
-    ...groupTimezones(timezones?.timezones || [])?.map((timezone) => ({
+    ...groupTimezones(timezones?.timezones || []).map((timezone) => ({
       value: timezone.value,
       query: `${timezone.value} ${timezone.label}, ${timezone.gmt_offset}, ${timezone.utc_offset}`,
       content: getTimeZoneLabel(timezone),

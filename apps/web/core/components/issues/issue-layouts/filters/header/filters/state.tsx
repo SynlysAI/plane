@@ -7,6 +7,8 @@
 import React, { useMemo, useState } from "react";
 import { sortBy } from "lodash-es";
 import { observer } from "mobx-react";
+import { useTranslation } from "@plane/i18n";
+import { getStateDisplayName } from "@/helpers/work-item-labels";
 import { EIconSize } from "@plane/constants";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { IState } from "@plane/types";
@@ -24,6 +26,7 @@ type Props = {
 };
 
 export const FilterState = observer(function FilterState(props: Props) {
+  const { t } = useTranslation();
   const { appliedFilters, handleUpdate, searchQuery, states } = props;
 
   const [itemsToRender, setItemsToRender] = useState(5);
@@ -32,11 +35,12 @@ export const FilterState = observer(function FilterState(props: Props) {
   const appliedFiltersCount = appliedFilters?.length ?? 0;
 
   const sortedOptions = useMemo(() => {
-    const filteredOptions = (states ?? []).filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredOptions = (states ?? []).filter((state) =>
+      `${state.name} ${getStateDisplayName(state, t)}`.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     return sortBy(filteredOptions, [(s) => !(appliedFilters ?? []).includes(s.id)]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
+  }, [searchQuery, states, appliedFilters, t]);
 
   const handleViewToggle = () => {
     if (!sortedOptions) return;
@@ -48,7 +52,7 @@ export const FilterState = observer(function FilterState(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`State${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${t("state")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -60,7 +64,7 @@ export const FilterState = observer(function FilterState(props: Props) {
                 {sortedOptions.slice(0, itemsToRender).map((state) => (
                   <FilterOption
                     key={state.id}
-                    isChecked={appliedFilters?.includes(state.id) ? true : false}
+                    isChecked={Boolean(appliedFilters?.includes(state.id))}
                     onClick={() => handleUpdate(state.id)}
                     icon={
                       <StateGroupIcon
@@ -70,7 +74,7 @@ export const FilterState = observer(function FilterState(props: Props) {
                         percentage={state?.order}
                       />
                     }
-                    title={state.name}
+                    title={getStateDisplayName(state, t)}
                   />
                 ))}
                 {sortedOptions.length > 5 && (

@@ -146,13 +146,13 @@ export function ResizableSidebar({
     if (!isAnySidebarDropdownOpen && isCollapsed && isHoveringTrigger) {
       handlePeekLeave();
     }
-  }, [isAnySidebarDropdownOpen]);
+  }, [isAnySidebarDropdownOpen, isCollapsed, isHoveringTrigger, handlePeekLeave]);
 
   useEffect(() => {
     if (!isAnyExtendedSidebarExpanded && isCollapsed && isHoveringTrigger) {
       handlePeekLeave();
     }
-  }, [isAnyExtendedSidebarExpanded]);
+  }, [isAnyExtendedSidebarExpanded, isCollapsed, isHoveringTrigger, handlePeekLeave]);
 
   // Reset peek when sidebar is expanded
   useEffect(() => {
@@ -193,6 +193,8 @@ export function ResizableSidebar({
         }}
         role="complementary"
         aria-label="Main sidebar"
+        aria-hidden={isCollapsed}
+        inert={isCollapsed}
         data-prevent-outside-click={isMobile}
       >
         <aside
@@ -201,7 +203,7 @@ export function ResizableSidebar({
             isAnyExtendedSidebarExpanded && "rounded-none"
           )}
         >
-          {children}
+          {!isCollapsed && children}
 
           {/* Resize Handle */}
           <div
@@ -236,6 +238,8 @@ export function ResizableSidebar({
         onMouseLeave={handlePeekLeave}
         role="complementary"
         aria-label="Sidebar peek view"
+        aria-hidden={!isCollapsed || !showPeek}
+        inert={!isCollapsed || !showPeek}
       >
         <aside
           className={cn(
@@ -244,7 +248,7 @@ export function ResizableSidebar({
             isAnyExtendedSidebarExpanded && "rounded-none"
           )}
         >
-          {children}
+          {isCollapsed && showPeek && children}
           {/* Resize Handle */}
           <div
             className={cn(
@@ -263,7 +267,7 @@ export function ResizableSidebar({
       </div>
 
       {/* Extended Sidebar */}
-      {extendedSidebar && extendedSidebar}
+      {extendedSidebar}
     </>
   );
 }

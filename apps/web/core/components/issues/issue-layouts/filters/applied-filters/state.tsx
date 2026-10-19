@@ -5,6 +5,8 @@
  */
 
 import { observer } from "mobx-react";
+import { useTranslation } from "@plane/i18n";
+import { getStateDisplayName } from "@/helpers/work-item-labels";
 // icons
 // plane imports
 import { EIconSize } from "@plane/constants";
@@ -20,6 +22,7 @@ type Props = {
 };
 
 export const AppliedStateFilters = observer(function AppliedStateFilters(props: Props) {
+  const { t } = useTranslation();
   const { handleRemove, states, values, editable } = props;
 
   return (
@@ -37,7 +40,7 @@ export const AppliedStateFilters = observer(function AppliedStateFilters(props: 
               size={EIconSize.SM}
               percentage={stateDetails?.order}
             />
-            {stateDetails.name}
+            {getStateDisplayName(stateDetails, t)}
             {editable && (
               <button
                 type="button"

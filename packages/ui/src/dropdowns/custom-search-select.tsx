@@ -6,7 +6,7 @@
 
 import { Combobox } from "@headlessui/react";
 import { ChevronDownOutline, InfoOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { usePopper } from "react-popper";
 import { useOutsideClickDetector } from "@plane/hooks";
 // plane imports
@@ -51,6 +51,15 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const wasOpen = useRef(false);
+
+  // 开闭通知在提交后触发，避免渲染期间更新调用方的状态。
+  useEffect(() => {
+    if (wasOpen.current === isOpen) return;
+    wasOpen.current = isOpen;
+    if (isOpen) onOpen?.();
+    else onClose?.();
+  }, [isOpen, onOpen, onClose]);
 
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: placement ?? "bottom-start",
@@ -70,12 +79,10 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
   const openDropdown = () => {
     setIsOpen(true);
     if (referenceElement) referenceElement.focus();
-    if (onOpen) onOpen();
   };
 
   const closeDropdown = () => {
     setIsOpen(false);
-    onClose?.();
   };
 
   const handleKeyDown = useDropdownKeyDown(openDropdown, closeDropdown, isOpen);
@@ -94,11 +101,12 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
       tabIndex={tabIndex}
       className={cn("relative flex-shrink-0 text-left", { flex: customButtonPrefix }, className)}
       onKeyDown={handleKeyDown}
+      onKeyDownCapture={(event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Escape" && isOpen) closeDropdown();
+      }}
       {...comboboxProps}
     >
-      {({ open }: { open: boolean }) => {
-        if (open && onOpen) onOpen();
-
+      {() => {
         return (
           <>
             {customButton ? (

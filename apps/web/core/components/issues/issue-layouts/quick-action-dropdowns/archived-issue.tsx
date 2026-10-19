@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 // ui
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { EIssuesStoreType } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
 import { ContextMenu, CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
@@ -36,6 +37,8 @@ export const ArchivedIssueQuickActions = observer(function ArchivedIssueQuickAct
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
   // router
   const { workspaceSlug } = useParams();
+  const { t } = useTranslation();
+  const menuLabel = t("work_item_actions", { name: `${issue.sequence_id ?? issue.id} ${issue.name}` });
   // store hooks
   const { allowPermissions } = useUserPermissions();
 
@@ -84,13 +87,13 @@ export const ArchivedIssueQuickActions = observer(function ArchivedIssueQuickAct
         onSubmit={handleDelete}
       />
 
-      <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
+      <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} ariaLabel={menuLabel} />
       <CustomMenu
+        ariaLabel={menuLabel}
         ellipsis
         customButton={customActionButton}
         portalElement={portalElement}
         placement={placements}
-        menuItemsClassName="z-[14]"
         maxHeight="lg"
         useCaptureForOutsideClick
         closeOnSelect
