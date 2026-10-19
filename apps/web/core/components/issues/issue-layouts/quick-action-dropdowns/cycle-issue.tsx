@@ -146,7 +146,6 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
         placement={placements}
         customButton={customActionButton}
         portalElement={portalElement}
-        menuItemsClassName="z-[14]"
         maxHeight="lg"
         useCaptureForOutsideClick
         closeOnSelect

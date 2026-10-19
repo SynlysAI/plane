@@ -191,6 +191,28 @@ it("行省略菜单用 Esc 关闭后卸载内容并恢复焦点", async () => {
   expect(document.activeElement).toBe(trigger);
 });
 
+it("传送到列表外的行菜单可提交动作并关闭", async () => {
+  const action = vi.fn();
+  await act(async () =>
+    root.render(
+      <CustomMenu ellipsis ariaLabel="工作项一的操作" closeOnSelect>
+        <CustomMenu.MenuItem onClick={action}>编辑</CustomMenu.MenuItem>
+      </CustomMenu>
+    )
+  );
+  await act(async () => container.querySelector<HTMLButtonElement>("button")!.click());
+  const menu = document.querySelector('[role="menu"]')!;
+  expect(menu).not.toBeNull();
+  expect(container.contains(menu)).toBe(false);
+  await act(async () => {
+    const option = menu.querySelector<HTMLButtonElement>("button")!;
+    option.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    option.click();
+  });
+  expect(action).toHaveBeenCalledOnce();
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+});
+
 it("侧栏展开、折叠与预览仅保留一份可访问内容", async () => {
   /** 按外部状态挂载真实侧栏。 */
   const renderSidebar = async (isCollapsed: boolean, showPeek = false) => {

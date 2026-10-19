@@ -148,7 +148,6 @@ export const ProjectIssueQuickActions = observer(function ProjectIssueQuickActio
         placement={placements}
         customButton={customActionButton}
         portalElement={portalElement}
-        menuItemsClassName="z-[14]"
         maxHeight="lg"
         closeOnSelect
       >

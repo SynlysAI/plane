@@ -94,7 +94,6 @@ export const ArchivedIssueQuickActions = observer(function ArchivedIssueQuickAct
         customButton={customActionButton}
         portalElement={portalElement}
         placement={placements}
-        menuItemsClassName="z-[14]"
         maxHeight="lg"
         useCaptureForOutsideClick
         closeOnSelect

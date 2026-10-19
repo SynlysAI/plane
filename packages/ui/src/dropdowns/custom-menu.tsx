@@ -87,7 +87,7 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
   } = props;
 
   const [referenceElement, setReferenceElement] = React.useState<HTMLButtonElement | null>(null);
-  const [popperElement, setPopperElement] = React.useState<HTMLDivElement | null>(null);
+  const [popperElement, setPopperElement] = React.useState<HTMLElement | null>(null);
   const [isOpen, setIsOpen] = React.useState(false);
   // refs
   const dropdownRef = React.useRef<HTMLDivElement | null>(null);
@@ -95,6 +95,8 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
 
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: placement ?? "auto",
+    strategy: "fixed",
+    modifiers: [{ name: "preventOverflow", options: { padding: 8, altAxis: true } }],
   });
 
   const closeAllSubmenus = React.useCallback(() => {
@@ -196,11 +198,13 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
 
   let menuItems = (
     <Menu.Items
-      data-prevent-outside-click={!!portalElement}
-      className={cn(
-        "fixed z-30 translate-y-0",
-        menuItemsClassName
-      )} /** translate-y-0 is a hack to create new stacking context. Required for safari  */
+      data-prevent-outside-click
+      className={cn("fixed z-30 outline-none", menuItemsClassName)}
+      ref={setPopperElement}
+      style={styles.popper}
+      {...attributes.popper}
+      portal={!portalElement}
+      modal={false}
       static
     >
       <div
@@ -214,9 +218,9 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
           },
           optionsClassName
         )}
-        ref={setPopperElement}
-        style={styles.popper}
-        {...attributes.popper}
+        style={{
+          maxHeight: `min(${{ sm: "7rem", rg: "9rem", md: "12rem", lg: "15rem", xl: "20rem", "2xl": "24rem" }[maxHeight]}, calc(100dvh - 16px))`,
+        }}
       >
         <MenuContext.Provider value={menuContextValue}>{children}</MenuContext.Provider>
       </div>

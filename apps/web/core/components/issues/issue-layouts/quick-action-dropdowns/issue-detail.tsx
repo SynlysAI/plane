@@ -233,7 +233,6 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
         placement={placements}
         customButton={<MoreHorizontalOutline className="size-4" aria-hidden="true" />}
         portalElement={portalElement}
-        menuItemsClassName="z-[14]"
         maxHeight="lg"
         closeOnSelect
       >
