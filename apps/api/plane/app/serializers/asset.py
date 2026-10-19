@@ -10,9 +10,19 @@ from plane.db.models import FileAsset
 
 class FileAssetSerializer(BaseSerializer):
     def validate_entity_type(self, value):
-        """Reject feedback screenshots outside the dedicated feedback endpoint."""
-        if value == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
-            raise serializers.ValidationError("Feedback screenshots must use the feedback endpoint.")
+        """要求反馈截图和评论附件使用各自的上传入口。
+
+        Args:
+            value: 请求指定的资产类型。
+
+        Returns:
+            可在通用接口使用的资产类型。
+        """
+        if value in (
+            FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT,
+            FileAsset.EntityTypeContext.COMMENT_ATTACHMENT,
+        ):
+            raise serializers.ValidationError("This asset type requires its dedicated upload endpoint.")
         return value
 
     class Meta:

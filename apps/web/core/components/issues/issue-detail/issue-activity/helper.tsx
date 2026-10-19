@@ -15,6 +15,9 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
+import { FileService } from "@/services/file.service";
+
+const COMMENT_FILE_SERVICE = new FileService();
 
 export const useWorkItemCommentOperations = (
   workspaceSlug: string | undefined,
@@ -44,7 +47,7 @@ export const useWorkItemCommentOperations = (
   const operations: TCommentsOperations = useMemo(() => {
     // Define operations object with all methods
     const ops: TCommentsOperations = {
-      copyCommentLink: (id) => {
+      copyCommentLink: async (id) => {
         if (!workspaceSlug || !issueDetails) return;
         try {
           const workItemLink = generateWorkItemLink({
@@ -55,12 +58,11 @@ export const useWorkItemCommentOperations = (
             sequenceId: issueDetails.sequence_id,
           });
           const commentLink = `${workItemLink}#comment-${id}`;
-          copyUrlToClipboard(commentLink).then(() => {
-            setToast({
-              title: t("common.success"),
-              type: TOAST_TYPE.SUCCESS,
-              message: t("issue.comments.copy_link.success"),
-            });
+          await copyUrlToClipboard(commentLink);
+          setToast({
+            title: t("common.success"),
+            type: TOAST_TYPE.SUCCESS,
+            message: t("issue.comments.copy_link.success"),
           });
         } catch (error) {
           console.error("Error in copying comment link:", error);
@@ -81,12 +83,13 @@ export const useWorkItemCommentOperations = (
             message: t("issue.comments.create.success"),
           });
           return comment;
-        } catch {
+        } catch (error) {
           setToast({
             title: t("common.error.label"),
             type: TOAST_TYPE.ERROR,
             message: t("issue.comments.create.error"),
           });
+          throw error;
         }
       },
       updateComment: async (commentId, data) => {
@@ -98,12 +101,13 @@ export const useWorkItemCommentOperations = (
             type: TOAST_TYPE.SUCCESS,
             message: t("issue.comments.update.success"),
           });
-        } catch {
+        } catch (error) {
           setToast({
             title: t("common.error.label"),
             type: TOAST_TYPE.ERROR,
             message: t("issue.comments.update.error"),
           });
+          throw error;
         }
       },
       removeComment: async (commentId) => {
@@ -139,8 +143,30 @@ export const useWorkItemCommentOperations = (
           return res;
         } catch (error) {
           console.log("Error in uploading comment asset:", error);
-          throw new Error(t("issue.comments.upload.error"));
+          throw new Error(t("issue.comments.upload.error"), { cause: error });
         }
+      },
+      uploadCommentAttachment: async (file) => {
+        if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing fields");
+        const response = await COMMENT_FILE_SERVICE.uploadProjectAsset(
+          workspaceSlug,
+          projectId,
+          { entity_type: EFileAssetType.COMMENT_ATTACHMENT, entity_identifier: issueId },
+          file
+        );
+        return {
+          id: response.asset_id,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          download_url: `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/download/${response.asset_id}/`,
+        };
+      },
+      discardCommentAttachment: async (assetId) => {
+        if (!workspaceSlug || !projectId) throw new Error("Missing fields");
+        await COMMENT_FILE_SERVICE.deleteNewAsset(
+          `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${assetId}/`
+        );
       },
       duplicateCommentAsset: async (assetId, commentId) => {
         try {
@@ -210,6 +236,7 @@ export const useWorkItemCommentOperations = (
       },
     };
     return ops;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, projectId, issueId, createComment, updateComment, uploadEditorAsset, removeComment]);
 
   return operations;

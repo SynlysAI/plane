@@ -38,3 +38,25 @@ describe("IssueCommentStore.removeComment", () => {
     expect(store.commentMap.commentId?.id).toBe("commentId");
   });
 });
+
+describe("IssueCommentStore.updateComment", () => {
+  it("applies canonical attachments only after a successful save", async () => {
+    const store = createStore();
+    const saved = { id: "commentId", comment_html: "<p>材料</p>", file_attachments: [{ id: "file" }] };
+    store.issueCommentService = { patchIssueComment: vi.fn().mockResolvedValue(saved) } as never;
+    await store.updateComment("workspace", "project", "issueId", "commentId", { attachment_ids: ["file"] });
+    expect(store.commentMap.commentId).toEqual(saved);
+  });
+
+  it("keeps the displayed comment and files unchanged after a failed save", async () => {
+    const store = createStore();
+    store.issueCommentService = { patchIssueComment: vi.fn().mockRejectedValue(new Error("offline")) } as never;
+    await expect(
+      store.updateComment("workspace", "project", "issueId", "commentId", {
+        comment_html: "<p>未保存</p>",
+        attachment_ids: [],
+      })
+    ).rejects.toThrow("offline");
+    expect(store.commentMap.commentId).toEqual({ id: "commentId" });
+  });
+});

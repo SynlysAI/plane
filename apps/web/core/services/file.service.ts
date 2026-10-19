@@ -169,6 +169,10 @@ export class FileService extends APIService {
     uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
   ): Promise<TFileSignedURLResponse> {
     const fileMetaData = await getFileMetaDataForUpload(file);
+    // 文本文件通常没有二进制签名，仅评论附件允许回退到浏览器提供的类型。
+    if (data.entity_type === "COMMENT_ATTACHMENT" && !fileMetaData.type) {
+      fileMetaData.type = file.type || "application/octet-stream";
+    }
     return this.post(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/`, {
       ...data,
       ...fileMetaData,

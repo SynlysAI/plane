@@ -9,7 +9,8 @@ import json
 from django.utils import timezone
 from django.db.models import Exists
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.shortcuts import get_object_or_404
 
 # Third Party imports
 from rest_framework.response import Response
@@ -20,7 +21,7 @@ from .. import BaseViewSet
 from plane.app.serializers import IssueCommentSerializer, CommentReactionSerializer
 from plane.app.permissions import allow_permission, ROLE
 from plane.research.utils.project_review import project_member_filters
-from plane.db.models import IssueComment, ProjectMember, CommentReaction, Project, Issue
+from plane.db.models import IssueComment, ProjectMember, CommentReaction, Project, Issue, FileAsset
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.host import base_host
 from plane.bgtasks.webhook_task import model_activity
@@ -51,6 +52,7 @@ class IssueCommentViewSet(BaseViewSet):
             .select_related("project")
             .select_related("workspace")
             .select_related("issue")
+            .prefetch_related("assets")
             .annotate(
                 is_member=Exists(
                     ProjectMember.objects.filter(
@@ -66,8 +68,8 @@ class IssueCommentViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def create(self, request, slug, project_id, issue_id):
-        project = Project.objects.get(pk=project_id)
-        issue = Issue.objects.get(pk=issue_id)
+        project = get_object_or_404(Project, pk=project_id, workspace__slug=slug, archived_at__isnull=True)
+        issue = get_object_or_404(Issue, pk=issue_id, project=project, workspace__slug=slug)
         if (
             ProjectMember.objects.filter(
                 workspace__slug=slug,
@@ -83,7 +85,10 @@ class IssueCommentViewSet(BaseViewSet):
                 {"error": "You are not allowed to comment on the issue"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = IssueCommentSerializer(data=request.data)
+        serializer = IssueCommentSerializer(
+            data=request.data,
+            context={"request": request, "attachment_issue": issue},
+        )
         if serializer.is_valid():
             serializer.save(project_id=project_id, issue_id=issue_id, actor=request.user)
             issue_activity.delay(
@@ -115,7 +120,12 @@ class IssueCommentViewSet(BaseViewSet):
         issue_comment = IssueComment.objects.get(workspace__slug=slug, project_id=project_id, issue_id=issue_id, pk=pk)
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
         current_instance = json.dumps(IssueCommentSerializer(issue_comment).data, cls=DjangoJSONEncoder)
-        serializer = IssueCommentSerializer(issue_comment, data=request.data, partial=True)
+        serializer = IssueCommentSerializer(
+            issue_comment,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
         if serializer.is_valid():
             if "comment_html" in request.data and request.data["comment_html"] != issue_comment.comment_html:
                 serializer.save(edited_at=timezone.now())
@@ -149,7 +159,13 @@ class IssueCommentViewSet(BaseViewSet):
     def destroy(self, request, slug, project_id, issue_id, pk):
         issue_comment = IssueComment.objects.get(workspace__slug=slug, project_id=project_id, issue_id=issue_id, pk=pk)
         current_instance = json.dumps(IssueCommentSerializer(issue_comment).data, cls=DjangoJSONEncoder)
-        issue_comment.delete()
+        with transaction.atomic():
+            issue_comment = IssueComment.objects.select_for_update().get(pk=issue_comment.pk)
+            issue_comment.assets.filter(entity_type=FileAsset.EntityTypeContext.COMMENT_ATTACHMENT).update(
+                is_deleted=True,
+                deleted_at=timezone.now(),
+            )
+            issue_comment.delete()
         issue_activity.delay(
             type="comment.activity.deleted",
             requested_data=json.dumps({"comment_id": str(pk)}),

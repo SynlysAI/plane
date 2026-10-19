@@ -11,6 +11,7 @@ from django.http import HttpResponseRedirect
 from django.utils import timezone
 from django.db import IntegrityError
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 
 # Third party imports
 from rest_framework import status
@@ -23,6 +24,7 @@ from plane.db.models import (
     CodeArtifact,
     ExperimentAmendment,
     FileAsset,
+    Issue,
     LiteratureEntry,
     Project,
     ProjectMember,
@@ -42,6 +44,7 @@ from plane.utils.cache import invalidate_cache_directly
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
+from plane.utils.comment_attachments import can_access_comment_attachment
 
 
 def can_download_research_asset(user, asset):
@@ -53,6 +56,8 @@ def can_download_research_asset(user, asset):
     same ``download`` decision as the research attachment endpoint. An upload
     that has not been registered to a report fails closed.
     """
+    if asset.entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
+        return can_access_comment_attachment(user, asset)
     if asset.entity_type == FileAsset.EntityTypeContext.REPORT_IMAGE:
         from plane.research.utils.report_images import can_read_report_image
 
@@ -103,6 +108,8 @@ def can_mutate_research_asset(user, asset):
     member (or an author editing a frozen formal record) from deleting the
     underlying file through Plane's generic asset route.
     """
+    if asset.entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
+        return can_access_comment_attachment(user, asset, mutate=True)
     if asset.entity_type == FileAsset.EntityTypeContext.REPORT_IMAGE:
         return False
     if asset.entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
@@ -487,10 +494,13 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 {"error": "Invalid entity type.", "status": False},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
+        if entity_type in (
+            FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT,
+            FileAsset.EntityTypeContext.COMMENT_ATTACHMENT,
+        ):
             return Response(
                 {
-                    "error": "Feedback screenshots must be uploaded through the feedback endpoint.",
+                    "error": "This asset type requires its project-specific upload endpoint.",
                     "status": False,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -731,9 +741,40 @@ class ProjectAssetEndpoint(BaseAPIView):
     def post(self, request, slug, project_id):
         name = sanitize_filename(request.data.get("name")) or "unnamed"
         type = request.data.get("type", "image/jpeg")
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
         entity_type = request.data.get("entity_type", "")
         entity_identifier = request.data.get("entity_identifier")
+        try:
+            size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        except (TypeError, ValueError, OverflowError):
+            return Response({"error": "Invalid file size."}, status=status.HTTP_400_BAD_REQUEST)
+
+        issue = None
+        if entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
+            if size <= 0 or size > settings.FILE_SIZE_LIMIT:
+                return Response({"error": "Invalid file size."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                issue_id = uuid.UUID(str(entity_identifier))
+            except (ValueError, TypeError, AttributeError):
+                return Response({"error": "Invalid work item."}, status=status.HTTP_400_BAD_REQUEST)
+            issue = get_object_or_404(
+                Issue,
+                pk=issue_id,
+                workspace__slug=slug,
+                project_id=project_id,
+                project__archived_at__isnull=True,
+            )
+            if (
+                ProjectMember.objects.filter(
+                    workspace__slug=slug,
+                    project_id=project_id,
+                    member=request.user,
+                    role=5,
+                    is_active=True,
+                ).exists()
+                and not issue.project.guest_view_all_features
+                and issue.created_by_id != request.user.id
+            ):
+                return Response({"error": "You are not allowed to comment on the issue."}, status=403)
 
         # Check if the entity type is allowed
         if entity_type not in FileAsset.EntityTypeContext.values:
@@ -758,10 +799,12 @@ class ProjectAssetEndpoint(BaseAPIView):
             "image/jpg",
             "image/gif",
         ]
+        if entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
+            allowed_types = settings.ATTACHMENT_MIME_TYPES
         if type not in allowed_types:
             return Response(
                 {
-                    "error": "Invalid file type. Only JPEG, PNG, WebP, JPG and GIF files are allowed.",
+                    "error": "Invalid file type.",
                     "status": False,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -785,7 +828,7 @@ class ProjectAssetEndpoint(BaseAPIView):
             created_by=request.user,
             entity_type=entity_type,
             project_id=project_id,
-            **self.get_entity_id_field(entity_type, entity_identifier),
+            **({"issue_id": issue.id} if issue else self.get_entity_id_field(entity_type, entity_identifier or None)),
         )
 
         # Get the presigned URL
@@ -881,11 +924,17 @@ class ProjectBulkAssetEndpoint(BaseAPIView):
         # unassociated-or-same-project bound prevent cross-project/user IDOR (a caller can
         # only touch their own uploads, cannot move an asset in from another project, and
         # @allow_permission already scopes them to this project).
-        assets = FileAsset.objects.filter(
-            id__in=asset_ids,
-            workspace__slug=slug,
-            created_by=request.user,
-        ).filter(Q(project_id=project_id) | Q(project_id__isnull=True))
+        assets = (
+            FileAsset.objects.filter(
+                id__in=asset_ids,
+                workspace__slug=slug,
+                created_by=request.user,
+            )
+            .filter(Q(project_id=project_id) | Q(project_id__isnull=True))
+            .exclude(
+                entity_type=FileAsset.EntityTypeContext.COMMENT_ATTACHMENT,
+            )
+        )
 
         # Get the first asset
         asset = assets.first()
@@ -988,7 +1037,10 @@ class DuplicateAssetEndpoint(BaseAPIView):
                 {"error": "Invalid entity type or entity id"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if entity_type == FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT:
+        if entity_type in (
+            FileAsset.EntityTypeContext.FEEDBACK_SCREENSHOT,
+            FileAsset.EntityTypeContext.COMMENT_ATTACHMENT,
+        ):
             return Response(
                 {"error": "Feedback screenshots must be uploaded through the feedback endpoint."},
                 status=status.HTTP_400_BAD_REQUEST,

@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 // plane constants
 import type { EIssueCommentAccessSpecifier } from "@plane/constants";
 // plane imports
@@ -50,6 +50,10 @@ type LiteTextEditorWrapperProps = MakeOptional<
   editorClassName?: string;
   submitButtonText?: string;
   disabledMenuItems?: TEditorCommands[];
+  onAttachFiles?: (files: File[]) => void;
+  attachmentContent?: React.ReactNode;
+  hasAttachments?: boolean;
+  isSubmitDisabled?: boolean;
 } & (
     | {
         editable: false;
@@ -87,6 +91,10 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
     showPlaceholderOnEmpty = true,
     submitButtonText = "common.comment",
     disabledMenuItems,
+    onAttachFiles,
+    attachmentContent,
+    hasAttachments = false,
+    isSubmitDisabled = false,
     ...rest
   } = props;
   // states
@@ -94,6 +102,11 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   const isFullVariant = variant === "full";
   const [isFocused, setIsFocused] = useState(isFullVariant ? showToolbarInitially : true);
   const [editorRef, setEditorRef] = useState<EditorRefApi | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const enterHandlerRef = useRef(rest.onEnterKeyPress);
+  enterHandlerRef.current = rest.onEnterKeyPress;
+  // TipTap 初始化后会保留快捷键扩展，回车必须读取最新正文及附件草稿状态。
+  const handleEnterKeyPress = useCallback((event?: React.KeyboardEvent) => enterHandlerRef.current?.(event), []);
   // editor flaggings
   const { liteText: liteTextEditorExtensions } = useEditorFlagging({
     workspaceSlug,
@@ -118,7 +131,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   // editor config
   const { getEditorFileHandlers } = useEditorConfig();
   // derived values
-  const isEmpty = isCommentEmpty(props.initialValue);
+  const isEmpty = isCommentEmpty(props.initialValue) && !hasAttachments;
 
   return (
     <div
@@ -173,6 +186,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
             extendedEditorProps={{}}
             editorClassName={editorClassName}
             {...rest}
+            onEnterKeyPress={handleEnterKeyPress}
           />
         </div>
 
@@ -193,6 +207,22 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
           />
         )}
       </div>
+
+      {attachmentContent}
+      {editable && onAttachFiles && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          aria-label="选择评论附件"
+          disabled={isSubmitting}
+          onChange={(event) => {
+            onAttachFiles(Array.from(event.target.files ?? []));
+            event.target.value = "";
+          }}
+        />
+      )}
 
       {/* Full Toolbar - conditionally rendered */}
       {isFullVariant && editable && (
@@ -221,6 +251,8 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
             editorRef={editorRef}
             showSubmitButton={showSubmitButton}
             submitButtonText={submitButtonText}
+            onAttachFiles={onAttachFiles ? () => fileInputRef.current?.click() : undefined}
+            isSubmitDisabled={isSubmitDisabled}
           />
         </div>
       )}
