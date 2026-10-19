@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
-from django.db.models import Count, Q, OuterRef, Subquery, IntegerField
+from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Prefetch
 from django.utils import timezone
 from django.db.models.functions import Coalesce
 
@@ -21,7 +21,13 @@ from plane.app.serializers import (
     WorkSpaceMemberSerializer,
 )
 from plane.app.views.base import BaseAPIView
-from plane.db.models import Project, ProjectMember, WorkspaceMember, DraftIssue
+from plane.db.models import (
+    DraftIssue,
+    Project,
+    ProjectMember,
+    WorkspaceMember,
+    WorkspaceMemberTagAssignment,
+)
 from plane.utils.cache import invalidate_cache
 
 from .. import BaseViewSet
@@ -40,6 +46,13 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
             .select_related("member", "member__avatar_asset")
+            .prefetch_related(
+                Prefetch(
+                    "tag_assignments",
+                    queryset=WorkspaceMemberTagAssignment.objects.select_related("tag__group"),
+                    to_attr="prefetched_tag_assignments",
+                )
+            )
         )
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -49,9 +62,13 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         # Get all active workspace members
         workspace_members = self.get_queryset()
         if workspace_member.role > 5:
-            serializer = WorkspaceMemberAdminSerializer(workspace_members, fields=("id", "member", "role"), many=True)
+            serializer = WorkspaceMemberAdminSerializer(
+                workspace_members, fields=("id", "member", "role", "is_active", "created_at", "tags"), many=True
+            )
         else:
-            serializer = WorkSpaceMemberSerializer(workspace_members, fields=("id", "member", "role"), many=True)
+            serializer = WorkSpaceMemberSerializer(
+                workspace_members, fields=("id", "member", "role", "is_active", "created_at", "tags"), many=True
+            )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -68,9 +85,13 @@ class WorkSpaceMemberViewSet(BaseViewSet):
             )
 
         if workspace_member.role > ROLE.GUEST.value:
-            serializer = WorkspaceMemberAdminSerializer(member, fields=("id", "member", "role"))
+            serializer = WorkspaceMemberAdminSerializer(
+                member, fields=("id", "member", "role", "is_active", "created_at", "tags")
+            )
         else:
-            serializer = WorkSpaceMemberSerializer(member, fields=("id", "member", "role"))
+            serializer = WorkSpaceMemberSerializer(
+                member, fields=("id", "member", "role", "is_active", "created_at", "tags")
+            )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE")

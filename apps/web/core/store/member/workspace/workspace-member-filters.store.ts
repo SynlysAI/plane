@@ -19,6 +19,7 @@ interface IWorkspaceMembership {
   member: string;
   role: EUserPermissions;
   is_active?: boolean;
+  tags?: { id: string }[];
 }
 
 export interface IWorkspaceMemberFiltersStore {

@@ -8,7 +8,13 @@ import { set, sortBy } from "lodash-es";
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import type { IWorkspaceBulkInviteFormData, IWorkspaceMember, IWorkspaceMemberInvitation } from "@plane/types";
+import type {
+  IWorkspaceBulkInviteFormData,
+  IWorkspaceMember,
+  IWorkspaceMemberInvitation,
+  IWorkspaceMemberTag,
+  IWorkspaceMemberTagGroup,
+} from "@plane/types";
 import type { TUserPermissions } from "@plane/types";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
@@ -26,12 +32,14 @@ export interface IWorkspaceMembership {
   member: string;
   role: TUserPermissions;
   is_active?: boolean;
+  tags?: IWorkspaceMemberTag[];
 }
 
 export interface IWorkspaceMemberStore {
   // observables
   workspaceMemberMap: Record<string, Record<string, IWorkspaceMembership>>;
   workspaceMemberInvitations: Record<string, IWorkspaceMemberInvitation[]>;
+  workspaceMemberTagGroups: Record<string, IWorkspaceMemberTagGroup[]>;
   // filters store
   filtersStore: IWorkspaceMemberFiltersStore;
   // computed
@@ -47,9 +55,15 @@ export interface IWorkspaceMemberStore {
   getWorkspaceInvitationDetails: (invitationId: string) => IWorkspaceMemberInvitation | null;
   // fetch actions
   fetchWorkspaceMembers: (workspaceSlug: string) => Promise<IWorkspaceMember[]>;
+  fetchWorkspaceMemberTagGroups: (workspaceSlug: string) => Promise<IWorkspaceMemberTagGroup[]>;
   fetchWorkspaceMemberInvitations: (workspaceSlug: string) => Promise<IWorkspaceMemberInvitation[]>;
   // crud actions
   updateMember: (workspaceSlug: string, userId: string, data: { role: TUserPermissions }) => Promise<void>;
+  updateMemberTags: (workspaceSlug: string, userId: string, tagIds: string[]) => Promise<IWorkspaceMemberTag[]>;
+  bulkUpdateMemberTags: (
+    workspaceSlug: string,
+    data: { member_ids: string[]; add_tag_ids: string[]; remove_tag_ids: string[] }
+  ) => Promise<IWorkspaceMember[]>;
   removeMemberFromWorkspace: (workspaceSlug: string, userId: string) => Promise<void>;
   // invite actions
   inviteMembersToWorkspace: (workspaceSlug: string, data: IWorkspaceBulkInviteFormData) => Promise<void>;
@@ -68,6 +82,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
     [workspaceSlug: string]: Record<string, IWorkspaceMembership>;
   } = {}; // { workspaceSlug: { userId: userDetails } }
   workspaceMemberInvitations: Record<string, IWorkspaceMemberInvitation[]> = {}; // { workspaceSlug: [invitations] }
+  workspaceMemberTagGroups: Record<string, IWorkspaceMemberTagGroup[]> = {};
   // filters store
   filtersStore: IWorkspaceMemberFiltersStore;
   // stores
@@ -82,13 +97,17 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       // observables
       workspaceMemberMap: observable,
       workspaceMemberInvitations: observable,
+      workspaceMemberTagGroups: observable,
       // computed
       workspaceMemberIds: computed,
       workspaceMemberInvitationIds: computed,
       memberMap: computed,
       // actions
       fetchWorkspaceMembers: action,
+      fetchWorkspaceMemberTagGroups: action,
       updateMember: action,
+      updateMemberTags: action,
+      bulkUpdateMemberTags: action,
       removeMemberFromWorkspace: action,
       fetchWorkspaceMemberInvitations: action,
       updateMemberInvitation: action,
@@ -170,7 +189,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       if (!memberDetails) return false;
       const memberSearchQuery = `${memberDetails.member.first_name} ${memberDetails.member.last_name} ${
         memberDetails.member?.display_name
-      } ${memberDetails.member.email ?? ""}`;
+      } ${memberDetails.member.email ?? ""} ${(memberDetails.tags ?? []).map((tag) => tag.name).join(" ")}`;
       return memberSearchQuery.toLowerCase()?.includes(searchQuery.toLowerCase());
     });
     return searchedWorkspaceMemberIds;
@@ -209,6 +228,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       role: workspaceMember.role,
       member: this.memberRoot?.memberMap?.[workspaceMember.member],
       is_active: workspaceMember.is_active,
+      tags: workspaceMember.tags ?? [],
     };
     return memberDetails;
   });
@@ -243,6 +263,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
             member: member.member.id,
             role: member.role as TUserPermissions,
             is_active: member.is_active,
+            tags: member.tags ?? [],
           };
         });
         // Replace the workspace snapshot so removed members and MobX computed
@@ -251,6 +272,42 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       });
       return response;
     });
+
+  /** 获取并缓存工作区成员标签配置。 */
+  fetchWorkspaceMemberTagGroups = async (workspaceSlug: string) =>
+    await this.workspaceService.fetchWorkspaceMemberTagGroups(workspaceSlug).then((response) => {
+      runInAction(() => {
+        this.workspaceMemberTagGroups[workspaceSlug] = response;
+      });
+      return response;
+    });
+
+  /** 替换单个成员标签并同步本地成员缓存。 */
+  updateMemberTags = async (workspaceSlug: string, userId: string, tagIds: string[]) => {
+    const memberDetails = this.getWorkspaceMemberDetails(userId);
+    if (!memberDetails) throw new Error("Member not found");
+    const response = await this.workspaceService.updateWorkspaceMemberTags(workspaceSlug, memberDetails.id, tagIds);
+    runInAction(() => {
+      const current = this.workspaceMemberMap[workspaceSlug]?.[userId];
+      if (current) current.tags = response.tags;
+    });
+    return response.tags;
+  };
+
+  /** 批量更新成员标签并同步本地成员缓存。 */
+  bulkUpdateMemberTags = async (
+    workspaceSlug: string,
+    data: { member_ids: string[]; add_tag_ids: string[]; remove_tag_ids: string[] }
+  ) => {
+    const response = await this.workspaceService.bulkUpdateWorkspaceMemberTags(workspaceSlug, data);
+    runInAction(() => {
+      response.members.forEach((member) => {
+        const current = this.workspaceMemberMap[workspaceSlug]?.[member.member.id];
+        if (current) current.tags = member.tags ?? [];
+      });
+    });
+    return response.members;
+  };
 
   /**
    * @description update the role of a workspace member

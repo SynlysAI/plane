@@ -122,6 +122,24 @@ export interface IWorkspaceMember {
   display_name?: string;
   last_login_medium?: TLoginMediums;
   is_active?: boolean;
+  tags?: IWorkspaceMemberTag[];
+}
+
+export type TWorkspaceMemberTagColor = "sage" | "sand" | "slate" | "mist" | "clay" | "moss";
+
+export interface IWorkspaceMemberTag {
+  id: string;
+  group_id: string;
+  name: string;
+  color: TWorkspaceMemberTagColor;
+  sort_order: number;
+}
+
+export interface IWorkspaceMemberTagGroup {
+  id: string;
+  name: string;
+  sort_order: number;
+  tags: IWorkspaceMemberTag[];
 }
 
 export interface IWorkspaceMemberMe {

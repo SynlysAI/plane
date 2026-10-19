@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { Button } from "@plane/propel/button";
 import { ChevronDownOutline } from "@makeplane/propel/icons";
 import { EUserProjectRoles, EUserWorkspaceRoles } from "@plane/types";
+import type { IWorkspaceMemberTagGroup } from "@plane/types";
 // plane ui
 import { CustomMenu } from "@plane/ui";
 // components
@@ -24,6 +25,9 @@ type Props = {
   appliedFilters: string[] | null;
   handleUpdate: (role: string) => void;
   memberType: "project" | "workspace";
+  tagGroups?: IWorkspaceMemberTagGroup[];
+  appliedTagFilters?: string[];
+  handleTagUpdate?: (tagId: string) => void;
 };
 
 const PROJECT_ROLE_OPTIONS: IRoleOption[] = [
@@ -81,21 +85,35 @@ const RoleFilterGroup = observer(function RoleFilterGroup({
 });
 
 export const MemberListFilters = observer(function MemberListFilters(props: Props) {
-  const { appliedFilters, handleUpdate, memberType } = props;
+  const { appliedFilters, handleUpdate, memberType, tagGroups, appliedTagFilters, handleTagUpdate } = props;
 
   return (
     <div className="space-y-4">
       {/* Role Filter Group */}
       <RoleFilterGroup appliedFilters={appliedFilters} handleUpdate={handleUpdate} memberType={memberType} />
+      {memberType === "workspace" &&
+        tagGroups?.map((group) => (
+          <div key={group.id} className="space-y-1.5">
+            <p className="text-11 font-medium text-tertiary">{group.name}</p>
+            {group.tags.map((tag) => (
+              <FilterOption
+                key={tag.id}
+                isChecked={appliedTagFilters?.includes(tag.id) ?? false}
+                title={tag.name}
+                onClick={() => handleTagUpdate?.(tag.id)}
+              />
+            ))}
+          </div>
+        ))}
     </div>
   );
 });
 
 // Dropdown component for member list filters
 export const MemberListFiltersDropdown = observer(function MemberListFiltersDropdown(props: Props) {
-  const { appliedFilters, handleUpdate, memberType } = props;
+  const { appliedFilters, handleUpdate, memberType, tagGroups, appliedTagFilters, handleTagUpdate } = props;
 
-  const appliedFiltersCount = appliedFilters?.length ?? 0;
+  const appliedFiltersCount = (appliedFilters?.length ?? 0) + (appliedTagFilters?.length ?? 0);
 
   return (
     <CustomMenu
@@ -112,7 +130,14 @@ export const MemberListFiltersDropdown = observer(function MemberListFiltersDrop
       }
       placement="bottom-start"
     >
-      <MemberListFilters appliedFilters={appliedFilters} handleUpdate={handleUpdate} memberType={memberType} />
+      <MemberListFilters
+        appliedFilters={appliedFilters}
+        handleUpdate={handleUpdate}
+        memberType={memberType}
+        tagGroups={tagGroups}
+        appliedTagFilters={appliedTagFilters}
+        handleTagUpdate={handleTagUpdate}
+      />
     </CustomMenu>
   );
 });

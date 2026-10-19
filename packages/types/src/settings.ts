@@ -16,7 +16,7 @@ export type TProfileSettingsTabs =
   | "api-tokens"
   | "agent-configuration";
 
-export type TWorkspaceSettingsTabs = "general" | "members" | "export" | "webhooks";
+export type TWorkspaceSettingsTabs = "general" | "members" | "member-tags" | "export" | "webhooks";
 export type TWorkspaceSettingsItem = {
   key: TWorkspaceSettingsTabs;
   i18n_label: string;

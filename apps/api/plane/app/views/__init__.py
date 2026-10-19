@@ -68,6 +68,14 @@ from .workspace.invite import (
     UserWorkspaceInvitationsViewSet,
 )
 from .workspace.label import WorkspaceLabelsEndpoint
+from .workspace.member_tag import (
+    WorkspaceMemberTagAssignmentEndpoint,
+    WorkspaceMemberTagBulkAssignmentEndpoint,
+    WorkspaceMemberTagDetailEndpoint,
+    WorkspaceMemberTagGroupDetailEndpoint,
+    WorkspaceMemberTagGroupsEndpoint,
+    WorkspaceMemberTagsEndpoint,
+)
 from .workspace.state import WorkspaceStatesEndpoint
 from .workspace.user import (
     UserLastProjectWithWorkspaceEndpoint,
