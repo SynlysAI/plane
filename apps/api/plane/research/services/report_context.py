@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from plane.db.models import PeriodicReport
 from plane.research.utils.acl import build_actor_context, check_access
+from plane.research.utils.report_images import snapshot_image_manifest
 from plane.research.utils.reports import report_resource
 
 MAX_REPORT_CHARACTERS = 50000
@@ -75,7 +76,7 @@ def selected_report_content(*, workspace, actor, project_id, selections):
                 "attachments": [
                     {**item, "parsed": False, "scan_status": "not_scanned"} for item in snapshot.attachment_manifest
                 ],
-                "images": snapshot.image_manifest,
+                "images": snapshot_image_manifest(report, snapshot),
             }
         )
     if sum(len(item["text"]) for item in result) > MAX_REPORT_CHARACTERS:

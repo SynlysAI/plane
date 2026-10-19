@@ -1,18 +1,23 @@
 """报告正文图片权限、跨报告引用及正式资源保留契约。"""
 
 from unittest import mock
+from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 
-from plane.db.models import FileAsset, PeriodicReport
+from plane.db.models import FileAsset, PeriodicReport, PeriodicReportSnapshot
+from plane.research.services.report_context import selected_report_content
 from plane.research.utils.report_images import can_read_report_image
 from plane.tests.contract.app.test_research_attachments import env as attachment_env, research_module_on  # noqa: F401
+from plane.tests.research_fixtures import make_workspace
 
 
 @pytest.fixture
-def env(attachment_env):
+def env(attachment_env):  # noqa: F811
     """复用实际报告及 S3 夹具。"""
     return attachment_env
+
 
 pytestmark = pytest.mark.contract
 
@@ -38,22 +43,104 @@ def body_url(env):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("uploaded,foreign", [(False, False), (True, True)])
-def test_body_rejects_incomplete_and_foreign_image(env, uploaded, foreign):
-    asset = make_image(env, uploaded=uploaded)
-    if foreign:
-        asset.entity_identifier = "00000000-0000-0000-0000-000000000001"
-        asset.save()
+@pytest.mark.parametrize("node_type,tag", [("image", "img"), ("imageComponent", "image-component")])
+@pytest.mark.parametrize("invalid", ["incomplete", "foreign_report", "foreign_workspace", "removed", "wrong_type"])
+def test_body_rejects_incomplete_and_foreign_image(env, node_type, tag, invalid):
+    """新旧格式都不能绕过资源归属、类型或上传状态校验。"""
+    asset = make_image(env, uploaded=invalid != "incomplete")
+    if invalid == "foreign_report":
+        asset.entity_identifier = str(uuid4())
+    elif invalid == "foreign_workspace":
+        asset.workspace = make_workspace(env["admin"])
+    elif invalid == "removed":
+        asset.is_deleted = True
+    elif invalid == "wrong_type":
+        asset.entity_type = FileAsset.EntityTypeContext.REPORT_ATTACHMENT
+    asset.save()
     response = env["student_client"].patch(
         body_url(env),
         {
-            "description_json": {"type": "doc", "content": [{"type": "image", "attrs": {"src": str(asset.id)}}]},
-            "description_html": f'<img src="{asset.id}">',
+            "description_json": {"type": "doc", "content": [{"type": node_type, "attrs": {"src": str(asset.id)}}]},
+            "description_html": f'<{tag} src="{asset.id}"></{tag}>',
         },
         format="json",
     )
     assert response.status_code == 422
     assert PeriodicReport.objects.get(pk=env["report"]["id"]).page.description_html == "<p></p>"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("node_type,tag", [("image", "img"), ("imageComponent", "image-component")])
+@pytest.mark.parametrize("source", ["json", "html", "both"])
+def test_submitted_editor_images_are_frozen_and_readable(env, node_type, tag, source):
+    """保存并提交实际编辑器格式后，导师可以读取去重后的正式图片。"""
+    asset = make_image(env)
+    url = f"{body_url(env)}images/{asset.id}/"
+    payload = {
+        "description_json": {"type": "doc", "content": [{"type": node_type, "attrs": {"src": url}}] * 2},
+        "description_html": f'<{tag} src="{url}"></{tag}>' * 2,
+    }
+    if source == "json":
+        payload["description_html"] = "<p>正文</p>"
+    elif source == "html":
+        payload["description_json"] = {}
+    saved = env["student_client"].patch(body_url(env), payload, format="json")
+    assert saved.status_code == 200, saved.json()
+    submitted = env["student_client"].post(f"{body_url(env)}submit/", {}, format="json")
+    assert submitted.status_code == 200, submitted.json()
+    snapshot = PeriodicReportSnapshot.objects.get(report_id=env["report"]["id"])
+    assert [item["asset_id"] for item in snapshot.image_manifest] == [str(asset.id)]
+    with mock.patch("plane.research.views.report_images.S3Storage") as storage:
+        storage.return_value.generate_presigned_url.return_value = "https://storage.invalid/test.png"
+        response = env["advisor_client"].get(url)
+    assert response.status_code == 302
+    assert response["Location"] == "https://storage.invalid/test.png"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("partial_manifest", [False, True])
+def test_legacy_snapshot_images_are_readable_without_rewriting_history(env, partial_manifest):
+    """历史空清单或部分清单按正式正文补全，且隔离后续草稿新增图片。"""
+    asset = make_image(env)
+    other = make_image(env)
+    draft_asset = make_image(env)
+    report = PeriodicReport.objects.get(pk=env["report"]["id"])
+    report.status = PeriodicReport.Status.NEEDS_REVISION
+    report.submitted_at = timezone.now()
+    report.save(update_fields=["status", "submitted_at", "updated_at"])
+    sources = [f"{body_url(env)}images/{image.id}/" for image in (asset, other)]
+    frozen_manifest = [{"asset_id": str(asset.id), "file_name": "frozen.png"}] if partial_manifest else []
+    snapshot = PeriodicReportSnapshot.objects.create(
+        report=report,
+        version_no=1,
+        snapshot_status=PeriodicReport.Status.SUBMITTED,
+        description_json={"type": "doc", "content": [{"type": "imageComponent", "attrs": {"src": sources[0]}}]},
+        description_html=f'<image-component src="{sources[1]}"></image-component>',
+        image_manifest=frozen_manifest,
+        submitted_by=env["student"],
+    )
+    report.page.description_json = {}
+    report.page.description_html = f'<image-component src="{body_url(env)}images/{draft_asset.id}/"></image-component>'
+    report.page.save(update_fields=["description_json", "description_html", "updated_at"])
+    asset.is_deleted = True
+    asset.save(update_fields=["is_deleted", "updated_at"])
+    with mock.patch("plane.research.views.report_images.S3Storage") as storage:
+        storage.return_value.generate_presigned_url.return_value = "https://storage.invalid/test.png"
+        assert all(env["advisor_client"].get(url).status_code == 302 for url in sources)
+        assert env["advisor_client"].get(f"{body_url(env)}images/{draft_asset.id}/").status_code == 404
+        assert env["outsider_client"].get(sources[0]).status_code == 404
+    contents = selected_report_content(
+        workspace=env["workspace"],
+        actor=env["advisor"],
+        project_id=report.project_id,
+        selections=[{"report_id": str(report.id), "version_no": 1}],
+    )
+    assert {image["asset_id"] for image in contents[0]["images"]} == {str(asset.id), str(other.id)}
+    snapshot.refresh_from_db()
+    assert snapshot.image_manifest == frozen_manifest
+    assert snapshot.description_html == f'<image-component src="{sources[1]}"></image-component>'
+    report.page.refresh_from_db()
+    assert str(draft_asset.id) in report.page.description_html
 
 
 @pytest.mark.django_db
