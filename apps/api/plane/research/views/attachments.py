@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import logging
 import uuid
 
 from django.db import IntegrityError
@@ -31,6 +32,9 @@ from plane.research.utils.settings import get_workspace_research_settings
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.reports import report_queryset
 from plane.settings.storage import S3Storage
+
+
+LOGGER = logging.getLogger("plane.api")
 
 
 class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
@@ -110,7 +114,13 @@ class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
             return research_permission_denied()
         if asset.entity_identifier and str(asset.entity_identifier) != str(report.id):
             return research_permission_denied()
-        if ReportAttachment.all_objects.filter(asset=asset).exists():
+        existing_attachment = ReportAttachment.all_objects.filter(asset=asset).first()
+        if existing_attachment is not None:
+            if existing_attachment.report_id == report.id and existing_attachment.deleted_at is None:
+                return Response(
+                    ReportAttachmentSerializer(existing_attachment).data,
+                    status=status.HTTP_200_OK,
+                )
             return research_permission_denied()
 
         file_name = asset.attributes.get("name") or asset.asset.name
@@ -118,9 +128,14 @@ class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
         try:
             error_code, metadata = inspect_uploaded_asset(S3Storage(request=request), asset, limits)
         except Exception:
+            LOGGER.exception(
+                "report_attachment_storage_inspection_failed report_id=%s asset_id=%s",
+                report.id,
+                asset.id,
+            )
             return research_error(
-                ResearchErrorCode.ATTACHMENT_NOT_FOUND,
-                "无法校验存储对象，请重试。",
+                ResearchErrorCode.UPLOAD_REGISTRATION_FAILED,
+                "无法确认附件上传结果，请稍后重试。",
                 status.HTTP_409_CONFLICT,
             )
         if error_code:
@@ -161,9 +176,21 @@ class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
                 created_by=request.user,
             )
         except IntegrityError:
+            existing_attachment = ReportAttachment.all_objects.filter(asset=asset, report=report).first()
+            if existing_attachment is not None and existing_attachment.deleted_at is None:
+                return Response(
+                    ReportAttachmentSerializer(existing_attachment).data,
+                    status=status.HTTP_200_OK,
+                )
+            LOGGER.exception(
+                "report_attachment_registration_failed report_id=%s asset_id=%s",
+                report.id,
+                asset.id,
+            )
             return research_error(
-                ResearchErrorCode.ATTACHMENT_NOT_FOUND,
-                "This file is already attached to the report.",
+                ResearchErrorCode.UPLOAD_REGISTRATION_FAILED,
+                "附件登记失败，请稍后重试。",
+                status.HTTP_409_CONFLICT,
             )
 
         record_audit_event(
@@ -239,15 +266,24 @@ class ResearchReportAttachmentPresignEndpoint(ResearchAPIView):
         safe_name = sanitize_filename(file_name) or "attachment"
         asset_key = f"{workspace.id}/research/{report.id}/{uuid.uuid4().hex}-{safe_name}"
         storage = S3Storage(request=request)
-        presigned = storage.generate_presigned_post(
-            object_name=asset_key,
-            file_type=content_type,
-            file_size=size,
-        )
+        try:
+            presigned = storage.generate_presigned_post(
+                object_name=asset_key,
+                file_type=content_type,
+                file_size=size,
+            )
+        except Exception:
+            LOGGER.exception("report_attachment_presign_failed report_id=%s", report.id)
+            presigned = None
         if presigned is None:
+            LOGGER.error(
+                "report_attachment_upload_storage_unavailable report_id=%s asset_key=%s",
+                report.id,
+                asset_key,
+            )
             return research_error(
-                ResearchErrorCode.FILE_TYPE_NOT_ALLOWED,
-                "Unable to prepare the upload.",
+                ResearchErrorCode.UPLOAD_STORAGE_FAILED,
+                "无法准备对象存储上传，请检查 MinIO 或代理配置后重试。",
                 status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 

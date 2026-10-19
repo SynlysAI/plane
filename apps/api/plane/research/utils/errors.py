@@ -73,6 +73,8 @@ class ResearchErrorCode:
     FILE_TYPE_NOT_ALLOWED = "file_type_not_allowed"
     FILE_SIZE_EXCEEDED = "file_size_exceeded"
     ATTACHMENT_NOT_FOUND = "report_attachment_not_found"
+    UPLOAD_STORAGE_FAILED = "research_upload_storage_failed"
+    UPLOAD_REGISTRATION_FAILED = "research_upload_registration_failed"
     FEEDBACK_INVALID = "research_feedback_invalid"
     FEEDBACK_NOT_FOUND = "research_feedback_not_found"
     FEEDBACK_IDEMPOTENCY_CONFLICT = "research_feedback_idempotency_conflict"

@@ -2377,6 +2377,8 @@
       "research_project_not_found": "科研项目不存在。",
       "file_type_not_allowed": "不支持该文件类型。",
       "file_size_exceeded": "文件超过配置的大小限制。",
+      "upload_storage_failed": "对象存储上传失败，请检查 MinIO 或代理配置后重试。",
+      "upload_registration_failed": "附件登记失败，请稍后重试；如果文件已上传，请重新打开报告确认。",
       "approval_flow_not_found": "审批流不存在。",
       "approval_request_not_found": "审批申请不存在。",
       "approval_state_conflict": "当前审批状态不允许该操作。",

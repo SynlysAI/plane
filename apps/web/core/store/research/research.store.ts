@@ -1303,19 +1303,48 @@ export class ResearchStore implements IResearchStore {
     reportId: string,
     file: { file_name: string; content_type: string; size: number; body: Blob }
   ) => {
-    const presigned = await this.reportService.presignReportAttachment(workspaceSlug, reportId, {
-      file_name: file.file_name,
-      content_type: file.content_type,
-      size: file.size,
-    });
+    let presigned;
+    try {
+      presigned = await this.reportService.presignReportAttachment(workspaceSlug, reportId, {
+        file_name: file.file_name,
+        content_type: file.content_type,
+        size: file.size,
+      });
+    } catch (error) {
+      throw {
+        ...(error as object),
+        error_code: (error as { error_code?: string })?.error_code ?? "research_upload_storage_failed",
+      };
+    }
     const formData = new FormData();
     Object.entries(presigned.upload_data.fields ?? {}).forEach(([key, value]) => formData.append(key, value));
     formData.append("file", file.body);
-    const uploadResponse = await fetch(presigned.upload_data.url, { method: "POST", body: formData });
-    if (!uploadResponse.ok) throw new Error("upload_failed");
-    await this.reportService.registerReportAttachment(workspaceSlug, reportId, {
-      asset_id: presigned.asset_id,
-    });
+    let uploadResponse: Response;
+    try {
+      uploadResponse = await fetch(presigned.upload_data.url, { method: "POST", body: formData });
+    } catch (error) {
+      throw {
+        error_code: "research_upload_storage_failed",
+        message: error instanceof Error ? error.message : "对象存储上传失败。",
+      };
+    }
+    if (!uploadResponse.ok) {
+      const responseText = (await uploadResponse.text()).slice(0, 500);
+      throw {
+        error_code: "research_upload_storage_failed",
+        message: `对象存储上传失败（HTTP ${uploadResponse.status}）${responseText ? `：${responseText}` : "。"}`,
+      };
+    }
+    try {
+      await this.reportService.registerReportAttachment(workspaceSlug, reportId, {
+        asset_id: presigned.asset_id,
+      });
+    } catch (error) {
+      throw {
+        ...(error as object),
+        error_code: (error as { error_code?: string })?.error_code ?? "research_upload_registration_failed",
+      };
+    }
     await this.fetchReportAttachments(workspaceSlug, reportId);
   };
 

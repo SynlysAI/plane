@@ -27,6 +27,12 @@
 	}
 
 	# MinIO 下载签名包含完整 Host，存储代理也必须保留端口。
+	handle /uploads {
+		rewrite * /uploads/
+		reverse_proxy plane-minio:9000 {
+			header_up Host {http.request.hostport}
+		}
+	}
 	handle /uploads/* {
 		reverse_proxy plane-minio:9000 {
 			header_up Host {http.request.hostport}

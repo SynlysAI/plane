@@ -11,7 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 // components
-import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { getResearchErrorDetail, getResearchErrorKey } from "@/components/research/common/error-messages";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -34,13 +34,13 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
   const { t } = useTranslation();
   const research = useResearch();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [attachmentError, setError] = useState<unknown>(null);
 
   const attachments = research.reportAttachments[reportId] ?? [];
 
   useEffect(() => {
     void research.fetchReportAttachments(workspaceSlug, reportId).catch((error) => {
-      setErrorKey(getResearchErrorKey(error));
+      setError(error);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, reportId]);
@@ -54,9 +54,9 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
           size: file.size,
           body: file,
         });
-        setErrorKey(null);
+        setError(null);
       } catch (error) {
-        setErrorKey(getResearchErrorKey(error));
+        setError(error);
       }
     },
     [reportId, research, workspaceSlug]
@@ -66,9 +66,9 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
     async (attachmentId: string) => {
       try {
         await research.deleteReportAttachment(workspaceSlug, reportId, attachmentId);
-        setErrorKey(null);
+        setError(null);
       } catch (error) {
-        setErrorKey(getResearchErrorKey(error));
+        setError(error);
       }
     },
     [reportId, research, workspaceSlug]
@@ -98,9 +98,14 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
         )}
       </div>
 
-      {errorKey && (
+      {attachmentError !== null && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
-          {t(errorKey)}
+          <div>{t(getResearchErrorKey(attachmentError))}</div>
+          {getResearchErrorDetail(attachmentError) && (
+            <div className="mt-1 text-11 break-words text-danger-primary/80">
+              {getResearchErrorDetail(attachmentError)}
+            </div>
+          )}
         </div>
       )}
       <p className="text-12 text-tertiary">

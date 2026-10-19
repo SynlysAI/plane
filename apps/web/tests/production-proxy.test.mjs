@@ -94,7 +94,7 @@ test("生产代理在 API、认证和存储请求中保留浏览器 Host 与端�
 
   const checks = [];
   for (const host of ["10.26.15.92:3300", "plane.example.test:3300", "[::1]:3300", "plane.example.test"]) {
-    for (const path of ["/api/assets/v2/workspaces/public/", "/auth/sign-in/", "/uploads/"]) {
+    for (const path of ["/api/assets/v2/workspaces/public/", "/auth/sign-in/", "/uploads", "/uploads/"]) {
       checks.push(
         proxyRequest(proxyPort, path, host).then((url) =>
           assert.equal(url, `http://${host}/uploads/`, `${host} ${path}`)

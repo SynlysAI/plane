@@ -2352,6 +2352,8 @@
       "research_project_not_found": "Research project not found.",
       "file_type_not_allowed": "This file type is not allowed.",
       "file_size_exceeded": "The file exceeds the configured limit.",
+      "upload_storage_failed": "Object storage upload failed. Check the MinIO or proxy configuration and try again.",
+      "upload_registration_failed": "The attachment could not be registered. Try again, then reopen the report to verify the file.",
       "approval_flow_not_found": "Approval flow not found.",
       "approval_request_not_found": "Approval request not found.",
       "approval_state_conflict": "The approval status does not allow this action.",

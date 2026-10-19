@@ -314,7 +314,8 @@ class TestReportAttachments:
         payload = {"asset_id": str(asset.id)}
         assert env["student_client"].post(env["attachments_url"], payload, format="json").status_code == 201
         duplicate = env["student_client"].post(env["attachments_url"], payload, format="json")
-        assert duplicate.status_code in (400, 403, 422)
+        assert duplicate.status_code == 200
+        assert duplicate.json()["asset"] == payload["asset_id"]
 
     def test_submitted_report_rejects_new_attachments(self, env):
         env["student_client"].post(
@@ -492,6 +493,35 @@ class TestReportAttachments:
         )
         assert rejected_size.status_code == 422
         assert rejected_size.json()["error_code"] == "file_size_exceeded"
+
+    def test_presign_storage_failure_has_a_structured_error(self, env, monkeypatch):
+        """对象存储无法生成签名时，前端应能区分存储阶段失败。"""
+        monkeypatch.setattr(
+            "plane.research.views.attachments.S3Storage.generate_presigned_post",
+            mock.Mock(side_effect=RuntimeError("storage unavailable")),
+        )
+        response = env["student_client"].post(
+            f"{env['attachments_url']}presign/",
+            {"file_name": "paper.pdf", "content_type": "application/pdf", "size": 2 * MB},
+            format="json",
+        )
+
+        assert response.status_code == 503
+        assert response.json()["error_code"] == "research_upload_storage_failed"
+
+    def test_registration_storage_failure_has_a_structured_error(self, env, monkeypatch):
+        """登记时无法确认对象状态，应返回登记阶段错误而不是通用失败。"""
+        asset = make_asset(env["workspace"], env["student"], "paper.pdf", "application/pdf", MB)
+        monkeypatch.setattr(
+            "plane.research.views.attachments.inspect_uploaded_asset",
+            mock.Mock(side_effect=RuntimeError("head failed")),
+        )
+        response = env["student_client"].post(
+            env["attachments_url"], {"asset_id": str(asset.id)}, format="json"
+        )
+
+        assert response.status_code == 409
+        assert response.json()["error_code"] == "research_upload_registration_failed"
 
 
 @pytest.mark.django_db

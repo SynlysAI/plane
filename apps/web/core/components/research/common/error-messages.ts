@@ -39,6 +39,8 @@ const RESEARCH_ERROR_KEYS: Record<string, string> = {
   research_project_not_found: "research.errors.research_project_not_found",
   file_type_not_allowed: "research.errors.file_type_not_allowed",
   file_size_exceeded: "research.errors.file_size_exceeded",
+  research_upload_storage_failed: "research.errors.upload_storage_failed",
+  research_upload_registration_failed: "research.errors.upload_registration_failed",
   approval_flow_not_found: "research.errors.approval_flow_not_found",
   approval_request_not_found: "research.errors.approval_request_not_found",
   approval_state_conflict: "research.errors.approval_state_conflict",
@@ -123,4 +125,13 @@ export const getResearchErrorKey = (error?: unknown): string => {
   const errorCode = (error as { error_code?: string } | null | undefined)?.error_code;
   if (!errorCode) return RESEARCH_GENERIC_ERROR_KEY;
   return RESEARCH_ERROR_KEYS[errorCode] ?? RESEARCH_GENERIC_ERROR_KEY;
+};
+
+/**
+ * 提取可展示的上传错误详情，限制长度避免把对象存储响应原样铺满页面。
+ */
+export const getResearchErrorDetail = (error?: unknown): string | null => {
+  const message = (error as { message?: unknown } | null | undefined)?.message;
+  if (typeof message !== "string" || !message.trim()) return null;
+  return message.trim().slice(0, 240);
 };
