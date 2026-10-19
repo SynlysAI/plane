@@ -131,6 +131,7 @@ export function ExistingIssuesListModal(props: Props) {
 
   useEffect(() => {
     handleSearch();
+    // oxlint-disable-next-line eslint-plugin-react-hooks/exhaustive-deps -- Keep searches tied to the existing explicit search inputs.
   }, [debouncedSearchTerm, isOpen, isWorkspaceLevel, projectId, workspaceSlug]);
 
   const filteredIssues = issues.filter((issue) => !shouldHideIssue?.(issue));
@@ -217,6 +218,8 @@ export function ExistingIssuesListModal(props: Props) {
         </div>
 
         <Combobox.Options
+          // Keep search controls and selected-item removal available inside the dialog.
+          modal={false}
           as="ul"
           static
           className="vertical-scrollbar scrollbar-md max-h-80 scroll-py-2 overflow-y-auto"

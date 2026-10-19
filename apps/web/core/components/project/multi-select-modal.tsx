@@ -106,24 +106,27 @@ export const ProjectMultiSelectModal = observer(function ProjectMultiSelectModal
               const projectDetails = projectDetailsMap.get(projectId);
               if (!projectDetails) return null;
               return (
-                <div
+                <button
                   key={projectDetails.id}
+                  type="button"
                   className="group flex cursor-pointer items-center gap-1.5 rounded-sm bg-surface-2 px-2 py-1"
                   onClick={() => {
                     handleSelectedProjectChange(selectedProjectIds.filter((id) => id !== projectDetails.id));
                   }}
                 >
                   <Logo logo={projectDetails.logo_props} size={14} />
-                  <p className="truncate text-11 text-tertiary transition-colors group-hover:text-secondary">
+                  <span className="truncate text-11 text-tertiary transition-colors group-hover:text-secondary">
                     {projectDetails.identifier}
-                  </p>
+                  </span>
                   <CloseOutline className="size-3 flex-shrink-0 text-placeholder transition-colors group-hover:text-secondary" />
-                </div>
+                </button>
               );
             })}
           </div>
         )}
         <Combobox.Options
+          // ModalCore owns isolation; the confirm button and selected tags must stay interactive.
+          modal={false}
           as="ul"
           static
           className="vertical-scrollbar scrollbar-md max-h-80 scroll-py-2 overflow-y-auto py-2 transition-[height] duration-200 ease-in-out"
