@@ -20,11 +20,13 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn, checkEmailValidity } from "@plane/utils";
 // hooks
 import useTimer from "@/hooks/use-timer";
+import { useInstance } from "@/hooks/store/use-instance";
 // services
 import { AuthService } from "@/services/auth.service";
 // local components
 import { FormContainer } from "./common/container";
 import { AuthFormHeader } from "./common/header";
+import { ForgotPasswordPopover } from "./forgot-password-popover";
 
 type TForgotPasswordFormValues = {
   email: string;
@@ -43,12 +45,14 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
   const email = searchParams.get("email");
   // plane hooks
   const { t } = useTranslation();
+  const { config } = useInstance();
   // timer
   const { timer: resendTimerCode, setTimer: setResendCodeTimer } = useTimer(0);
 
   // form info
   const {
     control,
+    watch,
     formState: { errors, isSubmitting, isValid },
     handleSubmit,
   } = useForm<TForgotPasswordFormValues>({
@@ -57,8 +61,10 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
       email: email?.toString() ?? "",
     },
   });
+  const recoveryEmail = watch("email");
 
   const handleForgotPassword = async (formData: TForgotPasswordFormValues) => {
+    if (!config?.is_smtp_configured) return;
     await authService
       .sendResetPasswordLink({
         email: formData.email,
@@ -70,6 +76,7 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
           message: t("auth.forgot_password.toast.success.message"),
         });
         setResendCodeTimer(30);
+        return undefined;
       })
       .catch((err) => {
         setToast({
@@ -82,7 +89,7 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
 
   return (
     <FormContainer>
-      <AuthFormHeader title="Reset password" description="Regain access to your account." />
+      <AuthFormHeader title="重置密码" description="通过邮件或联系管理员恢复账号。" />
       <form onSubmit={handleSubmit(handleForgotPassword)} className="space-y-4">
         <div className="space-y-1">
           <label className="text-13 font-medium text-tertiary" htmlFor="email">
@@ -121,18 +128,23 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
             </p>
           )}
         </div>
-        <Button
-          type="submit"
-          variant="primary"
-          className="w-full"
-          size="xl"
-          disabled={!isValid}
-          loading={isSubmitting || resendTimerCode > 0}
-        >
-          {resendTimerCode > 0
-            ? t("auth.common.resend_in", { seconds: resendTimerCode })
-            : t("auth.forgot_password.send_reset_link")}
-        </Button>
+        {config?.is_smtp_configured ? (
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full"
+            size="xl"
+            disabled={!isValid}
+            loading={isSubmitting || resendTimerCode > 0}
+          >
+            {resendTimerCode > 0
+              ? t("auth.common.resend_in", { seconds: resendTimerCode })
+              : t("auth.forgot_password.send_reset_link")}
+          </Button>
+        ) : (
+          <p className="text-12 text-secondary">本站尚未启用邮件重置，请联系管理员核验身份。</p>
+        )}
+        <ForgotPasswordPopover email={recoveryEmail} />
         <Link href="/" className={cn("w-full", getButtonStyling("link", "lg"))}>
           {t("auth.common.back_to_sign_in")}
         </Link>

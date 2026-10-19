@@ -135,7 +135,15 @@ class APITokenLogMiddleware:
         if not api_key:
             return
 
+        # 管理员密码核验与临时凭据响应不得随外部 API 日志落库，
+        # 即使会话请求额外携带 X-Api-Key 也必须脱敏。
+        is_password_reset = request.path.startswith("/api/workspaces/") and request.path.endswith("/reset-password/")
         try:
+            if is_password_reset:
+                logged_body = logged_response_body = "[REDACTED]"
+            else:
+                logged_body = self._safe_decode_body(request_body) if request_body else None
+                logged_response_body = self._safe_decode_body(response.content) if response.content else None
             log_data = {
                 # Tokenize the (high-entropy) API key into a stable, non-reversible
                 # identifier so logs can be correlated to a token without ever
@@ -148,8 +156,8 @@ class APITokenLogMiddleware:
                 "method": request.method,
                 "query_params": request.META.get("QUERY_STRING", ""),
                 "headers": self._redacted_headers(request),
-                "body": self._safe_decode_body(request_body) if request_body else None,
-                "response_body": self._safe_decode_body(response.content) if response.content else None,
+                "body": logged_body,
+                "response_body": logged_response_body,
                 "response_code": response.status_code,
                 "ip_address": get_client_ip(request=request),
                 "user_agent": request.META.get("HTTP_USER_AGENT", None),

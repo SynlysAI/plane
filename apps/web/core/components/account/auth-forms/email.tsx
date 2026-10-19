@@ -18,6 +18,7 @@ import { Button } from "@plane/propel/button";
 import type { IEmailCheckData } from "@plane/types";
 import { Spinner } from "@plane/ui";
 import { checkEmailValidity } from "@plane/utils";
+import { ForgotPasswordPopover } from "./forgot-password-popover";
 // helpers
 type TAuthEmailForm = {
   defaultEmail: string;
@@ -27,6 +28,7 @@ type TAuthEmailForm = {
   inviteOnly?: boolean;
 };
 
+/** 展示邮箱登录表单和人工账号恢复渠道。 */
 export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailForm) {
   const { onSubmit, defaultEmail, inviteOnly = false } = props;
   // states
@@ -87,7 +89,6 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t("auth.common.email.placeholder")}
               autoComplete="off"
-              autoFocus
               ref={inputRef}
             />
             {email.length > 0 && (
@@ -116,6 +117,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
       <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
         {isSubmitting ? <Spinner height="20px" width="20px" /> : t("common.continue")}
       </Button>
+      {!inviteOnly && <ForgotPasswordPopover email={email} />}
     </form>
   );
 });

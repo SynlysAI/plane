@@ -15,6 +15,7 @@ import { Table } from "@plane/ui";
 import { MembersLayoutLoader } from "@/components/ui/loader/layouts/members-layout-loader";
 import { ConfirmWorkspaceMemberRemove } from "@/components/workspace/confirm-workspace-member-remove";
 import type { RowData } from "@/components/workspace/settings/member-columns";
+import { WorkspacePasswordResetModal } from "./password-reset-modal";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -29,7 +30,14 @@ type Props = {
 
 export const WorkspaceMembersListItem = observer(function WorkspaceMembersListItem(props: Props) {
   const { memberDetails } = props;
-  const { columns, workspaceSlug, removeMemberModal, setRemoveMemberModal } = useMemberColumns();
+  const {
+    columns,
+    workspaceSlug,
+    removeMemberModal,
+    setRemoveMemberModal,
+    resetPasswordMember,
+    setResetPasswordMember,
+  } = useMemberColumns();
   // router
   const router = useAppRouter();
   // store hooks
@@ -92,6 +100,14 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
 
   return (
     <div className="grid border-t border-subtle">
+      {resetPasswordMember && (
+        <WorkspacePasswordResetModal
+          key={resetPasswordMember.member.id}
+          workspaceSlug={workspaceSlug}
+          user={resetPasswordMember.member}
+          onClose={() => setResetPasswordMember(null)}
+        />
+      )}
       {removeMemberModal && (
         <ConfirmWorkspaceMemberRemove
           isOpen={removeMemberModal.member.id.length > 0}

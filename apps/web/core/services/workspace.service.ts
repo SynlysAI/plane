@@ -189,6 +189,19 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  /** 验证管理员当前密码，为工作区成员生成临时密码。 */
+  async resetMemberPassword(workspaceSlug: string, userId: string, currentPassword: string, csrfToken: string) {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/members/${userId}/reset-password/`,
+      { current_password: currentPassword },
+      { headers: { "X-CSRFToken": csrfToken } }
+    )
+      .then((response) => response.data as { temporary_password: string })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async workspaceInvitations(workspaceSlug: string): Promise<IWorkspaceMemberInvitation[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/invitations/`)
       .then((response) => response?.data)

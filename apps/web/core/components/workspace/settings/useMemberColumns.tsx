@@ -19,6 +19,7 @@ import type { IMemberFilters } from "@/store/member/utils";
 export const useMemberColumns = () => {
   // states
   const [removeMemberModal, setRemoveMemberModal] = useState<RowData | null>(null);
+  const [resetPasswordMember, setResetPasswordMember] = useState<RowData | null>(null);
 
   const { workspaceSlug } = useParams();
 
@@ -133,5 +134,28 @@ export const useMemberColumns = () => {
       ),
     },
   ];
-  return { columns, workspaceSlug, removeMemberModal, setRemoveMemberModal };
+  if (isAdmin) {
+    columns.push({
+      key: "Reset password",
+      content: "账号恢复",
+      tdRender: (rowData: RowData) =>
+        !isSuspended(rowData) && rowData.member.id !== currentUser?.id ? (
+          <button
+            type="button"
+            className="text-12 whitespace-nowrap text-accent-primary underline-offset-4 hover:underline"
+            onClick={() => setResetPasswordMember(rowData)}
+          >
+            重置密码
+          </button>
+        ) : null,
+    });
+  }
+  return {
+    columns,
+    workspaceSlug,
+    removeMemberModal,
+    setRemoveMemberModal,
+    resetPasswordMember,
+    setResetPasswordMember,
+  };
 };

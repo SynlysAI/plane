@@ -131,7 +131,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
             {t("auth.common.forgot_password")}
           </Link>
         ) : (
-          <ForgotPasswordPopover />
+          <ForgotPasswordPopover email={email} />
         )}
       </div>
     ) : (

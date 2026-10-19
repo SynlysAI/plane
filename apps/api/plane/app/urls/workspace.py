@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 from django.urls import path
+from plane.app.views.workspace.password_reset import WorkspaceMemberPasswordResetEndpoint
 
 
 from plane.app.views import (
@@ -105,6 +106,11 @@ urlpatterns = [
         "workspaces/<str:slug>/project-members/",
         WorkspaceProjectMemberEndpoint.as_view(),
         name="workspace-member-roles",
+    ),
+    path(
+        "workspaces/<str:slug>/members/<uuid:pk>/reset-password/",
+        WorkspaceMemberPasswordResetEndpoint.as_view(),
+        name="workspace-member-password-reset",
     ),
     path(
         "workspaces/<str:slug>/members/<uuid:pk>/",
