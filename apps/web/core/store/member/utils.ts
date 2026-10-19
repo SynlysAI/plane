@@ -11,6 +11,7 @@ import type { IUserLite, TProjectMembership } from "@plane/types";
 export interface IMemberFilters {
   order_by?: TMemberOrderByOptions;
   roles?: string[];
+  tag_ids?: string[];
 }
 
 // Helper function to parse order key and direction
@@ -109,6 +110,7 @@ export const sortMembers = <T>(
 
   const { field, direction } = parseOrderKey(orderBy);
 
+  // eslint-disable-next-line unicorn/no-array-sort -- 已拷贝输入数组，且 Web lib 暂为 ES2022。
   return [...members].sort((a, b) => {
     const aKey = getMemberKey(a);
     const bKey = getMemberKey(b);
@@ -170,7 +172,9 @@ export const sortProjectMembers = (
   );
 };
 
-export const sortWorkspaceMembers = <T extends { role: string | EUserPermissions; is_active?: boolean }>(
+export const sortWorkspaceMembers = <
+  T extends { role: string | EUserPermissions; is_active?: boolean; tags?: { id: string }[] },
+>(
   members: T[],
   memberDetailsMap: Record<string, IUserLite>,
   getMemberKey: (member: T) => string,
@@ -179,12 +183,17 @@ export const sortWorkspaceMembers = <T extends { role: string | EUserPermissions
   const filteredMembers =
     filters?.roles && filters.roles.length > 0 ? filterWorkspaceMembersByRole(members, filters.roles) : members;
 
+  const tagFilteredMembers =
+    filters?.tag_ids && filters.tag_ids.length > 0
+      ? filteredMembers.filter((member) => (member.tags ?? []).some((tag) => filters.tag_ids?.includes(tag.id)))
+      : filteredMembers;
+
   // If no order_by filter, return filtered members
-  if (!filters?.order_by) return filteredMembers;
+  if (!filters?.order_by) return tagFilteredMembers;
 
   // Apply sorting
   return sortMembers(
-    filteredMembers,
+    tagFilteredMembers,
     memberDetailsMap,
     getMemberKey,
     (member) => String(member.role ?? ""),

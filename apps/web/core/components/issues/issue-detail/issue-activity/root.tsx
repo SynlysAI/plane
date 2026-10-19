@@ -78,6 +78,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
   const renderCommentCreationBox = useMemo(
     () => (
       <CommentCreate
+        key={`${workspaceSlug}-${issueId}`}
         workspaceSlug={workspaceSlug}
         entityId={issueId}
         activityOperations={activityOperations}

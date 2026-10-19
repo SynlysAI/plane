@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import type { LucideIcon } from "lucide-react";
+import { Paperclip } from "lucide-react";
 
 import { EIssueCommentAccessSpecifier } from "@plane/constants";
 // editor
@@ -35,6 +36,8 @@ type Props = {
   editorRef: EditorRefApi | null;
   submitButtonText?: string;
   disabledMenuItems?: TEditorCommands[];
+  onAttachFiles?: () => void;
+  isSubmitDisabled?: boolean;
 };
 
 type TCommentAccessType = {
@@ -72,6 +75,8 @@ export function IssueCommentToolbar(props: Props) {
     editorRef,
     submitButtonText = "common.comment",
     disabledMenuItems = [],
+    onAttachFiles,
+    isSubmitDisabled = false,
   } = props;
   // State to manage active states of toolbar items
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
@@ -102,10 +107,10 @@ export function IssueCommentToolbar(props: Props) {
   }, [editorRef, updateActiveStates]);
 
   const isEditorReadyToDiscard = editorRef?.isEditorReadyToDiscard();
-  const isSubmitButtonDisabled = isCommentEmpty || !isEditorReadyToDiscard;
+  const isSubmitButtonDisabled = isSubmitting || isSubmitDisabled || isCommentEmpty || !isEditorReadyToDiscard;
 
   return (
-    <div className="flex h-9 w-full items-stretch gap-1.5 overflow-x-scroll bg-surface-2">
+    <div className="flex h-9 w-full min-w-0 items-stretch gap-1.5 bg-surface-2">
       {showAccessSpecifier && (
         <div className="flex flex-shrink-0 items-stretch gap-0.5 rounded-sm border-[0.5px] border-subtle p-1">
           {COMMENT_ACCESS_SPECIFIERS.map((access) => {
@@ -132,12 +137,12 @@ export function IssueCommentToolbar(props: Props) {
           })}
         </div>
       )}
-      <div className="flex w-full items-stretch justify-between gap-2 rounded-sm border-[0.5px] border-subtle p-1">
-        <div className="flex items-stretch">
+      <div className="flex w-full min-w-0 items-stretch justify-between gap-2 rounded-sm border-[0.5px] border-subtle p-1">
+        <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
           {Object.keys(toolbarItems).map((key, index) => (
             <div
               key={key}
-              className={cn("flex items-stretch gap-0.5 border-r border-subtle px-2.5", {
+              className={cn("flex shrink-0 items-stretch gap-0.5 border-r border-subtle px-2.5", {
                 "pl-0": index === 0,
               })}
             >
@@ -171,20 +176,35 @@ export function IssueCommentToolbar(props: Props) {
             </div>
           ))}
         </div>
-        {showSubmitButton && (
-          <div className="sticky right-1">
-            <Button
-              type="submit"
-              variant="primary"
-              className="px-2.5 py-1.5 text-11"
-              onClick={handleSubmit}
-              disabled={isSubmitButtonDisabled}
-              loading={isSubmitting}
-            >
-              {t(submitButtonText)}
-            </Button>
-          </div>
-        )}
+        <div className="flex shrink-0 items-stretch gap-2">
+          {onAttachFiles && (
+            <Tooltip label="附加文件">
+              <button
+                type="button"
+                aria-label="附加文件"
+                disabled={isSubmitting}
+                onClick={onAttachFiles}
+                className="grid aspect-square place-items-center rounded-xs p-0.5 text-placeholder hover:bg-layer-1"
+              >
+                <Paperclip className="size-3.5" aria-hidden />
+              </button>
+            </Tooltip>
+          )}
+          {showSubmitButton && (
+            <div>
+              <Button
+                type="submit"
+                variant="primary"
+                className="px-2.5 py-1.5 text-11"
+                onClick={handleSubmit}
+                disabled={isSubmitButtonDisabled}
+                loading={isSubmitting}
+              >
+                {t(submitButtonText)}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

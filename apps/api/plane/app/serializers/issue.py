@@ -6,7 +6,8 @@
 from django.utils import timezone
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.utils.html import strip_tags
 
 # Third Party imports
 from rest_framework import serializers
@@ -749,6 +750,13 @@ class IssueVoteSerializer(BaseSerializer):
 
 
 class IssueCommentSerializer(BaseSerializer):
+    attachment_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        write_only=True,
+        max_length=10,
+    )
+    file_attachments = serializers.SerializerMethodField()
     actor_detail = UserLiteSerializer(read_only=True, source="actor")
     issue_detail = IssueFlatSerializer(read_only=True, source="issue")
     project_detail = ProjectLiteSerializer(read_only=True, source="project")
@@ -770,6 +778,8 @@ class IssueCommentSerializer(BaseSerializer):
         ]
 
     def validate(self, attrs):
+        if "attachment_ids" in attrs and "request" not in self.context:
+            raise serializers.ValidationError({"attachment_ids": "请通过工作项评论接口管理附件。"})
         if "comment_html" in attrs and attrs["comment_html"]:
             is_valid, error_msg, sanitized_html = validate_html_content(attrs["comment_html"])
             if not is_valid:
@@ -777,6 +787,95 @@ class IssueCommentSerializer(BaseSerializer):
             if sanitized_html is not None:
                 attrs["comment_html"] = sanitized_html
         return attrs
+
+    def get_file_attachments(self, obj):
+        """返回评论有效附件的元信息和需要认证的稳定下载地址。
+
+        Args:
+            obj: 当前评论。
+
+        Returns:
+            仅包含已上传、未移除文件的列表。
+        """
+        return [
+            {
+                "id": str(asset.id),
+                "name": asset.attributes.get("name", ""),
+                "type": asset.attributes.get("type", ""),
+                "size": asset.size,
+                "download_url": (
+                    f"/api/assets/v2/workspaces/{obj.workspace.slug}/projects/{obj.project_id}/download/{asset.id}/"
+                ),
+            }
+            for asset in obj.assets.all()
+            if asset.entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT
+            and asset.is_uploaded
+            and not asset.is_deleted
+            and asset.deleted_at is None
+        ]
+
+    @transaction.atomic
+    def create(self, validated_data):
+        """在同一事务中创建评论并关联已验证的过程文件。
+
+        Args:
+            validated_data: 已验证的评论字段与可选附件 ID。
+
+        Returns:
+            已保存并完成附件关联的评论。
+        """
+        from plane.utils.comment_attachments import lock_comment_attachments, sync_comment_attachments
+
+        ids = validated_data.pop("attachment_ids", None)
+        assets = []
+        if ids is not None:
+            issue = self.context["attachment_issue"]
+            user = self.context["request"].user
+            assets = lock_comment_attachments(ids, issue=issue, user=user)
+            self._validate_nonempty(validated_data.get("comment_html", ""), assets)
+        comment = super().create(validated_data)
+        if ids is not None:
+            sync_comment_attachments(comment, assets, user)
+        return comment
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        """保存正文及附件变更；省略附件字段时保留原文件。
+
+        Args:
+            instance: 当前评论。
+            validated_data: 本次更新的已验证字段。
+
+        Returns:
+            保存后的评论。
+        """
+        from plane.utils.comment_attachments import lock_comment_attachments, sync_comment_attachments
+
+        instance = IssueComment.objects.select_for_update().get(id=instance.id)
+        ids = validated_data.pop("attachment_ids", None)
+        if ids is not None:
+            user = self.context["request"].user
+            assets = lock_comment_attachments(ids, issue=instance.issue, user=user, comment=instance)
+            self._validate_nonempty(validated_data.get("comment_html", instance.comment_html), assets)
+            validated_data["edited_at"] = timezone.now()
+        comment = super().update(instance, validated_data)
+        if ids is not None:
+            sync_comment_attachments(comment, assets, user)
+        return comment
+
+    @staticmethod
+    def _validate_nonempty(html, assets):
+        """拒绝同时没有文字、内嵌内容和文件的附件评论。
+
+        Args:
+            html: 清洗后的评论 HTML。
+            assets: 本次保留的有效文件。
+        """
+        from bs4 import BeautifulSoup
+
+        if not assets and not strip_tags(html).replace("\xa0", " ").strip():
+            if not BeautifulSoup(html, "html.parser").find(["img", "image-component", "mention-component"]):
+                raise serializers.ValidationError({"comment_html": "请填写评论或附加文件。"})
 
 
 class IssueStateFlatSerializer(BaseSerializer):

@@ -18,6 +18,9 @@ import { LiteTextEditor } from "@/components/editor/lite-text";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // services
 import { FileService } from "@/services/file.service";
+import { useFileSize } from "@/hooks/use-file-size";
+import { CommentAttachmentList } from "./attachment-list";
+import { useCommentAttachments } from "./use-comment-attachments";
 
 type TCommentCreate = {
   entityId: string;
@@ -42,10 +45,16 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
   } = props;
   // states
   const [uploadedAssetIds, setUploadedAssetIds] = useState<string[]>([]);
+  const [submitError, setSubmitError] = useState("");
+  const savedCommentId = useRef<string | null>(null);
+  const submissionLock = useRef(false);
   // refs
   const editorRef = useRef<EditorRefApi>(null);
   // store hooks
   const workspaceStore = useWorkspace();
+  const { maxFileSize } = useFileSize();
+  const attachmentDraft = useCommentAttachments(activityOperations, maxFileSize);
+  const supportsAttachments = !!activityOperations.uploadCommentAttachment;
   // derived values
   const workspaceId = workspaceStore.getWorkspaceBySlug(workspaceSlug)?.id as string;
   // form info
@@ -61,51 +70,72 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
     },
   });
 
+  /** 保存成功后才清空；图片关联失败时重用已创建的评论。 */
   const onSubmit = async (formData: Partial<TIssueComment>) => {
+    if (
+      submissionLock.current ||
+      attachmentDraft.isBlocked ||
+      (isCommentEmpty(formData.comment_html) && !attachmentDraft.attachmentIds.length) ||
+      !editorRef.current?.isEditorReadyToDiscard()
+    )
+      return;
+    submissionLock.current = true;
+    setSubmitError("");
     try {
-      const comment = await activityOperations.createComment(formData);
-      if (comment?.id) onSubmitCallback?.(comment.id);
+      const payload = {
+        ...formData,
+        ...(supportsAttachments ? { attachment_ids: attachmentDraft.attachmentIds } : {}),
+      };
+      if (savedCommentId.current) {
+        await activityOperations.updateComment(savedCommentId.current, payload);
+      } else {
+        const comment = await activityOperations.createComment(payload);
+        if (!comment?.id) throw new Error("评论未保存");
+        savedCommentId.current = comment.id;
+      }
+      // 文件已归属评论，后续图片关联失败或组件卸载也不应清理这些文件。
+      attachmentDraft.markSaved();
       if (uploadedAssetIds.length > 0) {
         if (projectId) {
-          await fileService.updateBulkProjectAssetsUploadStatus(workspaceSlug, projectId.toString(), entityId, {
-            asset_ids: uploadedAssetIds,
-          });
+          await fileService.updateBulkProjectAssetsUploadStatus(
+            workspaceSlug,
+            projectId.toString(),
+            savedCommentId.current,
+            {
+              asset_ids: uploadedAssetIds,
+            }
+          );
         } else {
-          await fileService.updateBulkWorkspaceAssetsUploadStatus(workspaceSlug, entityId, {
+          await fileService.updateBulkWorkspaceAssetsUploadStatus(workspaceSlug, savedCommentId.current, {
             asset_ids: uploadedAssetIds,
           });
         }
         setUploadedAssetIds([]);
       }
-    } catch (error) {
-      console.error(error);
-    } finally {
+      onSubmitCallback?.(savedCommentId.current);
+      savedCommentId.current = null;
+      attachmentDraft.commit();
       reset({
         comment_html: "<p></p>",
       });
       editorRef.current?.clearEditor();
+    } catch {
+      setSubmitError("评论未完整保存，输入内容已保留，请重试。");
+    } finally {
+      submissionLock.current = false;
     }
   };
 
   const commentHTML = watch("comment_html");
-  const isEmpty = isCommentEmpty(commentHTML ?? undefined);
+  const isEmpty = isCommentEmpty(commentHTML ?? undefined) && !attachmentDraft.attachmentIds.length;
 
   return (
-    <div
-      className={cn("sticky bottom-0 z-[4] bg-surface-1 sm:static")}
-      onKeyDown={(e) => {
-        if (
-          e.key === "Enter" &&
-          !e.shiftKey &&
-          !e.ctrlKey &&
-          !e.metaKey &&
-          !isEmpty &&
-          !isSubmitting &&
-          editorRef.current?.isEditorReadyToDiscard()
-        )
-          handleSubmit(onSubmit)(e);
-      }}
-    >
+    <div className={cn("sticky bottom-0 z-[4] bg-surface-1 sm:static")}>
+      {submitError && (
+        <p role="alert" className="mb-2 text-12 text-danger-primary">
+          {submitError}
+        </p>
+      )}
       <Controller
         name="access"
         control={control}
@@ -122,7 +152,7 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 onEnterKeyPress={(e) => {
-                  if (!isEmpty && !isSubmitting) {
+                  if (!isEmpty && !isSubmitting && !attachmentDraft.isBlocked) {
                     handleSubmit(onSubmit)(e);
                   }
                 }}
@@ -133,6 +163,18 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
                 accessSpecifier={accessValue ?? EIssueCommentAccessSpecifier.INTERNAL}
                 handleAccessChange={onAccessChange}
                 isSubmitting={isSubmitting}
+                hasAttachments={attachmentDraft.attachmentIds.length > 0}
+                isSubmitDisabled={attachmentDraft.isBlocked}
+                onAttachFiles={supportsAttachments ? attachmentDraft.addFiles : undefined}
+                attachmentContent={
+                  <CommentAttachmentList
+                    entries={attachmentDraft.entries}
+                    error={attachmentDraft.error}
+                    disabled={isSubmitting}
+                    onRemove={attachmentDraft.remove}
+                    onRetry={attachmentDraft.retry}
+                  />
+                }
                 uploadFile={async (blockId, file) => {
                   const { asset_id } = await activityOperations.uploadCommentAsset(blockId, file);
                   setUploadedAssetIds((prev) => [...prev, asset_id]);

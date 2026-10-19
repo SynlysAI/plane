@@ -39,7 +39,7 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   // store hooks
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
   const {
-    workspace: { workspaceMemberIds, inviteMembersToWorkspace, filtersStore },
+    workspace: { workspaceMemberIds, inviteMembersToWorkspace, filtersStore, workspaceMemberTagGroups },
   } = useMember();
   const { currentWorkspace } = useWorkspace();
   const { t } = useTranslation();
@@ -92,6 +92,14 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   // derived values
   const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - Members` : undefined;
   const appliedRoleFilters = filtersStore.filters?.roles || [];
+  const appliedTagFilters = filtersStore.filters?.tag_ids || [];
+
+  const handleTagFilterUpdate = (tagId: string) => {
+    const updated = appliedTagFilters.includes(tagId)
+      ? appliedTagFilters.filter((value) => value !== tagId)
+      : [...appliedTagFilters, tagId];
+    filtersStore.updateFilters({ tag_ids: updated.length > 0 ? updated : undefined });
+  };
 
   // if user is not authorized to view this page
   if (workspaceUserInfo && !canPerformWorkspaceMemberActions) {
@@ -134,6 +142,9 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
               appliedFilters={appliedRoleFilters}
               handleUpdate={handleRoleFilterUpdate}
               memberType="workspace"
+              tagGroups={workspaceMemberTagGroups[workspaceSlug] ?? []}
+              appliedTagFilters={appliedTagFilters}
+              handleTagUpdate={handleTagFilterUpdate}
             />
             {canPerformWorkspaceAdminActions && (
               <Button variant="primary" size="lg" onClick={() => setInviteModal(true)}>

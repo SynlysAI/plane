@@ -37,6 +37,7 @@ class FileAsset(BaseModel):
         ISSUE_ATTACHMENT = "ISSUE_ATTACHMENT"
         ISSUE_DESCRIPTION = "ISSUE_DESCRIPTION"
         COMMENT_DESCRIPTION = "COMMENT_DESCRIPTION"
+        COMMENT_ATTACHMENT = "COMMENT_ATTACHMENT"
         PAGE_DESCRIPTION = "PAGE_DESCRIPTION"
         USER_COVER = "USER_COVER"
         USER_AVATAR = "USER_AVATAR"
@@ -98,6 +99,7 @@ class FileAsset(BaseModel):
         if self.entity_type in [
             self.EntityTypeContext.ISSUE_DESCRIPTION,
             self.EntityTypeContext.COMMENT_DESCRIPTION,
+            self.EntityTypeContext.COMMENT_ATTACHMENT,
             self.EntityTypeContext.PAGE_DESCRIPTION,
             self.EntityTypeContext.DRAFT_ISSUE_DESCRIPTION,
         ]:

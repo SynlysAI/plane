@@ -12,11 +12,76 @@ import { renderFormattedDate } from "@plane/utils";
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import type { RowData } from "@/components/workspace/settings/member-columns";
 import { AccountTypeColumn, NameColumn } from "@/components/workspace/settings/member-columns";
+import type { IWorkspaceMemberTag, IWorkspaceMemberTagGroup } from "@plane/types";
 import { useMember } from "@/hooks/store/use-member";
+import { MemberTagsEditor } from "./member-tags-editor";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
 
-export const useMemberColumns = () => {
+const TAG_COLOR_CLASS_NAMES: Record<IWorkspaceMemberTag["color"], string> = {
+  sage: "border-[#BDCCBF] bg-[#F0F5F0] text-[#466152]",
+  sand: "border-[#D8CBB6] bg-[#FAF6EE] text-[#75624B]",
+  slate: "border-[#C8CED3] bg-[#F2F4F5] text-[#53616B]",
+  mist: "border-[#C7D3D4] bg-[#F0F5F5] text-[#456467]",
+  clay: "border-[#D9C4B9] bg-[#FAF2EE] text-[#815E50]",
+  moss: "border-[#C7D1B5] bg-[#F3F6ED] text-[#5B6B47]",
+};
+
+function MemberTagsColumn({ tags, groups }: { tags?: IWorkspaceMemberTag[]; groups: IWorkspaceMemberTagGroup[] }) {
+  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
+
+  if (!tags?.length) return <span className="text-placeholder">—</span>;
+
+  const groupNames = new Map(groups.map((group) => [group.id, group.name]));
+  const tagsByGroup = tags.reduce<Map<string, IWorkspaceMemberTag[]>>((result, tag) => {
+    const current = result.get(tag.group_id) ?? [];
+    current.push(tag);
+    result.set(tag.group_id, current);
+    return result;
+  }, new Map());
+
+  return (
+    <div className="flex max-w-80 flex-wrap gap-x-2 gap-y-1">
+      {[...tagsByGroup.entries()].map(([groupId, groupedTags]) => {
+        const isExpanded = expandedGroupIds.includes(groupId);
+        const visibleTags = isExpanded ? groupedTags : groupedTags.slice(0, 3);
+        return (
+          <div key={groupId} className="flex items-center gap-1">
+            <span className="text-11 text-tertiary">{groupNames.get(groupId) ?? "标签"}</span>
+            {visibleTags.map((tag) => (
+              <span
+                key={tag.id}
+                className={`rounded-md border px-1.5 py-0.5 text-11 ${TAG_COLOR_CLASS_NAMES[tag.color]}`}
+              >
+                {tag.name}
+              </span>
+            ))}
+            {groupedTags.length > 3 && (
+              <button
+                type="button"
+                className="text-11 text-tertiary hover:text-primary"
+                onClick={() =>
+                  setExpandedGroupIds((current) =>
+                    isExpanded ? current.filter((id) => id !== groupId) : [...current, groupId]
+                  )
+                }
+              >
+                {isExpanded ? "收起" : `+${groupedTags.length - 3}`}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type MemberSelection = {
+  selectedMemberIds: string[];
+  toggleMember: (memberId: string) => void;
+};
+
+export const useMemberColumns = (selection?: MemberSelection) => {
   // states
   const [removeMemberModal, setRemoveMemberModal] = useState<RowData | null>(null);
   const [resetPasswordMember, setResetPasswordMember] = useState<RowData | null>(null);
@@ -28,12 +93,14 @@ export const useMemberColumns = () => {
   const {
     workspace: {
       filtersStore: { filters, updateFilters },
+      workspaceMemberTagGroups,
     },
   } = useMember();
   const { t } = useTranslation();
 
   // derived values
   const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const [tagEditorMember, setTagEditorMember] = useState<RowData | null>(null);
 
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const isSuspended = (rowData: RowData) => rowData.is_active === false;
@@ -110,6 +177,25 @@ export const useMemberColumns = () => {
     },
 
     {
+      key: "Tags",
+      content: "标签",
+      tdRender: (rowData: RowData) => (
+        <div className="flex items-center gap-2">
+          <MemberTagsColumn tags={rowData.member.tags} groups={workspaceMemberTagGroups[workspaceSlug] ?? []} />
+          {isAdmin && !isSuspended(rowData) && (
+            <button
+              type="button"
+              className="text-11 text-accent-primary opacity-0 transition-opacity group-hover:opacity-100"
+              onClick={() => setTagEditorMember(rowData)}
+            >
+              编辑
+            </button>
+          )}
+        </div>
+      ),
+    },
+
+    {
       key: "Authentication",
       content: t("workspace_settings.settings.members.details.authentication"),
       tdRender: (rowData: RowData) => {
@@ -134,6 +220,21 @@ export const useMemberColumns = () => {
       ),
     },
   ];
+  if (isAdmin && selection) {
+    columns.unshift({
+      key: "Select member",
+      content: "",
+      tdRender: (rowData: RowData) => (
+        <input
+          type="checkbox"
+          aria-label={`选择 ${rowData.member.display_name || rowData.member.email || "成员"}`}
+          checked={selection.selectedMemberIds.includes(rowData.member.id)}
+          onChange={() => selection.toggleMember(rowData.member.id)}
+          className="accent-accent-primary size-3.5"
+        />
+      ),
+    });
+  }
   if (isAdmin) {
     columns.push({
       key: "Reset password",
@@ -157,5 +258,20 @@ export const useMemberColumns = () => {
     setRemoveMemberModal,
     resetPasswordMember,
     setResetPasswordMember,
+    tagEditorMember,
+    setTagEditorMember,
+    tagEditor: tagEditorMember ? (
+      <MemberTagsEditor
+        workspaceSlug={workspaceSlug}
+        memberId={tagEditorMember.member.id}
+        memberName={
+          tagEditorMember.member.display_name ||
+          `${tagEditorMember.member.first_name ?? ""} ${tagEditorMember.member.last_name ?? ""}`
+        }
+        groups={workspaceMemberTagGroups[workspaceSlug] ?? []}
+        selectedTags={tagEditorMember.member.tags ?? []}
+        onClose={() => setTagEditorMember(null)}
+      />
+    ) : null,
   };
 };

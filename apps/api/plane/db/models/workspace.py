@@ -232,6 +232,114 @@ class WorkspaceMember(BaseModel):
         return f"{self.member.email} <{self.workspace.name}>"
 
 
+class WorkspaceMemberTagGroup(BaseModel):
+    """可由工作区管理员维护的成员标签组。"""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="workspace_member_tag_groups",
+    )
+    name = models.CharField(max_length=255)
+    sort_order = models.FloatField(default=65535)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_member_tag_group_unique_name_when_active",
+            )
+        ]
+        indexes = [models.Index(fields=["workspace", "sort_order"])]
+        verbose_name = "Workspace Member Tag Group"
+        verbose_name_plural = "Workspace Member Tag Groups"
+        db_table = "workspace_member_tag_groups"
+        ordering = ("sort_order", "name")
+
+    def __str__(self):
+        """Return the member tag group name."""
+        return self.name
+
+    def delete(self, using=None, soft=True, *args, **kwargs):
+        """删除标签组时同步删除标签和成员关联。"""
+        if soft:
+            for tag in self.tags.all():
+                tag.delete(using=using, soft=True)
+        return super().delete(using=using, soft=soft, *args, **kwargs)
+
+
+class WorkspaceMemberTag(BaseModel):
+    """归属于成员标签组的可分配标签。"""
+
+    group = models.ForeignKey(
+        "db.WorkspaceMemberTagGroup",
+        on_delete=models.CASCADE,
+        related_name="tags",
+    )
+    name = models.CharField(max_length=255)
+    color = models.CharField(max_length=32, default="sage")
+    sort_order = models.FloatField(default=65535)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_member_tag_unique_name_when_active",
+            )
+        ]
+        indexes = [models.Index(fields=["group", "sort_order"])]
+        verbose_name = "Workspace Member Tag"
+        verbose_name_plural = "Workspace Member Tags"
+        db_table = "workspace_member_tags"
+        ordering = ("sort_order", "name")
+
+    def __str__(self):
+        """Return the member tag name."""
+        return self.name
+
+    def delete(self, using=None, soft=True, *args, **kwargs):
+        """删除标签时同步删除成员标签关联。"""
+        if soft:
+            self.assignments.all().delete()
+        return super().delete(using=using, soft=soft, *args, **kwargs)
+
+
+class WorkspaceMemberTagAssignment(BaseModel):
+    """记录成员与标签之间的多对多关联。"""
+
+    workspace_member = models.ForeignKey(
+        "db.WorkspaceMember",
+        on_delete=models.CASCADE,
+        related_name="tag_assignments",
+    )
+    tag = models.ForeignKey(
+        "db.WorkspaceMemberTag",
+        on_delete=models.CASCADE,
+        related_name="assignments",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace_member", "tag"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_member_tag_assignment_unique_when_active",
+            )
+        ]
+        indexes = [models.Index(fields=["workspace_member", "tag"])]
+        verbose_name = "Workspace Member Tag Assignment"
+        verbose_name_plural = "Workspace Member Tag Assignments"
+        db_table = "workspace_member_tag_assignments"
+
+    def clean(self):
+        """验证标签与成员归属同一个工作区。"""
+        if self.workspace_member_id and self.tag_id:
+            if self.workspace_member.workspace_id != self.tag.group.workspace_id:
+                raise ValidationError("Tag and workspace member must belong to the same workspace")
+
+
 class WorkspaceMemberInvite(BaseModel):
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="workspace_member_invite")
     email = models.CharField(max_length=255)

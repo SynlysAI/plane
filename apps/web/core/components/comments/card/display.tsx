@@ -16,7 +16,14 @@ import { useHashScroll } from "@plane/hooks";
 import { GlobeOutline, LockOutline } from "@makeplane/propel/icons";
 import { EIssueCommentAccessSpecifier } from "@plane/types";
 import type { TCommentsOperations, TIssueComment } from "@plane/types";
-import { calculateTimeAgo, cn, getFileURL, renderFormattedDate, renderFormattedTime } from "@plane/utils";
+import {
+  calculateTimeAgo,
+  cn,
+  getFileURL,
+  isCommentEmpty,
+  renderFormattedDate,
+  renderFormattedTime,
+} from "@plane/utils";
 // components
 import { LiteTextEditor } from "@/components/editor/lite-text";
 // local imports
@@ -24,6 +31,7 @@ import { CommentReactions } from "../comment-reaction";
 import { CommentCardEditForm } from "./edit-form";
 import { EmojiReactionButton, EmojiReactionPicker } from "@plane/propel/emoji-reaction";
 import { useMember } from "@/hooks/store/use-member";
+import { CommentAttachmentList } from "../attachment-list";
 
 export type TCommentCardDisplayProps = {
   activityOperations: TCommentsOperations;
@@ -163,20 +171,23 @@ export const CommentCardDisplay = observer(function CommentCardDisplay(props: TC
         />
       ) : (
         <>
-          <LiteTextEditor
-            editable={false}
-            ref={readOnlyEditorRef}
-            id={comment.id}
-            initialValue={comment.comment_html ?? ""}
-            workspaceId={workspaceId}
-            workspaceSlug={workspaceSlug}
-            containerClassName={cn("!py-1 transition-[border-color] duration-500", highlightClassName)}
-            projectId={projectId?.toString()}
-            displayConfig={{
-              fontSize: "small-font",
-            }}
-            parentClassName="border-none"
-          />
+          {(!comment.file_attachments?.length || !isCommentEmpty(comment.comment_html)) && (
+            <LiteTextEditor
+              editable={false}
+              ref={readOnlyEditorRef}
+              id={comment.id}
+              initialValue={comment.comment_html ?? ""}
+              workspaceId={workspaceId}
+              workspaceSlug={workspaceSlug}
+              containerClassName={cn("!py-1 transition-[border-color] duration-500", highlightClassName)}
+              projectId={projectId?.toString()}
+              displayConfig={{
+                fontSize: "small-font",
+              }}
+              parentClassName="border-none"
+            />
+          )}
+          <CommentAttachmentList attachments={comment.file_attachments} />
           {shouldRenderReactions &&
             (renderFooter ? (
               renderFooter(

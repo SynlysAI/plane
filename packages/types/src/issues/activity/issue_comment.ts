@@ -22,6 +22,15 @@ export type TCommentReaction = {
   actor: string;
   actor_detail: IUserLite;
 };
+/** 工作项评论附带的文件，下载地址始终通过服务端鉴权。 */
+export type TCommentAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  download_url: string;
+};
+
 export type TIssueComment = {
   id: string;
   workspace: string;
@@ -38,6 +47,8 @@ export type TIssueComment = {
   created_by: string | undefined;
   updated_by: string | undefined;
   attachments: any[];
+  attachment_ids?: string[];
+  file_attachments?: TCommentAttachment[];
   comment_reactions: any[];
   comment_stripped: string;
   comment_html: string;
@@ -54,6 +65,8 @@ export type TCommentsOperations = {
   removeComment: (commentId: string) => Promise<void>;
   uploadCommentAsset: (blockId: string, file: File, commentId?: string) => Promise<TFileSignedURLResponse>;
   duplicateCommentAsset: (assetId: string, commentId?: string) => Promise<{ asset_id: string }>;
+  uploadCommentAttachment?: (file: File) => Promise<TCommentAttachment>;
+  discardCommentAttachment?: (assetId: string) => Promise<void>;
   addCommentReaction: (commentId: string, reactionEmoji: string) => Promise<void>;
   deleteCommentReaction: (commentId: string, reactionEmoji: string) => Promise<void>;
   react: (commentId: string, reactionEmoji: string, userReactions: string[]) => Promise<void>;

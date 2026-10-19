@@ -56,10 +56,11 @@ class IssueActivityEndpoint(BaseAPIView):
             .order_by("created_at")
             .select_related("actor", "issue", "project", "workspace")
             .prefetch_related(
+                "assets",
                 Prefetch(
                     "comment_reactions",
                     queryset=CommentReaction.objects.select_related("actor"),
-                )
+                ),
             )
         )
 

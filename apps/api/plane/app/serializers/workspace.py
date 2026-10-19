@@ -13,6 +13,8 @@ from .user import UserLiteSerializer, UserAdminLiteSerializer
 from plane.db.models import (
     Workspace,
     WorkspaceMember,
+    WorkspaceMemberTag,
+    WorkspaceMemberTagGroup,
     WorkspaceMemberInvite,
     WorkspaceTheme,
     WorkspaceUserProperties,
@@ -94,6 +96,14 @@ class WorkspaceLiteSerializer(BaseSerializer):
 
 class WorkSpaceMemberSerializer(DynamicBaseSerializer):
     member = UserLiteSerializer(read_only=True)
+    tags = serializers.SerializerMethodField()
+
+    def get_tags(self, instance):
+        """返回成员已关联的标签，供成员列表一次性渲染。"""
+        assignments = getattr(instance, "prefetched_tag_assignments", None)
+        if assignments is None:
+            assignments = instance.tag_assignments.select_related("tag__group").all()
+        return WorkspaceMemberTagSerializer([assignment.tag for assignment in assignments], many=True).data
 
     class Meta:
         model = WorkspaceMember
@@ -110,10 +120,40 @@ class WorkspaceMemberMeSerializer(BaseSerializer):
 
 class WorkspaceMemberAdminSerializer(DynamicBaseSerializer):
     member = UserAdminLiteSerializer(read_only=True)
+    tags = serializers.SerializerMethodField()
+
+    def get_tags(self, instance):
+        """返回成员已关联的标签，供管理员成员列表一次性渲染。"""
+        assignments = getattr(instance, "prefetched_tag_assignments", None)
+        if assignments is None:
+            assignments = instance.tag_assignments.select_related("tag__group").all()
+        return WorkspaceMemberTagSerializer([assignment.tag for assignment in assignments], many=True).data
 
     class Meta:
         model = WorkspaceMember
         fields = "__all__"
+
+
+class WorkspaceMemberTagSerializer(BaseSerializer):
+    """序列化成员标签及其所属标签组标识。"""
+
+    group_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = WorkspaceMemberTag
+        fields = ["id", "group_id", "name", "color", "sort_order"]
+        read_only_fields = fields
+
+
+class WorkspaceMemberTagGroupSerializer(BaseSerializer):
+    """序列化标签组及其有序标签列表。"""
+
+    tags = WorkspaceMemberTagSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = WorkspaceMemberTagGroup
+        fields = ["id", "name", "sort_order", "tags"]
+        read_only_fields = ["id", "tags"]
 
 
 class WorkSpaceMemberInviteSerializer(BaseSerializer):

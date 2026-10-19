@@ -62,6 +62,7 @@ export const GeneralProfileSettingsForm = observer(function GeneralProfileSettin
   const [isChangeEmailModalOpen, setIsChangeEmailModalOpen] = useState(false);
   // language support
   const { t } = useTranslation();
+  const lastNameRequiredMessage = t("common.errors.entity_required", { entity: t("last_name") });
   // form info
   const {
     handleSubmit,
@@ -233,9 +234,7 @@ export const GeneralProfileSettingsForm = observer(function GeneralProfileSettin
                         <img
                           src={getFileURL(userAvatar)}
                           className="absolute top-0 left-0 h-full w-full rounded-lg object-cover"
-                          onClick={() => setIsImageUploadModalOpen(true)}
                           alt={currentUser?.display_name}
-                          role="button"
                         />
                       </div>
                     )}
@@ -303,12 +302,17 @@ export const GeneralProfileSettingsForm = observer(function GeneralProfileSettin
                 {errors.first_name && <span className="text-11 text-danger-primary">{errors.first_name.message}</span>}
               </div>
               <div className="flex flex-col gap-1">
-                <h4 className="text-13 font-medium text-secondary">{t("last_name")}</h4>
+                <h4 className="text-13 font-medium text-secondary">
+                  {t("last_name")}&nbsp;
+                  <span className="text-danger-primary">*</span>
+                </h4>
                 <Controller
                   control={control}
                   name="last_name"
                   rules={{
-                    validate: validatePersonName,
+                    required: lastNameRequiredMessage,
+                    // 纯空白与空值使用同一必填提示，其余输入沿用姓名格式及长度校验。
+                    validate: (value) => (value.trim() === "" ? lastNameRequiredMessage : validatePersonName(value)),
                   }}
                   render={({ field: { value, onChange, ref } }) => (
                     <Field name="last_name" invalid={Boolean(errors.last_name)}>
@@ -317,6 +321,7 @@ export const GeneralProfileSettingsForm = observer(function GeneralProfileSettin
                           size="2xl"
                           id="last_name"
                           name="last_name"
+                          aria-required={true}
                           type="text"
                           value={value}
                           onChange={onChange}

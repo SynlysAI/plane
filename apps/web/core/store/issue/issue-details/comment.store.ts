@@ -98,10 +98,10 @@ export class IssueCommentStore implements IIssueCommentStore {
     this.loader = loaderType;
 
     let props = {};
-    const _commentIds = this.getCommentsByIssueId(issueId);
-    if (_commentIds && _commentIds.length > 0) {
-      const _comment = this.getCommentById(_commentIds[_commentIds.length - 1]);
-      if (_comment) props = { created_at__gt: _comment.created_at };
+    const existingCommentIds = this.getCommentsByIssueId(issueId);
+    if (existingCommentIds && existingCommentIds.length > 0) {
+      const latestComment = this.getCommentById(existingCommentIds[existingCommentIds.length - 1]);
+      if (latestComment) props = { created_at__gt: latestComment.created_at };
     }
 
     const comments = await this.issueCommentService.getIssueComments(workspaceSlug, projectId, issueId, props);
@@ -144,12 +144,6 @@ export class IssueCommentStore implements IIssueCommentStore {
     data: Partial<TIssueComment>
   ) => {
     try {
-      runInAction(() => {
-        Object.keys(data).forEach((key) => {
-          set(this.commentMap, [commentId, key], data[key as keyof TIssueComment]);
-        });
-      });
-
       const response = await this.issueCommentService.patchIssueComment(
         workspaceSlug,
         projectId,
@@ -159,8 +153,7 @@ export class IssueCommentStore implements IIssueCommentStore {
       );
 
       runInAction(() => {
-        set(this.commentMap, [commentId, "updated_at"], response.updated_at);
-        set(this.commentMap, [commentId, "edited_at"], response.edited_at);
+        set(this.commentMap, commentId, response);
       });
 
       return response;

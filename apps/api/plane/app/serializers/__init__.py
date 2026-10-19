@@ -22,6 +22,8 @@ from .workspace import (
     WorkspaceLiteSerializer,
     WorkspaceThemeSerializer,
     WorkspaceMemberAdminSerializer,
+    WorkspaceMemberTagGroupSerializer,
+    WorkspaceMemberTagSerializer,
     WorkspaceMemberMeSerializer,
     WorkspaceUserPropertiesSerializer,
     WorkspaceUserLinkSerializer,

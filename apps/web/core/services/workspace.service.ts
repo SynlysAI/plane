@@ -28,6 +28,8 @@ import type {
   IWorkspaceSidebarNavigationItem,
   IWorkspaceSidebarNavigation,
   IWorkspaceUserPropertiesResponse,
+  IWorkspaceMemberTag,
+  IWorkspaceMemberTagGroup,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -164,6 +166,102 @@ export class WorkspaceService extends APIService {
   async fetchWorkspaceMembers(workspaceSlug: string): Promise<IWorkspaceMember[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/members/`)
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 获取工作区成员标签组及标签配置。 */
+  async fetchWorkspaceMemberTagGroups(workspaceSlug: string): Promise<IWorkspaceMemberTagGroup[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/member-tag-groups/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 创建工作区成员标签组。 */
+  async createWorkspaceMemberTagGroup(workspaceSlug: string, data: { name: string; sort_order?: number }) {
+    return this.post(`/api/workspaces/${workspaceSlug}/member-tag-groups/`, data)
+      .then((response) => response?.data as IWorkspaceMemberTagGroup)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 更新工作区成员标签组。 */
+  async updateWorkspaceMemberTagGroup(
+    workspaceSlug: string,
+    groupId: string,
+    data: Partial<Pick<IWorkspaceMemberTagGroup, "name" | "sort_order">>
+  ) {
+    return this.patch(`/api/workspaces/${workspaceSlug}/member-tag-groups/${groupId}/`, data)
+      .then((response) => response?.data as IWorkspaceMemberTagGroup)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 删除工作区成员标签组。 */
+  async deleteWorkspaceMemberTagGroup(workspaceSlug: string, groupId: string) {
+    return this.delete(`/api/workspaces/${workspaceSlug}/member-tag-groups/${groupId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 创建成员标签。 */
+  async createWorkspaceMemberTag(
+    workspaceSlug: string,
+    groupId: string,
+    data: { name: string; color: IWorkspaceMemberTag["color"]; sort_order?: number }
+  ) {
+    return this.post(`/api/workspaces/${workspaceSlug}/member-tag-groups/${groupId}/tags/`, data)
+      .then((response) => response?.data as IWorkspaceMemberTag)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 更新成员标签。 */
+  async updateWorkspaceMemberTag(
+    workspaceSlug: string,
+    tagId: string,
+    data: Partial<Pick<IWorkspaceMemberTag, "name" | "color" | "sort_order">>
+  ) {
+    return this.patch(`/api/workspaces/${workspaceSlug}/member-tags/${tagId}/`, data)
+      .then((response) => response?.data as IWorkspaceMemberTag)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 删除成员标签。 */
+  async deleteWorkspaceMemberTag(workspaceSlug: string, tagId: string) {
+    return this.delete(`/api/workspaces/${workspaceSlug}/member-tags/${tagId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 替换单个成员的标签集合。 */
+  async updateWorkspaceMemberTags(workspaceSlug: string, memberId: string, tagIds: string[]) {
+    return this.put(`/api/workspaces/${workspaceSlug}/members/${memberId}/tags/`, { tag_ids: tagIds })
+      .then((response) => response?.data as { tags: IWorkspaceMemberTag[] })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 批量添加或移除成员标签。 */
+  async bulkUpdateWorkspaceMemberTags(
+    workspaceSlug: string,
+    data: { member_ids: string[]; add_tag_ids: string[]; remove_tag_ids: string[] }
+  ) {
+    return this.post(`/api/workspaces/${workspaceSlug}/members/tags/bulk/`, data)
+      .then((response) => response?.data as { members: IWorkspaceMember[] })
       .catch((error) => {
         throw error?.response?.data;
       });

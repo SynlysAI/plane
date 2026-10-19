@@ -293,6 +293,7 @@
   "medium": "Medium",
   "low": "Low",
   "members": "Members",
+  "member_tags": "Member tags",
   "assignee": "Assignee",
   "assignees": "Assignees",
   "subscriber": "{count, plural, one{# Subscriber} other{# Subscribers}}",

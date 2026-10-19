@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useForm } from "react-hook-form";
 import type { EditorRefApi } from "@plane/editor";
@@ -14,6 +14,9 @@ import type { TCommentsOperations, TIssueComment } from "@plane/types";
 import { cn, isCommentEmpty } from "@plane/utils";
 // components
 import { LiteTextEditor } from "@/components/editor/lite-text";
+import { useFileSize } from "@/hooks/use-file-size";
+import { CommentAttachmentList } from "../attachment-list";
+import { useCommentAttachments } from "../use-comment-attachments";
 
 type Props = {
   activityOperations: TCommentsOperations;
@@ -39,6 +42,11 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
   } = props;
   // refs
   const editorRef = useRef<EditorRefApi>(null);
+  const submissionLock = useRef(false);
+  const [submitError, setSubmitError] = useState("");
+  const { maxFileSize } = useFileSize();
+  const attachmentDraft = useCommentAttachments(activityOperations, maxFileSize, comment.file_attachments);
+  const supportsAttachments = !!activityOperations.uploadCommentAttachment;
   // form info
   const {
     formState: { isSubmitting },
@@ -51,20 +59,29 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
   });
   const commentHTML = watch("comment_html");
 
-  const isEmpty = isCommentEmpty(commentHTML);
+  const isEmpty = isCommentEmpty(commentHTML) && !attachmentDraft.attachmentIds.length;
   const isEditorReadyToDiscard = editorRef.current?.isEditorReadyToDiscard();
   const isSubmitButtonDisabled = isSubmitting || !isEditorReadyToDiscard;
-  const isDisabled = isSubmitting || isEmpty || isSubmitButtonDisabled;
+  const isDisabled = isSubmitting || isEmpty || isSubmitButtonDisabled || attachmentDraft.isBlocked;
 
   const onEnter = async (formData: Partial<TIssueComment>) => {
-    if (isSubmitting || !comment) return;
-
-    setIsEditing(false);
-
-    await activityOperations.updateComment(comment.id, formData);
-
-    editorRef.current?.setEditorValue(formData?.comment_html ?? "<p></p>");
-    readOnlyEditorRef?.setEditorValue(formData?.comment_html ?? "<p></p>");
+    if (submissionLock.current || isEmpty || attachmentDraft.isBlocked || !editorRef.current?.isEditorReadyToDiscard())
+      return;
+    submissionLock.current = true;
+    setSubmitError("");
+    try {
+      await activityOperations.updateComment(comment.id, {
+        ...formData,
+        ...(supportsAttachments ? { attachment_ids: attachmentDraft.attachmentIds } : {}),
+      });
+      attachmentDraft.commit();
+      readOnlyEditorRef?.setEditorValue(formData?.comment_html ?? "<p></p>");
+      setIsEditing(false);
+    } catch {
+      setSubmitError("评论未保存，输入内容及附件已保留，请重试。");
+    } finally {
+      submissionLock.current = false;
+    }
   };
 
   useEffect(() => {
@@ -75,11 +92,12 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
 
   return (
     <form className="flex flex-col gap-2">
-      <div
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !isEmpty) handleSubmit(onEnter)(e);
-        }}
-      >
+      {submitError && (
+        <p role="alert" className="text-12 text-danger-primary">
+          {submitError}
+        </p>
+      )}
+      <div>
         <LiteTextEditor
           editable
           workspaceId={workspaceId}
@@ -90,11 +108,24 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
           value={null}
           onChange={(_comment_json, comment_html) => setValue("comment_html", comment_html)}
           onEnterKeyPress={(e) => {
-            if (!isEmpty && !isSubmitting) {
+            if (!isDisabled) {
               handleSubmit(onEnter)(e);
             }
           }}
           showSubmitButton={false}
+          isSubmitting={isSubmitting}
+          hasAttachments={attachmentDraft.attachmentIds.length > 0}
+          isSubmitDisabled={attachmentDraft.isBlocked}
+          onAttachFiles={supportsAttachments ? attachmentDraft.addFiles : undefined}
+          attachmentContent={
+            <CommentAttachmentList
+              entries={attachmentDraft.entries}
+              error={attachmentDraft.error}
+              disabled={isSubmitting}
+              onRemove={attachmentDraft.remove}
+              onRetry={attachmentDraft.retry}
+            />
+          }
           uploadFile={async (blockId, file) => {
             const { asset_id } = await activityOperations.uploadCommentAsset(blockId, file, comment.id);
             return asset_id;
@@ -114,6 +145,7 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
         {!isEmpty && (
           <button
             type="button"
+            aria-label="保存评论"
             onClick={handleSubmit(onEnter)}
             disabled={isDisabled}
             className={cn(
@@ -126,12 +158,14 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
         )}
         <button
           type="button"
+          aria-label="取消编辑"
           disabled={isSubmitting}
           className={cn(
             "group grid size-7 place-items-center rounded-lg border border-danger-subtle bg-danger-subtle shadow-raised-100 duration-300",
             isSubmitting ? "" : "hover:bg-danger-subtle-hover"
           )}
           onClick={() => {
+            void attachmentDraft.cancel();
             setIsEditing(false);
             editorRef.current?.setEditorValue(comment.comment_html ?? "<p></p>");
           }}

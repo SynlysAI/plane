@@ -39,6 +39,12 @@ from plane.app.views import (
     WorkspaceUserPreferenceViewSet,
     WorkspaceMemberInvitationImportEndpoint,
     WorkspaceMemberInvitationImportTemplateEndpoint,
+    WorkspaceMemberTagAssignmentEndpoint,
+    WorkspaceMemberTagBulkAssignmentEndpoint,
+    WorkspaceMemberTagDetailEndpoint,
+    WorkspaceMemberTagGroupDetailEndpoint,
+    WorkspaceMemberTagGroupsEndpoint,
+    WorkspaceMemberTagsEndpoint,
 )
 
 
@@ -121,6 +127,36 @@ urlpatterns = [
         "workspaces/<str:slug>/members/leave/",
         WorkSpaceMemberViewSet.as_view({"post": "leave"}),
         name="leave-workspace-members",
+    ),
+    path(
+        "workspaces/<str:slug>/member-tag-groups/",
+        WorkspaceMemberTagGroupsEndpoint.as_view(),
+        name="workspace-member-tag-groups",
+    ),
+    path(
+        "workspaces/<str:slug>/member-tag-groups/<uuid:group_id>/",
+        WorkspaceMemberTagGroupDetailEndpoint.as_view(),
+        name="workspace-member-tag-group-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/member-tag-groups/<uuid:group_id>/tags/",
+        WorkspaceMemberTagsEndpoint.as_view(),
+        name="workspace-member-tags",
+    ),
+    path(
+        "workspaces/<str:slug>/member-tags/<uuid:tag_id>/",
+        WorkspaceMemberTagDetailEndpoint.as_view(),
+        name="workspace-member-tag-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/members/<uuid:member_id>/tags/",
+        WorkspaceMemberTagAssignmentEndpoint.as_view(),
+        name="workspace-member-tag-assignment",
+    ),
+    path(
+        "workspaces/<str:slug>/members/tags/bulk/",
+        WorkspaceMemberTagBulkAssignmentEndpoint.as_view(),
+        name="workspace-member-tag-bulk-assignment",
     ),
     path(
         "users/last-visited-workspace/",

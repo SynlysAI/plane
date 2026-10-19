@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 from django.conf import settings
 from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 
 # Third Party imports
 from rest_framework.response import Response
@@ -62,7 +63,11 @@ class IssueAttachmentEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = FileAsset.objects.filter(
-            pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id
+            pk=pk,
+            workspace__slug=slug,
+            project_id=project_id,
+            issue_id=issue_id,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
         ).first()
         if not issue_attachment:
             return Response(
@@ -87,7 +92,12 @@ class IssueAttachmentEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def get(self, request, slug, project_id, issue_id):
-        issue_attachments = FileAsset.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id)
+        issue_attachments = FileAsset.objects.filter(
+            issue_id=issue_id,
+            workspace__slug=slug,
+            project_id=project_id,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+        )
         serializer = IssueAttachmentSerializer(issue_attachments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -148,8 +158,13 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
     def delete(self, request, slug, project_id, issue_id, pk):
-        issue_attachment = FileAsset.objects.get(
-            pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id
+        issue_attachment = get_object_or_404(
+            FileAsset,
+            pk=pk,
+            workspace__slug=slug,
+            project_id=project_id,
+            issue_id=issue_id,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
         )
         issue_attachment.is_deleted = True
         issue_attachment.deleted_at = timezone.now()
@@ -173,7 +188,14 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     def get(self, request, slug, project_id, issue_id, pk=None):
         if pk:
             # Get the asset
-            asset = FileAsset.objects.get(id=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id)
+            asset = get_object_or_404(
+                FileAsset,
+                id=pk,
+                workspace__slug=slug,
+                project_id=project_id,
+                issue_id=issue_id,
+                entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+            )
 
             # Check if the asset is uploaded
             if not asset.is_uploaded:
@@ -204,8 +226,13 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def patch(self, request, slug, project_id, issue_id, pk):
-        issue_attachment = FileAsset.objects.get(
-            pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id
+        issue_attachment = get_object_or_404(
+            FileAsset,
+            pk=pk,
+            workspace__slug=slug,
+            project_id=project_id,
+            issue_id=issue_id,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
         )
         serializer = IssueAttachmentSerializer(issue_attachment)
 
