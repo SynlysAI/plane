@@ -94,3 +94,27 @@ class TestIssueListOrderByInjection:
             assert response.status_code == status.HTTP_200_OK, (
                 f"order_by={value!r} got {response.status_code}: {response.data!r}"
             )
+
+
+@pytest.mark.contract
+class TestIssueUpdate:
+    """Regression coverage for partial work-item updates."""
+
+    @pytest.mark.django_db
+    def test_partial_update_passes_workspace_context_to_serializer(
+        self, session_client, workspace, project, state, issue
+    ):
+        next_state = State.objects.create(
+            name="In progress",
+            project=project,
+            workspace=workspace,
+            group="started",
+        )
+        url = f"/api/workspaces/{workspace.slug}/projects/{project.id}/issues/{issue.id}/"
+
+        response = session_client.patch(url, {"name": "Updated issue", "state_id": str(next_state.id)}, format="json")
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT, response.data
+        issue.refresh_from_db()
+        assert issue.name == "Updated issue"
+        assert issue.state_id == next_state.id
