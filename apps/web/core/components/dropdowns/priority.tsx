@@ -80,10 +80,7 @@ function BorderButton(props: ButtonProps) {
   const { t } = useTranslation();
 
   return (
-    <Tooltip
-      label={`${t("priority")}: ${priorityDetails?.title ?? t("common.none")}`}
-      disabled={!showTooltip || isMobile}
-    >
+    <Tooltip label={`${t("priority")}: ${t(priorityDetails?.key ?? "none")}`} disabled={!showTooltip || isMobile}>
       <div
         className={cn(
           "flex h-full items-center gap-1.5 rounded-sm border-[0.5px] px-2 py-0.5",
@@ -129,7 +126,7 @@ function BorderButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? placeholder}
+            {priorityDetails ? t(priorityDetails.key) : placeholder}
           </span>
         )}
         {dropdownArrow && (
@@ -213,7 +210,7 @@ function BackgroundButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? t("common.priority") ?? placeholder}
+            {priorityDetails ? t(priorityDetails.key) : placeholder}
           </span>
         )}
         {dropdownArrow && (
@@ -244,10 +241,7 @@ function TransparentButton(props: ButtonProps) {
   const { t } = useTranslation();
 
   return (
-    <Tooltip
-      label={`${t("priority")}: ${priorityDetails?.title ?? t("common.none")}`}
-      disabled={!showTooltip || isMobile}
-    >
+    <Tooltip label={`${t("priority")}: ${t(priorityDetails?.key ?? "none")}`} disabled={!showTooltip || isMobile}>
       <div
         className={cn(
           "flex h-full w-full items-center gap-1.5 rounded-sm px-2 hover:bg-layer-transparent-hover",
@@ -293,7 +287,7 @@ function TransparentButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? t("common.priority") ?? placeholder}
+            {priorityDetails ? t(priorityDetails.key) : placeholder}
           </span>
         )}
         {dropdownArrow && (
@@ -351,11 +345,11 @@ export function PriorityDropdown(props: Props) {
 
   const options = ISSUE_PRIORITIES.map((priority) => ({
     value: priority.key,
-    query: priority.key,
+    query: `${priority.key} ${t(priority.key)}`,
     content: (
       <div className="flex items-center gap-2">
         <PriorityIcon priority={priority.key} size={14} withContainer />
-        <span className="flex-grow truncate">{priority.title}</span>
+        <span className="flex-grow truncate">{t(priority.key)}</span>
       </div>
     ),
   }));

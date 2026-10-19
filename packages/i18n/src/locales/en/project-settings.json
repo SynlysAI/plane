@@ -1,6 +1,8 @@
 {
   "project_settings": {
     "general": {
+      "title": "Project settings",
+      "name_max_length": "Project name should be less than 255 characters",
       "enter_project_id": "Enter project ID",
       "please_select_a_timezone": "Please select a timezone",
       "archive_project": {

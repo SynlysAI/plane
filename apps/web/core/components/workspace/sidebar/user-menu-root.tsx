@@ -69,7 +69,7 @@ export const UserMenuRoot = observer(function UserMenuRoot() {
         />
       }
       customButtonClassName="group flex flex-col items-center justify-center gap-0.5 text-tertiary"
-      ariaLabel={t("common.profile_settings")}
+      ariaLabel={t("profile_settings", { defaultValue: "Profile settings" })}
       menuButtonOnClick={() => !isUserMenuOpen && setIsUserMenuOpen(true)}
       onMenuClose={() => setIsUserMenuOpen(false)}
       placement="bottom-end"

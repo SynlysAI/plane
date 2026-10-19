@@ -47,6 +47,8 @@ import type {
   TSpreadsheetColumn,
 } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
+import type { TTranslationStore } from "@plane/i18n";
+import { getStateDisplayName } from "@/helpers/work-item-labels";
 // plane ui
 
 import { renderFormattedDate, getFileURL } from "@plane/utils";
@@ -106,6 +108,7 @@ export const isWorkspaceLevel = (type: EIssuesStoreType) =>
     : false;
 
 type TGetGroupByColumns = {
+  t: TTranslationStore["t"];
   groupBy: GroupByColumnTypes | null;
   includeNone: boolean;
   isWorkspaceLevel: boolean;
@@ -117,6 +120,7 @@ type TGetGroupByColumns = {
 // We are using `as` to typecast it to the expected type.
 // It can break the includeNone logic if not handled properly.
 export const getGroupByColumns = ({
+  t,
   groupBy,
   includeNone,
   isWorkspaceLevel,
@@ -128,7 +132,7 @@ export const getGroupByColumns = ({
     return [
       {
         id: "All Issues",
-        name: `All ${isEpic ? "Epics" : "work items"}`,
+        name: t(isEpic ? "epics" : "issue.all"),
         payload: {},
         icon: undefined,
       },
@@ -141,7 +145,7 @@ export const getGroupByColumns = ({
   // Map of group by options to their corresponding column getter functions
   const groupByColumnMap: Record<
     GroupByColumnTypes,
-    ({ isWorkspaceLevel, projectId }: TGetColumns) => IGroupByColumn[] | undefined
+    (args: TGetColumns, t: TTranslationStore["t"]) => IGroupByColumn[] | undefined
   > = {
     project: getProjectColumns,
     cycle: getCycleColumns,
@@ -156,7 +160,13 @@ export const getGroupByColumns = ({
   };
 
   // Get and return the columns for the specified group by option
-  return groupByColumnMap[groupBy]?.({ isWorkspaceLevel, projectId });
+  const columns = groupByColumnMap[groupBy]?.({ isWorkspaceLevel, projectId }, t);
+  columns?.forEach((column) => {
+    if (column.id === "None") column.name = t("none");
+    else if (groupBy === "priority") column.name = t(column.id);
+    else if (groupBy === "state_detail.group") column.name = t(`workspace_projects.state.${column.id}`);
+  });
+  return columns;
 };
 
 const getProjectColumns = (): IGroupByColumn[] | undefined => {
@@ -239,14 +249,14 @@ const getModuleColumns = (): IGroupByColumn[] | undefined => {
   return modules;
 };
 
-const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefined => {
+const getStateColumns = ({ projectId }: TGetColumns, t: TTranslationStore["t"]): IGroupByColumn[] | undefined => {
   const { getProjectStates, projectStates } = store.state;
   const _states = projectId ? getProjectStates(projectId) : projectStates;
   if (!_states) return;
   // map project states to group by columns
   return _states.map((state) => ({
     id: state.id,
-    name: state.name,
+    name: getStateDisplayName(state, t),
     icon: (
       <div className="size-4 rounded-full">
         <StateGroupIcon stateGroup={state.group} color={state.color} size={EIconSize.LG} percentage={state.order} />

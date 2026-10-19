@@ -22,6 +22,7 @@ import { BUTTON_VARIANTS_WITH_TEXT } from "@/components/dropdowns/constants";
 import type { TDropdownProps } from "@/components/dropdowns/types";
 // hooks
 import { useDropdown } from "@/hooks/use-dropdown";
+import { getStateDisplayName } from "@/helpers/work-item-labels";
 // plane web imports
 import { StateOption } from "@/components/workflow";
 
@@ -113,7 +114,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   // derived values
   const options = statesList?.map((state) => ({
     value: state?.id,
-    query: `${state?.name}`,
+    query: `${state.name} ${getStateDisplayName(state, t)}`,
     content: (
       <div className="flex items-center gap-2">
         <StateGroupIcon
@@ -122,7 +123,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
           className={cn("flex-shrink-0", iconSize)}
           percentage={state?.order}
         />
-        <span className="flex-grow truncate text-left">{state?.name}</span>
+        <span className="flex-grow truncate text-left">{getStateDisplayName(state, t)}</span>
       </div>
     ),
   }));
@@ -168,7 +169,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
         className={buttonClassName}
         isActive={isOpen}
         tooltipHeading={t("state")}
-        tooltipContent={selectedState?.name ?? t("state")}
+        tooltipContent={selectedState ? getStateDisplayName(selectedState, t) : t("state")}
         showTooltip={showTooltip}
         variant={buttonVariant}
         renderToolTipByDefault={renderByDefault}
@@ -186,7 +187,9 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
               />
             )}
             {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
-              <span className="flex-grow truncate text-left">{selectedState?.name ?? t("state")}</span>
+              <span className="flex-grow truncate text-left">
+                {selectedState ? getStateDisplayName(selectedState, t) : t("state")}
+              </span>
             )}
             {dropdownArrow && (
               <ChevronDownOutline

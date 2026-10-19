@@ -44,7 +44,7 @@ const projectService = new ProjectService();
 
 export function ProjectDetailsForm(props: IProjectDetailsForm) {
   const { project, workspaceSlug, projectId, isAdmin } = props;
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   // states
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,7 +94,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
     if (!workspaceSlug || !project) return;
     return updateProject(workspaceSlug.toString(), project.id, payload)
       .then(() => {
-        setToast({
+        return setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("toast.success"),
           message: t("project_settings.general.toast.success"),
@@ -192,8 +192,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       await projectService
         .checkProjectIdentifierAvailability(workspaceSlug, payload.identifier ?? "")
         .then(async (res) => {
-          if (res.exists) setError("identifier", { message: t("common.identifier_already_exists") });
-          else await handleUpdateChange(payload);
+          if (res.exists) return setError("identifier", { message: t("common.identifier_already_exists") });
+          return handleUpdateChange(payload);
         });
     else await handleUpdateChange(payload);
     setTimeout(() => {
@@ -285,7 +285,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               required: t("name_is_required"),
               maxLength: {
                 value: 255,
-                message: "Project name should be less than 255 characters",
+                message: t("project_settings.general.name_max_length"),
               },
             }}
             render={({ field: { value, onChange, ref } }) => (
@@ -334,7 +334,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <h4 className="text-13">Project ID</h4>
+            <h4 className="text-13">{t("project_id")}</h4>
             <div className="relative">
               <Controller
                 control={control}
@@ -437,8 +437,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                 <>
                   <TimezoneSelect
                     value={value}
-                    onChange={(value: string) => {
-                      onChange(value);
+                    onChange={(timezone: string) => {
+                      onChange(timezone);
                     }}
                     error={Boolean(errors.timezone)}
                     buttonClassName="!border-subtle !shadow-none font-medium rounded-md"
@@ -456,7 +456,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
               {isLoading ? t("updating") : t("common.update_project")}
             </Button>
             <span className="text-13 text-placeholder italic">
-              {t("common.created_on")} {renderFormattedDate(project?.created_at)}
+              {t("common.created_on")}{" "}
+              {renderFormattedDate(project?.created_at, currentLocale.startsWith("zh") ? "yyyy年M月d日" : undefined)}
             </span>
           </>
         </div>

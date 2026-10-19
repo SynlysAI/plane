@@ -37,6 +37,7 @@
   "display_name": "Display name",
   "role": "Role",
   "timezone": "Timezone",
+  "beijing_time": "Beijing time",
   "avatar": "Avatar",
   "cover_image": "Cover image",
   "password": "Password",
