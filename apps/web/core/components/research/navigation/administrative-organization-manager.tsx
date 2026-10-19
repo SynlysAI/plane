@@ -209,7 +209,10 @@ export function AdministrativeOrganizationManager({
                 >
                   <ChevronExpandOutline className="size-4 shrink-0" aria-hidden="true" />
                 </Combobox.Button>
-                <Combobox.Options className="vertical-scrollbar absolute z-10 mt-1 scrollbar-md max-h-48 w-full overflow-auto rounded-md border border-subtle bg-surface-1 p-1 shadow-raised-200">
+                <Combobox.Options
+                  modal={false}
+                  className="vertical-scrollbar absolute z-10 mt-1 scrollbar-md max-h-48 w-full overflow-auto rounded-md border border-subtle bg-surface-1 p-1 shadow-raised-200"
+                >
                   {filteredMembers.length === 0 ? (
                     <li className="px-2 py-1.5 text-13 text-placeholder">没有找到匹配的成员</li>
                   ) : (

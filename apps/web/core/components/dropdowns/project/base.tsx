@@ -48,6 +48,14 @@ type Props = TDropdownProps & {
       }
   );
 
+function renderProjectIcon(logoProps: TProject["logo_props"]) {
+  return (
+    <span className="grid h-4 w-4 flex-shrink-0 place-items-center">
+      <Logo logo={logoProps} size={14} />
+    </span>
+  );
+}
+
 export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: Props) {
   const {
     button,
@@ -139,29 +147,27 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
     if (!multiple) handleClose();
   };
 
-  const getDisplayName = (value: string | string[] | null, placeholder: string = "") => {
-    if (Array.isArray(value)) {
-      const firstProject = getProjectById(value[0]);
-      return value.length ? (value.length === 1 ? firstProject?.name : `${value.length} projects`) : placeholder;
+  const getDisplayName = (selectedValue: string | string[] | null, fallback: string = "") => {
+    if (Array.isArray(selectedValue)) {
+      const firstProject = getProjectById(selectedValue[0]);
+      return selectedValue.length
+        ? selectedValue.length === 1
+          ? firstProject?.name
+          : `${selectedValue.length} projects`
+        : fallback;
     } else {
-      return value ? (getProjectById(value)?.name ?? placeholder) : placeholder;
+      return selectedValue ? (getProjectById(selectedValue)?.name ?? fallback) : fallback;
     }
   };
 
-  const getProjectIcon = (value: string | string[] | null) => {
-    const renderIcon = (logoProps: TProject["logo_props"]) => (
-      <span className="grid h-4 w-4 flex-shrink-0 place-items-center">
-        <Logo logo={logoProps} size={14} />
-      </span>
-    );
-
-    if (Array.isArray(value)) {
+  const getProjectIcon = (selectedValue: string | string[] | null) => {
+    if (Array.isArray(selectedValue)) {
       return (
         <div className="flex items-center gap-0.5">
-          {value.length > 0 ? (
-            value.map((projectId) => {
+          {selectedValue.length > 0 ? (
+            selectedValue.map((projectId) => {
               const projectDetails = getProjectById(projectId);
-              return projectDetails?.logo_props ? renderIcon(projectDetails.logo_props) : null;
+              return projectDetails?.logo_props ? renderProjectIcon(projectDetails.logo_props) : null;
             })
           ) : (
             <ProjectsOutline className="size-3 text-tertiary" />
@@ -169,8 +175,8 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
         </div>
       );
     } else {
-      const projectDetails = getProjectById(value);
-      return projectDetails?.logo_props ? renderIcon(projectDetails.logo_props) : null;
+      const projectDetails = getProjectById(selectedValue);
+      return projectDetails?.logo_props ? renderProjectIcon(projectDetails.logo_props) : null;
     }
   };
 
@@ -222,6 +228,7 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
   return (
     <ComboDropDown
       as="div"
+      role="group"
       ref={dropdownRef}
       tabIndex={tabIndex}
       className={cn("h-full", className)}
@@ -235,6 +242,8 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
     >
       {isOpen && (
         <Combobox.Options
+          // The search input is inside the panel; modal isolation would make its sibling options inert.
+          modal={false}
           as="ul"
           className="fixed z-10"
           static

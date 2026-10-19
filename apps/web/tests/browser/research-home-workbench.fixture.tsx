@@ -2,13 +2,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { TranslationProvider } from "@plane/i18n";
+import { setLanguage, TranslationProvider } from "@plane/i18n";
 import { StoreProvider } from "@/lib/store-context";
 import { WorkspaceHomeWorkbench } from "../../core/components/home/workbench";
 import { ResearchChainService } from "../../core/services/research/chain.service";
 import { ResearchPlatformService } from "../../core/services/research/platform.service";
 import { ResearchReportService } from "../../core/services/research/report.service";
-import { ResearchTodoService } from "../../core/services/research/research-todo.service";
 import { ProjectDomainsService } from "../../core/services/project-domains.service";
 import { ProjectService } from "../../core/services/project/project.service";
 import { WorkspaceService } from "../../core/services/workspace.service";
@@ -16,14 +15,17 @@ import type { TResearchChain, TResearchIdentity } from "@plane/types";
 // oxlint-disable-next-line import/no-unassigned-import -- fixture stylesheet
 import "./research-home-workbench.fixture.css";
 
-const now = new Date("2026-10-10T15:00:00.000Z").toISOString();
+const now = new Date().toISOString();
+const role = new URLSearchParams(window.location.search).get("role") ?? "admin";
+const canResearch = role === "admin" || role === "researcher";
+const canSummary = role === "admin" || role === "summary";
 const identity = {
   module_enabled: true,
   workspace_enabled: true,
-  sections: { org: false, reports: true, approvals: false, research_chain: true },
+  sections: { org: false, reports: true, approvals: false, research_chain: canResearch },
   capabilities: {
-    level: "ADMIN",
-    nav: ["research_chain", "summary"],
+    level: role === "admin" ? "ADMIN" : canSummary ? "MENTOR" : canResearch ? "RESEARCHER" : "NONE",
+    nav: [...(canResearch ? ["research_chain"] : []), ...(canSummary ? ["summary"] : [])],
     is_mentor: false,
     is_main_pi: false,
     is_stage_reviewer: false,
@@ -87,12 +89,11 @@ ResearchChainService.prototype.getChains = async () => [
     open_task_count: 88,
   },
 ];
-ResearchTodoService.prototype.getResearchTodos = async () => ({
-  schema_version: "research-todo.v2",
+ProjectDomainsService.prototype.todos = async () => ({
   results: [
     {
-      schema_version: "research-todo.v2",
       id: "CHAIN_TASK:task-1",
+      domain: "RESEARCH",
       source: "CHAIN_TASK",
       object_id: "task-1",
       title: "补充催化剂失活实验图表",
@@ -110,14 +111,7 @@ ResearchTodoService.prototype.getResearchTodos = async () => ({
       updated_at: now,
     },
   ],
-  count: 1,
   total_count: 1,
-  next_cursor: null,
-  degraded_sources: [],
-});
-ProjectDomainsService.prototype.todos = async () => ({
-  results: [],
-  total_count: 0,
   next_cursor: null,
   degraded_sources: [],
 });
@@ -210,6 +204,7 @@ WorkspaceService.prototype.fetchWorkspaceRecents = async () => [
   },
 ];
 
+await setLanguage("zh-CN");
 createRoot(document.getElementById("root")!).render(
   <StoreProvider>
     <TranslationProvider>

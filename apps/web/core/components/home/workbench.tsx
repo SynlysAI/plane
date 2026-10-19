@@ -280,6 +280,8 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   });
   const todosHref = `/${workspaceSlug}/todos`;
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
+  const hasThreeSections = !canSeeResearch && !canSeeSummary;
+  const secondarySpan = canSeeResearch && canSeeSummary ? "xl:col-span-4" : "xl:col-span-6";
 
   return (
     <div
@@ -343,12 +345,16 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
 
       <div
         className={`grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12 ${
-          density === "compact" ? "xl:min-h-0 xl:flex-1 xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]" : ""
+          density === "compact"
+            ? `xl:min-h-0 xl:flex-1 ${hasThreeSections ? "xl:grid-rows-2" : "xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]"}`
+            : ""
         }`}
         data-testid="workspace-home-columns"
       >
         <HomeSectionCard
-          className="xl:col-span-5"
+          className={
+            hasThreeSections ? "xl:col-span-6 xl:row-span-2" : canSeeResearch ? "xl:col-span-5" : "xl:col-span-6"
+          }
           size="primary"
           density={density}
           title="我的待办"
@@ -452,7 +458,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
         )}
 
         <HomeSectionCard
-          className="xl:col-span-4"
+          className={`${secondarySpan} ${hasThreeSections ? "xl:col-start-7 xl:row-start-1" : ""}`}
           density={density}
           title={t("research.home_workbench.administrative_overview")}
           hint={t("research.home_workbench.administrative_hint")}
@@ -531,7 +537,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
         </HomeSectionCard>
 
         <HomeSectionCard
-          className="xl:col-span-4"
+          className={`${secondarySpan} ${hasThreeSections ? "xl:col-start-7 xl:row-start-2" : ""}`}
           density={density}
           title={t("research.home_workbench.recent_activity")}
         >
@@ -546,7 +552,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
 
         {canSeeSummary && (
           <HomeSectionCard
-            className="xl:col-span-4"
+            className={secondarySpan}
             density={density}
             title={t("research.home_workbench.report_summary")}
             action={

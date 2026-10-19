@@ -57,7 +57,7 @@ vi.mock("@/hooks/store/use-research", () => {
     get identityWorkspaceSlug() {
       return mocks.identityWorkspaceSlug;
     },
-    canSee: (key: string) => ["research_chain", "summary"].includes(key),
+    canSee: (key: string) => mocks.researchIdentity.capabilities.nav.includes(key),
     fetchIdentity: mocks.fetchIdentity,
     fetchReportSummary: mocks.fetchReportSummary,
   };
@@ -210,6 +210,7 @@ beforeEach(() => {
   mocks.researchIdentity.workspace_enabled = true;
   mocks.researchIdentity.sections.research_chain = true;
   mocks.researchIdentity.sections.reports = true;
+  mocks.researchIdentity.capabilities.nav = ["research_chain", "summary"];
 });
 
 afterEach(async () => {
@@ -266,6 +267,56 @@ it("fills the wide viewport in compact mode and supports density switching", asy
     expect(card.className).not.toMatch(/max-xl:h-\[(400|320)px\]/);
   }
   expect(grid?.parentElement?.className.split(/\s+/)).not.toContain("xl:h-full");
+});
+
+it.each([
+  { research: true, summary: true, count: 5, auxiliaryWidth: "xl:col-span-4" },
+  { research: true, summary: false, count: 4, auxiliaryWidth: "xl:col-span-6" },
+  { research: false, summary: true, count: 4, auxiliaryWidth: "xl:col-span-6" },
+  { research: false, summary: false, count: 3, auxiliaryWidth: "xl:col-span-6" },
+])(
+  "fills the layout with research=$research and summary=$summary",
+  async ({ research, summary, count, auxiliaryWidth }) => {
+    mocks.researchIdentity.capabilities.nav = [
+      ...(research ? ["research_chain"] : []),
+      ...(summary ? ["summary"] : []),
+    ];
+    await renderHome();
+
+    const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+    const section = (title: string) => grid.querySelector(`section[aria-label="${title}"]`);
+    expect(grid.children).toHaveLength(count);
+    expect(Boolean(section("科研项目概览"))).toBe(research);
+    expect(Boolean(section("报告提交摘要"))).toBe(summary);
+    for (const title of ["行政项目概览", "最近动态", ...(summary ? ["报告提交摘要"] : [])]) {
+      expect(section(title)?.classList.contains(auxiliaryWidth)).toBe(true);
+    }
+    expect(section("我的待办")?.classList.contains(research ? "xl:col-span-5" : "xl:col-span-6")).toBe(true);
+    if (!research && !summary) {
+      expect(section("我的待办")?.classList.contains("xl:row-span-2")).toBe(true);
+      expect(section("行政项目概览")?.classList.contains("xl:row-start-1")).toBe(true);
+      expect(section("最近动态")?.classList.contains("xl:row-start-2")).toBe(true);
+      expect(grid.classList.contains("xl:grid-rows-2")).toBe(true);
+    }
+    if (!research) expect(mocks.getChains).not.toHaveBeenCalled();
+    if (!summary) expect(mocks.getReportSummary).not.toHaveBeenCalled();
+
+    const detailed = [...container.querySelectorAll("button")].find((button) => button.textContent === "详细");
+    await act(async () => detailed?.click());
+    expect(grid.classList.contains("xl:flex-1")).toBe(false);
+    expect(grid.children).toHaveLength(count);
+  }
+);
+
+it("reflows existing sections after research permissions are removed", async () => {
+  await renderHome();
+  mocks.researchIdentity.capabilities.nav = [];
+  await renderHome();
+  const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  expect(grid.children).toHaveLength(3);
+  expect(grid.querySelector('section[aria-label="我的待办"]')?.classList.contains("xl:row-span-2")).toBe(true);
+  expect(grid.querySelector('section[aria-label="科研项目概览"]')).toBeNull();
+  expect(grid.querySelector('section[aria-label="报告提交摘要"]')).toBeNull();
 });
 
 it("keeps research and administrative project summaries separate", async () => {
