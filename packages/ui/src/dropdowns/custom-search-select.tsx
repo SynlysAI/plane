@@ -7,7 +7,6 @@
 import { Combobox } from "@headlessui/react";
 import { ChevronDownOutline, InfoOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import React, { useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { usePopper } from "react-popper";
 import { useOutsideClickDetector } from "@plane/hooks";
 // plane imports
@@ -153,97 +152,97 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                 </button>
               </Combobox.Button>
             )}
-            {isOpen &&
-              createPortal(
-                <Combobox.Options
-                  as="ul"
-                  data-prevent-outside-click
-                  static
-                  className="z-30"
-                  ref={setPopperElement}
-                  style={styles.popper}
-                  {...attributes.popper}
+            {isOpen && (
+              <Combobox.Options
+                modal={false}
+                portal
+                as="ul"
+                data-prevent-outside-click
+                static
+                className="fixed z-40"
+                ref={setPopperElement}
+                style={styles.popper}
+                {...attributes.popper}
+              >
+                <div
+                  className={cn(
+                    "my-1 min-w-48 overflow-y-scroll rounded-md border-[0.5px] border-subtle-1 bg-surface-1 py-2.5 text-11 whitespace-nowrap focus:outline-none",
+                    optionsClassName
+                  )}
                 >
-                  <div
-                    className={cn(
-                      "my-1 min-w-48 overflow-y-scroll rounded-md border-[0.5px] border-subtle-1 bg-surface-1 py-2.5 text-11 whitespace-nowrap focus:outline-none",
-                      optionsClassName
-                    )}
-                  >
-                    <div className="mx-2 flex items-center gap-1.5 rounded-sm border border-subtle px-2">
-                      <SearchOutline className="h-3.5 w-3.5 text-placeholder" />
-                      <Combobox.Input
-                        className="w-full bg-transparent py-1 text-11 text-secondary placeholder:text-placeholder focus:outline-none"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search"
-                        displayValue={(assigned: any) => assigned?.name}
-                      />
-                    </div>
-                    <div
-                      className={cn("vertical-scrollbar mt-2 scrollbar-xs space-y-1 overflow-y-scroll px-2", {
-                        "max-h-96": maxHeight === "2xl",
-                        "max-h-80": maxHeight === "xl",
-                        "max-h-60": maxHeight === "lg",
-                        "max-h-48": maxHeight === "md",
-                        "max-h-36": maxHeight === "rg",
-                        "max-h-28": maxHeight === "sm",
-                      })}
-                    >
-                      {filteredOptions ? (
-                        filteredOptions.length > 0 ? (
-                          filteredOptions.map((option) => (
-                            // Headless UI supplies the option's keyboard semantics.
-                            // oxlint-disable-next-line jsx_a11y/click-events-have-key-events
-                            <Combobox.Option
-                              as="li"
-                              key={option.value}
-                              value={option.value}
-                              className={({ active }) =>
-                                cn(
-                                  "flex w-full cursor-pointer items-center justify-between gap-2 truncate rounded-sm px-1 py-1.5 select-none",
-                                  {
-                                    "bg-layer-transparent-hover": active,
-                                    "cursor-not-allowed text-placeholder opacity-60": option.disabled,
-                                  }
-                                )
-                              }
-                              onClick={() => {
-                                if (!multiple) closeDropdown();
-                              }}
-                              disabled={option.disabled}
-                            >
-                              {({ selected }) => (
-                                <>
-                                  <span className="flex-grow truncate">{option.content}</span>
-                                  {selected && <TickOutline className="h-3.5 w-3.5 flex-shrink-0" />}
-                                  {option.tooltip && (
-                                    <>
-                                      {typeof option.tooltip === "string" ? (
-                                        <Tooltip tooltipContent={option.tooltip}>
-                                          <InfoOutline className="h-3.5 w-3.5 flex-shrink-0 cursor-pointer text-secondary" />
-                                        </Tooltip>
-                                      ) : (
-                                        option.tooltip
-                                      )}
-                                    </>
-                                  )}
-                                </>
-                              )}
-                            </Combobox.Option>
-                          ))
-                        ) : (
-                          <p className="px-1.5 py-1 text-placeholder italic">{noResultsMessage}</p>
-                        )
-                      ) : (
-                        <p className="px-1.5 py-1 text-placeholder italic">Loading...</p>
-                      )}
-                    </div>
-                    {footerOption}
+                  <div className="mx-2 flex items-center gap-1.5 rounded-sm border border-subtle px-2">
+                    <SearchOutline className="h-3.5 w-3.5 text-placeholder" />
+                    <Combobox.Input
+                      className="w-full bg-transparent py-1 text-11 text-secondary placeholder:text-placeholder focus:outline-none"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search"
+                      displayValue={(assigned: any) => assigned?.name}
+                    />
                   </div>
-                </Combobox.Options>,
-                document.body
-              )}
+                  <div
+                    className={cn("vertical-scrollbar mt-2 scrollbar-xs space-y-1 overflow-y-scroll px-2", {
+                      "max-h-96": maxHeight === "2xl",
+                      "max-h-80": maxHeight === "xl",
+                      "max-h-60": maxHeight === "lg",
+                      "max-h-48": maxHeight === "md",
+                      "max-h-36": maxHeight === "rg",
+                      "max-h-28": maxHeight === "sm",
+                    })}
+                  >
+                    {filteredOptions ? (
+                      filteredOptions.length > 0 ? (
+                        filteredOptions.map((option) => (
+                          // Headless UI supplies the option's keyboard semantics.
+                          // oxlint-disable-next-line jsx_a11y/click-events-have-key-events
+                          <Combobox.Option
+                            as="li"
+                            key={option.value}
+                            value={option.value}
+                            className={({ active }) =>
+                              cn(
+                                "flex w-full cursor-pointer items-center justify-between gap-2 truncate rounded-sm px-1 py-1.5 select-none",
+                                {
+                                  "bg-layer-transparent-hover": active,
+                                  "cursor-not-allowed text-placeholder opacity-60": option.disabled,
+                                }
+                              )
+                            }
+                            onClick={() => {
+                              if (!multiple) closeDropdown();
+                            }}
+                            disabled={option.disabled}
+                          >
+                            {({ selected }) => (
+                              <>
+                                <span className="flex-grow truncate">{option.content}</span>
+                                {selected && <TickOutline className="h-3.5 w-3.5 flex-shrink-0" />}
+                                {option.tooltip && (
+                                  <>
+                                    {typeof option.tooltip === "string" ? (
+                                      <Tooltip tooltipContent={option.tooltip}>
+                                        <InfoOutline className="h-3.5 w-3.5 flex-shrink-0 cursor-pointer text-secondary" />
+                                      </Tooltip>
+                                    ) : (
+                                      option.tooltip
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </Combobox.Option>
+                        ))
+                      ) : (
+                        <p className="px-1.5 py-1 text-placeholder italic">{noResultsMessage}</p>
+                      )
+                    ) : (
+                      <p className="px-1.5 py-1 text-placeholder italic">Loading...</p>
+                    )}
+                  </div>
+                  {footerOption}
+                </div>
+              </Combobox.Options>
+            )}
           </>
         );
       }}
