@@ -53,7 +53,9 @@ vi.mock("@/components/research/common/research-tab-link", async () => {
   };
 });
 vi.mock("@/components/research/common/research-page-shell", () => ({
-  ResearchPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ResearchPageShell: ({ children, hideHeader }: { children: React.ReactNode; hideHeader?: boolean }) => (
+    <div data-hide-header={hideHeader}>{children}</div>
+  ),
 }));
 vi.mock("@/components/research/approvals/approval-list", () => ({
   ResearchApprovalList: () => <div>office-approvals</div>,
@@ -170,6 +172,7 @@ it("places the shared todo envelope beside capability-filtered domain tabs", asy
   await renderCenter("/lab/research/approvals?tab=report_review");
   await act(async () => undefined);
 
+  expect(container.querySelector("[data-hide-header='true']")).not.toBeNull();
   const nav = container.querySelector('nav[aria-label="审批中心"]');
   expect(nav?.textContent).toContain("跨组件待办");
   expect(nav?.textContent).toContain("阶段评审");

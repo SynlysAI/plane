@@ -102,7 +102,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
   };
 
   return (
-    <ResearchPageShell {...shellProps}>
+    <ResearchPageShell {...shellProps} hideHeader>
       <div className="flex h-full flex-col overflow-hidden">
         <nav
           aria-label={t("research.nav.approvals_v2")}

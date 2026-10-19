@@ -21,6 +21,8 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 type Props = {
   titleKey: string;
   descriptionKey?: string;
+  /** Hides the page header when the parent surface already renders the title. */
+  hideHeader?: boolean;
   /** Optional breadcrumb slot rendered above the page title (required on detail pages). */
   breadcrumbs?: ReactNode;
   /** Metadata row kept separate from actions (owner, period, updated time, scope). */
@@ -72,6 +74,7 @@ const MANAGEMENT_NAV_KEYS = new Set([
 export const ResearchPageShell = observer(function ResearchPageShell({
   titleKey,
   descriptionKey,
+  hideHeader = false,
   breadcrumbs,
   metadata,
   section = "reports",
@@ -132,8 +135,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
 
   const sectionEnabled = identity.sections?.[section] ?? identity.sections?.reports;
   const managementTabKey = tabKey ?? navKey;
-  const showManagementTabs =
-    managementTabKey !== undefined && MANAGEMENT_NAV_KEYS.has(managementTabKey);
+  const showManagementTabs = managementTabKey !== undefined && MANAGEMENT_NAV_KEYS.has(managementTabKey);
 
   // Switch off, disabled section or a level that does not open this surface:
   // fall back to the workspace home (P0-UI-07). Pages that stay reachable while
@@ -157,19 +159,23 @@ export const ResearchPageShell = observer(function ResearchPageShell({
     <>
       <PageHead title={t(titleKey)} />
       <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
-        <div className="border-b border-subtle bg-surface-1 px-5 py-3.5">
-          {breadcrumbs && <div className="mb-1 text-12 text-tertiary">{breadcrumbs}</div>}
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="text-22 truncate font-semibold text-primary">{t(titleKey)}</h2>
-              {descriptionKey && <p className="mt-0.5 text-13 text-tertiary">{t(descriptionKey)}</p>}
-              {metadata && (
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">{metadata}</div>
-              )}
+        {!hideHeader && (
+          <div className="border-b border-subtle bg-surface-1 px-5 py-3.5">
+            {breadcrumbs && <div className="mb-1 text-12 text-tertiary">{breadcrumbs}</div>}
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-22 truncate font-semibold text-primary">{t(titleKey)}</h2>
+                {descriptionKey && <p className="mt-0.5 text-13 text-tertiary">{t(descriptionKey)}</p>}
+                {metadata && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
+                    {metadata}
+                  </div>
+                )}
+              </div>
+              {actions}
             </div>
-            {actions}
           </div>
-        </div>
+        )}
         {showManagementTabs && <ResearchManagementTabs currentKey={managementTabKey} />}
         <div className="flex-1 overflow-hidden">{children}</div>
       </div>
