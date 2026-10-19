@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import type { IWorkspaceMemberTag, IWorkspaceMemberTagGroup } from "@plane/types";
 import { useMember } from "@/hooks/store/use-member";
+import { getMemberTagErrorMessage } from "./member-tag-error";
 
 const TAG_COLOR_CLASS_NAMES: Record<IWorkspaceMemberTag["color"], string> = {
   sage: "border-[#BDCCBF] bg-[#F0F5F0] text-[#466152]",
@@ -39,6 +41,12 @@ export function MemberTagsEditor({ workspaceSlug, memberId, memberName, groups, 
     try {
       await workspace.updateMemberTags(workspaceSlug, memberId, selected);
       onClose();
+    } catch (error: unknown) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "保存成员标签失败",
+        message: getMemberTagErrorMessage(error, "成员标签保存失败，请稍后重试。"),
+      });
     } finally {
       setSaving(false);
     }
