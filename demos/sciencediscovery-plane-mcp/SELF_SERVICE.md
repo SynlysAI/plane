@@ -1,5 +1,7 @@
 # 个人 Agent 自助接入：Codex 优先，兼容 ScienceDiscovery
 
+2026-10-19 统一入口更新：Plane 个人设置新增 `/settings/profile/mcp/`，旧 `/mcp/` 与 `/{workspace-slug}/mcp/` 自动跳转；通过固定上游的同源桥接管理本服务的行政项目连接。原 `/connect`、所有客户端协议地址和 Bearer 验证保持兼容；本服务不自动获得科研节点写权限。配置与使用见 [统一 MCP 管理说明](../../docs/operations/mcp-unified-management.md) 和 [部署说明](../../docs/operations/mcp-unified-deployment.md)。以下仍描述独立部署和旧入口。
+
 本方案只扩展独立 MCP 服务，不修改 Plane 的前端、登录或 API。`/mcp` 是通用 Streamable HTTP 接口，Codex、ScienceDiscovery 等客户端均可使用。原 `http-config.example.json` 中管理员分配的静态令牌继续有效；自助模式为可选能力，默认不开启。
 
 ## 使用流程
@@ -77,7 +79,7 @@ curl --noproxy '*' http://127.0.0.1:8765/healthz
 }
 ```
 
-同时把 `self_service.public_url` 改成 `http://127.0.0.1:8765`。`plane_base_url`、`plane_ui_url` 和工作区仍可指向服务器 Plane。
+本地测试请使用 `http-local-self-service.example.json`：`public_url=http://localhost:8765`、`plane_base_url=http://127.0.0.1:8001`、`plane_ui_url=http://localhost:3000`，并填写本地工作区及独立的状态目录。不要在本地测试配置中沿用测试服务器的 Plane 地址。统一页显示为「行政项目接入」，底层原生协议保持兼容。
 
 ```powershell
 & .\.venv\Scripts\python.exe .\http_mcp.py --config .\http-self-service.local.json

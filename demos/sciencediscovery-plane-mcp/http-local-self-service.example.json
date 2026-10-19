@@ -1,0 +1,20 @@
+{
+  "host": "127.0.0.1",
+  "port": 8765,
+  "state_dir": "../../.runtime/windows/native-mcp/state",
+  "allowed_hosts": ["127.0.0.1:*", "localhost:*"],
+  "allowed_origins": [],
+  "clients": [],
+  "self_service": {
+    "enabled": true,
+    "public_url": "http://localhost:8765",
+    "plane_base_url": "http://127.0.0.1:8001",
+    "plane_ui_url": "http://localhost:3000",
+    "workspaces": ["REPLACE_LOCAL_WORKSPACE"],
+    "allow_publish": false,
+    "allow_insecure_http": false,
+    "max_token_days": 90,
+    "max_tokens_per_user": 10,
+    "max_runtimes": 20
+  }
+}

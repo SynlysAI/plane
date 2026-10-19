@@ -22,6 +22,7 @@ export type TAgentOperation = {
   result: { object_id?: string; event_id?: string; audit_id?: string; status?: string; readback?: string };
 };
 export type TAgentOperationState = {
+  connection_ttl_seconds?: number;
   enabled: boolean;
   can_configure: boolean;
   csrf_token: string;

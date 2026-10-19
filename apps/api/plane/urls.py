@@ -16,6 +16,7 @@ from drf_spectacular.views import (
 handler404 = "plane.app.views.error_404.custom_404_view"
 
 urlpatterns = [
+    path("api/", include("plane.mcp.urls")),
     # Research namespace is registered before the upstream includes so the
     # `/api/research/` prefix can never be shadowed (P0-COMPAT-02).
     path("api/", include("plane.research.urls")),

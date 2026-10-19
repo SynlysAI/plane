@@ -1,5 +1,21 @@
 # 本机 Plane 4.27.0 部署
 
+## 统一 MCP 页的本地测试（2026-10-19）
+
+页面的「行政项目接入」使用本机行政 MCP 门户，不连接测试服务器。当前链路为 Web `http://localhost:3000` → 本机 MCP `http://localhost:8765` → Plane API `http://127.0.0.1:8001`，工作区使用本机 `test11`，个人令牌也必须在本机 Plane 生成。
+
+私密配置位于 `.runtime/windows/native-mcp/http.local.json`，从 `demos/sciencediscovery-plane-mcp/http-local-self-service.example.json` 复制后填写真实本地工作区和独立绝对状态目录。已有 Demo `.venv` 提供 MCP 依赖，无需 Docker 镜像或 ScienceDiscovery。
+
+```powershell
+./deployments/windows/native-mcp-local.ps1 -Action Start
+./deployments/windows/native-mcp-local.ps1 -Action Status
+./deployments/windows/native-mcp-local.ps1 -Action Stop
+```
+
+本机 `apps/api/.env` 使用 `NATIVE_MCP_PORTAL_URL=http://localhost:8765`；API 容器另设 `NATIVE_MCP_PORTAL_INTERNAL_URL=http://host.docker.internal:8765` 访问宿主机。浏览器/Agent 始终使用 localhost 地址。日常 `start-local.ps1` 会按该配置启动本机 MCP，Stop 保留门户凭据库。
+
+科研节点新连接默认 7 天（`RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS=604800`），提案仍为 24 小时；旧上下文交换默认 600 秒。已有连接不追溯延长，按实际到期时间由本人重新生成。详见 [统一 MCP 管理](../../docs/operations/mcp-unified-management.md)。下文保留此前本机部署记录。
+
 代码目录：`D:\plane-main\plane-dev`，分支 `demo/sciencediscovery-mcp`，基础提交 `577b97f9b09beeba86f18335ed7aec609fb32358`（`origin/develop`）。旧版目录 `D:\plane-main\plane-main` 保留。
 
 本机沿用 Compose 项目 `pilab-windows`、网络 `pilab_windows_local` 和原有数据库、附件卷。六份 `.env` 从旧目录复制，未重新生成密钥。API、Worker、Beat 挂载新版 `apps/api`；Python 依赖和 Dockerfile 与旧版逐项核对一致，因此复用已安装依赖的本地镜像。未来 Python 依赖变更时应先构建对应镜像，再执行迁移。

@@ -6,10 +6,10 @@
 
 import type React from "react";
 import { useEffect } from "react";
-import { Cpu, type LucideIcon } from "lucide-react";
+import { Cpu, Plug, type LucideIcon } from "lucide-react";
 import { KeyOutline, LockOutline, SettingsOutline, SubscribeOutline, UserOutline } from "@makeplane/propel/icons";
 import { observer } from "mobx-react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 // plane imports
 import {
   GROUPED_PROFILE_SETTINGS,
@@ -32,7 +32,14 @@ const ICONS: Record<TProfileSettingsTabs, LucideIcon | React.FC<ISvgIcons>> = {
   preferences: SettingsOutline,
   notifications: SubscribeOutline,
   "api-tokens": KeyOutline,
+  mcp: Plug,
   "agent-configuration": Cpu,
+};
+
+const DEVELOPER_LABELS: Partial<Record<TProfileSettingsTabs, { zh: string; en: string }>> = {
+  "api-tokens": { zh: "Plane API", en: "Plane API" },
+  mcp: { zh: "MCP 连接", en: "MCP connections" },
+  "agent-configuration": { zh: "智能体配置", en: "Agent configuration" },
 };
 
 type Props = {
@@ -46,12 +53,14 @@ export const ProfileSettingsSidebarItemCategories = observer(function ProfileSet
   const { activeTab, updateActiveTab } = props;
   // params
   const { profileTabId } = useParams();
+  const [params] = useSearchParams();
   // translation
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const research = useResearch();
   const workspace = useWorkspace();
   const { data: currentUser } = useUser();
-  const currentWorkspaceSlug = workspace.currentWorkspace?.slug;
+  const currentWorkspaceSlug =
+    (profileTabId === "mcp" ? params.get("workspace") : null) ?? workspace.currentWorkspace?.slug;
   const identityWorkspaceSlug = research.identityWorkspaceSlug;
   const fetchIdentity = research.fetchIdentity;
   const identityLoader = research.identityLoader;
@@ -85,7 +94,9 @@ export const ProfileSettingsSidebarItemCategories = observer(function ProfileSet
                     onClick={() => updateActiveTab(item.key)}
                     isActive={activeTab === item.key}
                     icon={ICONS[item.key]}
-                    label={t(item.i18n_label)}
+                    label={t(item.i18n_label, {
+                      defaultValue: DEVELOPER_LABELS[item.key]?.[currentLocale?.startsWith("zh") ? "zh" : "en"],
+                    })}
                   />
                 ))}
             </div>

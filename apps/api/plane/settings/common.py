@@ -390,6 +390,7 @@ RESEARCH_INTEGRATION_TIMEOUT_SECONDS = int(os.environ.get("RESEARCH_INTEGRATION_
 RESEARCH_INTEGRATION_CACHE_TTL_SECONDS = int(os.environ.get("RESEARCH_INTEGRATION_CACHE_TTL_SECONDS", 300))
 RESEARCH_INTEGRATION_DEGRADED_MODE = os.environ.get("RESEARCH_INTEGRATION_DEGRADED_MODE", "link_only")
 RESEARCH_CONTEXT_TOKEN_TTL_SECONDS = int(os.environ.get("RESEARCH_CONTEXT_TOKEN_TTL_SECONDS", 600))
+RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS = int(os.environ.get("RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS", 604800))
 SYNLORA_BASE_URL = os.environ.get("SYNLORA_BASE_URL", "")
 SYNLORA_SERVICE_TOKEN = os.environ.get("SYNLORA_SERVICE_TOKEN", "")
 SYNLORA_AGENT_SLUG = os.environ.get("SYNLORA_AGENT_SLUG", "agent-202610140622")
@@ -626,6 +627,12 @@ SCRIPT_CAPABLE_MIME_TYPES: frozenset[str] = frozenset(
 
 # Seed directory path
 SEED_DIR = os.path.join(BASE_DIR, "seeds")
+
+# Fixed origin of the existing native-task self-service portal; opt-in only.
+# This is not a machine MCP endpoint and never receives research credentials.
+NATIVE_MCP_PORTAL_URL = os.environ.get("NATIVE_MCP_PORTAL_URL", "")
+# Optional fixed transport origin when the API runs in Docker and the portal on the host.
+NATIVE_MCP_PORTAL_INTERNAL_URL = os.environ.get("NATIVE_MCP_PORTAL_INTERNAL_URL", "")
 
 ENABLE_DRF_SPECTACULAR = os.environ.get("ENABLE_DRF_SPECTACULAR", "0") == "1"
 

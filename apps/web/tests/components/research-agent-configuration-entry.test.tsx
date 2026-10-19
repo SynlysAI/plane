@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  profileTabId: undefined as string | undefined,
+  query: "",
   research: {
     identity: {
       module_enabled: true,
@@ -27,13 +29,17 @@ const mocks = vi.hoisted(() => ({
 vi.mock("mobx-react", () => ({
   observer: (component: unknown) => component,
 }));
-vi.mock("react-router", () => ({ useParams: () => ({}) }));
+vi.mock("react-router", () => ({
+  useParams: () => ({ profileTabId: mocks.profileTabId }),
+  useSearchParams: () => [new URLSearchParams(mocks.query)],
+}));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("@plane/constants", async () => await vi.importActual("@plane/constants"));
 vi.mock("lucide-react", () => ({
   Cpu: () => <span>cpu</span>,
+  Plug: () => <span>plug</span>,
 }));
 vi.mock("@makeplane/propel/icons", () => ({
   KeyOutline: () => null,
@@ -72,6 +78,8 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
+  mocks.profileTabId = undefined;
+  mocks.query = "";
   mocks.research.identity = {
     module_enabled: true,
     workspace_enabled: true,
@@ -129,6 +137,13 @@ it("shows the sidebar entry for a research admin without organisation membership
   );
 
   expect(container.textContent).toContain("profile.actions.agent-configuration");
+  const labels = Array.from(container.querySelectorAll("button"), (button) => button.textContent);
+  const apiIndex = labels.indexOf("profile.actions.api-tokens");
+  expect(labels.slice(apiIndex, apiIndex + 3)).toEqual([
+    "profile.actions.api-tokens",
+    "profile.actions.mcp",
+    "profile.actions.agent-configuration",
+  ]);
 });
 
 it("hides the sidebar entry when the caller cannot configure a personal backend", async () => {
@@ -139,4 +154,22 @@ it("hides the sidebar entry when the caller cannot configure a personal backend"
 
   expect(container.textContent).not.toContain("profile.actions.agent-configuration");
   expect(container.textContent).toContain("profile.actions.api-tokens");
+  expect(container.textContent).toContain("profile.actions.mcp");
+});
+
+it("rechecks sidebar permissions against the workspace selected on the MCP settings page", async () => {
+  mocks.profileTabId = "mcp";
+  mocks.query = "workspace=second";
+  mocks.research.canConfigurePersonalAgentBackend = true;
+  await act(async () =>
+    root.render(<ProfileSettingsSidebarItemCategories activeTab="mcp" updateActiveTab={() => undefined} />)
+  );
+  expect(mocks.research.fetchIdentity).toHaveBeenCalledWith("second");
+  expect(container.textContent).toContain("profile.actions.mcp");
+  expect(container.textContent).not.toContain("profile.actions.agent-configuration");
+  mocks.research.identityWorkspaceSlug = "second";
+  await act(async () =>
+    root.render(<ProfileSettingsSidebarItemCategories activeTab="mcp" updateActiveTab={() => undefined} />)
+  );
+  expect(container.textContent).toContain("profile.actions.agent-configuration");
 });

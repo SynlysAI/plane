@@ -114,7 +114,8 @@ class APITokenLogMiddleware:
             return "[Could not decode content]"
 
     # Headers whose values must never be persisted in plaintext logs
-    SENSITIVE_HEADERS = frozenset({"x-api-key", "authorization", "cookie"})
+    SENSITIVE_HEADERS = frozenset({"x-api-key", "authorization", "cookie", "x-mcp-csrf", "x-csrftoken",
+                                   "x-research-context-token", "x-research-context-hash"})
 
     def _redacted_headers(self, request):
         """
@@ -139,7 +140,7 @@ class APITokenLogMiddleware:
         # 即使会话请求额外携带 X-Api-Key 也必须脱敏。
         is_password_reset = request.path.startswith("/api/workspaces/") and request.path.endswith("/reset-password/")
         try:
-            if is_password_reset:
+            if is_password_reset or request.path.startswith("/api/mcp/native/"):
                 logged_body = logged_response_body = "[REDACTED]"
             else:
                 logged_body = self._safe_decode_body(request_body) if request_body else None

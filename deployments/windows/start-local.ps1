@@ -41,9 +41,11 @@ Invoke-Checked $dockerPath ($compose + @('config', '--quiet'))
 if ($Action -eq 'Status') {
     Invoke-Checked $dockerPath ($compose + @('ps', '--all'))
     & (Join-Path $PSScriptRoot 'frontend-local.ps1') -Action Status
+    & (Join-Path $PSScriptRoot 'native-mcp-local.ps1') -Action Status
     return
 }
 if ($Action -eq 'Stop') {
+    & (Join-Path $PSScriptRoot 'native-mcp-local.ps1') -Action Stop
     & (Join-Path $PSScriptRoot 'frontend-local.ps1') -Action Stop
     Invoke-Checked $dockerPath ($compose + @('stop', 'api', 'worker', 'beat-worker'))
     Write-Output 'Plane applications stopped; infrastructure and data retained.'
@@ -63,5 +65,10 @@ for ($attempt = 0; $attempt -lt 120; $attempt++) {
     Start-Sleep -Seconds 2
 }
 if (-not $ready) { throw 'API did not become ready; inspect container logs.' }
+$portalSetting = Get-Content -LiteralPath (Join-Path $repoRoot 'apps/api/.env') |
+    Where-Object { $_ -match '^NATIVE_MCP_PORTAL_URL=' } | Select-Object -Last 1
+if ($portalSetting -and $portalSetting.Split('=', 2)[1].Trim().Trim('"', "'") -eq 'http://localhost:8765') {
+    & (Join-Path $PSScriptRoot 'native-mcp-local.ps1') -Action Start
+}
 & (Join-Path $PSScriptRoot 'frontend-local.ps1') -Action Start
 Write-Output 'Web: http://localhost:3000 | Admin: http://localhost:3001/god-mode/'

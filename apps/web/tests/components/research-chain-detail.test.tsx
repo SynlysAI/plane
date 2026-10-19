@@ -158,6 +158,15 @@ it("renders member columns and keeps role selection accessible", async () => {
   expect(role.value).toBe("15");
 });
 
+it("keeps historical operation review links on the exact selected node", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=nodes&node=node-1&operation=historical-op";
+  await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
+  await act(async () => undefined);
+  expect(container.textContent).toContain("agent-operation-review");
+  expect(container.querySelector('a[href*="/mcp/"]')?.getAttribute("href")).toContain("operation=historical-op");
+});
+
 beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -256,7 +265,9 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   expect(openAssistant).not.toBeNull();
   await act(async () => openAssistant!.click());
   expect(mocks.openAssistant).toHaveBeenCalledWith("node-1");
-  expect(container.textContent).toContain("agent-operation-review");
+  expect(container.textContent).toContain("MCP / Agent 操作");
+  expect(container.querySelector('a[href*="/mcp/"]')?.getAttribute("href")).toContain("chain=chain-1&node=node-1");
+  expect(container.textContent).not.toContain("agent-operation-review");
   expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-node")).toBe("node-1");
   expect(container.querySelector('[data-testid="paper-review-panel"]')).toBeNull();
   expect(container.textContent).not.toContain("记录与知识库");

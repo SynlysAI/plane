@@ -15,6 +15,7 @@ from plane.research.services.agent_operations import (
     issue_write_grant,
 )
 from plane.research.services.chain_context import ResearchReadService
+from plane.research.services.token_lifetimes import node_mcp_token_ttl_seconds
 from plane.research.services.mcp_catalog import ResearchReadError, TOOL_NAMES, tools_for
 from plane.research.services.operation_catalog import ACTIONS, OPERATION_TOOLS, OPERATION_TOOL_NAMES, matches, obj, text
 from plane.research.utils.audit import record_audit_event
@@ -131,6 +132,7 @@ class ResearchHumanOperationsEndpoint(ResearchMachineReadBase):
             "can_configure": is_research_admin(request.user, workspace.id),
             "allowed_actions": sorted(allowed_actions(workspace, request.user, node)),
             "csrf_token": get_token(request._request), "report_options": report_options,
+            "connection_ttl_seconds": node_mcp_token_ttl_seconds(),
             "operations": visible,
             "next_cursor": str(rows[9].pk) if len(rows) > 10 else None,
             "grants": [{"context_id": str(grant.context_id), "expires_at": grant.expires_at.isoformat(),
