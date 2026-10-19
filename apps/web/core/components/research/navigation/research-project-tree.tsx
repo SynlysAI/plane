@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { observer } from "mobx-react";
-import { AddOutline, ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
+import { ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
 import { Button } from "@plane/propel/button";
 import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -280,7 +280,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
   // 导航树由项目集合与分类共同投影。项目创建会先写入对应 store，这里跟踪
   // 当前通道的项目 ID 签名，使左侧树无需整页刷新即可同步新增项目。
   const projects = scope === "ADMINISTRATIVE" ? projectMap : researchProjects;
-  const projectSignature = Object.keys(projects ?? {})
+  const projectSignature = Object.values(projects ?? {}).map((project) => `${project.id}:${project.updated_at}`)
     // eslint-disable-next-line unicorn/no-array-sort -- Object.keys 已生成新数组，且当前 TS target 不含 toSorted。
     .sort()
     .join("|");
@@ -486,15 +486,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
         >
           {title}
         </Link>
-        {canManageTree && scope === "RESEARCH" && (
-          <IconButton
-            variant="ghost"
-            size="sm"
-            icon={AddOutline}
-            aria-label={`新建${title}分类`}
-            onClick={() => beginCreate(null)}
-          />
-        )}
+        {/* 科研项目按组织归属管理，不再从侧栏新增第二套自定义分类。 */}
       </div>
 
       {isOpen && (
@@ -518,8 +510,8 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                 expanded={expanded ?? {}}
                 toggleExpanded={toggleExpanded}
                 siblings={navigationCategories}
-                canManage={canManageTree}
-                onCreateChild={beginCreate}
+                canManage={scope === "ADMINISTRATIVE" && canManageTree}
+                onCreateChild={scope === "ADMINISTRATIVE" ? beginCreate : () => undefined}
                 onRename={(item) => setCategoryEditor({ mode: "rename", name: item.name, category: item })}
                 onSort={sortCategory}
                 onDelete={(item) => setDeleteEditor({ category: item, target: "uncategorized" })}
@@ -583,7 +575,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                       <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label={organization.name}>
                         {organization.project_ids.map((projectId) => {
                           const project = projectMap[projectId];
-                          return project ? (
+                          return project && !project.archived_at ? (
                             <ProjectLink
                               key={projectId}
                               project={{
@@ -631,7 +623,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                         <div className="ml-3 border-l border-subtle pl-1" role="group" aria-label="公共">
                           {defaultProjectIds.map((projectId) => {
                             const project = projectMap[projectId];
-                            return project ? (
+                            return project && !project.archived_at ? (
                               <ProjectLink
                                 key={projectId}
                                 project={{
@@ -658,7 +650,7 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
                   )
                 );
               })()}
-            {!isLoading && scope === "RESEARCH" && (tree.uncategorized.length > 0 || canManageTree) && (
+            {!isLoading && scope === "RESEARCH" && tree.uncategorized.length > 0 && (
               <div className="mt-1 border-t border-subtle pt-1">
                 <span className="px-2 text-11 text-tertiary">未分类</span>
                 {tree.uncategorized.map((project) => (

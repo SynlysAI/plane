@@ -24,7 +24,7 @@ from plane.utils.constants import DEFAULT_TIMEZONE
 def default_workspace_research_settings():
     limits = research_file_limits()
     return {
-        "module_enabled": research_module_enabled(),
+        "module_enabled": False,
         "purpose": "GENERAL",
         "main_pi": None,
         "required_reporter_categories": ["STUDENT", "POSTDOC"],
@@ -61,9 +61,9 @@ def get_workspace_research_settings(workspace):
         "purpose": setting.purpose,
         "main_pi": setting.main_pi_id,
         "required_reporter_categories": setting.required_reporter_categories,
-        "org_enabled": bool(setting.org_enabled),
-        "report_enabled": bool(setting.report_enabled),
-        "approval_enabled": bool(setting.approval_enabled),
+        "org_enabled": True,
+        "report_enabled": True,
+        "approval_enabled": True,
         "allow_multiple_projects": bool(setting.allow_multiple_projects),
         "default_report_visibility": setting.default_report_visibility,
         "weekly_default_visibility": setting.weekly_default_visibility,
@@ -78,11 +78,11 @@ def get_workspace_research_settings(workspace):
         "experiment_enabled": bool(setting.experiment_enabled),
         "code_enabled": bool(setting.code_enabled),
         "integration_enabled": bool(setting.integration_enabled),
-        "research_chain_enabled": bool(setting.research_chain_enabled),
+        "research_chain_enabled": True,
         "research_trace_enabled": bool(setting.research_trace_enabled),
         "research_account_link_enabled": bool(setting.research_account_link_enabled),
         "research_external_rag_enabled": bool(setting.research_external_rag_enabled),
-        "research_ia_v2": bool(setting.research_ia_v2),
+        "research_ia_v2": True,
         "literature_min_included": setting.literature_min_included,
         "literature_max_entries": setting.literature_max_entries,
         "stage_min_reviewers": setting.stage_min_reviewers,
@@ -95,7 +95,8 @@ def workspace_research_enabled(workspace) -> bool:
     """The deployment switch always wins over the workspace switch."""
     if not research_module_enabled():
         return False
-    return bool(get_workspace_research_settings(workspace)["module_enabled"])
+    config = get_workspace_research_settings(workspace)
+    return config["purpose"] != "PI_PRIVATE" and bool(config["module_enabled"])
 
 
 def workspace_research_sections(workspace):
@@ -105,7 +106,7 @@ def workspace_research_sections(workspace):
         "org": bool(enabled and settings["org_enabled"]),
         "reports": bool(enabled and settings["report_enabled"]),
         "approvals": bool(enabled and settings["approval_enabled"]),
-        "stages": bool(enabled and settings["stage_enabled"]),
+        "stages": enabled,
         "experiments": bool(enabled and settings["experiment_enabled"]),
         "code": bool(enabled and settings["code_enabled"]),
         "integrations": bool(enabled and settings["integration_enabled"]),

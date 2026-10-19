@@ -20,7 +20,7 @@ type Props = {
 export const PowerKOpenProjectMenu = observer(function PowerKOpenProjectMenu(props: Props) {
   const { handleSelect } = props;
   // store hooks
-  const { loader, joinedProjectIds, getPartialProjectById } = useProject();
+  const { loader, administrativeJoinedProjectIds: joinedProjectIds, getPartialProjectById } = useProject();
   // derived values
   const projectsList = joinedProjectIds
     ? joinedProjectIds.map((id) => getPartialProjectById(id)).filter((project) => project !== undefined)

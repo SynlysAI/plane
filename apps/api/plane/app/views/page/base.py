@@ -33,6 +33,7 @@ from rest_framework.response import Response
 from plane.app.permissions import allow_permission, ROLE
 from plane.research.utils.page_guard import page_mutation_error_code, page_mutation_error_message
 from plane.research.utils.project_review import project_member_filters
+from plane.utils.administrative_projects import effective_project_member
 from plane.app.serializers import (
     PageSerializer,
     PageDetailSerializer,
@@ -96,7 +97,7 @@ class PageViewSet(BaseViewSet):
         has_default_access = bool(
             project_id
             and (
-                user_can_manage_administrative_project(self.request.user, slug, project_id)
+                effective_project_member(self.request.user, slug, project_id) is not None
                 or user_can_review_research_project(self.request.user, slug, project_id)
             )
         )
@@ -113,7 +114,7 @@ class PageViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=slug)
-            .filter(project_scope)
+            .filter(project_scope, projects__id=project_id)
             .filter(parent__isnull=True)
             .filter(Q(owned_by=self.request.user) | Q(access=0))
             .prefetch_related("projects")

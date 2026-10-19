@@ -31,7 +31,7 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
   // router
   const router = useAppRouter();
   // store hooks
-  const { joinedProjectIds, getPartialProjectById } = useProject();
+  const { administrativeJoinedProjectIds: joinedProjectIds, getPartialProjectById } = useProject();
   const { allowPermissions } = useUserPermissions();
 
   // Get current project details
@@ -44,21 +44,6 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
     project: currentProjectDetails,
     allowPermissions,
   });
-
-  // Get preferences from hook
-  const { tabPreferences } = useTabPreferences(workspaceSlug, projectId);
-
-  // Memoize available tab keys
-  const availableTabKeys = useMemo(() => navigationItems.map((item) => item.key), [navigationItems]);
-
-  // Memoize validated default tab key
-  const validatedDefaultTabKey = useMemo(
-    () =>
-      availableTabKeys.includes(tabPreferences.defaultTab)
-        ? tabPreferences.defaultTab
-        : availableTabKeys[0] || "work_items",
-    [availableTabKeys, tabPreferences.defaultTab]
-  );
 
   // Memoize switcher options to prevent recalculation on every render
   const switcherOptions = useMemo<ICustomSearchSelectOption[]>(
@@ -89,10 +74,10 @@ export const ProjectHeader = observer(function ProjectHeader(props: TProjectHead
   const handleProjectChange = useCallback(
     (value: string) => {
       if (value !== currentProjectDetails?.id) {
-        router.push(getTabUrl(workspaceSlug, value, validatedDefaultTabKey));
+        router.push(`/${workspaceSlug}/projects/${value}/issues`);
       }
     },
-    [currentProjectDetails?.id, router, workspaceSlug, validatedDefaultTabKey]
+    [currentProjectDetails?.id, router, workspaceSlug]
   );
 
   // Early return if no project details

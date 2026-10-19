@@ -377,12 +377,11 @@ class ProjectMemberUserEndpoint(BaseAPIView):
                 status=status.HTTP_200_OK,
             )
         if project_member is None:
-            project_member = ProjectMember.objects.get(
-                project_id=project_id,
-                workspace__slug=slug,
-                member=request.user,
-                is_active=True,
-            )
+            inherited = effective_project_member(request.user, slug, project_id)
+            if inherited is not None:
+                return Response({"id": None, "member": str(request.user.id), "role": inherited.role,
+                                 "original_role": None, "created_at": None, "project": str(project_id)})
+            return Response({"error": "Project access denied"}, status=403)
         serializer = ProjectMemberSerializer(project_member)
 
         return Response(serializer.data, status=status.HTTP_200_OK)

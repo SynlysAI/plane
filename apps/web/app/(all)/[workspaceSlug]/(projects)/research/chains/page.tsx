@@ -17,7 +17,7 @@ function WorkspaceResearchChainsPage() {
 
   return (
     <ResearchPageShell
-      titleKey={research.isIaV2Enabled ? "research.nav.research_chain_v2" : "research.nav.research_chain"}
+      titleKey="research.nav.research_chain_v2"
       descriptionKey="research.chains.description"
       section="research_chain"
     >

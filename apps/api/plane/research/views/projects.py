@@ -401,22 +401,8 @@ class ResearchProjectListCreateEndpoint(ResearchAPIView):
         research_type = str(request.data.get("research_type") or "RESEARCH_PROJECT").strip().upper()
         if research_type not in ResearchProjectProfile.ResearchType.values:
             return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown research type.")
-        default_chain_kind = (
-            ResearchProjectProfile.ChainKind.RESEARCH_CHAIN
-            if research_type == ResearchProjectProfile.ResearchType.RESEARCH_PROJECT
-            else ResearchProjectProfile.ChainKind.LEGACY_TRAINING
-        )
-        chain_kind = str(request.data.get("chain_kind") or default_chain_kind).upper()
-        if chain_kind not in ResearchProjectProfile.ChainKind.values:
-            return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown chain kind.")
-        if chain_kind == ResearchProjectProfile.ChainKind.RESEARCH_CHAIN and not getattr(
-            getattr(workspace, "research_setting", None), "research_chain_enabled", False
-        ):
-            return research_error(
-                ResearchErrorCode.SUBMODULE_DISABLED,
-                "Research Chain is disabled for this workspace.",
-                status.HTTP_403_FORBIDDEN,
-            )
+        # All newly created research projects use the current chain workflow.
+        chain_kind = ResearchProjectProfile.ChainKind.RESEARCH_CHAIN
         chain_visibility = str(
             request.data.get("chain_visibility") or ResearchProjectProfile.ChainVisibility.PRIVATE
         ).upper()

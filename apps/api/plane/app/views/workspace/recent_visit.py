@@ -15,6 +15,7 @@ from plane.db.models import (
     ProjectPage,
     ResearchChain,
     ResearchProjectProfile,
+    ResearchChain,
     UserRecentVisit,
 )
 from plane.app.serializers import WorkspaceRecentVisitSerializer
@@ -47,6 +48,7 @@ class UserRecentVisitViewSet(BaseViewSet):
             Project.objects.filter(workspace__slug=slug, archived_at__isnull=True)
             .filter(Q(id__in=member_ids) | Q(id__in=administrative_projects_for_user(user, slug).values("id")))
             .exclude(id__in=ResearchProjectProfile.all_objects.values("project_id"))
+            .exclude(id__in=ResearchChain.all_objects.values("project_id"))
             .exclude(id__in=ResearchChain.all_objects.values("project_id"))
         )
 

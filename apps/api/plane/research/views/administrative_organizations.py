@@ -61,7 +61,7 @@ def _serialize_organization(organization, user, can_manage=None, visible_project
     if visible_project_ids is None:
         visible_project_ids = (
             visible_administrative_projects(user, workspace.slug)
-            .filter(administrative_organization=organization)
+            .filter(administrative_organization=organization, archived_at__isnull=True)
             .values_list("id", flat=True)
         )
     member_relations = getattr(organization, "visible_members", None)
@@ -104,6 +104,7 @@ class AdministrativeOrganizationListCreateEndpoint(AdministrativeAPIView):
         if not workspace_admin:
             organizations = organizations.filter(
                 Q(is_default=True)
+                | Q(projects__id__in=visible_administrative_projects(request.user, workspace.slug).values("id"))
                 | Q(
                     members__member=request.user,
                     members__is_active=True,
@@ -127,6 +128,7 @@ class AdministrativeOrganizationListCreateEndpoint(AdministrativeAPIView):
         visible_projects_by_organization = {}
         for organization_id, project_id in (
             visible_administrative_projects(request.user, workspace.slug)
+            .filter(archived_at__isnull=True)
             .exclude(administrative_organization__isnull=True)
             .values_list("administrative_organization_id", "id")
         ):

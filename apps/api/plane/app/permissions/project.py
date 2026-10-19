@@ -10,6 +10,7 @@ from plane.db.models import ProjectMember, WorkspaceMember
 from plane.db.models.project import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
 from plane.utils.administrative_projects import (
+    effective_project_member,
     administrative_organization_project_ids,
     public_administrative_project_ids,
     user_can_manage_administrative_project,
@@ -170,6 +171,9 @@ class ProjectMemberPermission(BasePermission):
                 is_active=True,
             ).exists()
 
+        member = effective_project_member(request.user, view.workspace_slug, view.project_id)
+        if member is not None and member.role >= ROLE.MEMBER.value:
+            return True
         ## Only Project Admins can update project attributes
         return ProjectMember.objects.filter(
             workspace__slug=view.workspace_slug,
@@ -202,7 +206,7 @@ class ProjectEntityPermission(BasePermission):
                     is_active=True,
                 ).exists() or administrative_organization_project_ids(
                     request.user, view.workspace_slug
-                ).filter(project__identifier=view.project_identifier).exists()
+                ).filter(identifier=view.project_identifier).exists()
 
         ## Safe Methods -> Handle the filtering logic in queryset
         if request.method in SAFE_METHODS:
@@ -217,6 +221,9 @@ class ProjectEntityPermission(BasePermission):
                 or _is_public_administrative_project_reader(request, view)
             )
 
+        member = effective_project_member(request.user, view.workspace_slug, view.project_id)
+        if member is not None and member.role >= ROLE.MEMBER.value:
+            return True
         ## Only project members or admins can create and edit the project attributes
         return ProjectMember.objects.filter(
             workspace__slug=view.workspace_slug,

@@ -72,10 +72,10 @@ it("always shows the administrative form when IA v2 is enabled", () => {
   expect(mocks.captured.at(-1)).toMatchObject({ isOpen: true, administrative: true });
 });
 
-it("keeps the legacy form when IA v2 is disabled", () => {
+it("keeps administrative creation independent of deprecated layout flags", () => {
   mocks.research.isIaV2Enabled = false;
-  expect(administrative()).toBe("false");
-  expect(mocks.captured.at(-1)).toMatchObject({ isOpen: true, administrative: false });
+  expect(administrative()).toBe("true");
+  expect(mocks.captured.at(-1)).toMatchObject({ isOpen: true, administrative: true });
 });
 
 it("passes the modal open state through", () => {

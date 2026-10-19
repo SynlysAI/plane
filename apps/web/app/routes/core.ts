@@ -59,6 +59,10 @@ export const coreRoutes: RouteConfigEntry[] = [
         // WORKSPACE LEVEL ROUTES
         // --------------------------------------------------------------------
 
+        route(":workspaceSlug/approvals", "./(all)/[workspaceSlug]/(projects)/approvals/page.tsx"),
+        route(":workspaceSlug/todos", "./(all)/[workspaceSlug]/(projects)/todos/page.tsx"),
+        route(":workspaceSlug/management", "./(all)/[workspaceSlug]/(projects)/management/page.tsx"),
+        route(":workspaceSlug/research/projects/:projectId/overview", "./(all)/[workspaceSlug]/(projects)/research/projects/[projectId]/overview/page.tsx"),
         // Workspace Home
         route(":workspaceSlug", "./(all)/[workspaceSlug]/(projects)/page.tsx"),
 
@@ -230,6 +234,7 @@ export const coreRoutes: RouteConfigEntry[] = [
 
         // Project Detail
         layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/layout.tsx", [
+          route(":workspaceSlug/projects/:projectId/approvals", "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/approvals/page.tsx"),
           // Project Issues List
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/issues/(list)/layout.tsx", [
             route(

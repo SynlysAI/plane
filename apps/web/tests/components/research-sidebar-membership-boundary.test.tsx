@@ -142,7 +142,7 @@ it("shows the research tree for an ADMIN without organisation membership", async
   expect(container.textContent).not.toContain("legacy-projects-list");
 });
 
-it("restores the ordinary projects list when IA v2 is disabled", async () => {
+it("never restores legacy projects for an obsolete layout flag", async () => {
   mocks.research.identity.research_ia_v2 = false;
   mocks.research.identity.capabilities = {
     level: "RESEARCHER",
@@ -150,6 +150,6 @@ it("restores the ordinary projects list when IA v2 is disabled", async () => {
   };
   await act(async () => root.render(<AppSidebar />));
 
-  expect(container.textContent).toContain("legacy-projects-list");
-  expect(container.querySelector("[data-tree-scope='ADMINISTRATIVE']")).toBeNull();
+  expect(container.textContent).not.toContain("legacy-projects-list");
+  expect(container.querySelector("[data-tree-scope='ADMINISTRATIVE']")).not.toBeNull();
 });

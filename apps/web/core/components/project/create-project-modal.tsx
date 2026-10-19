@@ -36,7 +36,7 @@ enum EProjectCreationSteps {
 }
 
 export function CreateProjectModal(props: Props) {
-  const { isOpen, onClose, setToFavorite = false, workspaceSlug, data, templateId, administrative = false } = props;
+  const { isOpen, onClose, setToFavorite = false, workspaceSlug, data, templateId, administrative = true } = props;
   // states
   const [currentStep, setCurrentStep] = useState<EProjectCreationSteps>(EProjectCreationSteps.CREATE_PROJECT);
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);

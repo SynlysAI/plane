@@ -35,7 +35,7 @@ export const ResearchIaV2Redirect = observer(function ResearchIaV2Redirect({ to,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug]);
 
-  if (!research.isIaV2Enabled) return <>{children}</>;
+
 
   const destinationSearch = new URLSearchParams(searchParams);
   Object.entries(query ?? {}).forEach(([key, value]) => {

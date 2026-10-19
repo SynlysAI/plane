@@ -38,7 +38,7 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [researchType, setResearchType] = useState<TResearchProjectType>("RESEARCH_PROJECT");
-  const [chainKind, setChainKind] = useState<"LEGACY_TRAINING" | "RESEARCH_CHAIN">("RESEARCH_CHAIN");
+  const chainKind = "RESEARCH_CHAIN";
   const [chainVisibility, setChainVisibility] = useState<"PRIVATE" | "MEMBERS" | "ORG" | "WORKSPACE">("PRIVATE");
   const [orgUnit, setOrgUnit] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -91,13 +91,9 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
         title: t("research.feedback.project_created.title"),
         message: t("research.feedback.project_created.message"),
       });
-      navigate(
-        chainKind === "RESEARCH_CHAIN" && project.research?.chain_id
-          ? `/${workspaceSlug}/research/chains/${project.research.chain_id}`
-          : researchType === "RESEARCH_PROJECT"
-            ? `/${workspaceSlug}/projects/${project.id}/issues`
-            : `/${workspaceSlug}/research/projects/${project.id}/stages`
-      );
+      navigate(project.research?.chain_id
+        ? `/${workspaceSlug}/research/chains/${project.research.chain_id}`
+        : `/${workspaceSlug}/research/projects/${project.id}/overview`);
     } catch (error) {
       setErrorKey(getResearchErrorKey(error));
     } finally {
@@ -184,19 +180,6 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
               ))}
             </select>
           </label>
-          {researchChainEnabled && researchType !== "RESEARCH_PROJECT" && (
-            <label className="flex flex-col gap-1 text-12 text-secondary">
-              <span>{t("research.projects.fields.chain_kind")}</span>
-              <select
-                className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-                value={chainKind}
-                onChange={(event) => setChainKind(event.target.value as "LEGACY_TRAINING" | "RESEARCH_CHAIN")}
-              >
-                <option value="LEGACY_TRAINING">{t("research.projects.chain_kinds.legacy_training")}</option>
-                <option value="RESEARCH_CHAIN">{t("research.projects.chain_kinds.research_chain")}</option>
-              </select>
-            </label>
-          )}
           {researchChainEnabled && chainKind === "RESEARCH_CHAIN" && (
             <label className="flex flex-col gap-1 text-12 text-secondary">
               <span>{t("research.projects.fields.chain_visibility")}</span>

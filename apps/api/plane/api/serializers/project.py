@@ -72,6 +72,7 @@ class ProjectCreateSerializer(BaseSerializer):
         model = Project
         fields = [
             "name",
+            "administrative_organization",
             "description",
             "project_lead",
             "default_assignee",
@@ -105,6 +106,17 @@ class ProjectCreateSerializer(BaseSerializer):
         ]
 
     def validate(self, data):
+        organization = data.get("administrative_organization")
+        if organization is None:
+            raise serializers.ValidationError({"administrative_organization": "请选择行政组织。"})
+        if str(organization.workspace_id) != str(self.context["workspace_id"]):
+            raise serializers.ValidationError({"administrative_organization": "组织不属于当前工作区。"})
+        requester = self.context.get("request")
+        from plane.utils.administrative_projects import user_can_manage_administrative_organization
+        if not organization.is_default and (requester is None or not user_can_manage_administrative_organization(
+            requester.user, organization.workspace.slug, organization.id
+        )):
+            raise serializers.ValidationError({"administrative_organization": "没有管理该组织的权限。"})
         project_name = data.get("name", None)
         project_identifier = data.get("identifier", None)
 

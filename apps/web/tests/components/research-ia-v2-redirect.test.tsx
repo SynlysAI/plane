@@ -41,7 +41,7 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-it("keeps the legacy page while IA v2 is disabled", async () => {
+it("always resolves legacy routes into the current layout", async () => {
   await act(async () =>
     root.render(
       <ResearchIaV2Redirect to="/lab/research/chains" query={{ view: "projects" }}>
@@ -50,8 +50,8 @@ it("keeps the legacy page while IA v2 is disabled", async () => {
     )
   );
 
-  expect(container.textContent).toContain("legacy-page");
-  expect(mocks.destination).toBeNull();
+  expect(container.textContent).not.toContain("legacy-page");
+  expect(mocks.destination).not.toBeNull();
 });
 
 it("redirects with destination query, legacy query, and hash when IA v2 is enabled", async () => {

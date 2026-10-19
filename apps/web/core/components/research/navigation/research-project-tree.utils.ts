@@ -20,8 +20,8 @@ export function projectHref(
   if (project.kind === "RESEARCH_CHAIN") {
     return `/${workspaceSlug}/research/chains/${project.chain_id || project.id}?tab=overview`;
   }
-  if (project.kind === "LEGACY_RESEARCH") {
-    return `/${workspaceSlug}/research/projects/${project.id}/stages`;
+  if (project.kind === "LEGACY_RESEARCH" || project.kind === "TEAM_RESEARCH") {
+    return `/${workspaceSlug}/research/projects/${project.id}/overview`;
   }
   return `/${workspaceSlug}/projects/${project.id}/issues`;
 }

@@ -39,7 +39,7 @@ export const ProjectsBaseHeader = observer(function ProjectsBaseHeader() {
     EUserPermissionsLevel.WORKSPACE
   );
   const isArchived = pathname.includes("/archives");
-  const usesAdministrativeChannel = research.isEnabled && research.isIaV2Enabled;
+  const usesAdministrativeChannel = true;
   const titleKey = usesAdministrativeChannel ? "administrative.projects.title" : "workspace_projects.label";
   const createKey = usesAdministrativeChannel ? "administrative.projects.create" : "workspace_projects.create.label";
 

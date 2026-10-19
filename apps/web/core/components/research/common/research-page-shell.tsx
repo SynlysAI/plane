@@ -133,7 +133,7 @@ export const ResearchPageShell = observer(function ResearchPageShell({
   const sectionEnabled = identity.sections?.[section] ?? identity.sections?.reports;
   const managementTabKey = tabKey ?? navKey;
   const showManagementTabs =
-    research.isIaV2Enabled && managementTabKey !== undefined && MANAGEMENT_NAV_KEYS.has(managementTabKey);
+    managementTabKey !== undefined && MANAGEMENT_NAV_KEYS.has(managementTabKey);
 
   // Switch off, disabled section or a level that does not open this surface:
   // fall back to the workspace home (P0-UI-07). Pages that stay reachable while

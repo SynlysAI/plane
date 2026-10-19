@@ -17,7 +17,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 # Third part imports
 from rest_framework import status
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -40,6 +40,16 @@ class TimezoneMixin:
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if request.user.is_authenticated:
+            # Shared Plane resources must also obey the owning project's domain.
+            if self.__class__.__module__.startswith("plane.app.views."):
+                project_id = getattr(self, "project_id", None)
+                slug = kwargs.get("slug")
+                if project_id and slug:
+                    from plane.utils.project_domains import project_domain_allows
+                    if not project_domain_allows(
+                        request.user, slug, project_id, write=request.method not in ("GET", "HEAD", "OPTIONS")
+                    ):
+                        raise PermissionDenied("当前账号没有该项目的操作权限。")
             timezone.activate(zoneinfo.ZoneInfo(request.user.user_timezone))
         else:
             timezone.deactivate()

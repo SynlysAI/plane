@@ -27,7 +27,7 @@ export const ProjectBreadcrumb = observer(function ProjectBreadcrumb(props: TPro
   // router
   const router = useAppRouter();
   // store hooks
-  const { joinedProjectIds, getPartialProjectById } = useProject();
+  const { administrativeJoinedProjectIds: joinedProjectIds, getPartialProjectById } = useProject();
   const currentProjectDetails = getPartialProjectById(projectId);
 
   // store hooks

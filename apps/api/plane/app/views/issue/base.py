@@ -1227,21 +1227,9 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
         # Fetch the project
         project = Project.objects.get(identifier__iexact=project_identifier, workspace__slug=slug)
 
-        # 项目成员按原规则阅读。研究链上级不是成员，但可以按编号只读打开。
-        is_project_member = ProjectMember.objects.filter(
-            workspace__slug=slug,
-            project_id=project.id,
-            member=request.user,
-            is_active=True,
-        ).exists()
-        if not is_project_member and not user_can_manage_administrative_project(request.user, slug, project.id):
-            from plane.research.utils.project_review import user_can_review_research_project
-
-            if not user_can_review_research_project(request.user, slug, project.id):
-                return Response(
-                    {"error": "You are not allowed to view this issue"},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        from plane.utils.project_domains import project_domain_allows
+        if not project_domain_allows(request.user, slug, project.id):
+            return Response({"error": "You are not allowed to view this issue"}, status=403)
 
         # Fetch the issue
         issue = (

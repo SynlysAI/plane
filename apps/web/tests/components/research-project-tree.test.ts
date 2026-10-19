@@ -66,8 +66,8 @@ it("keeps the existing research and administrative project routes", () => {
     "/ws/research/chains/project-1?tab=overview"
   );
   expect(projectHref("ws", { id: "project-1", kind: "LEGACY_RESEARCH" })).toBe(
-    "/ws/research/projects/project-1/stages"
+    "/ws/research/projects/project-1/overview"
   );
-  expect(projectHref("ws", { id: "project-1", kind: "TEAM_RESEARCH" })).toBe("/ws/projects/project-1/issues");
+  expect(projectHref("ws", { id: "project-1", kind: "TEAM_RESEARCH" })).toBe("/ws/research/projects/project-1/overview");
   expect(projectHref("ws", { id: "project-1", kind: "ADMINISTRATIVE" })).toBe("/ws/projects/project-1/issues");
 });

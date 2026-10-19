@@ -520,6 +520,8 @@ export class ResearchStore implements IResearchStore {
   identityWorkspaceSlug: string | null = null;
   identityErrorCode: string | null = null;
   private identityRequestSequence = 0;
+  private identityRequests = new Map<string, Promise<TResearchIdentity>>();
+  private requestedIdentityWorkspace: string | null = null;
   private orgMemberRequestSequence: Record<string, number> = {};
   orgUnits: Record<string, TOrgUnit> = {};
   orgUnitIdsByWorkspace: Record<string, string[]> = {};
@@ -842,7 +844,7 @@ export class ResearchStore implements IResearchStore {
   }
 
   get isIaV2Enabled() {
-    return Boolean(this.identity?.research_ia_v2);
+    return true; // Deprecated API compatibility; the application has one layout.
   }
 
   get isWorkspaceAdmin() {
@@ -892,7 +894,7 @@ export class ResearchStore implements IResearchStore {
    */
   canSee = (navKey: string) => {
     const nav = this.visibleNavKeys;
-    if (!nav) return true;
+    if (!nav) return false;
     return nav.includes(navKey);
   };
 
@@ -1003,7 +1005,18 @@ export class ResearchStore implements IResearchStore {
   // identity
   // ---------------------------------------------------------------------
 
-  fetchIdentity = async (workspaceSlug: string) => {
+  fetchIdentity = (workspaceSlug: string): Promise<TResearchIdentity> => {
+    const pending = this.identityRequests.get(workspaceSlug);
+    if (pending && this.requestedIdentityWorkspace === workspaceSlug) return pending;
+    this.requestedIdentityWorkspace = workspaceSlug;
+    const request = this.loadIdentity(workspaceSlug).finally(() => {
+      if (this.identityRequests.get(workspaceSlug) === request) this.identityRequests.delete(workspaceSlug);
+    });
+    this.identityRequests.set(workspaceSlug, request);
+    return request;
+  };
+
+  private loadIdentity = async (workspaceSlug: string) => {
     const requestSequence = ++this.identityRequestSequence;
     runInAction(() => {
       this.identityLoader = true;

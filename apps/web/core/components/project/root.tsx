@@ -58,7 +58,7 @@ export const ProjectRoot = observer(function ProjectRoot() {
   const visibleTotalProjectIds = administrativeProjectIds(totalProjectIds);
   const visibleFilteredProjectIds = administrativeProjectIds(filteredProjectIds);
   const [organizations, setOrganizations] = useState<TProjectOrganizationOption[]>([]);
-  const usesOrganizationGroups = research.isEnabled && research.isIaV2Enabled;
+  const usesOrganizationGroups = true;
 
   useEffect(() => {
     if (!usesOrganizationGroups || !workspaceSlug) return;

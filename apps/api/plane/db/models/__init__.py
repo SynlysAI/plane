@@ -178,3 +178,11 @@ from .research import (
     WorkspaceResearchSetting,
     ResearchWorkspaceAccessGrant,
 )
+
+from .administrative_approval import (
+    AdministrativeApprovalFlow,
+    AdministrativeApprovalStep,
+    AdministrativeProjectApprovalSetting,
+    AdministrativeApprovalRequest,
+    AdministrativeApprovalAction,
+)

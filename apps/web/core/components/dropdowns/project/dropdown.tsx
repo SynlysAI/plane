@@ -35,7 +35,7 @@ type Props = TDropdownProps & {
 
 export const ProjectDropdown = observer(function ProjectDropdown(props: Props) {
   // store hooks
-  const { joinedProjectIds, getProjectById } = useProject();
+  const { administrativeJoinedProjectIds, getProjectById } = useProject();
 
-  return <ProjectDropdownBase {...props} getProjectById={getProjectById} projectIds={joinedProjectIds} />;
+  return <ProjectDropdownBase {...props} getProjectById={getProjectById} projectIds={administrativeJoinedProjectIds} />;
 });

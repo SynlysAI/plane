@@ -15,6 +15,8 @@ from plane.app.views.base import BaseAPIView
 from plane.db.models import UserFavorite, Workspace
 from plane.app.serializers import UserFavoriteSerializer
 from plane.app.permissions import allow_permission, ROLE
+from plane.utils.administrative_projects import visible_administrative_projects
+from plane.utils.project_domains import project_domain_allows
 
 
 class WorkspaceFavoriteEndpoint(BaseAPIView):
@@ -27,8 +29,7 @@ class WorkspaceFavoriteEndpoint(BaseAPIView):
             Q(project__isnull=True) & ~Q(entity_type="page")
             | (
                 Q(project__isnull=False)
-                & Q(project__project_projectmember__member=request.user)
-                & Q(project__project_projectmember__is_active=True)
+                & Q(project_id__in=visible_administrative_projects(request.user, slug).values("id"))
             )
         )
         serializer = UserFavoriteSerializer(favorites, many=True)
@@ -38,6 +39,9 @@ class WorkspaceFavoriteEndpoint(BaseAPIView):
     def post(self, request, slug):
         try:
             workspace = Workspace.objects.get(slug=slug)
+            project_id = request.data.get("project_id")
+            if project_id and not project_domain_allows(request.user, slug, project_id):
+                return Response({"error": "Project access denied"}, status=403)
 
             # If the favorite exists return
             if request.data.get("entity_identifier"):
@@ -89,8 +93,7 @@ class WorkspaceFavoriteGroupEndpoint(BaseAPIView):
             Q(project__isnull=True)
             | (
                 Q(project__isnull=False)
-                & Q(project__project_projectmember__member=request.user)
-                & Q(project__project_projectmember__is_active=True)
+                & Q(project_id__in=visible_administrative_projects(request.user, slug).values("id"))
             )
         )
         serializer = UserFavoriteSerializer(favorites, many=True)

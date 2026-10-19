@@ -1361,7 +1361,8 @@
       "views": {
         "chains": "课题",
         "projects": "项目管理",
-        "reports": "报告与成果"
+        "reports": "报告与成果",
+        "project_records": "项目档案"
       },
       "empty": "当前可见课题还没有研究链。",
       "refresh": "刷新",

@@ -272,40 +272,18 @@ function setSwitches(researchChain: boolean, iaV2 = false) {
   mocks.research.identity.research_ia_v2 = iaV2;
 }
 
-it("keeps every existing research entry and hides 研究链 while the chain switch is off", async () => {
+it("does not restore the old flat research menu", async () => {
   setSwitches(false);
-  const originalNavKeys = mocks.research.visibleNavKeys;
-  mocks.research.visibleNavKeys = [
-    "overview",
-    ...mocks.businessItems.map((item) => item.key),
-    ...mocks.settingItems.map((item) => item.key),
-  ];
   await act(async () => root.render(<ResearchSidebarItems />));
-  mocks.research.visibleNavKeys = originalNavKeys;
-  expect(container.textContent).toContain("报告");
-  expect(container.textContent).toContain("提交汇总");
-  expect(container.textContent).toContain("科研项目");
-  expect(container.textContent).toContain("待我评审");
-  expect(container.textContent).toContain("办公审批");
-  expect(container.textContent).toContain("组织架构");
-  expect(container.textContent).toContain("系统集成");
-  expect(container.textContent).not.toContain("研究链");
-  expect(mocks.businessItems.some((item) => item.key === "research_chain")).toBe(true);
-  expect(mocks.settingItems.map((item) => item.key)).toEqual([
-    "org",
-    "system",
-    "templates",
-    "identity",
-    "platform",
-    "audit",
-    "integrations",
-  ]);
+  expect(container.textContent).not.toContain("提交汇总");
+  expect(container.textContent).not.toContain("系统集成");
+  expect(container.textContent).toContain("行政项目");
 });
 
 it("shows 研究链 only when the workspace chain switch is on", async () => {
   setSwitches(true);
   await act(async () => root.render(<ResearchSidebarItems />));
-  expect(container.textContent).toContain("研究链");
+  expect(container.textContent).toContain("科研项目");
   const link = container.querySelector('a[href="/lab/research/chains"]');
   expect(link).not.toBeNull();
 });

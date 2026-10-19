@@ -342,7 +342,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                     {project.research?.research_type === "RESEARCH_PROJECT" ? (
                       <Link
                         className="mr-2 text-12 text-accent-primary hover:underline"
-                        href={`/${workspaceSlug}/projects/${project.id}/issues`}
+                        href={`/${workspaceSlug}/research/projects/${project.id}/overview`}
                       >
                         {t("research.projects.open_team_project")}
                       </Link>

@@ -41,6 +41,8 @@ import re
 
 
 class WorkSpaceSerializer(DynamicBaseSerializer):
+    research_enabled = serializers.BooleanField(source="research_setting.module_enabled", read_only=True)
+    research_purpose = serializers.CharField(source="research_setting.purpose", read_only=True)
     total_members = serializers.IntegerField(read_only=True)
     logo_url = serializers.CharField(read_only=True)
     role = serializers.IntegerField(read_only=True)

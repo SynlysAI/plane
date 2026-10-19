@@ -18,7 +18,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.generics import GenericAPIView
 
 # Module imports
@@ -41,6 +41,11 @@ class TimezoneMixin:
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if request.user.is_authenticated:
+            project_id = kwargs.get("project_id")
+            if project_id and kwargs.get("slug"):
+                from plane.utils.project_domains import project_domain_allows
+                if not project_domain_allows(request.user, kwargs["slug"], project_id, write=request.method not in ("GET", "HEAD", "OPTIONS")):
+                    raise PermissionDenied()
             timezone.activate(zoneinfo.ZoneInfo(request.user.user_timezone))
         else:
             timezone.deactivate()

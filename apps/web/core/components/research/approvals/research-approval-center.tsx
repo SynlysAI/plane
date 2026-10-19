@@ -75,19 +75,6 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
   const requestedTab = searchParams.get("tab") as ApprovalTab | null;
   const sections = research.identity?.sections;
 
-  if (!research.isIaV2Enabled) {
-    return (
-      <ResearchPageShell
-        titleKey="research.nav.approvals"
-        descriptionKey="research.approvals.description"
-        section="approvals"
-        navKey="approvals"
-      >
-        <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isResearchAdmin} />
-      </ResearchPageShell>
-    );
-  }
-
   const domainTabs = [
     {
       id: "stage_review" as const,

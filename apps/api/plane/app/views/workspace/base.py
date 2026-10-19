@@ -10,7 +10,7 @@ from datetime import date
 import uuid
 
 from dateutil.relativedelta import relativedelta
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Func, OuterRef, Prefetch, Q
 
 from django.db.models.fields import DateField
@@ -81,6 +81,7 @@ class WorkSpaceViewSet(BaseViewSet):
         )
         return filter_workspaces_for_private_access(workspaces, self.request.user)
 
+    @transaction.atomic
     def create(self, request):
         try:
             if not InstanceAdmin.objects.filter(user=request.user, role__gte=15).exists():
@@ -104,6 +105,9 @@ class WorkSpaceViewSet(BaseViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+            enabled = request.data.get("research_enabled", False)
+            if type(enabled) is not bool:
+                return Response({"research_enabled": "必须为布尔值。"}, status=400)
             serializer = WorkSpaceSerializer(data=request.data)
 
             slug = request.data.get("slug", False)
@@ -128,7 +132,9 @@ class WorkSpaceViewSet(BaseViewSet):
                 )
 
             if serializer.is_valid(raise_exception=True):
-                serializer.save(owner=request.user)
+                workspace = serializer.save(owner=request.user)
+                from plane.utils.project_domains import initialize_workspace_research
+                initialize_workspace_research(workspace, enabled, actor=request.user)
                 # Create Workspace member
                 _ = WorkspaceMember.objects.create(
                     workspace_id=serializer.data["id"],

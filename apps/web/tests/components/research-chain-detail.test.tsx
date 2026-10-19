@@ -31,6 +31,7 @@ vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams(mocks.query), mocks.setSearchParams],
 }));
 vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "en",
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => {
       const value = key

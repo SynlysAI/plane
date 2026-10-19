@@ -102,7 +102,8 @@ it("keeps only the closest project-list entry in project scoped navigation", asy
     link.getAttribute("href")?.startsWith("/lab/research")
   );
   expect(researchLinks.map((link) => link.getAttribute("href"))).toEqual([
-    "/lab/research/projects",
+    "/lab/research/chains?view=projects",
+    "/lab/research/projects/project-1/overview",
     "/lab/research/projects/project-1/stages",
   ]);
   expect(container.textContent).not.toContain("返回科研总览");

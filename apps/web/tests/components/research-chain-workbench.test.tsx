@@ -40,6 +40,8 @@ vi.mock("@/hooks/store/use-research", () => ({
 }));
 vi.mock("@/hooks/store/user", () => ({ useUser: () => ({ data: { id: "user-1" } }) }));
 
+vi.mock("@/components/research/projects/research-project-list", () => ({ ResearchProjectList: () => <div>research-project-records</div> }));
+
 const { ResearchChainWorkbench } = await import("@/components/research/chains/research-chain-workbench");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
@@ -96,7 +98,7 @@ it("legacy reports 视图继续渲染报告与成果工作台", async () => {
 it("legacy project 视图回退到课题列表，不再渲染行政或权威 Project 列表", async () => {
   await render("/lab/research/chains?view=projects");
 
-  expect(container.textContent).toContain("chain-board");
+  expect(container.textContent).toContain("research-project-records");
   expect(container.textContent).not.toContain("project-list");
   expect(container.textContent).not.toContain("research.chains.views.projects");
 });

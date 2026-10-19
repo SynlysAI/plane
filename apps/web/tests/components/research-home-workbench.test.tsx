@@ -94,6 +94,9 @@ vi.mock("@/components/home/widgets/recents", () => ({
   },
 }));
 
+vi.mock("@/hooks/use-workspace-context", () => ({ useWorkspaceContext: () => ({ context: mocks.researchIdentity }) }));
+vi.mock("@/services/project-domains.service", () => ({ ProjectDomainsService: class { todos = mocks.getResearchTodos; }, domainError: () => "请求失败" }));
+
 const { WorkspaceHomeWorkbench } = await import("@/components/home/workbench");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
@@ -203,16 +206,16 @@ it("renders the action-first bento home information architecture without generic
   await act(async () => undefined);
 
   const columns = container.querySelector("[data-testid='workspace-home-columns']");
-  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
+  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", "all", undefined);
   expect(columns?.className).toContain("min-w-0");
   expect(columns?.className).toContain("grid-cols-1");
   expect(columns?.className).toContain("xl:grid-cols-12");
-  for (const title of ["科研项目概览", "行政项目概览", "跨组件待办", "最近动态", "报告提交摘要"]) {
+  for (const title of ["科研项目概览", "行政项目概览", "我的待办", "最近动态", "报告提交摘要"]) {
     expect(container.textContent).toContain(title);
   }
-  expect(container.querySelector('a[href="/lab/research/approvals/"]')?.textContent).toBe("查看全部待办");
+  expect(container.querySelector('a[href="/lab/todos"]')?.textContent).toBe("查看全部待办");
   expect(container.querySelector('a[href="/lab/research/todos"]')).toBeNull();
-  expect(container.querySelector('a[href="/public/research/chains/?view=reports"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research/chains/?view=reports"]')).not.toBeNull();
   expect(container.textContent).not.toContain("快捷入口");
   expect(container.textContent).not.toContain("我的工作");
   expect(container.textContent).not.toContain("便签");
@@ -223,7 +226,7 @@ it("fills the wide viewport in compact mode and supports density switching", asy
   await renderHome();
   await act(async () => undefined);
 
-  const cards = [...container.querySelectorAll("section")];
+  const cards = [...container.querySelectorAll('[data-testid="workspace-home-columns"] > section')];
   expect(cards.length).toBeGreaterThanOrEqual(5);
   for (const card of cards.slice(0, 5)) {
     expect(card.className).toMatch(/max-xl:h-\[(400|320)px\]/);
@@ -317,6 +320,7 @@ it("uses the shared server todo projection and preserves URL scope changes", asy
   const todo = {
     schema_version: "research-todo.v2" as const,
     id: "REPORT:report-1",
+    domain: "RESEARCH",
     source: "REPORT" as const,
     object_id: "report-1",
     title: "报告需修订 · 2026-W38",
@@ -342,19 +346,13 @@ it("uses the shared server todo projection and preserves URL scope changes", asy
     degraded_sources: [],
   });
 
-  await renderHome("/lab?todo_scope=visible");
-  await act(async () => undefined);
+  await renderHome();
+  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", "all", undefined);
+  expect(container.textContent).toContain("报告需修订");
+  const filter = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "行政");
+  await act(async () => filter?.click());
+  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", "administrative", undefined);
 
-  expect(mocks.getResearchTodos).toHaveBeenNthCalledWith(1, "lab", { scope: "visible", limit: 100 });
-  expect(container.textContent).toContain("报告需修订 · 2026-W38");
-  expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
-  expect(mocks.getChainNodes).not.toHaveBeenCalled();
-  expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
-
-  const visibleButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "我可处理");
-  await act(async () => visibleButton?.click());
-  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "to_me", limit: 100 });
-  expect(mocks.getChains).toHaveBeenCalledTimes(1);
 });
 
 it("shows the compact report submission summary and refreshes the workbench", async () => {
@@ -397,7 +395,7 @@ it("keeps weekly and monthly counts and periods separate", async () => {
   ]);
   expect(
     [...week!.querySelectorAll("a"), ...month!.querySelectorAll("a")].every(
-      (link) => link.getAttribute("href") === "/public/research/chains/?view=reports"
+      (link) => link.getAttribute("href") === "/lab/research/chains/?view=reports"
     )
   ).toBe(true);
   const allPeriod = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部");
@@ -438,8 +436,7 @@ it("does not request or invent counts without summary permission", async () => {
   await renderHome();
   const section = container.querySelector('section[aria-label="报告提交摘要"]');
   expect(mocks.getReportSummary).not.toHaveBeenCalled();
-  expect(section?.textContent).toContain("没有科研数据访问权限");
-  expect(section?.querySelector("a")).toBeNull();
+  expect(section).toBeNull();
 });
 
 it("retains monthly counts when the weekly summary is forbidden", async () => {
@@ -506,7 +503,7 @@ it("uses a neutral research empty state when the caller has no research access",
   await renderHome();
   await act(async () => undefined);
 
-  expect(container.textContent).toContain("当前账号没有科研数据访问权限。");
+  expect(container.querySelector('a[href="/lab/research/chains"]')).toBeNull();
   expect(container.textContent).toContain("设备采购协作");
   expect(container.textContent).not.toContain("催化剂失活机理研究");
 });
@@ -517,7 +514,7 @@ it("loads administrative work statistics in one batch and shows dates and counts
     project_ids: "admin-project",
     fields: "open_issues,done_issues,last_activity_at",
   });
-  const section = [...container.querySelectorAll("section")].find((entry) =>
+  const section = [...container.querySelectorAll('[data-testid="workspace-home-columns"] > section')].find((entry) =>
     entry.textContent?.includes("行政项目概览")
   );
   expect(section?.textContent).toContain("最近更新：");

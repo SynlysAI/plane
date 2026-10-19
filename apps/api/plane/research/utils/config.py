@@ -20,8 +20,8 @@ def _env_int(name, default):
 
 
 def research_module_enabled() -> bool:
-    """Deployment level kill switch. Defaults to disabled."""
-    return bool(getattr(settings, "RESEARCH_MODULE_ENABLED", False))
+    """Research is installed; each workspace controls its own activation."""
+    return True
 
 
 def research_file_limits(defaults=None):
@@ -88,11 +88,11 @@ def research_integration_defaults():
 def research_phase_zero_defaults():
     """Return Phase 0 safety switches, all disabled by default."""
     return {
-        "research_chain_enabled": _env_bool("RESEARCH_CHAIN_ENABLED", False),
+        "research_chain_enabled": True,
         "research_trace_enabled": _env_bool("RESEARCH_TRACE_ENABLED", False),
         "research_account_link_enabled": _env_bool("RESEARCH_ACCOUNT_LINK_ENABLED", False),
         "research_external_rag_enabled": _env_bool("RESEARCH_EXTERNAL_RAG_ENABLED", False),
-        "research_ia_v2": _env_bool("RESEARCH_IA_V2", True),
+        "research_ia_v2": True,
     }
 
 

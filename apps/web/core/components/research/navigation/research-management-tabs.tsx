@@ -45,6 +45,7 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
         className="overflow-x-auto border-b border-subtle bg-surface-1 px-5"
       >
         <TabNavigationList className="py-2">
+          <ResearchTabLink href={`/${workspaceSlug}/management?tab=research`} isActive={false}>返回管理</ResearchTabLink>
           <span aria-current="page" className="text-13 font-medium whitespace-nowrap text-primary">
             {t("research.nav.platform")}
           </span>
@@ -56,6 +57,7 @@ export const ResearchManagementTabs = observer(function ResearchManagementTabs({
   return (
     <nav aria-label={t("research.nav.management")} className="overflow-x-auto border-b border-subtle bg-surface-1 px-5">
       <TabNavigationList className="py-2">
+          <ResearchTabLink href={`/${workspaceSlug}/management?tab=research`} isActive={false}>返回管理</ResearchTabLink>
         {(research.identity?.user.is_main_pi ||
           research.isResearchAdmin ||
           research.identity?.user.is_system_admin) && (

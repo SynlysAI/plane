@@ -228,26 +228,10 @@ def _project_queryset(workspace, user, scope):
             deleted_at__isnull=True,
         ).select_related("navigation_category", "research_profile", "research_chain")
 
-    queryset = (
-        Project.objects.filter(
-            workspace=workspace,
-            deleted_at__isnull=True,
-        )
-        .exclude(research_profile__isnull=False)
-        .exclude(id__in=ResearchChain.all_objects.values("project_id"))
-        .select_related("navigation_category", "administrative_organization")
-    )
-    if is_workspace_admin(user, workspace.id):
-        return queryset
-    return queryset.filter(
-        Q(project_projectmember__member=user, project_projectmember__is_active=True)
-        | Q(
-            administrative_organization__members__member=user,
-            administrative_organization__members__is_active=True,
-            administrative_organization__members__deleted_at__isnull=True,
-        )
-        | Q(id__in=administrative_projects_for_user(user, workspace.slug).values("id"))
-    ).distinct()
+    from plane.utils.administrative_projects import visible_administrative_projects
+    return visible_administrative_projects(user, workspace.slug).filter(
+        archived_at__isnull=True
+    ).select_related("navigation_category", "administrative_organization")
 
 
 def _project_payload(project, scope):
@@ -418,11 +402,11 @@ def _tree(workspace, user, scope, projects, can_manage=False):
         if can_manage:
             visible_project_ids.update(
                 str(project_id)
-                for project_id in administrative_projects_for_user(user, workspace.slug).values_list("id", flat=True)
+                for project_id in administrative_projects_for_user(user, workspace.slug).filter(archived_at__isnull=True).values_list("id", flat=True)
             )
         if can_manage:
             managed_projects = (
-                Project.objects.filter(workspace=workspace, id__in=visible_project_ids, deleted_at__isnull=True)
+                Project.objects.filter(workspace=workspace, id__in=visible_project_ids, deleted_at__isnull=True, archived_at__isnull=True)
                 .exclude(research_profile__isnull=False)
                 .exclude(id__in=ResearchChain.all_objects.values("project_id"))
             )

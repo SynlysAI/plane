@@ -246,7 +246,7 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
         try:
             workspace = Workspace.objects.get(slug=slug)
 
-            serializer = ProjectCreateSerializer(data={**request.data}, context={"workspace_id": workspace.id})
+            serializer = ProjectCreateSerializer(data={**request.data}, context={"workspace_id": workspace.id, "request": request})
 
             if serializer.is_valid():
                 with transaction.atomic():

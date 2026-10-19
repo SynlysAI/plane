@@ -23,7 +23,7 @@ export class ResearchPlatformService extends APIService {
   }
 
   async getIdentity(workspaceSlug: string) {
-    return this.get(researchEndpoints.identityMe(workspaceSlug))
+    return this.get(`/api/workspaces/${workspaceSlug}/context/`)
       .then((res) => res?.data as TResearchIdentity)
       .catch((err) => {
         throw err?.response?.data;

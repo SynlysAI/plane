@@ -207,6 +207,8 @@ def visible_administrative_projects(user, workspace_slug):
     projects = administrative_projects(workspace_slug)
     if not user or not getattr(user, "is_authenticated", False):
         return projects.none()
+    if not WorkspaceMember.objects.filter(workspace__slug=workspace_slug, member=user, is_active=True).exists():
+        return projects.none()
     if not user_can_access_workspace(user, workspace_slug=workspace_slug):
         return projects.none()
     member_ids = ProjectMember.objects.filter(workspace__slug=workspace_slug, member=user, is_active=True).values(
@@ -234,13 +236,18 @@ def restrict_administrative_project_visibility(queryset, user, workspace_slug):
     member_ids = ProjectMember.objects.filter(workspace__slug=workspace_slug, member=user, is_active=True).values(
         "project_id"
     )
+    from plane.utils.project_domains import research_admitted
+    from plane.research.views.projects import visible_profile_queryset
+    workspace = Workspace.objects.filter(slug=workspace_slug).first()
+    visible_research = (visible_profile_queryset(workspace, user).values("project_id")
+                        if research_admitted(user, workspace) else ResearchProjectProfile.objects.none().values("project_id"))
     return queryset.filter(
-        Q(id__in=research_project_ids())
+        Q(id__in=visible_research)
         | Q(id__in=member_ids)
         | Q(id__in=public_administrative_project_ids(user, workspace_slug))
         | Q(id__in=administrative_organization_project_ids(user, workspace_slug))
         | Q(id__in=administrative_projects_for_user(user, workspace_slug).values("id"))
-    )
+    ).filter(~Q(id__in=research_project_ids()) | Q(id__in=visible_research))
 
 
 def user_can_manage_administrative_project(user, workspace_slug, project_id):

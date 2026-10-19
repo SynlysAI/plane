@@ -15,7 +15,7 @@ from django.utils import timezone
 from plane.db.models import MentorBinding, OrgUnit, OrgUnitMember, ResearchProjectProfile, Workspace
 from plane.research.utils.acl import models_q_expired
 from plane.research.utils.roles import configured_main_pi_id, is_research_admin
-from plane.utils.administrative_projects import user_can_manage_administrative_project
+from plane.utils.administrative_projects import user_can_manage_administrative_project, effective_project_member
 
 REVIEW_ORG_ROLES = (OrgUnitMember.OrgRole.PI, OrgUnitMember.OrgRole.OWNER)
 
@@ -109,7 +109,7 @@ def project_member_filters(user, slug, project_id, prefix="project__project_proj
     Returns:
         默认行政管理员和科研只读读者返回空字典，其他人返回有效成员条件。
     """
-    if user_can_manage_administrative_project(user, slug, project_id) or user_can_review_research_project(
+    if effective_project_member(user, slug, project_id) is not None or user_can_review_research_project(
         user, slug, project_id
     ):
         return {}
@@ -150,5 +150,8 @@ def user_can_review_research_project(user, workspace_slug, project_id, on_date=N
     """
     workspace = Workspace.objects.filter(slug=workspace_slug).first()
     if workspace is None or project_id is None:
+        return False
+    from plane.utils.project_domains import research_admitted
+    if not research_admitted(user, workspace):
         return False
     return research_review_profiles(workspace, user, on_date).filter(project_id=project_id).exists()

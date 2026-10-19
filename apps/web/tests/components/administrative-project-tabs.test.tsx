@@ -98,7 +98,7 @@ it("keeps organization creation out of the administrative page heading", async (
   expect(button).toBeFalsy();
 });
 
-it("keeps ordinary pages unchanged when IA v2 is disabled", async () => {
+it("keeps administrative feature tabs regardless of retired layout setting", async () => {
   mocks.research.isIaV2Enabled = false;
   await act(async () =>
     root.render(
@@ -109,8 +109,8 @@ it("keeps ordinary pages unchanged when IA v2 is disabled", async () => {
   );
   mocks.research.isIaV2Enabled = true;
 
-  expect(container.textContent).toBe("legacy-plane-body");
-  expect(container.querySelector("a")).toBeNull();
+  expect(container.textContent).toContain("legacy-plane-body");
+  expect(container.querySelectorAll("a")).toHaveLength(4);
 });
 
 it("allows the secondary tabs to scroll independently on narrow screens", async () => {

@@ -31,6 +31,7 @@ import { ResearchStatusBadge } from "@/components/research/common/research-statu
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
+import { ResearchBrowseRefresh } from "@/components/research/common/research-browse-toolbar";
 
 type Props = {
   workspaceSlug: string;
@@ -126,13 +127,18 @@ export const ResearchApprovalList = observer(function ResearchApprovalList({ wor
       )}
 
       <ResearchFilterToolbar>
-        <TabNavigationList>
-          {SCOPES.map((item) => (
-            <button key={item.key} type="button" onClick={() => setScope(item.key)}>
-              <TabNavigationItem isActive={scope === item.key}>{t(item.labelKey)}</TabNavigationItem>
-            </button>
-          ))}
-        </TabNavigationList>
+        <div className="flex min-h-8 items-end gap-3">
+          <TabNavigationList>
+            {SCOPES.map((item) => (
+              <button key={item.key} type="button" onClick={() => setScope(item.key)}>
+                <TabNavigationItem isActive={scope === item.key}>{t(item.labelKey)}</TabNavigationItem>
+              </button>
+            ))}
+          </TabNavigationList>
+          <Button variant="secondary" size="xl" className="shrink-0" disabled={activeRequestId !== null} onClick={() => void load()}>
+            {t("research.common.refresh")}
+          </Button>
+        </div>
       </ResearchFilterToolbar>
 
       <ResearchTableSurface>

@@ -25,18 +25,12 @@ from plane.research.utils.settings import default_workspace_research_settings
 from plane.research.views.base import ResearchAPIView, truthy
 
 BOOLEAN_FIELDS = (
-    "module_enabled",
-    "org_enabled",
-    "report_enabled",
-    "approval_enabled",
     "allow_multiple_projects",
-    "research_chain_enabled",
     "research_agent_enabled",
     "research_agent_user_backend_enabled",
     "research_trace_enabled",
     "research_account_link_enabled",
     "research_external_rag_enabled",
-    "research_ia_v2",
 )
 
 VISIBILITY_FIELDS = (
@@ -105,6 +99,8 @@ class ResearchSettingsEndpoint(ResearchAPIView):
             return research_permission_denied()
 
         setting = get_or_create_setting(workspace, actor=request.user)
+        if "module_enabled" in request.data:
+            return Response({"message": "请在工作区设置中修改科研模块状态。"}, status=400)
         previous = WorkspaceResearchSettingSerializer(setting).data
         changed = []
 
@@ -220,7 +216,7 @@ class ResearchSettingsEndpoint(ResearchAPIView):
 
         # enabling the module provisions the organisation root so the tree is
         # never empty (P0-ORG-01)
-        if setting.module_enabled and setting.org_enabled:
+        if setting.module_enabled:
             ensure_root_org_unit(workspace, actor=request.user)
 
         record_audit_event(

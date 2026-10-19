@@ -5,7 +5,8 @@
  */
 
 import { observer } from "mobx-react";
-import { Outlet } from "react-router";
+import { Outlet, Navigate, useLocation } from "react-router";
+import { useProject } from "@/hooks/store/use-project";
 // plane imports
 import { Header, Row } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -23,11 +24,17 @@ import type { Route } from "./+types/layout";
 function ProjectLayout({ params }: Route.ComponentProps) {
   // router
   const { workspaceSlug, projectId } = params;
+  const { pathname } = useLocation();
+  const { getPartialProjectById } = useProject();
+  const project = getPartialProjectById(projectId);
   // store hooks
   const { sidebarCollapsed } = useAppTheme();
   // preferences
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
 
+  if (project?.is_research_project && pathname.replace(/\/$/, "") === `/${workspaceSlug}/projects/${projectId}/issues`) {
+    return <Navigate replace to={`/${workspaceSlug}/research/projects/${projectId}/overview?detail=tasks`} />;
+  }
   return (
     <>
       {projectPreferences.navigationMode === "TABBED" && (

@@ -140,6 +140,7 @@ def _todo(
     capabilities,
     trace_ref,
     updated_at,
+    project_id=None,
 ):
     """Build one versioned todo envelope.
 
@@ -168,6 +169,7 @@ def _todo(
         "id": f"{source}:{object_id}",
         "source": source,
         "object_id": str(object_id),
+        "project_id": str(project_id) if project_id else None,
         "title": title,
         "context": context,
         "requester": requester,
@@ -195,7 +197,8 @@ def _has_action(todo):
 
 def _chain_feature_enabled(workspace):
     setting = getattr(workspace, "research_setting", None)
-    return bool(setting and setting.research_chain_enabled)
+    from plane.research.utils.settings import workspace_research_enabled
+    return workspace_research_enabled(workspace)
 
 
 def collect_chain_task_todos(workspace, user, scope):
@@ -286,6 +289,7 @@ def collect_chain_task_todos(workspace, user, scope):
         assignees = [task.assignee] if task.assignee is not None else []
         todo = _todo(
             source="CHAIN_TASK",
+            project_id=task.chain.project_id,
             object_id=task.id,
             title=task.title,
             context=f"{task.chain.project.name} · {task.node.title}",
@@ -410,6 +414,7 @@ def collect_report_todos(workspace, user, scope):
         project_name = report.project.name if report.project_id else workspace.name
         todo = _todo(
             source="REPORT",
+            project_id=report.project_id,
             object_id=report.id,
             title=title,
             context=f"{project_name} · {report.period_key}",
@@ -492,6 +497,7 @@ def collect_paper_review_todos(workspace, user, scope):
         handler = review.final_reviewer if review.status == ResearchPaperReview.Status.WAITING_REVIEW else review.owner
         todo = _todo(
             source="PAPER_REVIEW",
+            project_id=review.chain.project_id,
             object_id=review.id,
             title=f"论文评审 · {review.node.title}",
             context=review.chain.project.name,
@@ -567,6 +573,7 @@ def collect_stage_review_todos(workspace, user, scope):
             requester = User.objects.filter(pk=owner_id).first()
         todo = _todo(
             source="STAGE_REVIEW",
+            project_id=stage.project_id,
             object_id=stage.id,
             title=f"阶段评审 · {stage.project.name}",
             context=stage.get_stage_display() if hasattr(stage, "get_stage_display") else stage.stage,
@@ -643,6 +650,7 @@ def collect_agent_approval_todos(workspace, user, scope):
         )
         todo = _todo(
             source="AGENT_APPROVAL",
+            project_id=session.project_id,
             object_id=session.session_id,
             title=f"Agent 审批 · {session.chain_node.title}",
             context=summary,
@@ -690,6 +698,7 @@ def collect_office_approval_todos(workspace, user, scope):
         can_decide, _step = can_act_on_current_step(request, user)
         todo = _todo(
             source="OFFICE_APPROVAL",
+            project_id=request.issue.project_id,
             object_id=request.id,
             title=request.issue.name if request.issue_id else "办公审批",
             context=request.flow.name,

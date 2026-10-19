@@ -767,8 +767,22 @@ export type TIdentityMapping = {
 };
 
 export type TResearchIdentity = {
+  navigation?: {
+    administrative: boolean;
+    approvals: boolean;
+    management: boolean;
+    workspace_settings: boolean;
+    administrative_organizations: boolean;
+  };
   module_enabled: boolean;
   workspace_enabled: boolean;
+  navigation?: {
+    administrative: boolean;
+    approvals: boolean;
+    management: boolean;
+    workspace_settings: boolean;
+    administrative_organizations: boolean;
+  };
   research_ia_v2?: boolean;
   sections: {
     org: boolean;
@@ -827,6 +841,7 @@ export type TResearchIdentity = {
   workspace?: {
     slug: string;
     purpose: "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
+    research_enabled?: boolean;
   };
   identity: {
     provider: string | null;

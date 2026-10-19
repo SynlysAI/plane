@@ -9,6 +9,20 @@ from plane.db.models import WorkspaceResearchSetting
 
 class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
     main_pi_name = serializers.SerializerMethodField()
+    # Deprecated switches are read-only compatibility values.
+    research_ia_v2 = serializers.SerializerMethodField()
+    research_chain_enabled = serializers.SerializerMethodField()
+    org_enabled = serializers.SerializerMethodField()
+    report_enabled = serializers.SerializerMethodField()
+    approval_enabled = serializers.SerializerMethodField()
+
+    def get_research_ia_v2(self, obj):
+        return True
+
+    get_research_chain_enabled = get_research_ia_v2
+    get_org_enabled = get_research_ia_v2
+    get_report_enabled = get_research_ia_v2
+    get_approval_enabled = get_research_ia_v2
 
     class Meta:
         model = WorkspaceResearchSetting

@@ -76,7 +76,6 @@ export const AdministrativeProjectTabs = observer(function AdministrativeProject
     return () => window.removeEventListener("administrative-organization-create", openOrganizationModal);
   }, [activeTab]);
 
-  if (!research.isEnabled || !research.isIaV2Enabled) return <>{children}</>;
 
   return (
     <div className="flex min-h-full w-full min-w-0 flex-col bg-surface-1">

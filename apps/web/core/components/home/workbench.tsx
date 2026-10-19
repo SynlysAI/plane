@@ -18,7 +18,8 @@ import {
 } from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { chainOwnerLabel, visibleResearchChains } from "@/components/research/common/research-overview-rows";
-import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
+import { WorkspaceTodos } from "@/components/home/workspace-todos";
+import { useWorkspaceContext } from "@/hooks/use-workspace-context";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
@@ -72,6 +73,7 @@ function readStoredDensity(): THomeDensity {
 export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({ workspaceSlug }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
+  const { context } = useWorkspaceContext();
   const { fetchProjects, fetchProjectAnalyticsCount } = useProject();
   const [period, setPeriod] = useState<TPeriod>("30");
   const [density, setDensity] = useState<THomeDensity>(readStoredDensity);
@@ -89,16 +91,16 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const reportVersion = useRef(0);
 
   const canSeeResearch = Boolean(
-    research.identity?.module_enabled &&
-    research.identity?.workspace_enabled &&
-    research.identity?.sections?.research_chain &&
+    context?.module_enabled &&
+    context?.workspace_enabled &&
+    context?.sections?.research_chain &&
     (research.canSee("research_chain") || research.isResearchAdmin)
   );
   const reportIdentity = research.identity;
   const canSeeSummary = Boolean(
     research.identityWorkspaceSlug === workspaceSlug &&
-    research.identity?.module_enabled &&
-    research.identity?.workspace_enabled &&
+    context?.module_enabled &&
+    context?.workspace_enabled &&
     research.identity?.sections?.reports &&
     (research.canSee("summary") || research.isResearchAdmin)
   );
@@ -132,7 +134,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     setAdministrativeStats({});
     setAdministrativeStatsLoading(false);
     try {
-      const result = await fetchProjects(workspaceSlug);
+      const result = await fetchProjects(workspaceSlug, "administrative");
       if (administrativeVersion.current !== version) return;
       const administrative = result.filter((project) => !project.is_research_project && !project.archived_at);
       setAdministrativeProjects(administrative);
@@ -190,7 +192,8 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
 
   useEffect(() => {
     if (canSeeResearch) void loadChains();
-    else setChainState("forbidden");
+    else { setChains([]); setChainState("forbidden"); }
+    return () => { researchVersion.current += 1; };
   }, [canSeeResearch, loadChains, refreshToken]);
 
   useEffect(() => {
@@ -226,14 +229,14 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     window.localStorage.setItem(DENSITY_STORAGE_KEY, density);
   }, [density]);
 
-  const summaryHref = "/public/research/chains/?view=reports";
+  const summaryHref = `/${workspaceSlug}/research/chains/?view=reports`;
   // oxlint-disable-next-line unicorn/no-array-sort -- 当前 TypeScript lib 不支持 toSorted，排序副本避免修改原列表。
   const sortedAdministrativeProjects = [...administrativeProjects].sort((left, right) => {
     const leftTime = administrativeStats[left.id]?.last_activity_at;
     const rightTime = administrativeStats[right.id]?.last_activity_at;
     return (rightTime ? Date.parse(rightTime) || 0 : 0) - (leftTime ? Date.parse(leftTime) || 0 : 0);
   });
-  const todosHref = `/${workspaceSlug}/research/approvals/`;
+  const todosHref = `/${workspaceSlug}/todos`;
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
   return (
@@ -306,22 +309,22 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
           className="xl:col-span-5"
           size="primary"
           density={density}
-          title={t("research.todo.title")}
-          hint={t("research.todo.description_v2")}
+          title="我的待办"
+          hint="指派给我的任务与待我处理的审批"
           action={
             <Link href={todosHref} className={cardLinkClassName}>
               {t("research.home_workbench.view_todos")}
             </Link>
           }
         >
-          <ResearchTodoEnvelopeList
+          <WorkspaceTodos
             key={`todo-${refreshToken}`}
             workspaceSlug={workspaceSlug}
-            periodDays={periodDays}
             embedded
           />
         </HomeSectionCard>
 
+        {canSeeResearch && (
         <HomeSectionCard
           className="xl:col-span-7"
           size="primary"
@@ -408,6 +411,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             </>
           )}
         </HomeSectionCard>
+        )}
 
         <HomeSectionCard
           className="xl:col-span-4"
@@ -502,6 +506,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
           />
         </HomeSectionCard>
 
+        {canSeeSummary && (
         <HomeSectionCard
           className="xl:col-span-4"
           density={density}
@@ -569,6 +574,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             </div>
           )}
         </HomeSectionCard>
+        )}
       </div>
     </div>
   );

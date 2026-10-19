@@ -39,6 +39,7 @@ export const CreateWorkspace = observer(function CreateWorkspace(props: Props) {
   const { stepChange, user, invitedWorkspaces, handleCurrentViewChange } = props;
   // states
   const [slugError, setSlugError] = useState(false);
+  const [researchEnabled, setResearchEnabled] = useState(false);
   const [invalidSlug, setInvalidSlug] = useState(false);
   // plane hooks
   const { t } = useTranslation();
@@ -68,7 +69,7 @@ export const CreateWorkspace = observer(function CreateWorkspace(props: Props) {
       const res = await workspaceService.workspaceSlugCheck(formData.slug);
       if (res?.status === true && !RESTRICTED_URLS.includes(formData.slug)) {
         setSlugError(false);
-        const workspaceResponse = await createWorkspace(formData);
+        const workspaceResponse = await createWorkspace({ ...formData, research_enabled: researchEnabled });
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("workspace_creation.toast.success.title"),
@@ -266,7 +267,11 @@ export const CreateWorkspace = observer(function CreateWorkspace(props: Props) {
             )}
           </div>
         </div>
-        <Button variant="primary" type="submit" size="xl" className="w-full" disabled={isButtonDisabled}>
+        <label className="flex items-center gap-2 text-13">
+            <input type="checkbox" checked={researchEnabled} onChange={(event) => setResearchEnabled(event.target.checked)} />
+            启用科研模块
+          </label>
+          <Button variant="primary" type="submit" size="xl" className="w-full" disabled={isButtonDisabled}>
           {isSubmitting ? <Spinner height="20px" width="20px" /> : t("workspace_creation.button.default")}
         </Button>
       </form>

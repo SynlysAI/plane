@@ -60,7 +60,9 @@ def _serializer_context(request):
 
 def _flag_enabled(workspace):
     """Return whether the workspace opted into Research Chain."""
-    return bool(getattr(workspace, "research_setting", None) and workspace.research_setting.research_chain_enabled)
+    from plane.research.utils.settings import workspace_research_enabled
+
+    return workspace_research_enabled(workspace)
 
 
 def _disabled():

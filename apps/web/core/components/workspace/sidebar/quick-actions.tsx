@@ -34,7 +34,7 @@ export const SidebarQuickActions = observer(function SidebarQuickActions() {
   const workspaceSlug = routerWorkspaceSlug?.toString();
   // store hooks
   const { toggleCreateIssueModal } = useCommandPalette();
-  const { joinedProjectIds } = useProject();
+  const { administrativeJoinedProjectIds: joinedProjectIds } = useProject();
   const { allowPermissions } = useUserPermissions();
   // local storage
   const { storedValue, setValue } = useLocalStorage<Record<string, Partial<TIssue>>>("draftedIssue", {});

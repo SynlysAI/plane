@@ -97,14 +97,7 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 
-it("renders the cross-component todo center with the full list and home back link", async () => {
+it("redirects the legacy todo route to the neutral workspace center", async () => {
   await renderPage();
-  await act(async () => undefined);
-
-  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
-  expect(container.textContent).toContain("跨组件待办");
-  expect(container.textContent).toContain("报告需修订 · 2026-W38");
-  expect(container.textContent).toContain("共 1 条");
-  expect(container.querySelector('a[href="/lab"]')).not.toBeNull();
-  expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
+  expect(mocks.getResearchTodos).not.toHaveBeenCalled();
 });

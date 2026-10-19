@@ -26,12 +26,6 @@ type Props = {
 };
 
 const TOGGLES: { field: keyof TWorkspaceResearchSetting; labelKey: string }[] = [
-  { field: "module_enabled", labelKey: "research.platform.module_enabled" },
-  { field: "org_enabled", labelKey: "research.platform.org_enabled" },
-  { field: "report_enabled", labelKey: "research.platform.report_enabled" },
-  { field: "approval_enabled", labelKey: "research.platform.approval_enabled" },
-  { field: "research_chain_enabled", labelKey: "research.platform.research_chain_enabled" },
-  { field: "research_ia_v2", labelKey: "research.platform.research_ia_v2" },
   { field: "research_agent_enabled", labelKey: "research.platform.research_agent_enabled" },
   {
     field: "research_agent_user_backend_enabled",
@@ -128,13 +122,7 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
     setSaving(true);
     try {
       const payload = {
-        module_enabled: draft.module_enabled,
-        org_enabled: draft.org_enabled,
-        report_enabled: draft.report_enabled,
-        approval_enabled: draft.approval_enabled,
-        research_chain_enabled: Boolean(draft.research_chain_enabled),
         research_agent_enabled: Boolean(draft.research_agent_enabled),
-        research_ia_v2: Boolean(draft.research_ia_v2),
         research_agent_user_backend_enabled: Boolean(draft.research_agent_user_backend_enabled),
         default_report_visibility: draft.default_report_visibility,
         weekly_default_visibility: draft.weekly_default_visibility ?? null,

@@ -1304,7 +1304,8 @@
       "views": {
         "chains": "Topics",
         "projects": "Project management",
-        "reports": "Reports and outcomes"
+        "reports": "Reports and outcomes",
+        "project_records": "Project records"
       },
       "empty": "No research chain has been created in your visible projects yet.",
       "refresh": "Refresh",

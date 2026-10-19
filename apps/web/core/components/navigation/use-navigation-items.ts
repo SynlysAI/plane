@@ -100,6 +100,12 @@ export const useNavigationItems = ({
         shouldRender: !!project?.inbox_view,
         sortOrder: 6,
       },
+      {
+        i18n_key: "research.nav.approvals_v2", key: "approvals", name: "审批",
+        href: `/${workspaceSlug}/projects/${projectId}/approvals`, icon: IntakeOutline,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: project?.is_research_project === false, sortOrder: 7,
+      },
     ],
     [project]
   );

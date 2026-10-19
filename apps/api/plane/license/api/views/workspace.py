@@ -78,6 +78,9 @@ class InstanceWorkSpaceEndpoint(BaseAPIView):
 
     def post(self, request):
         try:
+            enabled = request.data.get("research_enabled", False)
+            if type(enabled) is not bool:
+                return Response({"research_enabled": "必须为布尔值。"}, status=400)
             serializer = WorkspaceSerializer(data=request.data)
 
             slug = request.data.get("slug", False)
@@ -109,12 +112,8 @@ class InstanceWorkSpaceEndpoint(BaseAPIView):
                     )
                 with transaction.atomic():
                     workspace = serializer.save(owner=request.user)
-                    WorkspaceResearchSetting.objects.create(
-                        workspace=workspace,
-                        purpose=purpose,
-                        module_enabled=False,
-                        created_by=request.user,
-                    )
+                    from plane.utils.project_domains import initialize_workspace_research
+                    initialize_workspace_research(workspace, enabled, purpose, request.user)
                     # Create Workspace member
                     _ = WorkspaceMember.objects.create(
                         workspace=workspace,

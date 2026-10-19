@@ -1,19 +1,7 @@
-/**
- * Copyright (c) 2023-present Plane Software, Inc. and contributors
- * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
- */
-
-import { observer } from "mobx-react";
-import { useParams } from "react-router";
-// components
-import { ResearchApprovalCenter } from "@/components/research/approvals/research-approval-center";
-
-function WorkspaceResearchApprovalsPage() {
+import { Navigate, useParams, useLocation } from "react-router";
+export default function LegacyApprovalsPage() {
   const { workspaceSlug } = useParams();
-  if (!workspaceSlug) return null;
-
-  return <ResearchApprovalCenter workspaceSlug={workspaceSlug} />;
+  const { search, hash } = useLocation();
+  const params = new URLSearchParams(search); params.set("domain", "research");
+  return <Navigate replace to={`/${workspaceSlug}/approvals?${params}${hash}`} />;
 }
-
-export default observer(WorkspaceResearchApprovalsPage);

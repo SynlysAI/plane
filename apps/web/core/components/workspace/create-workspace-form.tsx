@@ -55,6 +55,7 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
   } = props;
   // states
   const [slugError, setSlugError] = useState(false);
+  const [researchEnabled, setResearchEnabled] = useState(false);
   const [invalidSlug, setInvalidSlug] = useState(false);
   // router
   const router = useAppRouter();
@@ -75,7 +76,7 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
       if (res.status === true && !RESTRICTED_URLS.includes(formData.slug)) {
         setSlugError(false);
         try {
-          const workspaceResponse = await createWorkspace(formData);
+          const workspaceResponse = await createWorkspace({ ...formData, research_enabled: researchEnabled });
           setToast({
             type: TOAST_TYPE.SUCCESS,
             title: t("workspace_creation.toast.success.title"),
@@ -247,7 +248,11 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
       </div>
       <div className="flex items-center gap-4">
         {secondaryButton}
-        <Button variant="primary" type="submit" size="xl" disabled={!isValid} loading={isSubmitting}>
+        <label className="flex items-center gap-2 text-13">
+            <input type="checkbox" checked={researchEnabled} onChange={(event) => setResearchEnabled(event.target.checked)} />
+            启用科研模块
+          </label>
+          <Button variant="primary" type="submit" size="xl" disabled={!isValid} loading={isSubmitting}>
           {isSubmitting ? t(primaryButtonText.loading) : t(primaryButtonText.default)}
         </Button>
         {!secondaryButton && (

@@ -59,7 +59,7 @@ export const DEFAULT_PERSONAL_PREFERENCES: TPersonalNavigationPreferences = {
 };
 
 export const DEFAULT_PROJECT_PREFERENCES: TProjectNavigationPreferences = {
-  navigationMode: "ACCORDION",
+  navigationMode: "TABBED",
   showLimitedProjects: false,
   limitedProjectsCount: 10,
 };

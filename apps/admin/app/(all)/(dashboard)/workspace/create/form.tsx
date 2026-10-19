@@ -28,6 +28,7 @@ export function WorkspaceCreateForm() {
   const router = useRouter();
   // states
   const [slugError, setSlugError] = useState(false);
+  const [researchEnabled, setResearchEnabled] = useState(false);
   const [invalidSlug, setInvalidSlug] = useState(false);
   const [researchPurpose, setResearchPurpose] = useState<"GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE">("GENERAL");
   const [defaultValues, setDefaultValues] = useState<Partial<IWorkspace>>({
@@ -63,7 +64,7 @@ export function WorkspaceCreateForm() {
       }
       setSlugError(false);
       try {
-        await createWorkspace({ ...formData, research_purpose: researchPurpose });
+        await createWorkspace({ ...formData, research_purpose: researchPurpose, research_enabled: researchPurpose !== "PI_PRIVATE" && researchEnabled });
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: "创建成功",
@@ -218,7 +219,12 @@ export function WorkspaceCreateForm() {
           loading={isSubmitting}
           label={isSubmitting ? "正在创建" : "新建工作空间"}
         />
-        <Button
+        <label className="flex items-center gap-2 text-13">
+            <input type="checkbox" checked={researchPurpose !== "PI_PRIVATE" && researchEnabled}
+              disabled={researchPurpose === "PI_PRIVATE"} onChange={(event) => setResearchEnabled(event.target.checked)} />
+            启用科研模块
+          </label>
+          <Button
           variant="secondary"
           size="md"
           stretch="auto"

@@ -113,20 +113,6 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
 
-  // fetch workspace sidebar preferences
-  useSWR(
-    workspaceSlug ? WORKSPACE_SIDEBAR_PREFERENCES(workspaceSlug.toString()) : null,
-    workspaceSlug ? () => fetchSidebarNavigationPreferences(workspaceSlug.toString()) : null,
-    { revalidateIfStale: false, revalidateOnFocus: false }
-  );
-
-  // fetch workspace project navigation preferences
-  useSWR(
-    workspaceSlug ? WORKSPACE_PROJECT_NAVIGATION_PREFERENCES(workspaceSlug.toString()) : null,
-    workspaceSlug ? () => fetchProjectNavigationPreferences(workspaceSlug.toString()) : null,
-    { revalidateIfStale: false, revalidateOnFocus: false }
-  );
-
   const handleSignOut = async () => {
     await signOut().catch(() =>
       setToast({
