@@ -112,9 +112,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
     ?.map((userId) => {
       const userDetails = getUserDetails(userId);
       const projectMemberDetails = projectId ? getProjectMemberDetails(userId, projectId) : null;
-      const projectRoleLabelKey = projectMemberDetails
-        ? getProjectRoleLabelKey(projectMemberDetails.original_role ?? projectMemberDetails.role)
-        : undefined;
+      const projectRoleLabelKey = projectMemberDetails ? getProjectRoleLabelKey(projectMemberDetails.role) : undefined;
       return {
         value: userId,
         query: `${userDetails?.display_name} ${userDetails?.first_name} ${userDetails?.last_name}`,

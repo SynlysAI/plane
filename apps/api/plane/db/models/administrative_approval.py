@@ -12,6 +12,7 @@ class AdministrativeApprovalFlow(BaseModel):
     version = models.PositiveIntegerField(default=1)
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
+    is_template = models.BooleanField(default=True)
 
     class Meta:
         db_table = "administrative_approval_flows"

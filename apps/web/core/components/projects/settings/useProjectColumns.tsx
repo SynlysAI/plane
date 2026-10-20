@@ -5,19 +5,25 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "@plane/i18n";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import type { IWorkspaceMember, TProjectMembership } from "@plane/types";
-import { renderFormattedDate } from "@plane/utils";
+
 // components
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import { AccountTypeColumn, NameColumn } from "@/components/project/settings/member-columns";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
+import { useProject } from "@/hooks/store/use-project";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
 
-export interface RowData extends Pick<TProjectMembership, "original_role"> {
+export interface RowData extends Pick<
+  TProjectMembership,
+  "original_role" | "membership_source" | "inherits_organization"
+> {
+  role?: TProjectMembership["role"];
   member: IWorkspaceMember;
 }
 
@@ -28,11 +34,13 @@ type TUseProjectColumnsProps = {
 
 export const useProjectColumns = (props: TUseProjectColumnsProps) => {
   const { projectId, workspaceSlug } = props;
+  const { t, currentLocale } = useTranslation();
   // states
   const [removeMemberModal, setRemoveMemberModal] = useState<RowData | null>(null);
 
   // store hooks
   const { data: currentUser } = useUser();
+  const { getPartialProjectById } = useProject();
   const { allowPermissions, getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const {
     project: {
@@ -59,7 +67,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
   const columns = [
     {
       key: "Full Name",
-      content: "Full name",
+      content: t("project_members.full_name"),
       thClassName: "text-left",
       thRender: () => (
         <MemberHeaderColumn
@@ -80,7 +88,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
     {
       key: "Display Name",
-      content: "Display name",
+      content: t("display_name"),
       thRender: () => (
         <MemberHeaderColumn
           property="display_name"
@@ -92,7 +100,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
     {
       key: "Email",
-      content: "Email",
+      content: t("email"),
       thRender: () => (
         <MemberHeaderColumn
           property="email"
@@ -104,7 +112,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
     {
       key: "Account Type",
-      content: "Account type",
+      content: t("role"),
       thRender: () => (
         <MemberHeaderColumn
           property="role"
@@ -122,8 +130,21 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
       ),
     },
     {
+      key: "Membership Source",
+      content: t("project_settings.members.membership_source"),
+      tdRender: (rowData: RowData) => (
+        <div className="min-w-24 text-12 text-secondary">
+          {rowData.membership_source === "ORGANIZATION"
+            ? t("project_settings.members.source_organization")
+            : rowData.inherits_organization
+              ? t("project_settings.members.source_both")
+              : t("project_settings.members.source_direct")}
+        </div>
+      ),
+    },
+    {
       key: "Joining Date",
-      content: "Joining date",
+      content: t("project_members.joining_date"),
       thRender: () => (
         <MemberHeaderColumn
           property="joining_date"
@@ -131,11 +152,22 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
           handleDisplayFilterUpdate={handleDisplayFilterUpdate}
         />
       ),
-      tdRender: (rowData: RowData) => <div>{renderFormattedDate(rowData?.member?.joining_date)}</div>,
+      tdRender: (rowData: RowData) => (
+        <div>
+          {rowData.member.joining_date
+            ? new Intl.DateTimeFormat(currentLocale, { year: "numeric", month: "short", day: "numeric" }).format(
+                new Date(rowData.member.joining_date)
+              )
+            : "—"}
+        </div>
+      ),
     },
   ];
   return {
-    columns,
+    columns:
+      getPartialProjectById(projectId)?.is_research_project === false
+        ? columns
+        : columns.filter((column) => column.key !== "Membership Source"),
     removeMemberModal,
     setRemoveMemberModal,
     displayFilters,

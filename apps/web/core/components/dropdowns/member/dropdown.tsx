@@ -6,7 +6,7 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import type { ComponentType, SVGProps } from "react";
+import { useCallback, type ComponentType, type SVGProps } from "react";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 // local imports
@@ -40,9 +40,10 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
       ? getProjectMemberIds(projectId, false)
       : workspaceMemberIds;
 
-  const onDropdownOpen = () => {
-    if (!memberIds && projectId && workspaceSlug) fetchProjectMembers(workspaceSlug.toString(), projectId);
-  };
+  const onDropdownOpen = useCallback(() => {
+    if (projectId && workspaceSlug)
+      void fetchProjectMembers(workspaceSlug.toString(), projectId).catch(() => undefined);
+  }, [projectId, workspaceSlug, fetchProjectMembers]);
 
   return (
     <MemberDropdownBase

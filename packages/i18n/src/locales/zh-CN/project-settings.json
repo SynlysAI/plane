@@ -36,7 +36,29 @@
         "title": "邀请成员",
         "sub_heading": "邀请成员参与您的项目。",
         "select_co_worker": "选择同事"
-      }
+      },
+      "guest_access": "访客访问权限",
+      "roles": "角色",
+      "suspended": "已停用",
+      "select_member_required": "请选择成员",
+      "select_role": "选择角色",
+      "role_required": "请选择角色。",
+      "added_successfully": "成员添加成功。",
+      "role_update_failed": "暂时无法更改此角色",
+      "role_update_error": "更新成员角色失败，请重试。",
+      "leave_failed": "暂时无法离开此项目",
+      "remove_failed": "暂时无法移除此成员",
+      "membership_source": "成员来源",
+      "source_organization": "组织继承",
+      "source_direct": "单独添加",
+      "source_both": "单独添加 · 组织继承",
+      "remove_direct_access": "移除单独授权",
+      "confirm_leave_title": "离开项目？",
+      "confirm_remove_title": "移除 {name}？",
+      "confirm_leave_description": "确定离开“{project}”吗？之后可通过重新邀请或加入公开项目再次参与。",
+      "confirm_remove_description": "确定移除“{name}”在此项目中的单独授权吗？通过组织继承的访问权限将保留。",
+      "leaving": "离开中…",
+      "removing": "移除中…"
     },
     "states": {
       "heading": "状态",
@@ -523,6 +545,7 @@
           }
         }
       }
-    }
+    },
+    "title": "项目设置"
   }
 }

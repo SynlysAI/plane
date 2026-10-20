@@ -81,6 +81,19 @@ it("commits an option through a complete pointer click", async () => {
   expect(container.querySelector("output")?.textContent).toBe("next");
 });
 
+it("allows native mouse focus on the search input inside the options panel", async () => {
+  await act(async () => root.render(<Harness />));
+  await act(async () => container.querySelector<HTMLButtonElement>("button")?.click());
+
+  const input = document.body.querySelector<HTMLInputElement>('input[role="combobox"]');
+  expect(input).not.toBeNull();
+  const mouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 });
+  await act(async () => input?.dispatchEvent(mouseDown));
+
+  // Preventing mousedown cancels the browser's default input focus action.
+  expect(mouseDown.defaultPrevented).toBe(false);
+});
+
 it("开闭通知仅在状态变化后各触发一次，Esc 和外部点击仍然有效", async () => {
   const onOpen = vi.fn();
   const onClose = vi.fn();

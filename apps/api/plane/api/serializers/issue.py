@@ -22,7 +22,7 @@ from plane.db.models import (
     IssueLink,
     IssueRelation,
     Label,
-    ProjectMember,
+    Project,
     State,
     User,
     EstimatePoint,
@@ -31,6 +31,7 @@ from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
+from plane.utils.administrative_projects import assignable_project_member_ids
 
 from .base import BaseSerializer
 from .cycle import CycleLiteSerializer, CycleSerializer
@@ -103,15 +104,13 @@ class IssueSerializer(BaseSerializer):
             if not is_valid:
                 raise serializers.ValidationError({"description_binary": "Invalid binary data"})
 
-        # Validate assignees are from project
+        # Validate assignees against direct and inherited project participation.
         if data.get("assignees", []):
+            project = Project.objects.select_related("workspace", "administrative_organization").get(
+                pk=self.context["project_id"],
+            )
             valid_assignee_ids = set(
-                ProjectMember.objects.filter(
-                    project_id=self.context.get("project_id"),
-                    is_active=True,
-                    role__gte=15,
-                    member_id__in=data["assignees"],
-                ).values_list("member_id", flat=True)
+                assignable_project_member_ids(project).filter(id__in=data["assignees"])
             )
             invalid_assignee_ids = set(data["assignees"]) - valid_assignee_ids
             if invalid_assignee_ids:
@@ -206,12 +205,7 @@ class IssueSerializer(BaseSerializer):
                 # Then assign it to default assignee, if it is a valid assignee
                 if (
                     default_assignee_id is not None
-                    and ProjectMember.objects.filter(
-                        member_id=default_assignee_id,
-                        project_id=project_id,
-                        role__gte=15,
-                        is_active=True,
-                    ).exists()
+                    and assignable_project_member_ids(issue.project).filter(id=default_assignee_id).exists()
                 ):
                     IssueAssignee.objects.create(
                         assignee_id=default_assignee_id,

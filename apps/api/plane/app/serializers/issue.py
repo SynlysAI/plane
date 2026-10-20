@@ -42,14 +42,13 @@ from plane.db.models import (
     IssueVersion,
     IssueDescriptionVersion,
     Project,
-    ProjectMember,
-    WorkspaceMember,
     EstimatePoint,
 )
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
+from plane.utils.administrative_projects import assignable_project_member_ids
 
 
 class IssueFlatSerializer(BaseSerializer):
@@ -151,33 +150,14 @@ class IssueCreateSerializer(BaseSerializer):
 
         # Validate assignees are from project
         requested_assignees = attrs.get("assignee_ids", [])
-        is_public_project = Project.objects.filter(
+        assignment_project = Project.objects.select_related("workspace", "administrative_organization").get(
             pk=self.context["project_id"],
             workspace_id=self.context["workspace_id"],
-            administrative_organization__is_default=True,
-            administrative_organization__deleted_at__isnull=True,
-        ).exists()
+        )
+        assignable_ids = assignable_project_member_ids(assignment_project)
         if requested_assignees:
             requested_assignee_ids = [assignee.id for assignee in requested_assignees]
-            if is_public_project:
-                valid_assignee_ids = set(
-                    WorkspaceMember.objects.filter(
-                        workspace_id=self.context["workspace_id"],
-                        member_id__in=requested_assignee_ids,
-                        is_active=True,
-                        deleted_at__isnull=True,
-                    ).values_list("member_id", flat=True)
-                )
-            else:
-                valid_assignee_ids = set(
-                    ProjectMember.objects.filter(
-                        project_id=self.context["project_id"],
-                        role__gte=15,
-                        is_active=True,
-                        deleted_at__isnull=True,
-                        member_id__in=requested_assignee_ids,
-                    ).values_list("member_id", flat=True)
-                )
+            valid_assignee_ids = set(assignable_ids.filter(id__in=requested_assignee_ids))
             invalid_assignee_ids = set(requested_assignee_ids) - valid_assignee_ids
             if invalid_assignee_ids:
                 raise serializers.ValidationError(
@@ -189,20 +169,7 @@ class IssueCreateSerializer(BaseSerializer):
                     }
                 )
 
-        if is_public_project:
-            has_assignable_members = WorkspaceMember.objects.filter(
-                workspace_id=self.context["workspace_id"],
-                is_active=True,
-                deleted_at__isnull=True,
-            ).exists()
-        else:
-            has_assignable_members = ProjectMember.objects.filter(
-                project_id=self.context["project_id"],
-                role__gte=15,
-                is_active=True,
-                deleted_at__isnull=True,
-            ).exists()
-        if self.instance is None and not has_assignable_members:
+        if self.instance is None and not assignable_ids.exists():
             raise serializers.ValidationError({"assignee_ids": "This project has no assignable members"})
 
         if requested_assignees:
@@ -288,12 +255,7 @@ class IssueCreateSerializer(BaseSerializer):
             # Then assign it to default assignee, if it is a valid assignee
             if (
                 default_assignee_id is not None
-                and ProjectMember.objects.filter(
-                    member_id=default_assignee_id,
-                    project_id=project_id,
-                    role__gte=15,
-                    is_active=True,
-                ).exists()
+                and assignable_project_member_ids(issue.project).filter(id=default_assignee_id).exists()
             ):
                 try:
                     IssueAssignee.objects.create(

@@ -1,39 +1,21 @@
-# Agent Development Guide
+# CLAUDE.md
 
-## Commands
+## 项目开发规范
 
-- `pnpm dev` - Start all dev servers (web:3000, admin:3001)
-- `pnpm --filter web dev:hmr` - Start the local web server with React Router HMR
-- `pnpm build` - Build all packages and apps
-- `pnpm check` - Run all checks (format, lint, types)
-- `pnpm check:lint` - OxLint across all packages
-- `pnpm check:types` - TypeScript type checking
-- `pnpm fix` - Auto-fix format and lint issues
-- `pnpm turbo run <command> --filter=<package>` - Target specific package/app
-- `pnpm --filter=@plane/ui storybook` - Start Storybook on port 6006
+主要开发规范见 [AGENTS.md](AGENTS.md)（命令、代码风格、测试约定）。
 
-## Code Style
+## 部署（重要）
 
-- **Imports**: Use `workspace:*` for internal packages, `catalog:` for external deps
-- **TypeScript**: Strict mode enabled, all files must be typed
-- **Formatting**: oxfmt, run `pnpm fix:format`
-- **Linting**: OxLint with shared `.oxlintrc.json` config
-- **Naming**: camelCase for variables/functions, PascalCase for components/types
-- **Error Handling**: Use try-catch with proper error types, log errors appropriately
-- **State Management**: MobX stores in `packages/shared-state`, reactive patterns
-- **Testing**: All features require unit tests, use existing test framework per package
-- **Components**: Build in `@plane/ui` with Storybook for isolated development
+本机采用混合生产部署：后端 `docker-compose-local.yml`（api/worker/beat 源码卷挂载），前端 `docker-compose-prod-web.yml`（Caddy 服务 `apps/web/build/client`）。更新部署统一用：
 
-## Backend tests (Docker)
+```bash
+./scripts/deploy.sh              # 完整更新：git pull → pnpm build web/admin → 重建 Caddy → 跑迁移 → 重建 api/worker/beat → 健康检查
+./scripts/deploy.sh --skip-pull  # 部署当前检出的代码（本地分支 / 未推送提交必须加此参数，否则 git pull 会失败或拉错分支）
+./scripts/deploy.sh --web        # 仅构建前端并重建 Caddy
+./scripts/deploy.sh --backend    # 仅跑数据库迁移并重建后端容器
+```
 
-The Django/pytest suite for `apps/api` runs in an isolated stack defined by `docker-compose-test.yml` at the repo root.
-
-Prereq (once): `./setup.sh` — generates `apps/api/.env` from `.env.example`.
-
-- Full suite: `docker compose -f docker-compose-test.yml up --build --abort-on-container-exit --exit-code-from api-tests`
-- Subset: `docker compose -f docker-compose-test.yml run --rm api-tests pytest -m unit`
-- Teardown: `docker compose -f docker-compose-test.yml down -v`
-
-See `apps/api/tests/RUNNING_TESTS.md` for the full walkthrough and troubleshooting; see `apps/api/plane/tests/TESTING_GUIDE.md` for test conventions and fixtures.
-
-- 禁用项：`docker-compose-test.yml` 测试栈不要运行（用户明确要求），改好代码，用户自己部署测试，不要自主构建docker测试，构建前需要询问
+- 部署入口：Web `http://127.0.0.1:3300`（`PLANE_WEB_PORT` 可覆盖），API 由 Caddy 反代
+- 迁移失败：`docker logs <migrator容器ID>`；服务日志：`docker compose -f docker-compose-local.yml logs api`
+- 已初始化的部署缺 .env 时脚本直接报错——**不要重跑 setup.sh**（会覆盖全部 .env）
+- 禁用项：`docker-compose-test.yml` 测试栈不要运行（用户明确要求）

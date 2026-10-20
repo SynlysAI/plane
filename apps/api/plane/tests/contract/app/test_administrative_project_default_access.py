@@ -236,7 +236,7 @@ def test_public_administrative_project_readable_by_every_member(env):
 
 
 def test_public_org_project_visible_to_org_members_only(env):
-    """公开挂组织项目：组织成员 GUEST 只读可访问；非组织成员列表不可见、详情无权限。"""
+    """组织成员继承公开项目的参与权限，组织外成员仍无权访问。"""
     organization = AdministrativeOrganization.objects.create(
         workspace=env["workspace"], name="测试组织", created_by=env["owner"]
     )
@@ -264,13 +264,13 @@ def test_public_org_project_visible_to_org_members_only(env):
     slug = env["workspace"].slug
     base = f"/api/workspaces/{slug}/projects/{org_project.id}/"
 
-    # 组织成员：角色地图 GUEST，可读项目和工作项，不能创建工作项。
+    # 组织成员继承 MEMBER，可以创建工作项，无需显式项目成员记录。
     roles = org_client.get(f"/api/users/me/workspaces/{slug}/project-roles/")
     assert roles.status_code == 200, roles.data
-    assert roles.data[str(org_project.id)] == 5
+    assert roles.data[str(org_project.id)] == 15
     assert org_client.get(base).status_code == 200
     assert org_client.get(f"{base}issues/").status_code == 200
-    assert org_client.post(f"{base}issues/", {"name": "Denied"}, format="json").status_code == 403
+    assert org_client.post(f"{base}issues/", {"name": "Organization collaboration"}, format="json").status_code == 201
 
     # 非组织成员：列表不可见、详情无权限，不再出现“看得到点不开”。
     listed = outsider_client.get(f"/api/workspaces/{slug}/projects/")

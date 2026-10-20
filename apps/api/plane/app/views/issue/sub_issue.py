@@ -7,7 +7,7 @@ import json
 
 # Django imports
 from django.utils import timezone
-from django.db.models import OuterRef, Func, F, Q, Value, UUIDField, Subquery, Count, IntegerField
+from django.db.models import OuterRef, F, Value, UUIDField, Subquery, Count, IntegerField
 from django.utils.decorators import method_decorator
 from django.views.decorators.gzip import gzip_page
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -22,12 +22,13 @@ from rest_framework import status
 from .. import BaseAPIView
 from plane.app.serializers import IssueSerializer
 from plane.app.permissions import ProjectEntityPermission
-from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, IssueLabel, IssueAssignee, ModuleIssue
+from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, IssueLabel, ModuleIssue
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
 from collections import defaultdict
 from plane.utils.host import base_host
 from plane.utils.order_queryset import order_issue_queryset
+from plane.utils.administrative_projects import active_issue_assignees
 
 
 class SubIssuesEndpoint(BaseAPIView):
@@ -104,9 +105,8 @@ class SubIssuesEndpoint(BaseAPIView):
                 ),
                 assignee_ids=Coalesce(
                     Subquery(
-                        IssueAssignee.objects.filter(
+                        active_issue_assignees().filter(
                             issue_id=OuterRef("id"),
-                            assignee__member_project__is_active=True,
                             deleted_at__isnull=True,
                         )
                         .order_by()

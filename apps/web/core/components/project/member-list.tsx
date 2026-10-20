@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -32,16 +32,25 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
   const [inviteModal, setInviteModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const {
-    project: { projectMemberIds, getFilteredProjectMemberDetails, filters },
+    project: { projectMemberIds, getFilteredProjectMemberDetails, fetchProjectMembers, filters },
   } = useMember();
   const { allowPermissions } = useUserPermissions();
 
   const { t } = useTranslation();
 
+  useEffect(() => {
+    const refresh = () => {
+      void fetchProjectMembers(workspaceSlug, projectId).catch(() => undefined);
+    };
+    refresh();
+    window.addEventListener("administrative-organizations-updated", refresh);
+    return () => window.removeEventListener("administrative-organizations-updated", refresh);
+  }, [workspaceSlug, projectId, fetchProjectMembers]);
+
   const searchedProjectMembers = (projectMemberIds ?? []).filter((userId) => {
     const memberDetails = projectId ? getFilteredProjectMemberDetails(userId, projectId.toString()) : null;
 
-    if (!memberDetails?.member || !memberDetails.original_role) return false;
+    if (!memberDetails?.member || !memberDetails.role) return false;
 
     const fullName = `${memberDetails?.member.first_name} ${memberDetails?.member.last_name}`.toLowerCase();
     const displayName = memberDetails?.member.display_name.toLowerCase();
@@ -81,15 +90,16 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       />
-      <div className="flex items-center justify-between gap-4 overflow-x-hidden border-b border-subtle py-2">
-        <div className="text-14 font-semibold">{t("common.members")}</div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 overflow-x-hidden border-b border-subtle py-2">
+        <div className="shrink-0 text-14 font-semibold">{t("common.members")}</div>
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <div className="flex min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
             <SearchOutline className="h-3.5 w-3.5" />
             <input
               className="w-full max-w-[234px] border-none bg-transparent text-13 placeholder:text-placeholder focus:outline-none"
-              placeholder="Search"
+              placeholder={t("search")}
               value={searchQuery}
+              // oxlint-disable-next-line jsx_a11y/no-autofocus -- Focus the member search when entering member management.
               autoFocus
               onChange={(e) => setSearchQuery(e.target.value)}
             />

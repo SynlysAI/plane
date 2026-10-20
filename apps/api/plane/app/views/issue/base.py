@@ -33,7 +33,9 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import ROLE, allow_permission
-from plane.utils.administrative_projects import user_can_manage_administrative_project
+from plane.utils.administrative_projects import (
+    active_issue_assignees, effective_project_member, user_can_manage_administrative_project,
+)
 from plane.app.serializers import (
     IssueCreateSerializer,
     IssueDetailSerializer,
@@ -97,7 +99,7 @@ class IssueListEndpoint(BaseAPIView):
         # Restrict guests without full feature access to issues they created,
         # mirroring IssueViewSet.list.
         if (
-            not user_can_manage_administrative_project(request.user, slug, project_id)
+            getattr(effective_project_member(request.user, slug, project_id), "role", None) == ROLE.GUEST.value
             and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
@@ -312,7 +314,7 @@ class IssueViewSet(BaseViewSet):
             user_id=request.user.id,
         )
         if (
-            not user_can_manage_administrative_project(request.user, slug, project_id)
+            getattr(effective_project_member(request.user, slug, project_id), "role", None) == ROLE.GUEST.value
             and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
@@ -550,9 +552,8 @@ class IssueViewSet(BaseViewSet):
                 ),
                 assignee_ids=Coalesce(
                     Subquery(
-                        IssueAssignee.objects.filter(
+                        active_issue_assignees().filter(
                             issue_id=OuterRef("pk"),
-                            assignee__member_project__is_active=True,
                         )
                         .values("issue_id")
                         .annotate(arr=ArrayAgg("assignee_id", distinct=True))
@@ -608,7 +609,7 @@ class IssueViewSet(BaseViewSet):
         """
 
         if (
-            not user_can_manage_administrative_project(request.user, slug, project_id)
+            getattr(effective_project_member(request.user, slug, project_id), "role", None) == ROLE.GUEST.value
             and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project_id,
@@ -659,7 +660,9 @@ class IssueViewSet(BaseViewSet):
                         distinct=True,
                         filter=Q(
                             ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
+                            & Q(assignees__id__in=active_issue_assignees().filter(
+                                issue_id=OuterRef("pk"),
+                            ).values("assignee_id"))
                             & Q(issue_assignee__deleted_at__isnull=True)
                         ),
                     ),
@@ -922,7 +925,7 @@ class IssuePaginatedViewSet(BaseViewSet):
             is_active=True,
         )
         if (
-            not user_can_manage_administrative_project(request.user, slug, project_id)
+            getattr(effective_project_member(request.user, slug, project_id), "role", None) == ROLE.GUEST.value
             and project_member.exists()
             and not project.guest_view_all_features
         ):
@@ -946,9 +949,8 @@ class IssuePaginatedViewSet(BaseViewSet):
             ),
             assignee_ids=Coalesce(
                 Subquery(
-                    IssueAssignee.objects.filter(
+                    active_issue_assignees().filter(
                         issue_id=OuterRef("pk"),
-                        assignee__member_project__is_active=True,
                     )
                     .values("issue_id")
                     .annotate(arr=ArrayAgg("assignee_id", distinct=True))
@@ -1280,7 +1282,9 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
                         distinct=True,
                         filter=Q(
                             ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
+                            & Q(assignees__id__in=active_issue_assignees().filter(
+                                issue_id=OuterRef("pk"),
+                            ).values("assignee_id"))
                             & Q(issue_assignee__deleted_at__isnull=True)
                         ),
                     ),
@@ -1346,7 +1350,8 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
         """
 
         if (
-            ProjectMember.objects.filter(
+            getattr(effective_project_member(request.user, slug, project.id), "role", None) == ROLE.GUEST.value
+            and ProjectMember.objects.filter(
                 workspace__slug=slug,
                 project_id=project.id,
                 member=request.user,

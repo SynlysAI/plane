@@ -2,11 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { ResearchDetailSurface, ResearchFilterToolbar, ResearchListSurface, ResearchTableSurface } from "@/components/research/common/research-data-surface";
+import {
+  ResearchDetailSurface,
+  ResearchFilterToolbar,
+  ResearchListSurface,
+  ResearchTableSurface,
+} from "@/components/research/common/research-data-surface";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
-import { AdministrativeOrganizationManager, type AdministrativeOrganizationManagerAction } from "@/components/research/navigation/administrative-organization-manager";
+import {
+  AdministrativeOrganizationManager,
+  type AdministrativeOrganizationManagerAction,
+} from "@/components/research/navigation/administrative-organization-manager";
 import { ResearchNavigationService, type TAdministrativeOrganization } from "@/services/research/navigation.service";
-import { ProjectDomainsService, domainError, type TAdministrativeApprovalStep, type TAdministrativeFlow } from "@/services/project-domains.service";
+import {
+  ProjectDomainsService,
+  domainError,
+  type TAdministrativeApprovalStep,
+  type TAdministrativeFlow,
+} from "@/services/project-domains.service";
 
 const navigation = new ResearchNavigationService();
 const approvals = new ProjectDomainsService();
@@ -46,6 +59,7 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
       .approvers(workspaceSlug, editor.organizationId)
       .then((items) => {
         if (active) setMembers(items);
+        return undefined;
       })
       .catch(() => {
         if (active) setMembers([]);
@@ -55,7 +69,10 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
     };
   }, [editor?.organizationId, workspaceSlug]);
 
-  const editableOrganizations = useMemo(() => organizations.filter((organization) => organization.can_manage), [organizations]);
+  const editableOrganizations = useMemo(
+    () => organizations.filter((organization) => organization.can_manage),
+    [organizations]
+  );
 
   const run = async (mutation: () => Promise<unknown>) => {
     if (busy) return;
@@ -83,14 +100,22 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
   const updateStep = (index: number, patch: Partial<TAdministrativeApprovalStep>) => {
     setEditor((current) =>
       current
-        ? { ...current, steps: current.steps.map((step, stepIndex) => (stepIndex === index ? { ...step, ...patch } : step)) }
+        ? {
+            ...current,
+            steps: current.steps.map((step, stepIndex) => (stepIndex === index ? { ...step, ...patch } : step)),
+          }
         : current
     );
   };
 
   const saveFlow = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editor?.organizationId || !editor.name.trim() || editor.steps.some((step) => step.approver_kind === "USER" && !step.approver_id)) return;
+    if (
+      !editor?.organizationId ||
+      !editor.name.trim() ||
+      editor.steps.some((step) => step.approver_kind === "USER" && !step.approver_id)
+    )
+      return;
     await run(async () => {
       await approvals.saveFlow(
         workspaceSlug,
@@ -103,12 +128,16 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
 
   return (
     <ResearchListSurface>
-      {error && <div role="alert" className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">{error}</div>}
+      {error && (
+        <div
+          role="alert"
+          className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary"
+        >
+          {error}
+        </div>
+      )}
 
-      <ResearchDetailSurface
-        title="行政组织"
-        hint="组织只负责成员归属和项目范围。新建组织请在行政项目页完成。"
-      >
+      <ResearchDetailSurface title="行政组织" hint="组织成员继承下属公开项目的参与权限，私有项目需单独授权。">
         <ResearchTableSurface>
           <Table>
             <TableHeader>
@@ -135,7 +164,12 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
                     {organization.can_manage && !organization.is_default ? (
                       <div className="flex justify-end gap-1">
                         {(["members", "rename", "delete"] as const).map((action) => (
-                          <Button key={action} variant="ghost" size="sm" onClick={() => setManager({ id: organization.id, action })}>
+                          <Button
+                            key={action}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setManager({ id: organization.id, action })}
+                          >
                             {{ members: "成员", rename: "重命名", delete: "删除" }[action]}
                           </Button>
                         ))}
@@ -148,7 +182,9 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
               ))}
               {organizations.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-tertiary">暂无可管理的行政组织</TableCell>
+                  <TableCell colSpan={5} className="py-10 text-center text-tertiary">
+                    暂无可管理的行政组织
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -159,7 +195,11 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
       <ResearchDetailSurface
         title="行政审批流程"
         hint="流程按组织隔离。已发起的审批固定使用创建时的流程版本。"
-        actions={<Button variant="primary" size="sm" disabled={editableOrganizations.length === 0} onClick={openNewFlow}>新建审批流程</Button>}
+        actions={
+          <Button variant="primary" size="sm" disabled={editableOrganizations.length === 0} onClick={openNewFlow}>
+            新建审批流程
+          </Button>
+        }
       >
         <ResearchFilterToolbar>
           <span className="text-12 text-tertiary">共 {flows.length} 个流程</span>
@@ -191,12 +231,22 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
                       </ResearchStatusBadge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {organization?.can_manage && flow.is_active && <Button variant="ghost" size="sm" onClick={() => openEditFlow(flow)}>编辑新版本</Button>}
+                      {organization?.can_manage && flow.is_active && (
+                        <Button variant="ghost" size="sm" onClick={() => openEditFlow(flow)}>
+                          编辑新版本
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
               })}
-              {flows.length === 0 && <TableRow><TableCell colSpan={6} className="py-10 text-center text-tertiary">暂无审批流程</TableCell></TableRow>}
+              {flows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-10 text-center text-tertiary">
+                    暂无审批流程
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </ResearchTableSurface>
@@ -214,7 +264,12 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
         />
       )}
 
-      <ModalCore isOpen={editor !== null} handleClose={() => !busy && setEditor(null)} position={EModalPosition.CENTER} width={EModalWidth.LG}>
+      <ModalCore
+        isOpen={editor !== null}
+        handleClose={() => !busy && setEditor(null)}
+        position={EModalPosition.CENTER}
+        width={EModalWidth.LG}
+      >
         {editor && (
           <form className="space-y-5 p-5" onSubmit={(event) => void saveFlow(event)}>
             <div>
@@ -222,43 +277,110 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
               <p className="mt-1 text-12 text-tertiary">每一步按顺序执行，可指定组织管理员或具体成员。</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-12 text-secondary">所属组织
-                <select required disabled={Boolean(editor.id)} className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-13" value={editor.organizationId} onChange={(event) => setEditor({ ...editor, organizationId: event.target.value, steps: [newStep()] })}>
+              <label className="flex flex-col gap-1 text-12 text-secondary">
+                所属组织
+                <select
+                  required
+                  disabled={Boolean(editor.id)}
+                  className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-13"
+                  value={editor.organizationId}
+                  onChange={(event) => setEditor({ ...editor, organizationId: event.target.value, steps: [newStep()] })}
+                >
                   <option value="">请选择组织</option>
-                  {editableOrganizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
+                  {editableOrganizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-12 text-secondary">流程名称
-                <input required maxLength={255} className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-13" value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} />
+              <label className="flex flex-col gap-1 text-12 text-secondary">
+                流程名称
+                <input
+                  required
+                  maxLength={255}
+                  className="h-8 rounded-md border border-subtle bg-surface-1 px-2 text-13"
+                  value={editor.name}
+                  onChange={(event) => setEditor({ ...editor, name: event.target.value })}
+                />
               </label>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-13 font-semibold text-primary">审批步骤</h3>
-                <Button type="button" variant="secondary" size="sm" disabled={editor.steps.length >= 20} onClick={() => setEditor({ ...editor, steps: [...editor.steps, newStep(editor.steps.length + 1)] })}>增加步骤</Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={editor.steps.length >= 20}
+                  onClick={() => setEditor({ ...editor, steps: [...editor.steps, newStep(editor.steps.length + 1)] })}
+                >
+                  增加步骤
+                </Button>
               </div>
               <div className="space-y-2 rounded-lg bg-surface-2 p-3">
                 {editor.steps.map((step, index) => (
-                  <div key={step.order} className="flex flex-wrap items-center gap-2 rounded-md bg-surface-1 p-2 text-13">
+                  <div
+                    key={step.order}
+                    className="flex flex-wrap items-center gap-2 rounded-md bg-surface-1 p-2 text-13"
+                  >
                     <span className="w-12 text-secondary">第 {index + 1} 步</span>
-                    <select className="h-8 rounded-md border border-subtle bg-surface-1 px-2" value={step.approver_kind} onChange={(event) => updateStep(index, { approver_kind: event.target.value as TAdministrativeApprovalStep["approver_kind"], approver_id: null })}>
+                    <select
+                      className="h-8 rounded-md border border-subtle bg-surface-1 px-2"
+                      value={step.approver_kind}
+                      onChange={(event) =>
+                        updateStep(index, {
+                          approver_kind: event.target.value as TAdministrativeApprovalStep["approver_kind"],
+                          approver_id: null,
+                        })
+                      }
+                    >
                       <option value="ORG_ADMIN">组织管理员</option>
                       <option value="USER">指定成员</option>
                     </select>
                     {step.approver_kind === "USER" && (
-                      <select required className="h-8 min-w-48 rounded-md border border-subtle bg-surface-1 px-2" value={step.approver_id ?? ""} onChange={(event) => updateStep(index, { approver_id: event.target.value })}>
+                      <select
+                        required
+                        className="h-8 min-w-48 rounded-md border border-subtle bg-surface-1 px-2"
+                        value={step.approver_id ?? ""}
+                        onChange={(event) => updateStep(index, { approver_id: event.target.value })}
+                      >
                         <option value="">选择审批人</option>
-                        {members.map((member) => <option key={member.id} value={member.id}>{member.name || member.email}</option>)}
+                        {members.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name || member.email}
+                          </option>
+                        ))}
                       </select>
                     )}
-                    {editor.steps.length > 1 && <Button type="button" variant="ghost" size="sm" onClick={() => setEditor({ ...editor, steps: editor.steps.filter((_, itemIndex) => itemIndex !== index).map((item, itemIndex) => ({ ...item, order: itemIndex + 1 })) })}>移除</Button>}
+                    {editor.steps.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setEditor({
+                            ...editor,
+                            steps: editor.steps
+                              .filter((_, itemIndex) => itemIndex !== index)
+                              .map((item, itemIndex) => Object.assign({}, item, { order: itemIndex + 1 })),
+                          })
+                        }
+                      >
+                        移除
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-subtle pt-4">
-              <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => setEditor(null)}>取消</Button>
-              <Button type="submit" variant="primary" size="sm" loading={busy}>保存流程</Button>
+              <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => setEditor(null)}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary" size="sm" loading={busy}>
+                保存流程
+              </Button>
             </div>
           </form>
         )}
@@ -266,4 +388,3 @@ export function AdministrativeOrganizationSettings({ workspaceSlug }: { workspac
     </ResearchListSurface>
   );
 }
-

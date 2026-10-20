@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "@plane/i18n";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { WarningTriangleOutline } from "@makeplane/propel/icons";
@@ -26,6 +27,7 @@ type Props = {
 
 export const ConfirmProjectMemberRemove = observer(function ConfirmProjectMemberRemove(props: Props) {
   const { data, onSubmit, isOpen, onClose } = props;
+  const { t } = useTranslation();
   // router
   const { projectId } = useParams();
   // states
@@ -61,20 +63,20 @@ export const ConfirmProjectMemberRemove = observer(function ConfirmProjectMember
           </div>
           <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
             <h3 className="text-16 leading-6 font-medium text-primary">
-              {isCurrentUser ? "Leave project?" : `Remove ${data?.display_name}?`}
+              {isCurrentUser
+                ? t("project_settings.members.confirm_leave_title")
+                : t("project_settings.members.confirm_remove_title", { name: data?.display_name ?? "" })}
             </h3>
             <div className="mt-2">
               <p className="text-13 text-secondary">
                 {isCurrentUser ? (
                   <>
-                    Are you sure you want to leave the <span className="font-bold">{currentProjectDetails?.name}</span>{" "}
-                    project? You will be able to join the project if invited again or if it{"'"}s public.
+                    {t("project_settings.members.confirm_leave_description", {
+                      project: currentProjectDetails?.name ?? "",
+                    })}
                   </>
                 ) : (
-                  <>
-                    Are you sure you want to remove member- <span className="font-bold">{data?.display_name}</span>?
-                    They will no longer have access to this project. This action cannot be undone.
-                  </>
+                  <>{t("project_settings.members.confirm_remove_description", { name: data?.display_name ?? "" })}</>
                 )}
               </p>
             </div>
@@ -83,10 +85,16 @@ export const ConfirmProjectMemberRemove = observer(function ConfirmProjectMember
       </div>
       <div className="flex justify-end gap-2 p-4 sm:px-6">
         <Button variant="secondary" size="lg" onClick={handleClose}>
-          Cancel
+          {t("cancel")}
         </Button>
-        <Button variant="error-fill" size="lg" tabIndex={1} onClick={handleDeletion} loading={isDeleteLoading}>
-          {isCurrentUser ? (isDeleteLoading ? "Leaving..." : "Leave") : isDeleteLoading ? "Removing..." : "Remove"}
+        <Button variant="error-fill" size="lg" onClick={handleDeletion} loading={isDeleteLoading}>
+          {isCurrentUser
+            ? isDeleteLoading
+              ? t("project_settings.members.leaving")
+              : t("leave")
+            : isDeleteLoading
+              ? t("project_settings.members.removing")
+              : t("remove")}
         </Button>
       </div>
     </ModalCore>

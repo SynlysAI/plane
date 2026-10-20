@@ -42,6 +42,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
     value,
     tabIndex,
     noResultsMessage = "No matches found",
+    searchPlaceholder = "Search",
     defaultOpen = false,
   } = props;
   const [query, setQuery] = useState("");
@@ -70,7 +71,10 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
 
   const comboboxProps: any = {
     value,
-    onChange,
+    onChange: (selected: any) => {
+      onChange(selected);
+      if (!multiple) closeDropdown();
+    },
     disabled,
   };
 
@@ -183,8 +187,11 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                     <Combobox.Input
                       className="w-full bg-transparent py-1 text-11 text-secondary placeholder:text-placeholder focus:outline-none"
                       value={query}
+                      // Options prevents mousedown's default to retain combobox focus.
+                      // Let this input receive native mouse focus instead.
+                      onMouseDown={(event) => event.stopPropagation()}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search"
+                      placeholder={searchPlaceholder}
                       displayValue={(assigned: any) => assigned?.name}
                     />
                   </div>
@@ -216,9 +223,6 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                                 }
                               )
                             }
-                            onClick={() => {
-                              if (!multiple) closeDropdown();
-                            }}
                             disabled={option.disabled}
                           >
                             {({ selected }) => (

@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useTranslation } from "@plane/i18n";
 import { observer } from "mobx-react";
 // plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -27,13 +28,14 @@ type Props = {
 
 export const ProjectMemberListItem = observer(function ProjectMemberListItem(props: Props) {
   const { memberDetails, projectId, workspaceSlug } = props;
+  const { t } = useTranslation();
   // router
   const router = useAppRouter();
   // store hooks
   const { leaveProject } = useUserPermissions();
   const { data: currentUser } = useUser();
   const {
-    project: { removeMemberFromProject },
+    project: { removeMemberFromProject, fetchProjectMembers, getProjectMemberDetails },
   } = useMember();
   // helper hooks
   const { columns, removeMemberModal, setRemoveMemberModal } = useProjectColumns({
@@ -48,21 +50,22 @@ export const ProjectMemberListItem = observer(function ProjectMemberListItem(pro
       await leaveProject(workspaceSlug.toString(), projectId.toString())
         // oxlint-disable-next-line promise/always-return
         .then(async () => {
-          router.push(`/${workspaceSlug}/projects`);
+          await fetchProjectMembers(workspaceSlug, projectId);
+          if (!getProjectMemberDetails(memberId, projectId)) router.push(`/${workspaceSlug}/projects`);
         })
         .catch((err) => {
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "You can’t leave this project yet.",
-            message: err?.error || "Something went wrong. Please try again.",
+            title: t("project_settings.members.leave_failed"),
+            message: err?.error || t("something_went_wrong"),
           });
         });
     } else
       await removeMemberFromProject(workspaceSlug.toString(), projectId.toString(), memberId).catch((err) =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "You can't remove the member from this project yet.",
-          message: err?.error || "Something went wrong. Please try again.",
+          title: t("project_settings.members.remove_failed"),
+          message: err?.error || t("something_went_wrong"),
         })
       );
   };

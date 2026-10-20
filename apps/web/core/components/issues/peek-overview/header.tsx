@@ -23,6 +23,7 @@ import type { TNameDescriptionLoader } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
 import { copyUrlToClipboard, generateWorkItemLink } from "@plane/utils";
+import { IssueApprovalButton } from "@/components/administrative/issue-approval-button";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -71,6 +72,7 @@ export type PeekOverviewHeaderProps = {
   toggleEditIssueModal: (value: boolean) => void;
   handleRestoreIssue: () => Promise<void>;
   isSubmitting: TNameDescriptionLoader;
+  onApprovalModalOpenChange: (open: boolean) => void;
 };
 
 export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader(props: PeekOverviewHeaderProps) {
@@ -90,6 +92,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
     toggleEditIssueModal,
     handleRestoreIssue,
     isSubmitting,
+    onApprovalModalOpenChange,
   } = props;
   // ref
   const parentRef = useRef<HTMLDivElement>(null);
@@ -104,7 +107,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
     getIsIssuePeeked,
   } = useIssueDetail();
   const { isMobile } = usePlatformOS();
-  const { getProjectIdentifierById } = useProject();
+  const { getProjectIdentifierById, getPartialProjectById } = useProject();
   // derived values
   const issueDetails = getIssueById(issueId);
   const currentMode = PEEK_OPTIONS.find((m) => m.key === peekMode);
@@ -207,6 +210,14 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
       <div className="flex items-center gap-x-4">
         <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
         <div className="flex items-center gap-2">
+          {!isArchived && getPartialProjectById(projectId)?.is_research_project === false && (
+            <IssueApprovalButton
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              issueId={issueId}
+              onOpenChange={onApprovalModalOpenChange}
+            />
+          )}
           {currentUser && !isArchived && (
             <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
           )}

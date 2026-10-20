@@ -1,7 +1,7 @@
 """行政项目的默认管理权限，独立于显式项目成员关系。"""
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 
 from plane.db.models import (
     AdministrativeOrganization,
@@ -13,6 +13,8 @@ from plane.db.models import (
     ResearchProjectProfile,
     Workspace,
     WorkspaceMember,
+    User,
+    IssueAssignee,
 )
 from plane.db.models.project import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
@@ -86,7 +88,7 @@ def administrative_projects_for_user(user, workspace_slug):
 
 
 def administrative_organization_project_ids(user, workspace_slug):
-    """返回用户通过行政组织成员身份可读取的公开行政项目 ID。
+    """返回用户通过行政组织成员身份可参与的公开行政项目 ID。
 
     私有项目（SECRET）不向组织成员开放：组织挂靠只是归属分类，
     访问权限由"公开 + 组织成员"共同决定。
@@ -100,6 +102,9 @@ def administrative_organization_project_ids(user, workspace_slug):
             administrative_organization__members__is_active=True,
             administrative_organization__members__deleted_at__isnull=True,
             administrative_organization__deleted_at__isnull=True,
+            workspace__workspace_member__member=user,
+            workspace__workspace_member__is_active=True,
+            workspace__workspace_member__deleted_at__isnull=True,
             network=ProjectNetwork.PUBLIC.value,
             deleted_at__isnull=True,
         )
@@ -238,9 +243,13 @@ def restrict_administrative_project_visibility(queryset, user, workspace_slug):
     )
     from plane.utils.project_domains import research_admitted
     from plane.research.views.projects import visible_profile_queryset
+
     workspace = Workspace.objects.filter(slug=workspace_slug).first()
-    visible_research = (visible_profile_queryset(workspace, user).values("project_id")
-                        if research_admitted(user, workspace) else ResearchProjectProfile.objects.none().values("project_id"))
+    visible_research = (
+        visible_profile_queryset(workspace, user).values("project_id")
+        if research_admitted(user, workspace)
+        else ResearchProjectProfile.objects.none().values("project_id")
+    )
     return queryset.filter(
         Q(id__in=visible_research)
         | Q(id__in=member_ids)
@@ -266,8 +275,118 @@ def user_can_manage_administrative_project(user, workspace_slug, project_id):
     return administrative_projects_for_user(user, workspace_slug).filter(id=project_id).exists()
 
 
+def inherited_project_members(project):
+    """Return live workspace memberships inherited by a public administrative project."""
+    members = WorkspaceMember.objects.filter(
+        workspace_id=project.workspace_id,
+        is_active=True,
+        member__is_active=True,
+    )
+    if (
+        project.network != ProjectNetwork.PUBLIC.value
+        or not project.administrative_organization_id
+        or not administrative_projects(project.workspace.slug).filter(pk=project.pk).exists()
+        or project.administrative_organization.deleted_at
+    ):
+        return members.none()
+    if not project.administrative_organization.is_default:
+        members = members.filter(
+            member_id__in=AdministrativeOrganizationMember.objects.filter(
+                organization_id=project.administrative_organization_id,
+                is_active=True,
+            ).values("member_id")
+        )
+    return members
+
+
+def assignable_project_member_ids(project):
+    """Use the same roster for assignment validation and project participation."""
+    direct = ProjectMember.objects.filter(project=project, is_active=True, role__gte=ROLE.MEMBER.value)
+    return (
+        User.objects.filter(
+            Q(id__in=direct.values("member_id")) | Q(id__in=inherited_project_members(project).values("member_id")),
+            member_workspace__workspace_id=project.workspace_id,
+            member_workspace__is_active=True,
+            member_workspace__deleted_at__isnull=True,
+            is_active=True,
+        )
+        .values_list("id", flat=True)
+        .distinct()
+    )
+
+
+def project_member_roster(project):
+    """Merge direct and inherited memberships without persisting inherited grants."""
+    direct = ProjectMember.objects.filter(
+        project=project,
+        is_active=True,
+        member__is_bot=False,
+        member__is_active=True,
+        member__member_workspace__workspace_id=project.workspace_id,
+        member__member_workspace__is_active=True,
+        member__member_workspace__deleted_at__isnull=True,
+    )
+    rows = {
+        str(member.member_id): {
+            "id": str(member.id),
+            "member": str(member.member_id),
+            "role": member.role,
+            "original_role": member.role,
+            "created_at": member.created_at,
+            "membership_source": "DIRECT",
+            "inherits_organization": False,
+        }
+        for member in direct
+    }
+    for member in inherited_project_members(project).filter(member__is_bot=False):
+        user_id = str(member.member_id)
+        if user_id in rows:
+            rows[user_id]["role"] = max(rows[user_id]["role"], ROLE.MEMBER.value)
+            rows[user_id]["inherits_organization"] = True
+        else:
+            rows[user_id] = {
+                "id": None,
+                "member": user_id,
+                "role": ROLE.MEMBER.value,
+                "original_role": None,
+                "created_at": None,
+                "membership_source": "ORGANIZATION",
+                "inherits_organization": True,
+            }
+    return list(rows.values())
+
+
+def active_issue_assignees():
+    """Keep inherited assignees visible in task lists and detail responses."""
+    workspace_member = WorkspaceMember.objects.filter(
+        workspace_id=OuterRef("workspace_id"),
+        member_id=OuterRef("assignee_id"),
+        is_active=True,
+    )
+    direct = ProjectMember.objects.filter(
+        project_id=OuterRef("project_id"),
+        member_id=OuterRef("assignee_id"),
+        is_active=True,
+    )
+    organization_member = AdministrativeOrganizationMember.objects.filter(
+        organization_id=OuterRef("project__administrative_organization_id"),
+        member_id=OuterRef("assignee_id"),
+        is_active=True,
+    )
+    inherited = (
+        Q(project__network=ProjectNetwork.PUBLIC.value, project__administrative_organization__deleted_at__isnull=True)
+        & ~Q(project_id__in=research_project_ids())
+        & (Q(project__administrative_organization__is_default=True) | Q(Exists(organization_member)))
+    )
+    return IssueAssignee.objects.filter(
+        Exists(workspace_member),
+        Q(Exists(direct)) | inherited,
+        assignee__is_active=True,
+    )
+
+
 def effective_project_member(user, workspace_slug, project_id):
-    """返回显式成员或用于权限检查的临时行政项目管理员。
+    """返回显式成员或用于权限检查的临时继承成员。
 
     Args:
         user: 当前用户。
@@ -290,7 +409,7 @@ def effective_project_member(user, workspace_slug, project_id):
             workspace_id=Workspace.objects.values_list("id", flat=True).get(slug=workspace_slug),
             role=ROLE.ADMIN.value,
         )
-    if public_member:
+    if public_member or organization_member:
         role = max(member.role, ROLE.MEMBER.value) if member is not None else ROLE.MEMBER.value
         return ProjectMember(
             id=member.id if member else None,
@@ -298,12 +417,5 @@ def effective_project_member(user, workspace_slug, project_id):
             project_id=project_id,
             workspace_id=Workspace.objects.values_list("id", flat=True).get(slug=workspace_slug),
             role=role,
-        )
-    if organization_member and member is None:
-        return ProjectMember(
-            member=user,
-            project_id=project_id,
-            workspace_id=Workspace.objects.values_list("id", flat=True).get(slug=workspace_slug),
-            role=ROLE.GUEST.value,
         )
     return member

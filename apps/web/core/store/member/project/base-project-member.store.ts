@@ -221,6 +221,8 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
       id: projectMember.id,
       role: projectMember.role,
       original_role: projectMember.original_role,
+      membership_source: projectMember.membership_source,
+      inherits_organization: projectMember.inherits_organization,
       member: {
         ...userDetails,
         joining_date: projectMember.created_at ?? undefined,
@@ -274,6 +276,8 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
       id: projectMember.id,
       role: projectMember.role,
       original_role: projectMember.original_role,
+      membership_source: projectMember.membership_source,
+      inherits_organization: projectMember.inherits_organization,
       member: {
         ...userDetails,
         joining_date: projectMember.created_at ?? undefined,
@@ -288,12 +292,11 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
    * @param workspaceSlug
    * @param projectId
    */
-  fetchProjectMembers = async (workspaceSlug: string, projectId: string, clearExistingMembers: boolean = false) =>
+  fetchProjectMembers = async (workspaceSlug: string, projectId: string, _clearExistingMembers: boolean = false) =>
     await this.projectMemberService.fetchProjectMembers(workspaceSlug, projectId).then((response) => {
       runInAction(() => {
-        if (clearExistingMembers) {
-          unset(this.projectMemberMap, [projectId]);
-        }
+        // The roster is authoritative, including revoked organization inheritance.
+        unset(this.projectMemberMap, [projectId]);
         response.forEach((member) => {
           set(this.projectMemberMap, [projectId, member.member], member);
         });
@@ -310,7 +313,7 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
    * @returns Promise<TProjectMembership[]>
    */
   bulkAddMembersToProject = async (workspaceSlug: string, projectId: string, data: IProjectBulkAddFormData) =>
-    await this.projectMemberService.bulkAddMembersToProject(workspaceSlug, projectId, data).then((response) => {
+    await this.projectMemberService.bulkAddMembersToProject(workspaceSlug, projectId, data).then(async (response) => {
       runInAction(() => {
         response.forEach((member) => {
           set(this.projectMemberMap, [projectId, member.member], {
@@ -326,7 +329,7 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
       this.projectRoot.projectMap[projectId].members = this.projectRoot.projectMap?.[projectId]?.members?.concat(
         data.members.map((m) => m.member_id)
       );
-
+      await this.fetchProjectMembers(workspaceSlug, projectId);
       return response;
     });
 
@@ -377,6 +380,7 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
           role,
         }
       );
+      await this.fetchProjectMembers(workspaceSlug, projectId);
       return response;
     } catch (error) {
       // revert back to original members in case of error
@@ -430,12 +434,8 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
   removeMemberFromProject = async (workspaceSlug: string, projectId: string, userId: string) => {
     const memberDetails = this.getProjectMemberDetails(userId, projectId);
     if (!memberDetails || !memberDetails?.id) throw new Error("Member not found");
-    // oxlint-disable-next-line promise/always-return
-    await this.projectMemberService.deleteProjectMember(workspaceSlug, projectId, memberDetails?.id).then(() => {
-      runInAction(() => {
-        this.processMemberRemoval(projectId, userId);
-      });
-    });
+    await this.projectMemberService.deleteProjectMember(workspaceSlug, projectId, memberDetails.id);
+    await this.fetchProjectMembers(workspaceSlug, projectId);
   };
 
   /**

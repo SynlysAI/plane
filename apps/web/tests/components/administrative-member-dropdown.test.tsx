@@ -73,6 +73,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.fetchProjectMembers.mockResolvedValue([]);
   mocks.getProjectMemberIds.mockReturnValue(["admin-1", "member-1"]);
   mocks.getUserDetails.mockImplementation((userId: string) => ({ id: userId, display_name: userId }));
   mocks.getProjectMemberDetails.mockImplementation((userId: string) =>
@@ -122,4 +123,22 @@ it("shows a scoped empty state when the project has no assignable members", asyn
   await renderDropdown();
 
   expect(document.body.textContent).toContain("当前行政项目暂无可指派成员");
+});
+
+it("refreshes a cached roster once per opening without refetching on rerender", async () => {
+  await renderDropdown();
+  expect(mocks.fetchProjectMembers).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    root.render(
+      <MemberDropdown
+        projectId="project-1"
+        value={[]}
+        onChange={vi.fn()}
+        multiple
+        buttonVariant="border-with-text"
+        placeholder="负责人"
+      />
+    );
+  });
+  expect(mocks.fetchProjectMembers).toHaveBeenCalledTimes(1);
 });
