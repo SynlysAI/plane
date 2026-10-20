@@ -89,6 +89,7 @@ export function AdministrativeOrganizationManager({
       try {
         await mutation();
         await onUpdated();
+        window.dispatchEvent(new CustomEvent("administrative-organizations-updated"));
         setToast({ type: TOAST_TYPE.SUCCESS, title: "组织已更新", message: successMessage });
         return true;
       } catch (error) {

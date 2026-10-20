@@ -3,24 +3,86 @@ import type { TResearchIdentity } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
 export type TWorkspaceTodo = {
-  id: string; domain: "RESEARCH" | "ADMINISTRATIVE"; source: string; object_id: string;
-  title: string; context: string; project_id?: string; business_status: string;
-  handling_status: string; due_at: string | null; urgency: string; updated_at: string; href: string;
+  id: string;
+  domain: "RESEARCH" | "ADMINISTRATIVE";
+  source: string;
+  object_id: string;
+  title: string;
+  context: string;
+  project_id?: string;
+  business_status: string;
+  handling_status: string;
+  due_at: string | null;
+  urgency: string;
+  updated_at: string;
+  href: string;
 };
 export type TWorkspaceTodoPage = {
-  results: TWorkspaceTodo[]; total_count: number; next_cursor: string | null; degraded_sources: string[];
+  results: TWorkspaceTodo[];
+  total_count: number;
+  next_cursor: string | null;
+  degraded_sources: string[];
 };
-export type TAdministrativeApprovalStep = { order: number; approver_kind: "ORG_ADMIN" | "USER"; approver_id: string | null };
-export type TAdministrativeFlow = { id: string; organization_id: string; name: string; version: number; is_active: boolean; steps: TAdministrativeApprovalStep[] };
+export type TAdministrativeApprovalStep = {
+  order: number;
+  approver_kind: "ORG_ADMIN" | "USER";
+  approver_id: string | null;
+};
+export type TAdministrativeFlow = {
+  id: string;
+  organization_id: string;
+  name: string;
+  version: number;
+  is_active: boolean;
+  steps: TAdministrativeApprovalStep[];
+};
 export type TAdministrativeApproval = {
-  id: string; project_id: string; project_name: string; issue_id: string; title: string;
-  status: string; step: number; flow_id: string; flow_name: string; flow_version: number;
-  requester: { id: string; display_name: string }; approvers: { id: string; display_name: string }[];
-  can_act: boolean; can_withdraw: boolean; can_cancel: boolean; blocked: boolean;
-  due_at: string | null; created_at: string; updated_at: string;
+  id: string;
+  project_id: string;
+  project_name: string;
+  issue_id: string;
+  title: string;
+  status: string;
+  step: number;
+  flow_id: string;
+  flow_name: string;
+  flow_version: number;
+  approval_mode: "FLOW" | "DIRECT";
+  requester: { id: string; display_name: string };
+  approvers: { id: string; display_name: string }[];
+  can_act: boolean;
+  can_withdraw: boolean;
+  can_cancel: boolean;
+  blocked: boolean;
+  due_at: string | null;
+  created_at: string;
+  updated_at: string;
+  work_item?: {
+    id: string;
+    workspace_id: string;
+    identifier: string;
+    name: string;
+    description_html: string;
+    state: string | null;
+    priority: string;
+    start_date: string | null;
+    target_date: string | null;
+    assignees: { id: string; display_name: string }[];
+    attachments: { id: string; name: string; url: string }[];
+  };
+  steps?: { order: number; approver_kind: string; approver_name: string }[];
   history?: { id: string; action: string; actor: string; comment: string; step: number; created_at: string }[];
 };
-export type TProjectApprovalSetting = { flow_id: string | null; organization_id: string | null; can_manage: boolean; can_submit: boolean };
+export type TProjectApprovalSetting = {
+  flow_id: string | null;
+  organization_id: string | null;
+  can_manage: boolean;
+  can_submit: boolean;
+  approvers: { id: string; name: string }[];
+};
+export type TAdministrativeApprovalSelection =
+  | { flow_id: string; approver_id?: never }
+  | { approver_id: string; flow_id?: never };
 
 export function domainError(error: unknown): string {
   const response = (error as { response?: { data?: unknown } })?.response?.data;
@@ -34,20 +96,32 @@ export function domainError(error: unknown): string {
 }
 
 export class ProjectDomainsService extends APIService {
-  constructor() { super(API_BASE_URL); }
+  constructor() {
+    super(API_BASE_URL);
+  }
   async setResearchEnabled(slug: string, enabled: boolean): Promise<TResearchIdentity> {
     return this.patch(`/api/workspaces/${slug}/context/`, { research_enabled: enabled }).then((res) => res.data);
   }
   async todos(slug: string, domain = "all", cursor?: string): Promise<TWorkspaceTodoPage> {
-    return this.get(`/api/workspaces/${slug}/todos/`, { params: { domain, cursor, limit: 50 } }).then((res) => res.data);
+    return this.get(`/api/workspaces/${slug}/todos/`, { params: { domain, cursor, limit: 50 } }).then(
+      (res) => res.data
+    );
   }
   async flows(slug: string, organizationId?: string): Promise<TAdministrativeFlow[]> {
-    return this.get(`/api/workspaces/${slug}/administrative/approval-flows/`, { params: { organization_id: organizationId } }).then((res) => res.data.results);
+    return this.get(`/api/workspaces/${slug}/administrative/approval-flows/`, {
+      params: { organization_id: organizationId },
+    }).then((res) => res.data.results);
   }
   async approvers(slug: string, organizationId: string): Promise<{ id: string; name: string; email: string }[]> {
-    return this.get(`/api/workspaces/${slug}/administrative/organizations/${organizationId}/approvers/`).then((res) => res.data);
+    return this.get(`/api/workspaces/${slug}/administrative/organizations/${organizationId}/approvers/`).then(
+      (res) => res.data
+    );
   }
-  async saveFlow(slug: string, payload: Pick<TAdministrativeFlow, "organization_id" | "name" | "steps">, id?: string): Promise<TAdministrativeFlow> {
+  async saveFlow(
+    slug: string,
+    payload: Pick<TAdministrativeFlow, "organization_id" | "name" | "steps">,
+    id?: string
+  ): Promise<TAdministrativeFlow> {
     const path = `/api/workspaces/${slug}/administrative/approval-flows/${id ? `${id}/` : ""}`;
     return (id ? this.patch(path, payload) : this.post(path, payload)).then((res) => res.data);
   }
@@ -55,18 +129,47 @@ export class ProjectDomainsService extends APIService {
     return this.get(`/api/workspaces/${slug}/projects/${projectId}/approval-setting/`).then((res) => res.data);
   }
   async selectFlow(slug: string, projectId: string, flowId: string): Promise<TProjectApprovalSetting> {
-    return this.patch(`/api/workspaces/${slug}/projects/${projectId}/approval-setting/`, { flow_id: flowId }).then((res) => res.data);
+    return this.patch(`/api/workspaces/${slug}/projects/${projectId}/approval-setting/`, { flow_id: flowId }).then(
+      (res) => res.data
+    );
   }
-  async requests(slug: string, scope = "to_me", projectId?: string): Promise<TAdministrativeApproval[]> {
-    return this.get(`/api/workspaces/${slug}/administrative/approval-requests/`, { params: { scope, project_id: projectId } }).then((res) => res.data.results);
+  async requests(
+    slug: string,
+    scope = "to_me",
+    projectId?: string,
+    status?: string
+  ): Promise<TAdministrativeApproval[]> {
+    return this.get(`/api/workspaces/${slug}/administrative/approval-requests/`, {
+      params: { scope, project_id: projectId, status },
+    }).then((res) => res.data.results);
   }
-  async getRequest(slug: string, id: string): Promise<TAdministrativeApproval> {
-    return this.get(`/api/workspaces/${slug}/administrative/approval-requests/${id}/`).then((res) => res.data);
+  async getRequest(slug: string, id: string, projectId?: string): Promise<TAdministrativeApproval> {
+    return this.get(`/api/workspaces/${slug}/administrative/approval-requests/${id}/`, {
+      params: { project_id: projectId },
+    }).then((res) => res.data);
   }
-  async submit(slug: string, projectId: string, issueId: string): Promise<TAdministrativeApproval> {
-    return this.post(`/api/workspaces/${slug}/administrative/approval-requests/`, { project_id: projectId, issue_id: issueId }).then((res) => res.data);
+  async submit(
+    slug: string,
+    projectId: string,
+    issueId: string,
+    selection: TAdministrativeApprovalSelection
+  ): Promise<TAdministrativeApproval> {
+    return this.post(`/api/workspaces/${slug}/administrative/approval-requests/`, {
+      project_id: projectId,
+      issue_id: issueId,
+      ...selection,
+    }).then((res) => res.data);
   }
-  async act(slug: string, item: TAdministrativeApproval, action: string, comment: string): Promise<TAdministrativeApproval> {
-    return this.post(`/api/workspaces/${slug}/administrative/approval-requests/${item.id}/`, { action, expected_step: item.step, comment }).then((res) => res.data);
+  async act(
+    slug: string,
+    item: TAdministrativeApproval,
+    action: string,
+    comment: string
+  ): Promise<TAdministrativeApproval> {
+    return this.post(`/api/workspaces/${slug}/administrative/approval-requests/${item.id}/`, {
+      action,
+      expected_step: item.step,
+      comment,
+    }).then((res) => res.data);
   }
 }

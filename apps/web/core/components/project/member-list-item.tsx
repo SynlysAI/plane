@@ -33,7 +33,7 @@ export const ProjectMemberListItem = observer(function ProjectMemberListItem(pro
   const { leaveProject } = useUserPermissions();
   const { data: currentUser } = useUser();
   const {
-    project: { removeMemberFromProject },
+    project: { removeMemberFromProject, fetchProjectMembers, getProjectMemberDetails },
   } = useMember();
   // helper hooks
   const { columns, removeMemberModal, setRemoveMemberModal } = useProjectColumns({
@@ -48,7 +48,8 @@ export const ProjectMemberListItem = observer(function ProjectMemberListItem(pro
       await leaveProject(workspaceSlug.toString(), projectId.toString())
         // oxlint-disable-next-line promise/always-return
         .then(async () => {
-          router.push(`/${workspaceSlug}/projects`);
+          await fetchProjectMembers(workspaceSlug, projectId);
+          if (!getProjectMemberDetails(memberId, projectId)) router.push(`/${workspaceSlug}/projects`);
         })
         .catch((err) => {
           setToast({

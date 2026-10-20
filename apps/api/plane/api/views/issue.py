@@ -173,7 +173,14 @@ def user_has_issue_permission(user_id, project_id, issue=None, allowed_roles=Non
     if allowed_roles is not None:
         qs = qs.filter(role__in=allowed_roles)
 
-    return qs.exists()
+    if qs.exists():
+        return True
+    from plane.utils.administrative_projects import effective_project_member
+    from plane.db.models import User
+    project = Project.objects.select_related("workspace").filter(pk=project_id).first()
+    user = User.objects.filter(pk=user_id, is_active=True).first()
+    member = effective_project_member(user, project.workspace.slug, project_id) if project and user else None
+    return member is not None and (allowed_roles is None or member.role in allowed_roles)
 
 
 class WorkspaceIssueAPIEndpoint(BaseAPIView):

@@ -33,6 +33,7 @@ from plane.utils.administrative_projects import (
     get_or_create_default_administrative_organization,
     user_can_manage_administrative_organization,
     research_project_ids,
+    assignable_project_member_ids,
 )
 from plane.utils.project_identifier import random_identifier, unique_identifier
 
@@ -134,13 +135,7 @@ class ProjectSerializer(BaseSerializer):
                     deleted_at__isnull=True,
                 ).exists()
             else:
-                is_valid_user = ProjectMember.objects.filter(
-                    project_id=self.instance.id,
-                    member_id=user_id,
-                    role__gte=15,
-                    is_active=True,
-                    deleted_at__isnull=True,
-                ).exists()
+                is_valid_user = assignable_project_member_ids(self.instance).filter(id=user_id).exists()
 
             if not is_valid_user:
                 raise serializers.ValidationError({field: "The provided user is not an active member of this project"})

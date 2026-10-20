@@ -27,6 +27,7 @@ from plane.utils.administrative_projects import (
     administrative_organization_project_ids,
     administrative_projects_for_user,
     effective_project_member,
+    project_member_roster,
     public_administrative_project_ids,
     user_can_manage_administrative_project,
 )
@@ -163,18 +164,10 @@ class ProjectMemberViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
-        # Get the list of project members for the project
-        project_members = ProjectMember.objects.filter(
-            project_id=project_id,
-            workspace__slug=slug,
-            member__is_bot=False,
-            is_active=True,
-            member__member_workspace__workspace__slug=slug,
-            member__member_workspace__is_active=True,
-        ).select_related("project", "member", "workspace")
-
-        serializer = ProjectMemberRoleSerializer(project_members, fields=("id", "member", "role"), many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        project = Project.objects.select_related("workspace", "administrative_organization").get(
+            pk=project_id, workspace__slug=slug,
+        )
+        return Response(project_member_roster(project), status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def retrieve(self, request, slug, project_id, pk):
@@ -382,9 +375,14 @@ class ProjectMemberUserEndpoint(BaseAPIView):
                 return Response({"id": None, "member": str(request.user.id), "role": inherited.role,
                                  "original_role": None, "created_at": None, "project": str(project_id)})
             return Response({"error": "Project access denied"}, status=403)
+        inherited = effective_project_member(request.user, slug, project_id)
         serializer = ProjectMemberSerializer(project_member)
+        data = dict(serializer.data)
+        if inherited is not None:
+            data["role"] = inherited.role
+            data["original_role"] = project_member.role
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class UserProjectRolesEndpoint(BaseAPIView):
@@ -403,13 +401,10 @@ class UserProjectRolesEndpoint(BaseAPIView):
         project_members = {str(member["project_id"]): member["role"] for member in project_members}
         for project_id in administrative_projects_for_user(request.user, slug).values_list("id", flat=True):
             project_members[str(project_id)] = ROLE.ADMIN.value
-        # 对齐项目列表 member_role 注解的口径：公共行政项目对全员按 MEMBER 只读
-        # 开放，行政组织关联项目按 GUEST 开放。缺了这两类，前端权限地图会把列表
-        # 里可见的项目误判为不可访问（显示“未找到项目”）。
         for project_id in public_administrative_project_ids(request.user, slug).values_list("id", flat=True):
-            project_members.setdefault(str(project_id), ROLE.MEMBER.value)
+            project_members[str(project_id)] = max(project_members.get(str(project_id), 0), ROLE.MEMBER.value)
         for project_id in administrative_organization_project_ids(request.user, slug).values_list("id", flat=True):
-            project_members.setdefault(str(project_id), ROLE.GUEST.value)
+            project_members[str(project_id)] = max(project_members.get(str(project_id), 0), ROLE.MEMBER.value)
         for project_id in research_review_project_ids_for_slug(request.user, slug):
             project_members.setdefault(str(project_id), ROLE.GUEST.value)
         return Response(project_members, status=status.HTTP_200_OK)

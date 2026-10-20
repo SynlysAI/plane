@@ -107,6 +107,8 @@ export interface IProjectMemberLite {
 export type TProjectMembership = {
   member: string;
   role: TUserPermissions | EUserProjectRoles;
+  membership_source?: "DIRECT" | "ORGANIZATION";
+  inherits_organization?: boolean;
 } & (
   | {
       id: string;

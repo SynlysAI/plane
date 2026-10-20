@@ -14,10 +14,15 @@ import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import { AccountTypeColumn, NameColumn } from "@/components/project/settings/member-columns";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
+import { useProject } from "@/hooks/store/use-project";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
 
-export interface RowData extends Pick<TProjectMembership, "original_role"> {
+export interface RowData extends Pick<
+  TProjectMembership,
+  "original_role" | "membership_source" | "inherits_organization"
+> {
+  role?: TProjectMembership["role"];
   member: IWorkspaceMember;
 }
 
@@ -33,6 +38,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
 
   // store hooks
   const { data: currentUser } = useUser();
+  const { getPartialProjectById } = useProject();
   const { allowPermissions, getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const {
     project: {
@@ -122,6 +128,19 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
       ),
     },
     {
+      key: "Membership Source",
+      content: "成员来源",
+      tdRender: (rowData: RowData) => (
+        <div className="min-w-24 text-12 text-secondary">
+          {rowData.membership_source === "ORGANIZATION"
+            ? "组织继承"
+            : rowData.inherits_organization
+              ? "单独添加 · 组织继承"
+              : "单独添加"}
+        </div>
+      ),
+    },
+    {
       key: "Joining Date",
       content: "Joining date",
       thRender: () => (
@@ -135,7 +154,10 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
   ];
   return {
-    columns,
+    columns:
+      getPartialProjectById(projectId)?.is_research_project === false
+        ? columns
+        : columns.filter((column) => column.key !== "Membership Source"),
     removeMemberModal,
     setRemoveMemberModal,
     displayFilters,

@@ -32,6 +32,7 @@ from plane.db.models import (
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.issue_relation_mapper import get_actual_relation
 from plane.utils.host import base_host
+from plane.utils.administrative_projects import active_issue_assignees
 
 
 class IssueRelationViewSet(BaseViewSet):
@@ -144,7 +145,9 @@ class IssueRelationViewSet(BaseViewSet):
                         distinct=True,
                         filter=Q(
                             ~Q(assignees__id__isnull=True)
-                            & Q(assignees__member_project__is_active=True)
+                            & Q(assignees__id__in=active_issue_assignees().filter(
+                                issue_id=OuterRef("pk"),
+                            ).values("assignee_id"))
                             & Q(issue_assignee__deleted_at__isnull=True)
                         ),
                     ),

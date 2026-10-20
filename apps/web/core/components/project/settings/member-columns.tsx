@@ -19,7 +19,11 @@ import { getFileURL } from "@plane/utils";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 
-export interface RowData extends Pick<TProjectMembership, "original_role"> {
+export interface RowData extends Pick<
+  TProjectMembership,
+  "original_role" | "membership_source" | "inherits_organization"
+> {
+  role?: TProjectMembership["role"];
   member: IWorkspaceMember;
 }
 
@@ -68,7 +72,7 @@ export function NameColumn(props: NameProps) {
               )}
               {first_name} {last_name}
             </div>
-            {(isAdmin || id === currentUser?.id) && (
+            {rowData.original_role != null && (isAdmin || id === currentUser?.id) && (
               <CustomMenu
                 ellipsis
                 buttonClassName="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -80,7 +84,11 @@ export function NameColumn(props: NameProps) {
                   onClick={() => setRemoveMemberModal(rowData)}
                 >
                   <CircleMinus className="size-3.5 flex-shrink-0" />
-                  {rowData.member?.id === currentUser?.id ? "Leave " : "Remove "}
+                  {rowData.inherits_organization
+                    ? "移除单独授权"
+                    : rowData.member?.id === currentUser?.id
+                      ? "Leave "
+                      : "Remove "}
                 </CustomMenu.MenuItem>
               </CustomMenu>
             )}
@@ -106,7 +114,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
     formState: { errors },
   } = useForm();
   // derived values
-  const roleLabel = ROLE[rowData.original_role ?? EUserPermissions.GUEST];
+  const roleLabel = ROLE[rowData.role ?? rowData.original_role ?? EUserPermissions.GUEST];
   const isCurrentUser = currentUser?.id === rowData.member.id;
   const isRowDataWorkspaceAdmin = [EUserPermissions.ADMIN].includes(
     Number(getWorkspaceMemberDetails(rowData.member.id)?.role ?? EUserPermissions.GUEST)
@@ -126,8 +134,9 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
   // Workspace admin can change his own role
   // Project admin can change any role except his own and workspace admin's role
   const isRoleEditable =
-    (isCurrentUserWorkspaceAdmin && isCurrentUser) ||
-    (isCurrentUserProjectAdmin && !isRowDataWorkspaceAdmin && !isCurrentUser);
+    rowData.original_role != null &&
+    ((isCurrentUserWorkspaceAdmin && isCurrentUser) ||
+      (isCurrentUserProjectAdmin && !isRowDataWorkspaceAdmin && !isCurrentUser));
   const checkCurrentOptionWorkspaceRole = (value: string) => {
     const currentMemberWorkspaceRole = getWorkspaceMemberDetails(value)?.role as EUserPermissions | undefined;
     if (!value || !currentMemberWorkspaceRole) return ROLE;
@@ -135,7 +144,11 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
     const isGuest = [EUserPermissions.GUEST].includes(currentMemberWorkspaceRole);
 
     return Object.fromEntries(
-      Object.entries(ROLE).filter(([key]) => !isGuest || parseInt(key) === EUserPermissions.GUEST)
+      Object.entries(ROLE).filter(
+        ([key]) =>
+          (!isGuest || parseInt(key) === EUserPermissions.GUEST) &&
+          (!rowData.inherits_organization || parseInt(key) >= EUserPermissions.MEMBER)
+      )
     );
   };
 

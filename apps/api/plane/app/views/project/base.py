@@ -24,6 +24,7 @@ from django.db.models import (
     When,
 )
 from django.utils import timezone
+from django.db.models.functions import Coalesce, Greatest
 
 # Third Party imports
 from rest_framework import status
@@ -124,9 +125,12 @@ def _project_member_role_expression(request, slug):
     ).values("project_id")
     return Case(
         When(id__in=administrative_projects_for_user(request.user, slug).values("id"), then=Value(ROLE.ADMIN.value)),
-        When(id__in=public_administrative_project_ids(request.user, slug), then=Value(ROLE.MEMBER.value)),
+        When(
+            Q(id__in=public_administrative_project_ids(request.user, slug))
+            | Q(id__in=administrative_organization_project_ids(request.user, slug)),
+            then=Greatest(Coalesce(Subquery(member_role), Value(0)), Value(ROLE.MEMBER.value)),
+        ),
         When(id__in=explicit_project_ids, then=Subquery(member_role)),
-        When(id__in=administrative_organization_project_ids(request.user, slug), then=Value(ROLE.GUEST.value)),
         default=Subquery(member_role),
         output_field=IntegerField(),
     )
