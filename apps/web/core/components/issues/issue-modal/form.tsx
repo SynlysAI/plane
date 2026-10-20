@@ -20,7 +20,6 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssue, TWorkspaceDraftIssue } from "@plane/types";
 // hooks
-import { Switch } from "@makeplane/propel/components/switch";
 import {
   convertWorkItemDataToSearchResponse,
   getUpdateFormDataForReset,
@@ -29,6 +28,7 @@ import {
   getTabIndex,
 } from "@plane/utils";
 // components
+import { CreateMoreSwitch } from "@/components/issues/create-more-switch";
 import {
   IssueDefaultProperties,
   IssueDescriptionEditor,
@@ -455,27 +455,13 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                 </p>
               )}
               {showActionButtons && (
-                <div
-                  className="flex items-center justify-end gap-4 border-t-[0.5px] border-subtle pt-6 pb-3"
-                  tabIndex={getIndex("create_more")}
-                >
+                <div className="flex items-center justify-end gap-4 border-t-[0.5px] border-subtle pt-6 pb-3">
                   {!data?.id && (
-                    <div
-                      className="inline-flex cursor-pointer items-center gap-1.5"
-                      onClick={() => onCreateMoreToggleChange(!isCreateMoreToggleEnabled)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") onCreateMoreToggleChange(!isCreateMoreToggleEnabled);
-                      }}
-                      role="button"
-                    >
-                      <Switch
-                        size="sm"
-                        checked={isCreateMoreToggleEnabled}
-                        onCheckedChange={() => {}}
-                        aria-label={t("create_more")}
-                      />
-                      <span className="text-caption-sm-regular">{t("create_more")}</span>
-                    </div>
+                    <CreateMoreSwitch
+                      checked={isCreateMoreToggleEnabled}
+                      onCheckedChange={onCreateMoreToggleChange}
+                      tabIndex={getIndex("create_more")}
+                    />
                   )}
                   <div className="flex items-center gap-2">
                     <div tabIndex={getIndex("discard_button")}>

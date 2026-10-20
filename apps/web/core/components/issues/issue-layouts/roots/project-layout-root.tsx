@@ -77,9 +77,9 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
         workspaceSlug={workspaceSlug}
       >
         {({ filter: projectWorkItemsFilter }) => (
-          <div className="relative flex h-full w-full flex-col overflow-hidden">
+          <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden">
             {projectWorkItemsFilter && <WorkItemFiltersRow filter={projectWorkItemsFilter} />}
-            <div className="relative h-full w-full overflow-auto bg-surface-1">
+            <div className="relative min-h-0 w-full flex-1 overflow-auto bg-surface-1">
               {/* mutation loader */}
               {issues?.getIssueLoader() === "mutation" && (
                 <div className="shadow-sm fixed top-[70px] right-[20px] z-50 flex h-[40px] w-[40px] items-center justify-center rounded-sm bg-layer-1">

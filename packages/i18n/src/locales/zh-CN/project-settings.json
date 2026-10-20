@@ -1,6 +1,8 @@
 {
   "project_settings": {
     "general": {
+      "title": "项目设置",
+      "name_max_length": "项目名称不能超过 255 个字符",
       "enter_project_id": "输入项目 ID",
       "please_select_a_timezone": "请选择时区",
       "archive_project": {

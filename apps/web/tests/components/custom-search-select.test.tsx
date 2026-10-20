@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { act, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CustomSearchSelect } from "@plane/ui";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
@@ -92,4 +92,63 @@ it("allows native mouse focus on the search input inside the options panel", asy
 
   // Preventing mousedown cancels the browser's default input focus action.
   expect(mouseDown.defaultPrevented).toBe(false);
+});
+
+it("开闭通知仅在状态变化后各触发一次，Esc 和外部点击仍然有效", async () => {
+  const onOpen = vi.fn();
+  const onClose = vi.fn();
+  const navigate = vi.fn();
+  const errors = vi.spyOn(console, "error");
+  /** 复现面包屑中开闭回调更新父组件的场景。 */
+  function CallbackHarness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <CustomSearchSelect
+          value="current"
+          onChange={() => undefined}
+          label="当前项目"
+          options={[{ value: "current", query: "current", content: "当前项目" }]}
+          onOpen={() => {
+            onOpen();
+            setOpen(true);
+          }}
+          onClose={() => {
+            onClose();
+            setOpen(false);
+          }}
+        />
+        <output>{String(open)}</output>
+        <button onClick={navigate}>管理</button>
+      </>
+    );
+  }
+  try {
+    await act(async () => root.render(<CallbackHarness />));
+    const trigger = container.querySelector<HTMLButtonElement>("button")!;
+    await act(async () => trigger.click());
+    expect(onOpen).toHaveBeenCalledOnce();
+    expect(container.querySelector("output")?.textContent).toBe("true");
+    await act(async () =>
+      document
+        .querySelector("input")!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    );
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(onClose).toHaveBeenCalledOnce();
+    await act(async () => trigger.click());
+    const target = [...container.querySelectorAll("button")].find((button) => button.textContent === "管理")!;
+    await act(async () => {
+      target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      target.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(errors.mock.calls.flat().join(" ")).not.toContain("Cannot update a component");
+  } finally {
+    errors.mockRestore();
+  }
 });

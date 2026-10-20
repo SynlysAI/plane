@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
+import { useTranslation } from "@plane/i18n";
 // plane constants
 import { ALL_ISSUES } from "@plane/constants";
 // types
@@ -55,6 +56,7 @@ export interface IList {
 }
 
 export const List = observer(function List(props: IList) {
+  const { t } = useTranslation();
   const {
     groupedIssueIds,
     issuesMap,
@@ -82,6 +84,7 @@ export const List = observer(function List(props: IList) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const groups = getGroupByColumns({
+    t,
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),

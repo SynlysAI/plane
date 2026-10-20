@@ -64,6 +64,7 @@ export const SubIssuesListRoot = observer(function SubIssuesListRoot(props: Prop
   const filteredSubWorkItemsCount = (getFilteredSubWorkItems(rootIssueId, filters.filters ?? {}) ?? []).length;
 
   const groups = getGroupByColumns({
+    t,
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
