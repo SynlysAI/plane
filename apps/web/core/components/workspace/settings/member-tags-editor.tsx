@@ -1,19 +1,12 @@
 import { useEffect, useState } from "react";
+import { TickOutline } from "@makeplane/propel/icons";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import type { IWorkspaceMemberTag, IWorkspaceMemberTagGroup } from "@plane/types";
 import { useMember } from "@/hooks/store/use-member";
 import { getMemberTagErrorMessage } from "./member-tag-error";
-
-const TAG_COLOR_CLASS_NAMES: Record<IWorkspaceMemberTag["color"], string> = {
-  sage: "border-[#BDCCBF] bg-[#F0F5F0] text-[#466152]",
-  sand: "border-[#D8CBB6] bg-[#FAF6EE] text-[#75624B]",
-  slate: "border-[#C8CED3] bg-[#F2F4F5] text-[#53616B]",
-  mist: "border-[#C7D3D4] bg-[#F0F5F5] text-[#456467]",
-  clay: "border-[#D9C4B9] bg-[#FAF2EE] text-[#815E50]",
-  moss: "border-[#C7D1B5] bg-[#F3F6ED] text-[#5B6B47]",
-};
+import { getMemberTagClassNames } from "./member-tag-pill";
 
 type Props = {
   workspaceSlug: string;
@@ -58,6 +51,9 @@ export function MemberTagsEditor({ workspaceSlug, memberId, memberName, groups, 
         <div>
           <h2 className="text-16 font-semibold text-primary">编辑成员标签</h2>
           <p className="mt-1 text-13 text-secondary">{memberName}</p>
+          <p className="mt-0.5 text-12 text-tertiary" aria-live="polite">
+            已选标签：{selected.length} 个
+          </p>
         </div>
         <div className="space-y-4">
           {groups.map((group) => (
@@ -71,11 +67,11 @@ export function MemberTagsEditor({ workspaceSlug, memberId, memberName, groups, 
                       key={tag.id}
                       type="button"
                       onClick={() => toggleTag(tag.id)}
-                      className={`rounded-md border px-2.5 py-1.5 text-12 ${
-                        checked ? TAG_COLOR_CLASS_NAMES[tag.color] : "border-subtle text-secondary hover:bg-surface-2"
-                      }`}
+                      aria-pressed={checked}
+                      className={getMemberTagClassNames(tag, checked, "control")}
                     >
-                      {tag.name}
+                      {checked && <TickOutline className="size-3 shrink-0" aria-hidden="true" />}
+                      <span>{tag.name}</span>
                     </button>
                   );
                 })}

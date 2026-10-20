@@ -158,9 +158,7 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
       )}
       <Table<RowData>
         columns={columns ?? []}
-        data={
-          (memberDetails?.filter((member): member is IWorkspaceMember => member !== null) ?? []) as unknown as RowData[]
-        }
+        data={memberDetails?.filter((member): member is IWorkspaceMember => member !== null) ?? []}
         keyExtractor={(rowData) => rowData?.member.id ?? ""}
         tHeadClassName="border-b border-subtle"
         thClassName="text-left font-medium divide-x-0 text-placeholder"

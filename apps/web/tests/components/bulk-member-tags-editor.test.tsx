@@ -24,7 +24,10 @@ vi.mock("@plane/propel/button", () => ({
     ...props
   }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) => <button {...props}>{children}</button>,
 }));
-vi.mock("@makeplane/propel/icons", () => ({ SearchOutline: () => <span aria-hidden="true" /> }));
+vi.mock("@makeplane/propel/icons", () => ({
+  SearchOutline: () => <span aria-hidden="true" />,
+  TickOutline: () => <span data-testid="bulk-member-tag-tick" aria-hidden="true" />,
+}));
 vi.mock("@plane/ui", () => ({
   ModalCore: ({ children }: { children: React.ReactNode }) => <div role="dialog">{children}</div>,
   EModalPosition: { CENTER: "center" },
@@ -158,6 +161,29 @@ it("saves every selected member after the list is filtered", async () => {
   });
   expect(mocks.success).toHaveBeenCalledOnce();
   expect(mocks.close).toHaveBeenCalledOnce();
+});
+
+it("marks selected tags for accessibility and updates the selected count", async () => {
+  expect(container.textContent).toContain("已选标签：0 个");
+
+  await act(async () => {
+    const tagButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === "核心"
+    )!;
+    tagButton.click();
+  });
+
+  const tagButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (button) => button.textContent === "核心"
+  )!;
+  expect(tagButton.getAttribute("aria-pressed")).toBe("true");
+  expect(tagButton.querySelector('[data-testid="bulk-member-tag-tick"]')).not.toBeNull();
+  expect(container.textContent).toContain("已选标签：1 个");
+
+  await act(async () => tagButton.click());
+  expect(tagButton.getAttribute("aria-pressed")).toBe("false");
+  expect(tagButton.querySelector('[data-testid="bulk-member-tag-tick"]')).toBeNull();
+  expect(container.textContent).toContain("已选标签：0 个");
 });
 
 it("keeps the dialog open and reports an API error", async () => {
