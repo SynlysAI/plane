@@ -111,13 +111,13 @@ docker compose -f docker-compose-local.yml exec -T api \
 
 ## 4. 页面授权及 Agent 连接
 
-统一页面更新：个人设置中「MCP 连接」位于 Plane API 与「智能体配置」之间，地址 `/settings/profile/mcp/`；节点工作台「MCP / Agent 操作」携带工作区及节点直接进入设置页。旧 `/mcp/` 和 `/{workspace-slug}/mcp/` 自动跳转并保留定位信息。科研区域复用下述节点授权及逐项人工确认；行政项目区域通过可选 `NATIVE_MCP_PORTAL_URL` 连接现有自助服务。无新增迁移，旧 `review_path` 有效。详情见 [统一 MCP 管理说明](mcp-unified-management.md)。
+当前版本中，个人设置「MCP 连接」仅保留行政项目配置；科研链节点、科研任务和统一页不再提供科研操作 UI。旧 `/mcp/`、`/{workspace-slug}/mcp/` 自动跳转到设置页且只保留工作区参数；历史 `review_path` 打开节点页但忽略 `operation`。科研授权与人工确认继续使用下述 API，行政项目区域通过可选 `NATIVE_MCP_PORTAL_URL` 连接现有自助服务。无新增迁移。详情见 [统一 MCP 管理说明](mcp-unified-management.md)。
 
 1. 登录服务器，确认目标工作区科研模块和科研链已开启，并创建/选择活动科研链中的可操作节点。v2.1 不能通过 MCP 创建链和节点。
-2. 选择节点实际所属阶段，再选择节点，例如文献综述节点要在文献综述阶段打开。
-3. 从节点工作台「MCP / Agent 操作」进入统一页，或打开历史提案审核链接；由管理员显式点击「启用工作区 Agent 操作」。
-4. 用户展开「连接 Agent 与管理授权」，选择需要的动作和正式报告版本，生成连接配置。
-5. 将配置保存到客户端私密设置。使用页面生成的 URL、`X-Research-Context-Token`、`X-Research-Context-Hash`；个人 API Key 或旧只读 grant 不会自动获得写权限。
+2. 由研究管理员调用 `POST /api/research/workspaces/<slug>/nodes/<node_id>/agent-operations/`，请求体 `{ "kind": "workspace_policy", "enabled": true }`，启用工作区 Agent 操作。该请求必须携带 Plane 登录会话和 `X-CSRFToken`。
+3. 用户调用同一接口 `GET` 获取可用动作与报告版本，再提交 `{ "kind": "issue_grant", ... }` 生成节点连接配置；响应只展示一次 `X-Research-Context-Token` 与 `X-Research-Context-Hash`。
+4. 将配置保存到客户端私密设置。机器 MCP 地址为下方 `agent-operations/mcp/`；个人 API Key 或旧只读 grant 不会自动获得写权限。
+5. Agent prepare 提案后，用户调用 `{ "kind": "decision", "operation_id": "...", "proposal_hash": "...", "decision": "APPROVED" }` 精确确认或拒绝，再由 Agent execute。
 
 新地址形如：
 
@@ -129,19 +129,19 @@ https://plane-test.example.org/api/research/workspaces/<workspace-slug>/agent-op
 
 ## 5. 上线验收与故障定位
 
-脚本对 Web/Admin/API 的 200 检查只证明服务可达。还需使用测试节点逐项完成五类动作：prepare → 页面核对 → 人工确认 → execute → 读回。执行结果应为 `COMMITTED`，`readback=verified`，页面能查到对象和 Agent 来源记录。
+脚本对 Web/Admin/API 的 200 检查只证明服务可达。还需使用测试节点逐项完成五类动作：prepare → API 核对 → 人工确认 → execute → 读回。执行结果应为 `COMMITTED`，`readback=verified`，人类接口能查到对象和 Agent 来源记录。
 
 另检查未确认/拒绝提案不能执行、重复执行原 operation_id 不重复创建、撤销节点授权后调用被拒绝。出现超时先查询原 operation_id；不确定 prepare 是否成功时复用原 request_id 和内容。
 
-| 现象                    | 检查方向                                                                                               |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ |
-| 看不到 MCP / Agent 入口 | 核对实际渲染的节点、网络响应、部署版本和配置；旧组件收到 disabled 会隐藏，不能仅凭截图断言是缓存或权限 |
-| 有面板但无启用按钮      | 当前账号是否为该工作区有效管理员/已入工作区的实例管理员；是否工作区已启用                              |
-| 授权/确认返回 403       | 登录会话、CSRF token、真实入口和 `CSRF_TRUSTED_ORIGINS`，不要关闭 CSRF                                 |
-| MCP 返回 401            | 缺少/过期/撤销的节点 Token，或 Token 与 Hash 不匹配；匿名探测返回 401 是正常保护行为                   |
-| MCP 返回 404 / disabled | 发布版本、科研总开关、读取/写入开关、工作区科研链配置、slug、代理路径                                  |
-| HTTP 200 但无业务结果   | 继续检查 JSON-RPC `error` 或 `result.isError`，不能只按 HTTP 状态判成功                                |
-| 提案确认后执行冲突      | 节点、任务或依据已改变；按错误准备新提案并重新人工确认                                                 |
+| 现象                    | 检查方向                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| 看不到 MCP / Agent 入口 | 当前版本预期行为；科研操作应检查 `agent-operations` API 和机器 MCP，不再检查节点页面 |
+| 有面板但无启用按钮      | 当前账号是否为该工作区有效管理员/已入工作区的实例管理员；是否工作区已启用            |
+| 授权/确认返回 403       | 登录会话、CSRF token、真实入口和 `CSRF_TRUSTED_ORIGINS`，不要关闭 CSRF               |
+| MCP 返回 401            | 缺少/过期/撤销的节点 Token，或 Token 与 Hash 不匹配；匿名探测返回 401 是正常保护行为 |
+| MCP 返回 404 / disabled | 发布版本、科研总开关、读取/写入开关、工作区科研链配置、slug、代理路径                |
+| HTTP 200 但无业务结果   | 继续检查 JSON-RPC `error` 或 `result.isError`，不能只按 HTTP 状态判成功              |
+| 提案确认后执行冲突      | 节点、任务或依据已改变；按错误准备新提案并重新人工确认                               |
 
 本地已实际验收三类写入；分析草稿和资源关联仍需补齐真实 MCP 业务验收。详细边界见 [验收摘要](research-mcp-v21-acceptance.md)。测试服务器尚未验收，不把本机结果当成远端结果。
 

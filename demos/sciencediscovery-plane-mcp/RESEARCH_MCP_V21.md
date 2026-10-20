@@ -1,6 +1,6 @@
 # 科研链 MCP v2.1：任务、草稿与人工确认
 
-2026-10-19 页面更新：从个人设置中 Plane API 与智能体配置之间的「MCP 连接」，或节点工作台「MCP / Agent 操作」进入 `/settings/profile/mcp/`，选择科研节点接入。旧管理页地址自动跳转并保留节点上下文；旧提案 `review_path` 保留原人工确认组件；协议、精确提案确认及执行流程不变。见 [统一管理说明](../../docs/operations/mcp-unified-management.md)。
+2026-10-20 更新：个人设置中的「MCP 连接」仅保留行政项目配置；科研链节点、科研任务和统一页不再提供科研操作 UI。旧管理页地址自动跳转并只保留工作区参数；历史 `review_path` 打开节点页但忽略 `operation`。科研授权、精确提案确认及执行流程继续通过 API 使用。见 [统一管理说明](../../docs/operations/mcp-unified-management.md)。
 
 实现日期：2026-10-17。本版新增受控写入代码，保留 v1 的十个只读工具与原连接入口。部署、人工业务确认和真实 Codex 操作验收须与代码测试区分。
 
@@ -30,8 +30,8 @@
 
 1. 备份数据库，部署后端与前端代码，执行迁移至 `0182_research_agent_operations`。本版还有 v1 的 0181 迁移前置。
 2. 后端保持 `RESEARCH_MODULE_ENABLED=1`，并同时设置 `RESEARCH_MCP_ENABLED=1`、`RESEARCH_MCP_WRITE_ENABLED=1`。这些开关默认关闭；本机现已按用户授权开启并应用 0182，其他部署需要显式配置。
-3. 打开科研链，进入节点工作台，展开目标节点，下方可见“Agent 操作审核”。科研管理员可以显式启用工作区 Agent 操作。
-4. 用户展开“连接 Agent 与管理授权”，勾选允许的动作、需要引用的正式报告版本，生成当前节点的连接配置。普通个人 API Key 与原来的只读 context grant 不会自动获得写能力。
+3. 科研管理员通过 `POST /api/research/workspaces/<slug>/nodes/<node_id>/agent-operations/` 提交 `{ "kind": "workspace_policy", "enabled": true }`，显式启用工作区 Agent 操作；请求必须携带 Plane 登录会话和 `X-CSRFToken`。
+4. 用户通过同一接口执行 `GET` 和 `{ "kind": "issue_grant", ... }`，按允许的动作和需要引用的正式报告版本生成当前节点连接配置。普通个人 API Key 与原来的只读 context grant 不会自动获得写能力。
 5. 将配置保存到自己的本地私密设置。连接密钥只展示一次，可隐藏、撤销；显式节点连接由 `RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS` 控制，默认 604800 秒（7 天）。旧上下文交换仍用 `RESEARCH_CONTEXT_TOKEN_TTL_SECONDS`，默认 600 秒。已有连接不追溯延期；到期后重新生成连接，旧操作仍可在同一用户、同一节点、相同动作范围下恢复。
 
 工作区写开关、节点写授权、现有业务角色与每项操作确认共同决定最终权限。用户只能确认自己的提案，不借用另一审核人的高权限执行操作。
@@ -46,9 +46,9 @@
 http://127.0.0.1:8001/api/research/workspaces/<workspace-slug>/agent-operations/mcp/
 ```
 
-请求头必须同时包含用户页面生成的 `X-Research-Context-Token`、`X-Research-Context-Hash`；操作入口不接受个人 API Key 代替节点写授权。配置里的地址必须使用 Agent 能访问的 Plane API origin。
+请求头必须同时包含人类接口签发的 `X-Research-Context-Token`、`X-Research-Context-Hash`；操作入口不接受个人 API Key 代替节点写授权。配置里的地址必须使用 Agent 能访问的 Plane API origin。
 
-本地 Codex TOML 配置示意，替换地址和页面生成的密钥；不要提交真实配置：
+本地 Codex TOML 配置示意，替换地址和 API 响应中的密钥；不要提交真实配置：
 
 ```toml
 [mcp_servers.plane_research_operations]

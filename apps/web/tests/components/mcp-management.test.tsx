@@ -48,18 +48,6 @@ vi.mock("@/services/mcp.service", () => ({
     write = mocks.nativeWrite;
   },
 }));
-vi.mock("@/components/research/chains/research-agent-operations", () => ({
-  ResearchAgentOperations: (props: { workspaceSlug: string; nodeId: string; operationId?: string }) => (
-    <div
-      data-testid="review"
-      data-workspace={props.workspaceSlug}
-      data-node={props.nodeId}
-      data-operation={props.operationId}
-    >
-      shared-human-review
-    </div>
-  ),
-}));
 vi.mock("@/components/core/page-title", () => ({ PageHead: () => null }));
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => workspaceStore }));
 vi.mock("react-router", () => ({
@@ -71,11 +59,8 @@ vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams(mocks.query), mocks.setParams],
 }));
 
-import { ResearchMCPManager } from "@/components/mcp/research-mcp-manager";
-import { ResearchNodeMCPEntry } from "@/components/mcp/research-node-mcp-entry";
 import { NativeMCPManager } from "@/components/mcp/native-mcp-manager";
 import { MCPManagement } from "@/components/mcp/mcp-management";
-import { mcpManagementPath } from "@/components/mcp/mcp-context";
 import { MCPManagementRedirect } from "@/components/mcp/mcp-management-redirect";
 import { MCPProfileSettings } from "@/components/settings/profile/content/pages/mcp";
 
@@ -129,136 +114,40 @@ afterEach(async () => {
 async function render(element: React.ReactNode) {
   await act(async () => root.render(element));
 }
-function button(text: string) {
-  return Array.from(container.querySelectorAll("button")).find((item) => item.textContent === text)!;
-}
 function select(name: string, value: string) {
   const element = container.querySelector<HTMLSelectElement>(`select[aria-label="${name}"]`)!;
   element.value = value;
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-it("passes only location context to the unified page", () => {
-  const path = mcpManagementPath("public", { chain: "chain-1", node: "node-1", task: "task-1", operation: "op-1" });
-  const url = new URL(path, "https://plane.test");
-  expect(url.pathname).toBe("/settings/profile/mcp/");
-  expect(Object.fromEntries(url.searchParams)).toEqual({
-    mode: "research",
-    workspace: "public",
-    chain: "chain-1",
-    node: "node-1",
-    task: "task-1",
-    operation: "op-1",
-  });
-});
-
-it("always renders a node entry even without MCP enabled and retains historical review paths", async () => {
-  await render(<ResearchNodeMCPEntry workspaceSlug="public" chainId="chain-1" nodeId="node-1" />);
-  expect(container.textContent).toContain("MCP / Agent 操作");
-  expect(container.querySelector('[data-testid="review"]')).toBeNull();
-  await render(
-    <ResearchNodeMCPEntry workspaceSlug="public" chainId="chain-1" nodeId="node-1" operationId="old-operation" />
-  );
-  expect(container.querySelector('[data-testid="review"]')?.getAttribute("data-operation")).toBe("old-operation");
-  expect(container.querySelector("a")?.href).toContain("operation=old-operation");
-});
-
-it("checks chain, node and optional task before mounting the shared approval component", async () => {
-  await render(
-    <ResearchMCPManager
-      workspaceSlug="public"
-      context={{ chain: "chain-1", node: "node-1", task: "task-1", operation: "op-1" }}
-      onContextChange={vi.fn()}
-    />
-  );
-  expect(mocks.tasks).toHaveBeenCalledWith("public", "chain-1", "node-1");
-  expect(container.textContent).toContain("来源科研任务：Research task");
-  expect(container.querySelector('[data-testid="review"]')?.getAttribute("data-node")).toBe("node-1");
-});
-
-it("does not mount authorization for a node outside the selected chain", async () => {
-  await render(
-    <ResearchMCPManager
-      workspaceSlug="public"
-      context={{ chain: "chain-1", node: "foreign" }}
-      onContextChange={vi.fn()}
-    />
-  );
-  expect(container.querySelector('[role="alert"]')?.textContent).toContain("不属于当前科研链");
-  expect(container.querySelector('[data-testid="review"]')).toBeNull();
-});
-
-it("rejects an unrelated task context", async () => {
-  await render(
-    <ResearchMCPManager
-      workspaceSlug="public"
-      context={{ chain: "chain-1", node: "node-1", task: "foreign-task" }}
-      onContextChange={vi.fn()}
-    />
-  );
-  expect(container.querySelector('[role="alert"]')?.textContent).toContain("任务不属于当前节点");
-  expect(container.querySelector('[data-testid="review"]')).toBeNull();
-});
-
-it("changing a node clears task and proposal context", async () => {
-  const onChange = vi.fn();
-  await render(
-    <ResearchMCPManager
-      workspaceSlug="public"
-      context={{ chain: "chain-1", node: "node-1", task: "task-1", operation: "old-op" }}
-      onContextChange={onChange}
-    />
-  );
-  await act(async () => select("科研节点", "node-2"));
-  expect(onChange).toHaveBeenCalledWith({ chain: "chain-1", node: "node-2" });
-});
-
-it("ignores an earlier node lookup that resolves after switching", async () => {
-  let resolveOld!: (items: unknown) => void;
-  mocks.nodes.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        resolveOld = resolve;
-      })
-  );
-  await render(
-    <ResearchMCPManager
-      workspaceSlug="public"
-      context={{ chain: "chain-1", node: "node-1" }}
-      onContextChange={vi.fn()}
-    />
-  );
-  await render(
-    <ResearchMCPManager
-      workspaceSlug="public"
-      context={{ chain: "chain-1", node: "node-2" }}
-      onContextChange={vi.fn()}
-    />
-  );
-  await act(async () => resolveOld([{ id: "node-1", chain: "chain-1" }]));
-  expect(container.querySelector('[data-testid="review"]')?.getAttribute("data-node")).toBe("node-2");
-});
-
-it("workspace navigation does not carry node, task, proposal or credentials", async () => {
+it("renders only native MCP configuration and ignores historical research context", async () => {
   mocks.query = "mode=research&chain=chain-1&node=node-1&operation=op-1";
   await render(<MCPManagement workspaceSlug="public" />);
-  await act(async () => select("MCP 工作区", "second"));
-  expect(Object.fromEntries(mocks.setParams.mock.calls[0][0])).toEqual({ mode: "research", workspace: "second" });
+  expect(container.textContent).toContain("MCP 配置");
+  expect(container.textContent).toContain("行政项目接入");
+  expect(container.textContent).not.toContain("科研链节点接入");
+  expect(container.textContent).not.toContain("Agent 操作审核");
+  expect(container.textContent).not.toContain("生成当前节点连接配置");
+  expect(mocks.chainPage).not.toHaveBeenCalled();
+  expect(mocks.nodes).not.toHaveBeenCalled();
+  expect(mocks.tasks).not.toHaveBeenCalled();
+  expect(mocks.nativeRead).toHaveBeenCalledWith("options");
 });
 
-it("switching connection type removes all research context", async () => {
-  mocks.query = "mode=research&chain=chain-1&node=node-1";
+it("workspace navigation removes node, task, proposal and credentials", async () => {
+  mocks.query = "mode=research&workspace=second&chain=chain-1&node=node-1&operation=op-1";
   await render(<MCPManagement workspaceSlug="public" />);
-  await act(async () => button("行政项目接入").click());
-  expect(mocks.setParams.mock.calls[0][0].toString()).toBe("mode=native&workspace=public");
+  await act(async () => select("MCP 工作区", "second"));
+  expect(Object.fromEntries(mocks.setParams.mock.calls[0][0])).toEqual({ workspace: "second" });
 });
 
-it("renders shared management inside settings using explicit workspace and proposal context", async () => {
+it("renders only native configuration inside settings", async () => {
   mocks.query = "mode=research&workspace=second&chain=chain-1&node=node-1&operation=op-1";
   await render(<MCPProfileSettings />);
-  const review = container.querySelector('[data-testid="review"]');
-  expect(review?.getAttribute("data-workspace")).toBe("second");
-  expect(review?.getAttribute("data-operation")).toBe("op-1");
+  expect(container.querySelector('[aria-label="行政项目接入"]')).not.toBeNull();
+  expect(container.textContent).not.toContain("科研链节点接入");
+  expect(container.textContent).not.toContain("Agent 操作审核");
+  expect(mocks.chainPage).not.toHaveBeenCalled();
 });
 
 it("keeps modal selections isolated from the underlying workbench URL", async () => {
@@ -271,28 +160,19 @@ it("keeps modal selections isolated from the underlying workbench URL", async ()
   expect(mocks.setParams).not.toHaveBeenCalled();
 });
 
-it("redirects legacy workspace links into settings preserving location and dropping secrets", async () => {
+it("redirects legacy research links into native settings with only the workspace", async () => {
   mocks.query = "node=node-1&chain=chain-1&task=task-1&operation=op-1&token=secret&workspace=other";
   await render(<MCPManagementRedirect workspaceSlug="public" />);
   const redirect = container.querySelector('[data-testid="redirect"]');
   const url = new URL(redirect!.getAttribute("data-to")!, "https://plane.test");
   expect(url.pathname).toBe("/settings/profile/mcp/");
-  expect(Object.fromEntries(url.searchParams)).toEqual({
-    mode: "research",
-    workspace: "public",
-    node: "node-1",
-    chain: "chain-1",
-    task: "task-1",
-    operation: "op-1",
-  });
+  expect(Object.fromEntries(url.searchParams)).toEqual({ workspace: "public" });
   expect(redirect?.getAttribute("data-replace")).toBe("true");
 });
 
 it("redirects the legacy global entry to settings with workspace selection", async () => {
   await render(<MCPManagementRedirect />);
-  expect(container.querySelector('[data-testid="redirect"]')?.getAttribute("data-to")).toBe(
-    "/settings/profile/mcp/?mode=native"
-  );
+  expect(container.querySelector('[data-testid="redirect"]')?.getAttribute("data-to")).toBe("/settings/profile/mcp/");
 });
 
 it("reads native limits from the service and authenticates with separate CSRF values", async () => {
