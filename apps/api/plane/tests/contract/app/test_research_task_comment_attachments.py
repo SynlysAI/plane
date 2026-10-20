@@ -92,6 +92,12 @@ def test_file_presign_accepts_any_type_and_uses_workspace_quota(env):
 
     assert response.status_code == 200, response.data
     assert confirmed.status_code == 200, confirmed.data
+    assert confirmed.data == {
+        "asset_id": asset_id,
+        "name": "installer.deb",
+        "type": "application/x-deb",
+        "size": 2 * MEGABYTE,
+    }
     asset = FileAsset.objects.get(pk=response.data["asset_id"])
     assert asset.is_uploaded is True
     assert asset.size == 2 * MEGABYTE

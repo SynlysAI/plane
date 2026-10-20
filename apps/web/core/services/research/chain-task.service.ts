@@ -37,6 +37,14 @@ type TResearchTaskUploadSlot = {
   upload_data: { url: string; fields: Record<string, string> };
 };
 
+/** 任务评论附件确认接口返回的服务端契约。 */
+type TResearchTaskCommentAttachmentConfirm = {
+  asset_id: string;
+  name: string;
+  type: string;
+  size: number;
+};
+
 /** Generate a best-effort client request id for task idempotency. */
 function request_id() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -141,8 +149,17 @@ export class ResearchChainTaskService extends APIService {
     await uploadToSlot(slot, file);
     return await this.post(`${base}comment-attachments/${slot.asset_id}/confirm/`, {})
       .then((response) => {
-        const payload = response.data as Omit<TCommentAttachment, "download_url">;
-        return { ...payload, download_url: `${base}comment-attachments/${slot.asset_id}/download/` };
+        const payload = response.data as TResearchTaskCommentAttachmentConfirm | undefined;
+        if (!payload?.asset_id) {
+          throw { error_code: "research_task_comment_attachment_confirm_invalid" };
+        }
+        return {
+          id: payload.asset_id,
+          name: payload.name,
+          type: payload.type,
+          size: payload.size,
+          download_url: `${base}comment-attachments/${payload.asset_id}/download/`,
+        } satisfies TCommentAttachment;
       })
       .catch(async (error) => {
         await this.deleteTaskCommentAttachment(workspaceSlug, chainId, nodeId, taskId, slot.asset_id).catch(
