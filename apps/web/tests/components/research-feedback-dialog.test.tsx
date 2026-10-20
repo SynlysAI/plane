@@ -26,8 +26,22 @@ vi.mock("@/services/research/feedback.service", () => ({
 }));
 vi.mock("@plane/ui", async () => ({
   ...(await vi.importActual("@plane/ui")),
-  ModalCore: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
-    isOpen ? <div role="dialog">{children}</div> : null,
+  ModalCore: ({
+    isOpen,
+    children,
+    width,
+    className,
+  }: {
+    isOpen: boolean;
+    children: React.ReactNode;
+    width?: string;
+    className?: string;
+  }) =>
+    isOpen ? (
+      <div role="dialog" data-width={width} data-class-name={className}>
+        {children}
+      </div>
+    ) : null,
 }));
 vi.mock("@plane/propel/button", () => ({
   Button: ({
@@ -357,10 +371,18 @@ it("普通弹窗的管理视图继续提供状态处置并使用管理截图范�
   await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(3)')?.click());
   await act(async () =>
     Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent === "Manage from dialog")
+      .find((button) => button.textContent?.includes("Manage from dialog"))
       ?.click()
   );
 
+  const split = container.querySelector('[data-testid="feedback-management-split"]');
+  expect(split?.className).toContain("md:grid-cols-");
+  expect(container.querySelector('[role="dialog"]')?.getAttribute("data-width")).toContain("max-w-6xl");
+  expect(container.querySelector('[role="dialog"]')?.getAttribute("data-class-name")).toContain("overflow-hidden");
+  expect(container.querySelector('section[aria-label="反馈清单"]')).not.toBeNull();
+  expect(container.querySelector('section[aria-label="反馈详情"]')).not.toBeNull();
+  expect(container.querySelector('[data-testid="feedback-list-scroll"]')?.className).toContain("overflow-y-auto");
+  expect(container.querySelector('[data-testid="feedback-detail-scroll"]')?.className).toContain("overflow-y-auto");
   expect(container.querySelector('img[alt="反馈截图 1"]')?.getAttribute("src")).toContain("?scope=manage");
   expect(container.querySelector('textarea[aria-label="处置说明"]')).not.toBeNull();
   const commentBox = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="处置说明"]');
