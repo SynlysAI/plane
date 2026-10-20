@@ -16,7 +16,6 @@ import { calculateTimeAgo, generateWorkItemLink } from "@plane/utils";
 // components
 import { ListItem } from "@/components/core/list";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
-import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
@@ -70,26 +69,8 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
       itemLink={workItemLink}
       title={issueDetails?.name}
       prependTitleElement={
-        <div className="flex flex-shrink-0 items-center gap-2">
-          {issueDetails.type ? (
-            <IssueIdentifier
-              size="lg"
-              issueTypeId={issueDetails?.type}
-              projectId={issueDetails?.project_id || ""}
-              projectIdentifier={issueDetails?.project_identifier || ""}
-              issueSequenceId={issueDetails?.sequence_id || ""}
-              variant="tertiary"
-            />
-          ) : (
-            <div className="flex items-center justify-center gap-2">
-              <div className="grid size-8 flex-shrink-0 place-items-center rounded-sm bg-layer-2">
-                <WorkItemsOutline className="size-4 text-tertiary" />
-              </div>
-              <div className="text-13 font-medium whitespace-nowrap text-placeholder">
-                {issueDetails?.project_identifier}-{issueDetails?.sequence_id}
-              </div>
-            </div>
-          )}
+        <div className="grid size-8 flex-shrink-0 place-items-center rounded-sm bg-layer-2">
+          <WorkItemsOutline className="size-4 text-tertiary" />
         </div>
       }
       appendTitleElement={

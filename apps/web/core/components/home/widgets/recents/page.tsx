@@ -43,18 +43,11 @@ export function RecentPage(props: BlockProps) {
       itemLink={pageLink}
       title={getPageName(pageDetails?.name)}
       prependTitleElement={
-        <div className="flex flex-shrink-0 items-center gap-2">
-          <div className="grid size-8 flex-shrink-0 place-items-center rounded-sm bg-layer-2">
-            {pageDetails?.logo_props?.in_use ? (
-              <Logo logo={pageDetails?.logo_props} size={16} type="lucide" />
-            ) : (
-              <PagesOutline className="size-4 text-tertiary" />
-            )}
-          </div>
-          {pageDetails?.project_identifier && (
-            <div className="text-13 font-medium whitespace-nowrap text-placeholder">
-              {pageDetails?.project_identifier}
-            </div>
+        <div className="grid size-8 flex-shrink-0 place-items-center rounded-sm bg-layer-2">
+          {pageDetails?.logo_props?.in_use ? (
+            <Logo logo={pageDetails?.logo_props} size={16} type="lucide" />
+          ) : (
+            <PagesOutline className="size-4 text-tertiary" />
           )}
         </div>
       }
