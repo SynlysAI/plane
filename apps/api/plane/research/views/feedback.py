@@ -29,9 +29,11 @@ def _error_response(exception):
 
 
 class ResearchFeedbackEndpoint(ResearchAPIView):
-    """Create feedback and list the caller's own or managed records."""
+    """Workspace feedback is shared by administrative and research members."""
 
     nav_capability = None
+    research_module_required = False
+    research_membership_required = False
 
     def get(self, request, slug):
         """Return own feedback, or the management scope when explicitly authorized.
@@ -76,6 +78,8 @@ class ResearchFeedbackStatusEndpoint(ResearchAPIView):
     """Update the status of a feedback record in an authorized management scope."""
 
     nav_capability = None
+    research_module_required = False
+    research_membership_required = False
 
     def patch(self, request, slug, feedback_id):
         """Apply a status transition and return the updated record.
@@ -102,6 +106,8 @@ class ResearchFeedbackScreenshotEndpoint(ResearchAPIView):
     """Stream an authorized feedback screenshot from Plane storage."""
 
     nav_capability = None
+    research_module_required = False
+    research_membership_required = False
 
     def get(self, request, slug, feedback_id, screenshot_id):
         """Return a no-store image stream after applying feedback ACL.
