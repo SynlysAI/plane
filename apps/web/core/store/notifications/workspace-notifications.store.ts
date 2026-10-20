@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { orderBy, isEmpty, update, set } from "lodash-es";
+import { orderBy, isEmpty, set } from "lodash-es";
 import { action, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // plane imports
@@ -20,6 +20,7 @@ import type {
 } from "@plane/types";
 // helpers
 import { convertToEpoch } from "@plane/utils";
+import { adjustUnreadNotificationsCount, isNotificationInTab } from "@/lib/notification-counts";
 // services
 import workspaceNotificationService from "@/services/workspace-notification.service";
 // store
@@ -50,7 +51,7 @@ export interface IWorkspaceNotificationStore {
   // actions
   setCurrentNotificationTab: (tab: TNotificationTab) => void;
   setCurrentSelectedNotificationId: (notificationId: string | undefined) => void;
-  setUnreadNotificationsCount: (type: "increment" | "decrement", newCount?: number) => void;
+  setUnreadNotificationsCount: (type: "increment" | "decrement", newCount?: number, isMentioned?: boolean) => void;
   getUnreadNotificationsCount: (workspaceSlug: string) => Promise<TUnreadNotificationsCount | undefined>;
   getNotifications: (
     workspaceSlug: string,
@@ -125,30 +126,9 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
     );
     const workspaceNotificationIds = workspaceNotifications
       .filter((n) => n.workspace === workspaceId)
-      .filter((n) =>
-        this.currentNotificationTab === ENotificationTab.MENTIONS
-          ? n.is_mentioned_notification
-          : !n.is_mentioned_notification
-      )
-      .filter((n) => {
-        if (!this.filters.archived && !this.filters.snoozed) {
-          if (n.archived_at) {
-            return false;
-          } else if (n.snoozed_till) {
-            return false;
-          } else {
-            return true;
-          }
-        } else {
-          if (this.filters.snoozed) {
-            return n.snoozed_till ? true : false;
-          } else if (this.filters.archived) {
-            return n.archived_at ? true : false;
-          } else {
-            return true;
-          }
-        }
-      })
+      .filter((n) => isNotificationInTab(n, this.currentNotificationTab))
+      .filter((n) => (n.archived_at ? this.filters.archived : !this.filters.archived))
+      .filter((n) => (n.snoozed_till ? this.filters.snoozed : !this.filters.snoozed))
       // .filter((n) => (this.filters.read ? (n.read_at ? true : false) : n.read_at ? false : true))
       .map((n) => n.id);
     return workspaceNotificationIds;
@@ -281,31 +261,18 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
   };
 
   /**
-   * @description set unread notifications count
+   * @description adjust unread notifications count for one changed notification
    * @param { "increment" | "decrement" } type
+   * @param { number } newCount
+   * @param { boolean } isMentioned
    * @returns { void }
    */
-  setUnreadNotificationsCount = (type: "increment" | "decrement", newCount: number = 1): void => {
-    const validCount = Math.max(0, Math.abs(newCount));
-
-    switch (this.currentNotificationTab) {
-      case ENotificationTab.ALL:
-        update(
-          this.unreadNotificationsCount,
-          "total_unread_notifications_count",
-          (count: number) => +Math.max(0, type === "increment" ? count + validCount : count - validCount)
-        );
-        break;
-      case ENotificationTab.MENTIONS:
-        update(
-          this.unreadNotificationsCount,
-          "mention_unread_notifications_count",
-          (count: number) => +Math.max(0, type === "increment" ? count + validCount : count - validCount)
-        );
-        break;
-      default:
-        break;
-    }
+  setUnreadNotificationsCount = (type: "increment" | "decrement", newCount: number = 1, isMentioned = false): void => {
+    set(
+      this,
+      "unreadNotificationsCount",
+      adjustUnreadNotificationsCount(this.unreadNotificationsCount, type, newCount, isMentioned)
+    );
   };
 
   /**
@@ -376,16 +343,11 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
         snoozed: queryParams.snoozed,
         archived: queryParams.archived,
         read: queryParams.read,
+        mentioned: queryParams.mentioned,
       };
       await workspaceNotificationService.markAllNotificationsAsRead(workspaceSlug, params);
+      await this.getUnreadNotificationsCount(workspaceSlug);
       runInAction(() => {
-        update(
-          this.unreadNotificationsCount,
-          this.currentNotificationTab === ENotificationTab.ALL
-            ? "total_unread_notifications_count"
-            : "mention_unread_notifications_count",
-          () => 0
-        );
         Object.values(this.notifications).forEach((notification) =>
           notification.mutateNotification({
             read_at: new Date().toUTCString(),

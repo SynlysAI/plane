@@ -193,11 +193,12 @@ export class Notification implements INotification {
    */
   markNotificationAsRead = async (workspaceSlug: string): Promise<TNotification | undefined> => {
     const currentNotificationReadAt = this.read_at;
+    const wasUnread = !currentNotificationReadAt;
     try {
       const payload: Partial<TNotification> = {
         read_at: new Date().toISOString(),
       };
-      this.store.workspaceNotification.setUnreadNotificationsCount("decrement");
+      if (wasUnread) this.adjustActiveUnreadCount("decrement");
       runInAction(() => this.mutateNotification(payload));
       const notification = await workspaceNotificationService.markNotificationAsRead(workspaceSlug, this.id);
       if (notification) {
@@ -205,8 +206,8 @@ export class Notification implements INotification {
       }
       return notification;
     } catch (error) {
+      if (wasUnread) this.adjustUnreadCount("increment");
       runInAction(() => this.mutateNotification({ read_at: currentNotificationReadAt }));
-      this.store.workspaceNotification.setUnreadNotificationsCount("increment");
       throw error;
     }
   };
@@ -218,19 +219,21 @@ export class Notification implements INotification {
    */
   markNotificationAsUnRead = async (workspaceSlug: string): Promise<TNotification | undefined> => {
     const currentNotificationReadAt = this.read_at;
+    const wasRead = Boolean(currentNotificationReadAt);
+    const countAdjusted = wasRead && !this.archived_at && !this.snoozed_till;
     try {
       const payload: Partial<TNotification> = {
         read_at: undefined,
       };
-      this.store.workspaceNotification.setUnreadNotificationsCount("increment");
       runInAction(() => this.mutateNotification(payload));
+      if (wasRead) this.adjustActiveUnreadCount("increment");
       const notification = await workspaceNotificationService.markNotificationAsUnread(workspaceSlug, this.id);
       if (notification) {
         runInAction(() => this.mutateNotification(notification));
       }
       return notification;
     } catch (error) {
-      this.store.workspaceNotification.setUnreadNotificationsCount("decrement");
+      if (countAdjusted) this.adjustUnreadCount("decrement");
       runInAction(() => this.mutateNotification({ read_at: currentNotificationReadAt }));
       throw error;
     }
@@ -243,10 +246,12 @@ export class Notification implements INotification {
    */
   archiveNotification = async (workspaceSlug: string): Promise<TNotification | undefined> => {
     const currentNotificationArchivedAt = this.archived_at;
+    const countAdjusted = !this.read_at && !currentNotificationArchivedAt && !this.snoozed_till;
     try {
       const payload: Partial<TNotification> = {
         archived_at: new Date().toISOString(),
       };
+      this.adjustActiveUnreadCount("decrement");
       runInAction(() => this.mutateNotification(payload));
       const notification = await workspaceNotificationService.markNotificationAsArchived(workspaceSlug, this.id);
       if (notification) {
@@ -254,6 +259,7 @@ export class Notification implements INotification {
       }
       return notification;
     } catch (error) {
+      if (countAdjusted) this.adjustUnreadCount("increment");
       runInAction(() => this.mutateNotification({ archived_at: currentNotificationArchivedAt }));
       throw error;
     }
@@ -266,17 +272,20 @@ export class Notification implements INotification {
    */
   unArchiveNotification = async (workspaceSlug: string): Promise<TNotification | undefined> => {
     const currentNotificationArchivedAt = this.archived_at;
+    const countAdjusted = !this.read_at && Boolean(currentNotificationArchivedAt) && !this.snoozed_till;
     try {
       const payload: Partial<TNotification> = {
         archived_at: undefined,
       };
       runInAction(() => this.mutateNotification(payload));
+      if (currentNotificationArchivedAt) this.adjustActiveUnreadCount("increment");
       const notification = await workspaceNotificationService.markNotificationAsUnArchived(workspaceSlug, this.id);
       if (notification) {
         runInAction(() => this.mutateNotification(notification));
       }
       return notification;
     } catch (error) {
+      if (countAdjusted) this.adjustUnreadCount("decrement");
       runInAction(() => this.mutateNotification({ archived_at: currentNotificationArchivedAt }));
       throw error;
     }
@@ -290,14 +299,17 @@ export class Notification implements INotification {
    */
   snoozeNotification = async (workspaceSlug: string, snoozeTill: Date): Promise<TNotification | undefined> => {
     const currentNotificationSnoozeTill = this.snoozed_till;
+    const countAdjusted = !this.read_at && !this.archived_at && !currentNotificationSnoozeTill;
     try {
       const payload: Partial<TNotification> = {
         snoozed_till: snoozeTill.toISOString(),
       };
+      this.adjustActiveUnreadCount("decrement");
       runInAction(() => this.mutateNotification(payload));
       const notification = await workspaceNotificationService.updateNotificationById(workspaceSlug, this.id, payload);
       return notification;
     } catch (error) {
+      if (countAdjusted) this.adjustUnreadCount("increment");
       runInAction(() => this.mutateNotification({ snoozed_till: currentNotificationSnoozeTill }));
       throw error;
     }
@@ -310,16 +322,29 @@ export class Notification implements INotification {
    */
   unSnoozeNotification = async (workspaceSlug: string): Promise<TNotification | undefined> => {
     const currentNotificationSnoozeTill = this.snoozed_till;
+    const countAdjusted = !this.read_at && !this.archived_at && Boolean(currentNotificationSnoozeTill);
     try {
       const payload: Partial<TNotification> = {
         snoozed_till: undefined,
       };
       runInAction(() => this.mutateNotification(payload));
+      if (currentNotificationSnoozeTill) this.adjustActiveUnreadCount("increment");
       const notification = await workspaceNotificationService.updateNotificationById(workspaceSlug, this.id, payload);
       return notification;
     } catch (error) {
+      if (countAdjusted) this.adjustUnreadCount("decrement");
       runInAction(() => this.mutateNotification({ snoozed_till: currentNotificationSnoozeTill }));
       throw error;
     }
   };
+
+  private adjustActiveUnreadCount(type: "increment" | "decrement"): void {
+    if (this.read_at || this.archived_at || this.snoozed_till) return;
+
+    this.adjustUnreadCount(type);
+  }
+
+  private adjustUnreadCount(type: "increment" | "decrement"): void {
+    this.store.workspaceNotification.setUnreadNotificationsCount(type, 1, Boolean(this.is_mentioned_notification));
+  }
 }
