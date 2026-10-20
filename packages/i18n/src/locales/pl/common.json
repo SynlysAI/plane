@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Poprzedni tydzień",
-      "last_month": "Poprzedni miesiąc"
+      "last_month": "Poprzedni miesiąc",
+      "select_report_period": "Wybierz okres raportu",
+      "by_week": "Według tygodnia",
+      "by_month": "Według miesiąca",
+      "custom_period": "Niestandardowy okres"
     }
   },
   "cloud_maintenance_message": {

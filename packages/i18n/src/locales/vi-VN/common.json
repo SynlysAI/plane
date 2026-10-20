@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Tuần trước",
-      "last_month": "Tháng trước"
+      "last_month": "Tháng trước",
+      "select_report_period": "Chọn kỳ báo cáo",
+      "by_week": "Theo tuần",
+      "by_month": "Theo tháng",
+      "custom_period": "Kỳ tùy chỉnh"
     }
   },
   "cloud_maintenance_message": {

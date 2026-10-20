@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Geçen hafta",
-      "last_month": "Geçen ay"
+      "last_month": "Geçen ay",
+      "select_report_period": "Rapor dönemini seç",
+      "by_week": "Haftaya göre",
+      "by_month": "Aya göre",
+      "custom_period": "Özel dönem"
     }
   },
   "cloud_maintenance_message": {

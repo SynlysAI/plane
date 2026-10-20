@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Săptămâna trecută",
-      "last_month": "Luna trecută"
+      "last_month": "Luna trecută",
+      "select_report_period": "Selectați perioada raportului",
+      "by_week": "După săptămână",
+      "by_month": "După lună",
+      "custom_period": "Perioadă personalizată"
     }
   },
   "cloud_maintenance_message": {

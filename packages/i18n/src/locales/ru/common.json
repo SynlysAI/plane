@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Прошлая неделя",
-      "last_month": "Прошлый месяц"
+      "last_month": "Прошлый месяц",
+      "select_report_period": "Выбрать период отчета",
+      "by_week": "По неделям",
+      "by_month": "По месяцам",
+      "custom_period": "Пользовательский период"
     }
   },
   "cloud_maintenance_message": {

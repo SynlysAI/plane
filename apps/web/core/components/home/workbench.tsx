@@ -10,6 +10,7 @@ import { Skeleton } from "@plane/propel/skeleton";
 import type { TProject, TProjectAnalyticsCount, TReportSummary, TResearchChain, TResearchIdentity } from "@plane/types";
 // components
 import { HomeSectionCard, type THomeDensity } from "@/components/home/home-section-card";
+import { ReportPeriodSelector, type TCustomReportPeriod } from "@/components/home/report-period-selector";
 import { RecentActivityWidget } from "@/components/home/widgets/recents";
 import {
   formatResearchDate,
@@ -38,10 +39,13 @@ type Props = {
 type TLoadState = "loading" | "ready" | "empty" | "forbidden" | "error";
 type TPeriod = "30" | "90" | "all";
 type TReportPresetOption = (typeof REPORT_PERIOD_PRESETS)[number];
+type TReportPeriodSelection =
+  | { kind: "preset"; preset: TReportPresetOption }
+  | ({ kind: "custom" } & TCustomReportPeriod);
 type TReportSummaryState = {
   workspaceSlug: string;
   identity: TResearchIdentity;
-  preset: TReportPresetOption;
+  selection: TReportPeriodSelection;
   summary: TReportSummary | null;
   state: TLoadState;
 };
@@ -73,6 +77,10 @@ const REPORT_PERIOD_PRESETS = [
   },
 ] as const;
 const DEFAULT_REPORT_PERIOD_PRESET = REPORT_PERIOD_PRESETS[0];
+const DEFAULT_REPORT_PERIOD_SELECTION: TReportPeriodSelection = {
+  kind: "preset",
+  preset: DEFAULT_REPORT_PERIOD_PRESET,
+};
 
 const REPORT_BUCKETS = ["not_submitted", "needs_revision", "submitted", "accepted"] as const;
 
@@ -110,7 +118,9 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const [administrativeStats, setAdministrativeStats] = useState<Record<string, TProjectAnalyticsCount>>({});
   const [administrativeStatsLoading, setAdministrativeStatsLoading] = useState(false);
   const [administrativeState, setAdministrativeState] = useState<TLoadState>("loading");
-  const [selectedPreset, setSelectedPreset] = useState<TReportPresetOption>(DEFAULT_REPORT_PERIOD_PRESET);
+  const [selectedReportPeriod, setSelectedReportPeriod] = useState<TReportPeriodSelection>(
+    DEFAULT_REPORT_PERIOD_SELECTION
+  );
   const [reportSummaryState, setReportSummaryState] = useState<TReportSummaryState | null>(null);
   const researchVersion = useRef(0);
   const administrativeVersion = useRef(0);
@@ -196,14 +206,19 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     }
     try {
       const summary = await reportService.getSummary(workspaceSlug, {
-        report_type: selectedPreset.reportType,
-        period_offset: selectedPreset.periodOffset,
+        report_type:
+          selectedReportPeriod.kind === "preset"
+            ? selectedReportPeriod.preset.reportType
+            : selectedReportPeriod.reportType,
+        ...(selectedReportPeriod.kind === "preset"
+          ? { period_offset: selectedReportPeriod.preset.periodOffset }
+          : { period_key: selectedReportPeriod.periodKey }),
       });
       if (reportVersion.current !== version) return;
       setReportSummaryState({
         workspaceSlug,
         identity: reportIdentity,
-        preset: selectedPreset,
+        selection: selectedReportPeriod,
         summary,
         state: "ready",
       });
@@ -211,9 +226,15 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
       if (reportVersion.current !== version) return;
       const state =
         (error as { error_code?: string })?.error_code === "research_permission_denied" ? "forbidden" : "error";
-      setReportSummaryState({ workspaceSlug, identity: reportIdentity, preset: selectedPreset, summary: null, state });
+      setReportSummaryState({
+        workspaceSlug,
+        identity: reportIdentity,
+        selection: selectedReportPeriod,
+        summary: null,
+        state,
+      });
     }
-  }, [canSeeSummary, reportIdentity, selectedPreset, workspaceSlug]);
+  }, [canSeeSummary, reportIdentity, selectedReportPeriod, workspaceSlug]);
 
   useEffect(() => {
     if (canSeeResearch) void loadChains();
@@ -262,16 +283,26 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const currentReportSummaryState =
     reportSummaryState?.workspaceSlug === workspaceSlug &&
     reportSummaryState.identity === reportIdentity &&
-    reportSummaryState.preset === selectedPreset
+    reportSummaryState.selection === selectedReportPeriod
       ? reportSummaryState
       : null;
   const reportState = currentReportSummaryState?.state ?? "loading";
   const reportSummary = currentReportSummaryState?.summary ?? null;
   const reportSummaryHref = reportSummary
-    ? `/${workspaceSlug}/research/chains/?view=reports&report_type=${selectedPreset.reportType}&period_key=${encodeURIComponent(
-        reportSummary.period_key
-      )}`
+    ? `/${workspaceSlug}/research/chains/?view=reports&report_type=${
+        selectedReportPeriod.kind === "preset"
+          ? selectedReportPeriod.preset.reportType
+          : selectedReportPeriod.reportType
+      }&period_key=${encodeURIComponent(reportSummary.period_key)}`
     : `/${workspaceSlug}/research/chains/?view=reports`;
+  const reportPeriodLabel =
+    selectedReportPeriod.kind === "preset"
+      ? t(selectedReportPeriod.preset.labelKey)
+      : t("research.home_workbench.custom_period");
+  const customReportPeriod =
+    selectedReportPeriod.kind === "custom"
+      ? { reportType: selectedReportPeriod.reportType, periodKey: selectedReportPeriod.periodKey }
+      : null;
   // oxlint-disable-next-line unicorn/no-array-sort -- 当前 TypeScript lib 不支持 toSorted，排序副本避免修改原列表。
   const sortedAdministrativeProjects = [...administrativeProjects].sort((left, right) => {
     const leftTime = administrativeStats[left.id]?.last_activity_at;
@@ -568,35 +599,40 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             ) : (
               <>
                 <div className="px-4 py-3">
-                  <div
-                    className="inline-flex max-w-full flex-wrap rounded-md border border-subtle"
-                    role="group"
-                    aria-label={t("research.overview.period")}
-                  >
-                    {REPORT_PERIOD_PRESETS.map((preset) => (
-                      <button
-                        key={preset.value}
-                        type="button"
-                        aria-pressed={selectedPreset.value === preset.value}
-                        className={`min-w-0 px-2.5 py-1.5 text-12 transition-colors ${
-                          selectedPreset.value === preset.value
-                            ? "bg-surface-1 text-primary"
-                            : "text-secondary hover:bg-surface-1"
-                        }`}
-                        onClick={() => setSelectedPreset(preset)}
-                      >
-                        {t(preset.labelKey)}
-                      </button>
-                    ))}
+                  <div className="flex max-w-full flex-wrap items-center gap-1.5">
+                    <div
+                      className="inline-flex max-w-full flex-wrap overflow-hidden rounded-md border border-subtle"
+                      role="group"
+                      aria-label={t("research.overview.period")}
+                    >
+                      {REPORT_PERIOD_PRESETS.map((preset) => (
+                        <button
+                          key={preset.value}
+                          type="button"
+                          aria-pressed={
+                            selectedReportPeriod.kind === "preset" && selectedReportPeriod.preset.value === preset.value
+                          }
+                          className={`min-w-0 px-2.5 py-1.5 text-12 transition-colors ${
+                            selectedReportPeriod.kind === "preset" && selectedReportPeriod.preset.value === preset.value
+                              ? "bg-surface-1 text-primary"
+                              : "text-secondary hover:bg-surface-1"
+                          }`}
+                          onClick={() => setSelectedReportPeriod({ kind: "preset", preset })}
+                        >
+                          {t(preset.labelKey)}
+                        </button>
+                      ))}
+                    </div>
+                    <ReportPeriodSelector
+                      customPeriod={customReportPeriod}
+                      reportTimezone={reportIdentity?.workspace?.report_timezone}
+                      onSelect={(selection) => setSelectedReportPeriod({ kind: "custom", ...selection })}
+                    />
                   </div>
                 </div>
-                <div
-                  className="min-w-0 border-t border-subtle px-4 py-3"
-                  role="group"
-                  aria-label={t(selectedPreset.labelKey)}
-                >
+                <div className="min-w-0 border-t border-subtle px-4 py-3" role="group" aria-label={reportPeriodLabel}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-                    <h3 className="text-13 font-medium text-primary">{t(selectedPreset.labelKey)}</h3>
+                    <h3 className="text-13 font-medium text-primary">{reportPeriodLabel}</h3>
                     {reportSummary && <span className="text-11 text-tertiary">{reportSummary.period_key}</span>}
                   </div>
                   {reportSummary && (

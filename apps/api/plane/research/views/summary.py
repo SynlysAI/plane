@@ -28,7 +28,7 @@ from plane.research.utils.periods import InvalidPeriod, parse_period, period_for
 from plane.research.utils.reports import report_resource
 from plane.research.utils.roles import is_research_admin
 from plane.research.views.base import ResearchAPIView
-from plane.research.views.reports import report_timezone_for
+from plane.research.utils.settings import report_timezone_for
 
 STATUS_BUCKETS = {
     "DRAFT": "draft",

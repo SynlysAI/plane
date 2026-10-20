@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Minggu lalu",
-      "last_month": "Bulan lalu"
+      "last_month": "Bulan lalu",
+      "select_report_period": "Pilih periode laporan",
+      "by_week": "Per minggu",
+      "by_month": "Per bulan",
+      "custom_period": "Periode khusus"
     }
   },
   "cloud_maintenance_message": {
