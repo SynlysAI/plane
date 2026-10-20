@@ -96,6 +96,55 @@ def make_asset(context, **overrides):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("file_name", "submitted_type", "expected_type"),
+    [
+        ("clash-verge_1.3.8_amd64.deb", "application/x-deb", "application/x-deb"),
+        ("installer.exe", "application/x-msdownload", "application/x-msdownload"),
+        (
+            "dataset.custom",
+            "  Application/X-AI4MS-Dataset; charset=utf-8  ",
+            "application/x-ai4ms-dataset",
+        ),
+        ("unknown.bin", "", "application/octet-stream"),
+    ],
+)
+def test_comment_attachment_accepts_any_file_type(
+    session_client,
+    comment_context,
+    file_name,
+    submitted_type,
+    expected_type,
+):
+    """评论文件不限制后缀和 MIME，仅继续使用分类大小额度。"""
+    _, _, issue, _ = comment_context
+    configure_limits(comment_context[0], office=50)
+    payload = {
+        "name": file_name,
+        "type": submitted_type,
+        "size": 34 * MEGABYTE,
+        "entity_type": "COMMENT_ATTACHMENT",
+        "entity_identifier": str(issue.id),
+    }
+    with patch("plane.app.views.asset.v2.S3Storage") as storage:
+        storage.return_value.generate_presigned_post.return_value = {
+            "url": "https://storage.test",
+            "fields": {},
+        }
+        response = session_client.post(upload_url(comment_context), payload, format="json")
+
+    assert response.status_code == 200, response.data
+    asset = FileAsset.objects.get(id=response.data["asset_id"])
+    assert asset.attributes["type"] == expected_type
+    assert asset.size == payload["size"]
+    storage.return_value.generate_presigned_post.assert_called_once_with(
+        object_name=asset.asset.name,
+        file_type=expected_type,
+        file_size=50 * MEGABYTE,
+    )
+
+
+@pytest.mark.django_db
 def test_upload_pptx_and_keep_image_endpoints_restricted(session_client, comment_context):
     """仅评论文件类型放行 PPTX，保持图片上传约束。"""
     _, _, issue, _ = comment_context

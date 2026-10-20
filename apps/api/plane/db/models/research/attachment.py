@@ -8,6 +8,7 @@ from django.db.models import Q
 from plane.db.models.base import BaseModel
 
 from .report import PeriodicReport
+from .task import ResearchTaskComment
 
 
 class ReportAttachment(BaseModel):
@@ -64,3 +65,46 @@ class ReportAttachment(BaseModel):
 
     def __str__(self):
         return f"{self.file_name} <{self.report_id}>"
+
+
+class ResearchTaskCommentAttachment(BaseModel):
+    """File asset attached to a research task comment."""
+
+    comment = models.ForeignKey(
+        ResearchTaskComment,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    asset = models.ForeignKey(
+        "db.FileAsset",
+        on_delete=models.CASCADE,
+        related_name="research_task_comment_attachments",
+    )
+    file_name = models.CharField(max_length=500, blank=True, default="")
+    file_size = models.BigIntegerField(default=0)
+    content_type = models.CharField(max_length=255, blank=True, default="")
+    uploaded_by = models.ForeignKey(
+        "db.User",
+        on_delete=models.SET_NULL,
+        related_name="research_task_comment_attachments",
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = "Research Task Comment Attachment"
+        verbose_name_plural = "Research Task Comment Attachments"
+        db_table = "research_task_comment_attachments"
+        ordering = ("created_at", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["comment", "asset"],
+                condition=Q(deleted_at__isnull=True),
+                name="rsch_task_comment_attachment_uq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["comment", "asset"], name="rsch_task_comment_att_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.file_name} <{self.comment_id}>"

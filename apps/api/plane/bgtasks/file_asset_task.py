@@ -20,7 +20,18 @@ from plane.db.models import FileAsset
 @shared_task
 def delete_unuploaded_file_asset():
     """This task deletes unuploaded file assets older than a certain number of days."""
+    cutoff = timezone.now() - timedelta(days=int(os.environ.get("UNUPLOADED_ASSET_DELETE_DAYS", "7")))
     FileAsset.objects.filter(
-        Q(created_at__lt=timezone.now() - timedelta(days=int(os.environ.get("UNUPLOADED_ASSET_DELETE_DAYS", "7"))))
+        Q(created_at__lt=cutoff)
         & (Q(is_uploaded=False) | Q(entity_type=FileAsset.EntityTypeContext.COMMENT_ATTACHMENT, comment__isnull=True))
     ).delete()
+    FileAsset.objects.filter(
+        created_at__lt=cutoff,
+        entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_COMMENT_ATTACHMENT,
+        is_uploaded=False,
+        research_task_comment_attachments__isnull=True,
+    ).delete()
+    FileAsset.objects.filter(
+        created_at__lt=cutoff,
+        entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_COMMENT_IMAGE,
+    ).filter(Q(is_uploaded=False) | Q(is_deleted=True)).delete()

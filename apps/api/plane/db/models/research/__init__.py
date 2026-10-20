@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 
 from .audit import ResearchAuditEvent
-from .attachment import ReportAttachment
+from .attachment import ReportAttachment, ResearchTaskCommentAttachment
 from .approval import ApprovalAction, ApprovalFlow, ApprovalFlowStep, ApprovalRequest
 from .config import ReportVisibility, ResearchWorkspaceAccessGrant, WorkspaceResearchSetting
 from .code import CodeArtifact, ProjectCodeRepository
@@ -136,6 +136,7 @@ __all__ = [
     "PeriodicReportSnapshot",
     "ReportAccessGrant",
     "ReportAttachment",
+    "ResearchTaskCommentAttachment",
     "ApprovalAction",
     "ApprovalFlow",
     "ApprovalFlowStep",

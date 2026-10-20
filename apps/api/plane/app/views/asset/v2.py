@@ -744,9 +744,18 @@ class ProjectAssetEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def post(self, request, slug, project_id):
         name = sanitize_filename(request.data.get("name")) or "unnamed"
-        type = request.data.get("type", "image/jpeg")
         entity_type = request.data.get("entity_type", "")
         entity_identifier = request.data.get("entity_identifier")
+        is_comment_attachment = entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT
+        type = request.data.get("type")
+        if is_comment_attachment:
+            type = type or "application/octet-stream"
+        elif "type" not in request.data:
+            type = "image/jpeg"
+        type = str(type)
+        type = type.split(";", 1)[0].strip().lower()
+        if is_comment_attachment and not type:
+            type = "application/octet-stream"
         try:
             size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
         except (TypeError, ValueError, OverflowError):
@@ -794,7 +803,8 @@ class ProjectAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check if the file type is allowed
+        # Comment attachments accept any extension and MIME; their download is
+        # always forced to attachment disposition, so only size quotas apply.
         allowed_types = [
             "image/jpeg",
             "image/png",
@@ -802,9 +812,7 @@ class ProjectAssetEndpoint(BaseAPIView):
             "image/jpg",
             "image/gif",
         ]
-        if entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
-            allowed_types = settings.ATTACHMENT_MIME_TYPES
-        if type not in allowed_types:
+        if not is_comment_attachment and type not in allowed_types:
             return Response(
                 {
                     "error": "Invalid file type.",

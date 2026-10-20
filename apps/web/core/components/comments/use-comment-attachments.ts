@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import type { TCommentAttachment, TCommentAttachmentLimits, TCommentsOperations } from "@plane/types";
+import type { TCommentAttachment, TCommentAttachmentLimits } from "@plane/types";
 import { getCommentAttachmentLimitError } from "./comment-attachment-limits";
 
 export type TCommentAttachmentDraft = {
@@ -12,6 +12,11 @@ export type TCommentAttachmentDraft = {
   status: "uploading" | "ready" | "failed";
 };
 
+type TCommentAttachmentOperations = {
+  uploadCommentAttachment?: (file: File) => Promise<TCommentAttachment>;
+  discardCommentAttachment?: (assetId: string) => Promise<void>;
+};
+
 /** 管理评论文件草稿，保存前不删除已发布文件，及时清理被移除的临时上传。
  *
  * @param operations 评论上传与废弃操作。
@@ -20,7 +25,7 @@ export type TCommentAttachmentDraft = {
  * @returns 草稿列表、校验错误、上传队列及保存生命周期操作。
  */
 export function useCommentAttachments(
-  operations: Pick<TCommentsOperations, "uploadCommentAttachment" | "discardCommentAttachment">,
+  operations: TCommentAttachmentOperations,
   limits: TCommentAttachmentLimits | null,
   initial: TCommentAttachment[] = []
 ) {

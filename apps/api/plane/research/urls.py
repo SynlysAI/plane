@@ -22,6 +22,13 @@ from plane.research.views.agent_access import (
     ResearchReadToolsEndpoint,
 )
 from plane.research.views.task_comments import ResearchTaskCommentListEndpoint, ResearchTaskCommentDetailEndpoint
+from plane.research.views.task_comment_assets import (
+    ResearchTaskCommentAttachmentDownloadEndpoint,
+    ResearchTaskCommentAttachmentLimitsEndpoint,
+    ResearchTaskCommentAttachmentPresignEndpoint,
+    ResearchTaskCommentAttachmentSlotEndpoint,
+    ResearchTaskCommentImageEndpoint,
+)
 from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
@@ -395,6 +402,41 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comments/<uuid:comment_id>/",
         ResearchTaskCommentDetailEndpoint.as_view(),
         name="research-task-comment",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comment-attachment-limits/",
+        ResearchTaskCommentAttachmentLimitsEndpoint.as_view(),
+        name="research-task-comment-attachment-limits",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comment-attachments/presign/",
+        ResearchTaskCommentAttachmentPresignEndpoint.as_view(),
+        name="research-task-comment-attachment-presign",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comment-attachments/<uuid:asset_id>/confirm/",
+        ResearchTaskCommentAttachmentSlotEndpoint.as_view(),
+        name="research-task-comment-attachment-confirm",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comment-attachments/<uuid:asset_id>/download/",
+        ResearchTaskCommentAttachmentDownloadEndpoint.as_view(),
+        name="research-task-comment-attachment-download",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comment-attachments/<uuid:asset_id>/",
+        ResearchTaskCommentAttachmentSlotEndpoint.as_view(),
+        name="research-task-comment-attachment",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comment-images/",
+        ResearchTaskCommentImageEndpoint.as_view(),
+        name="research-task-comment-images",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comment-images/<uuid:asset_id>/",
+        ResearchTaskCommentImageEndpoint.as_view(),
+        name="research-task-comment-image",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/<str:action>/",

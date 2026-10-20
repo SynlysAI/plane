@@ -23,6 +23,7 @@ type TArgs = {
   duplicateFile: TFileHandler["duplicate"];
   workspaceId: string;
   workspaceSlug: string;
+  fileHandlerOverrides?: Partial<TFileHandler>;
 };
 
 export const useEditorConfig = () => {
@@ -34,7 +35,7 @@ export const useEditorConfig = () => {
 
   const getEditorFileHandlers = useCallback(
     (args: TArgs): TFileHandler => {
-      const { projectId, uploadFile, duplicateFile, workspaceId, workspaceSlug } = args;
+      const { projectId, uploadFile, duplicateFile, workspaceId, workspaceSlug, fileHandlerOverrides } = args;
 
       return {
         assetsUploadStatus: assetsUploadPercentage,
@@ -97,6 +98,7 @@ export const useEditorConfig = () => {
           maxFileSize,
         },
         ...getExtendedEditorFileHandlers({ projectId, workspaceSlug }),
+        ...fileHandlerOverrides,
       };
     },
     [assetsUploadPercentage, getExtendedEditorFileHandlers, maxFileSize]
