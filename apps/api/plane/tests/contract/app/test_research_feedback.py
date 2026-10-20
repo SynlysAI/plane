@@ -14,12 +14,16 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from plane.db.models import (
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
     FileAsset,
+    OrgUnitMember,
     ResearchAuditEvent,
     ResearchFeedback,
     ResearchFeedbackScreenshot,
+    WorkspaceMember,
 )
-from plane.tests.research_fixtures import make_instance_admin
+from plane.tests.research_fixtures import add_workspace_member, make_instance_admin, make_user
 from plane.tests.contract.app.test_research_browse import (  # noqa: F401
     client_for,
     create_project,
@@ -98,6 +102,81 @@ def submission(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("research_enabled", [True, False])
+def test_administrative_member_can_submit_and_read_own_feedback(env, storage, settings, research_enabled):
+    """行政成员无需科研身份或科研开关，但不能读取他人反馈或获得管理权限。"""
+    user = make_user(first_name="Administrative member")
+    add_workspace_member(env["workspace"], user)
+    organization = AdministrativeOrganization.objects.get(workspace=env["workspace"], is_default=True)
+    AdministrativeOrganizationMember.objects.create(
+        workspace=env["workspace"],
+        organization=organization,
+        member=user,
+    )
+    assert not OrgUnitMember.objects.filter(user=user).exists()
+    other = (
+        client_for(env["student"])
+        .post(feedback_url(env), {**submission(), "screenshots": [image()]}, format="multipart")
+        .json()["data"]
+    )
+    settings.RESEARCH_MODULE_ENABLED = research_enabled
+    setting = env["workspace"].research_setting
+    setting.module_enabled = research_enabled
+    setting.save(update_fields=["module_enabled"])
+    client = client_for(user)
+
+    response = client.post(feedback_url(env), {**submission(), "screenshots": [image()]}, format="multipart")
+
+    assert response.status_code == 200, response.json()
+    own = response.json()["data"]
+    record = ResearchFeedback.objects.get(pk=own["feedback_id"])
+    assert record.created_by == user
+    assert record.org_unit_id is None
+    listed = client.get(feedback_url(env))
+    assert listed.status_code == 200
+    assert [item["feedback_id"] for item in listed.json()["data"]["results"]] == [own["feedback_id"]]
+    shot = client.get(feedback_url(env, f"{own['feedback_id']}/screenshots/{own['screenshots'][0]['id']}/"))
+    assert shot.status_code == 200
+    assert b"".join(shot.streaming_content) == PNG_BYTES
+    other_shot = client.get(feedback_url(env, f"{other['feedback_id']}/screenshots/{other['screenshots'][0]['id']}/"))
+    assert other_shot.status_code == 404
+    assert client.get(feedback_url(env), {"scope": "manage"}).status_code == 403
+    denied_update = client.patch(
+        feedback_url(env, f"{own['feedback_id']}/status/"),
+        {"status": "done", "comment": "Not authorized"},
+        format="json",
+    )
+    assert denied_update.status_code == 403
+    managed = client_for(env["admin"]).get(feedback_url(env), {"scope": "manage"})
+    assert managed.status_code == 200
+    assert own["feedback_id"] in {item["feedback_id"] for item in managed.json()["data"]["results"]}
+    allowed_update = client_for(env["admin"]).patch(
+        feedback_url(env, f"{own['feedback_id']}/status/"),
+        {"status": "done", "comment": "Resolved"},
+        format="json",
+    )
+    assert allowed_update.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("membership", ["missing", "inactive", "guest"])
+def test_feedback_still_requires_active_non_guest_workspace_membership(env, storage, settings, membership):
+    """取消科研门禁不应放宽工作区席位要求。"""
+    user = make_user()
+    if membership != "missing":
+        seat = add_workspace_member(env["workspace"], user, role=5 if membership == "guest" else 15)
+        if membership == "inactive":
+            WorkspaceMember.objects.filter(pk=seat.pk).update(is_active=False)
+    settings.RESEARCH_MODULE_ENABLED = False
+    client = client_for(user)
+    expected = 403 if membership == "guest" else 404
+    assert client.post(feedback_url(env), submission(), format="multipart").status_code == expected
+    assert client.get(feedback_url(env)).status_code == expected
+    assert not ResearchFeedback.objects.exists()
+    storage.upload_file.assert_not_called()
 
 
 @pytest.mark.django_db
