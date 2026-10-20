@@ -11,6 +11,7 @@ import { ContentWrapper } from "@plane/ui";
 import { useUserProfile } from "@/hooks/store/user";
 // plane web imports
 import { TourRoot } from "@/components/onboarding/tour/root";
+import { HomePeekOverviewsRoot } from "@/components/issues/peek-overview/peek-overviews";
 // local imports
 import { WorkspaceHomeWorkbench } from "./workbench";
 
@@ -35,6 +36,7 @@ export const WorkspaceHomeView = observer(function WorkspaceHomeView() {
         </div>
       )}
       <>
+        <HomePeekOverviewsRoot />
         <ContentWrapper className="mx-auto scrollbar-hide h-full min-h-0 gap-6 bg-canvas px-page-x">
           {workspaceSlug && <WorkspaceHomeWorkbench workspaceSlug={workspaceSlug.toString()} />}
         </ContentWrapper>

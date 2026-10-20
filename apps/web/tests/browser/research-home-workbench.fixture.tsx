@@ -19,6 +19,12 @@ const now = new Date().toISOString();
 const role = new URLSearchParams(window.location.search).get("role") ?? "admin";
 const canResearch = role === "admin" || role === "researcher";
 const canSummary = role === "admin" || role === "summary";
+
+/** 将 fixture 的本地日期格式化为后端报告周期边界。 */
+function formatFixtureDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 const identity = {
   module_enabled: true,
   workspace_enabled: true,
@@ -44,6 +50,11 @@ const identity = {
     subject: null,
     employee_id: null,
     configured: false,
+  },
+  workspace: {
+    slug: "isolated-test",
+    purpose: "GENERAL",
+    report_timezone: "Asia/Shanghai",
   },
 } as TResearchIdentity;
 
@@ -115,43 +126,59 @@ ProjectDomainsService.prototype.todos = async () => ({
   next_cursor: null,
   degraded_sources: [],
 });
-ResearchReportService.prototype.getSummary = async (_workspaceSlug, params = {}) => ({
-  period_key:
-    params.report_type === "MONTHLY"
+/** 为浏览器验收解析显式或相对的报告周期。 */
+function fixtureReportPeriod(params: { report_type?: string; period_offset?: number; period_key?: string }) {
+  const reportType = params.report_type === "MONTHLY" ? "MONTHLY" : "WEEKLY";
+  const periodKey =
+    params.period_key ||
+    (reportType === "MONTHLY"
       ? params.period_offset === -1
         ? "2026-09"
         : "2026-10"
       : params.period_offset === -1
         ? "2026-W41"
-        : "2026-W42",
-  period_start:
-    params.report_type === "MONTHLY"
-      ? params.period_offset === -1
-        ? "2026-09-01"
-        : "2026-10-01"
-      : params.period_offset === -1
-        ? "2026-10-05"
-        : "2026-10-12",
-  period_end:
-    params.report_type === "MONTHLY"
-      ? params.period_offset === -1
-        ? "2026-09-30"
-        : "2026-10-31"
-      : params.period_offset === -1
-        ? "2026-10-11"
-        : "2026-10-18",
-  org_unit: null,
-  org_unit_name: null,
-  counts:
-    params.report_type === "MONTHLY"
-      ? params.period_offset === -1
-        ? { not_submitted: 92, draft: 0, submitted: 14, needs_revision: 11, accepted: 17 }
-        : { not_submitted: 93, draft: 1, submitted: 15, needs_revision: 12, accepted: 18 }
-      : params.period_offset === -1
-        ? { not_submitted: 192, draft: 0, submitted: 4, needs_revision: 1, accepted: 7 }
-        : { not_submitted: 193, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
-  pending_members: [],
-});
+        : "2026-W42");
+
+  if (reportType === "MONTHLY") {
+    const [year, month] = periodKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    return {
+      periodKey,
+      periodStart: `${year}-${String(month).padStart(2, "0")}-01`,
+      periodEnd: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+    };
+  }
+
+  const match = /^(\d{4})-W(\d{2})$/.exec(periodKey);
+  const isoYear = Number(match?.[1] ?? 2026);
+  const isoWeek = Number(match?.[2] ?? 42);
+  const januaryFourth = new Date(isoYear, 0, 4);
+  const monday = new Date(januaryFourth);
+  monday.setDate(januaryFourth.getDate() - ((januaryFourth.getDay() + 6) % 7) + (isoWeek - 1) * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { periodKey, periodStart: formatFixtureDate(monday), periodEnd: formatFixtureDate(sunday) };
+}
+
+ResearchReportService.prototype.getSummary = async (_workspaceSlug, params = {}) => {
+  const period = fixtureReportPeriod(params);
+  return {
+    period_key: period.periodKey,
+    period_start: period.periodStart,
+    period_end: period.periodEnd,
+    org_unit: null,
+    org_unit_name: null,
+    counts:
+      params.report_type === "MONTHLY"
+        ? params.period_offset === -1
+          ? { not_submitted: 92, draft: 0, submitted: 14, needs_revision: 11, accepted: 17 }
+          : { not_submitted: 93, draft: 1, submitted: 15, needs_revision: 12, accepted: 18 }
+        : params.period_offset === -1
+          ? { not_submitted: 192, draft: 0, submitted: 4, needs_revision: 1, accepted: 7 }
+          : { not_submitted: 193, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+    pending_members: [],
+  };
+};
 ProjectService.prototype.getProjects = async () =>
   [
     {

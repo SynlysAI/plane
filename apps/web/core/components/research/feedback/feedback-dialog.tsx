@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import type { TFeedbackStatus, TResearchFeedback } from "@plane/types";
 import { Button } from "@plane/propel/button";
-import { ModalCore, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
+import { EModalWidth, ModalCore, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 import { ResearchBrowseRefresh } from "@/components/research/common/research-browse-toolbar";
@@ -107,6 +107,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     identity?.user?.is_workspace_admin ||
     identity?.user?.is_system_admin
   );
+  const isManagementView = managementOnly || view === "manage";
   const managementDenied = managementOnly && identityKnown && !canManage;
   useEffect(() => {
     shotsRef.current = shots;
@@ -401,7 +402,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const body = (
     <section
       className={
-        managementOnly
+        isManagementView
           ? "flex h-full min-w-0 flex-col gap-5 overflow-hidden bg-canvas p-6"
           : "flex max-h-[85vh] min-w-0 flex-col gap-4 overflow-y-auto bg-surface-1 p-5"
       }
@@ -565,7 +566,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                 </Button>
               </div>
             </form>
-          ) : managementOnly ? (
+          ) : isManagementView ? (
             <>
               {filterToolbar}
               <div
@@ -728,7 +729,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                             </ol>
                           </section>
                         ) : null}
-                        {view === "manage" && (
+                        {isManagementView && (
                           <section aria-label="状态处置" className="border-t border-subtle pt-4">
                             <h4 className="text-12 font-semibold text-primary">状态处置</h4>
                             <div className="mt-3">{statusForm}</div>
@@ -862,7 +863,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                       </li>
                     ))}
                   </ol>
-                  {view === "manage" && (
+                  {isManagementView && (
                     <section aria-label="状态处置" className="mt-4 border-t border-subtle pt-4">
                       <h4 className="text-12 font-semibold text-primary">状态处置</h4>
                       <div className="mt-3">{statusForm}</div>
@@ -886,7 +887,12 @@ export const FeedbackDialog = observer(function FeedbackDialog({
       >
         <MessageSquare className="size-4" />
       </button>
-      <ModalCore isOpen={open} handleClose={() => !busy && setOpen(false)}>
+      <ModalCore
+        isOpen={open}
+        handleClose={() => !busy && setOpen(false)}
+        width={isManagementView ? EModalWidth.VIXL : EModalWidth.XXL}
+        className={isManagementView ? "h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] overflow-hidden" : undefined}
+      >
         {body}
       </ModalCore>
     </>

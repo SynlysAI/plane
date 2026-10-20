@@ -44,7 +44,11 @@ from plane.utils.cache import invalidate_cache_directly
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
-from plane.utils.comment_attachments import can_access_comment_attachment
+from plane.utils.comment_attachments import (
+    can_access_comment_attachment,
+    comment_attachment_limits,
+    resolve_comment_attachment_limit,
+)
 
 
 def can_download_research_asset(user, asset):
@@ -740,18 +744,26 @@ class ProjectAssetEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def post(self, request, slug, project_id):
         name = sanitize_filename(request.data.get("name")) or "unnamed"
-        type = request.data.get("type", "image/jpeg")
         entity_type = request.data.get("entity_type", "")
         entity_identifier = request.data.get("entity_identifier")
+        is_comment_attachment = entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT
+        type = request.data.get("type")
+        if is_comment_attachment:
+            type = type or "application/octet-stream"
+        elif "type" not in request.data:
+            type = "image/jpeg"
+        type = str(type)
+        type = type.split(";", 1)[0].strip().lower()
+        if is_comment_attachment and not type:
+            type = "application/octet-stream"
         try:
             size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
         except (TypeError, ValueError, OverflowError):
             return Response({"error": "Invalid file size."}, status=status.HTTP_400_BAD_REQUEST)
 
+        workspace = Workspace.objects.get(slug=slug)
         issue = None
         if entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
-            if size <= 0 or size > settings.FILE_SIZE_LIMIT:
-                return Response({"error": "Invalid file size."}, status=status.HTTP_400_BAD_REQUEST)
             try:
                 issue_id = uuid.UUID(str(entity_identifier))
             except (ValueError, TypeError, AttributeError):
@@ -791,7 +803,8 @@ class ProjectAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check if the file type is allowed
+        # Comment attachments accept any extension and MIME; their download is
+        # always forced to attachment disposition, so only size quotas apply.
         allowed_types = [
             "image/jpeg",
             "image/png",
@@ -799,9 +812,7 @@ class ProjectAssetEndpoint(BaseAPIView):
             "image/jpg",
             "image/gif",
         ]
-        if entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
-            allowed_types = settings.ATTACHMENT_MIME_TYPES
-        if type not in allowed_types:
+        if not is_comment_attachment and type not in allowed_types:
             return Response(
                 {
                     "error": "Invalid file type.",
@@ -810,11 +821,30 @@ class ProjectAssetEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Get the size limit
-        size_limit = min(settings.FILE_SIZE_LIMIT, size)
-
-        # Get the workspace
-        workspace = Workspace.objects.get(slug=slug)
+        # Comment attachments follow the owning workspace's research platform
+        # quotas. Every other project asset keeps the global request metadata
+        # limit and its corresponding presigned policy unchanged.
+        if entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT:
+            try:
+                limit = resolve_comment_attachment_limit(name, type, comment_attachment_limits(workspace))
+            except ValueError:
+                return Response({"error": "Invalid workspace attachment limit."}, status=status.HTTP_400_BAD_REQUEST)
+            if size <= 0 or size > limit.max_bytes:
+                return Response(
+                    {
+                        "error": "File size exceeds the workspace comment attachment limit.",
+                        "error_code": "comment_attachment_size_exceeded",
+                        "category": limit.category,
+                        "limit_mb": limit.max_mb,
+                        "limit_bytes": limit.max_bytes,
+                        "status": False,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            size_limit = size
+        else:
+            # Keep the historical global metadata/presign ceiling for non-comment assets.
+            size_limit = min(settings.FILE_SIZE_LIMIT, size)
 
         # asset key
         asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
@@ -834,7 +864,11 @@ class ProjectAssetEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_post(
+            object_name=asset_key,
+            file_type=type,
+            file_size=limit.max_bytes if entity_type == FileAsset.EntityTypeContext.COMMENT_ATTACHMENT else size_limit,
+        )
         # Return the presigned URL
         return Response(
             {

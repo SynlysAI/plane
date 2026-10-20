@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "지난주",
-      "last_month": "지난달"
+      "last_month": "지난달",
+      "select_report_period": "보고 기간 선택",
+      "by_week": "주별",
+      "by_month": "월별",
+      "custom_period": "사용자 지정 기간"
     }
   },
   "cloud_maintenance_message": {

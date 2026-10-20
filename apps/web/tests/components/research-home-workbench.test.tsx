@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     sections: { research_chain: true, reports: true },
     capabilities: { nav: ["research_chain", "summary"] },
     user: { id: "student-1", is_workspace_admin: false, org_units: [] },
+    workspace: { slug: "lab", purpose: "GENERAL", report_timezone: "Asia/Shanghai" },
   },
 }));
 
@@ -49,6 +50,63 @@ vi.mock("@plane/i18n", () => ({
 vi.mock("@plane/propel/button", () => ({
   Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
 }));
+vi.mock("@plane/propel/calendar", () => ({
+  Calendar: ({ onSelect, disabled }: { onSelect: (date: Date | undefined) => void; disabled?: unknown }) => (
+    <div data-testid="report-period-calendar" data-disabled={String(disabled !== undefined)}>
+      <button type="button" onClick={() => onSelect(new Date(2026, 8, 15))}>
+        选择 2026-09-15
+      </button>
+      <button type="button" onClick={() => onSelect(new Date(new Date().getFullYear() + 1, 0, 1))}>
+        选择未来日期
+      </button>
+    </div>
+  ),
+}));
+vi.mock("@plane/propel/popover", () => {
+  const PopoverContext = React.createContext<{ open: boolean; onOpenChange: (open: boolean) => void } | null>(null);
+  const Popover = Object.assign(
+    ({
+      children,
+      open = false,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => {
+      const value = React.useMemo(
+        () => ({ open, onOpenChange: onOpenChange ?? Function.prototype }),
+        [open, onOpenChange]
+      );
+      return (
+        <PopoverContext.Provider value={value}>
+          <div>{children}</div>
+        </PopoverContext.Provider>
+      );
+    },
+    {
+      Button: ({ children, onClick, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => {
+        const context = React.useContext(PopoverContext);
+        return (
+          <button
+            {...props}
+            onClick={(event) => {
+              onClick?.(event);
+              context?.onOpenChange(!context.open);
+            }}
+          >
+            {children}
+          </button>
+        );
+      },
+      Panel: ({ children }: { children: React.ReactNode }) => {
+        const context = React.useContext(PopoverContext);
+        return context?.open ? <div>{children}</div> : null;
+      },
+    }
+  );
+  return { Popover };
+});
 vi.mock("@/hooks/store/use-research", () => {
   const researchStore = {
     get identity() {
@@ -103,6 +161,7 @@ vi.mock("@/services/project-domains.service", () => ({
 }));
 
 const { WorkspaceHomeWorkbench } = await import("@/components/home/workbench");
+const { reportPeriodEnd, reportPeriodKey } = await import("@/components/home/report-period-selector");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
 let container: HTMLDivElement;
@@ -481,6 +540,130 @@ it("switches report periods without changing the global workbench period", async
   const allPeriod = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部");
   await act(async () => allPeriod?.click());
   expect(mocks.getReportSummary).toHaveBeenCalledTimes(3);
+});
+
+it("loads an ISO week summary when a custom week date is selected", async () => {
+  mocks.getReportSummary.mockImplementation(async (_slug, params) => {
+    if (params.period_key) {
+      return {
+        period_key: params.period_key,
+        period_start: "2026-09-14",
+        period_end: "2026-09-20",
+        counts: { not_submitted: 9, draft: 0, submitted: 6, needs_revision: 2, accepted: 4 },
+      };
+    }
+    return {
+      period_key: "2026-W42",
+      period_start: "2026-10-12",
+      period_end: "2026-10-18",
+      counts: { not_submitted: 3, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+    };
+  });
+
+  await renderHome();
+  const customPeriod = [...container.querySelectorAll("button")].find(
+    (button) => button.getAttribute("aria-label") === "选择报告周期"
+  );
+  await act(async () => customPeriod?.click());
+  expect(container.textContent).toContain("按周");
+
+  const date = [...container.querySelectorAll("button")].find((button) => button.textContent === "选择 2026-09-15");
+  await act(async () => date?.click());
+
+  expect(mocks.getReportSummary).toHaveBeenLastCalledWith("lab", {
+    report_type: "WEEKLY",
+    period_key: "2026-W38",
+  });
+  const summary = container.querySelector('[role="group"][aria-label="自定义周期"]');
+  expect(summary?.textContent).toContain("2026-W38");
+  expect(summary?.textContent).toContain("2026-09-14 ~ 2026-09-20");
+  expect(
+    summary?.querySelector('a[href="/lab/research/chains/?view=reports&report_type=WEEKLY&period_key=2026-W38"]')
+  ).not.toBeNull();
+  expect([...container.querySelectorAll("button")].find((button) => button.textContent === "2026-W38")).toBeDefined();
+});
+
+it("loads a calendar month summary and passes the report timezone to the picker", async () => {
+  mocks.getReportSummary.mockImplementation(async (_slug, params) => {
+    if (params.period_key) {
+      return {
+        period_key: params.period_key,
+        period_start: "2026-09-01",
+        period_end: "2026-09-30",
+        counts: { not_submitted: 9, draft: 0, submitted: 6, needs_revision: 2, accepted: 4 },
+      };
+    }
+    return {
+      period_key: "2026-W42",
+      period_start: "2026-10-12",
+      period_end: "2026-10-18",
+      counts: { not_submitted: 3, draft: 1, submitted: 5, needs_revision: 2, accepted: 8 },
+    };
+  });
+
+  await renderHome();
+  const customPeriod = [...container.querySelectorAll("button")].find(
+    (button) => button.getAttribute("aria-label") === "选择报告周期"
+  );
+  await act(async () => customPeriod?.click());
+  const monthMode = [...container.querySelectorAll("button")].find((button) => button.textContent === "按月");
+  await act(async () => monthMode?.click());
+  expect(container.querySelector('[data-testid="report-period-calendar"]')?.getAttribute("data-disabled")).toBe("true");
+
+  const date = [...container.querySelectorAll("button")].find((button) => button.textContent === "选择 2026-09-15");
+  await act(async () => date?.click());
+
+  expect(mocks.getReportSummary).toHaveBeenLastCalledWith("lab", {
+    report_type: "MONTHLY",
+    period_key: "2026-09",
+  });
+  expect(container.querySelector('[role="group"][aria-label="自定义周期"]')?.textContent).toContain("2026-09");
+});
+
+it("derives custom keys and current boundaries in the workspace report timezone", () => {
+  expect(reportPeriodKey("WEEKLY", new Date(2026, 8, 15))).toBe("2026-W38");
+  expect(reportPeriodKey("MONTHLY", new Date(2026, 8, 15))).toBe("2026-09");
+
+  const weekEnd = reportPeriodEnd("WEEKLY", "Asia/Shanghai", new Date("2026-09-20T16:30:00.000Z"));
+  expect([weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate()]).toEqual([2026, 8, 27]);
+
+  const monthEnd = reportPeriodEnd("MONTHLY", "Asia/Shanghai", new Date("2026-08-31T16:30:00.000Z"));
+  expect([monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate()]).toEqual([2026, 8, 30]);
+});
+
+it("does not request a future custom period from the calendar trigger", async () => {
+  await renderHome();
+  const customPeriod = [...container.querySelectorAll("button")].find(
+    (button) => button.getAttribute("aria-label") === "选择报告周期"
+  );
+  await act(async () => customPeriod?.click());
+  const requestCount = mocks.getReportSummary.mock.calls.length;
+
+  const futureDate = [...container.querySelectorAll("button")].find((button) => button.textContent === "选择未来日期");
+  await act(async () => futureDate?.click());
+
+  expect(mocks.getReportSummary).toHaveBeenCalledTimes(requestCount);
+  expect(container.querySelector('[role="group"][aria-label="本周"]')).not.toBeNull();
+});
+
+it("ignores a custom period response after returning to a preset", async () => {
+  const pending: ((summary: unknown) => void)[] = [];
+  mocks.getReportSummary.mockImplementation(() => new Promise((done) => pending.push(done)));
+
+  await renderHome();
+  const customPeriod = [...container.querySelectorAll("button")].find(
+    (button) => button.getAttribute("aria-label") === "选择报告周期"
+  );
+  await act(async () => customPeriod?.click());
+  const date = [...container.querySelectorAll("button")].find((button) => button.textContent === "选择 2026-09-15");
+  await act(async () => date?.click());
+  const currentMonth = [...container.querySelectorAll("button")].find((button) => button.textContent === "本月");
+  await act(async () => currentMonth?.click());
+
+  await act(async () => pending[1]({ period_key: "2026-W38", counts: { accepted: 999 } }));
+  expect(container.textContent).not.toContain("2026-W38");
+  await act(async () => pending[2]({ period_key: "2026-10", counts: { accepted: 8 } }));
+  expect(container.querySelector('[role="group"][aria-label="本月"]')?.textContent).toContain("2026-10");
 });
 
 it("ignores a pending report response after the period preset changes", async () => {

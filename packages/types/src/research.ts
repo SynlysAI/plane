@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import type { TCommentAttachment } from "./issues/activity/issue_comment";
+
 export type TOrgUnitType = "ROOT" | "INSTITUTE" | "LAB" | "GROUP" | "TEAM";
 export type TOrgBusinessCategory = "BASIC_RESEARCH" | "INDUSTRIALIZATION" | "MENTOR_GROUP";
 export type TOrgRole = "OWNER" | "PI" | "ADVISOR" | "REVIEWER" | "UNIT_ADMIN";
@@ -331,6 +333,7 @@ export type TResearchTaskComment = {
   edited_at: string | null;
   can_edit: boolean;
   can_delete: boolean;
+  file_attachments?: TCommentAttachment[];
 };
 
 export type TResearchChainNodeTask = {
@@ -842,6 +845,8 @@ export type TResearchIdentity = {
     slug: string;
     purpose: "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
     research_enabled?: boolean;
+    /** Timezone used to resolve report weeks, months, and submission boundaries. */
+    report_timezone?: string;
   };
   identity: {
     provider: string | null;

@@ -114,7 +114,7 @@ export function NativeMCPManager({ workspaceSlug }: { workspaceSlug: string }) {
   return (
     <section aria-label="行政项目接入" className="space-y-4">
       <p className="text-secondary">
-        读取行政项目的工作项、状态与评论，沿用 Plane 原生项目/工作项 API；科研节点任务请使用科研链节点接入。
+        读取行政项目的工作项、状态与评论，沿用 Plane 原生项目/工作项 API；科研链数据请使用后端科研 MCP API。
         个人令牌仅用于行政服务身份验证；服务开放发布时，才可准备并发布工作项进展评论。
       </p>
       {error && (

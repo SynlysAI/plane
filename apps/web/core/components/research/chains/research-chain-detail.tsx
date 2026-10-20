@@ -32,7 +32,6 @@ import {
   type TResearchChainStageNodeDetail,
 } from "@/components/research/chains/research-chain-workflow-stage-detail";
 import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
-import { ResearchNodeMCPEntry } from "@/components/mcp/research-node-mcp-entry";
 import { ResearchPaperReviewPanel } from "@/components/research/chains/research-paper-review-panel";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -214,7 +213,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("tab", "nodes");
       nextParams.set("stage", stage.id);
-      nextParams.delete("operation");
       if (stage.preferredNodeId) nextParams.set("node", stage.preferredNodeId);
       else nextParams.delete("node");
       setSearchParams(nextParams);
@@ -228,7 +226,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       nextParams.set("tab", "nodes");
       if (selectedStage) nextParams.set("stage", selectedStage.id);
       nextParams.set("node", nodeId);
-      nextParams.delete("operation");
       setSearchParams(nextParams);
     },
     [searchParams, selectedStage, setSearchParams]
@@ -677,12 +674,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                         workspaceSlug={workspaceSlug}
                         chainId={chainId}
                         nodeId={selected.node.id}
-                      />
-                      <ResearchNodeMCPEntry
-                        workspaceSlug={workspaceSlug}
-                        chainId={chainId}
-                        nodeId={selected.node.id}
-                        operationId={searchParams.get("operation")}
                       />
                       <ResearchChainKnowledgePanel
                         workspaceSlug={workspaceSlug}

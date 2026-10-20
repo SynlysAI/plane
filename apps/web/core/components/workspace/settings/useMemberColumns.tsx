@@ -15,17 +15,9 @@ import { AccountTypeColumn, NameColumn } from "@/components/workspace/settings/m
 import type { IWorkspaceMemberTag, IWorkspaceMemberTagGroup } from "@plane/types";
 import { useMember } from "@/hooks/store/use-member";
 import { MemberTagsEditor } from "./member-tags-editor";
+import { MemberTagPill } from "./member-tag-pill";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import type { IMemberFilters } from "@/store/member/utils";
-
-const TAG_COLOR_CLASS_NAMES: Record<IWorkspaceMemberTag["color"], string> = {
-  sage: "border-[#BDCCBF] bg-[#F0F5F0] text-[#466152]",
-  sand: "border-[#D8CBB6] bg-[#FAF6EE] text-[#75624B]",
-  slate: "border-[#C8CED3] bg-[#F2F4F5] text-[#53616B]",
-  mist: "border-[#C7D3D4] bg-[#F0F5F5] text-[#456467]",
-  clay: "border-[#D9C4B9] bg-[#FAF2EE] text-[#815E50]",
-  moss: "border-[#C7D1B5] bg-[#F3F6ED] text-[#5B6B47]",
-};
 
 function MemberTagsColumn({ tags, groups }: { tags?: IWorkspaceMemberTag[]; groups: IWorkspaceMemberTagGroup[] }) {
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
@@ -49,12 +41,7 @@ function MemberTagsColumn({ tags, groups }: { tags?: IWorkspaceMemberTag[]; grou
           <div key={groupId} className="flex items-center gap-1">
             <span className="text-11 text-tertiary">{groupNames.get(groupId) ?? "标签"}</span>
             {visibleTags.map((tag) => (
-              <span
-                key={tag.id}
-                className={`rounded-md border px-1.5 py-0.5 text-11 ${TAG_COLOR_CLASS_NAMES[tag.color]}`}
-              >
-                {tag.name}
-              </span>
+              <MemberTagPill key={tag.id} tag={tag} />
             ))}
             {groupedTags.length > 3 && (
               <button
@@ -181,7 +168,7 @@ export const useMemberColumns = (selection?: MemberSelection) => {
       content: "标签",
       tdRender: (rowData: RowData) => (
         <div className="flex items-center gap-2">
-          <MemberTagsColumn tags={rowData.member.tags} groups={workspaceMemberTagGroups[workspaceSlug] ?? []} />
+          <MemberTagsColumn tags={rowData.tags} groups={workspaceMemberTagGroups[workspaceSlug] ?? []} />
           {isAdmin && !isSuspended(rowData) && (
             <button
               type="button"
@@ -200,7 +187,7 @@ export const useMemberColumns = (selection?: MemberSelection) => {
       content: t("workspace_settings.settings.members.details.authentication"),
       tdRender: (rowData: RowData) => {
         if (isSuspended(rowData)) return null;
-        const loginMedium = rowData.member.last_login_medium;
+        const loginMedium = rowData.last_login_medium;
         if (!loginMedium) return null;
         return <div>{LOGIN_MEDIUM_LABELS[loginMedium]}</div>;
       },
@@ -269,7 +256,7 @@ export const useMemberColumns = (selection?: MemberSelection) => {
           `${tagEditorMember.member.first_name ?? ""} ${tagEditorMember.member.last_name ?? ""}`
         }
         groups={workspaceMemberTagGroups[workspaceSlug] ?? []}
-        selectedTags={tagEditorMember.member.tags ?? []}
+        selectedTags={tagEditorMember.tags ?? []}
         onClose={() => setTagEditorMember(null)}
       />
     ) : null,

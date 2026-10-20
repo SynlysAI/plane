@@ -6,6 +6,11 @@ from plane.db.models import ResearchAnalysisResult, ResearchChain, ResearchChain
 from plane.research.serializers.task_comment import ResearchTaskCommentSerializer
 from plane.research.services.chain_tasks import _ensure_task_parent_writable
 from plane.research.services.idempotency import payload_hash
+from plane.research.services.task_comment_attachments import (
+    attachment_ids_for_comment,
+    lock_task_comment_attachments,
+    sync_task_comment_attachments,
+)
 from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.audit import record_audit_event
 from plane.utils.html_processor import strip_tags
@@ -19,22 +24,33 @@ def lock_parent(node):
 
 
 @transaction.atomic
-def append_task_comment(*, task, actor, request_id, html, request=None):
+def append_task_comment(*, task, actor, request_id, html, attachment_ids=None, request=None):
     chain, node = lock_parent(task.node)
     locked = ResearchChainNodeTask.objects.select_for_update().filter(pk=task.pk, chain=chain, node=node).first()
     if locked is None:
         raise ResearchReadError("not_found", "Task not found.", 404)
-    serializer = ResearchTaskCommentSerializer(data={"comment_html": html})
+    requested_attachments = list(attachment_ids or [])
+    serializer = ResearchTaskCommentSerializer(
+        data={"comment_html": html, "attachment_ids": requested_attachments},
+        context={"task": task, "request": request},
+    )
     if not serializer.is_valid():
         raise ResearchReadError("invalid_arguments", "A non-empty valid comment is required.")
     html = serializer.validated_data["comment_html"]
     previous = ResearchTaskComment.all_objects.filter(task=locked, actor=actor, request_id=request_id).first()
     if previous:
-        if previous.deleted_at or previous.comment_html != html:
+        previous_attachments = attachment_ids_for_comment(previous)
+        if (
+            previous.deleted_at
+            or previous.comment_html != html
+            or set(previous_attachments) != set(requested_attachments)
+        ):
             raise ResearchReadError("idempotency_conflict", "This request_id was already used.", 409)
         return previous, False
+    assets = lock_task_comment_attachments(requested_attachments, task=locked, user=actor)
     comment = ResearchTaskComment.objects.create(task=locked, actor=actor, request_id=request_id,
                                                 comment_html=html, comment_stripped=strip_tags(html))
+    sync_task_comment_attachments(comment, assets, task=locked, user=actor, request=request)
     record_audit_event(workspace=task.workspace, actor=actor, action="task.comment.create",
                        resource_type="research_chain_node_task", resource_id=task.pk,
                        metadata={"comment": str(comment.pk)}, request=request)

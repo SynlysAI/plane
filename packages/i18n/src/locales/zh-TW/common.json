@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "上週",
-      "last_month": "上個月"
+      "last_month": "上個月",
+      "select_report_period": "選擇報告週期",
+      "by_week": "按週",
+      "by_month": "按月",
+      "custom_period": "自訂週期"
     }
   },
   "cloud_maintenance_message": {

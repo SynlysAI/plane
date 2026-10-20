@@ -29,7 +29,6 @@ from plane.research.serializers import (
     ReportAccessGrantSerializer,
     ReportReviewLogSerializer,
 )
-from plane.utils.constants import DEFAULT_TIMEZONE
 from plane.research.utils.acl import (
     build_actor_context,
     can_narrow,
@@ -60,7 +59,7 @@ from plane.research.utils.notifications import (
 from plane.research.utils.periods import InvalidPeriod, current_period, parse_period
 from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, is_editable, report_resource, visible_reports_queryset
-from plane.research.utils.settings import default_visibility_for, get_workspace_research_settings
+from plane.research.utils.settings import default_visibility_for, get_workspace_research_settings, report_timezone_for
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
 
 
@@ -280,11 +279,6 @@ def validate_report_access_update(report, workspace, payload):
                 )
             validated_grants.append((grantee_user, grantee_unit_id))
     return requested_visibility, validated_grants, default_visibility, None
-
-
-def report_timezone_for(workspace):
-    settings_map = get_workspace_research_settings(workspace)
-    return settings_map.get("timezone") or getattr(workspace, "timezone", None) or DEFAULT_TIMEZONE
 
 
 class ResearchReportListCreateEndpoint(ResearchAPIView):

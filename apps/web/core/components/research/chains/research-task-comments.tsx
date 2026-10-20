@@ -4,15 +4,23 @@ import { EditOutline, DeleteOutline, MoreHorizontalOutline, RefreshOutline } fro
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { researchEndpoints } from "@plane/constants";
 import type { EditorRefApi } from "@plane/editor";
-import type { TResearchChainNodeTask, TResearchTaskComment } from "@plane/types";
+import type { TCommentAttachmentLimits, TResearchChainNodeTask, TResearchTaskComment } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { getFileURL, isCommentEmpty } from "@plane/utils";
+import { CommentAttachmentList } from "@/components/comments/attachment-list";
+import { useCommentAttachments } from "@/components/comments/use-comment-attachments";
 import { LiteTextEditor } from "@/components/editor/lite-text";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 
 type Props = { task: TResearchChainNodeTask; workspaceSlug: string; locale: string; order: "asc" | "desc" };
+
+/** Build the authenticated inline-image base URL for one research task. */
+function taskImageBase(task: TResearchChainNodeTask, workspaceSlug: string) {
+  return `${researchEndpoints.chainNodeTask(workspaceSlug, task.chain, task.node, task.id)}comment-images/`;
+}
 
 export function ResearchTaskComments({ task, workspaceSlug, locale, order }: Props) {
   const { t } = useTranslation();
@@ -96,10 +104,12 @@ export function ResearchTaskComments({ task, workspaceSlug, locale, order }: Pro
           <CommentEditor
             task={task}
             workspaceSlug={workspaceSlug}
-            onSave={async (html, requestId) => {
+            service={service}
+            onSave={async (html, requestId, attachmentIds) => {
               const comment = await service.createTaskComment(workspaceSlug, task.chain, task.node, task.id, {
                 comment_html: html,
                 request_id: requestId,
+                attachment_ids: attachmentIds,
               });
               setComments((current) => [...current.filter((item) => item.id !== comment.id), comment]);
             }}
@@ -132,6 +142,7 @@ function TaskComment({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const imageBase = taskImageBase(task, workspaceSlug);
   return (
     <article className="flex gap-3" id={`task-comment-${comment.id}`}>
       <Avatar
@@ -180,16 +191,18 @@ function TaskComment({
           <CommentEditor
             task={task}
             workspaceSlug={workspaceSlug}
+            service={service}
             initialHtml={comment.comment_html}
+            initialAttachments={comment.file_attachments ?? []}
             onCancel={() => setEditing(false)}
-            onSave={async (html) => {
+            onSave={async (html, _requestId, attachmentIds) => {
               const updated = await service.updateTaskComment(
                 workspaceSlug,
                 task.chain,
                 task.node,
                 task.id,
                 comment.id,
-                html
+                { comment_html: html, attachment_ids: attachmentIds }
               );
               onUpdate(updated);
               setEditing(false);
@@ -206,8 +219,23 @@ function TaskComment({
             parentClassName="border-none"
             containerClassName="!p-0"
             displayConfig={{ fontSize: "small-font" }}
+            fileHandlerOverrides={{
+              getAssetSrc: async (source) => source,
+              getAssetDownloadSrc: async (source) => source,
+              delete: async (source) => {
+                if (!source.startsWith(imageBase)) return;
+                await service.deleteTaskCommentImage(
+                  workspaceSlug,
+                  task.chain,
+                  task.node,
+                  task.id,
+                  source.slice(imageBase.length).replace(/\/$/, "")
+                );
+              },
+            }}
           />
         )}
+        {!editing && <CommentAttachmentList attachments={comment.file_attachments ?? []} />}
         {confirmDelete && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-12" role="alert">
             <span>{t("research.chain_tasks.comments.confirm_delete")}</span>
@@ -241,17 +269,51 @@ function TaskComment({
   );
 }
 
+/** Load workspace quotas through the research task-scoped endpoint. */
+function useTaskCommentAttachmentLimits(
+  service: ResearchChainTaskService,
+  task: TResearchChainNodeTask,
+  workspaceSlug: string
+) {
+  const [limits, setLimits] = useState<TCommentAttachmentLimits | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLimits(null);
+    setError(false);
+    service
+      .getTaskCommentAttachmentLimits(workspaceSlug, task.chain, task.node, task.id)
+      .then((payload) => {
+        if (active) setLimits(payload);
+        return undefined;
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [service, task.chain, task.id, task.node, workspaceSlug]);
+
+  return { limits, error };
+}
+
 function CommentEditor({
   task,
   workspaceSlug,
+  service,
   initialHtml = "<p></p>",
+  initialAttachments = [],
   onSave,
   onCancel,
 }: {
   task: TResearchChainNodeTask;
   workspaceSlug: string;
+  service: ResearchChainTaskService;
   initialHtml?: string;
-  onSave: (html: string, requestId: string) => Promise<void>;
+  initialAttachments?: TResearchTaskComment["file_attachments"];
+  onSave: (html: string, requestId: string, attachmentIds: string[]) => Promise<void>;
   onCancel?: () => void;
 }) {
   const { t } = useTranslation();
@@ -261,23 +323,58 @@ function CommentEditor({
   const [html, setHtml] = useState(initialHtml);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [imageError, setImageError] = useState("");
+  const [imageUploadCount, setImageUploadCount] = useState(0);
+  const { limits, error: limitsError } = useTaskCommentAttachmentLimits(service, task, workspaceSlug);
+  const attachmentDraft = useCommentAttachments(
+    {
+      uploadCommentAttachment: (file) =>
+        service.uploadTaskCommentAttachment(workspaceSlug, task.chain, task.node, task.id, file),
+      discardCommentAttachment: (assetId) =>
+        service.deleteTaskCommentAttachment(workspaceSlug, task.chain, task.node, task.id, assetId),
+    },
+    limits,
+    initialAttachments
+  );
+  const imageBase = taskImageBase(task, workspaceSlug);
+  const hasInlineImage = /<(img|image-component)\b/i.test(html);
+  const isEmpty = isCommentEmpty(html) && !hasInlineImage && attachmentDraft.attachmentIds.length === 0;
+  const blocked = attachmentDraft.isBlocked || imageUploadCount > 0;
   const save = useCallback(async () => {
-    if (busyRef.current || isCommentEmpty(html)) return;
+    if (busyRef.current || isEmpty || blocked) return;
     busyRef.current = true;
     setBusy(true);
     setError("");
     try {
-      await onSave(html, requestId.current);
+      await onSave(html, requestId.current, attachmentDraft.attachmentIds);
       setHtml("<p></p>");
+      setImageError("");
       editor.current?.clearEditor();
       requestId.current = uuid();
+      attachmentDraft.commit();
     } catch {
       setError(t("research.chain_tasks.comments.save_failed"));
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [html, onSave, t]);
+  }, [attachmentDraft, blocked, html, isEmpty, onSave, t]);
+  const uploadImage = useCallback(
+    async (_blockId: string, file: File) => {
+      setImageUploadCount((count) => count + 1);
+      try {
+        const source = await service.uploadTaskCommentImage(workspaceSlug, task.chain, task.node, task.id, file);
+        setImageError("");
+        return source;
+      } catch (failure) {
+        setImageError(failure instanceof Error ? failure.message : "图片上传失败，请重试。");
+        throw failure;
+      } finally {
+        setImageUploadCount((count) => count - 1);
+      }
+    },
+    [service, task.chain, task.id, task.node, workspaceSlug]
+  );
   return (
     <div>
       <LiteTextEditor
@@ -289,10 +386,49 @@ function CommentEditor({
         initialValue={html}
         value={null}
         placeholder={t("research.chain_tasks.comments.placeholder")}
-        disabledExtensions={["image", "issue-embed"]}
-        disabledMenuItems={["image"]}
-        uploadFile={async () => ""}
-        duplicateFile={async () => ""}
+        disabledExtensions={["issue-embed"]}
+        isSubmitting={busy}
+        hasAttachments={attachmentDraft.attachmentIds.length > 0}
+        isSubmitDisabled={blocked}
+        onAttachFiles={attachmentDraft.addFiles}
+        attachmentContent={
+          <CommentAttachmentList
+            entries={attachmentDraft.entries}
+            error={limitsError ? "无法获取当前工作区附件限制" : attachmentDraft.error}
+            disabled={busy}
+            onRemove={attachmentDraft.remove}
+            onRetry={attachmentDraft.retry}
+          />
+        }
+        uploadFile={uploadImage}
+        duplicateFile={async () => {
+          throw new Error("请重新选择图片上传到这条任务评论。");
+        }}
+        fileHandlerOverrides={{
+          getAssetSrc: async (source) => source,
+          getAssetDownloadSrc: async (source) => source,
+          validation: { maxFileSize: limits?.image.max_bytes ?? 20 * 1024 * 1024 },
+          delete: async (source) => {
+            if (!source.startsWith(imageBase)) return;
+            await service.deleteTaskCommentImage(
+              workspaceSlug,
+              task.chain,
+              task.node,
+              task.id,
+              source.slice(imageBase.length).replace(/\/$/, "")
+            );
+          },
+          restore: async (source) => {
+            if (!source.startsWith(imageBase)) return;
+            await service.restoreTaskCommentImage(
+              workspaceSlug,
+              task.chain,
+              task.node,
+              task.id,
+              source.slice(imageBase.length).replace(/\/$/, "")
+            );
+          },
+        }}
         showSubmitButton={false}
         showToolbarInitially={false}
         parentClassName="p-2"
@@ -309,13 +445,23 @@ function CommentEditor({
           {error}
         </p>
       )}
+      {imageError && (
+        <p role="alert" className="mt-2 text-12 text-danger-primary">
+          {imageError}
+        </p>
+      )}
       <div className="mt-2 flex justify-end gap-2">
         {onCancel && (
-          <Button size="sm" variant="secondary" disabled={busy} onClick={onCancel}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy || imageUploadCount > 0}
+            onClick={() => void attachmentDraft.cancel().finally(onCancel)}
+          >
             {t("research.common.cancel")}
           </Button>
         )}
-        <Button size="sm" variant="primary" disabled={busy || isCommentEmpty(html)} onClick={() => void save()}>
+        <Button size="sm" variant="primary" disabled={busy || isEmpty || blocked} onClick={() => void save()}>
           {busy
             ? t("research.chain_tasks.saving")
             : t(onCancel ? "research.chain_tasks.save" : "research.chain_tasks.comments.post")}

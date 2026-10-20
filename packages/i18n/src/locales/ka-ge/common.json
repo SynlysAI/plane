@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "წინა კვირა",
-      "last_month": "წინა თვე"
+      "last_month": "წინა თვე",
+      "select_report_period": "ანგარიშის პერიოდის არჩევა",
+      "by_week": "კვირის მიხედვით",
+      "by_month": "თვის მიხედვით",
+      "custom_period": "მორგებული პერიოდი"
     }
   },
   "cloud_maintenance_message": {

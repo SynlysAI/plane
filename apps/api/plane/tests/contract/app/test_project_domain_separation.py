@@ -115,6 +115,29 @@ def test_todos_include_old_assigned_tasks_and_degrade_independently(domain_env):
     assert len(result.data["results"]) == 1 and "RESEARCH" in result.data["degraded_sources"]
 
 
+def test_todos_include_administrative_task_and_approval_requesters(domain_env):
+    env = domain_env
+    Issue.objects.filter(id=env["issue"].id).update(created_by=env["create_user"])
+
+    assigned = env["client"].get(f"{env['base']}/todos/")
+    assert assigned.status_code == 200, assigned.data
+    assert assigned.data["results"][0]["requester"] == {
+        "id": str(env["create_user"].id),
+        "display_name": env["create_user"].display_name or env["create_user"].username,
+    }
+
+    configure_flow(env)
+    created = submit(env)
+    assert created.status_code == 201, created.data
+    approvals = env["admin_client"].get(f"{env['base']}/todos/")
+    assert approvals.status_code == 200, approvals.data
+    approval = next(item for item in approvals.data["results"] if item["source"] == "APPROVAL")
+    assert approval["requester"] == {
+        "id": str(env["member"].id),
+        "display_name": env["member"].display_name or env["member"].username,
+    }
+
+
 def test_research_backing_project_cannot_be_used_for_administrative_approval(domain_env):
     env = domain_env; configure_flow(env)
     ResearchProjectProfile.objects.create(workspace=env["workspace"], project=env["project"], owner=env["member"])

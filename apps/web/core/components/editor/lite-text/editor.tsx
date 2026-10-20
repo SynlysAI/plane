@@ -54,6 +54,7 @@ type LiteTextEditorWrapperProps = MakeOptional<
   attachmentContent?: React.ReactNode;
   hasAttachments?: boolean;
   isSubmitDisabled?: boolean;
+  fileHandlerOverrides?: Partial<TFileHandler>;
 } & (
     | {
         editable: false;
@@ -95,6 +96,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
     attachmentContent,
     hasAttachments = false,
     isSubmitDisabled = false,
+    fileHandlerOverrides,
     ...rest
   } = props;
   // states
@@ -160,6 +162,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
               duplicateFile: editable ? props.duplicateFile : async () => "",
               workspaceId,
               workspaceSlug,
+              fileHandlerOverrides,
             })}
             getEditorMetaData={getEditorMetaData}
             handleEditorReady={(ready) => {

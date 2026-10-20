@@ -1,13 +1,80 @@
 """工作项评论文件的作用域、草稿权限与事务关联。"""
 
+from dataclasses import dataclass
+import os
+
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from plane.db.models import FileAsset, IssueComment
+from plane.research.utils.settings import get_workspace_research_settings
 from plane.utils.administrative_projects import administrative_organization_project_ids, effective_project_member
 from plane.utils.workspace_access import user_can_access_workspace
 from plane.utils.project_domains import project_domain_allows
+
+
+@dataclass(frozen=True)
+class CommentAttachmentSizeLimit:
+    """评论附件某一分类的有效上传额度。"""
+
+    category: str
+    max_mb: int
+    max_bytes: int
+
+
+def comment_attachment_limits(workspace):
+    """读取工作区科研平台设置中的四类评论附件额度。
+
+    Args:
+        workspace: 评论附件所属项目的工作区。
+
+    Returns:
+        以 image、pdf、markdown、office 为键的 MB 与字节限额。
+    """
+    settings = get_workspace_research_settings(workspace)
+    return {
+        "image": settings["image_max_mb"],
+        "pdf": settings["pdf_max_mb"],
+        "markdown": settings["markdown_max_mb"],
+        "office": settings["office_max_mb"],
+    }
+
+
+def resolve_comment_attachment_limit(file_name, content_type, limits):
+    """按文件名和 MIME 解析评论附件所属分类及额度。
+
+    该函数只决定额度，不放宽 ``ATTACHMENT_MIME_TYPES`` 白名单；除图片、
+    PDF 和 Markdown 外的已允许格式统一使用办公及其他附件额度。
+
+    Args:
+        file_name: 请求提供的文件名。
+        content_type: 请求或浏览器签名检测得到的 MIME 类型。
+        limits: 四类平台的 MB 额度。
+
+    Returns:
+        包含分类、MB 额度与字节额度的对象。
+
+    Raises:
+        ValueError: 平台设置中存在无效额度时抛出。
+    """
+    extension = os.path.splitext(str(file_name or ""))[1].lower()
+    normalized_type = str(content_type or "").split(";", 1)[0].strip().lower()
+    if extension == ".pdf" or normalized_type == "application/pdf":
+        category = "pdf"
+    elif extension in {".md", ".markdown"} or normalized_type in {"text/markdown", "text/x-markdown"}:
+        category = "markdown"
+    elif normalized_type.startswith("image/") or extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}:
+        category = "image"
+    else:
+        category = "office"
+    try:
+        max_mb = int(limits[category])
+        if max_mb < 0:
+            raise ValueError
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"Invalid {category} comment attachment limit.") from error
+    return CommentAttachmentSizeLimit(category=category, max_mb=max_mb, max_bytes=max_mb * 1024 * 1024)
 
 
 def can_access_comment_attachment(user, asset, *, mutate=False):

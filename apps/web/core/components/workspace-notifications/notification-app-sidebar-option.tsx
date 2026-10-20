@@ -10,6 +10,7 @@ import useSWR from "swr";
 import { getNumberCount } from "@plane/utils";
 // components
 import { CountChip } from "@/components/common/count-chip";
+import { getNotificationBadgeState, workspaceUnreadNotificationKey } from "@/lib/notification-counts";
 // hooks
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 
@@ -24,22 +25,17 @@ export const NotificationAppSidebarOption = observer(function NotificationAppSid
   // hooks
   const { unreadNotificationsCount, getUnreadNotificationsCount } = useWorkspaceNotifications();
 
-  useSWR(
-    workspaceSlug ? "WORKSPACE_UNREAD_NOTIFICATION_COUNT" : null,
-    workspaceSlug ? () => getUnreadNotificationsCount(workspaceSlug) : null
-  );
+  const unreadNotificationKey = workspaceUnreadNotificationKey(workspaceSlug);
+  useSWR(unreadNotificationKey, workspaceSlug ? () => getUnreadNotificationsCount(workspaceSlug) : null);
 
   // derived values
-  const isMentionsEnabled = unreadNotificationsCount.mention_unread_notifications_count > 0 ? true : false;
-  const totalNotifications = isMentionsEnabled
-    ? unreadNotificationsCount.mention_unread_notifications_count
-    : unreadNotificationsCount.total_unread_notifications_count;
+  const { count: totalNotifications, hasMentions } = getNotificationBadgeState(unreadNotificationsCount);
 
   if (totalNotifications <= 0) return <></>;
 
   return (
     <div className="ml-auto">
-      <CountChip count={`${isMentionsEnabled ? `@ ` : ``}${getNumberCount(totalNotifications)}`} />
+      <CountChip count={`${hasMentions ? `@ ` : ``}${getNumberCount(totalNotifications)}`} />
     </div>
   );
 });

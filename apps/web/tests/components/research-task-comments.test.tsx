@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
   createTaskComment: vi.fn(),
   updateTaskComment: vi.fn(),
   deleteTaskComment: vi.fn(),
+  getTaskCommentAttachmentLimits: vi.fn(),
+  uploadTaskCommentAttachment: vi.fn(),
+  deleteTaskCommentAttachment: vi.fn(),
+  uploadTaskCommentImage: vi.fn(),
+  deleteTaskCommentImage: vi.fn(),
 }));
 vi.mock("@/services/research/chain-task.service", () => ({
   ResearchChainTaskService: class {
@@ -17,6 +22,11 @@ vi.mock("@/services/research/chain-task.service", () => ({
     createTaskComment = mocks.createTaskComment;
     updateTaskComment = mocks.updateTaskComment;
     deleteTaskComment = mocks.deleteTaskComment;
+    getTaskCommentAttachmentLimits = mocks.getTaskCommentAttachmentLimits;
+    uploadTaskCommentAttachment = mocks.uploadTaskCommentAttachment;
+    deleteTaskCommentAttachment = mocks.deleteTaskCommentAttachment;
+    uploadTaskCommentImage = mocks.uploadTaskCommentImage;
+    deleteTaskCommentImage = mocks.deleteTaskCommentImage;
   },
 }));
 vi.mock("@plane/i18n", () => ({
@@ -48,25 +58,52 @@ vi.mock("@/components/editor/lite-text", () => ({
       editable,
       placeholder,
       onChange,
+      onAttachFiles,
+      attachmentContent,
+      uploadFile,
     }: {
       initialValue: string;
       editable: boolean;
       placeholder?: string;
       onChange?: (json: object, html: string) => void;
+      onAttachFiles?: (files: File[]) => void;
+      attachmentContent?: React.ReactNode;
+      uploadFile?: (blockId: string, file: File) => Promise<string>;
     },
     ref
   ) {
     const [body, setBody] = React.useState(initialValue);
     React.useImperativeHandle(ref, () => ({ clearEditor: () => setBody("<p></p>") }));
     return editable ? (
-      <textarea
-        aria-label={placeholder ?? "评论编辑器"}
-        value={body}
-        onChange={(event) => {
-          setBody(event.target.value);
-          onChange?.({}, event.target.value);
-        }}
-      />
+      <div>
+        <textarea
+          aria-label={placeholder ?? "评论编辑器"}
+          value={body}
+          onChange={(event) => {
+            setBody(event.target.value);
+            onChange?.({}, event.target.value);
+          }}
+        />
+        {onAttachFiles && (
+          <input
+            aria-label="选择评论附件"
+            type="file"
+            multiple
+            onChange={(event) => {
+              onAttachFiles(Array.from(event.target.files ?? []));
+              event.target.value = "";
+            }}
+          />
+        )}
+        <button
+          type="button"
+          aria-label="插入图片"
+          onClick={() => void uploadFile?.("block", new File(["x"], "x.png"))}
+        >
+          插入图片
+        </button>
+        {attachmentContent}
+      </div>
     ) : (
       <div>{initialValue}</div>
     );
@@ -87,6 +124,7 @@ const comment: TResearchTaskComment = {
   edited_at: null,
   created_at: "2026-10-12T10:00:00Z",
   updated_at: "2026-10-12T10:00:00Z",
+  file_attachments: [],
 };
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -96,6 +134,12 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.getTaskComments.mockResolvedValue({ results: [], can_comment: true });
   mocks.createTaskComment.mockResolvedValue(comment);
+  mocks.getTaskCommentAttachmentLimits.mockResolvedValue({
+    image: { max_mb: 20, max_bytes: 20 * 1024 * 1024 },
+    pdf: { max_mb: 100, max_bytes: 100 * 1024 * 1024 },
+    markdown: { max_mb: 5, max_bytes: 5 * 1024 * 1024 },
+    office: { max_mb: 50, max_bytes: 50 * 1024 * 1024 },
+  });
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -119,6 +163,17 @@ async function write(html: string) {
     const input = container.querySelector("textarea")!;
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(input, html);
     input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+async function attachFile(file = new File(["pptx"], "过程汇报.pptx", { type: "application/octet-stream" })) {
+  await act(async () => {
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => {
+    await Promise.resolve();
   });
 }
 
@@ -148,14 +203,10 @@ it("allows author edit and confirmed deletion without changing the task descript
   await click("编辑");
   await write("<p>补充后的讨论</p>");
   await click("保存修改");
-  expect(mocks.updateTaskComment).toHaveBeenCalledWith(
-    "lab",
-    "chain-1",
-    "node-1",
-    "task-1",
-    "comment-1",
-    "<p>补充后的讨论</p>"
-  );
+  expect(mocks.updateTaskComment).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "comment-1", {
+    comment_html: "<p>补充后的讨论</p>",
+    attachment_ids: [],
+  });
   expect(container.textContent).toContain("已编辑");
   await click("删除");
   expect(mocks.deleteTaskComment).not.toHaveBeenCalled();
@@ -164,6 +215,62 @@ it("allows author edit and confirmed deletion without changing the task descript
   });
   expect(mocks.deleteTaskComment).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "comment-1");
   expect(container.querySelector("article")).toBeNull();
+});
+
+it("uploads comment files and saves attachment IDs with the comment", async () => {
+  const attachment = {
+    id: "asset-1",
+    name: "过程汇报.pptx",
+    type: "application/octet-stream",
+    size: 4,
+    download_url: "/download/asset-1/",
+  };
+  mocks.uploadTaskCommentAttachment.mockResolvedValue(attachment);
+  await renderTask();
+  await attachFile();
+  expect(container.textContent).toContain("过程汇报.pptx");
+  await click("发表评论");
+  expect(mocks.createTaskComment).toHaveBeenLastCalledWith("lab", "chain-1", "node-1", "task-1", {
+    comment_html: "<p></p>",
+    request_id: expect.any(String),
+    attachment_ids: ["asset-1"],
+  });
+  expect(container.textContent).not.toContain("过程汇报.pptx");
+});
+
+it("keeps an existing attachment when editing a comment", async () => {
+  const attachment = {
+    id: "asset-existing",
+    name: "已有数据.csv",
+    type: "text/csv",
+    size: 12,
+    download_url: "/download/asset-existing/",
+  };
+  mocks.getTaskComments.mockResolvedValue({
+    results: [{ ...comment, file_attachments: [attachment] }],
+    can_comment: false,
+  });
+  mocks.updateTaskComment.mockResolvedValue({ ...comment, file_attachments: [attachment] });
+  await renderTask();
+  expect(container.textContent).toContain("已有数据.csv");
+  await click("编辑");
+  await click("保存修改");
+  expect(mocks.updateTaskComment).toHaveBeenLastCalledWith("lab", "chain-1", "node-1", "task-1", "comment-1", {
+    comment_html: "<p>讨论内容</p>",
+    attachment_ids: ["asset-existing"],
+  });
+});
+
+it("uploads inline images through the task-scoped endpoint", async () => {
+  mocks.uploadTaskCommentImage.mockResolvedValue("/api/research/workspaces/lab/comment-images/asset-image/");
+  await renderTask();
+  await act(async () => {
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (item) => item.getAttribute("aria-label") === "插入图片"
+    );
+    button?.click();
+  });
+  expect(mocks.uploadTaskCommentImage).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", expect.any(File));
 });
 
 it("shows readonly comments without author controls or a composer", async () => {

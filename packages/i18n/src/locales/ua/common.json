@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Минулий тиждень",
-      "last_month": "Минулий місяць"
+      "last_month": "Минулий місяць",
+      "select_report_period": "Вибрати період звіту",
+      "by_week": "За тижнем",
+      "by_month": "За місяцем",
+      "custom_period": "Власний період"
     }
   },
   "cloud_maintenance_message": {

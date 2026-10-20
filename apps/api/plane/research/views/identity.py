@@ -25,6 +25,7 @@ from plane.research.utils.org import effective_mentee_ids, effective_mentor_ids,
 from plane.research.utils.roles import ADMIN_ROLES, admin_roles, is_research_admin, is_system_admin
 from plane.research.utils.settings import (
     get_workspace_research_settings,
+    report_timezone_for,
     workspace_research_enabled,
     workspace_research_sections,
 )
@@ -121,6 +122,7 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
                 "workspace": {
                     "slug": workspace.slug,
                     "purpose": workspace_settings["purpose"],
+                    "report_timezone": report_timezone_for(workspace, workspace_settings),
                 },
             },
             status=status.HTTP_200_OK,

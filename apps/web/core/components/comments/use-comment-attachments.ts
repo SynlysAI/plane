@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import type { TCommentAttachment, TCommentsOperations } from "@plane/types";
+import type { TCommentAttachment, TCommentAttachmentLimits } from "@plane/types";
+import { getCommentAttachmentLimitError } from "./comment-attachment-limits";
 
 export type TCommentAttachmentDraft = {
   key: string;
@@ -11,10 +12,21 @@ export type TCommentAttachmentDraft = {
   status: "uploading" | "ready" | "failed";
 };
 
-/** 管理评论文件草稿，保存前不删除已发布文件，及时清理被移除的临时上传。 */
+type TCommentAttachmentOperations = {
+  uploadCommentAttachment?: (file: File) => Promise<TCommentAttachment>;
+  discardCommentAttachment?: (assetId: string) => Promise<void>;
+};
+
+/** 管理评论文件草稿，保存前不删除已发布文件，及时清理被移除的临时上传。
+ *
+ * @param operations 评论上传与废弃操作。
+ * @param limits 项目级四类附件额度；尚未加载时为 null。
+ * @param initial 编辑评论时已有的附件。
+ * @returns 草稿列表、校验错误、上传队列及保存生命周期操作。
+ */
 export function useCommentAttachments(
-  operations: Pick<TCommentsOperations, "uploadCommentAttachment" | "discardCommentAttachment">,
-  maxFileSize: number,
+  operations: TCommentAttachmentOperations,
+  limits: TCommentAttachmentLimits | null,
   initial: TCommentAttachment[] = []
 ) {
   const original = useRef<TCommentAttachmentDraft[]>(
@@ -67,12 +79,17 @@ export function useCommentAttachments(
 
   /** 批次校验数量和大小，通过后并行上传且分别保留结果。 */
   function addFiles(files: File[]) {
+    if (!limits) {
+      setError("无法获取当前工作区附件限制");
+      return;
+    }
     if (entriesRef.current.length + files.length > 10) {
       setError("每条评论最多附加 10 个文件。");
       return;
     }
-    if (files.some((file) => file.size <= 0 || file.size > maxFileSize)) {
-      setError(`文件不能为空，且单个文件不能超过 ${Math.round(maxFileSize / 1024 / 1024)} MB。`);
+    const sizeError = files.map((file) => getCommentAttachmentLimitError(limits, file)).find(Boolean);
+    if (sizeError) {
+      setError(sizeError);
       return;
     }
     setError("");
@@ -124,6 +141,10 @@ export function useCommentAttachments(
   function markSaved() {
     original.current = entriesRef.current;
   }
+
+  useEffect(() => {
+    if (limits) setError("");
+  }, [limits]);
 
   useEffect(() => {
     mounted.current = true;

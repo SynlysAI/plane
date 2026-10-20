@@ -18,8 +18,8 @@ import { LiteTextEditor } from "@/components/editor/lite-text";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // services
 import { FileService } from "@/services/file.service";
-import { useFileSize } from "@/hooks/use-file-size";
 import { CommentAttachmentList } from "./attachment-list";
+import { useCommentAttachmentLimits } from "./use-comment-attachment-limits";
 import { useCommentAttachments } from "./use-comment-attachments";
 
 type TCommentCreate = {
@@ -52,9 +52,13 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
   const editorRef = useRef<EditorRefApi>(null);
   // store hooks
   const workspaceStore = useWorkspace();
-  const { maxFileSize } = useFileSize();
-  const attachmentDraft = useCommentAttachments(activityOperations, maxFileSize);
   const supportsAttachments = !!activityOperations.uploadCommentAttachment;
+  const { limits, error: attachmentLimitsError } = useCommentAttachmentLimits(
+    workspaceSlug,
+    projectId,
+    supportsAttachments
+  );
+  const attachmentDraft = useCommentAttachments(activityOperations, limits);
   // derived values
   const workspaceId = workspaceStore.getWorkspaceBySlug(workspaceSlug)?.id as string;
   // form info
@@ -171,7 +175,7 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
                 attachmentContent={
                   <CommentAttachmentList
                     entries={attachmentDraft.entries}
-                    error={attachmentDraft.error}
+                    error={attachmentLimitsError ? "无法获取当前工作区附件限制" : attachmentDraft.error}
                     disabled={isSubmitting}
                     onRemove={attachmentDraft.remove}
                     onRetry={attachmentDraft.retry}

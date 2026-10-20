@@ -5,12 +5,17 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.db.models import ResearchChainNodeTask, ResearchTaskComment
+from plane.db.models import ResearchTaskComment
 from plane.research.serializers.task_comment import ResearchTaskCommentSerializer
 from plane.research.services.idempotency import request_id_from
 from plane.research.services.chain_mutations import append_task_comment
 from plane.research.services.chain_tasks import ChainTaskStateError
 from plane.research.services.mcp_catalog import ResearchReadError
+from plane.research.services.task_comment_attachments import (
+    lock_task_comment_attachments,
+    soft_delete_task_comment_attachments,
+    sync_task_comment_attachments,
+)
 from plane.research.utils.audit import record_audit_event, ResearchResourceType
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import research_error, research_not_found, research_permission_denied
@@ -43,7 +48,11 @@ class ResearchTaskCommentListEndpoint(ResearchAPIView):
         workspace, chain, node, task = _task_context(self, request, slug, chain_id, node_id, task_id)
         if workspace is None:
             return task
-        comments = task.comments.select_related("actor", "task__chain").order_by("created_at", "id")
+        comments = (
+            task.comments.select_related("actor", "task__chain")
+            .prefetch_related("attachments__asset")
+            .order_by("created_at", "id")
+        )
         return Response(
             {"results": [serialize(comment, request) for comment in comments], "can_comment": chain.status == "ACTIVE"}
         )
@@ -58,12 +67,23 @@ class ResearchTaskCommentListEndpoint(ResearchAPIView):
         request_id = request_id_from(request)
         if not request_id or len(request_id) > 128:
             return research_error("research_comment_invalid", "A request_id of at most 128 characters is required.")
-        serializer = ResearchTaskCommentSerializer(data={"comment_html": request.data.get("comment_html")})
+        serializer = ResearchTaskCommentSerializer(
+            data=request.data,
+            context={"task": task, "request": request},
+        )
         if not serializer.is_valid():
             return research_error("research_comment_invalid", "A non-empty, valid comment is required.")
         html = serializer.validated_data["comment_html"]
+        attachment_ids = serializer.validated_data.get("attachment_ids", [])
         try:
-            comment, created = append_task_comment(task=task, actor=request.user, request_id=request_id, html=html, request=request)
+            comment, created = append_task_comment(
+                task=task,
+                actor=request.user,
+                request_id=request_id,
+                html=html,
+                attachment_ids=attachment_ids,
+                request=request,
+            )
         except ResearchReadError as exc:
             return research_error(exc.code, str(exc), exc.status)
         except ChainTaskStateError as exc:
@@ -94,7 +114,14 @@ class ResearchTaskCommentDetailEndpoint(ResearchAPIView):
         comment, error = self._comment(request, slug, chain_id, node_id, task_id, comment_id)
         if error:
             return error
-        serializer = ResearchTaskCommentSerializer(comment, data={"comment_html": request.data.get("comment_html")})
+        data = {"comment_html": request.data.get("comment_html")}
+        if "attachment_ids" in request.data:
+            data["attachment_ids"] = request.data.get("attachment_ids")
+        serializer = ResearchTaskCommentSerializer(
+            comment,
+            data=data,
+            context={"task": comment.task, "request": request},
+        )
         if not serializer.is_valid():
             return research_error("research_comment_invalid", "A non-empty, valid comment is required.")
         with transaction.atomic():
@@ -107,10 +134,20 @@ class ResearchTaskCommentDetailEndpoint(ResearchAPIView):
             if comment is None:
                 return research_not_found("research_comment_not_found", "Comment not found.")
             html = serializer.validated_data["comment_html"]
+            assets = None
+            if "attachment_ids" in request.data:
+                assets = lock_task_comment_attachments(
+                    serializer.validated_data["attachment_ids"],
+                    task=comment.task,
+                    user=request.user,
+                    comment=comment,
+                )
             comment.comment_html = html
             comment.comment_stripped = strip_tags(html)
             comment.edited_at = timezone.now()
             comment.save(update_fields=["comment_html", "comment_stripped", "edited_at", "updated_at"])
+            if assets is not None:
+                sync_task_comment_attachments(comment, assets, task=comment.task, user=request.user, request=request)
             comment_audit(comment.task, comment, request, "update")
         return Response(serialize(comment, request))
 
@@ -127,6 +164,7 @@ class ResearchTaskCommentDetailEndpoint(ResearchAPIView):
             )
             if comment is None:
                 return research_not_found("research_comment_not_found", "Comment not found.")
+            soft_delete_task_comment_attachments(comment, task=comment.task, user=request.user, request=request)
             comment.deleted_at = timezone.now()
             comment.save(update_fields=["deleted_at", "updated_at"])
             comment_audit(comment.task, comment, request, "delete")

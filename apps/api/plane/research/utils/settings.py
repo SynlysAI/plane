@@ -91,6 +91,20 @@ def get_workspace_research_settings(workspace):
     }
 
 
+def report_timezone_for(workspace, settings=None):
+    """解析报告周期使用的有效时区。
+
+    Args:
+        workspace: 其科研设置可覆盖默认时区的工作区。
+        settings: 调用方已加载时可复用的有效科研设置。
+
+    Returns:
+        用于计算报告周期的 IANA 时区名称。
+    """
+    settings = settings or get_workspace_research_settings(workspace)
+    return settings.get("timezone") or getattr(workspace, "timezone", None) or DEFAULT_TIMEZONE
+
+
 def workspace_research_enabled(workspace) -> bool:
     """The deployment switch always wins over the workspace switch."""
     if not research_module_enabled():

@@ -80,6 +80,17 @@ class TestResearchIdentityMe:
         assert payload["user"]["is_workspace_admin"] is False
         assert payload["user"]["is_research_owner"] is False
         assert payload["identity"]["configured"] is False
+        assert payload["workspace"]["report_timezone"] == workspace.timezone
+
+    def test_returns_research_report_timezone_when_it_overrides_workspace_timezone(self, settings):
+        admin = make_user()
+        workspace = make_workspace(admin, timezone="UTC")
+        enable_research(workspace, timezone="Asia/Shanghai")
+
+        response = client_for(admin).get(f"/api/research/workspaces/{workspace.slug}/identity/me/")
+
+        assert response.status_code == 200
+        assert response.json()["workspace"]["report_timezone"] == "Asia/Shanghai"
 
     def test_reports_org_roles_and_identity_mapping(self, settings):
         configure_oidc(settings)

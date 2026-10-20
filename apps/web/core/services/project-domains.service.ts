@@ -9,6 +9,7 @@ export type TWorkspaceTodo = {
   object_id: string;
   title: string;
   context: string;
+  requester: { id: string; display_name: string } | null;
   project_id?: string;
   business_status: string;
   handling_status: string;

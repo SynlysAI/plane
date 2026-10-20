@@ -23,6 +23,7 @@ import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { FeedbackDialog } from "@/components/research/feedback/feedback-dialog";
 import { AssistantService } from "@/services/assistant";
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
+import { getNotificationBadgeState, workspaceUnreadNotificationKey } from "@/lib/notification-counts";
 
 const assistantService = new AssistantService();
 
@@ -40,10 +41,9 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
   const showLabel = preferences.displayMode === "icon_with_label";
 
   // Fetch notification count
-  useSWR(
-    workspaceSlug ? "WORKSPACE_UNREAD_NOTIFICATION_COUNT" : null,
-    workspaceSlug ? () => getUnreadNotificationsCount(workspaceSlug.toString()) : null
-  );
+  const activeWorkspaceSlug = workspaceSlug?.toString();
+  const unreadNotificationKey = workspaceUnreadNotificationKey(activeWorkspaceSlug);
+  useSWR(unreadNotificationKey, activeWorkspaceSlug ? () => getUnreadNotificationsCount(activeWorkspaceSlug) : null);
 
   // Fetch assistant availability
   const { data: assistantStatus } = useSWR(
@@ -52,10 +52,7 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
   );
 
   // Calculate notification count
-  const isMentionsEnabled = unreadNotificationsCount.mention_unread_notifications_count > 0;
-  const totalNotifications = isMentionsEnabled
-    ? unreadNotificationsCount.mention_unread_notifications_count
-    : unreadNotificationsCount.total_unread_notifications_count;
+  const { count: totalNotifications } = getNotificationBadgeState(unreadNotificationsCount);
 
   return (
     <div

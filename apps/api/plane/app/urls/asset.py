@@ -4,6 +4,8 @@
 
 from django.urls import path
 
+from plane.research.views.comment_attachment_limits import ProjectCommentAttachmentLimitsEndpoint
+
 
 from plane.app.views import (
     FileAssetEndpoint,
@@ -80,6 +82,11 @@ urlpatterns = [
         "assets/v2/workspaces/<str:slug>/projects/<uuid:project_id>/",
         ProjectAssetEndpoint.as_view(),
         name="bulk-asset-update",
+    ),
+    path(
+        "assets/v2/workspaces/<str:slug>/projects/<uuid:project_id>/comment-attachment-limits/",
+        ProjectCommentAttachmentLimitsEndpoint.as_view(),
+        name="project-comment-attachment-limits",
     ),
     path(
         "assets/v2/workspaces/<str:slug>/projects/<uuid:project_id>/<uuid:pk>/",

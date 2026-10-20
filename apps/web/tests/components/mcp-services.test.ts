@@ -10,7 +10,6 @@ vi.mock("@/services/api.service", () => ({
 }));
 vi.mock("axios", () => ({ create: () => ({ get: calls.get, post: calls.post }) }));
 import { NativeMCPService } from "@/services/mcp.service";
-import { ResearchAgentOperationService } from "@/services/research/agent-operation.service";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -26,25 +25,6 @@ it("sends both human CSRF values only to the native bridge", async () => {
     {
       headers: { "X-CSRFToken": "plane-csrf", "X-MCP-CSRF": "native-csrf" },
     }
-  );
-});
-
-it("research human decisions use node scope and CSRF without native or machine credentials", async () => {
-  await new ResearchAgentOperationService().act("public", "node-1", "plane-csrf", {
-    kind: "decision",
-    proposal_hash: "exact-hash",
-    decision: "APPROVED",
-    operation_id: "op-1",
-  });
-  expect(calls.post).toHaveBeenCalledWith(
-    "/api/research/workspaces/public/nodes/node-1/agent-operations/",
-    {
-      kind: "decision",
-      proposal_hash: "exact-hash",
-      decision: "APPROVED",
-      operation_id: "op-1",
-    },
-    { headers: { "X-CSRFToken": "plane-csrf" } }
   );
 });
 

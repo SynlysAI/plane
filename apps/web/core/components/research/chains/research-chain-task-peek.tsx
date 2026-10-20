@@ -45,7 +45,6 @@ import {
 } from "@/components/research/chains/research-chain-workbench-peek";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 import { ResearchTaskComments } from "@/components/research/chains/research-task-comments";
-import { mcpManagementPath } from "@/components/mcp/mcp-context";
 
 type TTaskFormState = {
   taskId: string | null;
@@ -389,14 +388,6 @@ export function ResearchChainTaskPeek(props: Props) {
       bodyClassName="min-h-0 flex-1 overflow-y-auto"
     >
       <div className="flex flex-col gap-6 px-8 py-5">
-        {kind === "task" && task && (
-          <a
-            className="text-13 text-accent-primary"
-            href={mcpManagementPath(workspaceSlug, { chain: task.chain, node: nodeId, task: task.id })}
-          >
-            MCP / Agent 操作
-          </a>
-        )}
         <div className="space-y-2">
           <p className="text-12 text-tertiary">
             {kind === "create" ? t("research.chain_tasks.panel_title") : t(STATUS_KEYS[status])}

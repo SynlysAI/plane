@@ -266,6 +266,8 @@ it("keeps task cancellation in the header menu and requires a reason before canc
 
   const peek = container.querySelector("aside");
   expect(peek?.textContent).not.toContain("取消任务");
+  expect(peek?.textContent).not.toContain("MCP / Agent 操作");
+  expect(peek?.querySelector('a[href*="/mcp/"]')).toBeNull();
   const more = peek?.querySelector<HTMLButtonElement>('button[aria-label="更多"]');
   expect(more).not.toBeNull();
   await act(async () => more?.click());

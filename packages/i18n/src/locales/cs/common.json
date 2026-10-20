@@ -2,7 +2,11 @@
   "research": {
     "home_workbench": {
       "last_week": "Minulý týden",
-      "last_month": "Minulý měsíc"
+      "last_month": "Minulý měsíc",
+      "select_report_period": "Vybrat období výkazu",
+      "by_week": "Podle týdne",
+      "by_month": "Podle měsíce",
+      "custom_period": "Vlastní období"
     }
   },
   "cloud_maintenance_message": {
