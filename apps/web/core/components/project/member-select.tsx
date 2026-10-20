@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useTranslation } from "@plane/i18n";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // components
@@ -20,6 +21,7 @@ type Props = {
 export const MemberSelect = observer(function MemberSelect(props: Props) {
   const { value, onChange, isDisabled = false } = props;
   const { projectId } = useParams();
+  const { t } = useTranslation();
   const {
     project: { getProjectMemberDetails },
   } = useMember();
@@ -35,7 +37,7 @@ export const MemberSelect = observer(function MemberSelect(props: Props) {
       multiple={false}
       buttonVariant="border-with-text"
       buttonClassName="!px-3 !py-2 bg-surface-1"
-      placeholder="None"
+      placeholder={t("none")}
       disabled={isDisabled}
     />
   );

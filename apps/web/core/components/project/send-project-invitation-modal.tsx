@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
-import { ROLE, EUserPermissions } from "@plane/constants";
+import { ROLE, ROLE_DETAILS, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { AddOutline, ChevronDownOutline, CloseOutline } from "@makeplane/propel/icons";
@@ -88,9 +88,9 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
       onSuccess?.();
       onClose();
       setToast({
-        title: "Success!",
+        title: t("toast.success"),
         type: TOAST_TYPE.SUCCESS,
-        message: "Members added successfully.",
+        message: t("project_settings.members.added_successfully"),
       });
     } catch (error) {
       console.error(error);
@@ -193,7 +193,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                   <Controller
                     control={control}
                     name={`members.${index}.member_id`}
-                    rules={{ required: "Please select a member" }}
+                    rules={{ required: t("project_settings.members.select_member_required") }}
                     render={({ field: { value, onChange } }) => {
                       const selectedMember = getWorkspaceMemberDetails(value);
                       return (
@@ -212,7 +212,9 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                                   {selectedMember?.member.display_name}
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-2 py-0.5">Select co-worker</div>
+                                <div className="flex items-center gap-2 py-0.5">
+                                  {t("project_settings.members.invite_members.select_co_worker")}
+                                </div>
                               )}
                               <ChevronDownOutline className="h-3 w-3" aria-hidden="true" />
                             </>
@@ -230,6 +232,8 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                             );
                           }}
                           options={options}
+                          searchPlaceholder={t("search")}
+                          noResultsMessage={t("common.search.no_matches_found")}
                           optionsClassName="w-48"
                         />
                       );
@@ -247,14 +251,16 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                     <Controller
                       name={`members.${index}.role`}
                       control={control}
-                      rules={{ required: "Select Role" }}
+                      rules={{ required: t("project_settings.members.role_required") }}
                       render={({ field: roleField }) => (
                         <CustomSelect
                           {...roleField}
                           customButton={
                             <div className="shadow-sm flex w-24 items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2.5 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none">
                               <span className="capitalize">
-                                {roleField.value ? ROLE[roleField.value] : "Select role"}
+                                {roleField.value
+                                  ? t(ROLE_DETAILS[roleField.value as EUserPermissions].i18n_title)
+                                  : t("project_settings.members.select_role")}
                               </span>
                               <ChevronDownOutline className="h-3 w-3" aria-hidden="true" />
                             </div>
@@ -262,12 +268,12 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                           input
                         >
                           {Object.entries(checkCurrentOptionWorkspaceRole(watch(`members.${index}.member_id`))).map(
-                            ([key, label]) => {
+                            ([key]) => {
                               if (parseInt(key) > (currentProjectRole ?? EUserPermissions.GUEST)) return null;
 
                               return (
                                 <CustomSelect.Option key={key} value={key}>
-                                  {label}
+                                  {t(ROLE_DETAILS[Number(key) as EUserPermissions].i18n_title)}
                                 </CustomSelect.Option>
                               );
                             }

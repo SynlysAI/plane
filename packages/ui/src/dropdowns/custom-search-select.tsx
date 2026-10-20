@@ -42,6 +42,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
     value,
     tabIndex,
     noResultsMessage = "No matches found",
+    searchPlaceholder = "Search",
     defaultOpen = false,
   } = props;
   const [query, setQuery] = useState("");
@@ -182,7 +183,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                       // Let this input receive native mouse focus instead.
                       onMouseDown={(event) => event.stopPropagation()}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search"
+                      placeholder={searchPlaceholder}
                       displayValue={(assigned: any) => assigned?.name}
                     />
                   </div>

@@ -4,13 +4,14 @@
  * See the LICENSE file for details.
  */
 
+import { useTranslation } from "@plane/i18n";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { CircleMinus } from "lucide-react";
 import { Disclosure } from "@headlessui/react";
 // plane imports
-import { ROLE, EUserPermissions } from "@plane/constants";
+import { ROLE, ROLE_DETAILS, EUserPermissions } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EUserProjectRoles, IUser, IWorkspaceMember, TProjectMembership } from "@plane/types";
 import { CustomMenu, CustomSelect } from "@plane/ui";
@@ -44,6 +45,7 @@ type AccountTypeProps = {
 
 export function NameColumn(props: NameProps) {
   const { rowData, workspaceSlug, isAdmin, currentUser, setRemoveMemberModal } = props;
+  const { t } = useTranslation();
   // derived values
   const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
 
@@ -85,10 +87,10 @@ export function NameColumn(props: NameProps) {
                 >
                   <CircleMinus className="size-3.5 flex-shrink-0" />
                   {rowData.inherits_organization
-                    ? "移除单独授权"
+                    ? t("project_settings.members.remove_direct_access")
                     : rowData.member?.id === currentUser?.id
-                      ? "Leave "
-                      : "Remove "}
+                      ? t("leave")
+                      : t("remove")}
                 </CustomMenu.MenuItem>
               </CustomMenu>
             )}
@@ -101,6 +103,7 @@ export function NameColumn(props: NameProps) {
 
 export const AccountTypeColumn = observer(function AccountTypeColumn(props: AccountTypeProps) {
   const { rowData, projectId, workspaceSlug } = props;
+  const { t } = useTranslation();
   // store hooks
   const {
     project: { updateMemberRole },
@@ -114,7 +117,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
     formState: { errors },
   } = useForm();
   // derived values
-  const roleLabel = ROLE[rowData.role ?? rowData.original_role ?? EUserPermissions.GUEST];
+  const roleLabel = t(ROLE_DETAILS[rowData.role ?? rowData.original_role ?? EUserPermissions.GUEST].i18n_title);
   const isCurrentUser = currentUser?.id === rowData.member.id;
   const isRowDataWorkspaceAdmin = [EUserPermissions.ADMIN].includes(
     Number(getWorkspaceMemberDetails(rowData.member.id)?.role ?? EUserPermissions.GUEST)
@@ -158,7 +161,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
         <Controller
           name="role"
           control={control}
-          rules={{ required: "Role is required." }}
+          rules={{ required: t("project_settings.members.role_required") }}
           render={() => (
             <CustomSelect
               value={rowData.original_role}
@@ -172,8 +175,8 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
 
                     setToast({
                       type: TOAST_TYPE.ERROR,
-                      title: "You can’t change this role yet.",
-                      message: errorString ?? "An error occurred while updating member role. Please try again.",
+                      title: t("project_settings.members.role_update_failed"),
+                      message: errorString ?? t("project_settings.members.role_update_error"),
                     });
                   }
                 );
@@ -187,9 +190,9 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
               className="w-32 rounded-md p-0"
               input
             >
-              {Object.entries(checkCurrentOptionWorkspaceRole(rowData.member.id)).map(([key, label]) => (
+              {Object.entries(checkCurrentOptionWorkspaceRole(rowData.member.id)).map(([key]) => (
                 <CustomSelect.Option key={key} value={key}>
-                  {label}
+                  {t(ROLE_DETAILS[Number(key) as EUserPermissions].i18n_title)}
                 </CustomSelect.Option>
               ))}
             </CustomSelect>

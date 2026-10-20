@@ -34,7 +34,29 @@
         "title": "Invite members",
         "sub_heading": "Invite members to work on your project.",
         "select_co_worker": "Select co-worker"
-      }
+      },
+      "guest_access": "Guest access",
+      "roles": "Roles",
+      "suspended": "Suspended",
+      "select_member_required": "Please select a member",
+      "select_role": "Select role",
+      "role_required": "Role is required.",
+      "added_successfully": "Members added successfully.",
+      "role_update_failed": "Unable to change this role",
+      "role_update_error": "Failed to update the member role. Please try again.",
+      "leave_failed": "Unable to leave this project",
+      "remove_failed": "Unable to remove this member",
+      "membership_source": "Membership source",
+      "source_organization": "Inherited from organization",
+      "source_direct": "Added directly",
+      "source_both": "Added directly · Inherited from organization",
+      "remove_direct_access": "Remove direct access",
+      "confirm_leave_title": "Leave project?",
+      "confirm_remove_title": "Remove {name}?",
+      "confirm_leave_description": "Are you sure you want to leave {project}? You can rejoin if invited again or if the project is public.",
+      "confirm_remove_description": "Remove {name} from this project? Any access inherited from the organization will remain.",
+      "leaving": "Leaving…",
+      "removing": "Removing…"
     },
     "states": {
       "heading": "States",
@@ -521,6 +543,7 @@
           }
         }
       }
-    }
+    },
+    "title": "Project settings"
   }
 }

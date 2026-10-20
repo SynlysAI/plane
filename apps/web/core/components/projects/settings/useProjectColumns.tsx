@@ -5,10 +5,11 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "@plane/i18n";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import type { IWorkspaceMember, TProjectMembership } from "@plane/types";
-import { renderFormattedDate } from "@plane/utils";
+
 // components
 import { MemberHeaderColumn } from "@/components/project/member-header-column";
 import { AccountTypeColumn, NameColumn } from "@/components/project/settings/member-columns";
@@ -33,6 +34,7 @@ type TUseProjectColumnsProps = {
 
 export const useProjectColumns = (props: TUseProjectColumnsProps) => {
   const { projectId, workspaceSlug } = props;
+  const { t, currentLocale } = useTranslation();
   // states
   const [removeMemberModal, setRemoveMemberModal] = useState<RowData | null>(null);
 
@@ -65,7 +67,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
   const columns = [
     {
       key: "Full Name",
-      content: "Full name",
+      content: t("project_members.full_name"),
       thClassName: "text-left",
       thRender: () => (
         <MemberHeaderColumn
@@ -86,7 +88,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
     {
       key: "Display Name",
-      content: "Display name",
+      content: t("display_name"),
       thRender: () => (
         <MemberHeaderColumn
           property="display_name"
@@ -98,7 +100,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
     {
       key: "Email",
-      content: "Email",
+      content: t("email"),
       thRender: () => (
         <MemberHeaderColumn
           property="email"
@@ -110,7 +112,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
     {
       key: "Account Type",
-      content: "Account type",
+      content: t("role"),
       thRender: () => (
         <MemberHeaderColumn
           property="role"
@@ -129,20 +131,20 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
     },
     {
       key: "Membership Source",
-      content: "成员来源",
+      content: t("project_settings.members.membership_source"),
       tdRender: (rowData: RowData) => (
         <div className="min-w-24 text-12 text-secondary">
           {rowData.membership_source === "ORGANIZATION"
-            ? "组织继承"
+            ? t("project_settings.members.source_organization")
             : rowData.inherits_organization
-              ? "单独添加 · 组织继承"
-              : "单独添加"}
+              ? t("project_settings.members.source_both")
+              : t("project_settings.members.source_direct")}
         </div>
       ),
     },
     {
       key: "Joining Date",
-      content: "Joining date",
+      content: t("project_members.joining_date"),
       thRender: () => (
         <MemberHeaderColumn
           property="joining_date"
@@ -150,7 +152,15 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
           handleDisplayFilterUpdate={handleDisplayFilterUpdate}
         />
       ),
-      tdRender: (rowData: RowData) => <div>{renderFormattedDate(rowData?.member?.joining_date)}</div>,
+      tdRender: (rowData: RowData) => (
+        <div>
+          {rowData.member.joining_date
+            ? new Intl.DateTimeFormat(currentLocale, { year: "numeric", month: "short", day: "numeric" }).format(
+                new Date(rowData.member.joining_date)
+              )
+            : "—"}
+        </div>
+      ),
     },
   ];
   return {
