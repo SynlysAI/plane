@@ -16,16 +16,24 @@ from plane.research.views.research_todos import encode_todo_cursor, decode_todo_
 logger = logging.getLogger("plane.api")
 
 
+def _participant(user):
+    """Project one todo participant without exposing account contact fields."""
+    if user is None:
+        return None
+    return {"id": str(user.id), "display_name": user.display_name or user.username or str(user.id)}
+
+
 def administrative_todos(workspace, user):
     projects = visible_administrative_projects(user, workspace.slug).filter(archived_at__isnull=True)
     issues = Issue.issue_objects.filter(
         workspace=workspace, project_id__in=projects.values("id"), assignees=user,
         archived_at__isnull=True,
-    ).exclude(state__group__in=["completed", "cancelled"]).select_related("project", "state").distinct()
+    ).exclude(state__group__in=["completed", "cancelled"]).select_related("project", "state", "created_by").distinct()
     result = [{
         "id": f"administrative:issue:{issue.id}", "domain": "ADMINISTRATIVE", "source": "WORK_ITEM",
         "object_id": str(issue.id), "title": issue.name, "project_id": str(issue.project_id),
-        "context": issue.project.name, "business_status": issue.state.name,
+        "context": issue.project.name, "requester": _participant(issue.created_by),
+        "business_status": issue.state.name,
         "handling_status": "IN_PROGRESS" if issue.state.group == "started" else "TODO",
         "due_at": issue.target_date.isoformat() if issue.target_date else None,
         "urgency": research_todo_urgency(issue.target_date), "updated_at": issue.updated_at.isoformat(),
@@ -38,7 +46,8 @@ def administrative_todos(workspace, user):
         result.append({
             "id": f"administrative:approval:{approval.id}", "domain": "ADMINISTRATIVE", "source": "APPROVAL",
             "object_id": str(approval.id), "title": approval.issue.name, "project_id": str(approval.project_id),
-            "context": approval.project.name, "business_status": "待审批", "handling_status": "TODO",
+            "context": approval.project.name, "requester": _participant(approval.requested_by),
+            "business_status": "待审批", "handling_status": "TODO",
             "due_at": approval.issue.target_date.isoformat() if approval.issue.target_date else None,
             "urgency": research_todo_urgency(approval.issue.target_date), "updated_at": approval.updated_at.isoformat(),
             "href": f"/{workspace.slug}/approvals?domain=administrative&request={approval.id}",
