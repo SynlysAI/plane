@@ -39,6 +39,7 @@ const EMPTY_TREE: TNavigationTree = {
 type Props = {
   scope: TNavigationScope;
   title: string;
+  href: string;
   canManage?: boolean;
   fillAvailableSpace?: boolean;
 };
@@ -207,6 +208,7 @@ function CategoryNode({
 export const ResearchProjectTree = observer(function ResearchProjectTree({
   scope,
   title,
+  href,
   canManage = false,
   fillAvailableSpace = false,
 }: Props) {
@@ -469,19 +471,24 @@ export const ResearchProjectTree = observer(function ResearchProjectTree({
       data-navigation-scope={scope}
       data-navigation-expanded={isOpen}
     >
-      <button
-        type="button"
-        className="group flex w-full shrink-0 cursor-pointer items-center gap-1 rounded-sm px-2 py-1.5 text-left text-placeholder hover:bg-layer-transparent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
-        aria-label={`${isOpen ? "收起" : "展开"}${title}`}
-        aria-expanded={isOpen}
-        onClick={() => setStoredOpen(!isOpen)}
-      >
-        <span className="min-w-0 flex-1 truncate text-13 font-semibold">{title}</span>
-        <span className="grid size-6 shrink-0 place-items-center" aria-hidden="true">
-          <ChevronRightOutline className={cn("size-3 transition-transform", { "rotate-90": isOpen })} />
-        </span>
+      <div className="group flex shrink-0 items-center gap-1 rounded-sm px-2 py-1.5 text-placeholder hover:bg-layer-transparent-hover">
+        <Link href={href} className="min-w-0 flex-1 truncate text-13 font-semibold">
+          {title}
+        </Link>
+        <button
+          type="button"
+          className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-sm hover:bg-layer-transparent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
+          aria-label={`${isOpen ? "收起" : "展开"}${title}`}
+          aria-expanded={isOpen}
+          onClick={() => setStoredOpen(!isOpen)}
+        >
+          <ChevronRightOutline
+            className={cn("size-3 transition-transform", { "rotate-90": isOpen })}
+            aria-hidden="true"
+          />
+        </button>
         {/* 科研项目按组织归属管理，不再从侧栏新增第二套自定义分类。 */}
-      </button>
+      </div>
 
       {isOpen && (
         <div className="flex min-h-0 flex-col overflow-x-hidden overflow-y-auto pl-2">

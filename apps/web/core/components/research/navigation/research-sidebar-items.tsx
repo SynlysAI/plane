@@ -16,6 +16,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
         <ResearchProjectTree
           scope="RESEARCH"
           title="科研项目"
+          href={`/${workspaceSlug}/research/chains`}
           canManage={research.isResearchAdmin}
           fillAvailableSpace
         />
@@ -23,6 +24,7 @@ export const ResearchSidebarItems = observer(function ResearchSidebarItems() {
       <ResearchProjectTree
         scope="ADMINISTRATIVE"
         title="行政项目"
+        href={`/${workspaceSlug}/projects`}
         canManage={Boolean(research.identity.navigation?.administrative_organizations)}
         fillAvailableSpace={!canResearch || !(researchOpen ?? true)}
       />
