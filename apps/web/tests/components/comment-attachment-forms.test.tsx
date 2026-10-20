@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TCommentsOperations, TIssueComment } from "@plane/types";
 
-const mocks = vi.hoisted(() => ({ bulk: vi.fn(), uploadImage: vi.fn() }));
+const mocks = vi.hoisted(() => ({ bulk: vi.fn(), uploadImage: vi.fn(), limits: vi.fn() }));
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => ({ getWorkspaceBySlug: () => ({ id: "ws" }) }) }));
 vi.mock("@/hooks/use-file-size", () => ({ useFileSize: () => ({ maxFileSize: 1024 }) }));
 vi.mock("@/services/file.service", () => ({
   FileService: class {
     updateBulkProjectAssetsUploadStatus = mocks.bulk;
+    getCommentAttachmentLimits = mocks.limits;
   },
 }));
 vi.mock("@/components/editor/lite-text", () => ({
@@ -95,6 +96,12 @@ const file = {
   size: 4,
   download_url: "/download/asset",
 };
+const limits = {
+  image: { max_mb: 1, max_bytes: 1024 * 1024 },
+  pdf: { max_mb: 2, max_bytes: 2 * 1024 * 1024 },
+  markdown: { max_mb: 3, max_bytes: 3 * 1024 * 1024 },
+  office: { max_mb: 4, max_bytes: 4 * 1024 * 1024 },
+};
 
 /** 准备评论操作边界，保留真实草稿、表单与附件列表。 */
 function operations() {
@@ -113,6 +120,7 @@ async function mount(element: React.ReactNode) {
   document.body.append(container);
   root = createRoot(container);
   await act(async () => root.render(element));
+  await act(async () => await Promise.resolve());
 }
 
 /** 通过原生文件事件添加过程文件。 */
@@ -120,6 +128,15 @@ async function attach() {
   await act(async () => {
     const input = container.querySelector('input[type="file"]')!;
     Object.defineProperty(input, "files", { configurable: true, value: [new File(["pptx"], "过程.pptx")] });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+/** 通过原生文件事件添加指定文件。 */
+async function attachFile(inputFile: File) {
+  await act(async () => {
+    const input = container.querySelector('input[type="file"]')!;
+    Object.defineProperty(input, "files", { configurable: true, value: [inputFile] });
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
@@ -139,6 +156,43 @@ afterEach(async () => {
   await act(async () => root?.unmount());
   container?.remove();
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  mocks.limits.mockReset().mockResolvedValue(limits);
+});
+
+it("loads project comment attachment limits for create and edit forms", async () => {
+  mocks.limits.mockResolvedValue(limits);
+  const ops = operations();
+  await mount(<CommentCreate workspaceSlug="lab" projectId="project" entityId="issue" activityOperations={ops} />);
+  expect(mocks.limits).toHaveBeenCalledWith("lab", "project");
+  await act(async () => root.render(null));
+  await mount(
+    <CommentCardEditForm
+      workspaceSlug="lab"
+      workspaceId="ws"
+      projectId="project"
+      comment={{ id: "comment", comment_html: "<p></p>", file_attachments: [] } as unknown as TIssueComment}
+      activityOperations={ops}
+      isEditing
+      readOnlyEditorRef={null}
+      setIsEditing={vi.fn()}
+    />
+  );
+  expect(mocks.limits).toHaveBeenLastCalledWith("lab", "project");
+});
+
+it("blocks create-form attachments when limits cannot be loaded", async () => {
+  mocks.limits.mockRejectedValue(new Error("offline"));
+  const ops = operations();
+  await mount(<CommentCreate workspaceSlug="lab" projectId="project" entityId="issue" activityOperations={ops} />);
+  await act(async () => await Promise.resolve());
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("无法获取当前工作区附件限制");
+  const large = new File(["pdf"], "large.pdf", { type: "application/pdf" });
+  Object.defineProperty(large, "size", { value: 2 * 1024 * 1024 + 1 });
+  await attachFile(large);
+  expect(ops.uploadCommentAttachment).not.toHaveBeenCalled();
 });
 
 it("keeps an attachment-only failed comment and clears only after successful retry", async () => {

@@ -8,7 +8,7 @@ import type { AxiosRequestConfig } from "axios";
 // plane types
 import { API_BASE_URL } from "@plane/constants";
 import { getFileMetaDataForUpload, generateFileUploadPayload } from "@plane/services";
-import type { EFileAssetType, TFileEntityInfo, TFileSignedURLResponse } from "@plane/types";
+import type { EFileAssetType, TCommentAttachmentLimits, TFileEntityInfo, TFileSignedURLResponse } from "@plane/types";
 import { getAssetIdFromUrl } from "@plane/utils";
 // helpers
 // services
@@ -129,6 +129,20 @@ export class FileService extends APIService {
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
+      });
+  }
+
+  /** 读取项目所属工作区的评论附件分类额度。
+   *
+   * @param workspaceSlug 工作区标识。
+   * @param projectId 项目 ID。
+   * @returns 图片、PDF、Markdown、办公及其他附件的 MB 与字节限额。
+   */
+  async getCommentAttachmentLimits(workspaceSlug: string, projectId: string): Promise<TCommentAttachmentLimits> {
+    return this.get(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/comment-attachment-limits/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
       });
   }
 

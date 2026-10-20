@@ -14,8 +14,8 @@ import type { TCommentsOperations, TIssueComment } from "@plane/types";
 import { cn, isCommentEmpty } from "@plane/utils";
 // components
 import { LiteTextEditor } from "@/components/editor/lite-text";
-import { useFileSize } from "@/hooks/use-file-size";
 import { CommentAttachmentList } from "../attachment-list";
+import { useCommentAttachmentLimits } from "../use-comment-attachment-limits";
 import { useCommentAttachments } from "../use-comment-attachments";
 
 type Props = {
@@ -44,9 +44,13 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
   const editorRef = useRef<EditorRefApi>(null);
   const submissionLock = useRef(false);
   const [submitError, setSubmitError] = useState("");
-  const { maxFileSize } = useFileSize();
-  const attachmentDraft = useCommentAttachments(activityOperations, maxFileSize, comment.file_attachments);
   const supportsAttachments = !!activityOperations.uploadCommentAttachment;
+  const { limits, error: attachmentLimitsError } = useCommentAttachmentLimits(
+    workspaceSlug,
+    projectId,
+    supportsAttachments
+  );
+  const attachmentDraft = useCommentAttachments(activityOperations, limits, comment.file_attachments);
   // form info
   const {
     formState: { isSubmitting },
@@ -122,7 +126,7 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
           attachmentContent={
             <CommentAttachmentList
               entries={attachmentDraft.entries}
-              error={attachmentDraft.error}
+              error={attachmentLimitsError ? "无法获取当前工作区附件限制" : attachmentDraft.error}
               disabled={isSubmitting}
               onRemove={attachmentDraft.remove}
               onRetry={attachmentDraft.retry}

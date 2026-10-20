@@ -20,6 +20,20 @@ export type TFileEntityInfo = {
 
 export type TFileMetaData = TFileMetaDataLite & TFileEntityInfo;
 
+export type TCommentAttachmentCategory = "image" | "pdf" | "markdown" | "office";
+
+export type TCommentAttachmentLimit = {
+  max_mb: number;
+  max_bytes: number;
+};
+
+export type TCommentAttachmentLimits = {
+  image: TCommentAttachmentLimit;
+  pdf: TCommentAttachmentLimit;
+  markdown: TCommentAttachmentLimit;
+  office: TCommentAttachmentLimit;
+};
+
 export type TFileSignedURLResponse = {
   asset_id: string;
   asset_url: string;

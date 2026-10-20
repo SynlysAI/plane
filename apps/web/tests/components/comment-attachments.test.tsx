@@ -3,6 +3,10 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { TCommentAttachment } from "@plane/types";
+import {
+  getCommentAttachmentCategory,
+  getCommentAttachmentLimitError,
+} from "@/components/comments/comment-attachment-limits";
 import { useCommentAttachments } from "@/components/comments/use-comment-attachments";
 
 Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
@@ -11,6 +15,13 @@ const container = document.createElement("div");
 let root: ReturnType<typeof createRoot>;
 const upload = vi.fn();
 const discard = vi.fn().mockResolvedValue(undefined);
+const MEGABYTE = 1024 * 1024;
+const limits = {
+  image: { max_mb: 1, max_bytes: MEGABYTE },
+  pdf: { max_mb: 2, max_bytes: 2 * MEGABYTE },
+  markdown: { max_mb: 3, max_bytes: 3 * MEGABYTE },
+  office: { max_mb: 4, max_bytes: 4 * MEGABYTE },
+};
 const existing: TCommentAttachment = {
   id: "existing",
   name: "原材料.pptx",
@@ -24,7 +35,7 @@ async function mount(initial: TCommentAttachment[] = []) {
   function Harness() {
     state = useCommentAttachments(
       { uploadCommentAttachment: upload, discardCommentAttachment: discard },
-      1024,
+      limits,
       initial
     );
     return null;
@@ -67,14 +78,51 @@ it("retains successful files when another upload fails and supports retry", asyn
   expect(state.isBlocked).toBe(false);
 });
 
-it("enforces size and count before upload", async () => {
+it("classifies comment attachments consistently", () => {
+  expect(getCommentAttachmentCategory(new File(["a"], "图版.png", { type: "image/png" }))).toBe("image");
+  expect(getCommentAttachmentCategory(new File(["a"], "论文.pdf", { type: "application/pdf" }))).toBe("pdf");
+  expect(getCommentAttachmentCategory(new File(["a"], "记录.markdown", { type: "text/markdown" }))).toBe("markdown");
+  expect(getCommentAttachmentCategory(new File(["a"], "记录.md", { type: "text/x-markdown" }))).toBe("markdown");
+  expect(getCommentAttachmentCategory(new File(["a"], "汇报.pptx", { type: "application/octet-stream" }))).toBe(
+    "office"
+  );
+  expect(getCommentAttachmentCategory(new File(["a"], "数据.zip", { type: "application/zip" }))).toBe("office");
+  expect(getCommentAttachmentLimitError(limits, new File(["a"], "记录.md", { type: "text/markdown" }))).toBeNull();
+});
+
+it("enforces category size and count before upload", async () => {
   await mount(Array.from({ length: 9 }, (_, i) => ({ ...existing, id: String(i) })));
-  await act(async () => state.addFiles([new File([new Uint8Array(1025)], "large.pptx")]));
+  const largePdf = new File(["pdf"], "large.pdf", { type: "application/pdf" });
+  Object.defineProperty(largePdf, "size", { value: 2 * MEGABYTE + 1 });
+  await act(async () => state.addFiles([largePdf]));
   expect(upload).not.toHaveBeenCalled();
-  expect(state.error).toBeTruthy();
+  expect(state.error).toBe("PDF 文件不能超过 2 MB。");
   await act(async () => state.addFiles([new File(["a"], "a.pdf"), new File(["b"], "b.pdf")]));
   expect(upload).not.toHaveBeenCalled();
   expect(state.entries).toHaveLength(9);
+});
+
+it("uses each category limit and rejects the whole mixed batch when one file exceeds it", async () => {
+  await mount();
+  const largeImage = new File(["png"], "large.png", { type: "image/png" });
+  Object.defineProperty(largeImage, "size", { value: MEGABYTE + 1 });
+  await act(async () => state.addFiles([largeImage, new File(["pdf"], "ok.pdf", { type: "application/pdf" })]));
+  expect(upload).not.toHaveBeenCalled();
+  expect(state.error).toBe("图片文件不能超过 1 MB。");
+  expect(state.entries).toEqual([]);
+});
+
+it("blocks new attachments when project limits cannot be loaded", async () => {
+  function FailedHarness() {
+    state = useCommentAttachments({ uploadCommentAttachment: upload, discardCommentAttachment: discard }, null, []);
+    return null;
+  }
+  root = createRoot(container);
+  await act(async () => root.render(<FailedHarness />));
+  await act(async () => state.addFiles([new File(["a"], "a.pdf")]));
+  expect(upload).not.toHaveBeenCalled();
+  expect(state.error).toBe("无法获取当前工作区附件限制");
+  expect(state.entries).toEqual([]);
 });
 
 it("removing original attachments is local until save and cancel discards only new files", async () => {

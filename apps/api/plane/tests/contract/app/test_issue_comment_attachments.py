@@ -9,9 +9,22 @@ from django.utils import timezone
 from django.test import override_settings
 from rest_framework.test import APIClient
 
-from plane.db.models import FileAsset, Issue, IssueComment, Project, ProjectMember, State, User, WorkspaceMember
+from plane.db.models import (
+    FileAsset,
+    Issue,
+    IssueComment,
+    Project,
+    ProjectMember,
+    ResearchProjectProfile,
+    State,
+    User,
+    Workspace,
+    WorkspaceMember,
+    WorkspaceResearchSetting,
+)
 
 PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+MEGABYTE = 1024 * 1024
 
 
 @pytest.fixture
@@ -41,6 +54,25 @@ def upload_url(context):
     """返回项目资产上传地址。"""
     workspace, project, _, _ = context
     return f"/api/assets/v2/workspaces/{workspace.slug}/projects/{project.id}/"
+
+
+def limits_url(context):
+    """返回项目级评论附件额度地址。"""
+    workspace, project, _, _ = context
+    return f"/api/assets/v2/workspaces/{workspace.slug}/projects/{project.id}/comment-attachment-limits/"
+
+
+def configure_limits(workspace, image=1, pdf=2, markdown=3, office=4):
+    """为工作区写入四类科研平台上传额度。"""
+    return WorkspaceResearchSetting.objects.update_or_create(
+        workspace=workspace,
+        defaults={
+            "image_max_mb": image,
+            "pdf_max_mb": pdf,
+            "markdown_max_mb": markdown,
+            "office_max_mb": office,
+        },
+    )[0]
 
 
 def make_asset(context, **overrides):
@@ -100,27 +132,146 @@ def test_upload_pptx_and_keep_image_endpoints_restricted(session_client, comment
 
 
 @pytest.mark.django_db
-@override_settings(FILE_SIZE_LIMIT=8 * 1024 * 1024)
-def test_comment_attachment_uses_configured_file_size_limit(session_client, comment_context):
-    """评论附件上传遵循系统 FILE_SIZE_LIMIT，而不是固定 5MB。"""
+@override_settings(FILE_SIZE_LIMIT=1 * 1024 * 1024)
+@pytest.mark.parametrize(
+    ("file_name", "content_type", "category", "limit_mb"),
+    [
+        ("图版.png", "image/png", "image", 1),
+        ("图版.png", "application/octet-stream", "image", 1),
+        ("论文.pdf", "application/pdf", "pdf", 2),
+        ("记录.md", "text/markdown", "markdown", 3),
+        ("记录.markdown", "application/octet-stream", "markdown", 3),
+        ("汇报.pptx", PPTX_TYPE, "office", 4),
+    ],
+)
+def test_comment_attachment_uses_workspace_category_limit(
+    session_client, comment_context, file_name, content_type, category, limit_mb
+):
+    """评论附件按工作区平台设置的分类额度签发上传策略。"""
     _, _, issue, _ = comment_context
-    payload = {
-        "name": "大型过程材料.pptx",
-        "type": PPTX_TYPE,
-        "size": 6 * 1024 * 1024,
+    configure_limits(comment_context[0])
+    base = {
+        "name": file_name,
+        "type": content_type,
         "entity_type": "COMMENT_ATTACHMENT",
         "entity_identifier": str(issue.id),
+    }
+    exact_size = limit_mb * MEGABYTE
+    with patch("plane.app.views.asset.v2.S3Storage") as storage:
+        storage.return_value.generate_presigned_post.return_value = {"url": "https://storage.test", "fields": {}}
+        response = session_client.post(upload_url(comment_context), {**base, "size": exact_size}, format="json")
+    assert response.status_code == 200, response.data
+    asset = FileAsset.objects.get(id=response.data["asset_id"])
+    assert asset.size == exact_size
+    storage.return_value.generate_presigned_post.assert_called_once_with(
+        object_name=asset.asset.name, file_type=content_type, file_size=exact_size
+    )
+
+    too_large = session_client.post(upload_url(comment_context), {**base, "size": exact_size + 1}, format="json")
+    assert too_large.status_code == 400
+    assert too_large.data["error_code"] == "comment_attachment_size_exceeded"
+    assert too_large.data["category"] == category
+    assert too_large.data["limit_mb"] == limit_mb
+    assert too_large.data["limit_bytes"] == exact_size
+
+
+@pytest.mark.django_db
+def test_comment_attachment_limits_endpoint_only_returns_project_scoped_limits(session_client, comment_context):
+    """额度接口复用项目访问权限，且只暴露四类评论附件限制。"""
+    workspace, _, _, user = comment_context
+    setting = configure_limits(workspace, image=6, pdf=7, markdown=8, office=9)
+    research_project = Project.objects.create(
+        workspace=workspace,
+        name="科研项目",
+        identifier="RESEARCH",
+        network=0,
+    )
+    ResearchProjectProfile.objects.create(
+        project=research_project,
+        workspace=workspace,
+        owner=user,
+        chain_kind=ResearchProjectProfile.ChainKind.RESEARCH_CHAIN,
+    )
+    ProjectMember.objects.create(workspace=workspace, project=research_project, member=user, role=20)
+    response = session_client.get(limits_url(comment_context))
+    assert response.status_code == 200
+    assert response.data == {
+        "image": {"max_mb": 6, "max_bytes": 6 * MEGABYTE},
+        "pdf": {"max_mb": 7, "max_bytes": 7 * MEGABYTE},
+        "markdown": {"max_mb": 8, "max_bytes": 8 * MEGABYTE},
+        "office": {"max_mb": 9, "max_bytes": 9 * MEGABYTE},
+    }
+    research_url = (
+        f"/api/assets/v2/workspaces/{workspace.slug}/projects/{research_project.id}/comment-attachment-limits/"
+    )
+    assert session_client.get(research_url).data == response.data
+
+    outsider = User.objects.create(email=f"{uuid4()}@example.com", username=uuid4().hex)
+    WorkspaceMember.objects.create(workspace=workspace, member=outsider, role=15)
+    client = APIClient()
+    client.force_authenticate(user=outsider)
+    assert client.get(limits_url(comment_context)).status_code == 403
+    setting.refresh_from_db()
+    assert setting.module_enabled is False
+
+
+@pytest.mark.django_db
+@override_settings(FILE_SIZE_LIMIT=5 * 1024 * 1024)
+def test_non_comment_asset_keeps_global_file_size_limit(session_client, comment_context):
+    """非评论资产仍记录并签发全局 FILE_SIZE_LIMIT。"""
+    _, _, _, _ = comment_context
+    payload = {
+        "name": "正文图片.png",
+        "type": "image/png",
+        "size": 6 * MEGABYTE,
+        "entity_type": "COMMENT_DESCRIPTION",
+        "entity_identifier": "",
     }
     with patch("plane.app.views.asset.v2.S3Storage") as storage:
         storage.return_value.generate_presigned_post.return_value = {"url": "https://storage.test", "fields": {}}
         response = session_client.post(upload_url(comment_context), payload, format="json")
-    assert response.status_code == 200, response.data
-    assert FileAsset.objects.get(id=response.data["asset_id"]).size == payload["size"]
-
-    too_large = session_client.post(
-        upload_url(comment_context), {**payload, "size": 9 * 1024 * 1024}, format="json"
+    assert response.status_code == 200
+    assert FileAsset.objects.get(id=response.data["asset_id"]).size == 5 * MEGABYTE
+    storage.return_value.generate_presigned_post.assert_called_once_with(
+        object_name=FileAsset.objects.get(id=response.data["asset_id"]).asset.name,
+        file_type="image/png",
+        file_size=5 * MEGABYTE,
     )
-    assert too_large.status_code == 400
+
+
+@pytest.mark.django_db
+def test_comment_attachment_limits_do_not_leak_across_workspaces(session_client, comment_context):
+    """每个项目只读取所属工作区的平台额度。"""
+    user = comment_context[3]
+    other_workspace = Workspace.objects.create(name="另一工作区", owner=user, slug=f"ws-{uuid4().hex[:12]}")
+    WorkspaceMember.objects.create(workspace=other_workspace, member=user, role=20)
+    other_project = Project.objects.create(
+        workspace=other_workspace,
+        name="另一工作区项目",
+        identifier="OTHERWS",
+        network=0,
+    )
+    ProjectMember.objects.create(workspace=other_workspace, project=other_project, member=user, role=20)
+    other_issue = Issue.objects.create(workspace=other_workspace, project=other_project, name="另一任务")
+    configure_limits(comment_context[0], office=4)
+    configure_limits(other_workspace, office=11)
+    payload = {
+        "name": "跨区汇报.pptx",
+        "type": PPTX_TYPE,
+        "size": 11 * MEGABYTE,
+        "entity_type": "COMMENT_ATTACHMENT",
+        "entity_identifier": str(other_issue.id),
+    }
+    url = f"/api/assets/v2/workspaces/{other_workspace.slug}/projects/{other_project.id}/"
+    with patch("plane.app.views.asset.v2.S3Storage") as storage:
+        storage.return_value.generate_presigned_post.return_value = {"url": "https://storage.test", "fields": {}}
+        response = session_client.post(url, payload, format="json")
+    assert response.status_code == 200, response.data
+    storage.return_value.generate_presigned_post.assert_called_once_with(
+        object_name=FileAsset.objects.get(id=response.data["asset_id"]).asset.name,
+        file_type=PPTX_TYPE,
+        file_size=11 * MEGABYTE,
+    )
 
 
 @pytest.mark.django_db
