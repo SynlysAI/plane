@@ -122,7 +122,7 @@ let root: ReturnType<typeof createRoot>;
 function TreeHarness() {
   return (
     <>
-      <ResearchProjectTree scope="ADMINISTRATIVE" title="行政项目" canManage={false} />
+      <ResearchProjectTree scope="ADMINISTRATIVE" title="行政项目" href="/lab/projects" canManage={false} />
       <button
         type="button"
         onClick={() => {
