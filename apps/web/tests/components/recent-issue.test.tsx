@@ -6,6 +6,7 @@ import type { TActivityEntityData } from "@plane/types";
 
 const setPeekIssue = vi.fn();
 const setPeekEpic = vi.fn();
+const peekState: { peekIssue?: unknown } = {};
 const listItemProps: {
   itemLink: string;
   onItemClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
@@ -52,13 +53,27 @@ vi.mock("@/components/core/list", () => ({
   },
 }));
 vi.mock("@/components/dropdowns/member/dropdown", () => ({ MemberDropdown: () => null }));
+vi.mock("@/components/issues/peek-overview", () => ({
+  IssuePeekOverview: () => <div data-testid="issue-peek-overview" />,
+}));
 vi.mock("@/components/issues/issue-detail/issue-identifier", () => ({
   IssueIdentifier: ({ projectIdentifier, issueSequenceId }: { projectIdentifier: string; issueSequenceId: string }) => (
     <span>{`${projectIdentifier}-${issueSequenceId}`}</span>
   ),
 }));
 vi.mock("@/hooks/store/use-issue-detail", () => ({
-  useIssueDetail: (serviceType: string) => (serviceType === "epics" ? { setPeekIssue: setPeekEpic } : { setPeekIssue }),
+  useIssueDetail: (serviceType: string) =>
+    serviceType === "epics"
+      ? { setPeekIssue: setPeekEpic }
+      : {
+          get peekIssue() {
+            return peekState.peekIssue;
+          },
+          setPeekIssue: (peekIssue: unknown) => {
+            peekState.peekIssue = peekIssue;
+            setPeekIssue(peekIssue);
+          },
+        },
 }));
 vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ getProjectIdentifierById: () => "PRJA121C6" }) }));
 vi.mock("@/hooks/store/use-project-state", () => ({
@@ -66,6 +81,7 @@ vi.mock("@/hooks/store/use-project-state", () => ({
 }));
 
 const { RecentIssue } = await import("@/components/home/widgets/recents/issue");
+const { HomePeekOverviewsRoot } = await import("@/components/issues/peek-overview/peek-overviews");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
 let container: HTMLDivElement;
@@ -76,6 +92,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   listItemProps.length = 0;
+  peekState.peekIssue = undefined;
   setPeekIssue.mockClear();
 });
 
@@ -115,13 +132,22 @@ it.each(["task-type", null])("renders a typed or untyped work item without its i
   expect(container.textContent).not.toContain("PRJA121C6-1");
 });
 
-it("keeps the work-item link and peek behavior after removing the identifier", async () => {
+it("keeps the work-item link and renders peek details after removing the identifier", async () => {
   const parentRef = { current: document.createElement("div") };
 
-  await act(async () =>
-    root.render(<RecentIssue activity={recentIssue("task-type")} ref={parentRef} workspaceSlug="lab" />)
-  );
+  /** 渲染最近动态任务与首页 Peek 容器，用于验证点击后的状态链路。 */
+  const renderRecentActivity = () =>
+    root.render(
+      <>
+        <RecentIssue activity={recentIssue("task-type")} ref={parentRef} workspaceSlug="lab" />
+        <HomePeekOverviewsRoot />
+      </>
+    );
+
+  await act(async () => renderRecentActivity());
+  expect(container.querySelector('[data-testid="issue-peek-overview"]')).toBeNull();
   await act(async () => container.querySelector("button")?.click());
+  await act(async () => renderRecentActivity());
 
   expect(listItemProps.at(-1)?.itemLink).toBe("/lab/browse/PRJA121C6-1/");
   expect(setPeekIssue).toHaveBeenCalledWith({
@@ -129,4 +155,5 @@ it("keeps the work-item link and peek behavior after removing the identifier", a
     projectId: "project-id",
     issueId: "issue-id",
   });
+  expect(container.querySelector('[data-testid="issue-peek-overview"]')).not.toBeNull();
 });
