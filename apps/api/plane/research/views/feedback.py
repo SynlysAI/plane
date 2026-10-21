@@ -36,14 +36,16 @@ class ResearchFeedbackEndpoint(ResearchAPIView):
     research_membership_required = False
 
     def get(self, request, slug):
-        """Return own feedback, or the management scope when explicitly authorized.
+        """Return feedback in the caller's selected visibility scope.
 
         Args:
             request: Authenticated DRF request.
             slug: Workspace slug from the URL.
 
         Returns:
-            The paginated feedback response or a controlled error.
+            The paginated feedback response or a controlled error. The default is
+            the caller's own feedback; ``workspace`` is read-only and broad, while
+            ``manage`` still requires feedback management rights.
         """
         workspace, error = self.get_workspace(nav=None, require_enabled=False)
         if error:

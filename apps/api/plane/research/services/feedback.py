@@ -319,6 +319,31 @@ def _feedback_queryset(user, workspace):
     )
 
 
+def _workspace_queryset(workspace):
+    """Return every active feedback record in one workspace.
+
+    Args:
+        workspace: Workspace resolved from the URL.
+
+    Returns:
+        A queryset containing all active workspace feedback.
+    """
+    return (
+        ResearchFeedback.objects.filter(workspace=workspace, deleted_at__isnull=True)
+        .select_related("workspace", "org_unit", "created_by")
+        .prefetch_related(
+            Prefetch(
+                "screenshots",
+                queryset=ResearchFeedbackScreenshot.objects.filter(
+                    deleted_at__isnull=True,
+                    asset__is_deleted=False,
+                    asset__deleted_at__isnull=True,
+                ).select_related("asset"),
+            )
+        )
+    )
+
+
 def _management_queryset(user, workspace):
     """Resolve the management queryset from Plane roles and organisation scope.
 
@@ -339,18 +364,22 @@ def _management_queryset(user, workspace):
     return None
 
 
-def visible_feedback_queryset(user, workspace, *, manage=False):
+def visible_feedback_queryset(user, workspace, *, scope="own"):
     """Return the feedback queryset allowed for this caller.
 
     Args:
         user: Authenticated Plane user.
         workspace: Workspace resolved from the URL.
-        manage: Whether management scope was explicitly requested.
+        scope: Feedback visibility scope: ``own``, ``workspace``, or ``manage``.
 
     Returns:
-        Own-scope or management-scope queryset; management denial returns ``None``.
+        The selected queryset; management denial returns ``None``.
     """
-    return _management_queryset(user, workspace) if manage else _feedback_queryset(user, workspace)
+    if scope == "manage":
+        return _management_queryset(user, workspace)
+    if scope == "workspace":
+        return _workspace_queryset(workspace)
+    return _feedback_queryset(user, workspace)
 
 
 def _history_entries(feedback_ids):
@@ -629,7 +658,7 @@ def _pagination(params):
 
 
 def list_feedback(request, user, workspace):
-    """List own or managed feedback with server-side filters.
+    """List feedback in the selected scope with server-side filters.
 
     Args:
         request: DRF list request.
@@ -639,8 +668,8 @@ def list_feedback(request, user, workspace):
     Returns:
         The paginated API payload.
     """
-    manage = request.GET.get("scope") == "manage"
-    queryset = visible_feedback_queryset(user, workspace, manage=manage)
+    scope = request.GET.get("scope", "own")
+    queryset = visible_feedback_queryset(user, workspace, scope=scope)
     if queryset is None:
         raise ResearchAPIException(
             ResearchErrorCode.PERMISSION_DENIED,
@@ -758,7 +787,7 @@ def update_feedback_status(request, user, workspace, feedback_id):
     return serialize_feedback(feedback, history=history)
 
 
-def _authorized_screenshot(user, workspace, feedback_id, screenshot_id, *, manage):
+def _authorized_screenshot(user, workspace, feedback_id, screenshot_id, *, scope):
     """Resolve a screenshot only through the same feedback visibility rule.
 
     Args:
@@ -766,12 +795,12 @@ def _authorized_screenshot(user, workspace, feedback_id, screenshot_id, *, manag
         workspace: Workspace resolved from the URL.
         feedback_id: UUID of the parent feedback record.
         screenshot_id: UUID of the screenshot registration.
-        manage: Whether management scope was requested.
+        scope: Feedback visibility scope requested by the client.
 
     Returns:
         The authorized screenshot registration.
     """
-    queryset = visible_feedback_queryset(user, workspace, manage=manage)
+    queryset = visible_feedback_queryset(user, workspace, scope=scope)
     if queryset is None:
         raise ResearchAPIException(
             ResearchErrorCode.PERMISSION_DENIED,
@@ -822,7 +851,7 @@ def open_feedback_screenshot(request, user, workspace, feedback_id, screenshot_i
         workspace,
         feedback_id,
         screenshot_id,
-        manage=request.GET.get("scope") == "manage",
+        scope=request.GET.get("scope", "own"),
     )
     asset = screenshot.asset
     try:

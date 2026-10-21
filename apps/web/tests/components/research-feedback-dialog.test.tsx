@@ -5,7 +5,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ post: vi.fn(), get: vi.fn(), patch: vi.fn() }));
 const researchState = {
-  identity: null as { user: { is_main_pi: boolean; is_workspace_admin: boolean; is_system_admin: boolean } } | null,
+  identity: null as {
+    user: {
+      is_main_pi: boolean;
+      is_research_admin?: boolean;
+      is_workspace_admin: boolean;
+      is_system_admin: boolean;
+    };
+  } | null,
   identityLoader: false,
 };
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -18,9 +25,14 @@ vi.mock("@/services/research/feedback.service", () => ({
       mocks.post(`/api/research/workspaces/${workspaceSlug}/feedback/`, form);
     updateStatus = (workspaceSlug: string, feedbackId: string, payload: unknown) =>
       mocks.patch(`/api/research/workspaces/${workspaceSlug}/feedback/${feedbackId}/status/`, payload);
-    screenshotUrl = (workspaceSlug: string, feedbackId: string, screenshotId: string, manage = false) =>
+    screenshotUrl = (
+      workspaceSlug: string,
+      feedbackId: string,
+      screenshotId: string,
+      scope: "own" | "workspace" | "manage" = "own"
+    ) =>
       `/api/research/workspaces/${workspaceSlug}/feedback/${feedbackId}/screenshots/${screenshotId}/${
-        manage ? "?scope=manage" : ""
+        scope === "own" ? "" : `?scope=${scope}`
       }`;
   },
 }));
@@ -103,7 +115,7 @@ function localDate(offsetDays: number) {
 async function open() {
   await act(async () => root.render(<FeedbackDialog workspaceSlug="lab" />));
   await act(async () =>
-    container.querySelector<HTMLButtonElement>('button[aria-label="提交反馈或查看我的反馈"]')?.click()
+    container.querySelector<HTMLButtonElement>('button[aria-label="提交反馈或查看反馈统计"]')?.click()
   );
 }
 
@@ -117,7 +129,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   researchState.identity = {
-    user: { is_main_pi: false, is_workspace_admin: false, is_system_admin: false },
+    user: { is_main_pi: false, is_research_admin: false, is_workspace_admin: false, is_system_admin: false },
   };
   researchState.identityLoader = false;
   mocks.get.mockResolvedValue({ results: [], count: 0 });
@@ -331,9 +343,62 @@ it("普通用户查询本人记录，不显示管理入口且查看四状态与�
   expect(container.querySelector('textarea[aria-label="处置说明"]')).toBeNull();
 });
 
-it("普通弹窗的管理视图继续提供状态处置并使用管理截图范围", async () => {
+it("普通成员查看工作空间反馈统计，只读且可读取他人截图与历史", async () => {
+  mocks.get.mockResolvedValue({
+    count: 1,
+    results: [
+      {
+        feedback_id: "feedback-workspace",
+        content: "Workspace feedback from another member",
+        feedback_type: "idea",
+        status: "in_progress",
+        username: "Colleague",
+        path: "/lab/projects",
+        browser: "Workspace browser",
+        module: "projects",
+        created_at: "2026-10-08T00:00:00Z",
+        screenshots: [{ id: "shot-workspace", content_type: "image/png", size: 32 }],
+        history: [
+          {
+            actor_name: "PI",
+            from_status: "open",
+            to_status: "in_progress",
+            comment: "Assigned to platform team",
+            created_at: "2026-10-08T01:00:00Z",
+          },
+        ],
+      },
+    ],
+  });
+  await open();
+  await act(async () =>
+    Array.from(container.querySelectorAll('button[role="tab"]'))
+      .find((button) => button.textContent === "反馈统计")
+      ?.click()
+  );
+
+  expect(mocks.get).toHaveBeenCalledWith(
+    "/api/research/workspaces/lab/feedback/",
+    expect.objectContaining({ params: expect.objectContaining({ scope: "workspace" }) })
+  );
+  expect(container.querySelector('[data-testid="feedback-management-split"]')).not.toBeNull();
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Workspace feedback from another member"))
+      ?.click()
+  );
+  expect(container.textContent).toContain("Colleague");
+  expect(container.textContent).toContain("/lab/projects");
+  expect(container.textContent).toContain("Workspace browser");
+  expect(container.textContent).toContain("Assigned to platform team");
+  expect(container.querySelector('img[alt="反馈截图 1"]')?.getAttribute("src")).toContain("?scope=workspace");
+  expect(container.querySelector('textarea[aria-label="处置说明"]')).toBeNull();
+  expect(mocks.patch).not.toHaveBeenCalled();
+});
+
+it("管理员在反馈统计页签继续提供状态处置并使用工作空间截图范围", async () => {
   researchState.identity = {
-    user: { is_main_pi: true, is_workspace_admin: false, is_system_admin: false },
+    user: { is_main_pi: true, is_research_admin: false, is_workspace_admin: false, is_system_admin: false },
   };
   mocks.get.mockResolvedValue({
     count: 1,
@@ -383,7 +448,7 @@ it("普通弹窗的管理视图继续提供状态处置并使用管理截图范�
   expect(container.querySelector('section[aria-label="反馈详情"]')).not.toBeNull();
   expect(container.querySelector('[data-testid="feedback-list-scroll"]')?.className).toContain("overflow-y-auto");
   expect(container.querySelector('[data-testid="feedback-detail-scroll"]')?.className).toContain("overflow-y-auto");
-  expect(container.querySelector('img[alt="反馈截图 1"]')?.getAttribute("src")).toContain("?scope=manage");
+  expect(container.querySelector('img[alt="反馈截图 1"]')?.getAttribute("src")).toContain("?scope=workspace");
   expect(container.querySelector('textarea[aria-label="处置说明"]')).not.toBeNull();
   const commentBox = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="处置说明"]');
   if (!commentBox) throw new Error("处置说明未显示");

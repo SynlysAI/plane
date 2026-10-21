@@ -17,8 +17,10 @@ type TResearchFeedbackFilters = {
   q?: string;
   date_from?: string;
   date_to?: string;
-  scope?: string;
+  scope?: TResearchFeedbackScope;
 };
+
+type TResearchFeedbackScope = "own" | "workspace" | "manage";
 
 export class ResearchFeedbackService extends APIService {
   constructor() {
@@ -26,7 +28,7 @@ export class ResearchFeedbackService extends APIService {
   }
 
   /**
-   * Read own or managed feedback from the Plane API.
+   * Read own, workspace-wide, or managed feedback from the Plane API.
    *
    * Args:
    *   workspaceSlug: Workspace identifier.
@@ -86,13 +88,18 @@ export class ResearchFeedbackService extends APIService {
    *   workspaceSlug: Workspace identifier.
    *   feedbackId: Feedback record identifier.
    *   screenshotId: Screenshot registration identifier.
-   *   manage: Whether the management scope query is required.
+   *   scope: Feedback visibility scope used for screenshot authorization.
    *
    * Returns:
    *   Absolute URL to the Plane feedback screenshot endpoint.
    */
-  screenshotUrl(workspaceSlug: string, feedbackId: string, screenshotId: string, manage = false) {
+  screenshotUrl(
+    workspaceSlug: string,
+    feedbackId: string,
+    screenshotId: string,
+    scope: TResearchFeedbackScope = "own"
+  ) {
     const endpoint = researchEndpoints.feedbackScreenshot(workspaceSlug, feedbackId, screenshotId);
-    return `${API_BASE_URL}${endpoint}${manage ? "?scope=manage" : ""}`;
+    return `${API_BASE_URL}${endpoint}${scope === "own" ? "" : `?scope=${scope}`}`;
   }
 }

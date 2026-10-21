@@ -900,6 +900,7 @@
       "dashboard": "科研概览",
       "system": "系统管理",
       "feedback": "反馈管理",
+      "feedback_statistics": "反馈统计",
       "back_to_projects": "返回项目列表",
       "back_to_overview": "返回科研总览"
     },

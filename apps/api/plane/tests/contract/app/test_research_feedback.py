@@ -143,6 +143,11 @@ def test_administrative_member_can_submit_and_read_own_feedback(env, storage, se
     assert b"".join(shot.streaming_content) == PNG_BYTES
     other_shot = client.get(feedback_url(env, f"{other['feedback_id']}/screenshots/{other['screenshots'][0]['id']}/"))
     assert other_shot.status_code == 404
+    workspace_shot = client.get(
+        feedback_url(env, f"{other['feedback_id']}/screenshots/{other['screenshots'][0]['id']}/"),
+        {"scope": "workspace"},
+    )
+    assert workspace_shot.status_code == 200
     assert client.get(feedback_url(env), {"scope": "manage"}).status_code == 403
     denied_update = client.patch(
         feedback_url(env, f"{own['feedback_id']}/status/"),
@@ -175,6 +180,7 @@ def test_feedback_still_requires_active_non_guest_workspace_membership(env, stor
     expected = 403 if membership == "guest" else 404
     assert client.post(feedback_url(env), submission(), format="multipart").status_code == expected
     assert client.get(feedback_url(env)).status_code == expected
+    assert client.get(feedback_url(env), {"scope": "workspace"}).status_code == expected
     assert not ResearchFeedback.objects.exists()
     storage.upload_file.assert_not_called()
 
@@ -287,6 +293,8 @@ def test_lists_and_status_use_own_org_and_workspace_scopes(env, storage):
     other_id = other.json()["data"]["feedback_id"]
 
     assert [item["feedback_id"] for item in student_client.get(feedback_url(env)).json()["data"]["results"]] == [own_id]
+    workspace_results = student_client.get(feedback_url(env), {"scope": "workspace"}).json()["data"]["results"]
+    assert {item["feedback_id"] for item in workspace_results} == {own_id, other_id}
     assert client_for(env["advisor"]).get(feedback_url(env), {"scope": "manage"}).status_code == 403
     pi_results = client_for(env["pi"]).get(feedback_url(env), {"scope": "manage"}).json()["data"]["results"]
     assert {item["feedback_id"] for item in pi_results} == {own_id, other_id}
@@ -370,9 +378,10 @@ def test_screenshot_stream_uses_feedback_acl_and_no_store_headers(env, storage):
 
     own = client_for(env["student"]).get(feedback_url(env, suffix))
     outsider = client_for(env["colleague"]).get(feedback_url(env, suffix))
+    workspace_viewer = client_for(env["colleague"]).get(feedback_url(env, suffix), {"scope": "workspace"})
     manager = client_for(env["pi"]).get(feedback_url(env, suffix), {"scope": "manage"})
 
-    assert own.status_code == manager.status_code == 200
+    assert own.status_code == workspace_viewer.status_code == manager.status_code == 200
     assert b"".join(own.streaming_content) == PNG_BYTES
     assert own["Cache-Control"] == "private, no-store"
     assert own["X-Content-Type-Options"] == "nosniff"

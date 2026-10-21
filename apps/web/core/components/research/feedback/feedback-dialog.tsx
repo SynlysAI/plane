@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import type { TFeedbackStatus, TResearchFeedback } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { EModalWidth, ModalCore, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
+import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
 import { ResearchBrowseRefresh } from "@/components/research/common/research-browse-toolbar";
@@ -27,6 +28,8 @@ const FEEDBACK_TYPE_LABELS: Record<Feedback["feedback_type"], string> = {
 type Feedback = TResearchFeedback;
 type Shot = { file: File; preview: string };
 type DatePreset = "any" | "7" | "30" | "custom";
+type FeedbackView = "submit" | "mine" | "statistics" | "manage";
+type FeedbackScope = "own" | "workspace" | "manage";
 
 /** 将日期格式化为服务端反馈筛选使用的本地 YYYY-MM-DD 字符串。 */
 const toLocalDateString = (date: Date) =>
@@ -60,7 +63,7 @@ function ScreenshotLink({ url, index }: { url: string; index: number }) {
   );
 }
 
-/** 全局反馈与本人记录，管理者在同一管理视图处置组织范围内反馈。 */
+/** 全局反馈、本人记录与工作空间统计，管理者可在统计视图处置反馈。 */
 export const FeedbackDialog = observer(function FeedbackDialog({
   workspaceSlug,
   managementOnly = false,
@@ -68,11 +71,12 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   workspaceSlug: string;
   managementOnly?: boolean;
 }) {
+  const { t } = useTranslation();
   const research = useResearch();
   const identity = research.identity;
   const identityKnown = Boolean(identity);
   const [open, setOpen] = useState(managementOnly);
-  const [view, setView] = useState(managementOnly ? "manage" : "submit");
+  const [view, setView] = useState<FeedbackView>(managementOnly ? "manage" : "submit");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("bug");
   const [shots, setShots] = useState<Shot[]>([]);
@@ -107,7 +111,9 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     identity?.user?.is_workspace_admin ||
     identity?.user?.is_system_admin
   );
-  const isManagementView = managementOnly || view === "manage";
+  const usesWorkspaceLayout = managementOnly || view === "statistics";
+  const listScope: FeedbackScope = managementOnly ? "manage" : view === "statistics" ? "workspace" : "own";
+  const screenshotScope: FeedbackScope = listScope;
   const managementDenied = managementOnly && identityKnown && !canManage;
   useEffect(() => {
     shotsRef.current = shots;
@@ -120,9 +126,9 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   );
   useEffect(() => {
     if (!open || view === "submit") return;
-    if (view === "manage" && !canManage) return;
+    if (managementOnly && !canManage) return;
     const version = ++queryVersion.current;
-    const params = { ...filter, page: String(page), ...(view === "manage" ? { scope: "manage" } : {}) };
+    const params = { ...filter, page: String(page), ...(listScope === "own" ? {} : { scope: listScope }) };
     setListLoading(true);
     void service
       .list(workspaceSlug, params)
@@ -146,7 +152,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     return () => {
       queryVersion.current += 1;
     };
-  }, [canManage, filter, open, page, refresh, view, workspaceSlug]);
+  }, [canManage, filter, listScope, managementOnly, open, page, refresh, view, workspaceSlug]);
   useEffect(() => {
     if (!open || view === "submit") return undefined;
     const timer = setTimeout(() => {
@@ -181,15 +187,13 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     setFilter((current) => ({ ...current, ...next }));
     setPage(1);
   };
-  const availableTabs = [
-    ...(managementOnly
+  const availableTabs = (managementOnly
       ? []
       : ([
           ["submit", "提交反馈"],
           ["mine", "我的反馈"],
-        ] as const)),
-    ...(canManage ? [["manage", "反馈管理"] as const] : []),
-  ];
+          ["statistics", t("research.nav.feedback_statistics")],
+        ] as const));
   /** 按方向键在可用反馈视图之间切换。 */
   const moveTab = (direction: 1 | -1) => {
     const current = availableTabs.findIndex(([value]) => value === view);
@@ -402,7 +406,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const body = (
     <section
       className={
-        isManagementView
+        usesWorkspaceLayout
           ? "flex h-full min-w-0 flex-col gap-5 overflow-hidden bg-canvas p-6"
           : "flex max-h-[85vh] min-w-0 flex-col gap-4 overflow-y-auto bg-surface-1 p-5"
       }
@@ -566,7 +570,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                 </Button>
               </div>
             </form>
-          ) : isManagementView ? (
+          ) : usesWorkspaceLayout ? (
             <>
               {filterToolbar}
               <div
@@ -702,7 +706,12 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                                 <ScreenshotLink
                                   key={shot.id}
                                   index={index}
-                                  url={service.screenshotUrl(workspaceSlug, selected.feedback_id, shot.id, true)}
+                                  url={service.screenshotUrl(
+                                    workspaceSlug,
+                                    selected.feedback_id,
+                                    shot.id,
+                                    screenshotScope
+                                  )}
                                 />
                               ))}
                             </div>
@@ -729,7 +738,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                             </ol>
                           </section>
                         ) : null}
-                        {isManagementView && (
+                        {usesWorkspaceLayout && canManage && (
                           <section aria-label="状态处置" className="border-t border-subtle pt-4">
                             <h4 className="text-12 font-semibold text-primary">状态处置</h4>
                             <div className="mt-3">{statusForm}</div>
@@ -843,7 +852,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                       <ScreenshotLink
                         key={shot.id}
                         index={index}
-                        url={service.screenshotUrl(workspaceSlug, selected.feedback_id, shot.id, view === "manage")}
+                        url={service.screenshotUrl(workspaceSlug, selected.feedback_id, shot.id, screenshotScope)}
                       />
                     ))}
                   </div>
@@ -863,7 +872,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                       </li>
                     ))}
                   </ol>
-                  {isManagementView && (
+                  {usesWorkspaceLayout && canManage && (
                     <section aria-label="状态处置" className="mt-4 border-t border-subtle pt-4">
                       <h4 className="text-12 font-semibold text-primary">状态处置</h4>
                       <div className="mt-3">{statusForm}</div>
@@ -881,7 +890,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   return (
     <>
       <button
-        aria-label="提交反馈或查看我的反馈"
+        aria-label="提交反馈或查看反馈统计"
         className="flex size-8 items-center justify-center rounded-md text-secondary hover:bg-surface-2"
         onClick={() => setOpen(true)}
       >
@@ -890,8 +899,8 @@ export const FeedbackDialog = observer(function FeedbackDialog({
       <ModalCore
         isOpen={open}
         handleClose={() => !busy && setOpen(false)}
-        width={isManagementView ? EModalWidth.VIXL : EModalWidth.XXL}
-        className={isManagementView ? "h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] overflow-hidden" : undefined}
+        width={usesWorkspaceLayout ? EModalWidth.VIXL : EModalWidth.XXL}
+        className={usesWorkspaceLayout ? "h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] overflow-hidden" : undefined}
       >
         {body}
       </ModalCore>

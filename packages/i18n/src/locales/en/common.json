@@ -900,6 +900,7 @@
       "dashboard": "Research overview",
       "system": "System management",
       "feedback": "Feedback management",
+      "feedback_statistics": "Feedback statistics",
       "back_to_projects": "Back to projects",
       "back_to_overview": "Back to research overview"
     },
