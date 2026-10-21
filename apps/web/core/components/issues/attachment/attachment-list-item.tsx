@@ -87,18 +87,20 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
               </>
             )}
 
-            <CustomMenu ellipsis closeOnSelect placement="bottom-end" disabled={disabled}>
-              <CustomMenu.MenuItem
-                onClick={() => {
-                  toggleDeleteAttachmentModal(attachmentId);
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <DeleteOutline className="h-3.5 w-3.5" />
-                  <span>{t("common.actions.delete")}</span>
-                </div>
-              </CustomMenu.MenuItem>
-            </CustomMenu>
+            {!disabled && (
+              <CustomMenu ellipsis closeOnSelect placement="bottom-end">
+                <CustomMenu.MenuItem
+                  onClick={() => {
+                    toggleDeleteAttachmentModal(attachmentId);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <DeleteOutline className="h-3.5 w-3.5" />
+                    <span>{t("common.actions.delete")}</span>
+                  </div>
+                </CustomMenu.MenuItem>
+              </CustomMenu>
+            )}
           </div>
         </div>
       </button>

@@ -61,7 +61,7 @@ class IssueAttachmentEndpoint(BaseAPIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], creator=True, model=FileAsset)
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = FileAsset.objects.filter(
             pk=pk,
@@ -180,7 +180,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
             status=status.HTTP_200_OK,
         )
 
-    @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], creator=True, model=FileAsset)
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = get_object_or_404(
             FileAsset,
