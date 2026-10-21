@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
 // plane imports
@@ -61,6 +61,11 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const [isDuplicateIssueModalOpen, setIsDuplicateIssueModalOpen] = useState(false);
   const [isEditIssueModalOpen, setIsEditIssueModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+  // 冻结态：工作项详情默认只读，点击"编辑"后才允许修改
+  const [isEditMode, setIsEditMode] = useState(false);
+  useEffect(() => {
+    setIsEditMode(false);
+  }, [issueId]);
   // ref
   const issuePeekOverviewRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorRefApi>(null);
@@ -128,6 +133,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     await issueOperations.restore(workspaceSlug, projectId, issueId);
     removeRoutePeekId();
   };
+
+  const toggleEditMode = (value: boolean) => setIsEditMode(value);
 
   const peekOverviewIssueClassName = cn(
     !embedIssue
@@ -197,6 +204,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       isArchived={is_archived}
                       isSubmitting={isSubmitting}
                       setIsSubmitting={(value) => setIsSubmitting(value)}
+                      isEditMode={isEditMode}
+                      onToggleEditMode={toggleEditMode}
                     />
 
                     <div className="py-2">
@@ -204,7 +213,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
                         issueId={issueId}
-                        disabled={disabled || is_archived}
+                        disabled={disabled || is_archived || !isEditMode}
                         issueServiceType={EIssueServiceType.ISSUES}
                       />
                     </div>
@@ -214,7 +223,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       projectId={projectId}
                       issueId={issueId}
                       issueOperations={issueOperations}
-                      disabled={disabled || is_archived}
+                      disabled={disabled || is_archived || !isEditMode}
                     />
 
                     <IssueActivity
@@ -238,6 +247,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                           isArchived={is_archived}
                           isSubmitting={isSubmitting}
                           setIsSubmitting={(value) => setIsSubmitting(value)}
+                          isEditMode={isEditMode}
+                          onToggleEditMode={toggleEditMode}
                         />
 
                         <div className="py-2">
@@ -245,7 +256,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                             workspaceSlug={workspaceSlug}
                             projectId={projectId}
                             issueId={issueId}
-                            disabled={disabled}
+                            disabled={disabled || is_archived || !isEditMode}
                             issueServiceType={EIssueServiceType.ISSUES}
                           />
                         </div>
@@ -268,7 +279,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         projectId={projectId}
                         issueId={issueId}
                         issueOperations={issueOperations}
-                        disabled={disabled || is_archived}
+                        disabled={disabled || is_archived || !isEditMode}
                       />
                     </div>
                   </div>

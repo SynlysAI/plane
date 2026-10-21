@@ -30,6 +30,9 @@ export function IssueDetailWidgetActionButtons(props: Props) {
   // translation
   const { t } = useTranslation();
 
+  // 冻结态或无权限时不提供任何"添加"操作入口
+  if (disabled) return null;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {!hideWidgets?.includes("sub-work-items") && (

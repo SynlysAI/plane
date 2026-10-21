@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -84,16 +84,16 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
 
   const issueOperations: TIssueOperations = useMemo(
     () => ({
-      fetch: async (workspaceSlug: string, projectId: string, issueId: string) => {
+      fetch: async (nextWorkspaceSlug: string, nextProjectId: string, nextIssueId: string) => {
         try {
-          await fetchIssue(workspaceSlug, projectId, issueId);
+          await fetchIssue(nextWorkspaceSlug, nextProjectId, nextIssueId);
         } catch (error) {
           console.error("Error fetching the parent issue:", error);
         }
       },
-      update: async (workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>) => {
+      update: async (nextWorkspaceSlug: string, nextProjectId: string, nextIssueId: string, data: Partial<TIssue>) => {
         try {
-          await updateIssue(workspaceSlug, projectId, issueId, data);
+          await updateIssue(nextWorkspaceSlug, nextProjectId, nextIssueId, data);
         } catch (error) {
           console.log("Error in updating issue:", error);
           setToast({
@@ -103,10 +103,10 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           });
         }
       },
-      remove: async (workspaceSlug: string, projectId: string, issueId: string) => {
+      remove: async (nextWorkspaceSlug: string, nextProjectId: string, nextIssueId: string) => {
         try {
-          if (is_archived) await removeArchivedIssue(workspaceSlug, projectId, issueId);
-          else await removeIssue(workspaceSlug, projectId, issueId);
+          if (is_archived) await removeArchivedIssue(nextWorkspaceSlug, nextProjectId, nextIssueId);
+          else await removeIssue(nextWorkspaceSlug, nextProjectId, nextIssueId);
           setToast({
             title: t("common.success"),
             type: TOAST_TYPE.SUCCESS,
@@ -121,16 +121,21 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           });
         }
       },
-      archive: async (workspaceSlug: string, projectId: string, issueId: string) => {
+      archive: async (nextWorkspaceSlug: string, nextProjectId: string, nextIssueId: string) => {
         try {
-          await archiveIssue(workspaceSlug, projectId, issueId);
+          await archiveIssue(nextWorkspaceSlug, nextProjectId, nextIssueId);
         } catch (error) {
           console.log("Error in archiving issue:", error);
         }
       },
-      addCycleToIssue: async (workspaceSlug: string, projectId: string, cycleId: string, issueId: string) => {
+      addCycleToIssue: async (
+        nextWorkspaceSlug: string,
+        nextProjectId: string,
+        cycleId: string,
+        nextIssueId: string
+      ) => {
         try {
-          await addCycleToIssue(workspaceSlug, projectId, cycleId, issueId);
+          await addCycleToIssue(nextWorkspaceSlug, nextProjectId, cycleId, nextIssueId);
         } catch (_error) {
           setToast({
             type: TOAST_TYPE.ERROR,
@@ -139,9 +144,14 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           });
         }
       },
-      addIssueToCycle: async (workspaceSlug: string, projectId: string, cycleId: string, issueIds: string[]) => {
+      addIssueToCycle: async (
+        nextWorkspaceSlug: string,
+        nextProjectId: string,
+        cycleId: string,
+        nextIssueIds: string[]
+      ) => {
         try {
-          await addIssueToCycle(workspaceSlug, projectId, cycleId, issueIds);
+          await addIssueToCycle(nextWorkspaceSlug, nextProjectId, cycleId, nextIssueIds);
         } catch (_error) {
           setToast({
             type: TOAST_TYPE.ERROR,
@@ -150,9 +160,14 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           });
         }
       },
-      removeIssueFromCycle: async (workspaceSlug: string, projectId: string, cycleId: string, issueId: string) => {
+      removeIssueFromCycle: async (
+        nextWorkspaceSlug: string,
+        nextProjectId: string,
+        cycleId: string,
+        nextIssueId: string
+      ) => {
         try {
-          const removeFromCyclePromise = removeIssueFromCycle(workspaceSlug, projectId, cycleId, issueId);
+          const removeFromCyclePromise = removeIssueFromCycle(nextWorkspaceSlug, nextProjectId, cycleId, nextIssueId);
           setPromiseToast(removeFromCyclePromise, {
             loading: t("issue.remove.cycle.loading"),
             success: {
@@ -169,9 +184,19 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           console.log("Error in removing issue from cycle:", error);
         }
       },
-      removeIssueFromModule: async (workspaceSlug: string, projectId: string, moduleId: string, issueId: string) => {
+      removeIssueFromModule: async (
+        nextWorkspaceSlug: string,
+        nextProjectId: string,
+        moduleId: string,
+        nextIssueId: string
+      ) => {
         try {
-          const removeFromModulePromise = removeIssueFromModule(workspaceSlug, projectId, moduleId, issueId);
+          const removeFromModulePromise = removeIssueFromModule(
+            nextWorkspaceSlug,
+            nextProjectId,
+            moduleId,
+            nextIssueId
+          );
           setPromiseToast(removeFromModulePromise, {
             loading: t("issue.remove.module.loading"),
             success: {
@@ -189,13 +214,19 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
         }
       },
       changeModulesInIssue: async (
-        workspaceSlug: string,
-        projectId: string,
-        issueId: string,
+        nextWorkspaceSlug: string,
+        nextProjectId: string,
+        nextIssueId: string,
         addModuleIds: string[],
         removeModuleIds: string[]
       ) => {
-        const promise = await changeModulesInIssue(workspaceSlug, projectId, issueId, addModuleIds, removeModuleIds);
+        const promise = await changeModulesInIssue(
+          nextWorkspaceSlug,
+          nextProjectId,
+          nextIssueId,
+          addModuleIds,
+          removeModuleIds
+        );
         return promise;
       },
     }),
@@ -217,6 +248,11 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
 
   // issue details
   const issue = getIssueById(issueId);
+  // 冻结态：工作项详情默认只读，点击"编辑"后才允许修改
+  const [isEditMode, setIsEditMode] = useState(false);
+  useEffect(() => {
+    setIsEditMode(false);
+  }, [issueId]);
   // checking if issue is editable, based on user role
   const isEditable = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -247,6 +283,8 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
               issueOperations={issueOperations}
               isEditable={isEditable}
               isArchived={is_archived}
+              isEditMode={isEditMode}
+              onToggleEditMode={(value) => setIsEditMode(value)}
             />
           </div>
           <div
@@ -258,7 +296,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
               projectId={projectId}
               issueId={issueId}
               issueOperations={issueOperations}
-              isEditable={!is_archived && isEditable}
+              isEditable={!is_archived && isEditable && isEditMode}
             />
           </div>
         </div>
