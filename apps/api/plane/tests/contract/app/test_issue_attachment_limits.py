@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from django.test import override_settings
+from rest_framework.test import APIClient
 
 from plane.db.models import (
     FileAsset,
@@ -11,7 +12,9 @@ from plane.db.models import (
     Project,
     ProjectMember,
     State,
+    User,
     WorkspaceResearchSetting,
+    WorkspaceMember,
 )
 
 MEGABYTE = 1024 * 1024
@@ -105,3 +108,36 @@ def test_issue_attachment_rejects_invalid_size_without_asset(session_client, att
     assert response.status_code == 400, response.data
     assert response.data["error"] == "Invalid file size."
     assert FileAsset.objects.filter(entity_type="ISSUE_ATTACHMENT").count() == 0
+
+
+@pytest.mark.django_db
+def test_project_member_can_delete_issue_attachment(attachment_context):
+    """项目成员可以删除当前工作项附件。"""
+    workspace, project, issue, _owner = attachment_context
+    member = User.objects.create_user(
+        email="attachment-member@plane.so",
+        username="attachment_member",
+        password="attachment-password",
+    )
+    WorkspaceMember.objects.create(workspace=workspace, member=member, role=15, is_active=True)
+    ProjectMember.objects.create(workspace=workspace, project=project, member=member, role=15, is_active=True)
+    asset = FileAsset.objects.create(
+        attributes={"name": "行政材料.pptx", "type": PPTX_TYPE, "size": 1024},
+        asset="issue-attachments/member-file.pptx",
+        size=1024,
+        workspace=workspace,
+        project=project,
+        issue=issue,
+        created_by=member,
+        entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+    )
+    client = APIClient()
+    client.force_authenticate(user=member)
+
+    with patch("plane.app.views.issue.attachment.issue_activity.delay"):
+        response = client.delete(f"{attachments_url(attachment_context)}{asset.id}/")
+
+    assert response.status_code == 204, response.data
+    asset.refresh_from_db()
+    assert asset.is_deleted is True
+    assert asset.deleted_at is not None
