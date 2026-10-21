@@ -12,8 +12,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/use-file-size", () => ({ useFileSize: () => ({ maxFileSize: 5 * 1024 * 1024 }) }));
-vi.mock("@/hooks/use-issue-attachment-limits", () => ({
-  useIssueAttachmentLimits: (...args: unknown[]) => mocks.limits(...args),
+vi.mock("@/components/comments/use-comment-attachment-limits", () => ({
+  useCommentAttachmentLimits: (...args: unknown[]) => mocks.limits(...args),
 }));
 vi.mock("@/hooks/store/use-issue-detail", () => ({
   useIssueDetail: () => ({
@@ -56,17 +56,6 @@ function configuredLimits() {
   return {
     limits,
     error: false,
-    isLoading: false,
-    maxFileSize: 100 * MEGABYTE,
-    getLimitError: (uploadedFile: File) => {
-      if (uploadedFile.name.endsWith(".png") && uploadedFile.size > limits.image.max_bytes) {
-        return "图片文件不能超过 20 MB。";
-      }
-      if (uploadedFile.name.endsWith(".pptx") && uploadedFile.size > limits.office.max_bytes) {
-        return "办公及其他附件不能超过 50 MB。";
-      }
-      return null;
-    },
   };
 }
 
@@ -122,6 +111,20 @@ it("allows a six MB office attachment in the issue attachment list", async () =>
   expect(mocks.create).toHaveBeenCalledTimes(1);
 });
 
+it("blocks an oversized image in the issue attachment list", async () => {
+  await mount(
+    <IssueAttachmentItemList
+      workspaceSlug="lab"
+      projectId="project"
+      issueId="issue"
+      attachmentHelpers={{ operations: { create: mocks.create }, snapshot: { uploadStatus: [] } }}
+    />
+  );
+  await selectFile(makeFile("现场照片.png", "image/png", 21 * MEGABYTE));
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "图片文件不能超过 20 MB。" }));
+});
+
 it("blocks an oversized image from the quick action with the category limit", async () => {
   await mount(
     <IssueAttachmentActionButton workspaceSlug="lab" projectId="project" issueId="issue" issueServiceType="issues" />
@@ -131,13 +134,20 @@ it("blocks an oversized image from the quick action with the category limit", as
   expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "图片文件不能超过 20 MB。" }));
 });
 
+it("allows a six MB office attachment in the standalone upload area", async () => {
+  await mount(
+    <IssueAttachmentUpload workspaceSlug="lab" projectId="project" attachmentOperations={{ create: mocks.create }} />
+  );
+  await selectFile(
+    makeFile("行政材料.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", 6 * MEGABYTE)
+  );
+  expect(mocks.create).toHaveBeenCalledTimes(1);
+});
+
 it("blocks attachment upload when workspace limits cannot be loaded", async () => {
   mocks.limits.mockReturnValue({
     limits: null,
     error: true,
-    isLoading: false,
-    maxFileSize: 0,
-    getLimitError: () => "无法获取当前工作区附件限制",
   });
   await mount(
     <IssueAttachmentUpload workspaceSlug="lab" projectId="project" attachmentOperations={{ create: mocks.create }} />
