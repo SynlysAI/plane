@@ -70,6 +70,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? "";
   const currentUserId = research.identity?.user.id;
   const readState = report ? reportReadState(report) : null;
+  const authorName = report?.owner_detail?.display_name || report?.owner_detail?.email || report?.owner;
 
   useEffect(() => {
     void (async () => {
@@ -197,6 +198,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         title={`${report.period_key} · ${t(REPORT_TYPE_LABELS[report.report_type])}`}
         metadata={
           <>
+            {authorName && <span>{t("research.reports.author", { name: authorName })}</span>}
             <span>{t(REPORT_STATUS_LABELS[report.status])}</span>
             {readState && <span>{t(`research.reports.read.${readState}`)}</span>}
             {report.latest_read_at && (

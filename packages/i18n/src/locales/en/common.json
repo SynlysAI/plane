@@ -2125,6 +2125,7 @@
       "description": "Weekly and monthly reports with review workflow.",
       "detail_title": "Report",
       "detail_description": "Status, visibility, review history and actions.",
+      "author": "Author: {name}",
       "create_title": "Create periodic report",
       "create_hint": "After creation, continue in the report detail to edit the body, add attachments and submit it for review.",
       "template": "Template",

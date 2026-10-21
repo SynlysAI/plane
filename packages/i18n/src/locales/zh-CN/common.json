@@ -2150,6 +2150,7 @@
       "description": "周报与月报的提交与验收。",
       "detail_title": "报告详情",
       "detail_description": "状态、可见级别、审核历史与操作。",
+      "author": "撰写人：{name}",
       "create_title": "新建周期报告",
       "create_hint": "创建后将进入报告详情，可继续编辑正文、添加附件并提交审核。",
       "template": "模板",
