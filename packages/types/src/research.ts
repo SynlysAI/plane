@@ -447,6 +447,7 @@ export type TResearchTodoNextAction =
   | "READ"
   | "REVIEW"
   | "SUBMIT"
+  | "ASSIGN"
   | "RETURN"
   | "ACCEPT"
   | "WITHDRAW"
@@ -779,13 +780,6 @@ export type TResearchIdentity = {
   };
   module_enabled: boolean;
   workspace_enabled: boolean;
-  navigation?: {
-    administrative: boolean;
-    approvals: boolean;
-    management: boolean;
-    workspace_settings: boolean;
-    administrative_organizations: boolean;
-  };
   research_ia_v2?: boolean;
   sections: {
     org: boolean;

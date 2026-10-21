@@ -20,6 +20,7 @@ import type {
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
+import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 
 export class IssueService extends APIService {
   private serviceType: TIssueServiceType;
@@ -225,7 +226,10 @@ export class IssueService extends APIService {
 
   async patchIssue(workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>): Promise<any> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/`, data)
-      .then((response) => response?.data)
+      .then((response) => {
+        notifyWorkspaceTodosUpdated();
+        return response?.data;
+      })
       .catch((error) => {
         throw error?.response?.data;
       });

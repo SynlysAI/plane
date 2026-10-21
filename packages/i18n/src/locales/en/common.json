@@ -1167,6 +1167,7 @@
       "next_read": "Read",
       "next_review": "Review",
       "next_submit": "Submit",
+      "next_assign": "Assign",
       "next_return": "Return",
       "next_accept": "Accept",
       "next_withdraw": "Withdraw",

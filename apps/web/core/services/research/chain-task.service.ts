@@ -16,6 +16,7 @@ import type {
   TCommentAttachmentLimits,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
+import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 
 type TResearchEnvelope<T> = {
   success: boolean;
@@ -309,7 +310,10 @@ export class ResearchChainTaskService extends APIService {
       ...payload,
       request_id: request_id(),
     })
-      .then((response) => unwrap<TResearchChainNodeTask>(response?.data))
+      .then((response) => {
+        notifyWorkspaceTodosUpdated();
+        return unwrap<TResearchChainNodeTask>(response?.data);
+      })
       .catch((error) => {
         throw error?.response?.data ?? error;
       });
@@ -323,7 +327,10 @@ export class ResearchChainTaskService extends APIService {
     payload: TResearchChainNodeTaskUpdatePayload
   ) {
     return this.patch(researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId), payload)
-      .then((response) => unwrap<TResearchChainNodeTask>(response?.data))
+      .then((response) => {
+        notifyWorkspaceTodosUpdated();
+        return unwrap<TResearchChainNodeTask>(response?.data);
+      })
       .catch((error) => {
         throw error?.response?.data ?? error;
       });
@@ -341,7 +348,10 @@ export class ResearchChainTaskService extends APIService {
       ...payload,
       request_id: request_id(),
     })
-      .then((response) => unwrap<TResearchChainNodeTask>(response?.data))
+      .then((response) => {
+        notifyWorkspaceTodosUpdated();
+        return unwrap<TResearchChainNodeTask>(response?.data);
+      })
       .catch((error) => {
         throw error?.response?.data ?? error;
       });

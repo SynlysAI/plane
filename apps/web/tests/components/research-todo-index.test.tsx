@@ -201,6 +201,14 @@ it("uses server-computed next actions without rendering trace payloads", async (
         next_action: "REVIEW",
         href: "/lab/research/reports/report-review",
       }),
+      todoEnvelope({
+        id: "CHAIN_TASK:task-unassigned",
+        source: "CHAIN_TASK",
+        object_id: "task-unassigned",
+        title: "未指派节点任务",
+        next_action: "ASSIGN",
+        href: "/lab/research/chains/chain-1?node=node-1&task=task-unassigned",
+      }),
     ])
   );
 
@@ -210,6 +218,7 @@ it("uses server-computed next actions without rendering trace payloads", async (
   expect(container.textContent).toContain("周报待审阅 · 2026-W39");
   expect(container.textContent).toContain("阅读");
   expect(container.textContent).toContain("审阅");
+  expect(container.textContent).toContain("指派");
   expect(container.textContent).not.toContain("secret-trace-id");
   const controls = [...container.querySelectorAll("button")].map((item) => item.textContent ?? "");
   expect(controls.every((label) => ["刷新待办", "我可处理", "我发起", "全部可见"].includes(label))).toBe(true);
@@ -327,4 +336,39 @@ it("refreshes the aggregate projection without adding source requests", async ()
   expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
   expect(container.textContent).toContain("刷新后待办");
   expect(container.textContent).not.toContain("刷新前待办");
+});
+
+it("refreshes from the server after a workspace todo update event", async () => {
+  mocks.getResearchTodos
+    .mockResolvedValueOnce(todoList([todoEnvelope({ title: "事件前待办" })]))
+    .mockResolvedValueOnce(todoList([todoEnvelope({ title: "事件后待办" })]));
+
+  await renderTodo("/lab");
+  expect(container.textContent).toContain("事件前待办");
+
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent("workspace-todos-updated"));
+  });
+
+  expect(mocks.getResearchTodos).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain("事件后待办");
+  expect(container.textContent).not.toContain("事件前待办");
+});
+
+it("ignores a stale response after the selected scope changes", async () => {
+  let resolveStale!: (value: unknown) => void;
+  mocks.getResearchTodos.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveStale = resolve;
+      })
+  );
+  mocks.getResearchTodos.mockResolvedValueOnce(todoList([todoEnvelope({ title: "当前范围待办" })]));
+
+  await renderTodo("/lab?todo_scope=to_me");
+  await act(async () => button("全部可见").click());
+  await act(async () => resolveStale(todoList([todoEnvelope({ title: "旧范围待办" })])));
+
+  expect(container.textContent).toContain("当前范围待办");
+  expect(container.textContent).not.toContain("旧范围待办");
 });

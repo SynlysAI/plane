@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
@@ -47,6 +47,7 @@ const NEXT_ACTION_LABEL_KEYS: Record<TResearchTodoNextAction, string> = {
   READ: "research.todo.next_read",
   REVIEW: "research.todo.next_review",
   SUBMIT: "research.todo.next_submit",
+  ASSIGN: "research.todo.next_assign",
   RETURN: "research.todo.next_return",
   ACCEPT: "research.todo.next_accept",
   WITHDRAW: "research.todo.next_withdraw",
@@ -155,8 +156,10 @@ export function ResearchTodoEnvelopeList({
   const [state, setState] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [errorKind, setErrorKind] = useState<TodoErrorKind | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const requestVersion = useRef(0);
 
   const load = useCallback(async () => {
+    const request = ++requestVersion.current;
     setState("loading");
     try {
       const payload = await todoService.getResearchTodos(workspaceSlug, {
@@ -164,12 +167,14 @@ export function ResearchTodoEnvelopeList({
         limit: TODO_REQUEST_LIMIT,
       });
       const normalized = payload.results.filter((todo) => withinPeriod(todo, periodDays, Date.now()));
+      if (request !== requestVersion.current) return;
       setTodos(normalized);
       setDegradedSources(payload.degraded_sources);
       setTotalCount(payload.total_count ?? normalized.length);
       setErrorKind(null);
       setState(normalized.length ? "ready" : "empty");
     } catch (error) {
+      if (request !== requestVersion.current) return;
       setTodos([]);
       setDegradedSources([]);
       setTotalCount(0);
@@ -180,6 +185,12 @@ export function ResearchTodoEnvelopeList({
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    const refresh = () => void load();
+    window.addEventListener("workspace-todos-updated", refresh);
+    return () => window.removeEventListener("workspace-todos-updated", refresh);
   }, [load]);
 
   const changeScope = useCallback(
