@@ -23,7 +23,11 @@ from plane.db.models import (
     ProjectMember,
     ResearchChainNodeTask,
     ResearchPaperReview,
+    ResearchAgentRunEvent,
+    ResearchAgentSession,
+    ResearchContextGrant,
     ResearchStageInstance,
+    StageReview,
     ReviewerRole,
     StageReviewerAssignment,
     StageType,
@@ -54,6 +58,22 @@ def _task(env, status, *, due=None, title="节点任务"):
         assigned_by=env["student"],
         due_at=due,
         request_id=f"todo-task-{uuid4()}",
+        payload_hash=_digest(uuid4()),
+    )
+
+
+def _owned_task(env, status, *, assignee=None, assigned_by=None, created_by=None, title="责任任务"):
+    """Create one task with explicit initiator and owner audit fields."""
+    return ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=env["paper_node"],
+        title=title,
+        status=status,
+        assignee=assignee,
+        assigned_by=assigned_by,
+        created_by=created_by,
+        request_id=f"todo-responsibility-{uuid4()}",
         payload_hash=_digest(uuid4()),
     )
 
@@ -241,6 +261,186 @@ class TestResearchTodoScopesAndAcl:
         }
         assert all(item["schema_version"] == "research-todo.v2" for item in _items(payload))
 
+    def test_chain_task_reassignment_moves_the_submit_todo(self, env):
+        task = _owned_task(
+            env,
+            ResearchChainNodeTask.Status.ASSIGNED,
+            assignee=env["group_member"],
+            assigned_by=env["student"],
+            created_by=env["student"],
+        )
+
+        before_group = _payload(_get(env, "member", "?scope=to_me"))
+        before_advisor = _payload(_get(env, "advisor", "?scope=to_me"))
+        assert str(task.id) in {item["object_id"] for item in before_group["results"] if item["source"] == "CHAIN_TASK"}
+        assert str(task.id) not in {
+            item["object_id"] for item in before_advisor["results"] if item["source"] == "CHAIN_TASK"
+        }
+
+        task.assignee = env["advisor"]
+        task.save(update_fields=["assignee", "updated_at"])
+        after_group = _payload(_get(env, "member", "?scope=to_me"))
+        after_advisor = _payload(_get(env, "advisor", "?scope=to_me"))
+
+        assert str(task.id) not in {
+            item["object_id"] for item in after_group["results"] if item["source"] == "CHAIN_TASK"
+        }
+        assert str(task.id) in {
+            item["object_id"] for item in after_advisor["results"] if item["source"] == "CHAIN_TASK"
+        }
+
+    def test_unassigned_or_invalid_chain_task_only_todos_its_initiator(self, env):
+        unassigned = _owned_task(
+            env,
+            ResearchChainNodeTask.Status.DRAFT,
+            assigned_by=env["student"],
+            created_by=env["student"],
+        )
+        invalid_owner = _owned_task(
+            env,
+            ResearchChainNodeTask.Status.DRAFT,
+            assignee=env["guest"],
+            assigned_by=env["student"],
+            created_by=env["student"],
+        )
+
+        student_items = _items(_payload(_get(env, "student", "?scope=to_me")))
+        member_items = _items(_payload(_get(env, "member", "?scope=to_me")))
+        student_tasks = {item["object_id"]: item for item in student_items if item["source"] == "CHAIN_TASK"}
+        member_tasks = {item["object_id"] for item in member_items if item["source"] == "CHAIN_TASK"}
+
+        assert student_tasks[str(unassigned.id)]["next_action"] == "ASSIGN"
+        assert student_tasks[str(invalid_owner.id)]["next_action"] == "ASSIGN"
+        assert {str(unassigned.id), str(invalid_owner.id)}.isdisjoint(member_tasks)
+
+    def test_submitted_chain_task_only_todos_qualified_reviewers(self, env):
+        student_items = _items(_payload(_get(env, "student", "?scope=to_me")))
+        member_items = _items(_payload(_get(env, "member", "?scope=to_me")))
+        advisor_items = _items(_payload(_get(env, "advisor", "?scope=to_me")))
+        task_id = str(env["submitted_task"].id)
+
+        assert task_id not in {item["object_id"] for item in student_items if item["source"] == "CHAIN_TASK"}
+        assert task_id not in {item["object_id"] for item in member_items if item["source"] == "CHAIN_TASK"}
+        assert task_id in {item["object_id"] for item in advisor_items if item["source"] == "CHAIN_TASK"}
+
+    def test_mine_uses_actual_creator_and_historical_fallbacks(self, env):
+        creator_task = _owned_task(
+            env,
+            ResearchChainNodeTask.Status.ASSIGNED,
+            assignee=env["group_member"],
+            assigned_by=env["student"],
+        )
+        ResearchChainNodeTask.objects.filter(pk=creator_task.pk).update(created_by=env["advisor"])
+        fallback_task = _owned_task(
+            env,
+            ResearchChainNodeTask.Status.ASSIGNED,
+            assignee=env["group_member"],
+            assigned_by=env["student"],
+        )
+        ResearchChainNodeTask.objects.filter(pk=fallback_task.pk).update(created_by=None)
+        owner_fallback = _owned_task(
+            env,
+            ResearchChainNodeTask.Status.ASSIGNED,
+            assignee=env["group_member"],
+        )
+        ResearchChainNodeTask.objects.filter(pk=owner_fallback.pk).update(created_by=None, assigned_by=None)
+
+        student_items = {item["object_id"] for item in _items(_payload(_get(env, "student", "?scope=mine")))}
+        advisor_items = {item["object_id"] for item in _items(_payload(_get(env, "advisor", "?scope=mine")))}
+
+        assert str(creator_task.id) not in student_items
+        assert str(creator_task.id) in advisor_items
+        assert str(fallback_task.id) in student_items
+        assert str(owner_fallback.id) in student_items
+
+    def test_non_responsible_visible_users_do_not_receive_other_research_todos(self, env):
+        member_items = _items(_payload(_get(env, "member", "?scope=to_me")))
+        sources = {item["source"] for item in member_items}
+
+        assert "REPORT" not in sources
+        assert "PAPER_REVIEW" not in sources
+        assert "STAGE_REVIEW" not in sources
+        assert "OFFICE_APPROVAL" not in sources
+
+    def test_report_paper_and_stage_owners_or_current_reviewers_own_todos(self, env):
+        student_items = {
+            (item["source"], item["object_id"]): item for item in _items(_payload(_get(env, "student", "?scope=to_me")))
+        }
+        advisor_items = {
+            (item["source"], item["object_id"]): item for item in _items(_payload(_get(env, "advisor", "?scope=to_me")))
+        }
+
+        assert ("REPORT", str(env["revision_report"].id)) in student_items
+        assert ("REPORT", str(env["report"].id)) not in student_items
+        assert ("REPORT", str(env["report"].id)) in advisor_items
+        assert ("PAPER_REVIEW", str(env["returned_paper"].id)) in student_items
+        assert ("PAPER_REVIEW", str(env["waiting_paper"].id)) not in student_items
+        assert ("PAPER_REVIEW", str(env["waiting_paper"].id)) in advisor_items
+        assert ("STAGE_REVIEW", str(env["stage"].id)) not in student_items
+        assert ("STAGE_REVIEW", str(env["stage"].id)) in advisor_items
+
+    def test_completed_stage_reviewer_keeps_history_access_without_a_todo(self, env):
+        StageReview.objects.create(
+            stage_instance=env["stage"],
+            reviewer=env["advisor"],
+            reviewer_role=ReviewerRole.DIRECT_ADVISOR,
+            recommendation=StageReview.Recommendation.PASS,
+            submitted_at=timezone.now(),
+        )
+
+        advisor_items = _items(_payload(_get(env, "advisor", "?scope=to_me")))
+
+        assert str(env["stage"].id) not in {
+            item["object_id"] for item in advisor_items if item["source"] == "STAGE_REVIEW"
+        }
+
+    def test_agent_approval_todo_is_limited_to_non_review_initiator(self, env):
+        env["workspace"].research_setting.research_agent_enabled = True
+        env["workspace"].research_setting.save(update_fields=["research_agent_enabled", "updated_at"])
+        grant = ResearchContextGrant.objects.create(
+            workspace=env["workspace"],
+            user=env["student"],
+            project=env["project"],
+            chain_node=env["paper_node"],
+            scope_kind="OWNER",
+            context_hash=_digest("context"),
+            token_hash=_digest("token"),
+            expires_at=timezone.now() + timedelta(hours=1),
+            request_id=f"todo-agent-grant-{uuid4()}",
+        )
+        session = ResearchAgentSession.objects.create(
+            workspace=env["workspace"],
+            user=env["student"],
+            project=env["project"],
+            chain_node=env["paper_node"],
+            context_grant=grant,
+            status=ResearchAgentSession.Status.WAITING_APPROVAL,
+            request_id=f"todo-agent-session-{uuid4()}",
+            payload_hash=_digest("session"),
+        )
+        ResearchAgentRunEvent.objects.create(
+            session=session,
+            run_id=session.run_id,
+            seq=1,
+            event_type="TOOL_CALL",
+            payload={"tool_call_id": "tool-1", "input_summary": "检索文献"},
+            request_id=f"todo-agent-event-{uuid4()}",
+        )
+
+        student_items = _items(_payload(_get(env, "student", "?scope=to_me")))
+        member_items = _items(_payload(_get(env, "member", "?scope=to_me")))
+        assert str(session.session_id) in {
+            item["object_id"] for item in student_items if item["source"] == "AGENT_APPROVAL"
+        }
+        assert str(session.session_id) not in {
+            item["object_id"] for item in member_items if item["source"] == "AGENT_APPROVAL"
+        }
+
+        ResearchContextGrant.objects.filter(pk=grant.pk).update(scope_kind="REVIEW")
+        review_items = _items(_payload(_get(env, "student", "?scope=to_me")))
+        assert str(session.session_id) not in {
+            item["object_id"] for item in review_items if item["source"] == "AGENT_APPROVAL"
+        }
 
     def test_to_me_returns_actionable_items_from_server_capabilities(self, env):
         payload = _payload(_get(env, "advisor", "?scope=to_me"))
@@ -310,9 +510,7 @@ class TestResearchTodoScopesAndAcl:
 
         expired_response = _get(env, "member", "?scope=to_me")
         invalid_project_member = _payload(
-            descendant_client.get(
-                f"/api/research/workspaces/{env['workspace'].slug}/research-todos/?scope=to_me"
-            )
+            descendant_client.get(f"/api/research/workspaces/{env['workspace'].slug}/research-todos/?scope=to_me")
         )
 
         assert expired_response.status_code == 403
@@ -379,8 +577,6 @@ class TestResearchTodoProjectionContract:
     def test_urgency_is_projected_and_overdue_is_textually_unambiguous(self, env):
         payload = _payload(_get(env, "member", "?scope=visible"))
         items = {item["object_id"]: item for item in _items(payload)}
-        student_payload = _payload(_get(env, "student", "?scope=to_me"))
-        student_items = {item["object_id"]: item for item in _items(student_payload)}
 
         assert items[str(env["submitted_task"].id)]["urgency"] == "OVERDUE"
         assert items[str(env["assigned_task"].id)]["urgency"] == "DUE_SOON"

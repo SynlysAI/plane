@@ -321,6 +321,19 @@ def list_assignable_users(workspace, chain, actor) -> list[dict]:
     return _candidate_items(workspace, chain)
 
 
+def chain_assignable_user_ids(workspace, chain) -> set[UUID]:
+    """Return the server-side assignable-user ID set for one Chain.
+
+    Args:
+        workspace: Workspace that must own the chain.
+        chain: Research chain whose assignable-user boundary is resolved.
+
+    Returns:
+        A set of user IDs that can currently own tasks in the chain.
+    """
+    return {UUID(item["user_id"]) for item in _candidate_items(workspace, chain)}
+
+
 def validate_assignable_user(workspace, chain, user_id) -> bool:
     """Validate that a user is in a chain's server-side assignee candidate set.
 
@@ -337,7 +350,7 @@ def validate_assignable_user(workspace, chain, user_id) -> bool:
     except (TypeError, ValueError):
         return False
 
-    return str(parsed_user_id) in {item["user_id"] for item in _candidate_items(workspace, chain)}
+    return parsed_user_id in chain_assignable_user_ids(workspace, chain)
 
 
 def actor_can_review_task(workspace, task, actor) -> bool:

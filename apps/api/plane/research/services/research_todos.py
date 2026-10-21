@@ -33,6 +33,7 @@ from plane.research.services.chain_tasks import (
     actor_can_review_task,
     actor_can_submit_task,
     chain_writer,
+    chain_assignable_user_ids,
 )
 from plane.research.services.paper_review import (
     actor_can_review_paper,
@@ -52,9 +53,6 @@ logger = logging.getLogger("plane.api")
 
 TODO_SCHEMA_VERSION = "research-todo.v2"
 TODO_SCOPES = frozenset(("to_me", "mine", "visible"))
-ACTIONABLE_ACTIONS = frozenset(
-    ("read", "submit", "review", "return", "accept", "withdraw", "complete", "cancel", "approve", "reject", "revise")
-)
 
 
 class ResearchTodoUrgency(TextChoices):
@@ -186,19 +184,15 @@ def _todo(
     }
 
 
-def _has_action(todo):
-    """Return whether the current actor has an executable domain action."""
-    return any(
-        decision.get("allowed") is True
-        for action, decision in todo["capabilities"]["actions"].items()
-        if action in ACTIONABLE_ACTIONS
-    )
-
-
 def _chain_feature_enabled(workspace):
-    setting = getattr(workspace, "research_setting", None)
     from plane.research.utils.settings import workspace_research_enabled
+
     return workspace_research_enabled(workspace)
+
+
+def _chain_task_initiator(task):
+    """Resolve the actual task initiator with historical-data fallbacks."""
+    return task.created_by or task.assigned_by or task.chain.owner
 
 
 def collect_chain_task_todos(workspace, user, scope):
@@ -234,18 +228,24 @@ def collect_chain_task_todos(workspace, user, scope):
             "chain__project",
             "chain__owner",
             "node",
+            "created_by",
             "assignee",
             "assigned_by",
         )
         .order_by("-updated_at", "-created_at")
     )
     result = []
+    assignable_ids_by_chain = {}
     for task in tasks:
         profile = getattr(task.chain.project, "research_profile", None)
         if profile is None or not can_read_project_research_metadata(workspace, user, profile):
             continue
-        if scope == "mine" and task.assigned_by_id != user.id and task.chain.owner_id != user.id:
+        initiator = _chain_task_initiator(task)
+        if scope == "mine" and initiator.id != user.id:
             continue
+        if task.chain_id not in assignable_ids_by_chain:
+            assignable_ids_by_chain[task.chain_id] = chain_assignable_user_ids(workspace, task.chain)
+        assignee_is_valid = task.assignee_id is not None and task.assignee_id in assignable_ids_by_chain[task.chain_id]
         can_submit = actor_can_submit_task(workspace, task, user)
         can_review = actor_can_review_task(workspace, task, user)
         can_cancel = actor_can_cancel_task(workspace, task, user)
@@ -265,35 +265,26 @@ def collect_chain_task_todos(workspace, user, scope):
             "complete": can_review and task.status == ResearchChainNodeTask.Status.SUBMITTED,
             "cancel": can_cancel and editable,
         }
-        if can_submit:
+        if task.status == ResearchChainNodeTask.Status.SUBMITTED:
+            next_action = "REVIEW"
+        elif assignee_is_valid:
             next_action = "SUBMIT"
-        elif can_review and task.status == ResearchChainNodeTask.Status.SUBMITTED:
-            next_action = "REVIEW"
-        elif decisions["return"]:
-            next_action = "RETURN"
-        elif decisions["complete"]:
-            next_action = "COMPLETE"
-        elif decisions["cancel"]:
-            next_action = "CANCEL"
-        elif task.status == ResearchChainNodeTask.Status.SUBMITTED:
-            next_action = "REVIEW"
         else:
-            next_action = "SUBMIT"
+            next_action = "ASSIGN"
         handling = {
             ResearchChainNodeTask.Status.DRAFT: "TODO",
             ResearchChainNodeTask.Status.ASSIGNED: "TODO",
             ResearchChainNodeTask.Status.SUBMITTED: "IN_PROGRESS",
             ResearchChainNodeTask.Status.NEEDS_REVISION: "RETURNED",
         }[task.status]
-        requester = task.assigned_by or task.chain.owner
-        assignees = [task.assignee] if task.assignee is not None else []
+        assignees = [task.assignee] if task.assignee is not None and assignee_is_valid else []
         todo = _todo(
             source="CHAIN_TASK",
             project_id=task.chain.project_id,
             object_id=task.id,
             title=task.title,
             context=f"{task.chain.project.name} · {task.node.title}",
-            requester=_participant(requester),
+            requester=_participant(initiator),
             assignees=_participants(assignees),
             business_status=task.status,
             handling_status="BLOCKED" if not assignees else handling,
@@ -312,7 +303,11 @@ def collect_chain_task_todos(workspace, user, scope):
             },
             updated_at=task.updated_at,
         )
-        if scope != "to_me" or _has_action(todo):
+        submitted_to_me = task.status == ResearchChainNodeTask.Status.SUBMITTED and can_review
+        editable_to_me = editable and (
+            (assignee_is_valid and task.assignee_id == user.id) or (not assignee_is_valid and initiator.id == user.id)
+        )
+        if scope != "to_me" or submitted_to_me or editable_to_me:
             result.append(todo)
     return result
 
@@ -366,9 +361,12 @@ def collect_report_todos(workspace, user, scope):
         queryset = visible_reports_queryset(queryset, context)
     result = []
     for report in queryset:
+        report_handlers = _report_assignees(report)
+        is_formal_reviewer = any(handler.id == user.id for handler in report_handlers)
         snapshot_version = _latest_snapshot_version(report)
         read_allowed = (
             report.status == PeriodicReport.Status.SUBMITTED
+            and is_formal_reviewer
             and snapshot_version is not None
             and not report.read_receipts.filter(
                 reader=user,
@@ -429,7 +427,16 @@ def collect_report_todos(workspace, user, scope):
             trace_ref={"resource_type": "report", "resource_id": str(report.id)},
             updated_at=report.updated_at,
         )
-        if scope != "to_me" or _has_action(todo):
+        owner_pending = (
+            report.status
+            in (
+                PeriodicReport.Status.DRAFT,
+                PeriodicReport.Status.NEEDS_REVISION,
+            )
+            and report.owner_id == user.id
+        )
+        reviewer_pending = report.status == PeriodicReport.Status.SUBMITTED and is_formal_reviewer
+        if scope != "to_me" or owner_pending or reviewer_pending:
             result.append(todo)
     return result
 
@@ -516,7 +523,9 @@ def collect_paper_review_todos(workspace, user, scope):
             },
             updated_at=review.updated_at,
         )
-        if scope != "to_me" or _has_action(todo):
+        owner_pending = open_for_submit and review.owner_id == user.id
+        reviewer_pending = review.status == ResearchPaperReview.Status.WAITING_REVIEW and can_review
+        if scope != "to_me" or owner_pending or reviewer_pending:
             result.append(todo)
     return result
 
@@ -592,7 +601,7 @@ def collect_stage_review_todos(workspace, user, scope):
             trace_ref={"resource_type": "research_stage_instance", "resource_id": str(stage.id)},
             updated_at=stage.updated_at,
         )
-        if scope != "to_me" or _has_action(todo):
+        if scope != "to_me" or can_review:
             result.append(todo)
     return result
 
@@ -630,9 +639,7 @@ def collect_agent_approval_todos(workspace, user, scope):
         )
         if not visible or (scope == "mine" and session.user_id != user.id):
             continue
-        can_decide = (
-            chain_writer(workspace, user, session.chain_node.chain) and session.context_grant.scope_kind != "REVIEW"
-        )
+        can_decide = session.user_id == user.id and session.context_grant.scope_kind != "REVIEW"
         latest_event = session.run_events.filter(event_type__in=("TOOL_CALL", "AI_ACTION")).order_by("-seq").first()
         payload = latest_event.payload if latest_event is not None else {}
         summary = next(
@@ -672,7 +679,7 @@ def collect_agent_approval_todos(workspace, user, scope):
             },
             updated_at=session.updated_at,
         )
-        if scope != "to_me" or _has_action(todo):
+        if scope != "to_me" or can_decide:
             result.append(todo)
     return result
 
@@ -716,7 +723,7 @@ def collect_office_approval_todos(workspace, user, scope):
             trace_ref={"resource_type": "approval_request", "resource_id": str(request.id)},
             updated_at=request.updated_at,
         )
-        if scope != "to_me" or _has_action(todo):
+        if scope != "to_me" or can_decide:
             result.append(todo)
     return result
 

@@ -139,7 +139,7 @@ def synlora_orchestration(env, monkeypatch):
         def resume(self, *, run_id, approved, request_id):
             return None
 
-    monkeypatch.setattr(agent_view, "resolve_synlora_runtime", lambda workspace: FakeSynloraRuntime())
+    monkeypatch.setattr(agent_view, "resolve_synlora_runtime", lambda workspace, **_kwargs: FakeSynloraRuntime())
 
 
 def agent_url(env, suffix=""):
@@ -344,8 +344,7 @@ def test_agent_artifact_and_chain_event_are_idempotent(env):
     assert projected[0].payload["remote_seq"] == 10
     assert ResearchAgentRunEvent.objects.filter(run_id=session["run_id"], payload__remote_seq=10).count() == 1
     assert (
-        ResearchChainEvent.objects.filter(request_id=f"chain:run:{session_record.synlora_session_id}:10").count()
-        == 1
+        ResearchChainEvent.objects.filter(request_id=f"chain:run:{session_record.synlora_session_id}:10").count() == 1
     )
 
     event_request = {
@@ -558,6 +557,22 @@ def test_agent_approval_queue_exposes_only_operable_waiting_sessions(env):
     assert other_queue.status_code == 200
     assert other_queue.json()["count"] == 0
 
+    other_decision = env["other_client"].post(
+        agent_url(env, f"runs/{session['run_id']}/approvals/"),
+        {
+            "request_id": f"approval-{uuid4().hex}",
+            "decision": "APPROVED",
+            "tool_call_id": "tool-queue-1",
+        },
+        format="json",
+    )
+    assert other_decision.status_code in (403, 404)
+    assert other_decision.json()["error_code"] in (
+        "research_permission_denied",
+        "research_agent_session_not_found",
+        "AGENT_SESSION_NOT_FOUND",
+    )
+
     decision = env["client"].post(
         agent_url(env, f"runs/{session['run_id']}/approvals/"),
         {
@@ -570,6 +585,27 @@ def test_agent_approval_queue_exposes_only_operable_waiting_sessions(env):
     )
     assert decision.status_code == 200
     assert decision.json()["event"]["payload"]["reason"] == "outside the approved scope"
+
+
+def test_review_agent_initiator_cannot_decide_tool_approval(env):
+    """REVIEW scope keeps read/comment/draft only even for the session initiator."""
+    session = _create_agent_session(env)
+    record = ResearchAgentSession.objects.select_related("context_grant").get(session_id=session["session_id"])
+    record.status = ResearchAgentSession.Status.WAITING_APPROVAL
+    record.save(update_fields=["status", "updated_at"])
+    ResearchContextGrant.objects.filter(pk=record.context_grant_id).update(scope_kind="REVIEW")
+
+    queue = env["client"].get(agent_url(env, "approvals/"))
+    decision = env["client"].post(
+        agent_url(env, f"runs/{session['run_id']}/approvals/"),
+        {"request_id": f"approval-{uuid4().hex}", "decision": "APPROVED", "tool_call_id": "tool-review"},
+        format="json",
+    )
+
+    assert queue.status_code == 200
+    assert queue.json()["count"] == 0
+    assert decision.status_code == 403
+    assert decision.json()["error_code"] == "research_permission_denied"
 
 
 def test_agent_events_are_isolated_between_old_and_new_sessions(env):
