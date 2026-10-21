@@ -6,15 +6,26 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.response import Response
 from plane.app.views.base import BaseAPIView
 from plane.db.models import (
-    AdministrativeApprovalFlow, AdministrativeOrganization, AdministrativeOrganizationMember,
-    AdministrativeProjectApprovalSetting, Workspace, WorkspaceMember, User,
+    AdministrativeApprovalFlow,
+    AdministrativeOrganization,
+    AdministrativeOrganizationMember,
+    AdministrativeProjectApprovalSetting,
+    Workspace,
+    WorkspaceMember,
+    User,
 )
 from plane.utils.workspace_access import user_can_access_workspace
 from plane.utils.administrative_projects import visible_administrative_projects
 from plane.utils.administrative_projects import user_can_manage_administrative_organization
 from plane.utils.administrative_approvals import (
-    act_on_request, approver_options, can_manage_project, flow_payload, project_role, request_payload,
-    related_requests, save_flow, submit_request, visible_requests,
+    approver_options,
+    can_manage_project,
+    flow_payload,
+    project_role,
+    request_payload,
+    related_requests,
+    save_flow,
+    visible_requests,
 )
 
 
@@ -23,16 +34,20 @@ class AdministrativeBaseEndpoint(BaseAPIView):
         workspace = Workspace.objects.filter(slug=slug).first()
         if workspace is None:
             raise NotFound()
-        if not user_can_access_workspace(request.user, workspace_slug=slug) or not WorkspaceMember.objects.filter(
-            workspace=workspace, member=request.user, is_active=True
-        ).exists():
+        if (
+            not user_can_access_workspace(request.user, workspace_slug=slug)
+            or not WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True).exists()
+        ):
             raise PermissionDenied()
         return workspace
 
     def project(self, request, slug, project_id):
-        project = visible_administrative_projects(request.user, slug).filter(pk=project_id).select_related(
-            "workspace", "administrative_organization"
-        ).first()
+        project = (
+            visible_administrative_projects(request.user, slug)
+            .filter(pk=project_id)
+            .select_related("workspace", "administrative_organization")
+            .first()
+        )
         if project is None:
             raise NotFound("行政项目不存在或无权访问。")
         return project
@@ -46,9 +61,13 @@ class AdministrativeFlowEndpoint(AdministrativeBaseEndpoint):
             workspace=workspace, member=request.user, is_active=True
         ).values("organization_id")
         flows = AdministrativeApprovalFlow.objects.filter(workspace=workspace, is_active=True, is_template=True)
-        if not WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True, role=20).exists():
-            flows = flows.filter(Q(organization_id__in=organization_ids) | Q(
-                organization_id__in=visible.values("administrative_organization_id")))
+        if not WorkspaceMember.objects.filter(
+            workspace=workspace, member=request.user, is_active=True, role=20
+        ).exists():
+            flows = flows.filter(
+                Q(organization_id__in=organization_ids)
+                | Q(organization_id__in=visible.values("administrative_organization_id"))
+            )
         if request.GET.get("organization_id"):
             flows = flows.filter(organization_id=request.GET["organization_id"])
         return Response({"results": [flow_payload(flow) for flow in flows.prefetch_related("steps").order_by("name")]})
@@ -66,10 +85,16 @@ class AdministrativeFlowEndpoint(AdministrativeBaseEndpoint):
 class AdministrativeFlowDetailEndpoint(AdministrativeBaseEndpoint):
     def patch(self, request, slug, flow_id):
         workspace = self.workspace(request, slug)
-        flow = AdministrativeApprovalFlow.objects.filter(pk=flow_id, workspace=workspace, is_template=True).select_related("organization").first()
+        flow = (
+            AdministrativeApprovalFlow.objects.filter(pk=flow_id, workspace=workspace, is_template=True)
+            .select_related("organization")
+            .first()
+        )
         if flow is None:
             raise NotFound()
-        return Response(flow_payload(save_flow(workspace, request.user, flow.organization, request.data, original=flow)))
+        return Response(
+            flow_payload(save_flow(workspace, request.user, flow.organization, request.data, original=flow))
+        )
 
 
 class AdministrativeApproverOptionsEndpoint(AdministrativeBaseEndpoint):
@@ -81,15 +106,23 @@ class AdministrativeApproverOptionsEndpoint(AdministrativeBaseEndpoint):
         if not user_can_manage_administrative_organization(request.user, slug, organization_id):
             raise PermissionDenied()
         users = User.objects.filter(
-            member_workspace__workspace=workspace, member_workspace__is_active=True,
-            member_workspace__deleted_at__isnull=True, is_active=True,
+            member_workspace__workspace=workspace,
+            member_workspace__is_active=True,
+            member_workspace__deleted_at__isnull=True,
+            is_active=True,
         )
         if not organization.is_default:
-            users = users.filter(id__in=AdministrativeOrganizationMember.objects.filter(
-                organization=organization, is_active=True
-            ).values("member_id"))
-        return Response([{"id": str(user.id), "name": user.display_name or user.email, "email": user.email}
-                         for user in users.distinct().order_by("display_name", "id")])
+            users = users.filter(
+                id__in=AdministrativeOrganizationMember.objects.filter(
+                    organization=organization, is_active=True
+                ).values("member_id")
+            )
+        return Response(
+            [
+                {"id": str(user.id), "name": user.display_name or user.email, "email": user.email}
+                for user in users.distinct().order_by("display_name", "id")
+            ]
+        )
 
 
 class AdministrativeProjectApprovalEndpoint(AdministrativeBaseEndpoint):
@@ -98,12 +131,22 @@ class AdministrativeProjectApprovalEndpoint(AdministrativeBaseEndpoint):
         project = self.project(request, slug, project_id)
         setting = AdministrativeProjectApprovalSetting.objects.filter(project=project).select_related("flow").first()
         can_submit = (project_role(request.user, project) or 0) >= 15 and not project.archived_at
-        return Response({"flow_id": str(setting.flow_id) if setting else None,
-                         "can_manage": can_manage_project(request.user, project),
-                         "can_submit": can_submit,
-                         "approvers": [{"id": str(actor.id), "name": actor.display_name or actor.email}
-                                       for actor in approver_options(project)] if can_submit else [],
-                         "organization_id": str(project.administrative_organization_id) if project.administrative_organization_id else None})
+        return Response(
+            {
+                "flow_id": str(setting.flow_id) if setting else None,
+                "can_manage": can_manage_project(request.user, project),
+                "can_submit": can_submit,
+                "approvers": [
+                    {"id": str(actor.id), "name": actor.display_name or actor.email}
+                    for actor in approver_options(project)
+                ]
+                if can_submit
+                else [],
+                "organization_id": str(project.administrative_organization_id)
+                if project.administrative_organization_id
+                else None,
+            }
+        )
 
     @transaction.atomic
     def patch(self, request, slug, project_id):
@@ -112,8 +155,11 @@ class AdministrativeProjectApprovalEndpoint(AdministrativeBaseEndpoint):
         if not can_manage_project(request.user, project) or project.archived_at:
             raise PermissionDenied()
         flow = AdministrativeApprovalFlow.objects.filter(
-            pk=request.data.get("flow_id"), workspace=workspace,
-            organization_id=project.administrative_organization_id, is_active=True, is_template=True,
+            pk=request.data.get("flow_id"),
+            workspace=workspace,
+            organization_id=project.administrative_organization_id,
+            is_active=True,
+            is_template=True,
         ).first()
         if flow is None:
             raise ValidationError("请选择当前行政组织的有效审批流程。")
@@ -158,13 +204,8 @@ class AdministrativeRequestEndpoint(AdministrativeBaseEndpoint):
         return Response({"results": results})
 
     def post(self, request, slug):
-        workspace = self.workspace(request, slug)
-        project = self.project(request, slug, request.data.get("project_id"))
-        approval = submit_request(
-            workspace, request.user, project, request.data.get("issue_id"),
-            flow_id=request.data.get("flow_id"), approver_id=request.data.get("approver_id"),
-        )
-        return Response(request_payload(approval, request.user), status=201)
+        self.workspace(request, slug)
+        raise ValidationError("行政工作项审批已改为直接指派负责人后自动完成。")
 
 
 class AdministrativeRequestDetailEndpoint(AdministrativeBaseEndpoint):
@@ -183,12 +224,5 @@ class AdministrativeRequestDetailEndpoint(AdministrativeBaseEndpoint):
         return Response(request_payload(approval, request.user, history=True))
 
     def post(self, request, slug, request_id):
-        workspace = self.workspace(request, slug)
-        approval = visible_requests(workspace, request.user).filter(pk=request_id).first()
-        if approval is None:
-            raise NotFound()
-        step = request.data.get("expected_step")
-        if type(step) is not int:
-            raise ValidationError("请提供当前审批步骤。")
-        result = act_on_request(approval, request.user, request.data.get("action"), step, request.data.get("comment"))
-        return Response(request_payload(result, request.user, history=True))
+        self.workspace(request, slug)
+        raise ValidationError("行政审批历史仅供查看；请直接指定负责人完成工作项。")

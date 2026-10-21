@@ -118,40 +118,17 @@ def test_direct_grant_and_inheritance_are_merged(inherited, workspace, direct_ro
     assert project_member_roster(env["project"])[0]["membership_source"] == "ORGANIZATION"
 
 
-def test_inherited_member_can_create_assign_and_submit_approval(inherited, workspace, create_user):
+def test_inherited_member_can_create_and_assign_work_item(inherited, workspace, create_user):
+    """Inherited project members can create a directly assigned work item."""
     env = inherited
     response = env["client"].post(
         env["base"] + "issues/",
-        {
-            "name": "Office request",
-            "assignee_ids": [str(env["user"].id)],
-        },
+        {"name": "Office request", "assignee_ids": [str(env["user"].id)]},
         format="json",
     )
     assert response.status_code == 201, response.data
     issue = Issue.objects.get(pk=response.data["id"])
     assert list(issue.assignees.values_list("id", flat=True)) == [env["user"].id]
-    flow = save_flow(
-        workspace,
-        create_user,
-        env["organization"],
-        {
-            "name": "Office approval",
-            "steps": [{"approver_kind": "USER", "approver_id": str(env["user"].id)}],
-        },
-    )
-    selected = env["owner_client"].patch(env["base"] + "approval-setting/", {"flow_id": str(flow.id)}, format="json")
-    assert selected.status_code == 200, selected.data
-    approval = env["client"].post(
-        f"/api/workspaces/{workspace.slug}/administrative/approval-requests/",
-        {
-            "project_id": str(env["project"].id),
-            "issue_id": str(issue.id),
-        },
-        format="json",
-    )
-    assert approval.status_code == 201, approval.data
-    assert approval.data["can_act"] is True
 
 
 def test_outside_member_cannot_be_assigned(inherited):

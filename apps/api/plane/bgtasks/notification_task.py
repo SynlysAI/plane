@@ -288,6 +288,12 @@ def notifications(
             )
 
             issue = Issue.objects.filter(pk=issue_id).first()
+            assignment_activities = [
+                activity
+                for activity in issue_activities_created
+                if activity.get("field") == "assignees" and activity.get("new_identifier")
+            ]
+            assigned_receiver_ids = {str(activity.get("new_identifier")) for activity in assignment_activities}
 
             if subscriber:
                 # add the user to issue subscriber
@@ -306,7 +312,11 @@ def notifications(
                 assignee__in=Subquery(project_members),
             ).values_list("assignee", flat=True)
 
-            issue_subscribers = list(set(issue_subscribers) - {uuid.UUID(actor_id)})
+            issue_subscribers = list(
+                set(issue_subscribers)
+                - {uuid.UUID(actor_id)}
+                - {uuid.UUID(receiver_id) for receiver_id in assigned_receiver_ids}
+            )
 
             for subscriber in issue_subscribers:
                 if issue.created_by_id and issue.created_by_id == subscriber:
@@ -319,6 +329,10 @@ def notifications(
                 preference = UserNotificationPreference.objects.get(user_id=subscriber)
 
                 for issue_activity in issue_activities_created:
+                    # Assignment notifications are sent only to the newly assigned owner below.
+                    if issue_activity.get("field") == "assignees":
+                        continue
+
                     # If activity done in blocking then blocked by email should not go
                     if issue_activity.get("issue_detail").get("id") != issue_id:
                         continue
@@ -445,6 +459,66 @@ def notifications(
                                         ),
                                         "activity_time": issue_activity.get("created_at"),
                                     },
+                                },
+                            )
+                        )
+
+            # Direct assignment notifications go only to the newly assigned user.
+            for receiver_id in assigned_receiver_ids:
+                if receiver_id == actor_id:
+                    continue
+                preference = UserNotificationPreference.objects.get(user_id=receiver_id)
+                for issue_activity in assignment_activities:
+                    issue_payload = {
+                        "id": str(issue_id),
+                        "name": str(issue.name),
+                        "identifier": str(issue.project.identifier),
+                        "sequence_id": issue.sequence_id,
+                        "state_name": issue.state.name,
+                        "state_group": issue.state.group,
+                    }
+                    activity_payload = {
+                        "id": str(issue_activity.get("id")),
+                        "verb": str(issue_activity.get("verb")),
+                        "field": str(issue_activity.get("field")),
+                        "actor": str(issue_activity.get("actor_id")),
+                        "new_value": str(issue_activity.get("new_value")),
+                        "old_value": str(issue_activity.get("old_value")),
+                        "old_identifier": str(issue_activity.get("old_identifier"))
+                        if issue_activity.get("old_identifier")
+                        else None,
+                        "new_identifier": str(issue_activity.get("new_identifier"))
+                        if issue_activity.get("new_identifier")
+                        else None,
+                    }
+                    bulk_notifications.append(
+                        Notification(
+                            workspace=project.workspace,
+                            sender="in_app:issue_activities:assigned",
+                            triggered_by_id=actor_id,
+                            receiver_id=receiver_id,
+                            entity_identifier=issue_id,
+                            entity_name="issue",
+                            project=project,
+                            title=issue_activity.get("comment"),
+                            data={"issue": issue_payload, "issue_activity": activity_payload},
+                        )
+                    )
+                    if preference.property_change:
+                        bulk_email_logs.append(
+                            EmailNotificationLog(
+                                triggered_by_id=actor_id,
+                                receiver_id=receiver_id,
+                                entity_identifier=issue_id,
+                                entity_name="issue",
+                                data={
+                                    "issue": issue_payload
+                                    | {
+                                        "project_id": str(issue.project.id),
+                                        "workspace_slug": str(issue.project.workspace.slug),
+                                    },
+                                    "issue_activity": activity_payload
+                                    | {"activity_time": issue_activity.get("created_at")},
                                 },
                             )
                         )

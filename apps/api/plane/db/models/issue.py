@@ -354,10 +354,15 @@ class IssueAssignee(ProjectBaseModel):
         unique_together = ["issue", "assignee", "deleted_at"]
         constraints = [
             models.UniqueConstraint(
+                fields=["issue"],
+                condition=Q(deleted_at__isnull=True),
+                name="issue_single_active_assignee",
+            ),
+            models.UniqueConstraint(
                 fields=["issue", "assignee"],
                 condition=Q(deleted_at__isnull=True),
                 name="issue_assignee_unique_issue_assignee_when_deleted_at_null",
-            )
+            ),
         ]
         verbose_name = "Issue Assignee"
         verbose_name_plural = "Issue Assignees"
@@ -392,9 +397,7 @@ def get_upload_path(instance, filename):
 def file_size(value):
     # File limit check is only for cloud hosted
     if value.size > settings.FILE_SIZE_LIMIT:
-        raise ValidationError(
-            f"File too large. Size should not exceed {settings.FILE_SIZE_LIMIT / 1024 / 1024:g} MB."
-        )
+        raise ValidationError(f"File too large. Size should not exceed {settings.FILE_SIZE_LIMIT / 1024 / 1024:g} MB.")
 
 
 class IssueAttachment(ProjectBaseModel):

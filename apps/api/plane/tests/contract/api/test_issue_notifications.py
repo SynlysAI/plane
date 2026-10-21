@@ -2,12 +2,23 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import json
 from unittest.mock import patch
 
 import pytest
 from rest_framework import status
 
-from plane.db.models import Issue, Project, ProjectMember, State, User
+from plane.db.models import (
+    Issue,
+    IssueActivity,
+    IssueSubscriber,
+    Notification,
+    Project,
+    ProjectMember,
+    State,
+    User,
+    WorkspaceMember,
+)
 
 
 @pytest.fixture
@@ -114,6 +125,62 @@ class TestIssueNotificationContract:
         assert kwargs["notification"] is True
 
     @pytest.mark.django_db
+    def test_assignment_notifies_only_the_new_owner(self, workspace, project, create_user, assignee_user):
+        """An assignee change reaches the new owner once and skips subscribers."""
+        from plane.bgtasks.notification_task import notifications
+
+        ProjectMember.objects.create(project=project, member=assignee_user, role=15, is_active=True)
+        observer = User.objects.create(email="observer@plane.so", username="observer")
+        ProjectMember.objects.create(project=project, member=observer, role=15, is_active=True)
+        issue = Issue.objects.create(
+            name="Assignment target", project=project, workspace=workspace, created_by=create_user
+        )
+        IssueSubscriber.objects.create(issue=issue, project=project, workspace=workspace, subscriber=observer)
+        activity = IssueActivity.objects.create(
+            issue=issue,
+            project=project,
+            workspace=workspace,
+            actor=create_user,
+            verb="updated",
+            field="assignees",
+            comment="added assignee ",
+            old_value="",
+            new_value=assignee_user.display_name,
+            new_identifier=assignee_user.id,
+        )
+
+        notifications(
+            type="issue.activity.updated",
+            issue_id=str(issue.id),
+            project_id=str(project.id),
+            actor_id=str(create_user.id),
+            subscriber=False,
+            issue_activities_created=json.dumps(
+                [
+                    {
+                        "id": str(activity.id),
+                        "issue_detail": {"id": str(issue.id)},
+                        "verb": activity.verb,
+                        "field": activity.field,
+                        "comment": activity.comment,
+                        "actor_id": str(create_user.id),
+                        "new_value": activity.new_value,
+                        "old_value": activity.old_value,
+                        "new_identifier": str(assignee_user.id),
+                        "old_identifier": None,
+                        "created_at": activity.created_at.isoformat(),
+                        "issue_comment": None,
+                    }
+                ]
+            ),
+            requested_data="{}",
+            current_instance="{}",
+        )
+
+        notifications_for_issue = Notification.objects.filter(entity_identifier=issue.id, entity_name="issue")
+        assert list(notifications_for_issue.values_list("receiver_id", flat=True)) == [assignee_user.id]
+        assert notifications_for_issue.get().sender == "in_app:issue_activities:assigned"
+
     def test_assign_issue_triggers_notification(self, api_key_client, workspace, project, create_issue, assignee_user):
         """Assigning a work item via the external API dispatches a notifying activity."""
         ProjectMember.objects.create(
@@ -122,6 +189,7 @@ class TestIssueNotificationContract:
             role=15,  # Member role
             is_active=True,
         )
+        WorkspaceMember.objects.create(workspace=workspace, member=assignee_user, role=15, is_active=True)
         url = self.get_detail_url(workspace.slug, project.id, create_issue.id)
 
         with patch("plane.api.views.issue.issue_activity") as mock_issue_activity:

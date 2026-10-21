@@ -39,15 +39,15 @@ type Props = {
   issue: TIssue;
 };
 
+const handleEventPropagation = (event: SyntheticEvent<HTMLDivElement>) => {
+  event.stopPropagation();
+  event.preventDefault();
+};
+
 export const SubIssuesListItemProperties = observer(function SubIssuesListItemProperties(props: Props) {
   const { workspaceSlug, parentIssueId, issueId, canEdit, updateSubIssue, displayProperties, issue } = props;
   const { t } = useTranslation();
   const { getStateById } = useProjectState();
-
-  const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
 
   const handleStartDate = (date: Date | null) => {
     if (issue.project_id) {
@@ -133,7 +133,13 @@ export const SubIssuesListItemProperties = observer(function SubIssuesListItemPr
         displayPropertyKey={["start_date", "due_date"]}
         shouldRenderProperty={() => isDateRangeEnabled}
       >
-        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+        <div
+          className="h-5"
+          role="presentation"
+          onFocus={handleEventPropagation}
+          onClick={handleEventPropagation}
+          onKeyDown={handleEventPropagation}
+        >
           <DateRangeDropdown
             value={{
               from: getDate(issue.start_date) || undefined,
@@ -207,16 +213,16 @@ export const SubIssuesListItemProperties = observer(function SubIssuesListItemPr
       <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="assignee">
         <div className="h-5 flex-shrink-0">
           <MemberDropdown
-            value={issue.assignee_ids}
+            value={issue.assignee_ids?.[0] ?? null}
             projectId={issue.project_id ?? undefined}
             onChange={(val) =>
               issue.project_id &&
               updateSubIssue(workspaceSlug, issue.project_id, parentIssueId, issueId, {
-                assignee_ids: val,
+                assignee_ids: val ? [val] : [],
               })
             }
             disabled={!canEdit}
-            multiple
+            multiple={false}
             buttonVariant={(issue?.assignee_ids || []).length > 0 ? "transparent-without-text" : "border-without-text"}
             buttonClassName={(issue?.assignee_ids || []).length > 0 ? "hover:bg-transparent px-0" : ""}
           />

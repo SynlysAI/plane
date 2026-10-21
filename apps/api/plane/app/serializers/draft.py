@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
+from django.db import transaction
 from django.utils import timezone
 
 # Third Party imports
@@ -16,18 +17,18 @@ from plane.db.models import (
     Label,
     State,
     DraftIssue,
-    DraftIssueAssignee,
     DraftIssueLabel,
     DraftIssueCycle,
     DraftIssueModule,
-    ProjectMember,
+    Project,
     EstimatePoint,
 )
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
-from plane.app.permissions import ROLE
+from plane.utils.administrative_projects import assignable_project_member_ids
+from plane.utils.work_item_assignment import replace_draft_issue_assignee, validate_single_assignee
 
 
 class DraftIssueCreateSerializer(BaseSerializer):
@@ -90,14 +91,26 @@ class DraftIssueCreateSerializer(BaseSerializer):
             if not is_valid:
                 raise serializers.ValidationError({"description_binary": "Invalid binary data"})
 
+        # Validate that the draft has at most one responsible user.
+        validate_single_assignee(attrs.get("assignee_ids"), "assignee_ids")
+
         # Validate assignees are from project
         if attrs.get("assignee_ids", []):
-            attrs["assignee_ids"] = ProjectMember.objects.filter(
-                project_id=self.context["project_id"],
-                role__gte=ROLE.MEMBER.value,
-                is_active=True,
-                member_id__in=attrs["assignee_ids"],
-            ).values_list("member_id", flat=True)
+            requested_ids = [assignee.id for assignee in attrs["assignee_ids"]]
+            project = Project.objects.get(pk=self.context["project_id"])
+            valid_ids = set(
+                assignable_project_member_ids(project).filter(id__in=requested_ids).values_list("id", flat=True)
+            )
+            invalid_ids = set(requested_ids) - valid_ids
+            if invalid_ids:
+                raise serializers.ValidationError(
+                    {
+                        "assignee_ids": [
+                            f"{assignee_id} is not an active member of this project" for assignee_id in invalid_ids
+                        ]
+                    }
+                )
+            attrs["assignee_ids"] = list(valid_ids)
 
         # Validate labels are from project
         if attrs.get("label_ids"):
@@ -139,6 +152,7 @@ class DraftIssueCreateSerializer(BaseSerializer):
 
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
@@ -156,21 +170,8 @@ class DraftIssueCreateSerializer(BaseSerializer):
         created_by_id = issue.created_by_id
         updated_by_id = issue.updated_by_id
 
-        if assignees is not None and len(assignees):
-            DraftIssueAssignee.objects.bulk_create(
-                [
-                    DraftIssueAssignee(
-                        assignee_id=assignee_id,
-                        draft_issue=issue,
-                        workspace_id=workspace_id,
-                        project_id=project_id,
-                        created_by_id=created_by_id,
-                        updated_by_id=updated_by_id,
-                    )
-                    for assignee_id in assignees
-                ],
-                batch_size=10,
-            )
+        if assignees:
+            replace_draft_issue_assignee(issue, assignees[0], actor=self.context.get("actor"))
 
         if labels is not None and len(labels):
             DraftIssueLabel.objects.bulk_create(
@@ -216,6 +217,7 @@ class DraftIssueCreateSerializer(BaseSerializer):
 
         return issue
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
@@ -230,21 +232,7 @@ class DraftIssueCreateSerializer(BaseSerializer):
         updated_by_id = instance.updated_by_id
 
         if assignees is not None:
-            DraftIssueAssignee.objects.filter(draft_issue=instance).delete()
-            DraftIssueAssignee.objects.bulk_create(
-                [
-                    DraftIssueAssignee(
-                        assignee_id=assignee_id,
-                        draft_issue=instance,
-                        workspace_id=workspace_id,
-                        project_id=project_id,
-                        created_by_id=created_by_id,
-                        updated_by_id=updated_by_id,
-                    )
-                    for assignee_id in assignees
-                ],
-                batch_size=10,
-            )
+            replace_draft_issue_assignee(instance, assignees[0] if assignees else None, actor=self.context.get("actor"))
 
         if labels is not None:
             DraftIssueLabel.objects.filter(draft_issue=instance).delete()

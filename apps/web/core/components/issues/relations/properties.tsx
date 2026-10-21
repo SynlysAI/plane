@@ -51,10 +51,10 @@ export const RelationIssueProperty = observer(function RelationIssueProperty(pro
       priority: val,
     });
 
-  const handleAssigneeChange = (val: string[]) =>
+  const handleAssigneeChange = (val: string | null) =>
     issue.project_id &&
     issueOperations.update(workspaceSlug, issue.project_id, issueId, {
-      assignee_ids: val,
+      assignee_ids: val ? [val] : [],
     });
 
   return (
@@ -81,11 +81,11 @@ export const RelationIssueProperty = observer(function RelationIssueProperty(pro
 
       <div className="h-5 flex-shrink-0">
         <MemberDropdown
-          value={issue.assignee_ids}
+          value={issue.assignee_ids?.[0] ?? null}
           projectId={issue.project_id ?? undefined}
           onChange={handleAssigneeChange}
           disabled={disabled}
-          multiple
+          multiple={false}
           buttonVariant={(issue?.assignee_ids || []).length > 0 ? "transparent-without-text" : "border-without-text"}
           buttonClassName={(issue?.assignee_ids || []).length > 0 ? "hover:bg-transparent px-0" : ""}
         />

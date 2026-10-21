@@ -59,3 +59,18 @@ class TestIssueSerializerAssigneeAndLabelValidation:
 
         assert serializer.is_valid(), serializer.errors
         assert list(serializer.validated_data["assignees"]) == [create_user.id]
+
+    @pytest.mark.django_db
+    def test_rejects_multiple_assignees(self, workspace, create_user):
+        project = Project.objects.create(name="Single owner", identifier="SOWN", workspace=workspace)
+        second = User.objects.create(email="second@example.com", username="second")
+        ProjectMember.objects.create(project=project, member=create_user, role=15, is_active=True)
+        ProjectMember.objects.create(project=project, member=second, role=15, is_active=True)
+
+        serializer = IssueSerializer(
+            data={"name": "Too many owners", "assignees": [str(create_user.id), str(second.id)]},
+            context={"project_id": project.id, "workspace_id": workspace.id},
+        )
+
+        assert not serializer.is_valid()
+        assert "assignees" in serializer.errors

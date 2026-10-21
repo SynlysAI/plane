@@ -5,12 +5,22 @@ from django.db.models import Q
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.exceptions import PermissionDenied, ValidationError, APIException
 from plane.db.models import (
-    AdministrativeApprovalAction, AdministrativeApprovalFlow, AdministrativeApprovalRequest,
-    AdministrativeApprovalStep, AdministrativeOrganizationMember, AdministrativeProjectApprovalSetting,
-    FileAsset, Issue, Project, User, WorkspaceMember,
+    AdministrativeApprovalAction,
+    AdministrativeApprovalFlow,
+    AdministrativeApprovalRequest,
+    AdministrativeApprovalStep,
+    AdministrativeOrganizationMember,
+    AdministrativeProjectApprovalSetting,
+    FileAsset,
+    Issue,
+    Project,
+    User,
+    WorkspaceMember,
 )
 from plane.utils.administrative_projects import (
-    administrative_project_filter, effective_project_member, visible_administrative_projects,
+    administrative_project_filter,
+    effective_project_member,
+    visible_administrative_projects,
     user_can_manage_administrative_organization,
 )
 
@@ -36,8 +46,10 @@ def step_approvers(project, step):
     if not project.administrative_organization_id:
         return []
     members = AdministrativeOrganizationMember.objects.filter(
-        organization=project.administrative_organization, is_active=True,
-        organization__deleted_at__isnull=True, member__is_active=True,
+        organization=project.administrative_organization,
+        is_active=True,
+        organization__deleted_at__isnull=True,
+        member__is_active=True,
     )
     if step.approver_kind == "USER":
         candidates = User.objects.filter(id=step.approver_id, is_active=True)
@@ -46,14 +58,21 @@ def step_approvers(project, step):
     else:
         candidates = User.objects.filter(id__in=members.filter(role="ADMIN").values("member_id"))
         if project.administrative_organization.is_default:
-            candidates = User.objects.filter(id__in=WorkspaceMember.objects.filter(
-                workspace=project.workspace, role=20, is_active=True
-            ).values("member_id"), is_active=True)
+            candidates = User.objects.filter(
+                id__in=WorkspaceMember.objects.filter(workspace=project.workspace, role=20, is_active=True).values(
+                    "member_id"
+                ),
+                is_active=True,
+            )
     return [user for user in candidates if project_role(user, project) is not None]
 
 
 def current_approvers(approval):
-    if approval.status != "PENDING" or approval.project.archived_at or not approval.project.administrative_organization_id:
+    if (
+        approval.status != "PENDING"
+        or approval.project.archived_at
+        or not approval.project.administrative_organization_id
+    ):
         return []
     if approval.project.administrative_organization_id != approval.flow.organization_id:
         return []
@@ -72,11 +91,16 @@ def approver_options(project):
         is_active=True,
     )
     if not project.administrative_organization.is_default:
-        candidates = candidates.filter(id__in=AdministrativeOrganizationMember.objects.filter(
-            organization=project.administrative_organization, is_active=True
-        ).values("member_id"))
-    return [actor for actor in candidates.distinct().order_by("display_name", "id")
-            if project_role(actor, project) is not None]
+        candidates = candidates.filter(
+            id__in=AdministrativeOrganizationMember.objects.filter(
+                organization=project.administrative_organization, is_active=True
+            ).values("member_id")
+        )
+    return [
+        actor
+        for actor in candidates.distinct().order_by("display_name", "id")
+        if project_role(actor, project) is not None
+    ]
 
 
 def visible_requests(workspace, user):
@@ -92,7 +116,10 @@ def related_requests(approvals, workspace, user):
     All steps count, including upcoming steps and steps on completed requests.
     """
     admin_organizations = AdministrativeOrganizationMember.objects.filter(
-        workspace=workspace, member=user, is_active=True, role="ADMIN",
+        workspace=workspace,
+        member=user,
+        is_active=True,
+        role="ADMIN",
         organization__deleted_at__isnull=True,
     ).values("organization_id")
     organization_approver = Q(
@@ -117,54 +144,96 @@ def request_payload(approval, user, history=False):
     approvers = current_approvers(approval)
     pending = approval.status == "PENDING"
     payload = {
-        "id": str(approval.id), "project_id": str(approval.project_id), "project_name": approval.project.name,
-        "issue_id": str(approval.issue_id), "title": approval.issue.name,
-        "flow_id": str(approval.flow_id), "flow_name": approval.flow.name, "flow_version": approval.flow.version,
+        "id": str(approval.id),
+        "project_id": str(approval.project_id),
+        "project_name": approval.project.name,
+        "issue_id": str(approval.issue_id),
+        "title": approval.issue.name,
+        "flow_id": str(approval.flow_id),
+        "flow_name": approval.flow.name,
+        "flow_version": approval.flow.version,
         "approval_mode": "FLOW" if approval.flow.is_template else "DIRECT",
-        "status": approval.status, "step": approval.current_step_order,
+        "status": approval.status,
+        "step": approval.current_step_order,
         "requester": {"id": str(approval.requested_by_id), "display_name": approval.requested_by.display_name},
         "approvers": [{"id": str(actor.id), "display_name": actor.display_name} for actor in approvers],
-        "can_act": pending and user.id in {actor.id for actor in approvers},
-        "can_withdraw": pending and approval.requested_by_id == user.id,
-        "can_cancel": pending and can_manage_project(user, approval.project),
+        "can_act": False,
+        "can_withdraw": False,
+        "can_cancel": False,
         "blocked": pending and not approvers,
         "due_at": approval.issue.target_date,
-        "created_at": approval.created_at, "updated_at": approval.updated_at,
+        "created_at": approval.created_at,
+        "updated_at": approval.updated_at,
     }
     if history:
         issue = approval.issue
         payload["work_item"] = {
-            "id": str(issue.id), "workspace_id": str(approval.workspace_id),
+            "id": str(issue.id),
+            "workspace_id": str(approval.workspace_id),
             "identifier": f"{approval.project.identifier}-{issue.sequence_id}",
-            "name": issue.name, "description_html": issue.description_html,
+            "name": issue.name,
+            "description_html": issue.description_html,
             "state": issue.state.name if issue.state_id else None,
-            "priority": issue.priority, "start_date": issue.start_date, "target_date": issue.target_date,
-            "assignees": [{"id": str(actor.id), "display_name": actor.display_name} for actor in issue.assignees.all()],
-            "attachments": [{"id": str(asset.id), "name": asset.attributes.get("name") or asset.asset.name.rsplit("/", 1)[-1],
-                             "url": asset.asset_url} for asset in FileAsset.objects.filter(
-                workspace_id=approval.workspace_id, project_id=approval.project_id, issue=issue,
-                entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT, is_uploaded=True, is_deleted=False,
-            )],
+            "priority": issue.priority,
+            "start_date": issue.start_date,
+            "target_date": issue.target_date,
+            "assignees": [
+                {"id": str(actor.id), "display_name": actor.display_name}
+                for actor in issue.assignees.filter(issue_assignee__deleted_at__isnull=True)
+            ],
+            "attachments": [
+                {
+                    "id": str(asset.id),
+                    "name": asset.attributes.get("name") or asset.asset.name.rsplit("/", 1)[-1],
+                    "url": asset.asset_url,
+                }
+                for asset in FileAsset.objects.filter(
+                    workspace_id=approval.workspace_id,
+                    project_id=approval.project_id,
+                    issue=issue,
+                    entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+                    is_uploaded=True,
+                    is_deleted=False,
+                )
+            ],
         }
-        payload["steps"] = [{
-            "order": step.order,
-            "approver_kind": step.approver_kind,
-            "approver_name": step.approver.display_name if step.approver_id else "组织管理员",
-        } for step in approval.flow.steps.select_related("approver")]
-        payload["history"] = [{
-            "id": str(action.id), "action": action.action, "comment": action.comment,
-            "step": action.step_order, "actor": action.actor.display_name, "created_at": action.created_at,
-        } for action in approval.actions.select_related("actor")]
+        payload["steps"] = [
+            {
+                "order": step.order,
+                "approver_kind": step.approver_kind,
+                "approver_name": step.approver.display_name if step.approver_id else "组织管理员",
+            }
+            for step in approval.flow.steps.select_related("approver")
+        ]
+        payload["history"] = [
+            {
+                "id": str(action.id),
+                "action": action.action,
+                "comment": action.comment,
+                "step": action.step_order,
+                "actor": action.actor.display_name,
+                "created_at": action.created_at,
+            }
+            for action in approval.actions.select_related("actor")
+        ]
     return payload
 
 
 def flow_payload(flow):
     return {
-        "id": str(flow.id), "organization_id": str(flow.organization_id), "name": flow.name,
-        "version": flow.version, "is_active": flow.is_active,
-        "steps": [{"order": step.order, "approver_kind": step.approver_kind,
-                   "approver_id": str(step.approver_id) if step.approver_id else None}
-                  for step in flow.steps.all()],
+        "id": str(flow.id),
+        "organization_id": str(flow.organization_id),
+        "name": flow.name,
+        "version": flow.version,
+        "is_active": flow.is_active,
+        "steps": [
+            {
+                "order": step.order,
+                "approver_kind": step.approver_kind,
+                "approver_id": str(step.approver_id) if step.approver_id else None,
+            }
+            for step in flow.steps.all()
+        ],
     }
 
 
@@ -189,11 +258,17 @@ def save_flow(workspace, user, organization, data, original=None):
         actor = None
         if item["approver_kind"] == "USER":
             actor = User.objects.filter(pk=item.get("approver_id"), is_active=True).first()
-            if actor is None or not WorkspaceMember.objects.filter(workspace=workspace, member=actor, is_active=True).exists():
+            if (
+                actor is None
+                or not WorkspaceMember.objects.filter(workspace=workspace, member=actor, is_active=True).exists()
+            ):
                 raise ValidationError("指定审批人不是有效工作区成员。")
-            if not organization.is_default and not AdministrativeOrganizationMember.objects.filter(
-                organization=organization, member=actor, is_active=True
-            ).exists():
+            if (
+                not organization.is_default
+                and not AdministrativeOrganizationMember.objects.filter(
+                    organization=organization, member=actor, is_active=True
+                ).exists()
+            ):
                 raise ValidationError("指定审批人必须属于当前行政组织。")
         resolved.append((item["approver_kind"], actor))
     # Immutable versions also keep already selected project templates explicit.
@@ -211,14 +286,20 @@ def save_flow(workspace, user, organization, data, original=None):
 
 @transaction.atomic
 def submit_request(workspace, user, project, issue_id, *, flow_id=None, approver_id=None):
-    project = Project.objects.select_for_update(of=("self",)).select_related("workspace", "administrative_organization").get(pk=project.pk)
+    project = (
+        Project.objects.select_for_update(of=("self",))
+        .select_related("workspace", "administrative_organization")
+        .get(pk=project.pk)
+    )
     if not Project.objects.filter(pk=project.pk).filter(administrative_project_filter()).exists():
         raise ValidationError("科研项目不能发起行政审批。")
     if (project_role(user, project) or 0) < 15 or project.archived_at:
         raise PermissionDenied("没有发起该项目审批的权限。")
-    issue = Issue.objects.select_for_update().filter(
-        pk=issue_id, project=project, workspace=workspace, archived_at__isnull=True
-    ).first()
+    issue = (
+        Issue.objects.select_for_update()
+        .filter(pk=issue_id, project=project, workspace=workspace, archived_at__isnull=True)
+        .first()
+    )
     if issue is None:
         raise ValidationError("请选择当前行政项目内未归档的任务。")
     if flow_id and approver_id:
@@ -228,15 +309,22 @@ def submit_request(workspace, user, project, issue_id, *, flow_id=None, approver
         if actor is None:
             raise ValidationError("请选择当前行政组织内有项目访问权限的有效审批人。")
         flow = AdministrativeApprovalFlow.objects.create(
-            workspace=workspace, organization=project.administrative_organization,
-            name="指定审批人", is_template=False, is_active=False, created_by=user,
+            workspace=workspace,
+            organization=project.administrative_organization,
+            name="指定审批人",
+            is_template=False,
+            is_active=False,
+            created_by=user,
         )
         AdministrativeApprovalStep.objects.create(flow=flow, order=1, approver_kind="USER", approver=actor)
     elif flow_id:
         try:
             flow = AdministrativeApprovalFlow.objects.filter(
-                pk=flow_id, workspace=workspace, organization_id=project.administrative_organization_id,
-                is_template=True, is_active=True,
+                pk=flow_id,
+                workspace=workspace,
+                organization_id=project.administrative_organization_id,
+                is_template=True,
+                is_active=True,
             ).first()
         except (DjangoValidationError, ValueError, TypeError):
             flow = None
@@ -262,9 +350,11 @@ def submit_request(workspace, user, project, issue_id, *, flow_id=None, approver
 
 @transaction.atomic
 def act_on_request(approval, user, action, expected_step, comment=""):
-    approval = AdministrativeApprovalRequest.objects.select_for_update(of=("self",)).select_related(
-        "project__workspace", "project__administrative_organization", "flow", "issue", "requested_by"
-    ).get(pk=approval.pk)
+    approval = (
+        AdministrativeApprovalRequest.objects.select_for_update(of=("self",))
+        .select_related("project__workspace", "project__administrative_organization", "flow", "issue", "requested_by")
+        .get(pk=approval.pk)
+    )
     if project_role(user, approval.project) is None:
         raise PermissionDenied("项目访问权限已失效。")
     if approval.status != "PENDING" or expected_step != approval.current_step_order:

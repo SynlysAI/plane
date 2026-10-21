@@ -117,6 +117,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
             context={
                 "workspace_id": workspace.id,
                 "project_id": request.data.get("project_id", None),
+                "actor": request.user,
             },
         )
         if serializer.is_valid():
@@ -174,6 +175,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
             context={
                 "project_id": project_id,
                 "cycle_id": request.data.get("cycle_id", "not_provided"),
+                "actor": request.user,
             },
         )
 
@@ -218,6 +220,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                 "project_id": draft_issue.project_id,
                 "workspace_id": draft_issue.project.workspace_id,
                 "default_assignee_id": draft_issue.project.default_assignee_id,
+                "actor": request.user,
             },
         )
 

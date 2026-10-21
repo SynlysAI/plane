@@ -20,7 +20,7 @@ from plane.db.models import (
     User,
     Issue,
     IssueComment,
-    IssueAssignee,
+    Project,
     IssueLabel,
     Label,
     CycleIssue,
@@ -32,10 +32,12 @@ from plane.db.models import (
     IssueVote,
     IssueRelation,
 )
+from plane.utils.administrative_projects import assignable_project_member_ids
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
+from plane.utils.work_item_assignment import replace_issue_assignee, validate_single_assignee
 
 
 class IssueStateFlatSerializer(BaseSerializer):
@@ -272,7 +274,9 @@ class IssueCreateSerializer(BaseSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data["assignees"] = [str(assignee.id) for assignee in instance.assignees.all()]
+        data["assignees"] = [
+            str(assignee.id) for assignee in instance.assignees.filter(issue_assignee__deleted_at__isnull=True)
+        ]
         data["labels"] = [str(label.id) for label in instance.labels.all()]
         return data
 
@@ -298,6 +302,27 @@ class IssueCreateSerializer(BaseSerializer):
             if not is_valid:
                 raise serializers.ValidationError({"description_binary": "Invalid binary data"})
 
+        validate_single_assignee(data.get("assignees"), "assignees")
+        if data.get("assignees", []):
+            requested_ids = [assignee.id for assignee in data["assignees"]]
+            project = Project.objects.select_related(
+                "workspace",
+                "administrative_organization",
+            ).get(pk=self.context["project_id"])
+            valid_ids = set(
+                assignable_project_member_ids(project).filter(id__in=requested_ids).values_list("id", flat=True)
+            )
+            invalid_ids = set(requested_ids) - valid_ids
+            if invalid_ids:
+                raise serializers.ValidationError(
+                    {
+                        "assignees": [
+                            f"{assignee_id} is not an active member of this project" for assignee_id in invalid_ids
+                        ]
+                    }
+                )
+            data["assignees"] = [assignee for assignee in data["assignees"] if assignee.id in valid_ids]
+
         return data
 
     def create(self, validated_data):
@@ -314,32 +339,13 @@ class IssueCreateSerializer(BaseSerializer):
         created_by_id = issue.created_by_id
         updated_by_id = issue.updated_by_id
 
-        if assignees is not None and len(assignees):
-            IssueAssignee.objects.bulk_create(
-                [
-                    IssueAssignee(
-                        assignee=user,
-                        issue=issue,
-                        project_id=project_id,
-                        workspace_id=workspace_id,
-                        created_by_id=created_by_id,
-                        updated_by_id=updated_by_id,
-                    )
-                    for user in assignees
-                ],
-                batch_size=10,
-            )
-        else:
-            # Then assign it to default assignee
-            if default_assignee_id is not None:
-                IssueAssignee.objects.create(
-                    assignee_id=default_assignee_id,
-                    issue=issue,
-                    project_id=project_id,
-                    workspace_id=workspace_id,
-                    created_by_id=created_by_id,
-                    updated_by_id=updated_by_id,
-                )
+        if assignees:
+            replace_issue_assignee(issue, assignees[0].id)
+        elif assignees is None and (
+            default_assignee_id is not None
+            and assignable_project_member_ids(issue.project).filter(id=default_assignee_id).exists()
+        ):
+            replace_issue_assignee(issue, default_assignee_id)
 
         if labels is not None and len(labels):
             IssueLabel.objects.bulk_create(
@@ -370,21 +376,7 @@ class IssueCreateSerializer(BaseSerializer):
         updated_by_id = instance.updated_by_id
 
         if assignees is not None:
-            IssueAssignee.objects.filter(issue=instance).delete()
-            IssueAssignee.objects.bulk_create(
-                [
-                    IssueAssignee(
-                        assignee=user,
-                        issue=instance,
-                        project_id=project_id,
-                        workspace_id=workspace_id,
-                        created_by_id=created_by_id,
-                        updated_by_id=updated_by_id,
-                    )
-                    for user in assignees
-                ],
-                batch_size=10,
-            )
+            replace_issue_assignee(instance, assignees[0].id if assignees else None)
 
         if labels is not None:
             IssueLabel.objects.filter(issue=instance).delete()

@@ -98,15 +98,17 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
               />
             </SidebarPropertyListItem>
 
-            <SidebarPropertyListItem icon={MembersOutline} label={t("common.assignees")}>
+            <SidebarPropertyListItem icon={MembersOutline} label="负责人">
               <MemberDropdown
-                value={issue?.assignee_ids ?? undefined}
-                onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { assignee_ids: val })}
+                value={issue?.assignee_ids?.[0] ?? null}
+                onChange={(val) =>
+                  issueOperations.update(workspaceSlug, projectId, issueId, { assignee_ids: val ? [val] : [] })
+                }
                 disabled={!isEditable}
                 projectId={projectId?.toString() ?? ""}
-                placeholder={t("issue.add.assignee")}
-                multiple
-                buttonVariant={issue?.assignee_ids?.length > 1 ? "transparent-without-text" : "transparent-with-text"}
+                placeholder="指定负责人"
+                multiple={false}
+                buttonVariant="transparent-with-text"
                 className="group w-full grow"
                 buttonContainerClassName="w-full text-left h-7.5"
                 buttonClassName={`text-body-xs-regular justify-between ${issue?.assignee_ids?.length > 0 ? "" : "text-placeholder"}`}

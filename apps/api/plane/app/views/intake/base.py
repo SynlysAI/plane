@@ -264,6 +264,7 @@ class IntakeIssueViewSet(BaseViewSet):
                 "workspace_id": project.workspace_id,
                 "default_assignee_id": project.default_assignee_id,
                 "allow_triage_state": True,
+                "actor": request.user,
             },
         )
         if serializer.is_valid():
@@ -412,7 +413,15 @@ class IntakeIssueViewSet(BaseViewSet):
             issue_requested_data = json.dumps(issue_data, cls=DjangoJSONEncoder)
 
             issue_serializer = IssueCreateSerializer(
-                issue, data=issue_data, partial=True, context={"project_id": project_id, "allow_triage_state": True}
+                issue,
+                data=issue_data,
+                partial=True,
+                context={
+                    "project_id": project_id,
+                    "workspace_id": intake_issue.workspace_id,
+                    "allow_triage_state": True,
+                    "actor": request.user,
+                },
             )
 
             if not issue_serializer.is_valid():

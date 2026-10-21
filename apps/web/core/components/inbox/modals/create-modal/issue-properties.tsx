@@ -81,12 +81,12 @@ export const InboxIssueProperties = observer(function InboxIssueProperties(props
       <div className="h-7">
         <MemberDropdown
           projectId={projectId}
-          value={data?.assignee_ids || []}
-          onChange={(assigneeIds) => handleData("assignee_ids", assigneeIds)}
+          value={data?.assignee_ids?.[0] ?? null}
+          onChange={(assigneeId) => handleData("assignee_ids", assigneeId ? [assigneeId] : [])}
           buttonVariant={(data?.assignee_ids || [])?.length > 0 ? "transparent-without-text" : "border-with-text"}
           buttonClassName={(data?.assignee_ids || [])?.length > 0 ? "hover:bg-transparent" : ""}
-          placeholder="Assignees"
-          multiple
+          placeholder="负责人"
+          multiple={false}
           tabIndex={getIndex("assignee_ids")}
         />
       </div>
