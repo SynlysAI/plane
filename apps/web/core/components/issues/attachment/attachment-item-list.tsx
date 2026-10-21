@@ -16,7 +16,7 @@ import { EIssueServiceType } from "@plane/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // plane web hooks
-import { useFileSize } from "@/hooks/use-file-size";
+import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
 // types
 import type { TAttachmentHelpers } from "../issue-detail-widgets/attachments/helper";
 // components
@@ -56,8 +56,8 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
   const { operations: attachmentOperations, snapshot: attachmentSnapshot } = attachmentHelpers;
   const { create: createAttachment } = attachmentOperations;
   const { uploadStatus } = attachmentSnapshot;
-  // file size
-  const { maxFileSize } = useFileSize();
+  // file size categories
+  const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
   // derived values
   const issueAttachments = getAttachmentsByIssueId(issueId);
 
@@ -73,6 +73,16 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
       if (rejectedFiles.length === 0) {
         const currentFile: File = acceptedFiles[0];
         if (!currentFile || !workspaceSlug) return;
+
+        const limitError = getLimitError(currentFile);
+        if (limitError) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("toast.error"),
+            message: limitError,
+          });
+          return;
+        }
 
         setIsUploading(true);
         createAttachment(currentFile)
@@ -96,24 +106,25 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
         message:
           totalAttachedFiles > 1
             ? t("attachment.only_one_file_allowed")
-            : t("attachment.file_size_limit", { size: maxFileSize / 1024 / 1024 }),
+            : (getLimitError(rejectedFiles[0]?.file) ??
+              t("attachment.file_size_limit", { size: maxFileSize / 1024 / 1024 })),
       });
       return;
     },
-    [createAttachment, maxFileSize, workspaceSlug, handleFetchPropertyActivities]
+    [createAttachment, getLimitError, maxFileSize, workspaceSlug, handleFetchPropertyActivities, t]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     maxSize: maxFileSize,
     multiple: false,
-    disabled: isUploading || disabled,
+    disabled: limitsLoading || isUploading || disabled,
   });
 
   return (
     <>
-      {uploadStatus?.map((uploadStatus) => (
-        <IssueAttachmentsUploadItem key={uploadStatus.id} uploadStatus={uploadStatus} />
+      {uploadStatus?.map((currentUploadStatus) => (
+        <IssueAttachmentsUploadItem key={currentUploadStatus.id} uploadStatus={currentUploadStatus} />
       ))}
       {issueAttachments && (
         <>

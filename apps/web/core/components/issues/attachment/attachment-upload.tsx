@@ -6,9 +6,10 @@
 
 import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
+import type { FileRejection } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
 // plane web hooks
-import { useFileSize } from "@/hooks/use-file-size";
+import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
 // types
 import type { TAttachmentOperations } from "../issue-detail-widgets/attachments/helper";
 
@@ -16,37 +17,49 @@ type TAttachmentOperationsModal = Pick<TAttachmentOperations, "create">;
 
 type Props = {
   workspaceSlug: string;
+  projectId: string;
   disabled?: boolean;
   attachmentOperations: TAttachmentOperationsModal;
 };
 
 export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(props: Props) {
-  const { workspaceSlug, disabled = false, attachmentOperations } = props;
+  const { workspaceSlug, projectId, disabled = false, attachmentOperations } = props;
   // states
   const [isLoading, setIsLoading] = useState(false);
-  // file size
-  const { maxFileSize } = useFileSize();
+  const [validationError, setValidationError] = useState<string | null>(null);
+  // file size categories
+  const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
 
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+      if (rejectedFiles.length > 0) {
+        setValidationError(null);
+        return;
+      }
       const currentFile: File = acceptedFiles[0];
       if (!currentFile || !workspaceSlug) return;
 
+      const limitError = getLimitError(currentFile);
+      if (limitError) {
+        setValidationError(limitError);
+        return;
+      }
+      setValidationError(null);
       setIsLoading(true);
       attachmentOperations.create(currentFile).finally(() => setIsLoading(false));
     },
-    [attachmentOperations, workspaceSlug]
+    [attachmentOperations, getLimitError, workspaceSlug]
   );
 
   const { getRootProps, getInputProps, isDragActive, isDragReject, fileRejections } = useDropzone({
     onDrop,
     maxSize: maxFileSize,
     multiple: false,
-    disabled: isLoading || disabled,
+    disabled: limitsLoading || isLoading || disabled,
   });
 
-  const fileError =
-    fileRejections.length > 0 ? `Invalid file type or size (max ${maxFileSize / 1024 / 1024} MB)` : null;
+  const rejectedError = fileRejections.length > 0 ? getLimitError(fileRejections[0].file) : null;
+  const fileError = validationError ?? rejectedError;
 
   return (
     <div

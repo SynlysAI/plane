@@ -15,7 +15,7 @@ import type { TIssueServiceType } from "@plane/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // plane web hooks
-import { useFileSize } from "@/hooks/use-file-size";
+import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
 // local imports
 import { useAttachmentOperations } from "./helper";
 
@@ -34,8 +34,8 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
   const [isLoading, setIsLoading] = useState(false);
   // store hooks
   const { setLastWidgetAction, fetchActivities } = useIssueDetail(issueServiceType);
-  // file size
-  const { maxFileSize } = useFileSize();
+  // file size categories
+  const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
   // operations
   const { operations: attachmentOperations } = useAttachmentOperations(
     workspaceSlug,
@@ -55,6 +55,16 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
       if (rejectedFiles.length === 0) {
         const currentFile: File = acceptedFiles[0];
         if (!currentFile || !workspaceSlug) return;
+
+        const limitError = getLimitError(currentFile);
+        if (limitError) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: limitError,
+          });
+          return;
+        }
 
         setIsLoading(true);
         attachmentOperations
@@ -80,26 +90,36 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
         message:
           totalAttachedFiles > 1
             ? "Only one file can be uploaded at a time."
-            : `File must be of ${maxFileSize / 1024 / 1024}MB or less in size.`,
+            : (getLimitError(rejectedFiles[0]?.file) ??
+              `File must be of ${maxFileSize / 1024 / 1024}MB or less in size.`),
       });
       return;
     },
-    [attachmentOperations, maxFileSize, workspaceSlug, handleFetchPropertyActivities, setLastWidgetAction]
+    [
+      attachmentOperations,
+      getLimitError,
+      maxFileSize,
+      workspaceSlug,
+      handleFetchPropertyActivities,
+      setLastWidgetAction,
+    ]
   );
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
     maxSize: maxFileSize,
     multiple: false,
-    disabled: isLoading || disabled,
+    disabled: limitsLoading || isLoading || disabled,
   });
 
   return (
     <div
+      role="presentation"
       onClick={(e) => {
         // TODO: Remove extra div and move event propagation to button
         e.stopPropagation();
       }}
+      onKeyDown={(e) => e.stopPropagation()}
     >
       <button {...getRootProps()} type="button" disabled={disabled}>
         <input {...getInputProps()} />

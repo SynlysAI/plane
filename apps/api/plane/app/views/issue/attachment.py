@@ -25,6 +25,7 @@ from plane.db.models import FileAsset, Workspace
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.app.permissions import allow_permission, ROLE
 from plane.settings.storage import S3Storage
+from plane.utils.comment_attachments import comment_attachment_limits, resolve_comment_attachment_limit
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
@@ -110,7 +111,10 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     def post(self, request, slug, project_id, issue_id):
         name = sanitize_filename(request.data.get("name")) or "unnamed"
         type = request.data.get("type", False)
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        try:
+            size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        except (TypeError, ValueError, OverflowError):
+            return Response({"error": "Invalid file size."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not type or type not in settings.ATTACHMENT_MIME_TYPES:
             return Response(
@@ -124,8 +128,24 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         # asset key
         asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
 
-        # Get the size limit
-        size_limit = min(size, settings.FILE_SIZE_LIMIT)
+        # Issue attachments share the workspace category quotas used by comments.
+        try:
+            limit = resolve_comment_attachment_limit(name, type, comment_attachment_limits(workspace))
+        except ValueError:
+            return Response({"error": "Invalid workspace attachment limit."}, status=status.HTTP_400_BAD_REQUEST)
+        if size <= 0 or size > limit.max_bytes:
+            return Response(
+                {
+                    "error": "File size exceeds the workspace issue attachment limit.",
+                    "error_code": "issue_attachment_size_exceeded",
+                    "category": limit.category,
+                    "limit_mb": limit.max_mb,
+                    "limit_bytes": limit.max_bytes,
+                    "status": False,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        size_limit = size
 
         # Create a File Asset
         asset = FileAsset.objects.create(
@@ -143,7 +163,11 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         storage = S3Storage(request=request)
 
         # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        presigned_url = storage.generate_presigned_post(
+            object_name=asset_key,
+            file_type=type,
+            file_size=limit.max_bytes,
+        )
 
         # Return the presigned URL
         return Response(

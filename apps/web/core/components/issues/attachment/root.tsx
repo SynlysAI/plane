@@ -30,6 +30,7 @@ export const IssueAttachmentRoot = observer(function IssueAttachmentRoot(props: 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <IssueAttachmentUpload
           workspaceSlug={workspaceSlug}
+          projectId={projectId}
           disabled={disabled}
           attachmentOperations={attachmentHelpers.operations}
         />
