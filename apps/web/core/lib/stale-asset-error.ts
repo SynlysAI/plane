@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import { consumePendingNavigation } from "./pending-navigation";
+
 // Error signatures produced when a deploy removes hashed assets that an open tab
 // still references (stale-tab version skew).
 const STALE_ASSET_ERROR_SIGNATURES = [
@@ -61,6 +63,14 @@ export const recoverFromStaleAsset = (): boolean => {
     isRecoveringFromStaleAsset = false;
     return false;
   }
-  window.location.reload();
+  // React Router 在懒加载路由模块成功前不会提交 URL；chunk 失效时地址栏仍停留在旧页面。
+  // 优先整页打开用户的意图目标，避免部署更新后表现为“原地刷新当前页/首页”。
+  const pendingTarget = consumePendingNavigation();
+  const resolvedTarget = pendingTarget ? new URL(pendingTarget, window.location.href).href : null;
+  if (resolvedTarget && resolvedTarget !== window.location.href) {
+    window.location.assign(resolvedTarget);
+  } else {
+    window.location.reload();
+  }
   return true;
 };

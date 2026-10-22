@@ -10,6 +10,7 @@ import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
 
 import polyfills from "@/lib/polyfills";
+import { installPendingNavigationClickRecorder } from "@/lib/pending-navigation";
 import { isStaleAssetErrorMessage, recoverFromStaleAsset } from "@/lib/stale-asset-error";
 
 void polyfills;
@@ -17,6 +18,8 @@ void polyfills;
 // Production-only: in dev these errors come from the dev server itself (restarts,
 // stale optimized deps) and auto-reloading would mask them.
 if (import.meta.env.PROD) {
+  installPendingNavigationClickRecorder();
+
   window.addEventListener("vite:preloadError", (event) => {
     if (recoverFromStaleAsset()) event.preventDefault();
   });
@@ -47,4 +50,5 @@ void initPromise
         </StrictMode>
       );
     });
+    return null;
   });
