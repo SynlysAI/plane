@@ -1,3 +1,7 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Persistent grants for short-lived Research Context tokens."""
 
 import uuid
@@ -11,6 +15,7 @@ class ResearchContextGrant(BaseModel):
     """One short-lived, revocable grant issued by the Plane Context API."""
 
     context_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    connection_label = models.CharField(max_length=100, blank=True, default="")
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="research_context_grants")
     user = models.ForeignKey("db.User", on_delete=models.CASCADE, related_name="research_context_grants")
     project = models.ForeignKey("db.Project", on_delete=models.PROTECT, related_name="research_context_grants")

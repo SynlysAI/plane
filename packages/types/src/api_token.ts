@@ -18,5 +18,6 @@ export interface IApiToken {
   user: string;
   user_type: number;
   token?: string;
+  masked_token?: string;
   workspace: string;
 }

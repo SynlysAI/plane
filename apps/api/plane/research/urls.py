@@ -10,6 +10,9 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.mcp_management import (
+    ResearchMCPCandidatesEndpoint, ResearchMCPConnectionsEndpoint, ResearchMCPRevokeEndpoint,
+)
 from plane.research.views.agent_operations import (
     ResearchHumanOperationsEndpoint, ResearchOperationMCPHTTPEndpoint,
     ResearchOperationToolsEndpoint, ResearchOperationToolEndpoint,
@@ -240,6 +243,21 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path(
+        "research/workspaces/<str:slug>/mcp/candidates/",
+        ResearchMCPCandidatesEndpoint.as_view(),
+        name="research-mcp-candidates",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/connections/",
+        ResearchMCPConnectionsEndpoint.as_view(),
+        name="research-mcp-connections",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/connections/<uuid:context_id>/revoke/",
+        ResearchMCPRevokeEndpoint.as_view(),
+        name="research-mcp-revoke",
+    ),
     path("research/workspaces/<str:slug>/agent-operations/mcp/", ResearchOperationMCPHTTPEndpoint.as_view(), name="research-operations-mcp"),
     path("research/workspaces/<str:slug>/agent-operations/tools/", ResearchOperationToolsEndpoint.as_view(), name="research-operation-tools"),
     path("research/workspaces/<str:slug>/agent-operations/tools/<str:tool_name>/", ResearchOperationToolEndpoint.as_view(), name="research-operation-tool"),

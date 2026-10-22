@@ -111,7 +111,7 @@ docker compose -f docker-compose-local.yml exec -T api \
 
 ## 4. 页面授权及 Agent 连接
 
-当前版本中，个人设置「MCP 连接」仅保留行政项目配置；科研链节点、科研任务和统一页不再提供科研操作 UI。旧 `/mcp/`、`/{workspace-slug}/mcp/` 自动跳转到设置页且只保留工作区参数；历史 `review_path` 打开节点页但忽略 `operation`。科研授权与人工确认继续使用下述 API，行政项目区域通过可选 `NATIVE_MCP_PORTAL_URL` 连接现有自助服务。无新增迁移。详情见 [统一 MCP 管理说明](mcp-unified-management.md)。
+个人设置「MCP 连接」现统一管理行政项目连接与显式科研节点连接，支持候选选择、批量生成、查看和撤销。行政项目区域通过 `NATIVE_MCP_PORTAL_URL` 连接独立门户，发布时需同步门户新增的候选接口。科研受控写入仍需逐项人工确认提案；勾选节点或写能力不会确认业务提案。旧 `/mcp/`、`/{workspace-slug}/mcp/` 继续跳转到设置页且只保留工作区参数；机器协议地址不变。需执行 `0188_research_context_connection_label` 及 `0190_merge_mcp_and_asset_preview` 等待应用的迁移。详情与部署边界见 [统一 MCP 管理说明](mcp-unified-management.md)。
 
 1. 登录服务器，确认目标工作区科研模块和科研链已开启，并创建/选择活动科研链中的可操作节点。v2.1 不能通过 MCP 创建链和节点。
 2. 由研究管理员调用 `POST /api/research/workspaces/<slug>/nodes/<node_id>/agent-operations/`，请求体 `{ "kind": "workspace_policy", "enabled": true }`，启用工作区 Agent 操作。该请求必须携带 Plane 登录会话和 `X-CSRFToken`。

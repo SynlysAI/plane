@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { add } from "date-fns";
 import { Controller, useForm } from "react-hook-form";
 import { CalendarOutline } from "@makeplane/propel/icons";
@@ -75,6 +75,7 @@ const getFormattedDate = (date: Date): Date => {
 };
 
 export function CreateApiTokenForm(props: Props) {
+  const neverExpiresId = useId();
   const { handleClose, neverExpires, toggleNeverExpires, onSubmit } = props;
   // states
   const [customDate, setCustomDate] = useState<Date | null>(null);
@@ -115,10 +116,13 @@ export function CreateApiTokenForm(props: Props) {
       if (expiryDate) payload.expired_at = expiryDate.toISOString();
     }
 
-    await onSubmit(payload).then(() => {
+    try {
+      await onSubmit(payload);
       reset(defaultValues);
       setCustomDate(null);
-    });
+    } catch {
+      // The caller displays the failure; preserve the form for correction/retry.
+    }
   };
 
   const today = new Date();
@@ -252,16 +256,20 @@ export function CreateApiTokenForm(props: Props) {
         </div>
       </div>
       <div className="flex items-center justify-between gap-2 border-t-[0.5px] border-subtle px-5 py-4">
-        <div className="flex cursor-pointer items-center gap-1.5" onClick={toggleNeverExpires}>
+        <div className="flex items-center gap-1.5">
           <div className="flex cursor-pointer items-center justify-center">
             <Switch
+              id={neverExpiresId}
               size="sm"
               checked={neverExpires}
-              onCheckedChange={() => {}}
+              onCheckedChange={toggleNeverExpires}
+              disabled={isSubmitting}
               aria-label={t("workspace_settings.settings.api_tokens.never_expires")}
             />
           </div>
-          <span className="text-11">{t("workspace_settings.settings.api_tokens.never_expires")}</span>
+          <label htmlFor={neverExpiresId} className="cursor-pointer text-11">
+            {t("workspace_settings.settings.api_tokens.never_expires")}
+          </label>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={handleClose}>

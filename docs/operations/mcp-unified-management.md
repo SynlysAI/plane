@@ -1,88 +1,97 @@
-# MCP 配置页面与科研操作 API
+# Plane API 令牌与 MCP 统一设置
 
-更新日期：2026-10-20。科研节点连接、授权和提案审核不再提供页面入口；相关后端 API 与机器 MCP 协议保持兼容。服务器配置、发布和回退步骤见 [部署说明](mcp-unified-deployment.md)。
+更新日期：2026-10-22。本轮统一的是人工管理页面；行政与科研仍使用原有独立协议和凭据，未增加统一机器入口或通用密钥。
 
-## 路由与入口
+## 个人 API 令牌
 
-- 主入口为个人设置 → Plane API →「MCP 连接」，页面地址 `/settings/profile/mcp/`，只提供「行政项目接入」配置。
-- 原 `/mcp/`、`/{workspace-slug}/mcp/` 和科研深链自动跳转到设置页，仅保留工作区参数；`mode`、链、节点、任务、提案和令牌等上下文一律丢弃。
-- 设置页使用 `workspace` 查询参数显式定位工作区；未指定时使用当前工作区，也可选择其他工作区。设置弹窗中的选择只在弹窗内生效，不读写底层工作台 URL。
-- 科研链节点工作台和科研任务详情不再渲染「MCP / Agent 操作」入口。
+入口为 `/settings/profile/api-tokens/`。按 2026-10-22 验收调整，列表使用表格展示当前用户非服务令牌的名称、脱敏 Key、创建日期和最新使用日期，不显示 Tracking ID，不提供完整密钥回看或详情入口。修改名称和删除按钮常驻，支持键盘与触屏；已停用或到期的令牌会附带状态提示。
 
-实施前核对：仓库没有原有的 Plane `/mcp` 管理路由。`10.26.15.92:3300/mcp` 返回 SPA HTML 的 200，不能证明管理页存在；`10.26.15.92:8765/mcp` 匿名请求返回 401，是机器协议；独立自助页实际为 `10.26.15.92:8765/connect`。
+读取与重命名响应由后端生成 `masked_token`，只暴露密钥前后少量字符；较短的旧密钥全部遮蔽。前端只使用该字段，不读取完整密钥生成列表预览。修改名称不会轮换密钥，也不改变 API 权限。语言资源通过生成的静态导入映射参与打包，避免发布后动态路径失效而显示翻译键。
 
-此前读取测试服务器独立服务配置为 `public`、只读、最长 90 天；本地测试现在使用独立的本机服务，当前开放 `test11`。统一页实时读取所在环境的服务配置，不硬编码服务器工作区。
+已修复的代码问题：
 
-## 原生任务桥接
+- 失败且无缓存时原页面一直显示加载骨架，现区分加载、空列表、失败、登录失效和权限不足，并提供重试或登录入口。
+- 删除按钮原本仅悬停显示；详情和删除请求原本缺少后端路由要求的末尾 `/`。路由不一致已修正，但本轮未使用真实账号复现代理重定向，不能据此断言它是现场删除失败的唯一原因。
+- 创建响应原本会把完整密钥加入 SWR 列表缓存并自动下载。现只在本次创建结果内展示与复制，关闭即清理；列表缓存仅使用读取接口的元信息，客户端也剔除读取响应中意外出现的 token 字段。
+- PATCH 原本使用含密钥的序列化器输出；现只允许修改名称和说明，并用只读序列化器返回元信息。停用状态不再被“未到期”覆盖。
+- 详情、删除和更新显式限定所有者并排除服务令牌，隐藏或不存在的 ID 返回 404。原 BaseAPIView 也有不存在对象的兜底处理；本轮改为显式 404 查询。
+- 删除确认防止重复提交；失败保留记录及原因，成功后刷新当前 SWR 缓存作用域。凭据管理响应禁止缓存，额外携带 API Key 的会话请求也不会将管理请求/响应正文写入 API 日志。
 
-新增可选后端变量，默认留空。留空时原生区域明确显示未配置，科研区域不受影响：
+接口保持 `/api/users/api-tokens/` 与 `/api/users/api-tokens/<id>/`，完整密钥只从创建响应返回，后续不能找回。
+
+## 统一 MCP 页面
+
+主入口 `/settings/profile/mcp/`，设置弹窗复用同一组件。页面不在 URL 保存密钥或选中节点，不改写底层工作台 URL。
+
+页面分为创建连接、本次生成结果和已有连接。创建区在宽屏下并排展示访问范围与授权摘要，在窄屏下纵向排列；两类已有连接集中在同一区域，可按全部、行政、科研筛选。已有科研连接按工作区独立加载与分页，不依赖目标选择区的展开状态，也不随目标搜索清空或重新加载。成功加载且没有未撤销连接、也无后续分页的科研工作区不显示标题或空列表提示；加载失败仍保留原因和重试入口。
+
+页面按来源工作区分组：
+
+- 行政来源明确展示所属 Plane URL 和独立门户账号名称，内部账号 ID 不作为页面文案显示。即便同实例也保留门户身份验证，不以工作区同名推断账号或授权映射。
+- 本实例科研工作区按“工作区 → 科研链 → 科研节点”展开；搜索同时覆盖工作区、链和节点名称，链及节点按需加载，所有分页均有明确的“加载更多”。
+- 链勾选只作用于当前已加载的节点集合，未加载或未来新增节点不自动授权；已选节点在摘要中逐项列明。批量补选节点不会覆盖已选节点的能力设置。
+- 科研只读默认可选；写入候选由后端检查部署开关、工作区开关、当前操作权限和链/节点状态。不自动启用写入开关。签发时再次执行服务端校验。
+- 行政天数受实时服务上限约束，科研有效期使用 `node_mcp_token_ttl_seconds()`，默认 604800 秒。结果显示服务端实际到期时间。
+- 一个批次逐项签发独立连接，记录成功和失败。重试跳过已成功项；关闭结果只清理密钥，成功回执仍保留以防重复签发。需要新密钥时先明确撤销对应旧连接。
+- TOML/JSON 输出使用项目既有 HTTP 配置结构，每个服务名包含业务类型和实际连接 ID，稳定且不冲突。多个服务项不代表共享地址或密钥。
+- 既有连接使用一致的卡片展示名称、业务类型、访问范围、能力和状态；详情仅包含工作区、创建时间、到期时间、最近使用时间。撤销需要确认，失败保留记录，成功后隐藏已撤销卡片。目标变化、退出门户验证或关闭结果会清除密钥；延迟响应不能把密钥带入另一目标。
+
+科研写入继续遵循“准备提案 → 人工确认 → 执行”。本轮没有增加提案审核工作台；确认/拒绝仍使用既有会话与 CSRF 人工接口，机器不能确认自己的提案。
+
+## 行政桥接与候选
+
+现有固定目标配置不变：
 
 ```dotenv
-# 固定服务 origin，不带 /connect 或 /mcp，不含用户信息及查询参数
-NATIVE_MCP_PORTAL_URL=http://localhost:8765
-# 仅 API 在 Docker、本机门户在宿主机时设置；浏览器与 Agent 不使用该内部地址
-NATIVE_MCP_PORTAL_INTERNAL_URL=http://host.docker.internal:8765
+NATIVE_MCP_PORTAL_URL=https://your-existing-portal.example
+# 仅在 API 需要通过独立内部地址连接门户时设置
+NATIVE_MCP_PORTAL_INTERNAL_URL=
 ```
 
-`NATIVE_MCP_PORTAL_URL` 是浏览器与 Agent 能访问的公开 origin；可选的 `NATIVE_MCP_PORTAL_INTERNAL_URL` 是 API 访问门户的固定传输 origin。桥接只通过该固定地址连接，Host/Origin 仍保留公开门户身份；会话也绑定内部目标，避免更换服务时重用凭据。服务器部署按自身网络配置，不能复制 localhost 指向另一台机器。
+`/api/mcp/native/*` 继续桥接原门户 `/connect/api/*`。本轮新增只读 `candidates`：门户依据已验证账号与管理员工作区白名单逐项复查上游权限，返回交集及明确的上游失败。没有权限的目标不作为候选；不可达目标的失败不会被静默当成空列表。
 
-本地链路：`localhost:3000` 管理页 → 本机 `localhost:8765` 行政 MCP → 本机 `127.0.0.1:8001` Plane API。新模板为 `demos/sciencediscovery-plane-mcp/http-local-self-service.example.json`；复制到 `.runtime/windows/native-mcp/http.local.json`，填写实际本地工作区及独立的绝对 `state_dir`。本地启动脚本验证三个 origin 都是 loopback，不接受测试服务器地址。
+人工变更继续要求 Plane Session + `X-CSRFToken`，以及行政门户自己的会话和 `X-MCP-CSRF`。桥接 Cookie 绑定 Plane 用户、公开来源和内部目标，只转发专用门户会话，不转发 Plane Cookie 或机器凭据。
 
-```powershell
-# 使用已有 Demo Python .venv，无镜像构建，也不启动 ScienceDiscovery
-./deployments/windows/native-mcp-local.ps1 -Action Start
-./deployments/windows/native-mcp-local.ps1 -Action Status
-./deployments/windows/native-mcp-local.ps1 -Action Stop
-```
+发布本轮页面需同时更新独立门户代码以提供 `/connect/api/candidates`；旧门户缺少该接口时，页面明确提示候选不可用，不退回仅按白名单生成候选。
 
-`start-local.ps1` 在配置使用本机门户时会启动该服务；Stop 会停止其拥有的进程，保留私密凭据库。新门户不会复制远端 Bearer、个人令牌或业务数据；测试时应由用户提供本机 Plane 的个人令牌。此前远端连接不自动迁移，也不会被本地操作撤销。
+## 科研管理接口
 
-页面采用「行政项目接入」名称，因为二开前端的行政项目沿用 Project/Issue 模型；`native` 路由、工具名和凭据类型保持兼容。现有外部项目 API 仍可能按 ACL 返回科研项目的原生项目壳，改名不扩大或额外缩减接口权限，也不把科研节点任务当作 Issue。
+本轮新增接口全部为会话管理接口，使用标准 DRF SessionAuthentication 与 CSRF，不接受 API Key、Bearer 或 Context Token 代替人工会话：
 
-`/api/mcp/native/{action}/` 只转发原有 `/connect/api/` 的 options、session、login、tokens、logout 和按 ID revoke。登录、创建、撤销、退出要求 Plane Session 与标准 CSRF；原生会话变更还保留其 `X-MCP-CSRF` 校验。不代理机器 `/mcp`、科研审批或任意 URL，不跟随重定向，限制请求时限和响应大小。
+| 接口                                                                        | 用途                                                             |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET /api/research/workspaces/<slug>/mcp/candidates/`                       | 查询可见链；提供 `chain_id` 时查询其可见节点；支持 `q`、`cursor` |
+| `GET /api/research/workspaces/<slug>/mcp/connections/`                      | 分页查询当前用户显式节点连接元信息                               |
+| `POST /api/research/workspaces/<slug>/mcp/connections/`                     | 按 `node_id`、`label`、`mode`、`actions` 签发一条连接            |
+| `POST /api/research/workspaces/<slug>/mcp/connections/<context_id>/revoke/` | 撤销当前用户在指定工作区的节点连接                               |
 
-桥接会话用签名 HttpOnly Cookie，绑定当前 Plane 用户与固定上游，有效 30 分钟。只转发专用原生门户会话，不转发 Plane Cookie、API Key、科研 Context Token。响应禁止缓存，原生桥接请求与响应正文不进入外部 API 日志。
+候选游标绑定工作区、用户、链、搜索内容和查询类型。节点权限来自既有 ResearchReadService；只读授予 TOOL_NAMES，不创建 WriteGrant。受控写入复用 issue_write_grant 及其权限、额度、状态、审计规则。
 
-用户单独输入个人 API Token，由现有自助服务继续验证身份与工作区权限，签发及撤销 Bearer；提交后清空输入框。统一页展示当前服务能力、有效期、连接状态及一次性客户端配置，不重做原生凭据存储，不转换为科研节点写授权。
+管理列表包括新只读连接和已有显式人工节点写连接；短期上下文交换、内置 Agent 会话凭据不当成用户显式连接混入列表。连接到期/撤销后不再接受机器请求。管理列表与撤销在功能关闭后仍可供当前工作区成员使用；候选和签发继续受功能开关约束。
 
-当原生服务连接的是另一套 Plane 时，其工作区可能与本地科研工作区不同。原生区域提供独立的「行政服务目标工作区」，选项只来自服务公开配置；不匹配当前本地工作区时必须显式选择。个人令牌管理链接指向原生服务所属的 Plane。签发仍由上游验证个人令牌对目标工作区的权限。切换原生目标清除连接密钥，并隔离延迟响应，不创建本地同名工作区或修改权限。
+新增迁移 `0188_research_context_connection_label` 只增加连接显示名称字段，不修改两类业务模型或原凭据语义。`0190_merge_mcp_and_asset_preview` 是空操作合并迁移，合并该迁移与 develop 已有的 `0189_asset_preview` 分支，不改写已应用的迁移历史。发布时运行标准迁移流程，使两个分支及合并迁移均完成；不要按文件序号跳过任一分支。现有密钥不回写、不轮换。
 
-## 科研节点操作 API
+## 兼容边界
 
-科研写入的后端能力保持不变，但只能由 API 客户端调用：
+- 旧 `/connect` 页面及 `/connect/api/*` 保持兼容，并增加统一设置导航链接。
+- 行政 `/mcp`、科研 `/agent-access/mcp/`、`/agent-operations/mcp/` 均不变；机器请求不跳转到 HTML。
+- 历史管理路由仍跳转到个人设置，仅保留工作区定位提示，丢弃旧令牌、节点和提案参数。
+- 读取工具和受控写入服务继续在每次调用时校验当前成员关系、对象归属、授权、到期、撤销、权限及提案确认状态。
 
-- 人类接口：`GET/POST /api/research/workspaces/<slug>/nodes/<node_id>/agent-operations/`，用于查看状态、启用工作区写入、签发/撤销节点授权和按精确 `proposal_hash` 确认/拒绝提案。该接口必须使用 Plane 登录会话和 `X-CSRFToken`，不接受 API Key 或机器 Context Token。
-- 机器接口：`/api/research/workspaces/<slug>/agent-operations/mcp/`，仍使用 `X-Research-Context-Token` 和 `X-Research-Context-Hash`，只能 prepare/query/execute 已获人工确认的提案。
-- 显式节点 MCP 连接使用 `RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS=604800`，默认 7 天；提案仍为 24 小时。旧上下文交换保留 `RESEARCH_CONTEXT_TOKEN_TTL_SECONDS=600`。已有授权、提案、审计和权限重检逻辑不变。
+## 本轮验证
 
-页面删除不影响科研 `/agent-access/` 只读 MCP，也不影响内置科研 Agent 与 ScienceDiscovery 的只读绑定。
+本地隔离验证记录：
 
-## 兼容与故障定位
+测试覆盖令牌所有权、候选权限、只读不可升级、跨节点/工作区拒绝、会话/CSRF、撤销、原科研读写协议、并发执行，以及行政桥接和门户的凭据隔离。后端采用独立临时 PostgreSQL 测试库、内存缓存与消息配置；门户使用临时凭据库、模拟 Plane 和临时 HTTP/MCP 服务。最终基线、测试数量、Web 类型检查和生产构建结果见 [验证记录](mcp-management-validation-2026-10-21.md)。
 
-- 原 `/connect`、`/connect/api/*`、8765 `/mcp` 与已有 Bearer 客户端保持兼容，独立服务无需升级。
-- 科研 `/agent-access/mcp/`、`/agent-operations/mcp/` 均不变，两套凭据不能互换。
-- 历史 `review_path` 仍会打开节点页，但 `operation` 参数被忽略，不再挂载审核组件；待审提案需调用人类 API 处理。
-- 历史统一页科研链接会进入行政项目配置页，只保留工作区定位，不携带提案或密钥参数。
+未启动 `docker-compose-test.yml`，未运行 setup.sh，未覆盖环境配置或清理真实数据。所有令牌、授权和业务提案均来自测试夹具或 mock。
 
-## 发布与验收
+人工验收应在隔离验收环境检查：本实例和跨实例来源识别、鼠标/键盘/触屏交互、真实目标客户端导入多服务配置、实际读取、受控写入的人工确认，以及开关关闭/成员退出/到期后的调用拒绝。部署时需同步迁移、Plane API/Web 和独立行政门户。
 
-无新增迁移或依赖。部署既有 Plane API 与 Web，更新 Web 构建产物，重新创建 API 加载路由和新增变量；保持 v2.1 开关、`/api/*` 代理和可信 CSRF 来源。统一页复用现有独立门户协议；本机测试额外启动该门户的本地实例，端口仅绑定 `127.0.0.1:8765`。无需 iframe 或额外 CORS。
+## 后续单地址、单密钥的接口边界
 
-检查命令：
+后续需要单独定义统一连接与范围管理接口、哈希保存的统一凭据、机器入口和业务适配层。本轮没有建立这些对象。
 
-```bash
-# apps/api 内，使用已安装 Django/DRF/httpx 的环境；无数据库/Redis/网络访问
-python -m plane.mcp.tests
-# 仓库根目录
-pnpm --filter web exec vitest run --config vitest.config.ts --testTimeout=20000 tests/components/mcp-management.test.tsx tests/components/mcp-services.test.ts tests/components/research-chain-route-registration.test.ts tests/components/research-chain-detail.test.tsx tests/components/research-chain-task-panel.test.tsx tests/components/research-chain-workbench.test.tsx
-pnpm --filter web check:types
-pnpm --filter web build
-```
+建议人工连接管理独立于机器入口；范围明确保存工作区、业务类型、节点 ID 集合和能力，不以全工作区或未来节点通配授权。统一凭据不得扩大子授权有效期；撤销只回收该连接独占的子授权。
 
-测试服务器仍需用户用自己的账号验收原生连接验证/创建/撤销，以及科研 prepare → API 人工确认 → Agent execute → 真实对象读回。组件和桥接检查不替代真实业务验收。
-
-本轮不运行 Docker 测试栈、不构建镜像、不启动 ScienceDiscovery、不写入真实凭据或批准业务提案。历史结果见 [v2.1 验收摘要](research-mcp-v21-acceptance.md)。
-
-## 历史验收说明
-
-2026-10-19 的页面式科研授权与提案审核验收结果见 [v2.1 验收摘要](research-mcp-v21-acceptance.md)。这些结果证明后端协议和审计链路曾完整工作；当前版本移除的是页面入口，不表示删除或降级后端 API。
+统一机器适配器需要在每次工具调用中重新解析任务/资源/提案的真实归属，对工具目录、结果计数和分页游标应用同样范围约束，防止通过行政 Project 外壳或缺失 node_id 的参数绕过科研授权。跨实例还需明确稳定的实例、账号和工作区映射，以及上游凭据的加密存储与失效反馈。这应作为后续独立交付。

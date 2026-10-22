@@ -1,3 +1,7 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Fixed-target bridge to the existing native Issue MCP self-service portal.
 
 No machine protocol, Plane session, API key fallback, or research grant is
@@ -54,7 +58,7 @@ class NativeMCPBridgeEndpoint(APIView):
         return response
 
     def get(self, request, action):
-        if action not in {"options", "session", "tokens"}:
+        if action not in {"options", "session", "tokens", "candidates"}:
             return Response({"error": "接口不存在。"}, status=404)
         return self.forward(request, action)
 

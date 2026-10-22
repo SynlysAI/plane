@@ -77,3 +77,17 @@ class TestAPITokenLogMiddleware:
         with patch("plane.middleware.logger.process_logs") as process_logs:
             middleware.process_request(request, HttpResponse(b"{}"), request_body=b"")
             assert not process_logs.delay.called
+
+    @pytest.mark.parametrize("path", [
+        "/api/users/api-tokens/", "/api/mcp/native/login/",
+        "/api/research/workspaces/synthetic/mcp/connections/",
+    ])
+    def test_credential_management_never_logs_request_or_response_secrets(self, middleware, request_factory, path):
+        request = request_factory.post(path, data='{"plane_token":"private-pat"}', content_type="application/json",
+            HTTP_X_API_KEY=self.API_KEY)
+        request.user = AnonymousUser()
+        with patch("plane.middleware.logger.process_logs") as process_logs:
+            middleware.process_request(request, HttpResponse(b'{"token":"one-time-secret"}'), request.body)
+            logged = process_logs.delay.call_args.kwargs["log_data"]
+            assert logged["body"] == "[REDACTED]"
+            assert logged["response_body"] == "[REDACTED]"

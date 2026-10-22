@@ -1,3 +1,7 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Standalone personal-token binding and revocable MCP credentials.
 
 Plane origins and workspace choices come only from administrator settings.
@@ -8,6 +12,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
+import asyncio
 import hmac
 import json
 import os
@@ -347,6 +352,30 @@ class SelfServicePortal:
             token, info = self.store.issue(current, workspace, label.strip(), days, publish, self.settings.max_tokens_per_user)
             return {**info, **connection_configs(self.settings, token)}
 
+        async def candidates(request):
+            current = self.current(request)
+            pat = self.store.cipher.decrypt(current["pat"]).decode()
+            semaphore = asyncio.Semaphore(5)
+
+            async def check(workspace):
+                async with semaphore:
+                    try:
+                        profile = await self.verifier(self.settings, pat, workspace)
+                        if profile["id"] != current["owner"]:
+                            raise PortalError("Plane 账号已变化，请重新验证。", 401)
+                        return workspace, None
+                    except PortalError as error:
+                        if error.status == 401:
+                            raise
+                        return None, {"workspace": workspace, "status": error.status,
+                                      "error": str(error)} if error.status != 403 else None
+
+            checked = await asyncio.gather(*(check(workspace) for workspace in self.settings.workspaces))
+            return {"workspaces": [workspace for workspace, _ in checked if workspace],
+                    "failures": [failure for _, failure in checked if failure],
+                    "plane_ui_url": self.settings.plane_ui_url, "identity_mapping": "independent",
+                    "account": {"id": current["owner"], "name": current["display_name"]}}
+
         async def revoke(request):
             current = self.current(request, write=True)
             await self.body(request)
@@ -362,4 +391,5 @@ class SelfServicePortal:
             return response
 
         definitions = [("/connect", page, ["GET"]), ("/connect/", page, ["GET"]), ("/connect/assets/{filename}", asset, ["GET"]), ("/connect/api/options", options, ["GET"]), ("/connect/api/login", login, ["POST"]), ("/connect/api/session", session, ["GET"]), ("/connect/api/tokens", tokens, ["GET", "POST"]), ("/connect/api/tokens/{identifier}/revoke", revoke, ["POST"]), ("/connect/api/logout", logout, ["POST"])]
+        definitions.append(("/connect/api/candidates", candidates, ["GET"]))
         return [Route(path, self.endpoint(handler), methods=methods) for path, handler, methods in definitions]

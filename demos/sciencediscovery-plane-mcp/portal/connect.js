@@ -1,3 +1,9 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
 "use strict";
 const $ = (id) => document.getElementById(id);
 let csrf = "";
@@ -186,6 +192,7 @@ $("logout").addEventListener("click", async () => {
 async function start() {
   const options = await api("options");
   $("plane-settings").href = options.plane_ui_url + "/settings/profile/api-tokens/";
+  $("unified-settings").href = options.plane_ui_url + "/settings/profile/mcp/";
   for (const workspace of options.workspaces) $("workspace").add(new Option(workspace, workspace));
   const days = [...new Set([1, 7, 30, 90, options.max_token_days])]
     .filter((n) => n <= options.max_token_days)

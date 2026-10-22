@@ -20,9 +20,9 @@ export class APITokenService extends APIService {
    */
   async list(): Promise<IApiToken[]> {
     return this.get(`/api/users/api-tokens/`)
-      .then((response) => response?.data)
+      .then((response) => response.data.map(({ token: _secret, ...metadata }: IApiToken) => metadata))
       .catch((error) => {
-        throw error?.response?.data;
+        throw { status: error?.response?.status, ...error?.response?.data };
       });
   }
 
@@ -33,10 +33,13 @@ export class APITokenService extends APIService {
    * @throws {Error} Throws response data if the request fails
    */
   async retrieve(tokenId: string): Promise<IApiToken> {
-    return this.get(`/api/users/api-tokens/${tokenId}`)
-      .then((response) => response?.data)
+    return this.get(`/api/users/api-tokens/${tokenId}/`)
+      .then((response) => {
+        const { token: _secret, ...metadata } = response.data as IApiToken;
+        return metadata;
+      })
       .catch((error) => {
-        throw error?.response?.data;
+        throw { status: error?.response?.status, ...error?.response?.data };
       });
   }
 
@@ -50,7 +53,18 @@ export class APITokenService extends APIService {
     return this.post(`/api/users/api-tokens/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw { status: error?.response?.status, ...error?.response?.data };
+      });
+  }
+
+  async rename(tokenId: string, label: string): Promise<IApiToken> {
+    return this.patch(`/api/users/api-tokens/${tokenId}/`, { label })
+      .then((response) => {
+        const { token: _secret, ...metadata } = response.data as IApiToken;
+        return metadata;
+      })
+      .catch((error) => {
+        throw { status: error?.response?.status, ...error?.response?.data };
       });
   }
 
@@ -61,10 +75,10 @@ export class APITokenService extends APIService {
    * @throws {Error} Throws response data if the request fails
    */
   async destroy(tokenId: string): Promise<IApiToken> {
-    return this.delete(`/api/users/api-tokens/${tokenId}`)
+    return this.delete(`/api/users/api-tokens/${tokenId}/`)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw { status: error?.response?.status, ...error?.response?.data };
       });
   }
 }
