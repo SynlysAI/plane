@@ -1448,6 +1448,8 @@
       }
     },
     "chain_tasks": {
+      "membership_hint": "Add the assignee as a project member first.",
+      "invalid_assignee": "The assignee is no longer an eligible project member. Restore membership or reassign this task.",
       "comments": {
         "confirm_delete": "Delete this comment?",
         "title": "Comments",
@@ -1494,10 +1496,10 @@
       "unassigned": "Unassigned",
       "candidate_no_permission": "Your account cannot manage task candidates; tasks remain read-only.",
       "candidate_load_failed": "The candidate scope could not load, so creating and assigning are temporarily unavailable.",
-      "candidate_scope_hint": "Candidates come only from this topic's organisation scope and explicit collaborators; there is no workspace-wide search.",
+      "candidate_scope_hint": "Candidates come only from active members of this topic; organisation details are informational, and there is no workspace-wide search.",
       "search_assignee": "Search candidates or organisations",
       "no_candidate_match": "No assignable member matches this search.",
-      "ownership_hint": "The task stays on this node. Candidates come from the research organisation scope and explicit collaborators.",
+      "ownership_hint": "The task stays on this node. Assignees must be active members of this topic.",
       "properties": "Properties",
       "more": "More",
       "updated_at": "Updated",

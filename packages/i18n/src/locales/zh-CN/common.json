@@ -1471,6 +1471,8 @@
       "org_unit": "所属组织"
     },
     "chain_tasks": {
+      "membership_hint": "请先在课题成员中添加负责人",
+      "invalid_assignee": "负责人已不具备有效课题成员资格，请补充成员或重新指派",
       "comments": {
         "confirm_delete": "确认删除这条评论？",
         "title": "评论",
@@ -1517,10 +1519,10 @@
       "unassigned": "未指派",
       "candidate_no_permission": "当前账号没有管理任务候选人的权限，任务仍为只读展示。",
       "candidate_load_failed": "候选人范围加载失败，暂不能创建或指派任务。",
-      "candidate_scope_hint": "候选人仅来自当前课题的组织范围与显式协作者，不做全工作区搜索。",
+      "candidate_scope_hint": "候选人仅来自当前课题的有效成员；组织信息仅用于展示，不做全工作区搜索。",
       "search_assignee": "搜索候选人或组织",
       "no_candidate_match": "没有匹配的可指派成员，请调整搜索条件。",
-      "ownership_hint": "任务仍归属于当前节点；指派候选人由科研组织范围和显式协作者权限决定。",
+      "ownership_hint": "任务仍归属于当前节点；负责人必须是当前课题的有效成员。",
       "properties": "属性",
       "more": "更多",
       "updated_at": "更新时间",

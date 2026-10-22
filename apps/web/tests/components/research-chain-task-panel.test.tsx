@@ -51,6 +51,7 @@ function task(overrides: Partial<TResearchChainNodeTask> = {}): TResearchChainNo
     instruction: "补充近三年实验方法对比。",
     status: "SUBMITTED",
     assignee: "student-1",
+    assignee_is_valid: true,
     assignee_detail: { id: "student-1", display_name: "李同学" },
     assigned_by: "advisor-1",
     assigned_by_detail: { id: "advisor-1", display_name: "王导师" },
@@ -312,4 +313,20 @@ it("renders empty, forbidden, loading, refresh, and server rejection states", as
   await setInput('input:not([type="date"]):not([type="search"])', "越权任务");
   await act(async () => button("创建任务").click());
   expect(container.textContent).toContain("assignee is outside the assignable-user boundary.");
+});
+
+it("retains an invalid assignee name and explains how to restore membership", async () => {
+  mocks.getNodeTasks.mockResolvedValue([task({ assignee_is_valid: false })]);
+  mocks.getAssignableUsers.mockResolvedValue([]);
+  await renderPanel();
+  expect(container.textContent).toContain("李同学");
+  await act(async () => button("整理开题文献").click());
+  const peek = container.querySelector("aside");
+  expect(peek?.textContent).toContain("李同学");
+  expect(peek?.textContent).toContain("负责人已不具备有效课题成员资格，请补充成员或重新指派");
+  expect(peek?.textContent).toContain("请先在课题成员中添加负责人");
+  const select = peek?.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
+  await act(async () => select.click());
+  expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
+  expect(mocks.updateNodeTask).not.toHaveBeenCalled();
 });

@@ -347,6 +347,7 @@ export type TResearchChainNodeTask = {
   status: TResearchChainNodeTaskStatus;
   assignee: string | null;
   assignee_detail?: TResearchTaskAssignee | null;
+  assignee_is_valid: boolean;
   assigned_by: string | null;
   assigned_by_detail?: TResearchTaskUserSummary | null;
   due_at: string | null;

@@ -16,6 +16,7 @@ from plane.research.services.chain_tasks import (
     actor_can_review_task,
     actor_can_submit_task,
     chain_writer,
+    chain_assignable_user_ids,
 )
 from plane.research.services.paper_review import (
     actor_can_review_paper,
@@ -71,7 +72,9 @@ def _capabilities(serializer, task):
         "view": True,
         "edit": writer,
         "assign": writer,
-        "submit": actor_can_submit_task(workspace, task, actor),
+        "submit": actor_can_submit_task(
+            workspace, task, actor, assignee_is_valid=serializer.get_assignee_is_valid(task)
+        ),
         "return": roles["reviewer"] and task.status == ResearchChainNodeTask.Status.SUBMITTED,
         "complete": roles["reviewer"] and task.status == ResearchChainNodeTask.Status.SUBMITTED,
         "cancel": roles["manager"] and editable,
@@ -84,6 +87,7 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
 
     schema_version = serializers.SerializerMethodField()
     assignee_detail = serializers.SerializerMethodField()
+    assignee_is_valid = serializers.SerializerMethodField()
     assigned_by_detail = serializers.SerializerMethodField()
     capabilities = serializers.SerializerMethodField()
 
@@ -100,6 +104,7 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
             "status",
             "assignee",
             "assignee_detail",
+            "assignee_is_valid",
             "assigned_by",
             "assigned_by_detail",
             "due_at",
@@ -122,6 +127,7 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
             "assigned_by",
             "assigned_by_detail",
             "assignee_detail",
+            "assignee_is_valid",
             "submitted_at",
             "completed_at",
             "request_id",
@@ -141,6 +147,23 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
     def get_assignee_detail(self, obj):
         """Return the assignee display projection."""
         return _user_detail(obj.assignee)
+
+    def get_assignee_is_valid(self, obj):
+        """返回负责人当前是否具备有效课题成员资格。
+
+        Args:
+            obj: 当前科研任务。
+
+        Returns:
+            无负责人或成员资格失效时返回 False。
+        """
+        if obj.assignee_id is None:
+            return False
+        cache = self.context.setdefault("_research_task_assignees", {})
+        key = (obj.workspace_id, obj.chain_id)
+        if key not in cache:
+            cache[key] = chain_assignable_user_ids(obj.workspace, obj.chain)
+        return obj.assignee_id in cache[key]
 
     def get_assigned_by_detail(self, obj):
         """Return the assigning user display projection."""

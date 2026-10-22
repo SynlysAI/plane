@@ -181,6 +181,8 @@ def _office_approval(env):
 def env(db, settings):
     settings.RESEARCH_MODULE_ENABLED = True
     fixture = make_research_boundary_fixture()
+    for key in ("group_member", "advisor"):
+        ProjectMember.objects.create(project=fixture["project"], member=fixture[key], role=15)
     now = timezone.now()
     fixture.update(
         {

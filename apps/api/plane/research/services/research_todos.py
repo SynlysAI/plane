@@ -246,7 +246,7 @@ def collect_chain_task_todos(workspace, user, scope):
         if task.chain_id not in assignable_ids_by_chain:
             assignable_ids_by_chain[task.chain_id] = chain_assignable_user_ids(workspace, task.chain)
         assignee_is_valid = task.assignee_id is not None and task.assignee_id in assignable_ids_by_chain[task.chain_id]
-        can_submit = actor_can_submit_task(workspace, task, user)
+        can_submit = actor_can_submit_task(workspace, task, user, assignee_is_valid=assignee_is_valid)
         can_review = actor_can_review_task(workspace, task, user)
         can_cancel = actor_can_cancel_task(workspace, task, user)
         editable = task.status in (
@@ -287,7 +287,7 @@ def collect_chain_task_todos(workspace, user, scope):
             requester=_participant(initiator),
             assignees=_participants(assignees),
             business_status=task.status,
-            handling_status="BLOCKED" if not assignees else handling,
+            handling_status="BLOCKED" if editable and not assignees else handling,
             next_action=next_action,
             due_at=task.due_at,
             href=f"/{workspace.slug}/research/chains/{task.chain_id}?node={task.node_id}&task={task.id}",
