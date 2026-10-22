@@ -25,6 +25,7 @@ import { cn } from "@plane/utils";
 // components
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { DetailBackLink } from "@/components/common/detail-back-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
 import {
   DisplayFiltersSelection,
@@ -132,7 +133,8 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
       <Header>
         <Header.LeftItem>
           <div className="flex items-center gap-2">
-            <Breadcrumbs onBack={router.back} isLoading={loader === "init-loader"}>
+            <DetailBackLink href={`/${workspaceSlug}/projects/${projectId}/modules/`}>返回模块列表</DetailBackLink>
+            <Breadcrumbs isLoading={loader === "init-loader"}>
               <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
               <Breadcrumbs.Item
                 component={

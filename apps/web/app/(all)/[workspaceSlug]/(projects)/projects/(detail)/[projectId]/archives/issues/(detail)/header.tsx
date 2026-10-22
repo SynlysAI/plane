@@ -12,6 +12,7 @@ import { ArchiveOutline, WorkItemsOutline } from "@makeplane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { DetailBackLink } from "@/components/common/detail-back-link";
 import { IssueDetailQuickActions } from "@/components/issues/issue-detail/issue-detail-quick-actions";
 // constants
 import { ISSUE_DETAILS } from "@plane/constants";
@@ -40,38 +41,43 @@ export const ProjectArchivedIssueDetailsHeader = observer(function ProjectArchiv
   return (
     <Header>
       <Header.LeftItem>
-        <Breadcrumbs isLoading={loader === "init-loader"}>
-          <ProjectBreadcrumb workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
-          <Breadcrumbs.Item
-            component={
-              <BreadcrumbLink
-                href={`/${workspaceSlug}/projects/${projectId}/archives/issues`}
-                label="Archives"
-                icon={<ArchiveOutline className="h-4 w-4 text-tertiary" />}
-              />
-            }
-          />
-          <Breadcrumbs.Item
-            component={
-              <BreadcrumbLink
-                href={`/${workspaceSlug}/projects/${projectId}/archives/issues`}
-                label="Work items"
-                icon={<WorkItemsOutline className="h-4 w-4 text-tertiary" />}
-              />
-            }
-          />
-          <Breadcrumbs.Item
-            component={
-              <BreadcrumbLink
-                label={
-                  currentProjectDetails && issueDetails
-                    ? `${currentProjectDetails.identifier}-${issueDetails.sequence_id}`
-                    : ""
-                }
-              />
-            }
-          />
-        </Breadcrumbs>
+        <div className="flex items-center gap-2">
+          <DetailBackLink href={`/${workspaceSlug}/projects/${projectId}/archives/issues/`}>
+            返回归档工作项
+          </DetailBackLink>
+          <Breadcrumbs isLoading={loader === "init-loader"}>
+            <ProjectBreadcrumb workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
+            <Breadcrumbs.Item
+              component={
+                <BreadcrumbLink
+                  href={`/${workspaceSlug}/projects/${projectId}/archives/issues`}
+                  label="Archives"
+                  icon={<ArchiveOutline className="h-4 w-4 text-tertiary" />}
+                />
+              }
+            />
+            <Breadcrumbs.Item
+              component={
+                <BreadcrumbLink
+                  href={`/${workspaceSlug}/projects/${projectId}/archives/issues`}
+                  label="Work items"
+                  icon={<WorkItemsOutline className="h-4 w-4 text-tertiary" />}
+                />
+              }
+            />
+            <Breadcrumbs.Item
+              component={
+                <BreadcrumbLink
+                  label={
+                    currentProjectDetails && issueDetails
+                      ? `${currentProjectDetails.identifier}-${issueDetails.sequence_id}`
+                      : ""
+                  }
+                />
+              }
+            />
+          </Breadcrumbs>
+        </div>
       </Header.LeftItem>
       <Header.RightItem>
         <IssueDetailQuickActions

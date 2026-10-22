@@ -13,6 +13,7 @@ import { Breadcrumbs, Header, BreadcrumbNavigationSearchDropdown } from "@plane/
 import { getPageName } from "@plane/utils";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { DetailBackLink } from "@/components/common/detail-back-link";
 import { PageAccessIcon } from "@/components/common/page-access-icon";
 import { SwitcherIcon, SwitcherLabel } from "@/components/common/switcher-label";
 import { PageHeaderActions } from "@/components/pages/header/actions";
@@ -65,7 +66,8 @@ export const PageDetailsHeader = observer(function PageDetailsHeader() {
   return (
     <Header>
       <Header.LeftItem>
-        <div>
+        <div className="flex items-center gap-2">
+          <DetailBackLink href={`/${workspaceSlug}/projects/${projectId}/pages/`}>返回页面列表</DetailBackLink>
           <Breadcrumbs isLoading={loader === "init-loader"}>
             <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
             <Breadcrumbs.Item
