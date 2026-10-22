@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs";
 import * as dotenv from "dotenv";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig, type Plugin, type ProxyOptions } from "vite";
@@ -118,6 +119,52 @@ function previewRemoteDiagnostics(): Plugin {
   };
 }
 
+const PDF_JS_RESOURCES = [
+  { route: "/pdfjs/cmaps/", source: path.resolve(__dirname, "node_modules/pdfjs-dist/cmaps") },
+  { route: "/pdfjs/standard_fonts/", source: path.resolve(__dirname, "node_modules/pdfjs-dist/standard_fonts") },
+  { route: "/pdfjs/wasm/", source: path.resolve(__dirname, "node_modules/pdfjs-dist/wasm") },
+];
+
+/**
+ * 在开发和构建产物中提供 PDF.js 的本地 CMap、标准字体与 WASM 资源。
+ *
+ * 这些文件来自锁定版本的依赖包，不提交到仓库；构建时复制到静态输出目录，
+ * 避免浏览器为渲染中文 PDF 向外部源发起请求。
+ */
+function localPdfResources(): Plugin {
+  return {
+    name: "plane-local-pdf-resources",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathname = decodeURIComponent(new URL(req.url || "/", "http://localhost").pathname);
+        const resource = PDF_JS_RESOURCES.find((item) => pathname.startsWith(item.route));
+        if (!resource) {
+          next();
+          return;
+        }
+        const relativePath = path.normalize(pathname.slice(resource.route.length));
+        const filePath = path.resolve(resource.source, relativePath);
+        if (
+          !filePath.startsWith(resource.source + path.sep) ||
+          !fs.existsSync(filePath) ||
+          !fs.statSync(filePath).isFile()
+        ) {
+          next();
+          return;
+        }
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        fs.createReadStream(filePath).pipe(res);
+      });
+    },
+    closeBundle() {
+      for (const resource of PDF_JS_RESOURCES) {
+        const output = path.join(__dirname, "build/client", resource.route.replace(/^\/+/, ""));
+        fs.cpSync(resource.source, output, { recursive: true });
+      }
+    },
+  };
+}
+
 export default defineConfig(() => ({
   define: {
     "process.env": JSON.stringify(viteEnv),
@@ -129,6 +176,7 @@ export default defineConfig(() => ({
     reactRouter(),
     tsconfigPaths({ projects: [path.resolve(__dirname, "tsconfig.json")] }),
     previewRemoteDiagnostics(),
+    localPdfResources(),
   ],
   resolve: {
     alias: {

@@ -28,7 +28,7 @@ IMAGE_CONTENT_TYPES = {
     "image/svg+xml",
 }
 PDF_EXTENSIONS = {".pdf"}
-MARKDOWN_EXTENSIONS = {".md", ".markdown"}
+MARKDOWN_EXTENSIONS = {".md", ".markdown", ".txt"}
 OFFICE_EXTENSIONS = {
     ".doc",
     ".docx",

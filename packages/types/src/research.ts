@@ -4,8 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import type { TCommentAttachment } from "./issues/activity/issue_comment";
-
 export type TOrgUnitType = "ROOT" | "INSTITUTE" | "LAB" | "GROUP" | "TEAM";
 export type TOrgBusinessCategory = "BASIC_RESEARCH" | "INDUSTRIALIZATION" | "MENTOR_GROUP";
 export type TOrgRole = "OWNER" | "PI" | "ADVISOR" | "REVIEWER" | "UNIT_ADMIN";
@@ -333,7 +331,7 @@ export type TResearchTaskComment = {
   edited_at: string | null;
   can_edit: boolean;
   can_delete: boolean;
-  file_attachments?: TCommentAttachment[];
+  file_attachments?: TResearchTaskCommentAttachment[];
 };
 
 export type TResearchChainNodeTask = {
@@ -665,6 +663,7 @@ export type TReportReviewLog = {
 };
 
 export type TReportAttachment = {
+  preview_url?: string | null;
   id: string;
   report: string;
   asset: string;
@@ -1387,6 +1386,17 @@ export type TResearchOutcomeAttachment = {
   file_size: number;
   asset: string;
   download_url?: string;
+  preview_url?: string | null;
+};
+
+/** 工作项和科研任务评论共用的只读文件元数据。 */
+export type TResearchTaskCommentAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  download_url: string;
+  preview_url?: string | null;
 };
 
 export type TIntegrationSystem =

@@ -24,6 +24,7 @@ export type TCommentReaction = {
 };
 /** 工作项评论附带的文件，下载地址始终通过服务端鉴权。 */
 export type TCommentAttachment = {
+  preview_url?: string | null;
   id: string;
   name: string;
   type: string;

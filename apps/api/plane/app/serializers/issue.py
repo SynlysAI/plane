@@ -590,6 +590,14 @@ class IssueLinkLiteSerializer(BaseSerializer):
 
 
 class IssueAttachmentSerializer(BaseSerializer):
+    preview_url = serializers.SerializerMethodField()
+
+    def get_preview_url(self, obj):
+        """返回需要业务鉴权的预览入口。"""
+        from plane.preview.access import preview_url
+
+        return preview_url(obj)
+
     asset_url = serializers.CharField(read_only=True)
 
     class Meta:
@@ -718,12 +726,15 @@ class IssueCommentSerializer(BaseSerializer):
         Returns:
             仅包含已上传、未移除文件的列表。
         """
+        from plane.preview.access import preview_url
+
         return [
             {
                 "id": str(asset.id),
                 "name": asset.attributes.get("name", ""),
                 "type": asset.attributes.get("type", ""),
                 "size": asset.size,
+                "preview_url": preview_url(asset),
                 "download_url": (
                     f"/api/assets/v2/workspaces/{obj.workspace.slug}/projects/{obj.project_id}/download/{asset.id}/"
                 ),

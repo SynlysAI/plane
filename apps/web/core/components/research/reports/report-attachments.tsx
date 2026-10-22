@@ -11,6 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
 // components
+import { AttachmentPreviewLink } from "@/components/attachments/preview";
 import { getResearchErrorDetail, getResearchErrorKey } from "@/components/research/common/error-messages";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -86,7 +87,7 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
             <input
               ref={fileInputRef}
               type="file"
-              accept=".md,.markdown,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.tsv,image/*,application/pdf"
+              accept=".md,.markdown,.txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.tsv,image/*,application/pdf"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -125,15 +126,19 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
           <TableBody>
             {attachments.map((attachment) => (
               <TableRow key={attachment.id}>
-                <TableCell className="text-secondary">{attachment.file_name}</TableCell>
+                <TableCell className="text-secondary">
+                  <AttachmentPreviewLink
+                    name={attachment.file_name}
+                    previewUrl={attachment.preview_url}
+                    downloadUrl={attachment.asset_url ?? ""}
+                    className="max-w-xs truncate text-left hover:underline"
+                  />
+                </TableCell>
                 <TableCell className="text-tertiary">{attachment.kind}</TableCell>
                 <TableCell className="text-tertiary">{Math.round(attachment.file_size / 1024)} KB</TableCell>
                 <TableCell>{attachment.uploaded_by}</TableCell>
                 <TableCell className="text-right">
-                  <a
-                    className="mr-3 text-accent-primary"
-                    href={`/api/research/workspaces/${workspaceSlug}/reports/${reportId}/attachments/${attachment.id}/`}
-                  >
+                  <a className="mr-3 text-accent-primary" href={attachment.asset_url}>
                     {t("research.attachments.download")}
                   </a>
                   {editable && (

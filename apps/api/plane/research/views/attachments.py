@@ -56,7 +56,9 @@ class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
         report, error = self._report(request, workspace, report_id)
         if error:
             return error
-        attachments_query = ReportAttachment.all_objects.filter(report=report).select_related("asset")
+        attachments_query = ReportAttachment.all_objects.filter(report=report).select_related(
+            "asset", "report__workspace"
+        )
         if report.owner_id == request.user.id:
             attachments_query = attachments_query.filter(deleted_at__isnull=True)
         else:
