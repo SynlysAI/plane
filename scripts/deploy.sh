@@ -175,7 +175,9 @@ fi
 
 if [[ "$MODE" != "web" ]]; then
     log "Running database migrations"
-    "${BACKEND_COMPOSE[@]}" up -d migrator || fail "migration container failed to start"
+    # --build keeps the migrator image in sync with requirements changes; the
+    # source is volume-mounted, so a stale image breaks on new pip deps (e.g. PIL).
+    "${BACKEND_COMPOSE[@]}" up -d --build migrator || fail "migration container failed to start"
     MIGRATOR_ID="$("${BACKEND_COMPOSE[@]}" ps -aq migrator)"
     [[ -n "$MIGRATOR_ID" ]] || fail "migration container was not created"
 
