@@ -23,7 +23,6 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
-import { IssueApprovalButton } from "@/components/administrative/issue-approval-button";
 import { IssueSubscription } from "./subscription";
 
 type Props = {
@@ -45,7 +44,7 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
   // hooks
   const { data: currentUser } = useUser();
   const { isMobile } = usePlatformOS();
-  const { getProjectIdentifierById, getPartialProjectById } = useProject();
+  const { getProjectIdentifierById } = useProject();
   const {
     issue: { getIssueById },
     removeIssue,
@@ -144,7 +143,6 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
     <>
       <div className="flex flex-shrink-0 items-center justify-end">
         <div className="flex flex-wrap items-center gap-2">
-          {!issue.archived_at && getPartialProjectById(projectId)?.is_research_project === false && <IssueApprovalButton workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />}
           {currentUser && !issue?.archived_at && (
             <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
           )}

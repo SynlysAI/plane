@@ -60,7 +60,6 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const [isArchiveIssueModalOpen, setIsArchiveIssueModalOpen] = useState(false);
   const [isDuplicateIssueModalOpen, setIsDuplicateIssueModalOpen] = useState(false);
   const [isEditIssueModalOpen, setIsEditIssueModalOpen] = useState(false);
-  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   // 冻结态：标题、描述与挂件默认只读；属性区仍可直接编辑
   const [isEditMode, setIsEditMode] = useState(false);
   useEffect(() => {
@@ -89,11 +88,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const toggleEditIssueModal = (value: boolean) => setIsEditIssueModalOpen(value);
 
   const isAnyLocalModalOpen =
-    isDeleteIssueModalOpen ||
-    isArchiveIssueModalOpen ||
-    isDuplicateIssueModalOpen ||
-    isEditIssueModalOpen ||
-    isApprovalModalOpen;
+    isDeleteIssueModalOpen || isArchiveIssueModalOpen || isDuplicateIssueModalOpen || isEditIssueModalOpen;
 
   usePeekOverviewOutsideClickDetector(
     issuePeekOverviewRef,
@@ -186,7 +181,6 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 isSubmitting={isSubmitting}
-                onApprovalModalOpenChange={setIsApprovalModalOpen}
                 disabled={disabled}
                 embedIssue={embedIssue}
               />

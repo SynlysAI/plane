@@ -23,7 +23,6 @@ from plane.utils.administrative_projects import (
     effective_project_member,
     project_member_roster,
 )
-from plane.utils.administrative_approvals import save_flow
 
 pytestmark = [pytest.mark.contract, pytest.mark.django_db]
 

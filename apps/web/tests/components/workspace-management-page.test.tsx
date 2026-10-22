@@ -122,7 +122,7 @@ it("将反馈管理置于科研管理之后，并在打开时渲染独立管理�
 
   expect(
     Array.from(container.querySelectorAll('nav[aria-label="管理分类"] button')).map((button) => button.textContent)
-  ).toEqual(["工作区设置", "行政组织与审批", "科研管理", "反馈管理"]);
+  ).toEqual(["工作区设置", "行政组织", "科研管理", "反馈管理"]);
   expect(container.querySelector('[data-testid="feedback-management"]')?.getAttribute("data-management-only")).toBe(
     "true"
   );
