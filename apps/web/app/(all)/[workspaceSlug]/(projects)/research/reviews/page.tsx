@@ -7,33 +7,13 @@
 import { observer } from "mobx-react";
 import { useParams } from "react-router";
 // components
-import { ResearchPageShell } from "@/components/research/common/research-page-shell";
-import { ResearchIaV2Redirect } from "@/components/research/navigation/research-ia-v2-redirect";
-import { ReviewInbox } from "@/components/research/reviews/review-inbox";
-
-function WorkspaceResearchReviewsContent() {
-  const { workspaceSlug } = useParams();
-  if (!workspaceSlug) return null;
-
-  return (
-    <ResearchPageShell
-      titleKey="research.nav.reviews"
-      descriptionKey="research.reviews.description"
-      section="stages"
-      navKey="reviews"
-    >
-      <ReviewInbox workspaceSlug={workspaceSlug} />
-    </ResearchPageShell>
-  );
-}
+import { LegacyResearchRedirect } from "@/components/research/navigation/legacy-research-redirect";
 
 function WorkspaceResearchReviewsPage() {
   const { workspaceSlug } = useParams();
   if (!workspaceSlug) return null;
   return (
-    <ResearchIaV2Redirect to={`/${workspaceSlug}/approvals`} query={{ domain: "research", tab: "stage_review" }}>
-      <WorkspaceResearchReviewsContent />
-    </ResearchIaV2Redirect>
+    <LegacyResearchRedirect to={`/${workspaceSlug}/approvals`} query={{ domain: "research", tab: "stage_review" }} />
   );
 }
 

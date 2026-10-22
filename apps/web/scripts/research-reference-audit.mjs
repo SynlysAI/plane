@@ -33,7 +33,7 @@ const COMPAT_CONTRACTS = new Map([
 ]);
 
 const BUSINESS_REQUIRED = new Map([
-  ["ResearchIaV2Redirect", "research_ia_v2 关闭回退和深链兼容"],
+  ["LegacyResearchRedirect", "科研旧路由统一转发和深链兼容"],
   ["ResearchChainKnowledgePanel", "历史 Chain KB 与团队 KB 双路径仍处于迁移期"],
   ["TResearchKnowledgeBase", "历史 Chain KB 与团队 KB 双路径契约"],
   ["TResearchKnowledgeCandidate", "历史 Chain KB 与团队 KB 双路径契约"],

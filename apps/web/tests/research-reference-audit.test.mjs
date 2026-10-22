@@ -31,7 +31,7 @@ const sources = {
     export function createIdempotencyKey() {}
   `,
   [`${ROOT}/apps/web/core/components/research/navigation/legacy-route.tsx`]: `
-    export const ResearchIaV2Redirect = "legacy-route";
+    export const LegacyResearchRedirect = "legacy-route";
   `,
   [`${ROOT}/apps/web/core/components/research/labels.ts`]: `
     export const RESEARCH_USER_LABELS = "dynamic";
@@ -53,8 +53,8 @@ const sources = {
     }
   `,
   [`${ROOT}/apps/web/app/routes/core.ts`]: `
-    import { ResearchIaV2Redirect } from "@/components/research/navigation/legacy-route";
-    export const routes = [ResearchIaV2Redirect];
+    import { LegacyResearchRedirect } from "@/components/research/navigation/legacy-route";
+    export const routes = [LegacyResearchRedirect];
   `,
   [`${ROOT}/apps/web/tests/side-panel.test.tsx`]: `
     const { ResearchAgentSidePanel } = await import("@/components/research/side-panel");
@@ -124,7 +124,7 @@ describe("research reference audit", () => {
     assert.equal(compat.classification, "compat_contract_keep");
     assert.match(compat.suggested_action, /^保留：/);
 
-    const legacyRoute = resultFor(audit, "ResearchIaV2Redirect");
+    const legacyRoute = resultFor(audit, "LegacyResearchRedirect");
     assert.equal(legacyRoute.runtime, 1);
     assert.equal(legacyRoute.route, 1);
     assert.equal(legacyRoute.classification, "business_required_keep");
