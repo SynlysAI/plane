@@ -5,17 +5,17 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LocalDate } from "@/components/core/local-date";
+import { useExpiration } from "@/hooks/use-expiration";
 import { Button } from "@plane/propel/button";
 import type { TResearchConnection } from "@/services/mcp.service";
-import type { NativeState } from "./native-mcp-manager";
-import { researchService } from "./research-workspace-picker";
+import { researchService, type NativeState } from "./mcp-services";
 import { failureMessage } from "./connection-config";
 
 type Workspace = { slug: string; name: string };
 type Revoke = { source: "admin" | "research"; workspace: string; id: string; label: string; csrf: string };
 type Filter = "all" | "admin" | "research";
 type ManagementProps = { disabled: boolean; onRevoke: (request: Revoke) => void };
-const date = (value: string | null) => (value ? new Date(value).toLocaleString() : "未提供");
 
 export function ExistingMCPConnections({
   native,
@@ -152,6 +152,8 @@ function ResearchConnections({
       } finally {
         if (generation.current === expected) {
           pending.current = false;
+          // This is inside finally; only the current request may clear its loading state.
+          // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
           setBusy(false);
         }
       }
@@ -248,13 +250,14 @@ function ConnectionCard({
   onRevoke: () => void;
 }) {
   const type = source === "admin" ? "行政" : "科研";
+  const expired = useExpiration(expires);
   return (
     <article className="flex min-w-0 flex-col gap-3 rounded-lg border border-subtle p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h4 className="mr-auto text-14 font-medium break-words">{label}</h4>
         <span className="rounded bg-surface-2 px-2 py-0.5 text-11 text-secondary">{type}</span>
         <span className="rounded bg-surface-2 px-2 py-0.5 text-11 text-secondary">{capability}</span>
-        <span className="text-12 text-secondary">{Date.parse(expires) <= Date.now() ? "已到期" : "有效"}</span>
+        <span className="text-12 text-secondary">{expired === null ? "确认有效期…" : expired ? "已到期" : "有效"}</span>
       </div>
       <p className="text-12 break-words text-secondary">{target}</p>
       <div className="mt-auto flex flex-wrap items-start justify-between gap-3 border-t border-subtle pt-3">
@@ -267,15 +270,21 @@ function ConnectionCard({
             </div>
             <div>
               <dt className="inline">创建时间：</dt>
-              <dd className="inline">{date(created)}</dd>
+              <dd className="inline">
+                <LocalDate value={created} emptyLabel="未提供" />
+              </dd>
             </div>
             <div>
               <dt className="inline">到期时间：</dt>
-              <dd className="inline">{date(expires)}</dd>
+              <dd className="inline">
+                <LocalDate value={expires} emptyLabel="未提供" />
+              </dd>
             </div>
             <div>
               <dt className="inline">最近使用时间：</dt>
-              <dd className="inline">{lastUsed ? date(lastUsed) : "尚未使用"}</dd>
+              <dd className="inline">
+                <LocalDate value={lastUsed} emptyLabel="尚未使用" />
+              </dd>
             </div>
           </dl>
         </details>

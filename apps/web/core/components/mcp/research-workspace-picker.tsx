@@ -6,11 +6,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@plane/propel/button";
-import { ResearchMCPService, type TMCPChain, type TMCPNode } from "@/services/mcp.service";
+import type { TMCPChain, TMCPNode } from "@/services/mcp.service";
+import { researchService } from "./mcp-services";
 import { actionLabels, failureMessage } from "./connection-config";
 import type { MCPTarget } from "./types";
 
-export const researchService = new ResearchMCPService();
 type SelectionProps = {
   selected: Record<string, MCPTarget>;
   disabled: boolean;
@@ -59,6 +59,8 @@ export function ResearchWorkspacePicker({
         if (generation.current === expected) setError(failureMessage(failure));
       } finally {
         if (generation.current === expected) {
+          // This is inside finally; only the current request may clear its loading state.
+          // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
           setBusy(false);
           loading.current = false;
         }
@@ -221,6 +223,7 @@ function ResearchChainPicker({
           {nodes.map((node) => {
             const item = target(node);
             const chosen = selected[item.key];
+            const chosenActions = new Set(chosen?.actions);
             return (
               <div key={node.id} className="space-y-2 rounded border border-subtle p-3">
                 <label>
@@ -260,7 +263,7 @@ function ResearchChainPicker({
                           <input
                             type="checkbox"
                             disabled={disabled}
-                            checked={chosen.actions.includes(action)}
+                            checked={chosenActions.has(action)}
                             onChange={(event) =>
                               onSelect([
                                 {

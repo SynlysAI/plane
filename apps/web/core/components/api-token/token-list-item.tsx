@@ -6,7 +6,6 @@
 
 import { useRef, useState } from "react";
 import { useSWRConfig } from "swr";
-import { format } from "date-fns";
 import { DeleteOutline, EditOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
 import { API_TOKENS_LIST } from "@plane/constants";
@@ -15,10 +14,11 @@ import { APITokenService } from "@plane/services";
 import type { IApiToken } from "@plane/types";
 import { ModalCore, EModalPosition, EModalWidth } from "@plane/ui";
 import { DeleteApiTokenModal } from "@/components/api-token/delete-token-modal";
+import { LocalDate } from "@/components/core/local-date";
+import { useExpiration } from "@/hooks/use-expiration";
 import { tokenErrorKey } from "./error";
 
 const service = new APITokenService();
-const date = (value: string | null) => (value ? format(new Date(value), "yyyy-MM-dd") : "—");
 const actionClass =
   "rounded p-2 text-secondary hover:bg-surface-2 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50";
 
@@ -31,7 +31,8 @@ export function ApiTokenListItem({ token }: { token: IApiToken }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
-  const active = token.is_active && (!token.expired_at || Date.parse(token.expired_at) > Date.now());
+  const expired = useExpiration(token.expired_at);
+  const active = token.is_active && expired !== true;
 
   function closeRename() {
     if (pending.current) return;
@@ -82,14 +83,14 @@ export function ApiTokenListItem({ token }: { token: IApiToken }) {
         {!active && <span className="ml-2 text-11 text-secondary">{t("api_token_management.inactive")}</span>}
       </td>
       <td className="font-mono px-3 py-4 text-13 whitespace-nowrap">{token.masked_token || "********"}</td>
-      <td className="px-3 py-4 whitespace-nowrap" title={new Date(token.created_at).toLocaleString()}>
-        {date(token.created_at)}
+      <td className="px-3 py-4 whitespace-nowrap">
+        <LocalDate value={token.created_at} dateOnly />
       </td>
       <td
         className="px-3 py-4 whitespace-nowrap"
-        title={token.last_used ? new Date(token.last_used).toLocaleString() : t("api_token_management.never_used")}
+        title={token.last_used ? undefined : t("api_token_management.never_used")}
       >
-        {date(token.last_used)}
+        <LocalDate value={token.last_used} dateOnly />
       </td>
       <td className="px-3 py-2">
         <div className="flex justify-end gap-1">

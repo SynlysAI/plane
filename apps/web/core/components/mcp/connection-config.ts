@@ -8,11 +8,48 @@ import { API_BASE_URL } from "@plane/constants";
 import type { TNativeConnection, TResearchIssued } from "@/services/mcp.service";
 
 export type MCPConfig = { name: string; url: string; headers: Record<string, string> };
-export function nativeConfig(value: TNativeConnection): MCPConfig {
-  const servers = JSON.parse(value.sciencediscovery_json).mcpServers;
-  const config = Object.values(servers)[0] as { url: string; headers: Record<string, string> };
-  return { name: `plane_admin_${value.id}`, url: value.mcp_url || config.url, headers: config.headers };
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+const invalidConfig = () => new Error("服务返回的连接配置格式无效，请联系管理员。");
+
+export function nativeConfig(value: TNativeConnection): MCPConfig {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value.sciencediscovery_json);
+  } catch {
+    // JSON parser errors can contain source text and therefore credentials.
+    throw invalidConfig();
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.mcpServers)) throw invalidConfig();
+  const servers = Object.values(parsed.mcpServers);
+  if (servers.length !== 1 || !isRecord(servers[0])) throw invalidConfig();
+  const config = servers[0];
+  const url = value.mcp_url || config.url;
+  if (typeof url !== "string" || !isRecord(config.headers)) throw invalidConfig();
+  try {
+    const endpoint = new URL(url);
+    if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password)
+      throw invalidConfig();
+  } catch {
+    throw invalidConfig();
+  }
+  const headers: Record<string, string> = {};
+  const entries = Object.entries(config.headers);
+  if (!entries.length) throw invalidConfig();
+  for (const [key, header] of entries) {
+    if (!key || typeof header !== "string" || !header.trim()) throw invalidConfig();
+    Object.defineProperty(headers, key, { value: header, enumerable: true });
+  }
+  return { name: `plane_admin_${value.id}`, url, headers };
+}
+
+export function parseNativeDays(value: string, maximum: number | undefined): number | null {
+  if (!value.trim() || !maximum) return null;
+  const days = Number(value);
+  return Number.isInteger(days) && days >= 1 && days <= maximum ? days : null;
+}
+
 export function researchConfig(value: TResearchIssued): MCPConfig {
   return {
     name: `plane_research_${value.id.replaceAll("-", "")}`,

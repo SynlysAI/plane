@@ -4,25 +4,10 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Button } from "@plane/propel/button";
-import {
-  NativeMCPService,
-  type TNativeCandidates,
-  type TNativeOptions,
-  type TNativeSession,
-  type TNativeToken,
-} from "@/services/mcp.service";
 import { failureMessage } from "./connection-config";
-
-export const nativeService = new NativeMCPService();
-export type NativeState = {
-  options: TNativeOptions | null;
-  session: TNativeSession | null;
-  candidates: TNativeCandidates | null;
-  tokens: TNativeToken[];
-};
-export const emptyNative: NativeState = { options: null, session: null, candidates: null, tokens: [] };
+import { emptyNative, nativeService, loadNativeState, type NativeState } from "./mcp-services";
 
 /** Independent portal identity. Targets live in the unified workspace tree. */
 export function NativeMCPManager({
@@ -45,36 +30,23 @@ export function NativeMCPManager({
   const [message, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const latest = useRef(state);
-  latest.current = state;
   const change = useRef(onChange);
-  change.current = onChange;
+  useLayoutEffect(() => {
+    latest.current = state;
+    change.current = onChange;
+  }, [state, onChange]);
+  const [browserOrigin, setBrowserOrigin] = useState<string | null>(null);
+  useEffect(() => setBrowserOrigin(window.location.origin), []);
   useEffect(() => {
     const expected = ++epoch.current;
     setBusy(true);
     setError("");
-    void (async () => {
-      const options = await nativeService.read<TNativeOptions>("options");
-      let session: TNativeSession | null = null;
-      try {
-        session = await nativeService.read<TNativeSession>("session");
-      } catch (error) {
-        if ((error as { status?: number }).status !== 401) throw error;
-      }
-      let candidates: TNativeCandidates | null = null;
-      let tokens: TNativeToken[] = [];
-      if (session) {
-        const listing = await nativeService.read<{ tokens: TNativeToken[] }>("tokens");
-        tokens = listing.tokens;
-        try {
-          candidates = await nativeService.read<TNativeCandidates>("candidates");
-        } catch (error) {
-          if (epoch.current !== expected) return;
-          if ((error as { status?: number }).status === 401) session = null;
-          setError(failureMessage(error) + " 行政候选暂不可用，已有连接仍可管理。若门户版本较旧，请更新接入服务。");
-        }
-      }
-      if (epoch.current === expected) change.current({ options, session, candidates, tokens });
-    })()
+    void loadNativeState()
+      .then(({ state: loaded, message: feedback }) => {
+        if (epoch.current !== expected) return;
+        setError(feedback);
+        return change.current(loaded);
+      })
       .catch((error) => {
         if (epoch.current === expected) {
           setError(failureMessage(error));
@@ -118,37 +90,61 @@ export function NativeMCPManager({
       if (epoch.current === expected) setBusy(false);
     }
   }
+  return (
+    <NativeMCPIdentity
+      state={state}
+      browserOrigin={browserOrigin}
+      input={input}
+      busy={busy}
+      disabled={disabled}
+      message={message}
+      onAuthenticate={authenticate}
+      onRefresh={() => {
+        onInvalidate();
+        setRetry((value) => value + 1);
+      }}
+    />
+  );
+}
+
+function NativeMCPIdentity({
+  state,
+  browserOrigin,
+  input,
+  busy,
+  disabled,
+  message,
+  onAuthenticate,
+  onRefresh,
+}: {
+  state: NativeState;
+  browserOrigin: string | null;
+  input: RefObject<HTMLInputElement | null>;
+  busy: boolean;
+  disabled: boolean;
+  message: string;
+  onAuthenticate: (logout: boolean) => Promise<void>;
+  onRefresh: () => void;
+}) {
   const origin = state.options?.plane_ui_url?.replace(/\/+$/, "");
   return (
     <section aria-label="行政身份验证" className="space-y-3 rounded border border-subtle p-4">
       <h3 className="text-16 font-semibold">行政项目接入 · 独立门户身份</h3>
-      {origin && (
-        <p>
-          来源：{origin} · {origin === window.location.origin ? "同一 Plane 实例" : "独立 Plane 来源（可能为另一实例）"}
-          。门户账号独立验证，不按工作区同名自动映射。
-        </p>
-      )}
+      <NativeMCPSource origin={origin} browserOrigin={browserOrigin} />
       {busy && <p role="status">正在验证或加载行政接入…</p>}
       {message && (
         <p role="alert" className="text-danger-primary">
           {message}
         </p>
       )}
-      <Button
-        variant="secondary"
-        disabled={busy || disabled}
-        onClick={() => {
-          onInvalidate();
-          setRetry((value) => value + 1);
-        }}
-      >
+      <Button variant="secondary" disabled={busy || disabled} onClick={onRefresh}>
         刷新行政接入
       </Button>
       {state.options &&
         (state.session ? (
           <div className="flex flex-wrap items-center gap-3">
             <p>已验证行政服务账号：{state.session.name}</p>
-            <Button variant="secondary" disabled={busy || disabled} onClick={() => void authenticate(true)}>
+            <Button variant="secondary" disabled={busy || disabled} onClick={() => void onAuthenticate(true)}>
               退出行政接入
             </Button>
           </div>
@@ -157,7 +153,7 @@ export function NativeMCPManager({
             className="flex flex-wrap items-end gap-3"
             onSubmit={(event) => {
               event.preventDefault();
-              void authenticate(false);
+              void onAuthenticate(false);
             }}
           >
             <label>
@@ -200,5 +196,20 @@ export function NativeMCPManager({
         </p>
       )}
     </section>
+  );
+}
+
+function NativeMCPSource({ origin, browserOrigin }: { origin: string | undefined; browserOrigin: string | null }) {
+  if (!origin) return null;
+  return (
+    <p>
+      来源：{origin} ·{" "}
+      {browserOrigin === null
+        ? "正在确认来源"
+        : origin === browserOrigin
+          ? "同一 Plane 实例"
+          : "独立 Plane 来源（可能为另一实例）"}
+      。门户账号独立验证，不按工作区同名自动映射。
+    </p>
   );
 }

@@ -30,3 +30,37 @@ it("exports stable distinct service names using each existing protocol and crede
   expect(output.toml).toContain('"X-Research-Context-Token" = "independent-read"');
   expect(configurationFiles([native, research])).toEqual(output);
 });
+
+it.each([
+  "",
+  "null",
+  "[]",
+  "{}",
+  '{"mcpServers":[]}',
+  '{"mcpServers":{}}',
+  '{"mcpServers":{"one":null}}',
+  '{"mcpServers":{"one":{"headers":{} }}}',
+  '{"mcpServers":{"one":{"headers":{"Authorization":42}}}}',
+  '{"mcpServers":{"one":{"headers":{"Authorization":""}}}}',
+  '{"mcpServers":{"one":{},"two":{}}}',
+  '{"secret":"SYNTHETIC-SECRET"',
+])("rejects malformed portal configuration without echoing its source (%s)", (sciencediscovery_json) => {
+  const create = () =>
+    nativeConfig({ id: "synthetic", mcp_url: "https://native.test/mcp", sciencediscovery_json } as TNativeConnection);
+  expect(create).toThrow("服务返回的连接配置格式无效，请联系管理员。");
+});
+
+it("validates the endpoint and supports the existing embedded endpoint fallback", () => {
+  const config = {
+    mcpServers: { service: { url: "https://native.test/mcp", headers: { Authorization: "Bearer synthetic" } } },
+  };
+  const connection = {
+    id: "synthetic",
+    mcp_url: "",
+    sciencediscovery_json: JSON.stringify(config),
+  } as TNativeConnection;
+  expect(nativeConfig(connection).url).toBe(config.mcpServers.service.url);
+  for (const mcp_url of ["invalid", "javascript:alert(1)", "https://user:password@native.test/mcp"]) {
+    expect(() => nativeConfig({ ...connection, mcp_url })).toThrow("连接配置格式无效");
+  }
+});

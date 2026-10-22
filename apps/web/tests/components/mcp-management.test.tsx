@@ -5,7 +5,8 @@
  * See the LICENSE file for details.
  */
 
-import React, { act } from "react";
+import React, { act, startTransition, Suspense } from "react";
+import { renderToString } from "react-dom/server";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
@@ -67,6 +68,8 @@ vi.mock("react-router", () => ({
   Navigate: ({ to, replace }: any) => <div data-to={to} data-replace={replace} />,
 }));
 import { MCPManagement } from "@/components/mcp/mcp-management";
+import { NativeMCPManager } from "@/components/mcp/native-mcp-manager";
+import { emptyNative } from "@/components/mcp/mcp-services";
 import { MCPProfileSettings } from "@/components/settings/profile/content/pages/mcp";
 import { MCPManagementRedirect } from "@/components/mcp/mcp-management-redirect";
 Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
@@ -477,11 +480,13 @@ it("clears secrets on target changes and ignores a delayed result after the acti
   await render();
   await nodes();
   await check("选择节点 First");
+  await check("选择节点 Second node");
   const button = [...container.querySelectorAll("button")].find((item) => item.textContent === "批量生成独立连接")!;
   await act(async () => button.click());
   await render(<MCPManagement workspaceSlug="second" />);
   await act(async () => resolve(researchIssued("node-1")));
   expect(container.querySelector("textarea")).toBeNull();
+  expect(mocks.issue).toHaveBeenCalledTimes(1);
 });
 
 it("shows permission failures with retry without claiming an empty successful result", async () => {
@@ -732,4 +737,95 @@ it("does not reissue a successful administrative target after the same independe
   await click("重试未成功目标");
   expect(mocks.write.mock.calls.filter(([action]) => action === "tokens")).toHaveLength(1);
   expect(mocks.issue).toHaveBeenCalledTimes(2);
+});
+
+it.each(["", "0", "1.5", "8", "invalid"])("rejects lifetime input %s and recovers with valid days", async (invalid) => {
+  await render();
+  await check("行政项目访问 public");
+  const input = container.querySelector<HTMLInputElement>('[aria-label="行政连接有效天数"]')!;
+  async function enter(value: string) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  await enter(invalid);
+  await click("批量生成独立连接");
+  expect(mocks.write).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("请输入 1 至 7 之间的整数天数");
+  await enter("2");
+  await click("批量生成独立连接");
+  expect(mocks.write).toHaveBeenCalledWith("tokens", expect.objectContaining({ days: 2 }), "plane-csrf", "native-csrf");
+});
+
+it("retains a successful receipt when its configuration is invalid without leaking or reissuing", async () => {
+  mocks.write.mockResolvedValue({ ...nativeIssued, sciencediscovery_json: '{"secret":"SYNTHETIC-CONFIG-SECRET"' });
+  await render();
+  await check("行政项目访问 public");
+  await click("批量生成独立连接");
+  expect(container.textContent).toContain("1 成功、0 失败");
+  expect(container.textContent).toContain("服务返回的配置格式无法识别");
+  expect(container.innerHTML).not.toContain("SYNTHETIC-CONFIG-SECRET");
+  expect(container.querySelector("textarea")).toBeNull();
+  await click("批量生成独立连接");
+  expect(mocks.write).toHaveBeenCalledTimes(1);
+});
+
+it("renders a configured native source without browser globals during server rendering", () => {
+  vi.stubGlobal("window", undefined);
+  try {
+    const markup = renderToString(
+      <NativeMCPManager
+        state={{ ...emptyNative, options }}
+        onChange={vi.fn()}
+        onInvalidate={vi.fn()}
+        refreshVersion={0}
+        disabled={false}
+      />
+    );
+    expect(markup).toContain("https://remote.test");
+    expect(markup).toContain("正在确认来源");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("keeps portal callbacks from the committed render when a new render is suspended", async () => {
+  let resolveOptions!: (value: typeof options) => void;
+  const read = mocks.read.getMockImplementation()!;
+  mocks.read.mockImplementation((action) =>
+    action === "options"
+      ? new Promise((done) => {
+          resolveOptions = done;
+        })
+      : read(action)
+  );
+  const committed = vi.fn();
+  const speculative = vi.fn();
+  const suspended = new Promise(() => {});
+  function Gate({ block }: { block: boolean }) {
+    if (block) throw suspended;
+    return null;
+  }
+  function View({ block, onChange }: { block: boolean; onChange: typeof committed }) {
+    return (
+      <Suspense fallback={<p>Suspended</p>}>
+        <NativeMCPManager
+          state={{ ...emptyNative, options }}
+          onChange={onChange}
+          onInvalidate={vi.fn()}
+          refreshVersion={0}
+          disabled={false}
+        />
+        <Gate block={block} />
+      </Suspense>
+    );
+  }
+  await render(<View block={false} onChange={committed} />);
+  await act(async () => startTransition(() => root.render(<View block onChange={speculative} />)));
+  await act(async () => resolveOptions(options));
+  expect(committed).toHaveBeenCalledWith(
+    expect.objectContaining({ session: expect.objectContaining({ name: "Independent user" }) })
+  );
+  expect(speculative).not.toHaveBeenCalled();
 });
