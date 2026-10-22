@@ -61,15 +61,15 @@ export const AIAssistantRoot = observer(function AIAssistantRoot() {
   return (
     <>
       {!assistantStore.isOpen && (
-        <div className="fixed right-5 bottom-5 z-40">
+        <div className="fixed top-1/2 right-5 z-40 -translate-y-1/2">
           <Tooltip label={t("aiAssistant.open")} side="left">
             <button
               type="button"
               onClick={() => assistantStore.open()}
               aria-label={t("aiAssistant.open")}
-              className="shadow-lg flex size-11 items-center justify-center rounded-full border border-subtle bg-surface-1 text-primary transition hover:bg-surface-2"
+              className="flex size-11 items-center justify-center rounded-[6px] border border-subtle bg-surface-1 text-primary transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
             >
-              <Sparkles className="size-5" />
+              <Sparkles className="size-[18px]" />
             </button>
           </Tooltip>
         </div>
