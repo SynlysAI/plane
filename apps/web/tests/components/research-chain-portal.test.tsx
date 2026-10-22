@@ -102,5 +102,5 @@ it("opens administrative approvals directly in the office queue", async () => {
   await act(async () => root.render(<ResearchChainPortal workspaceSlug="lab" />));
   mocks.research.canSee = (key: string) => key === "research_chain";
 
-  expect(container.querySelector('a[href="/lab/research/approvals?tab=office"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/approvals?domain=research&tab=office"]')).not.toBeNull();
 });

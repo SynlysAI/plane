@@ -31,7 +31,7 @@ function WorkspaceResearchReviewsPage() {
   const { workspaceSlug } = useParams();
   if (!workspaceSlug) return null;
   return (
-    <ResearchIaV2Redirect to={`/${workspaceSlug}/research/approvals`} query={{ tab: "stage_review" }}>
+    <ResearchIaV2Redirect to={`/${workspaceSlug}/approvals`} query={{ domain: "research", tab: "stage_review" }}>
       <WorkspaceResearchReviewsContent />
     </ResearchIaV2Redirect>
   );
