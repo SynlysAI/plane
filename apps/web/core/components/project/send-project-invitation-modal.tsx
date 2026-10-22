@@ -4,17 +4,18 @@
  * See the LICENSE file for details.
  */
 
-import React, { useEffect } from "react";
+import React from "react";
 import { observer } from "mobx-react";
-import { useForm, Controller, useFieldArray } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { ROLE, ROLE_DETAILS, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { AddOutline, ChevronDownOutline, CloseOutline } from "@makeplane/propel/icons";
+import { ChevronDownOutline, CloseOutline } from "@makeplane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomSelect, CustomSearchSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import type { IUser, IUserLite } from "@plane/types";
 // helpers
 import { getFileURL } from "@plane/utils";
 // hooks
@@ -29,23 +30,19 @@ type Props = {
   workspaceSlug: string;
 };
 
-type member = {
-  role: EUserPermissions;
-  member_id: string;
-};
-
 type FormValues = {
-  members: member[];
+  memberIds: string[];
+  roles: Record<string, EUserPermissions>;
 };
 
 const defaultValues: FormValues = {
-  members: [
-    {
-      role: 5,
-      member_id: "",
-    },
-  ],
+  memberIds: [],
+  roles: {},
 };
+
+/** 获取成员在界面中的优先展示名称。 */
+const getMemberDisplayName = (member: IUserLite) =>
+  member.display_name || `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.email || member.id;
 
 export const SendProjectInvitationModal = observer(function SendProjectInvitationModal(props: Props) {
   const { isOpen, onClose, onSuccess, projectId, workspaceSlug } = props;
@@ -60,16 +57,13 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   // form info
   const {
     formState: { errors, isSubmitting },
-    watch,
+    getValues,
     setValue,
     reset,
     handleSubmit,
     control,
-  } = useForm<FormValues>();
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "members",
-  });
+  } = useForm<FormValues>({ defaultValues });
+  const selectedMemberIds = useWatch({ control, name: "memberIds", defaultValue: [] }) ?? [];
   // derived values
   const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
   const uninvitedPeople = workspaceMemberIds?.filter((userId) => {
@@ -81,7 +75,12 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const onSubmit = async (formData: FormValues) => {
     if (!workspaceSlug || !projectId || isSubmitting) return;
 
-    const payload = { ...formData };
+    const payload = {
+      members: formData.memberIds.map((memberId) => ({
+        member_id: memberId,
+        role: Number(formData.roles[memberId] ?? EUserPermissions.GUEST) as EUserPermissions,
+      })),
+    };
 
     try {
       await bulkAddMembersToProject(workspaceSlug.toString(), projectId.toString(), payload);
@@ -108,47 +107,40 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     }, 500);
   };
 
-  const appendField = () => {
-    append({
-      role: 5,
-      member_id: "",
-    });
-  };
-
-  useEffect(() => {
-    if (fields.length === 0) {
-      append([
-        {
-          role: 5,
-          member_id: "",
-        },
-      ]);
-    }
-  }, [fields, append]);
-
   const options = uninvitedPeople
     ?.map((userId) => {
       const memberDetails = getWorkspaceMemberDetails(userId);
+      const member = memberDetails?.member;
 
-      if (!memberDetails?.member) return;
+      if (!member) return;
+      const fullName = `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim();
+      // IUserLite 不包含账号名，但运行时的工作区成员数据可能来自更完整的用户对象。
+      const accountName = (member as IUser).username ?? "";
+      const searchableFields = [
+        member.id,
+        accountName,
+        member.display_name,
+        fullName,
+        member.email,
+        memberDetails?.email,
+      ].filter(Boolean);
+
       return {
-        value: `${memberDetails?.member.id}`,
-        query: `${memberDetails?.member.first_name} ${
-          memberDetails?.member.last_name
-        } ${memberDetails?.member.display_name.toLowerCase()}`,
+        value: member.id,
+        query: searchableFields.join(" ").toLowerCase(),
         content: (
-          <div className="flex w-full items-center gap-2">
+          <div className="flex w-full min-w-0 items-center gap-2">
             <div className="shrink-0 pt-0.5">
               <Avatar
-                alt={memberDetails?.member.display_name}
-                fallback={memberDetails?.member.display_name?.[0]?.toUpperCase()}
-                src={getFileURL(memberDetails?.member.avatar_url)}
+                alt={member.display_name}
+                fallback={member.display_name?.[0]?.toUpperCase()}
+                src={getFileURL(member.avatar_url)}
                 size="xs"
               />
             </div>
-            <div className="truncate">
-              {memberDetails?.member.display_name} (
-              {memberDetails?.member.first_name + " " + memberDetails?.member.last_name})
+            <div className="min-w-0">
+              <div className="truncate text-13 text-primary">{member.display_name || fullName || member.email}</div>
+              <div className="truncate text-11 text-tertiary">{member.email ?? memberDetails?.email ?? member.id}</div>
             </div>
           </div>
         ),
@@ -161,6 +153,22 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
         content: React.ReactNode;
       }[]
     | undefined;
+
+  const getDefaultProjectRole = (memberId: string) => {
+    const workspaceRole = getWorkspaceMemberDetails(memberId)?.role;
+    return Number(workspaceRole ?? EUserPermissions.GUEST) as EUserPermissions;
+  };
+
+  const handleMembersChange = (nextMemberIds: string[]) => {
+    const previousRoles = getValues("roles");
+    const nextRoles = nextMemberIds.reduce<Record<string, EUserPermissions>>((accumulator, memberId) => {
+      accumulator[memberId] = previousRoles[memberId] ?? getDefaultProjectRole(memberId);
+      return accumulator;
+    }, {});
+
+    setValue("memberIds", nextMemberIds, { shouldValidate: true });
+    setValue("roles", nextRoles, { shouldValidate: true });
+  };
 
   const checkCurrentOptionWorkspaceRole = (value: string) => {
     const currentMemberWorkspaceRole = getWorkspaceMemberDetails(value)?.role;
@@ -186,139 +194,133 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
             <p className="text-13 text-secondary">{t("project_settings.members.invite_members.sub_heading")}</p>
           </div>
 
-          <div className="mb-3 space-y-4">
-            {fields.map((memberField, index) => (
-              <div key={memberField.id} className="group mb-1 flex w-full items-start justify-between gap-x-4 text-13">
-                <div className="flex w-full grow flex-col gap-1">
-                  <Controller
-                    control={control}
-                    name={`members.${index}.member_id`}
-                    rules={{ required: t("project_settings.members.select_member_required") }}
-                    render={({ field: { value, onChange } }) => {
-                      const selectedMember = getWorkspaceMemberDetails(value);
-                      return (
-                        <CustomSearchSelect
-                          value={value}
-                          customButton={
-                            <>
-                              {value && value !== "" ? (
-                                <div className="flex items-center gap-2">
-                                  <Avatar
-                                    alt={selectedMember?.member.display_name}
-                                    fallback={selectedMember?.member.display_name?.[0]?.toUpperCase()}
-                                    src={getFileURL(selectedMember?.member.avatar_url ?? "")}
-                                    size="xs"
-                                  />
-                                  {selectedMember?.member.display_name}
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 py-0.5">
-                                  {t("project_settings.members.invite_members.select_co_worker")}
-                                </div>
+          <div className="space-y-4">
+            <div>
+              <Controller
+                control={control}
+                name="memberIds"
+                rules={{
+                  required: t("project_settings.members.select_member_required"),
+                  validate: (value) => value.length > 0 || t("project_settings.members.select_member_required"),
+                }}
+                render={({ field }) => {
+                  const value = Array.isArray(field.value) ? field.value : [];
+                  const firstMember = getWorkspaceMemberDetails(value[0] ?? "")?.member;
+                  return (
+                    <CustomSearchSelect
+                      multiple
+                      ariaLabel={t("project_settings.members.invite_members.select_co_worker")}
+                      value={value}
+                      customButton={
+                        <>
+                          {value.length > 0 && firstMember ? (
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate">{getMemberDisplayName(firstMember)}</span>
+                              {value.length > 1 && (
+                                <span className="shrink-0 text-tertiary">
+                                  +{value.length - 1} {t("members")}
+                                </span>
                               )}
-                              <ChevronDownOutline className="h-3 w-3" aria-hidden="true" />
-                            </>
-                          }
-                          customButtonClassName="shadow-sm flex w-full items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none"
-                          onChange={(val: string) => {
-                            onChange(val);
-                            // Update the role to the workspace role when member ID changes
-                            const workspaceMemberDetails = getWorkspaceMemberDetails(val);
-                            const workspaceRole = workspaceMemberDetails?.role ?? 5;
-                            const newValue = ROLE[workspaceRole].toUpperCase();
-                            setValue(
-                              `members.${index}.role`,
-                              EUserPermissions[newValue as keyof typeof EUserPermissions]
-                            );
-                          }}
-                          options={options}
-                          searchPlaceholder={t("search")}
-                          noResultsMessage={t("common.search.no_matches_found")}
-                          optionsClassName="w-48"
-                        />
-                      );
-                    }}
-                  />
-                  {errors.members && errors.members[index]?.member_id && (
-                    <span className="px-1 text-13 text-danger-primary">
-                      {errors.members[index]?.member_id?.message}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex shrink-0 items-center justify-between gap-2">
-                  <div className="flex flex-col gap-1">
-                    <Controller
-                      name={`members.${index}.role`}
-                      control={control}
-                      rules={{ required: t("project_settings.members.role_required") }}
-                      render={({ field: roleField }) => (
-                        <CustomSelect
-                          {...roleField}
-                          customButton={
-                            <div className="shadow-sm flex w-24 items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2.5 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none">
-                              <span className="capitalize">
-                                {roleField.value
-                                  ? t(ROLE_DETAILS[roleField.value as EUserPermissions].i18n_title)
-                                  : t("project_settings.members.select_role")}
-                              </span>
-                              <ChevronDownOutline className="h-3 w-3" aria-hidden="true" />
-                            </div>
-                          }
-                          input
-                        >
-                          {Object.entries(checkCurrentOptionWorkspaceRole(watch(`members.${index}.member_id`))).map(
-                            ([key]) => {
-                              if (parseInt(key) > (currentProjectRole ?? EUserPermissions.GUEST)) return null;
-
-                              return (
-                                <CustomSelect.Option key={key} value={key}>
-                                  {t(ROLE_DETAILS[Number(key) as EUserPermissions].i18n_title)}
-                                </CustomSelect.Option>
-                              );
-                            }
+                            </span>
+                          ) : (
+                            <span>{t("project_settings.members.invite_members.select_co_worker")}</span>
                           )}
-                        </CustomSelect>
-                      )}
+                          <ChevronDownOutline className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        </>
+                      }
+                      customButtonClassName="flex min-h-10 w-full items-center justify-between gap-2 rounded-md border border-subtle bg-surface-1 px-3 py-2 text-left text-13 text-secondary transition-colors duration-200 hover:border-strong hover:text-primary focus:outline-none"
+                      onChange={(nextValue: string[]) => handleMembersChange(nextValue)}
+                      options={options}
+                      searchPlaceholder={t("search")}
+                      noResultsMessage={t("common.search.no_matches_found")}
+                      optionsClassName="w-full min-w-72"
                     />
-                    {errors.members && errors.members[index]?.role && (
-                      <span className="px-1 text-13 text-danger-primary">{errors.members[index]?.role?.message}</span>
-                    )}
-                  </div>
+                  );
+                }}
+              />
+              {errors.memberIds && (
+                <span className="mt-1 block text-13 text-danger-primary">{errors.memberIds.message}</span>
+              )}
+            </div>
 
-                  {fields.length > 1 && (
-                    <div className="flex-item flex w-6">
-                      <button
-                        type="button"
-                        className="place-items-center self-center rounded-sm"
-                        onClick={() => remove(index)}
-                      >
-                        <CloseOutline className="h-4 w-4 text-secondary" />
-                      </button>
+            {selectedMemberIds.length > 0 && (
+              <div className="divide-y divide-subtle rounded-md border border-subtle bg-surface-1">
+                {selectedMemberIds.map((memberId) => {
+                  const member = getWorkspaceMemberDetails(memberId)?.member;
+                  if (!member) return null;
+                  const displayName = getMemberDisplayName(member);
+
+                  return (
+                    <div key={memberId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Avatar
+                          alt={displayName}
+                          fallback={displayName?.[0]?.toUpperCase()}
+                          src={getFileURL(member.avatar_url)}
+                          size="xs"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-13 text-primary">{displayName}</p>
+                          <p className="truncate text-11 text-tertiary">{member.email ?? memberId}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Controller
+                          name={`roles.${memberId}`}
+                          control={control}
+                          rules={{ required: t("project_settings.members.role_required") }}
+                          render={({ field: roleField }) => (
+                            <CustomSelect
+                              {...roleField}
+                              ariaLabel={`${displayName}: ${t("project_settings.members.roles")}`}
+                              customButton={
+                                <div className="flex w-28 items-center justify-between gap-1 rounded-md border border-subtle px-2.5 py-2 text-left text-13 text-secondary transition-colors duration-200 hover:border-strong hover:text-primary focus:outline-none">
+                                  <span className="capitalize">
+                                    {roleField.value
+                                      ? t(ROLE_DETAILS[roleField.value as EUserPermissions].i18n_title)
+                                      : t("project_settings.members.select_role")}
+                                  </span>
+                                  <ChevronDownOutline className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                </div>
+                              }
+                              input
+                            >
+                              {Object.entries(checkCurrentOptionWorkspaceRole(memberId)).map(([key]) => {
+                                if (parseInt(key) > (currentProjectRole ?? EUserPermissions.GUEST)) return null;
+
+                                return (
+                                  <CustomSelect.Option key={key} value={key}>
+                                    {t(ROLE_DETAILS[Number(key) as EUserPermissions].i18n_title)}
+                                  </CustomSelect.Option>
+                                );
+                              })}
+                            </CustomSelect>
+                          )}
+                        />
+                        <button
+                          type="button"
+                          className="flex h-8 w-8 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary focus:outline-none"
+                          aria-label={`${t("remove_member")}: ${displayName}`}
+                          onClick={() => handleMembersChange(selectedMemberIds.filter((id) => id !== memberId))}
+                        >
+                          <CloseOutline className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
         </div>
-        <div className="mt-5 flex items-center justify-between gap-2">
-          <button
-            type="button"
-            className="flex items-center gap-2 bg-transparent py-2 pr-3 text-13 font-medium text-accent-primary outline-accent-strong"
-            onClick={appendField}
-          >
-            <AddOutline className="h-4 w-4" />
-            {t("common.add_more")}
-          </button>
+        <div className="mt-5 flex items-center justify-end gap-2">
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="lg" onClick={handleClose}>
               {t("cancel")}
             </Button>
             <Button variant="primary" size="lg" type="submit" loading={isSubmitting}>
-              {isSubmitting
-                ? `${fields && fields.length > 1 ? `${t("add_members")}...` : `${t("add_member")}...`}`
-                : `${fields && fields.length > 1 ? t("add_members") : t("add_member")}`}
+              {isSubmitting ? t("adding_members") : selectedMemberIds.length > 1 ? t("add_members") : t("add_member")}
             </Button>
           </div>
         </div>
