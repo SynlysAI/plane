@@ -22,12 +22,21 @@ type Props = {
   projectId: string;
   issueId: string;
   disabled: boolean;
+  attachmentDisabled?: boolean;
   issueServiceType: TIssueServiceType;
   hideWidgets?: TWorkItemWidgets[];
 };
 
 export const IssueDetailWidgetCollapsibles = observer(function IssueDetailWidgetCollapsibles(props: Props) {
-  const { workspaceSlug, projectId, issueId, disabled, issueServiceType, hideWidgets } = props;
+  const {
+    workspaceSlug,
+    projectId,
+    issueId,
+    disabled,
+    attachmentDisabled = disabled,
+    issueServiceType,
+    hideWidgets,
+  } = props;
   // store hooks
   const {
     issue: { getIssueById },
@@ -57,7 +66,7 @@ export const IssueDetailWidgetCollapsibles = observer(function IssueDetailWidget
           workspaceSlug={workspaceSlug}
           projectId={projectId}
           issueId={issueId}
-          disabled={disabled}
+          disabled={attachmentDisabled}
           issueServiceType={issueServiceType}
         />
       )}

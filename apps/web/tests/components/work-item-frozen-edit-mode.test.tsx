@@ -4,7 +4,9 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({
+  attachmentsDisabled: null as boolean | null,
   descriptionDisabled: null as boolean | null,
+  descriptionPlaceholder: null as string | null,
   propertiesDisabled: null as boolean | null,
   widgetsDisabled: null as boolean | null,
   titleDisabled: null as boolean | null,
@@ -13,10 +15,12 @@ const captured = vi.hoisted(() => ({
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@plane/utils", () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" "),
+  isEmptyHtmlString: () => true,
 }));
 vi.mock("@/components/editor/rich-text/description-input", () => ({
-  DescriptionInput: (props: { disabled: boolean }) => {
+  DescriptionInput: (props: { disabled: boolean; placeholder?: string }) => {
     captured.descriptionDisabled = props.disabled;
+    captured.descriptionPlaceholder = props.placeholder ?? null;
     return <div data-testid="description" />;
   },
 }));
@@ -32,8 +36,9 @@ vi.mock("@/components/issues/issue-detail/parent", () => ({ IssueParentDetail: (
 vi.mock("@/components/issues/issue-detail/reactions", () => ({ IssueReaction: () => <div /> }));
 vi.mock("@/components/issues/issue-detail/issue-activity", () => ({ IssueActivity: () => <div /> }));
 vi.mock("@/components/issues/issue-detail-widgets", () => ({
-  IssueDetailWidgets: (props: { disabled: boolean }) => {
+  IssueDetailWidgets: (props: { attachmentDisabled?: boolean; disabled: boolean }) => {
     captured.widgetsDisabled = props.disabled;
+    captured.attachmentsDisabled = props.attachmentDisabled ?? props.disabled;
     return <div data-testid="widgets" />;
   },
 }));
@@ -96,7 +101,9 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  captured.attachmentsDisabled = null;
   captured.descriptionDisabled = null;
+  captured.descriptionPlaceholder = null;
   captured.propertiesDisabled = null;
   captured.widgetsDisabled = null;
   captured.titleDisabled = null;
@@ -114,8 +121,11 @@ it("renders frozen by default and toggles editing through the edit button", asyn
   expect(editButton?.textContent).toContain("common.edit");
   expect(captured.titleDisabled).toBe(true);
   expect(captured.descriptionDisabled).toBe(true);
+  expect(captured.descriptionPlaceholder).toBe("common.description_placeholder");
+  expect(container.textContent).toContain("common.description_placeholder");
   expect(captured.propertiesDisabled).toBe(false);
   expect(captured.widgetsDisabled).toBe(true);
+  expect(captured.attachmentsDisabled).toBe(false);
 
   await act(async () => editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(container.querySelector("button")?.textContent).toContain("common.done");
@@ -138,8 +148,10 @@ it("hides the edit entry and stays read-only when the user cannot edit", async (
   expect(container.querySelector("button")).toBeNull();
   expect(captured.titleDisabled).toBe(true);
   expect(captured.descriptionDisabled).toBe(true);
+  expect(captured.descriptionPlaceholder).toBe("common.description_placeholder");
   expect(captured.propertiesDisabled).toBe(true);
   expect(captured.widgetsDisabled).toBe(true);
+  expect(captured.attachmentsDisabled).toBe(true);
 });
 
 it("keeps mobile properties disabled for archived work items", async () => {
@@ -147,4 +159,5 @@ it("keeps mobile properties disabled for archived work items", async () => {
 
   expect(captured.propertiesDisabled).toBe(true);
   expect(captured.widgetsDisabled).toBe(true);
+  expect(captured.attachmentsDisabled).toBe(true);
 });

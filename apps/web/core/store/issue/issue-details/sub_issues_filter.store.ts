@@ -20,7 +20,7 @@ import { getFilteredWorkItems, getGroupedWorkItemIds, updateSubWorkItemFilters }
 import type { IssueSubIssuesStore } from "./sub_issues.store";
 
 export const DEFAULT_DISPLAY_PROPERTIES = {
-  key: true,
+  key: false,
   issue_type: true,
   assignee: true,
   start_date: true,
