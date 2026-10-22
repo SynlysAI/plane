@@ -17,6 +17,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@/helpers": path.join(webRoot, "helpers"),
+      "@/app": path.join(webRoot, "app"),
       "@": path.join(webRoot, "core"),
       "next/link": path.join(webRoot, "app/compat/next/link.tsx"),
       "next/navigation": path.join(webRoot, "app/compat/next/navigation.ts"),

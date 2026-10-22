@@ -82,6 +82,21 @@ it("ignores a late response from the previous workspace", async () => {
   expect(container.textContent).not.toContain("stale");
 });
 
+it("re-requests the server projection after a todo update event", async () => {
+  mocks.todos.mockResolvedValueOnce(page([todo("重指派前")])).mockResolvedValueOnce(page([todo("重指派后")]));
+
+  await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
+  expect(container.textContent).toContain("重指派前");
+
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent("workspace-todos-updated"));
+  });
+
+  expect(mocks.todos).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain("重指派后");
+  expect(container.textContent).not.toContain("重指派前");
+});
+
 it("labels report submitters and other todo requesters", async () => {
   mocks.todos.mockResolvedValue(
     page([

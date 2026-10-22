@@ -7,6 +7,7 @@
 import type { TFileSignedURLResponse } from "../file";
 
 export type TIssueAttachment = {
+  preview_url?: string | null;
   id: string;
   attributes: {
     name: string;

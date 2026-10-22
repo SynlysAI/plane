@@ -5,6 +5,7 @@
 # Django imports
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 # Module imports
@@ -148,10 +149,15 @@ class DraftIssueAssignee(WorkspaceBaseModel):
         unique_together = ["draft_issue", "assignee", "deleted_at"]
         constraints = [
             models.UniqueConstraint(
+                fields=["draft_issue"],
+                condition=Q(deleted_at__isnull=True),
+                name="draft_single_active_assignee",
+            ),
+            models.UniqueConstraint(
                 fields=["draft_issue", "assignee"],
                 condition=models.Q(deleted_at__isnull=True),
                 name="draft_issue_assignee_unique_issue_assignee_when_deleted_at_null",
-            )
+            ),
         ]
         verbose_name = "Draft Issue Assignee"
         verbose_name_plural = "Draft Issue Assignees"

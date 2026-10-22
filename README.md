@@ -50,7 +50,7 @@ AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研�
 
 ### Phase 1.6 体验收敛（`4.27.0`）
 
-本轮不改变统一待办契约、六源降级和科研 / 行政指派边界，只收敛日常入口。首页改为行动优先 Bento：首行是跨组件待办和科研概览，次行是行政项目、报告摘要和最近动态；紧凑 / 详细密度可切换，默认紧凑。首页“查看全部待办”复用审批中心 `/{workspace}/research/approvals/`，默认展示完整跨组件待办。审批中心把跨组件待办提升为与领域队列同级的页签。研究链恢复可换行的十三阶段流程地图，任务、证据、快照和过程记录共用一层 Peek。创建项目后侧栏树按项目集合刷新。周报编辑器不再把选区、焦点或 unique ID 迁移误报为未保存。现行口径见 [Phase 1.6 PRD](docs/product/research-intelligent-platform-phase-1.6-prd.md) 与 [UX 指南](docs/product/research-workspace-ux-guide.md)。
+本轮不改变统一待办契约、六源降级和科研 / 行政指派边界，只收敛日常入口。首页改为行动优先 Bento：首行是跨组件待办和科研概览，次行是行政项目、报告摘要和最近动态；紧凑 / 详细密度可切换，默认紧凑。首页“查看全部待办”复用审批中心 `/{workspace}/approvals?domain=shared_todos`，默认展示完整跨组件待办。审批中心把跨组件待办提升为与行政审批、科研审批同级的页面级页签。研究链恢复可换行的十三阶段流程地图，任务、证据、快照和过程记录共用一层 Peek。创建项目后侧栏树按项目集合刷新。周报编辑器不再把选区、焦点或 unique ID 迁移误报为未保存。现行口径见 [Phase 1.6 PRD](docs/product/research-intelligent-platform-phase-1.6-prd.md) 与 [UX 指南](docs/product/research-workspace-ux-guide.md)。
 
 ### 行政组织与科研权限边界（`4.29.0`–`4.31.0`）
 
@@ -201,7 +201,7 @@ P2 / P3 的范围与启动前置条件见 [科研管理 PRD 与路线图](docs/p
 | 时间线       | `.../projects/{projectId}/timeline`        | 思维链 / 研发链全流程时间线                                       |
 | 首页         | `/{workspace}/`                            | 行动优先工作台：待办、科研概览、行政项目、报告摘要与最近动态      |
 | 待办中心     | `/{workspace}/research/todos`              | 保留独立完整聚合列表，首页入口复用审批中心，范围使用 `todo_scope` |
-| 审批中心     | `/{workspace}/research/approvals`          | 跨组件待办与阶段评审、报告审核、Agent 审批、办公审批同级页签      |
+| 审批中心     | `/{workspace}/approvals`                   | 跨组件待办、行政审批、科研审批同级页面级页签                      |
 | 组织设置     | `/{workspace}/research/settings/org`       | 组织树、成员角色、课题组主 PI、导师关系                           |
 | 报告模板     | `/{workspace}/research/settings/templates` | 周报 / 月报与阶段材料模板                                         |
 | 身份映射     | `/{workspace}/research/settings/identity`  | OIDC 身份绑定与解绑记录                                           |

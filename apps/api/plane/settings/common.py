@@ -332,6 +332,7 @@ CELERY_ACCEPT_CONTENT = ["application/json"]
 
 
 CELERY_IMPORTS = (
+    "plane.bgtasks.asset_preview_task",
     # scheduled tasks
     "plane.bgtasks.issue_automation_task",
     "plane.bgtasks.exporter_expired_task",
@@ -640,3 +641,10 @@ if ENABLE_DRF_SPECTACULAR:
     REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "drf_spectacular.openapi.AutoSchema"
     INSTALLED_APPS.append("drf_spectacular")
     from .openapi import SPECTACULAR_SETTINGS  # noqa: F401
+
+# 私有附件预览；派生内容始终经过原业务权限校验。
+ATTACHMENT_PREVIEW_ENABLED = os.environ.get("ATTACHMENT_PREVIEW_ENABLED", "1") == "1"
+ATTACHMENT_PREVIEW_CONVERTER_URL = os.environ.get("ATTACHMENT_PREVIEW_CONVERTER_URL", "http://document-converter:3000")
+ATTACHMENT_PREVIEW_VERSION = "gotenberg-8.38.1-v1"
+ATTACHMENT_PREVIEW_MAX_BYTES = 100 * 1024 * 1024
+ATTACHMENT_PREVIEW_TIMEOUT = 120

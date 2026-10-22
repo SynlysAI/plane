@@ -13,7 +13,7 @@ import { AlertModalCore } from "@plane/ui";
 import { getPageName } from "@plane/utils";
 // constants
 // plane web hooks
-import { useAppRouter } from "@/hooks/use-app-router";
+import { useDetailBack } from "@/hooks/use-detail-back";
 import type { EPageStoreType } from "@/hooks/store";
 import { usePageStore } from "@/hooks/store";
 // store
@@ -41,8 +41,9 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
     onClose();
   };
 
-  const router = useAppRouter();
-  const { pageId: routePageId } = useParams();
+  const { workspaceSlug, projectId, pageId: routePageId } = useParams();
+  const pageListHref = projectId ? `/${workspaceSlug}/projects/${projectId}/pages` : `/${workspaceSlug}/pages`;
+  const handleBackToList = useDetailBack(pageListHref);
 
   const handleDelete = async () => {
     if (!pageId) return;
@@ -57,8 +58,9 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
         });
 
         if (routePageId) {
-          router.back();
+          handleBackToList();
         }
+        return null;
       })
       .catch(() => {
         setToast({

@@ -5,7 +5,7 @@
 # Django imports
 from django.utils import timezone
 from lxml import html
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 #  Third party imports
 from rest_framework import serializers
@@ -32,6 +32,7 @@ from plane.utils.content_validator import (
     validate_binary_data,
 )
 from plane.utils.administrative_projects import assignable_project_member_ids
+from plane.utils.work_item_assignment import replace_issue_assignee, validate_single_assignee
 
 from .base import BaseSerializer
 from .cycle import CycleLiteSerializer, CycleSerializer
@@ -104,13 +105,16 @@ class IssueSerializer(BaseSerializer):
             if not is_valid:
                 raise serializers.ValidationError({"description_binary": "Invalid binary data"})
 
+        # Validate that the work item has at most one responsible user.
+        validate_single_assignee(data.get("assignees"), "assignees")
+
         # Validate assignees against direct and inherited project participation.
         if data.get("assignees", []):
             project = Project.objects.select_related("workspace", "administrative_organization").get(
                 pk=self.context["project_id"],
             )
             valid_assignee_ids = set(
-                assignable_project_member_ids(project).filter(id__in=data["assignees"])
+                assignable_project_member_ids(project).filter(id__in=data["assignees"]).values_list("id", flat=True)
             )
             invalid_assignee_ids = set(data["assignees"]) - valid_assignee_ids
             if invalid_assignee_ids:
@@ -122,9 +126,9 @@ class IssueSerializer(BaseSerializer):
         # Validate labels are from project
         if data.get("labels", []):
             valid_label_ids = set(
-                Label.objects.filter(
-                    project_id=self.context.get("project_id"), id__in=data["labels"]
-                ).values_list("id", flat=True)
+                Label.objects.filter(project_id=self.context.get("project_id"), id__in=data["labels"]).values_list(
+                    "id", flat=True
+                )
             )
             invalid_label_ids = set(data["labels"]) - valid_label_ids
             if invalid_label_ids:
@@ -161,6 +165,7 @@ class IssueSerializer(BaseSerializer):
 
         return data
 
+    @transaction.atomic
     def create(self, validated_data):
         assignees = validated_data.pop("assignees", None)
         labels = validated_data.pop("labels", None)
@@ -182,39 +187,15 @@ class IssueSerializer(BaseSerializer):
         created_by_id = issue.created_by_id
         updated_by_id = issue.updated_by_id
 
-        if assignees is not None and len(assignees):
+        if assignees:
+            replace_issue_assignee(issue, assignees[0], actor=self.context.get("actor"))
+        elif assignees is None:
             try:
-                IssueAssignee.objects.bulk_create(
-                    [
-                        IssueAssignee(
-                            assignee_id=assignee_id,
-                            issue=issue,
-                            project_id=project_id,
-                            workspace_id=workspace_id,
-                            created_by_id=created_by_id,
-                            updated_by_id=updated_by_id,
-                        )
-                        for assignee_id in assignees
-                    ],
-                    batch_size=10,
-                )
-            except IntegrityError:
-                pass
-        else:
-            try:
-                # Then assign it to default assignee, if it is a valid assignee
                 if (
                     default_assignee_id is not None
                     and assignable_project_member_ids(issue.project).filter(id=default_assignee_id).exists()
                 ):
-                    IssueAssignee.objects.create(
-                        assignee_id=default_assignee_id,
-                        issue=issue,
-                        project_id=project_id,
-                        workspace_id=workspace_id,
-                        created_by_id=created_by_id,
-                        updated_by_id=updated_by_id,
-                    )
+                    replace_issue_assignee(issue, default_assignee_id, actor=self.context.get("actor"))
             except IntegrityError:
                 pass
 
@@ -239,6 +220,7 @@ class IssueSerializer(BaseSerializer):
 
         return issue
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignees", None)
         labels = validated_data.pop("labels", None)
@@ -250,25 +232,7 @@ class IssueSerializer(BaseSerializer):
         updated_by_id = instance.updated_by_id
 
         if assignees is not None:
-            IssueAssignee.objects.filter(issue=instance).delete()
-            try:
-                IssueAssignee.objects.bulk_create(
-                    [
-                        IssueAssignee(
-                            assignee_id=assignee_id,
-                            issue=instance,
-                            project_id=project_id,
-                            workspace_id=workspace_id,
-                            created_by_id=created_by_id,
-                            updated_by_id=updated_by_id,
-                        )
-                        for assignee_id in assignees
-                    ],
-                    batch_size=10,
-                    ignore_conflicts=True,
-                )
-            except IntegrityError:
-                pass
+            replace_issue_assignee(instance, assignees[0] if assignees else None, actor=self.context.get("actor"))
 
         if labels is not None:
             IssueLabel.objects.filter(issue=instance).delete()

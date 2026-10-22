@@ -25,7 +25,20 @@ from plane.app.views import (
 )
 
 
+from plane.preview.views import AttachmentPreviewEndpoint
+
 urlpatterns = [
+    path(
+        "assets/v2/workspaces/<str:slug>/previews/<str:source>/<uuid:source_id>/",
+        AttachmentPreviewEndpoint.as_view(),
+        name="attachment-preview",
+    ),
+    path(
+        "assets/v2/workspaces/<str:slug>/previews/<str:source>/<uuid:source_id>/content/",
+        AttachmentPreviewEndpoint.as_view(),
+        {"content": True},
+        name="attachment-preview-content",
+    ),
     path(
         "workspaces/<str:slug>/file-assets/",
         FileAssetEndpoint.as_view(),

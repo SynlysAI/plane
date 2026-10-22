@@ -91,17 +91,18 @@ export const InboxIssueContentProperties = observer(function InboxIssueContentPr
             <div className="flex h-8 items-center gap-2">
               <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-13 text-tertiary">
                 <MembersOutline className="h-4 w-4 flex-shrink-0" />
-                <span>Assignees</span>
+                <span>负责人</span>
               </div>
               <MemberDropdown
-                value={issue?.assignee_ids ?? []}
+                value={issue?.assignee_ids?.[0] ?? null}
                 onChange={(val) =>
-                  issue?.id && issueOperations.update(workspaceSlug, projectId, issue?.id, { assignee_ids: val })
+                  issue?.id &&
+                  issueOperations.update(workspaceSlug, projectId, issue?.id, { assignee_ids: val ? [val] : [] })
                 }
                 disabled={!isEditable}
                 projectId={projectId?.toString() ?? ""}
-                placeholder="Add assignees"
-                multiple
+                placeholder="指定负责人"
+                multiple={false}
                 buttonVariant={
                   (issue?.assignee_ids || [])?.length > 0 ? "transparent-without-text" : "transparent-with-text"
                 }

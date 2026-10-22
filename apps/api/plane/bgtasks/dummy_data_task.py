@@ -399,14 +399,10 @@ def create_issue_assignees(workspace, project, user_id, issue_count):
     # Bulk issue
     bulk_issue_assignees = []
     for issue in issues:
-        for assignee in random.sample(list(assignees), random.randint(0, len(assignees) - 1)):
+        assignee = random.choice(list(assignees) + [None])
+        if assignee is not None:
             bulk_issue_assignees.append(
-                IssueAssignee(
-                    issue_id=issue,
-                    assignee_id=assignee,
-                    project=project,
-                    workspace=workspace,
-                )
+                IssueAssignee(issue_id=issue, assignee_id=assignee, project=project, workspace=workspace)
             )
 
     # Issue assignees

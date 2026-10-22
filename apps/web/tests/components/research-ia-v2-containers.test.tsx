@@ -43,9 +43,6 @@ vi.mock("@/components/research/approvals/approval-list", () => ({
 vi.mock("@/components/research/common/research-page-shell", () => ({
   ResearchPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
-vi.mock("@/components/research/common/research-todo-index", () => ({
-  ResearchTodoEnvelopeList: () => <section aria-label="跨组件待办">shared-todos</section>,
-}));
 vi.mock("@/components/research/reports/report-list", () => ({
   ResearchReportList: () => <div>report-list</div>,
 }));
@@ -58,7 +55,9 @@ vi.mock("@/components/research/chains/research-chain-board", () => ({
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
 vi.mock("@/hooks/store/user", () => ({ useUser: () => ({ data: { id: "user-1" } }) }));
 
-vi.mock("@/components/research/projects/research-project-list", () => ({ ResearchProjectList: () => <div>research-project-records</div> }));
+vi.mock("@/components/research/projects/research-project-list", () => ({
+  ResearchProjectList: () => <div>research-project-records</div>,
+}));
 
 const { ResearchApprovalCenter } = await import("@/components/research/approvals/research-approval-center");
 const { ResearchChainWorkbench } = await import("@/components/research/chains/research-chain-workbench");
@@ -82,12 +81,11 @@ it("renders the IA v2 approval queue with capability-filtered tabs", async () =>
   mocks.view = "";
   await act(async () => root.render(<ResearchApprovalCenter workspaceSlug="lab" />));
 
-  expect(container.textContent).toContain("research.approvals.tabs.shared_todos");
   expect(container.textContent).toContain("research.approvals.tabs.report_review");
   expect(container.textContent).toContain("research.approvals.tabs.office");
   expect(container.textContent).not.toContain("research.approvals.tabs.stage_review");
-  expect(container.textContent).toContain("shared-todos");
-  expect(container.textContent).not.toContain("report-list");
+  expect(container.textContent).not.toContain("research.approvals.tabs.shared_todos");
+  expect(container.textContent).toContain("report-list");
 });
 
 it("keeps the office approval page when IA v2 is disabled", async () => {
@@ -97,7 +95,7 @@ it("keeps the office approval page when IA v2 is disabled", async () => {
   mocks.research.isIaV2Enabled = true;
 
   expect(container.textContent).toContain("research.approvals.tabs.office");
-  expect(container.textContent).toContain("shared-todos");
+  expect(container.textContent).not.toContain("research.approvals.tabs.shared_todos");
 });
 
 it("falls back the legacy project view to the chain list without embedding Project", async () => {

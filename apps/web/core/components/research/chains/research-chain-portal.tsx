@@ -152,7 +152,10 @@ export const ResearchChainPortal = function ResearchChainPortal({ workspaceSlug 
               </Link>
             )}
             {research.canSee("approvals") && (
-              <Link href={`/${workspaceSlug}/research/approvals?tab=office`} className="text-12 text-accent-primary">
+              <Link
+                href={`/${workspaceSlug}/approvals?domain=research&tab=office`}
+                className="text-12 text-accent-primary"
+              >
                 {t("research.overview.open_approvals")}
               </Link>
             )}

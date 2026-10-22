@@ -5,8 +5,7 @@
  */
 
 import type { ReactNode } from "react";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { DetailBackLink } from "@/components/common/detail-back-link";
 
 type Props = {
   /** Target route of the closest upper-level object list. */
@@ -17,13 +16,5 @@ type Props = {
 
 /** Render the single, quiet navigation entry used by research detail pages. */
 export function ResearchBackLink({ href, children }: Props) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex min-h-6 items-center gap-1 rounded text-12 font-medium text-secondary transition-colors hover:text-primary"
-    >
-      <ChevronLeft className="size-3.5" aria-hidden="true" />
-      <span>{children}</span>
-    </Link>
-  );
+  return <DetailBackLink href={href}>{children}</DetailBackLink>;
 }

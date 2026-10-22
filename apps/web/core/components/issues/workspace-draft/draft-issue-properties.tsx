@@ -39,6 +39,11 @@ export interface IIssueProperties {
   className: string;
 }
 
+const handleEventPropagation = (event: React.SyntheticEvent<HTMLElement>) => {
+  event.stopPropagation();
+  event.preventDefault();
+};
+
 export const DraftIssueProperties = observer(function DraftIssueProperties(props: IIssueProperties) {
   const { issue, updateIssue, className } = props;
   // store hooks
@@ -83,8 +88,10 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
   const handleLabel = (ids: string[]) =>
     issue?.project_id && updateIssue && updateIssue(issue.project_id, issue.id, { label_ids: ids });
 
-  const handleAssignee = (ids: string[]) =>
-    issue?.project_id && updateIssue && updateIssue(issue.project_id, issue.id, { assignee_ids: ids });
+  const handleAssignee = (assigneeId: string | null) =>
+    issue?.project_id &&
+    updateIssue &&
+    updateIssue(issue.project_id, issue.id, { assignee_ids: assigneeId ? [assigneeId] : [] });
 
   const handleModule = useCallback(
     (moduleIds: string[] | null) => {
@@ -134,16 +141,11 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
   const maxDate = getDate(issue.target_date);
   maxDate?.setDate(maxDate.getDate());
 
-  const handleEventPropagation = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-
   return (
     <div className={className}>
       {/* basic properties */}
       {/* state */}
-      <div className="h-5" onClick={handleEventPropagation}>
+      <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
         <StateDropdown
           buttonContainerClassName="truncate max-w-40"
           value={issue.state_id}
@@ -156,7 +158,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
       </div>
 
       {/* priority */}
-      <div className="h-5" onClick={handleEventPropagation}>
+      <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
         <PriorityDropdown
           value={issue?.priority}
           onChange={handlePriority}
@@ -179,7 +181,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
       />
 
       {/* start date */}
-      <div className="h-5" onClick={handleEventPropagation}>
+      <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
         <DateDropdown
           value={issue.start_date ?? null}
           onChange={handleStartDate}
@@ -194,7 +196,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
       </div>
 
       {/* target/due date */}
-      <div className="h-5" onClick={handleEventPropagation}>
+      <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
         <DateDropdown
           value={issue?.target_date ?? null}
           onChange={handleTargetDate}
@@ -213,12 +215,12 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
       </div>
 
       {/* assignee */}
-      <div className="h-5" onClick={handleEventPropagation}>
+      <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
         <MemberDropdown
           projectId={issue?.project_id}
-          value={issue?.assignee_ids}
+          value={issue?.assignee_ids?.[0] ?? null}
           onChange={handleAssignee}
-          multiple
+          multiple={false}
           buttonVariant={issue.assignee_ids?.length > 0 ? "transparent-without-text" : "border-without-text"}
           buttonClassName={issue.assignee_ids?.length > 0 ? "hover:bg-transparent px-0" : ""}
           showTooltip={issue?.assignee_ids?.length === 0}
@@ -231,7 +233,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
 
       {/* modules */}
       {projectDetails?.module_view && (
-        <div className="h-5" onClick={handleEventPropagation}>
+        <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
           <ModuleDropdown
             buttonContainerClassName="truncate max-w-40"
             projectId={issue?.project_id}
@@ -248,7 +250,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
 
       {/* cycles */}
       {projectDetails?.cycle_view && (
-        <div className="h-5" onClick={handleEventPropagation}>
+        <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
           <CycleDropdown
             buttonContainerClassName="truncate max-w-40"
             projectId={issue?.project_id}
@@ -263,7 +265,7 @@ export const DraftIssueProperties = observer(function DraftIssueProperties(props
 
       {/* estimates */}
       {issue.project_id && areEstimateEnabledByProjectId(issue.project_id?.toString()) && (
-        <div className="h-5" onClick={handleEventPropagation}>
+        <div className="h-5" role="presentation" onClick={handleEventPropagation} onKeyDown={handleEventPropagation}>
           <EstimateDropdown
             value={issue.estimate_point ?? undefined}
             onChange={handleEstimate}

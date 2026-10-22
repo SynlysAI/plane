@@ -3,14 +3,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { TResearchTodoEnvelope, TResearchTodoEnvelopeList } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
-
-const mocks = vi.hoisted(() => ({
-  getChainNodes: vi.fn(),
-  getKnowledgeUploads: vi.fn(),
-  getResearchTodos: vi.fn(),
-}));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
 vi.mock("next/link", () => ({
@@ -27,20 +20,8 @@ vi.mock("@plane/i18n", () => ({
     currentLocale: "zh-CN",
   }),
 }));
-vi.mock("@plane/propel/button", () => ({
-  Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
-}));
-vi.mock("@plane/propel/skeleton", () => ({
-  Skeleton: { Item: () => <div /> },
-}));
-vi.mock("@/components/research/common/research-status-badge", () => ({
-  ResearchStatusBadge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
-}));
-vi.mock("@/components/research/common/research-format", () => ({
-  formatResearchDate: (value: string) => value,
-}));
-vi.mock("@/components/research/common/research-todo-urgency", () => ({
-  ResearchTodoUrgency: () => null,
+vi.mock("@plane/propel/tab-navigation", () => ({
+  TabNavigationList: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@/components/research/common/research-tab-link", async () => {
   const { Link } = await import("react-router");
@@ -65,17 +46,6 @@ vi.mock("@/components/research/reports/report-list", () => ({
 }));
 vi.mock("@/components/research/reviews/review-inbox", () => ({
   ReviewInbox: () => <div>review-inbox</div>,
-}));
-vi.mock("@/services/research/research-todo.service", () => ({
-  ResearchTodoService: class {
-    getResearchTodos = mocks.getResearchTodos;
-  },
-}));
-vi.mock("@/services/research/chain.service", () => ({
-  ResearchChainService: class {
-    getChainNodes = mocks.getChainNodes;
-    getKnowledgeUploads = mocks.getKnowledgeUploads;
-  },
 }));
 vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
@@ -107,42 +77,6 @@ function RouteProbe() {
   return null;
 }
 
-function todo(): TResearchTodoEnvelope {
-  return {
-    schema_version: "research-todo.v2",
-    id: "REPORT:report-1",
-    source: "REPORT",
-    object_id: "report-1",
-    title: "报告需修订 · 2026-W38",
-    context: "高分子课题 / 周报",
-    requester: { id: "student-1", display_name: "学生一" },
-    assignees: [{ id: "advisor-1", display_name: "导师一" }],
-    business_status: "NEEDS_REVISION",
-    handling_status: "RETURNED",
-    next_action: "SUBMIT",
-    due_at: null,
-    urgency: "NORMAL",
-    href: "/lab/research/reports/report-1",
-    capabilities: { schema_version: "research-capabilities.v1", actions: {} },
-    trace_ref: null,
-    updated_at: "2026-10-09T00:00:00Z",
-  };
-}
-
-function todoList(
-  results: TResearchTodoEnvelope[] = [],
-  degradedSources: TResearchTodoEnvelopeList["degraded_sources"] = []
-): TResearchTodoEnvelopeList {
-  return {
-    schema_version: "research-todo.v2",
-    results,
-    count: results.length,
-    total_count: results.length,
-    next_cursor: null,
-    degraded_sources: degradedSources,
-  };
-}
-
 function renderCenter(initialPath: string) {
   return act(async () =>
     root.render(
@@ -159,7 +93,6 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   currentSearch = "";
-  mocks.getResearchTodos.mockResolvedValue(todoList([todo()]));
 });
 
 afterEach(async () => {
@@ -168,75 +101,41 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-it("places the shared todo envelope beside capability-filtered domain tabs", async () => {
-  await renderCenter("/lab/research/approvals?tab=report_review");
+it("renders only research queues with canonical page-level links", async () => {
+  await renderCenter("/lab/approvals?domain=research&tab=report_review&todo_scope=visible");
   await act(async () => undefined);
 
   expect(container.querySelector("[data-hide-header='true']")).not.toBeNull();
   const nav = container.querySelector('nav[aria-label="审批中心"]');
-  expect(nav?.textContent).toContain("跨组件待办");
-  expect(nav?.textContent).toContain("阶段评审");
-  expect(nav?.textContent).toContain("报告审核");
-  expect(nav?.textContent).toContain("办公审批");
-  expect(container.querySelector('section[aria-label="跨组件待办"]')).toBeNull();
+  expect(Array.from(nav?.querySelectorAll("a") ?? []).map((link) => link.textContent)).toEqual([
+    "阶段评审",
+    "报告审核",
+    "办公审批",
+  ]);
+  expect(nav?.textContent).not.toContain("跨组件待办");
   expect(container.textContent).toContain("report-list");
-  expect(mocks.getResearchTodos).not.toHaveBeenCalled();
 
-  const todoTab = [...container.querySelectorAll("a")].find((link) => link.textContent === "跨组件待办");
-  expect(todoTab?.getAttribute("href")).toBe("/lab/research/approvals?tab=shared_todos");
-  await act(async () => todoTab?.click());
+  const stageTab = [...container.querySelectorAll("a")].find((link) => link.textContent === "阶段评审");
+  expect(stageTab?.getAttribute("href")).toBe("/lab/approvals?domain=research&tab=stage_review&todo_scope=visible");
+  await act(async () => stageTab?.click());
   await act(async () => undefined);
 
-  const sharedTodos = container.querySelector('section[aria-label="跨组件待办"]');
-  const tabNav = container.querySelector('nav[aria-label="审批中心"]');
-  expect(sharedTodos).not.toBeNull();
-  expect(tabNav?.compareDocumentPosition(sharedTodos!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "to_me", limit: 100 });
-  expect(container.textContent).toContain("报告需修订 · 2026-W38");
-  expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
+  expect(container.textContent).toContain("review-inbox");
   expect(container.textContent).not.toContain("report-list");
-  expect(mocks.getChainNodes).not.toHaveBeenCalled();
-  expect(mocks.getKnowledgeUploads).not.toHaveBeenCalled();
 });
 
-it("keeps todo scope while switching approval domain tabs", async () => {
-  await renderCenter("/lab/research/approvals?tab=shared_todos");
+it("keeps todo scope while switching research queues", async () => {
+  await renderCenter("/lab/approvals?domain=research&todo_scope=visible");
   await act(async () => undefined);
-
-  const visibleButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部可见");
-  await act(async () => visibleButton?.click());
-  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "visible", limit: 100 });
-  expect(currentSearch).toBe("?tab=shared_todos&todo_scope=visible");
 
   const officeTab = [...container.querySelectorAll("a")].find((link) =>
     link.getAttribute("href")?.includes("tab=office")
   );
-  expect(officeTab?.getAttribute("href")).toBe("/lab/research/approvals?tab=office&todo_scope=visible");
+  expect(officeTab?.getAttribute("href")).toBe("/lab/approvals?domain=research&tab=office&todo_scope=visible");
   await act(async () => officeTab?.click());
   await act(async () => undefined);
 
-  expect(currentSearch).toBe("?tab=office&todo_scope=visible");
-  expect(container.querySelector('section[aria-label="跨组件待办"]')).toBeNull();
-
-  const todoTab = [...container.querySelectorAll("a")].find((link) => link.textContent === "跨组件待办");
-  expect(todoTab?.getAttribute("href")).toBe("/lab/research/approvals?tab=shared_todos&todo_scope=visible");
-  await act(async () => todoTab?.click());
-  await act(async () => undefined);
-
-  expect(container.querySelector('a[href="/lab/research/reports/report-1"]')).not.toBeNull();
-  expect(mocks.getResearchTodos).toHaveBeenLastCalledWith("lab", { scope: "visible", limit: 100 });
-});
-
-it("keeps degraded sources visible and the approval layout inside the viewport", async () => {
-  mocks.getResearchTodos.mockResolvedValue(todoList([todo()], ["PAPER_REVIEW"]));
-  await renderCenter("/lab/research/approvals?todo_scope=visible");
-  await act(async () => undefined);
-
-  const tabNav = container.querySelector('nav[aria-label="审批中心"]');
-  const sharedTodos = container.querySelector('section[aria-label="跨组件待办"]');
-  expect(container.querySelector('[role="status"]')?.textContent).toBeTruthy();
-  expect(container.textContent).toContain("报告需修订 · 2026-W38");
-  expect(sharedTodos?.className).toContain("min-w-0");
-  expect(tabNav?.compareDocumentPosition(sharedTodos!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  expect(currentSearch).toBe("?domain=research&tab=office&todo_scope=visible");
+  expect(container.textContent).toContain("office-approvals");
+  expect(container.textContent).not.toContain("跨组件待办");
 });

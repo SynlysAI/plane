@@ -33,6 +33,26 @@ function Harness() {
   );
 }
 
+function MultipleHarness() {
+  const [values, setValues] = useState<string[]>([]);
+
+  return (
+    <>
+      <CustomSearchSelect
+        multiple
+        value={values}
+        onChange={setValues}
+        customButton={<span>Select members</span>}
+        options={[
+          { value: "alice", query: "alice chen alice.chen alice@example.com", content: "Alice Chen" },
+          { value: "bob", query: "bob wang bob.wang bob@example.com", content: "Bob Wang" },
+        ]}
+      />
+      <output>{values.join(",")}</output>
+    </>
+  );
+}
+
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
@@ -92,6 +112,42 @@ it("allows native mouse focus on the search input inside the options panel", asy
 
   // Preventing mousedown cancels the browser's default input focus action.
   expect(mouseDown.defaultPrevented).toBe(false);
+});
+
+it("支持多选连续提交且搜索可匹配账号和邮箱", async () => {
+  await act(async () => root.render(<MultipleHarness />));
+  await act(async () => container.querySelector<HTMLButtonElement>("button")?.click());
+
+  const searchInput = document.body.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    valueSetter?.call(searchInput, "bob@example.com");
+    searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  expect([...document.body.querySelectorAll("[role='option']")].map((element) => element.textContent)).toEqual([
+    "Bob Wang",
+  ]);
+
+  await act(async () => {
+    valueSetter?.call(searchInput, "");
+    searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  const options = [...document.body.querySelectorAll<HTMLElement>("[role='option']")];
+  const selectOption = async (option: HTMLElement) => {
+    await act(async () => {
+      option.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+      option.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+      option.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+    });
+  };
+
+  await selectOption(options[0]);
+  await selectOption(options[1]);
+
+  expect(container.querySelector("output")?.textContent).toBe("alice,bob");
+  expect(document.querySelector("[role='listbox']")).not.toBeNull();
 });
 
 it("开闭通知仅在状态变化后各触发一次，Esc 和外部点击仍然有效", async () => {

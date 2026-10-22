@@ -6,6 +6,7 @@
 import { API_BASE_URL, researchEndpoints } from "@plane/constants";
 import type { TAgentPluginManifest, TResearchAgentApproval, TResearchAgentSession } from "@plane/types";
 import { APIService } from "@/services/api.service";
+import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 
 export type TAgentRunEvent = {
   schema_version: "agent-plugin.v1";
@@ -164,7 +165,10 @@ export class ResearchAgentService extends APIService {
     }
   ) {
     return this.post(researchEndpoints.agentApproval(workspaceSlug, runId), payload)
-      .then((res) => res?.data as { session: TResearchAgentSession; event: TAgentRunEvent })
+      .then((res) => {
+        notifyWorkspaceTodosUpdated();
+        return res?.data as { session: TResearchAgentSession; event: TAgentRunEvent };
+      })
       .catch((err) => {
         throw err?.response?.data ?? err;
       });

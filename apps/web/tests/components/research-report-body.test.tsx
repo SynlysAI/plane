@@ -34,8 +34,13 @@ vi.mock("@/hooks/store/use-workspace", () => ({
 }));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
-    t: (key: string) =>
-      key.split(".").reduce<unknown>((entry, part) => (entry as Record<string, unknown>)?.[part], translations) ?? key,
+    t: (key: string, values: Record<string, string | number> = {}) => {
+      const template = key
+        .split(".")
+        .reduce<unknown>((entry, part) => (entry as Record<string, unknown>)?.[part], translations);
+      if (typeof template !== "string") return key;
+      return template.replace(/\{(\w+)\}/g, (_, name: string) => String(values[name] ?? ""));
+    },
     currentLocale: "zh-CN",
   }),
 }));
@@ -53,9 +58,18 @@ vi.mock("@plane/ui", () => ({
     isOpen ? <div role="dialog">{children}</div> : null,
 }));
 vi.mock("@/components/research/common/research-data-surface", () => ({
-  ResearchDetailHeader: ({ title, actions }: { title: string; actions: React.ReactNode }) => (
+  ResearchDetailHeader: ({
+    title,
+    metadata,
+    actions,
+  }: {
+    title: string;
+    metadata: React.ReactNode;
+    actions: React.ReactNode;
+  }) => (
     <header>
       <h1>{title}</h1>
+      <div>{metadata}</div>
       {actions}
     </header>
   ),
@@ -205,6 +219,34 @@ afterEach(async () => {
 });
 
 describe("报告详情正文保存与替换", () => {
+  it.each(["WEEKLY", "MONTHLY"] as const)("详情页元信息显示 %s 撰写人显示名", async (reportType) => {
+    mocks.reports["report-1"] = {
+      ...report(),
+      report_type: reportType,
+      owner_detail: {
+        id: "student-1",
+        email: "student@example.com",
+        first_name: "三",
+        last_name: "张",
+        display_name: "张三",
+        avatar: "",
+        avatar_url: null,
+        is_active: true,
+      },
+    };
+    await renderDetail();
+
+    expect(container.querySelector("header div")?.textContent).toContain("撰写人：张三");
+  });
+
+  it("撰写人详情缺失时回退显示责任人 ID", async () => {
+    const fallbackReport = { ...report(), owner_detail: undefined };
+    mocks.reports["report-1"] = fallbackReport;
+    await renderDetail();
+
+    expect(container.querySelector("header div")?.textContent).toContain("撰写人：student-1");
+  });
+
   it("从列表缓存进入详情时等待正文，详情加载完成后展示已保存内容", async () => {
     mocks.reports["report-1"] = { ...report(), draft_content: null };
     await renderDetail();

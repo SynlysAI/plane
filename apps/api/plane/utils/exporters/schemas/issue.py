@@ -151,7 +151,7 @@ class IssueExportSchema(ExportSchema):
         return [link.url for link in i.issue_link.all()]
 
     def prepare_assignees(self, i):
-        return [f"{u.first_name} {u.last_name}" for u in i.assignees.all()]
+        return [f"{u.first_name} {u.last_name}" for u in i.assignees.filter(issue_assignee__deleted_at__isnull=True)]
 
     def prepare_subscribers_count(self, i):
         return i.issue_subscribers.count()

@@ -1,6 +1,7 @@
 import { Download, File, RotateCcw, X } from "lucide-react";
 import type { TCommentAttachment } from "@plane/types";
 import { convertBytesToSize, getFileURL } from "@plane/utils";
+import { AttachmentPreviewLink } from "@/components/attachments/preview";
 import type { TCommentAttachmentDraft } from "./use-comment-attachments";
 
 /** 在评论正文下方呈现上传状态及保存后的文件下载入口。 */
@@ -35,9 +36,18 @@ export function CommentAttachmentList(props: {
         {entries.map((entry) => (
           <li key={entry.key} className="flex min-w-0 items-center gap-2 py-2">
             <File aria-hidden className="size-4 shrink-0 text-tertiary" />
-            <span title={entry.name} className="min-w-0 flex-1 truncate text-primary">
-              {entry.name}
-            </span>
+            <div className="min-w-0 flex-1 truncate text-primary">
+              {entry.attachment ? (
+                <AttachmentPreviewLink
+                  name={entry.name}
+                  previewUrl={entry.attachment.preview_url}
+                  downloadUrl={entry.attachment.download_url}
+                  className="max-w-full truncate text-left hover:underline"
+                />
+              ) : (
+                <span title={entry.name}>{entry.name}</span>
+              )}
+            </div>
             <span className="shrink-0 text-tertiary">{convertBytesToSize(entry.size)}</span>
             {entry.status === "uploading" && <span role="status">上传中…</span>}
             {entry.status === "failed" && (

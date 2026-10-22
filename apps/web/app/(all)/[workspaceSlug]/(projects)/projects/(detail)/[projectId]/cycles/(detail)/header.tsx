@@ -28,6 +28,7 @@ import { cn } from "@plane/utils";
 // components
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { DetailBackLink } from "@/components/common/detail-back-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
 import { CycleQuickActions } from "@/components/cycles/quick-actions";
 import {
@@ -135,7 +136,8 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
       <Header>
         <Header.LeftItem>
           <div className="flex items-center gap-2">
-            <Breadcrumbs onBack={router.back} isLoading={loader === "init-loader"}>
+            <DetailBackLink href={`/${workspaceSlug}/projects/${projectId}/cycles/`}>返回周期列表</DetailBackLink>
+            <Breadcrumbs isLoading={loader === "init-loader"}>
               <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
               <Breadcrumbs.Item
                 component={

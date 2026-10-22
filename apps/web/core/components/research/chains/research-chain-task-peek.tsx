@@ -454,6 +454,7 @@ export function ResearchChainTaskPeek(props: Props) {
                 <ResearchAssigneeSelect
                   candidates={candidates}
                   value={assigneeValue}
+                  selectedLabel={userName(task?.assignee_detail)}
                   label={t("research.chain_tasks.assignee")}
                   placeholder={t("research.chain_tasks.add_assignee")}
                   fullWidth
@@ -513,6 +514,12 @@ export function ResearchChainTaskPeek(props: Props) {
           </div>
           {kind === "create" && (
             <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.ownership_hint")}</p>
+          )}
+          {canAssign && <p className="mt-3 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>}
+          {task?.assignee && task.assignee_is_valid === false && (
+            <p role="status" className="mt-3 text-12 text-secondary">
+              {t("research.chain_tasks.invalid_assignee")}
+            </p>
           )}
         </section>
 

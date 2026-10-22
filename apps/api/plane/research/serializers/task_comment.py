@@ -8,6 +8,7 @@ from plane.db.models import FileAsset, ResearchTaskComment
 from plane.research.services.task_comment_attachments import attachment_ids_for_comment
 from plane.utils.content_validator import validate_html_content
 from plane.utils.html_processor import strip_tags
+from plane.preview.access import preview_url
 
 
 class ResearchTaskCommentSerializer(serializers.ModelSerializer):
@@ -125,6 +126,7 @@ class ResearchTaskCommentSerializer(serializers.ModelSerializer):
                 "name": attachment.file_name,
                 "type": attachment.content_type,
                 "size": attachment.file_size,
+                "preview_url": preview_url(attachment.asset),
                 "download_url": (
                     f"/api/research/workspaces/{attachment.comment.task.workspace.slug}/"
                     f"chains/{attachment.comment.task.chain_id}/nodes/{attachment.comment.task.node_id}/"

@@ -148,6 +148,7 @@ def _synlora_runtime_for_session(workspace, session):
         raise SynloraRuntimeError("synlora_not_configured", "Synlora runtime is not configured.", 503)
     return runtime
 
+
 AGENT_CHAIN_EVENT_TYPES = frozenset(
     {
         "RESEARCH_NOTE",
@@ -217,6 +218,11 @@ def _session_operator(workspace, user, session):
     )
 
 
+def _session_approval_operator(user, session):
+    """Return whether the session initiator may decide its tool approval."""
+    return session.user_id == user.id and session.context_grant.scope_kind != "REVIEW"
+
+
 def _session_scope_allows(session, action):
     """Enforce the REVIEW session's read/comment/draft-only capability boundary."""
     if session.context_grant.scope_kind != "REVIEW":
@@ -257,6 +263,7 @@ def _load_session(
     *,
     allow_inactive_context=False,
     require_operator=False,
+    require_approval_operator=False,
     require_active_chain=False,
 ):
     try:
@@ -282,6 +289,12 @@ def _load_session(
             "Only chain members can operate this Agent session.",
             status.HTTP_403_FORBIDDEN,
         )
+    if require_approval_operator and not _session_approval_operator(request.user, session):
+        return None, research_error(
+            ResearchErrorCode.PERMISSION_DENIED,
+            "Only the session initiator can decide this Agent approval.",
+            status.HTTP_403_FORBIDDEN,
+        )
     if require_active_chain:
         readonly_error = _chain_readonly_error(session.chain_node.chain)
         if readonly_error:
@@ -296,6 +309,7 @@ def _load_session_by_run(
     *,
     allow_inactive_context=False,
     require_operator=False,
+    require_approval_operator=False,
     require_active_chain=False,
 ):
     """Load a visible Agent session by its stable run ID."""
@@ -320,6 +334,12 @@ def _load_session_by_run(
         return None, research_error(
             ResearchErrorCode.PERMISSION_DENIED,
             "Only chain members can operate this Agent run.",
+            status.HTTP_403_FORBIDDEN,
+        )
+    if require_approval_operator and not _session_approval_operator(request.user, session):
+        return None, research_error(
+            ResearchErrorCode.PERMISSION_DENIED,
+            "Only the session initiator can decide this Agent approval.",
             status.HTTP_403_FORBIDDEN,
         )
     if require_active_chain:
@@ -425,9 +445,7 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
             # 否则回落平台默认 Synlora；连接信息只来自设置页，不走环境变量。
             backend_connection = resolve_science_discovery_connection(workspace, request.user)
             if backend_connection is not None:
-                orchestrated = create_science_discovery_session(
-                    connection=backend_connection, **orchestration_kwargs
-                )
+                orchestrated = create_science_discovery_session(connection=backend_connection, **orchestration_kwargs)
             else:
                 orchestrated = create_synlora_runtime_session(**orchestration_kwargs)
         except (SynloraRuntimeError, ScienceDiscoveryError) as exc:
@@ -957,11 +975,7 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
             # Synlora 分支：按游标有界拉取 SSE，翻译成 SD 事件词汇后共用同一投影器。
             try:
                 runtime = _synlora_runtime_for_session(workspace, session)
-                last_event = (
-                    session.run_events.order_by("-seq")
-                    .values_list("payload", flat=True)
-                    .first()
-                )
+                last_event = session.run_events.order_by("-seq").values_list("payload", flat=True).first()
                 cursor = (last_event or {}).get("remote_event_id")
                 sequence_base = max(
                     [
@@ -1051,10 +1065,7 @@ class ResearchAgentRunCancelEndpoint(AgentPluginMixin):
                     except ScienceDiscoveryError:
                         # 本地仍 fail-closed 关闭；远端取消由 SD 队列终态兜底。
                         pass
-            if (
-                session.provider == ResearchAgentSession.Provider.SYNLORA
-                and session.synlora_run_id
-            ):
+            if session.provider == ResearchAgentSession.Provider.SYNLORA and session.synlora_run_id:
                 try:
                     runtime = _synlora_runtime_for_session(workspace, session)
                     runtime.cancel(run_id=session.synlora_run_id)
@@ -1173,7 +1184,7 @@ class ResearchAgentApprovalListEndpoint(AgentPluginMixin):
         for session in sessions:
             if _chain_readonly_error(session.chain_node.chain) is not None:
                 continue
-            if not _session_operator(workspace, request.user, session):
+            if not _session_approval_operator(request.user, session):
                 continue
             results.append(_agent_approval_projection(session))
         return Response({"results": results, "count": len(results)})
@@ -1190,7 +1201,7 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             request,
             workspace,
             run_id,
-            require_operator=True,
+            require_approval_operator=True,
             require_active_chain=True,
         )
         if error:
@@ -1379,9 +1390,11 @@ class ResearchAgentBackendConnectionEndpoint(AgentPluginMixin):
             .first()
         )
         if connection is None:
-            existing_row = ResearchAgentBackendConnection.objects.filter(
-                workspace=workspace, user=request.user, system=system
-            ).order_by("-created_at").first()
+            existing_row = (
+                ResearchAgentBackendConnection.objects.filter(workspace=workspace, user=request.user, system=system)
+                .order_by("-created_at")
+                .first()
+            )
             if not token and not (existing_row and existing_row.credential_encrypted):
                 return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "token is required.")
             connection = ResearchAgentBackendConnection.objects.create(
@@ -1575,9 +1588,11 @@ class ResearchAgentSessionArtifactContentEndpoint(AgentPluginMixin):
             return Response({"error_code": exc.code, "message": exc.message}, status=exc.status_code)
         response = HttpResponse(content, content_type=media_type)
         artifact_name = ""
-        event = session.run_events.filter(event_type="INTERMEDIATE_ARTIFACT", payload__version__id=version_id).order_by(
-            "-seq"
-        ).first()
+        event = (
+            session.run_events.filter(event_type="INTERMEDIATE_ARTIFACT", payload__version__id=version_id)
+            .order_by("-seq")
+            .first()
+        )
         if event is not None:
             artifact = (event.payload or {}).get("artifact")
             artifact_name = str((artifact or {}).get("name") or "") if isinstance(artifact, dict) else ""

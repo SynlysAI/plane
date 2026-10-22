@@ -10,6 +10,9 @@ from django.utils.dateparse import parse_datetime
 
 from plane.db.models import (
     FileAsset,
+    OrgUnitMember,
+    ProjectMember,
+    WorkspaceMember,
     ResearchChain,
     ResearchChainEvent,
     ResearchChainNode,
@@ -22,9 +25,10 @@ from plane.research.services.chain_tasks import (
     chain_manager,
     chain_writer,
     review_only_actor,
-    validate_assignable_user,
 )
 from plane.research.services.idempotency import payload_hash
+from plane.research.utils.acl import org_unit_ancestry
+from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.collaboration_notifications import (
     notify_paper_accepted,
@@ -241,6 +245,36 @@ def _replay_paper_event(review, version, request_id, event_type, content_hash):
     return existing
 
 
+def _valid_final_reviewer(workspace, chain, user):
+    """保留论文终审人原有的组织及显式协作边界。
+
+    Args:
+        workspace: 当前工作区。
+        chain: 论文所属研究链。
+        user: 候选终审人。
+
+    Returns:
+        有效工作区成员属于课题组织、上级组织或显式协作者时为 True。
+    """
+    if not WorkspaceMember.objects.filter(
+        workspace=workspace, member=user, member__is_active=True,
+        role__in=READABLE_WORKSPACE_ROLES, is_active=True, deleted_at__isnull=True,
+    ).exists():
+        return False
+    if ProjectMember.objects.filter(
+        project_id=chain.project_id, member=user, is_active=True, deleted_at__isnull=True,
+    ).exists():
+        return True
+    profile = getattr(chain.project, "research_profile", None)
+    if profile is None or profile.org_unit_id is None:
+        return False
+    unit_ids = [profile.org_unit_id, *org_unit_ancestry(profile.org_unit_id, workspace.id)]
+    return OrgUnitMember.objects.filter(
+        active_membership_q(timezone.localdate()), workspace=workspace,
+        org_unit_id__in=unit_ids, org_unit__deleted_at__isnull=True, user=user,
+    ).exists()
+
+
 def _final_reviewer_from_payload(workspace, chain, actor, payload):
     """Resolve and server-validate an optional final reviewer.
 
@@ -258,7 +292,7 @@ def _final_reviewer_from_payload(workspace, chain, actor, payload):
         return None
     user_id = value.id if hasattr(value, "id") else value
     reviewer = User.objects.filter(pk=user_id, is_active=True).first()
-    if reviewer is None or reviewer.id == actor.id or not validate_assignable_user(workspace, chain, reviewer.id):
+    if reviewer is None or reviewer.id == actor.id or not _valid_final_reviewer(workspace, chain, reviewer):
         raise PaperReviewPermissionError("final_reviewer is outside the chain's reviewer candidate boundary.")
     return reviewer
 

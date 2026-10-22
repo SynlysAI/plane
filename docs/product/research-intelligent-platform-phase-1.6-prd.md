@@ -168,10 +168,10 @@ Phase 1.6 目标语义合同：
 当前路由口径：
 
 - `/{workspace}/` 承载首页工作台。
-- 首页“查看全部待办”进入 `/{workspace}/research/approvals/`，复用默认“跨组件待办”页签；`/{workspace}/research/todos` 保留独立完整列表。
+- 首页“查看全部待办”进入 `/{workspace}/approvals?domain=shared_todos`，复用“跨组件待办”页面级页签；`/{workspace}/research/todos` 保留独立完整列表。
 - `/{workspace}/research/chains` 显示“科研项目”，内部 Tab 为“科研项目 / 报告”；`?create=1` 打开创建对话框后清除该参数。
 - `/{workspace}/projects` 显示“行政项目”，内部 Tab 为“项目 / 视图 / 分析 / 归档”。
-- `/{workspace}/research/approvals` 与 `/{workspace}/research/settings` 保留。IA v2 下跨组件待办与领域队列同级，查询参数为 `tab=shared_todos`。
+- `/{workspace}/approvals?domain=shared_todos` 与 `/{workspace}/research/settings` 保留。IA v2 下跨组件待办与行政审批、科研审批同为页面级页签；旧 `/{workspace}/research/approvals` 深链保留重定向。
 - `/{workspace}/research/settings` 的页面标题显示为“管理”，不改路由和权限。
 - 旧 `/{workspace}/research` 科研总览重定向到首页。
 - 关闭 `research_ia_v2` 时回退旧平铺导航和旧审批列表，不删除数据。
@@ -326,8 +326,8 @@ Phase 1.6 不新增一个覆盖任务、报告、论文和审批的通用业务�
 
 本节是 `4.27.0` 相对 `4.26.0` 的现行交互合同。统一待办信封、三种范围、六源降级、双指派边界和领域状态机不变。静态原型中的两列首页只保留为历史对照，不覆盖生产合同。
 
-1. **待办入口**：首页卡片、`/{workspace}/research/todos` 和审批中心 `shared_todos` 页签共用 `ResearchTodoEnvelopeList` 与 `research-todo.v2`。范围读取 URL `todo_scope`，缺省 `to_me`。首页周期筛选只作用于首页卡片，不缩小待办中心和审批页签的完整列表。审批中心切换领域页签时保留 `todo_scope`。
-2. **审批中心**：跨组件待办与阶段评审、报告审核、Agent 审批、办公审批同级，避免聚合列表把领域页签顶出视口。待办页签沿用第一个可见领域队列的页面门禁，不因单独审批开关被拦住。
+1. **待办入口**：首页卡片、`/{workspace}/research/todos` 和审批中心 `shared_todos` 页面级页签共用 `ResearchTodoEnvelopeList` 与 `research-todo.v2`。范围读取 URL `todo_scope`，缺省 `to_me`。首页周期筛选只作用于首页卡片，不缩小待办中心和审批页签的完整列表。审批中心切换页面级或科研领域页签时保留 `todo_scope`。
+2. **审批中心**：跨组件待办、行政审批、科研审批为页面级页签；科研审批内部保留阶段评审、报告审核、办公审批队列。跨组件待办始终显示，数据可见性由统一待办 API 按 ACL 决定。
 3. **研究链导轨**：固定 13 阶段可换行，显示两位序号、名称和可见状态，阶段之间用箭头连接；不使用横向滚动或中点文字链。点击阶段只查看证据，不改变真实当前节点。
 4. **Peek**：节点任务的创建和详情，以及阶段证据、快照、过程记录、空项，共用一层 Peek，同一时间只打开一层。任务 Peek 支持侧边、模态框和全屏，展示属性、责任人、截止时间、活动记录和关联资料。活动优先读取节点 Chain Event，缺失时用任务时间字段合成。
 5. **指派搜索**：候选人搜索只过滤当前课题的组织范围与显式协作者，不提供全工作区搜索。

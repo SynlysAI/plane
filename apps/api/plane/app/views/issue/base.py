@@ -34,7 +34,9 @@ from rest_framework.response import Response
 # Module imports
 from plane.app.permissions import ROLE, allow_permission
 from plane.utils.administrative_projects import (
-    active_issue_assignees, effective_project_member, user_can_manage_administrative_project,
+    active_issue_assignees,
+    effective_project_member,
+    user_can_manage_administrative_project,
 )
 from plane.app.serializers import (
     IssueCreateSerializer,
@@ -418,6 +420,7 @@ class IssueViewSet(BaseViewSet):
                 "project_id": project_id,
                 "workspace_id": project.workspace_id,
                 "default_assignee_id": project.default_assignee_id,
+                "actor": request.user,
             },
         )
 
@@ -552,7 +555,8 @@ class IssueViewSet(BaseViewSet):
                 ),
                 assignee_ids=Coalesce(
                     Subquery(
-                        active_issue_assignees().filter(
+                        active_issue_assignees()
+                        .filter(
                             issue_id=OuterRef("pk"),
                         )
                         .values("issue_id")
@@ -660,9 +664,13 @@ class IssueViewSet(BaseViewSet):
                         distinct=True,
                         filter=Q(
                             ~Q(assignees__id__isnull=True)
-                            & Q(assignees__id__in=active_issue_assignees().filter(
-                                issue_id=OuterRef("pk"),
-                            ).values("assignee_id"))
+                            & Q(
+                                assignees__id__in=active_issue_assignees()
+                                .filter(
+                                    issue_id=OuterRef("pk"),
+                                )
+                                .values("assignee_id")
+                            )
                             & Q(issue_assignee__deleted_at__isnull=True)
                         ),
                     ),
@@ -695,7 +703,7 @@ class IssueViewSet(BaseViewSet):
             issue,
             data=request.data,
             partial=True,
-            context={"project_id": project_id, "workspace_id": issue.workspace_id},
+            context={"project_id": project_id, "workspace_id": issue.workspace_id, "actor": request.user},
         )
         if serializer.is_valid():
             serializer.save()
@@ -949,7 +957,8 @@ class IssuePaginatedViewSet(BaseViewSet):
             ),
             assignee_ids=Coalesce(
                 Subquery(
-                    active_issue_assignees().filter(
+                    active_issue_assignees()
+                    .filter(
                         issue_id=OuterRef("pk"),
                     )
                     .values("issue_id")
@@ -1114,9 +1123,9 @@ class IssueDetailEndpoint(BaseAPIView):
             order_by=order_by_param,
             queryset=issue,
             total_count_queryset=total_issue_queryset,
-            on_results=lambda issue: IssueListDetailSerializer(
-                issue, many=True, fields=self.fields, expand=self.expand
-            ).data,
+            on_results=lambda issue: (
+                IssueListDetailSerializer(issue, many=True, fields=self.fields, expand=self.expand).data
+            ),
         )
 
 
@@ -1235,6 +1244,7 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
         project = Project.objects.get(identifier__iexact=project_identifier, workspace__slug=slug)
 
         from plane.utils.project_domains import project_domain_allows
+
         if not project_domain_allows(request.user, slug, project.id):
             return Response({"error": "You are not allowed to view this issue"}, status=403)
 
@@ -1282,9 +1292,13 @@ class IssueDetailIdentifierEndpoint(BaseAPIView):
                         distinct=True,
                         filter=Q(
                             ~Q(assignees__id__isnull=True)
-                            & Q(assignees__id__in=active_issue_assignees().filter(
-                                issue_id=OuterRef("pk"),
-                            ).values("assignee_id"))
+                            & Q(
+                                assignees__id__in=active_issue_assignees()
+                                .filter(
+                                    issue_id=OuterRef("pk"),
+                                )
+                                .values("assignee_id")
+                            )
                             & Q(issue_assignee__deleted_at__isnull=True)
                         ),
                     ),

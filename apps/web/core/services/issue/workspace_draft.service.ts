@@ -9,6 +9,7 @@ import type { TIssue, TWorkspaceDraftIssue, TWorkspaceDraftPaginationInfo } from
 // helpers
 // services
 import { APIService } from "@/services/api.service";
+import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 
 export class WorkspaceDraftService extends APIService {
   constructor() {
@@ -51,7 +52,10 @@ export class WorkspaceDraftService extends APIService {
     payload: Partial<TWorkspaceDraftIssue | TIssue>
   ): Promise<TWorkspaceDraftIssue | undefined> {
     return this.patch(`/api/workspaces/${workspaceSlug}/draft-issues/${issueId}/`, payload)
-      .then((response) => response?.data)
+      .then((response) => {
+        notifyWorkspaceTodosUpdated();
+        return response?.data;
+      })
       .catch((error) => {
         throw error?.response;
       });

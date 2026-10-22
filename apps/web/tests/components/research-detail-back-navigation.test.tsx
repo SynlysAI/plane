@@ -8,7 +8,11 @@ const routeParams = vi.hoisted(() => ({ current: {} as Record<string, string | u
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
 vi.mock("react-router", () => ({ useParams: () => routeParams.current }));
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+  default: ({ href, children, ...props }: React.ComponentProps<"a"> & { href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("lucide-react", () => ({ ChevronLeft: () => <span aria-hidden="true">←</span> }));
 vi.mock("@plane/constants", () => ({
@@ -38,6 +42,9 @@ vi.mock("@/components/research/stages/stage-overview", () => ({ StageOverview: (
 vi.mock("@/components/research/stages/stage-material-detail", () => ({
   StageMaterialDetail: () => <p>material-detail</p>,
 }));
+vi.mock("@/components/research/agent/research-agent-plugin", () => ({
+  ResearchAgentPlugin: () => <p>agent-plugin</p>,
+}));
 
 const { default: ReportDetailPage } =
   await import("../../app/(all)/[workspaceSlug]/(projects)/research/reports/[reportId]/page");
@@ -47,6 +54,8 @@ const { default: StageDetailPage } =
   await import("../../app/(all)/[workspaceSlug]/(projects)/research/projects/[projectId]/stages/[stageCode]/page");
 const { default: MaterialDetailPage } =
   await import("../../app/(all)/[workspaceSlug]/(projects)/research/projects/[projectId]/stages/[stageCode]/materials/[materialId]/page");
+const { default: AgentDetailPage } =
+  await import("../../app/(all)/[workspaceSlug]/(projects)/research/chains/[chainId]/nodes/[nodeId]/agent/page");
 const { ResearchProjectNav } = await import("@/components/research/navigation/research-project-nav");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
@@ -73,7 +82,9 @@ afterEach(async () => {
 
 it("renders one nearest-list back link on every standalone research detail page", async () => {
   await renderPage(<ReportDetailPage />, { workspaceSlug: "lab", reportId: "report-1" });
-  expect(container.querySelector('a[href="/lab/research/reports"]')?.textContent).toContain("返回报告列表");
+  const reportBackLink = container.querySelector('a[href="/lab/research/reports"]');
+  expect(reportBackLink?.textContent).toContain("返回报告列表");
+  expect(reportBackLink?.getAttribute("aria-label")).toBe("返回上一级菜单");
 
   await renderPage(<ChainDetailPage />, { workspaceSlug: "lab", chainId: "chain-1" });
   expect(container.querySelector('a[href="/lab/research/chains"]')?.textContent).toContain("返回课题列表");
@@ -92,6 +103,9 @@ it("renders one nearest-list back link on every standalone research detail page"
   expect(container.querySelector('a[href="/lab/research/projects/project-1/stages/opening"]')?.textContent).toContain(
     "返回阶段详情"
   );
+
+  await renderPage(<AgentDetailPage />, { workspaceSlug: "lab", chainId: "chain-1", nodeId: "node-1" });
+  expect(container.querySelector('a[href="/lab/research/chains/chain-1"]')?.textContent).toContain("返回课题详情");
 });
 
 it("keeps only the closest project-list entry in project scoped navigation", async () => {

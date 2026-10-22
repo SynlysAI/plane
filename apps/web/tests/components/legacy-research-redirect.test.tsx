@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   research: {
     identityWorkspaceSlug: "lab",
     identity: {},
-    isIaV2Enabled: false,
     fetchIdentity: vi.fn(),
   },
   destination: null as string | null,
@@ -22,10 +21,9 @@ vi.mock("react-router", () => ({
     return <div>redirect</div>;
   },
 }));
-vi.mock("@plane/ui", () => ({ Spinner: () => <div>spinner</div> }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks.research }));
 
-const { ResearchIaV2Redirect } = await import("@/components/research/navigation/research-ia-v2-redirect");
+const { LegacyResearchRedirect } = await import("@/components/research/navigation/legacy-research-redirect");
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -42,28 +40,13 @@ afterEach(async () => {
 });
 
 it("always resolves legacy routes into the current layout", async () => {
-  await act(async () =>
-    root.render(
-      <ResearchIaV2Redirect to="/lab/research/chains" query={{ view: "projects" }}>
-        <div>legacy-page</div>
-      </ResearchIaV2Redirect>
-    )
-  );
+  await act(async () => root.render(<LegacyResearchRedirect to="/lab/research/chains" query={{ view: "projects" }} />));
 
-  expect(container.textContent).not.toContain("legacy-page");
   expect(mocks.destination).not.toBeNull();
 });
 
-it("redirects with destination query, legacy query, and hash when IA v2 is enabled", async () => {
-  mocks.research.isIaV2Enabled = true;
-  await act(async () =>
-    root.render(
-      <ResearchIaV2Redirect to="/lab/research/chains" query={{ view: "projects" }}>
-        <div>legacy-page</div>
-      </ResearchIaV2Redirect>
-    )
-  );
+it("redirects with destination query, legacy query, and hash preserved", async () => {
+  await act(async () => root.render(<LegacyResearchRedirect to="/lab/research/chains" query={{ view: "projects" }} />));
 
   expect(mocks.destination).toBe("/lab/research/chains?status=NEEDS_REVISION&view=projects#history");
-  expect(container.textContent).not.toContain("legacy-page");
 });

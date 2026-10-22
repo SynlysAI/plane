@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "4.41.3",
+  "version": "6.0.0",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",
@@ -57,6 +57,7 @@
     "mobx-react": "catalog:",
     "mobx-utils": "catalog:",
     "next-themes": "catalog:",
+    "pdfjs-dist": "5.7.284",
     "react": "catalog:",
     "react-color": "catalog:",
     "react-dom": "catalog:",

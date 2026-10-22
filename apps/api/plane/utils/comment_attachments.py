@@ -62,7 +62,7 @@ def resolve_comment_attachment_limit(file_name, content_type, limits):
     normalized_type = str(content_type or "").split(";", 1)[0].strip().lower()
     if extension == ".pdf" or normalized_type == "application/pdf":
         category = "pdf"
-    elif extension in {".md", ".markdown"} or normalized_type in {"text/markdown", "text/x-markdown"}:
+    elif extension in {".md", ".markdown", ".txt"} or normalized_type in {"text/markdown", "text/x-markdown"}:
         category = "markdown"
     elif normalized_type.startswith("image/") or extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}:
         category = "image"

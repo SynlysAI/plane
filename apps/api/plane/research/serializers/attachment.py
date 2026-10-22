@@ -7,8 +7,12 @@ from rest_framework import serializers
 from plane.db.models import ReportAttachment
 
 
+from plane.preview.access import report_preview_url
+
+
 class ReportAttachmentSerializer(serializers.ModelSerializer):
     asset_url = serializers.SerializerMethodField()
+    preview_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ReportAttachment
@@ -17,6 +21,7 @@ class ReportAttachmentSerializer(serializers.ModelSerializer):
             "report",
             "asset",
             "asset_url",
+            "preview_url",
             "kind",
             "file_name",
             "file_size",
@@ -28,4 +33,11 @@ class ReportAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_asset_url(self, obj):
-        return f"/api/research/workspaces/{{slug}}/reports/{obj.report_id}/attachments/{obj.id}/download/"
+        return (
+            f"/api/research/workspaces/{obj.report.workspace.slug}/"
+            f"reports/{obj.report_id}/attachments/{obj.id}/download/"
+        )
+
+    def get_preview_url(self, obj):
+        """返回绑定报告附件登记的预览入口。"""
+        return report_preview_url(obj)

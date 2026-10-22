@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
 // plane imports
@@ -60,7 +60,11 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const [isArchiveIssueModalOpen, setIsArchiveIssueModalOpen] = useState(false);
   const [isDuplicateIssueModalOpen, setIsDuplicateIssueModalOpen] = useState(false);
   const [isEditIssueModalOpen, setIsEditIssueModalOpen] = useState(false);
-  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+  // 冻结态：标题、描述与挂件默认只读；属性区仍可直接编辑
+  const [isEditMode, setIsEditMode] = useState(false);
+  useEffect(() => {
+    setIsEditMode(false);
+  }, [issueId]);
   // ref
   const issuePeekOverviewRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorRefApi>(null);
@@ -84,11 +88,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const toggleEditIssueModal = (value: boolean) => setIsEditIssueModalOpen(value);
 
   const isAnyLocalModalOpen =
-    isDeleteIssueModalOpen ||
-    isArchiveIssueModalOpen ||
-    isDuplicateIssueModalOpen ||
-    isEditIssueModalOpen ||
-    isApprovalModalOpen;
+    isDeleteIssueModalOpen || isArchiveIssueModalOpen || isDuplicateIssueModalOpen || isEditIssueModalOpen;
 
   usePeekOverviewOutsideClickDetector(
     issuePeekOverviewRef,
@@ -128,6 +128,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     await issueOperations.restore(workspaceSlug, projectId, issueId);
     removeRoutePeekId();
   };
+
+  const toggleEditMode = (value: boolean) => setIsEditMode(value);
 
   const peekOverviewIssueClassName = cn(
     !embedIssue
@@ -179,7 +181,6 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 isSubmitting={isSubmitting}
-                onApprovalModalOpenChange={setIsApprovalModalOpen}
                 disabled={disabled}
                 embedIssue={embedIssue}
               />
@@ -197,6 +198,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       isArchived={is_archived}
                       isSubmitting={isSubmitting}
                       setIsSubmitting={(value) => setIsSubmitting(value)}
+                      isEditMode={isEditMode}
+                      onToggleEditMode={toggleEditMode}
                     />
 
                     <div className="py-2">
@@ -204,7 +207,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         workspaceSlug={workspaceSlug}
                         projectId={projectId}
                         issueId={issueId}
-                        disabled={disabled || is_archived}
+                        disabled={disabled || is_archived || !isEditMode}
+                        attachmentDisabled={disabled || is_archived}
                         issueServiceType={EIssueServiceType.ISSUES}
                       />
                     </div>
@@ -238,6 +242,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                           isArchived={is_archived}
                           isSubmitting={isSubmitting}
                           setIsSubmitting={(value) => setIsSubmitting(value)}
+                          isEditMode={isEditMode}
+                          onToggleEditMode={toggleEditMode}
                         />
 
                         <div className="py-2">
@@ -245,7 +251,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                             workspaceSlug={workspaceSlug}
                             projectId={projectId}
                             issueId={issueId}
-                            disabled={disabled}
+                            disabled={disabled || is_archived || !isEditMode}
+                            attachmentDisabled={disabled || is_archived}
                             issueServiceType={EIssueServiceType.ISSUES}
                           />
                         </div>

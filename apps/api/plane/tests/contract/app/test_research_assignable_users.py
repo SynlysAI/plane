@@ -8,6 +8,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from plane.db.models import ProjectMember, WorkspaceMember
 from plane.research.services.chain_tasks import validate_assignable_user
 from plane.tests.research_fixtures import make_research_boundary_fixture
 
@@ -42,12 +43,12 @@ def _candidate_ids(env):
 
 @pytest.mark.django_db
 class TestResearchChainAssignableUsers:
-    def test_current_and_ancestor_unit_members_are_assignable(self, env):
+    def test_organization_identity_alone_does_not_allow_assignment(self, env):
         candidates = _candidate_ids(env)
 
-        assert str(env["student"].id) in candidates
-        assert str(env["group_member"].id) in candidates
-        assert str(env["ancestor"].id) in candidates
+        assert str(env["student"].id) not in candidates
+        assert str(env["group_member"].id) not in candidates
+        assert str(env["ancestor"].id) not in candidates
 
     def test_descendant_guest_workspace_admin_and_unrelated_users_are_excluded(self, env):
         candidates = _candidate_ids(env)
@@ -71,6 +72,7 @@ class TestResearchChainAssignableUsers:
         assert validate_assignable_user(env["workspace"], env["chain"], env["cross_org"].id)
 
     def test_response_exposes_research_scope_without_account_email(self, env):
+        ProjectMember.objects.create(project=env["project"], member=env["student"], role=20)
         response = env["owner_client"].get(_url(env))
         items = response.json()["data"]
         by_user = {item["user_id"]: item for item in items}
@@ -92,8 +94,8 @@ class TestResearchChainAssignableUsers:
         assert "email" not in collaborator
 
     def test_reusable_validator_accepts_only_candidate_ids(self, env):
-        assert validate_assignable_user(env["workspace"], env["chain"], env["student"].id)
-        assert validate_assignable_user(env["workspace"], env["chain"], env["ancestor"].id)
+        assert not validate_assignable_user(env["workspace"], env["chain"], env["student"].id)
+        assert not validate_assignable_user(env["workspace"], env["chain"], env["ancestor"].id)
         assert not validate_assignable_user(env["workspace"], env["chain"], env["descendant"].id)
         assert not validate_assignable_user(env["workspace"], env["chain"], env["guest"].id)
         assert not validate_assignable_user(env["workspace"], env["chain"], env["workspace_admin"].id)
@@ -103,3 +105,37 @@ class TestResearchChainAssignableUsers:
 
         assert response.status_code == 403
         assert response.json()["error_code"] == "research_permission_denied"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "invalidity",
+    [
+        "project_inactive",
+        "project_deleted",
+        "project_guest",
+        "workspace_inactive",
+        "workspace_deleted",
+        "workspace_guest",
+        "account_inactive",
+    ],
+)
+def test_only_live_project_and_workspace_members_are_assignable(env, invalidity):
+    """课题、工作区与账号任一失效都会撤销候选资格。"""
+    user = env["group_member"]
+    member = ProjectMember.objects.create(project=env["project"], member=user, role=15)
+    workspace_member = WorkspaceMember.objects.get(workspace=env["workspace"], member=user)
+    assert str(user.id) in _candidate_ids(env)
+    target, field, value = {
+        "project_inactive": (member, "is_active", False),
+        "project_deleted": (member, "deleted_at", timezone.now()),
+        "project_guest": (member, "role", 5),
+        "workspace_inactive": (workspace_member, "is_active", False),
+        "workspace_deleted": (workspace_member, "deleted_at", timezone.now()),
+        "workspace_guest": (workspace_member, "role", 5),
+        "account_inactive": (user, "is_active", False),
+    }[invalidity]
+    setattr(target, field, value)
+    target.save(update_fields=[field])
+    assert str(user.id) not in _candidate_ids(env)
+    assert not validate_assignable_user(env["workspace"], env["chain"], user.id)

@@ -13,7 +13,6 @@ import { ResearchTabLink } from "@/components/research/common/research-tab-link"
 // components
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
-import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 import { ReviewInbox } from "@/components/research/reviews/review-inbox";
 // hooks
@@ -23,7 +22,7 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ApprovalTab = "shared_todos" | "stage_review" | "report_review" | "office";
+type ApprovalTab = "stage_review" | "report_review" | "office";
 
 type ApprovalShell = {
   titleKey: string;
@@ -32,15 +31,19 @@ type ApprovalShell = {
   navKey: string;
 };
 
-/** 构造审批中心 Tab 深链，并保留待办范围等无关 URL 状态。 */
+/** 构造科研审批队列深链，并保留待办范围等无关 URL 状态。 */
 function approvalTabHref(searchParams: URLSearchParams, workspaceSlug: string, tabId: ApprovalTab) {
-  const params = new URLSearchParams(searchParams);
+  const params = new URLSearchParams();
+  params.set("domain", "research");
   params.set("tab", tabId);
-  return `/${workspaceSlug}/research/approvals?${params.toString()}`;
+  for (const [key, value] of searchParams.entries()) {
+    if (key !== "domain" && key !== "tab") params.append(key, value);
+  }
+  return `/${workspaceSlug}/approvals?${params.toString()}`;
 }
 
-/** 按当前队列选择页面门禁，跨组件待办沿用第一个可见领域队列，避免单独被审批开关拦住。 */
-function approvalShell(tab: Exclude<ApprovalTab, "shared_todos">): ApprovalShell {
+/** 按当前科研队列选择页面门禁。 */
+function approvalShell(tab: ApprovalTab): ApprovalShell {
   if (tab === "stage_review") {
     return {
       titleKey: "research.nav.approvals_v2",
@@ -66,7 +69,7 @@ function approvalShell(tab: Exclude<ApprovalTab, "shared_todos">): ApprovalShell
 }
 
 /**
- * 审批中心。跨组件待办与领域队列同级，避免聚合列表把阶段评审等页签顶出视口。
+ * 科研审批队列。跨组件待办已提升到审批中心页面级导航。
  */
 export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({ workspaceSlug }: Props) {
   const { t } = useTranslation();
@@ -92,14 +95,9 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
       visible: Boolean(sections?.approvals) && research.canSee("approvals"),
     },
   ].filter((tab) => tab.visible);
-  const tabs = [{ id: "shared_todos" as const, labelKey: "research.approvals.tabs.shared_todos" }, ...domainTabs];
-  const activeTab = requestedTab && tabs.some((tab) => tab.id === requestedTab) ? requestedTab : tabs[0].id;
-
-  const shellTab = activeTab === "shared_todos" ? domainTabs[0]?.id : activeTab;
-  const shellProps = {
-    ...(shellTab ? approvalShell(shellTab) : approvalShell("office")),
-    ...(activeTab === "shared_todos" ? { descriptionKey: "research.todo.description_v2" } : {}),
-  };
+  const activeTab =
+    requestedTab && domainTabs.some((tab) => tab.id === requestedTab) ? requestedTab : domainTabs[0]?.id;
+  const shellProps = approvalShell(activeTab ?? "office");
 
   return (
     <ResearchPageShell {...shellProps} hideHeader>
@@ -109,7 +107,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
           className="shrink-0 overflow-x-auto border-b border-subtle px-5"
         >
           <TabNavigationList className="py-2">
-            {tabs.map((tab) => (
+            {domainTabs.map((tab) => (
               <ResearchTabLink
                 key={tab.id}
                 href={approvalTabHref(searchParams, workspaceSlug, tab.id)}
@@ -121,14 +119,9 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
           </TabNavigationList>
         </nav>
         <div className="min-h-0 flex-1 overflow-hidden">
-          {activeTab === "shared_todos" && (
-            <div className="h-full overflow-y-auto bg-canvas p-5">
-              <ResearchTodoEnvelopeList workspaceSlug={workspaceSlug} />
-            </div>
-          )}
           {activeTab === "stage_review" && <ReviewInbox workspaceSlug={workspaceSlug} />}
           {activeTab === "report_review" && <ResearchReportList workspaceSlug={workspaceSlug} variant="review" />}
-          {activeTab === "office" && (
+          {(activeTab === "office" || !activeTab) && (
             <ResearchApprovalList workspaceSlug={workspaceSlug} isAdmin={research.isResearchAdmin} />
           )}
         </div>

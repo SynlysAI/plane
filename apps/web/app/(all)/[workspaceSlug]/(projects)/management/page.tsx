@@ -44,7 +44,7 @@ export default observer(function WorkspaceManagementPage() {
   );
   const tabs = [
     ...(context.navigation.workspace_settings ? [{ key: "workspace", label: "工作区设置" }] : []),
-    ...(context.navigation.administrative_organizations ? [{ key: "administrative", label: "行政组织与审批" }] : []),
+    ...(context.navigation.administrative_organizations ? [{ key: "administrative", label: "行政组织" }] : []),
     ...(context.workspace_enabled &&
     context.capabilities?.nav.some((key) => RESEARCH_SETTINGS_NAVIGATION_ITEMS.some((item) => item.key === key))
       ? [{ key: "research", label: "科研管理" }]

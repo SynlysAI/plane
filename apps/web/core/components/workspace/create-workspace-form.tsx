@@ -20,7 +20,7 @@ import { CustomSelect } from "@plane/ui";
 import { validateWorkspaceName, validateSlug } from "@plane/utils";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { useAppRouter } from "@/hooks/use-app-router";
+import { useDetailBack } from "@/hooks/use-detail-back";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
 
@@ -57,8 +57,8 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
   const [slugError, setSlugError] = useState(false);
   const [researchEnabled, setResearchEnabled] = useState(false);
   const [invalidSlug, setInvalidSlug] = useState(false);
-  // router
-  const router = useAppRouter();
+  // 返回
+  const handleBack = useDetailBack("/");
   // store hooks
   const { createWorkspace } = useWorkspace();
   // form info
@@ -249,14 +249,18 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
       <div className="flex items-center gap-4">
         {secondaryButton}
         <label className="flex items-center gap-2 text-13">
-            <input type="checkbox" checked={researchEnabled} onChange={(event) => setResearchEnabled(event.target.checked)} />
-            启用科研模块
-          </label>
-          <Button variant="primary" type="submit" size="xl" disabled={!isValid} loading={isSubmitting}>
+          <input
+            type="checkbox"
+            checked={researchEnabled}
+            onChange={(event) => setResearchEnabled(event.target.checked)}
+          />
+          启用科研模块
+        </label>
+        <Button variant="primary" type="submit" size="xl" disabled={!isValid} loading={isSubmitting}>
           {isSubmitting ? t(primaryButtonText.loading) : t(primaryButtonText.default)}
         </Button>
         {!secondaryButton && (
-          <Button variant="secondary" type="button" size="xl" onClick={() => router.back()}>
+          <Button variant="secondary" type="button" size="xl" onClick={handleBack}>
             {t("common.go_back")}
           </Button>
         )}

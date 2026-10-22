@@ -21,18 +21,32 @@ type Props = {
   projectId: string;
   issueId: string;
   disabled: boolean;
+  attachmentDisabled?: boolean;
   issueServiceType: TIssueServiceType;
   hideWidgets?: TWorkItemWidgets[];
 };
 
 export function IssueDetailWidgetActionButtons(props: Props) {
-  const { workspaceSlug, projectId, issueId, disabled, issueServiceType, hideWidgets } = props;
+  const {
+    workspaceSlug,
+    projectId,
+    issueId,
+    disabled,
+    attachmentDisabled = disabled,
+    issueServiceType,
+    hideWidgets,
+  } = props;
   // translation
   const { t } = useTranslation();
 
+  // 冻结态仅保留附件入口；无权限或归档时不提供任何"添加"操作入口。
+  const shouldRenderGeneralActions = !disabled;
+  const shouldRenderAttachmentAction = !attachmentDisabled;
+  if (!shouldRenderGeneralActions && !shouldRenderAttachmentAction) return null;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {!hideWidgets?.includes("sub-work-items") && (
+      {shouldRenderGeneralActions && !hideWidgets?.includes("sub-work-items") && (
         <SubIssuesActionButton
           issueId={issueId}
           customButton={
@@ -46,7 +60,7 @@ export function IssueDetailWidgetActionButtons(props: Props) {
           issueServiceType={issueServiceType}
         />
       )}
-      {!hideWidgets?.includes("relations") && (
+      {shouldRenderGeneralActions && !hideWidgets?.includes("relations") && (
         <RelationActionButton
           issueId={issueId}
           customButton={
@@ -60,7 +74,7 @@ export function IssueDetailWidgetActionButtons(props: Props) {
           issueServiceType={issueServiceType}
         />
       )}
-      {!hideWidgets?.includes("links") && (
+      {shouldRenderGeneralActions && !hideWidgets?.includes("links") && (
         <IssueLinksActionButton
           customButton={
             <IssueDetailWidgetButton
@@ -73,7 +87,7 @@ export function IssueDetailWidgetActionButtons(props: Props) {
           issueServiceType={issueServiceType}
         />
       )}
-      {!hideWidgets?.includes("attachments") && (
+      {shouldRenderAttachmentAction && !hideWidgets?.includes("attachments") && (
         <IssueAttachmentActionButton
           workspaceSlug={workspaceSlug}
           projectId={projectId}
@@ -82,10 +96,10 @@ export function IssueDetailWidgetActionButtons(props: Props) {
             <IssueDetailWidgetButton
               title={t("common.attach")}
               icon={<AttachOutline className="h-3.5 w-3.5 flex-shrink-0" />}
-              disabled={disabled}
+              disabled={attachmentDisabled}
             />
           }
-          disabled={disabled}
+          disabled={attachmentDisabled}
           issueServiceType={issueServiceType}
         />
       )}

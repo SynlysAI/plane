@@ -128,15 +128,15 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
           <div className="h-7">
             <MemberDropdown
               projectId={projectId ?? undefined}
-              value={value}
-              onChange={(assigneeIds) => {
-                onChange(assigneeIds);
+              value={value?.[0] ?? null}
+              onChange={(assigneeId) => {
+                onChange(assigneeId ? [assigneeId] : []);
                 handleFormChange();
               }}
               buttonVariant={value?.length > 0 ? "transparent-without-text" : "border-with-text"}
               buttonClassName={value?.length > 0 ? "hover:bg-transparent" : ""}
-              placeholder={t("assignees")}
-              multiple
+              placeholder="负责人"
+              multiple={false}
               tabIndex={getIndex("assignee_ids")}
             />
           </div>

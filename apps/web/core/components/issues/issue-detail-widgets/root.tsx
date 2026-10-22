@@ -17,6 +17,8 @@ type Props = {
   projectId: string;
   issueId: string;
   disabled: boolean;
+  /** 附件操作独立于标题/正文冻结态，仅在无权限或归档时禁用。 */
+  attachmentDisabled?: boolean;
   renderWidgetModals?: boolean;
   issueServiceType: TIssueServiceType;
   hideWidgets?: TWorkItemWidgets[];
@@ -28,6 +30,7 @@ export function IssueDetailWidgets(props: Props) {
     projectId,
     issueId,
     disabled,
+    attachmentDisabled = disabled,
     renderWidgetModals = true,
     issueServiceType,
     hideWidgets,
@@ -41,6 +44,7 @@ export function IssueDetailWidgets(props: Props) {
           projectId={projectId}
           issueId={issueId}
           disabled={disabled}
+          attachmentDisabled={attachmentDisabled}
           issueServiceType={issueServiceType}
           hideWidgets={hideWidgets}
         />
@@ -49,6 +53,7 @@ export function IssueDetailWidgets(props: Props) {
           projectId={projectId}
           issueId={issueId}
           disabled={disabled}
+          attachmentDisabled={attachmentDisabled}
           issueServiceType={issueServiceType}
           hideWidgets={hideWidgets}
         />

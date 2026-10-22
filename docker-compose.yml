@@ -61,9 +61,14 @@ services:
     env_file:
       - ./apps/api/.env
     depends_on:
-      - api
-      - plane-db
-      - plane-redis
+      document-converter:
+        condition: service_healthy
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
 
   beat-worker:
     container_name: beatworker
@@ -95,6 +100,32 @@ services:
     depends_on:
       - plane-db
       - plane-redis
+
+  document-converter:
+    container_name: plane-document-converter
+    build:
+      context: ./deployments/document-converter
+      dockerfile: Dockerfile
+    restart: always
+    cpus: 1.0
+    mem_limit: 1536m
+    pids_limit: 512
+    environment:
+      API_TIMEOUT: 130s
+      API_BODY_LIMIT: 110MB
+      API_DISABLE_DOWNLOAD_FROM: "true"
+      LIBREOFFICE_AUTO_START: "true"
+      LIBREOFFICE_RESTART_AFTER: "50"
+      LIBREOFFICE_MAX_QUEUE_SIZE: "20"
+      LIBREOFFICE_START_TIMEOUT: 60s
+      LIBREOFFICE_DENY_PRIVATE_IPS: "true"
+      LIBREOFFICE_DENY_PUBLIC_IPS: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   live:
     container_name: plane-live

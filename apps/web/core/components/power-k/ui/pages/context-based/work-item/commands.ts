@@ -105,11 +105,8 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
     (assigneeId: string) => {
       if (!entityDetails) return;
 
-      const updatedAssignees = [...(entityDetails.assignee_ids ?? [])];
-      if (updatedAssignees.includes(assigneeId)) updatedAssignees.splice(updatedAssignees.indexOf(assigneeId), 1);
-      else updatedAssignees.push(assigneeId);
-
-      handleUpdateEntity({ assignee_ids: updatedAssignees });
+      const currentAssigneeId = entityDetails.assignee_ids?.[0];
+      handleUpdateEntity({ assignee_ids: currentAssigneeId === assigneeId ? [] : [assigneeId] });
     },
     [entityDetails, handleUpdateEntity]
   );
@@ -152,6 +149,7 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
           type: TOAST_TYPE.SUCCESS,
           title: t("power_k.contextual_actions.work_item.copy_id_toast_success"),
         });
+        return undefined;
       })
       .catch(() => {
         setToast({
@@ -169,6 +167,7 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
           type: TOAST_TYPE.SUCCESS,
           title: t("power_k.contextual_actions.work_item.copy_title_toast_success"),
         });
+        return undefined;
       })
       .catch(() => {
         setToast({
@@ -187,6 +186,7 @@ export const usePowerKWorkItemContextBasedCommands = (): TPowerKCommandConfig[] 
           type: TOAST_TYPE.SUCCESS,
           title: t("power_k.contextual_actions.work_item.copy_url_toast_success"),
         });
+        return undefined;
       })
       .catch(() => {
         setToast({

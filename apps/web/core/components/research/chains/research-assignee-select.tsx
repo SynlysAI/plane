@@ -11,6 +11,7 @@ type Props = {
   disabled?: boolean;
   allowClear?: boolean;
   placeholder?: string;
+  selectedLabel?: string;
   fullWidth?: boolean;
   menuAlign?: "left" | "right";
   onChange: (userId: string) => void;
@@ -38,7 +39,7 @@ function candidateIdentity(candidate: TResearchAssignableUser, t: (key: string) 
 }
 
 /**
- * 用弹出层选择科研组织范围内的单名负责人。
+ * 用弹出层选择有效课题成员中的单名负责人。
  *
  * Args:
  *   candidates: 可指派接口的原样结果。
@@ -47,6 +48,7 @@ function candidateIdentity(candidate: TResearchAssignableUser, t: (key: string) 
  *   disabled: 当前是否允许改指派。
  *   allowClear: 是否允许选回未指派。已有负责人时应为 false。
  *   placeholder: 未选择时的提示。缺省时仍显示“未指派”。
+ *   selectedLabel: 历史负责人不在候选列表时保留的显示名。
  *   fullWidth: 详情属性行需要占满剩余宽度。
  *   menuAlign: 弹出层对齐方式。列表行靠右，详情行靠左。
  *   onChange: 只回传候选人 user id。
@@ -58,6 +60,7 @@ export function ResearchAssigneeSelect({
   disabled = false,
   allowClear = true,
   placeholder,
+  selectedLabel,
   fullWidth = false,
   menuAlign = "right",
   onChange,
@@ -99,7 +102,7 @@ export function ResearchAssigneeSelect({
             {selected.display_name.slice(0, 1)}
           </span>
         ) : null}
-        <span className="truncate">{selected?.display_name || emptyLabel}</span>
+        <span className="truncate">{selected?.display_name || (value && selectedLabel) || emptyLabel}</span>
       </button>
       {open && !disabled && (
         <div
@@ -109,6 +112,7 @@ export function ResearchAssigneeSelect({
             menuAlign === "left" ? "left-0" : "right-0"
           }`}
         >
+          <p className="px-2 py-1 text-12 text-tertiary">{t("research.chain_tasks.membership_hint")}</p>
           <input
             type="search"
             value={query}

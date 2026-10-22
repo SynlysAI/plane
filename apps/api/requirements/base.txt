@@ -71,3 +71,6 @@ PyJWT==2.13.0
 drf-spectacular==0.29.0
 # html sanitizer
 nh3==0.2.18
+# 私有附件预览的 PDF 与位图验证
+pypdf==6.21.2
+Pillow==12.2.0

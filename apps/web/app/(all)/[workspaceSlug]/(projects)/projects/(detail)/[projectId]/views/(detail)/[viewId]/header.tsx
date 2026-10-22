@@ -23,6 +23,7 @@ import { EIssuesStoreType, EViewAccess, EIssueLayoutTypes } from "@plane/types";
 import { Breadcrumbs, Header, BreadcrumbNavigationSearchDropdown } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { DetailBackLink } from "@/components/common/detail-back-link";
 import { SwitcherIcon, SwitcherLabel } from "@/components/common/switcher-label";
 import { DisplayFiltersSelection, FiltersDropdown, LayoutSelection } from "@/components/issues/issue-layouts/filters";
 import { ViewQuickActions } from "@/components/views/quick-actions";
@@ -122,36 +123,39 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
   return (
     <Header>
       <Header.LeftItem>
-        <Breadcrumbs isLoading={loader === "init-loader"}>
-          <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
-          <Breadcrumbs.Item
-            component={
-              <BreadcrumbLink
-                label="Views"
-                href={`/${workspaceSlug}/projects/${projectId}/views/`}
-                icon={<ViewsOutline className="h-4 w-4 text-tertiary" />}
-              />
-            }
-          />
-          <Breadcrumbs.Item
-            component={
-              <BreadcrumbNavigationSearchDropdown
-                selectedItem={viewId?.toString() ?? ""}
-                navigationItems={switcherOptions}
-                onChange={(value: string) => {
-                  router.push(`/${workspaceSlug}/projects/${projectId}/views/${value}`);
-                }}
-                title={viewDetails?.name}
-                icon={
-                  <Breadcrumbs.Icon>
-                    <SwitcherIcon logo_props={viewDetails.logo_props} LabelIcon={ViewsOutline} size={16} />
-                  </Breadcrumbs.Icon>
-                }
-                isLast
-              />
-            }
-          />
-        </Breadcrumbs>
+        <div className="flex items-center gap-2">
+          <DetailBackLink href={`/${workspaceSlug}/projects/${projectId}/views/`}>返回视图列表</DetailBackLink>
+          <Breadcrumbs isLoading={loader === "init-loader"}>
+            <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
+            <Breadcrumbs.Item
+              component={
+                <BreadcrumbLink
+                  label="Views"
+                  href={`/${workspaceSlug}/projects/${projectId}/views/`}
+                  icon={<ViewsOutline className="h-4 w-4 text-tertiary" />}
+                />
+              }
+            />
+            <Breadcrumbs.Item
+              component={
+                <BreadcrumbNavigationSearchDropdown
+                  selectedItem={viewId?.toString() ?? ""}
+                  navigationItems={switcherOptions}
+                  onChange={(value: string) => {
+                    router.push(`/${workspaceSlug}/projects/${projectId}/views/${value}`);
+                  }}
+                  title={viewDetails?.name}
+                  icon={
+                    <Breadcrumbs.Icon>
+                      <SwitcherIcon logo_props={viewDetails.logo_props} LabelIcon={ViewsOutline} size={16} />
+                    </Breadcrumbs.Icon>
+                  }
+                  isLast
+                />
+              }
+            />
+          </Breadcrumbs>
+        </div>
 
         {viewDetails?.access === EViewAccess.PRIVATE ? (
           <div className="cursor-default text-tertiary">

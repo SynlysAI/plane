@@ -20,6 +20,7 @@ import { CreateWorkspaceForm } from "@/components/workspace/create-workspace-for
 import { useUser, useUserProfile } from "@/hooks/store/user";
 import { useInstance } from "@/hooks/store/use-instance";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useDetailBack } from "@/hooks/use-detail-back";
 // wrappers
 import { AuthenticationWrapper } from "@/lib/wrappers/authentication-wrapper";
 
@@ -27,6 +28,7 @@ const CreateWorkspacePage = observer(function CreateWorkspacePage() {
   const { t } = useTranslation();
   // router
   const router = useAppRouter();
+  const handleBack = useDetailBack("/");
   // store hooks
   const { config } = useInstance();
   const { data: currentUser } = useUser();
@@ -86,7 +88,7 @@ const CreateWorkspacePage = observer(function CreateWorkspacePage() {
                 {t("workspace_creation.errors.creation_disabled.description")}
               </p>
               <div className="mt-6 flex gap-4">
-                <Button variant="primary" onClick={() => router.back()}>
+                <Button variant="primary" onClick={handleBack}>
                   {t("common.go_back")}
                 </Button>
                 <a href={getMailtoHref()} className={getButtonStyling("secondary", "base")}>

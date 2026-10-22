@@ -23,11 +23,12 @@
 
 主要容器：
 
-| Compose 文件                  | 容器/服务                                  | 说明                     |
-| ----------------------------- | ------------------------------------------ | ------------------------ |
-| `docker-compose-prod-web.yml` | `web-prod` / `plane-web-prod-1`            | Caddy，监听宿主机 `3300` |
-| `docker-compose-local.yml`    | `api`、`worker`、`beat-worker`、`migrator` | Django、Celery 与迁移    |
-| `docker-compose-local.yml`    | PostgreSQL、Redis、RabbitMQ、MinIO         | 后端基础设施             |
+| Compose 文件                  | 容器/服务                                  | 说明                                                          |
+| ----------------------------- | ------------------------------------------ | ------------------------------------------------------------- |
+| `docker-compose-prod-web.yml` | `web-prod` / `plane-web-prod-1`            | Caddy，监听宿主机 `3300`                                      |
+| `docker-compose-local.yml`    | `api`、`worker`、`beat-worker`、`migrator` | Django、Celery 与迁移                                         |
+| `docker-compose-local.yml`    | `document-converter`                       | 内部 Gotenberg/LibreOffice 附件预览转换服务，不暴露宿主机端口 |
+| `docker-compose-local.yml`    | PostgreSQL、Redis、RabbitMQ、MinIO         | 后端基础设施                                                  |
 
 管理端不再使用独立的宿主机 `3001` 端口。浏览器始终通过 `:3300/god-mode/` 访问，Caddy 再选择正确的静态目录。若前端构建配置中仍有 `localhost:3001`，Web 会把系统管理入口解析为 `10.26.15.53:3001`，最终出现 `ERR_CONNECTION_REFUSED`。
 
@@ -59,7 +60,11 @@ VITE_ADMIN_BASE_PATH="/god-mode"
 WEB_URL="http://10.26.15.53:3300"
 ADMIN_BASE_URL="http://10.26.15.53:3300"
 ADMIN_BASE_PATH="/god-mode"
+ATTACHMENT_PREVIEW_ENABLED=1
+ATTACHMENT_PREVIEW_CONVERTER_URL="http://document-converter:3000"
 ```
+
+`ATTACHMENT_PREVIEW_ENABLED=0` 只会隐藏预览入口并停止生成派生文件，上传和下载仍继续可用。转换容器只接收后端上传的文件字节，已禁用 `downloadFrom`，并拒绝 LibreOffice 嵌入资源访问公网与私网地址。
 
 不要把生产 `.env` 或密码提交到 Git。
 
@@ -138,7 +143,8 @@ pnpm turbo run build --filter=web --filter=admin
 # 3. 静态产物更新后重启 Caddy
 docker-compose -f docker-compose-prod-web.yml restart web-prod
 
-# 4. 执行数据库迁移
+# 4. 构建内部转换服务并执行数据库迁移
+docker-compose -f docker-compose-local.yml up -d --build document-converter
 docker-compose -f docker-compose-local.yml up -d migrator
 
 # 5. 重启使用 bind mount 代码的后端进程
@@ -169,7 +175,8 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' \
   --filter name=plane-web-prod-1 \
   --filter name=plane-api-1 \
   --filter name=plane-worker-1 \
-  --filter name=plane-beat-worker-1
+  --filter name=plane-beat-worker-1 \
+  --filter name=plane-document-converter-1
 ```
 
 再检查 HTTP 链路：
@@ -184,6 +191,15 @@ curl -fsS -o /dev/null -w 'api=%{http_code}\n' \
 ```
 
 三项都应返回 `200`。最后使用实例管理员账号从 Web 左下角点击「系统管理」，确认地址停留在 `http://10.26.15.53:3300/god-mode/`，登录后能进入管理菜单。
+
+检查内部转换服务：
+
+```bash
+docker-compose -f docker-compose-local.yml exec document-converter \
+  curl -fsS http://127.0.0.1:3000/health
+```
+
+返回 JSON 的 `status` 应为 `up`。该服务没有宿主机端口，不应在 Caddy 中增加公开路由。
 
 常见故障：
 
@@ -221,3 +237,4 @@ apps/admin/build/
 | 文档版本 | 日期       | 说明                                                                  |
 | -------- | ---------- | --------------------------------------------------------------------- |
 | v1.0     | 2026-09-18 | 记录当前混合部署架构，补齐 Web/Admin 构建、Caddy 路由和管理端排错流程 |
+| v1.1     | 2026-10-22 | 补充内部 Office 附件预览转换服务的部署、健康检查与出站边界            |

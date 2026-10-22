@@ -154,7 +154,7 @@ fi
 # initial full deployment has already created this network.
 if [[ "$MODE" != "web" ]]; then
     log "Starting infrastructure services"
-    "${BACKEND_COMPOSE[@]}" up -d plane-db plane-redis plane-mq plane-minio \
+    "${BACKEND_COMPOSE[@]}" up -d --build plane-db plane-redis plane-mq plane-minio document-converter \
         || fail "infrastructure services failed to start"
 elif ! docker network inspect plane_dev_env >/dev/null 2>&1; then
     fail "Docker network plane_dev_env does not exist; run one full deployment first"
@@ -175,7 +175,9 @@ fi
 
 if [[ "$MODE" != "web" ]]; then
     log "Running database migrations"
-    "${BACKEND_COMPOSE[@]}" up -d migrator || fail "migration container failed to start"
+    # --build keeps the migrator image in sync with requirements changes; the
+    # source is volume-mounted, so a stale image breaks on new pip deps (e.g. PIL).
+    "${BACKEND_COMPOSE[@]}" up -d --build migrator || fail "migration container failed to start"
     MIGRATOR_ID="$("${BACKEND_COMPOSE[@]}" ps -aq migrator)"
     [[ -n "$MIGRATOR_ID" ]] || fail "migration container was not created"
 
@@ -189,7 +191,7 @@ if [[ "$MODE" != "web" ]]; then
         || fail "migration exited with code $MIGRATOR_EXIT; run: docker logs $MIGRATOR_ID"
 
     log "Recreating API and workers"
-    "${BACKEND_COMPOSE[@]}" up -d --force-recreate api worker beat-worker \
+    "${BACKEND_COMPOSE[@]}" up -d --build --force-recreate api worker beat-worker document-converter \
         || fail "backend services failed to start"
 fi
 

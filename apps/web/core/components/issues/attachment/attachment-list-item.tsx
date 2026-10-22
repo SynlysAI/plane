@@ -15,7 +15,7 @@ import { EIssueServiceType } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { convertBytesToSize, getFileExtension, getFileName, getFileURL, renderFormattedDate } from "@plane/utils";
 // components
-//
+import { AttachmentPreviewLink } from "@/components/attachments/preview";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { getFileIcon } from "@/components/icons";
 // helpers
@@ -52,56 +52,51 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
   if (!attachment) return <></>;
 
   return (
-    <>
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          window.open(fileURL, "_blank");
-        }}
+    <div className="group flex h-11 items-center justify-between gap-3 pr-3 transition-colors hover:bg-surface-2">
+      <AttachmentPreviewLink
+        name={`${fileName}.${fileExtension}`}
+        previewUrl={attachment.preview_url}
+        downloadUrl={fileURL ?? ""}
+        className="flex h-full min-w-0 flex-1 items-center gap-3 truncate px-3 text-left text-13"
       >
-        <div className="group flex h-11 items-center justify-between gap-3 px-3 hover:bg-surface-2">
-          <div className="flex items-center gap-3 truncate text-13">
-            <div className="flex items-center gap-3">{fileIcon}</div>
-            <Tooltip label={`${fileName}.${fileExtension}`} layout="stacked" disabled={isMobile}>
-              <p className="truncate font-medium text-secondary">{`${fileName}.${fileExtension}`}</p>
-            </Tooltip>
-            <span className="flex size-1.5 rounded-full bg-layer-1" />
-            <span className="shrink-0 text-placeholder">{convertBytesToSize(attachment.attributes.size)}</span>
-          </div>
+        <div className="flex items-center gap-3">{fileIcon}</div>
+        <Tooltip label={`${fileName}.${fileExtension}`} layout="stacked" disabled={isMobile}>
+          <p className="truncate font-medium text-secondary">{`${fileName}.${fileExtension}`}</p>
+        </Tooltip>
+        <span className="flex size-1.5 rounded-full bg-layer-1" />
+        <span className="shrink-0 text-placeholder">{convertBytesToSize(attachment.attributes.size)}</span>
+      </AttachmentPreviewLink>
 
-          <div className="flex items-center gap-3">
-            {attachment?.created_by && (
-              <>
-                <Tooltip
-                  label={`${
-                    getUserDetails(attachment?.created_by)?.display_name ?? ""
-                  } uploaded on ${renderFormattedDate(attachment.updated_at)}`}
-                  layout="stacked"
-                  disabled={isMobile}
-                >
-                  <div className="flex items-center justify-center">
-                    <ButtonAvatars showTooltip userIds={attachment?.created_by} />
-                  </div>
-                </Tooltip>
-              </>
-            )}
+      <div className="flex shrink-0 items-center gap-3">
+        {attachment?.created_by && (
+          <Tooltip
+            label={`${
+              getUserDetails(attachment?.created_by)?.display_name ?? ""
+            } uploaded on ${renderFormattedDate(attachment.updated_at)}`}
+            layout="stacked"
+            disabled={isMobile}
+          >
+            <div className="flex items-center justify-center">
+              <ButtonAvatars showTooltip userIds={attachment?.created_by} />
+            </div>
+          </Tooltip>
+        )}
 
-            <CustomMenu ellipsis closeOnSelect placement="bottom-end" disabled={disabled}>
-              <CustomMenu.MenuItem
-                onClick={() => {
-                  toggleDeleteAttachmentModal(attachmentId);
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <DeleteOutline className="h-3.5 w-3.5" />
-                  <span>{t("common.actions.delete")}</span>
-                </div>
-              </CustomMenu.MenuItem>
-            </CustomMenu>
-          </div>
-        </div>
-      </button>
-    </>
+        {!disabled && (
+          <CustomMenu ellipsis closeOnSelect placement="bottom-end">
+            <CustomMenu.MenuItem
+              onClick={() => {
+                toggleDeleteAttachmentModal(attachmentId);
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <DeleteOutline className="h-3.5 w-3.5" />
+                <span>{t("common.actions.delete")}</span>
+              </div>
+            </CustomMenu.MenuItem>
+          </CustomMenu>
+        )}
+      </div>
+    </div>
   );
 });

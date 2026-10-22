@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 
 from plane.db.models import (
     Notification,
+    ProjectMember,
     ResearchAuditEvent,
     ResearchChainEvent,
     ResearchChainNode,
@@ -27,6 +28,8 @@ pytestmark = pytest.mark.contract
 def env(db, settings):
     settings.RESEARCH_MODULE_ENABLED = True
     fixture = make_research_boundary_fixture()
+    for key in ("group_member",):
+        ProjectMember.objects.create(project=fixture["project"], member=fixture[key], role=15)
     fixture.update(
         {
             "student_client": _client(fixture["student"]),

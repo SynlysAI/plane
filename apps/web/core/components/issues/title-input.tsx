@@ -108,7 +108,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
         textarea.removeEventListener("blur", handleBlur);
       }
     };
-  }, [title, isSubmitting, setIsSubmitting]);
+  }, [title, value, isSubmitting, setIsSubmitting]);
 
   // Save on unmount if there are unsaved changes
   useEffect(
@@ -140,7 +140,13 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
     [setIsSubmitting]
   );
 
-  if (disabled) return <div className="text-20 font-medium whitespace-pre-line">{title}</div>;
+  if (disabled) {
+    return (
+      <div className="text-20 font-medium whitespace-pre-line">
+        {title || <span className="text-placeholder">{t("issue.title.label")}</span>}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1.5">

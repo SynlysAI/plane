@@ -7,11 +7,16 @@
 import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
 import { Outlet } from "react-router";
+// plane imports
+import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // components
+import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { getProjectActivePath } from "@/components/settings/helper";
 import { SettingsMobileNav } from "@/components/settings/mobile/nav";
 // layouts
 import { ProjectAuthWrapper } from "@/layouts/auth-layout/project-wrapper";
+// hooks
+import { useUserPermissions } from "@/hooks/store/user";
 // types
 import type { Route } from "./+types/layout";
 import { ProjectSettingsSidebarRoot } from "@/components/settings/project/sidebar";
@@ -20,6 +25,19 @@ function ProjectDetailSettingsLayout({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   // router
   const pathname = usePathname();
+  // store hooks
+  const { workspaceUserInfo, allowPermissions } = useUserPermissions();
+  // derived values
+  const canAccessProjectSettings = allowPermissions(
+    [EUserPermissions.ADMIN],
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug,
+    projectId
+  );
+
+  if (workspaceUserInfo && !canAccessProjectSettings) {
+    return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
+  }
 
   return (
     <>

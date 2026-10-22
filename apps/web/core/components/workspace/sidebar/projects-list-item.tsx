@@ -425,16 +425,18 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                       </div>
                     </CustomMenu.MenuItem>
                   )}
-                  <CustomMenu.MenuItem
-                    onClick={() => {
-                      router.push(`/${workspaceSlug}/settings/projects/${project?.id}`);
-                    }}
-                  >
-                    <div className="flex cursor-pointer items-center justify-start gap-2">
-                      <SettingsOutline className="h-3.5 w-3.5 stroke-[1.5]" />
-                      <span>{t("settings")}</span>
-                    </div>
-                  </CustomMenu.MenuItem>
+                  {isAdmin && (
+                    <CustomMenu.MenuItem
+                      onClick={() => {
+                        router.push(`/${workspaceSlug}/settings/projects/${project?.id}`);
+                      }}
+                    >
+                      <div className="flex cursor-pointer items-center justify-start gap-2">
+                        <SettingsOutline className="h-3.5 w-3.5 stroke-[1.5]" />
+                        <span>{t("settings")}</span>
+                      </div>
+                    </CustomMenu.MenuItem>
+                  )}
                   {/* leave project */}
                   {!isAuthorized && (
                     <CustomMenu.MenuItem onClick={handleLeaveProject}>

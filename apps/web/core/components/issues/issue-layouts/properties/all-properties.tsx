@@ -116,8 +116,8 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
     if (updateIssue) await updateIssue(issue.project_id, issue.id, { label_ids: ids });
   };
 
-  const handleAssignee = async (ids: string[]) => {
-    if (updateIssue) await updateIssue(issue.project_id, issue.id, { assignee_ids: ids });
+  const handleAssignee = async (assigneeId: string | null) => {
+    if (updateIssue) await updateIssue(issue.project_id, issue.id, { assignee_ids: assigneeId ? [assigneeId] : [] });
   };
 
   const handleModule = useCallback(
@@ -322,14 +322,14 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
           <MemberDropdown
             projectId={issue?.project_id}
-            value={issue?.assignee_ids}
+            value={issue?.assignee_ids?.[0] ?? null}
             onChange={handleAssignee}
             disabled={isReadOnly}
-            multiple
+            multiple={false}
             buttonVariant={issue.assignee_ids?.length > 0 ? "transparent-without-text" : "border-without-text"}
             buttonClassName={issue.assignee_ids?.length > 0 ? "hover:bg-transparent px-0" : ""}
             showTooltip={issue?.assignee_ids?.length === 0}
-            placeholder={t("common.assignees")}
+            placeholder="负责人"
             optionsClassName="z-10"
             tooltipContent=""
             renderByDefault={isMobile}

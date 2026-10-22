@@ -400,12 +400,12 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
             </div>
             <div
               className={cn(
-                "space-y-3 bg-surface-1 pb-4",
+                "space-y-3 bg-surface-1 px-5 pt-4 pb-5",
                 activeAdditionalPropertiesLength > 4 &&
                   "vertical-scrollbar scrollbar-sm max-h-[45vh] overflow-hidden overflow-y-auto"
               )}
             >
-              <div className="px-5">
+              <div className="rounded-lg border border-subtle bg-surface-1 px-4 pt-1 pb-3 transition-colors focus-within:border-strong">
                 <IssueDescriptionEditor
                   control={control}
                   isDraft={isDraft}

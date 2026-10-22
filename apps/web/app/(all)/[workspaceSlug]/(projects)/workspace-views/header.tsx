@@ -17,6 +17,7 @@ import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
 import { Breadcrumbs, Header, BreadcrumbNavigationSearchDropdown } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+import { DetailBackLink } from "@/components/common/detail-back-link";
 import { SwitcherLabel } from "@/components/common/switcher-label";
 import { DisplayFiltersSelection, FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
@@ -104,32 +105,35 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
       <CreateUpdateWorkspaceViewModal isOpen={createViewModal} onClose={() => setCreateViewModal(false)} />
       <Header>
         <Header.LeftItem>
-          <Breadcrumbs>
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbLink label={t("views")} icon={<ViewsOutline className="h-4 w-4 text-tertiary" />} />
-              }
-            />
-            <Breadcrumbs.Item
-              component={
-                <BreadcrumbNavigationSearchDropdown
-                  selectedItem={globalViewId?.toString() || ""}
-                  navigationItems={switcherOptions}
-                  onChange={(value: string) => {
-                    router.push(`/${workspaceSlug}/workspace-views/${value}`);
-                  }}
-                  title={viewDetails?.name ?? t(defaultViewDetails?.i18n_label ?? "")}
-                  icon={
-                    <Breadcrumbs.Icon>
-                      <ViewsOutline className="size-4 flex-shrink-0 text-tertiary" />
-                    </Breadcrumbs.Icon>
-                  }
-                  isLast
-                />
-              }
-              isLast
-            />
-          </Breadcrumbs>
+          <div className="flex items-center gap-2">
+            <DetailBackLink href={`/${workspaceSlug}/workspace-views`}>返回工作区视图列表</DetailBackLink>
+            <Breadcrumbs>
+              <Breadcrumbs.Item
+                component={
+                  <BreadcrumbLink label={t("views")} icon={<ViewsOutline className="h-4 w-4 text-tertiary" />} />
+                }
+              />
+              <Breadcrumbs.Item
+                component={
+                  <BreadcrumbNavigationSearchDropdown
+                    selectedItem={globalViewId?.toString() || ""}
+                    navigationItems={switcherOptions}
+                    onChange={(value: string) => {
+                      router.push(`/${workspaceSlug}/workspace-views/${value}`);
+                    }}
+                    title={viewDetails?.name ?? t(defaultViewDetails?.i18n_label ?? "")}
+                    icon={
+                      <Breadcrumbs.Icon>
+                        <ViewsOutline className="size-4 flex-shrink-0 text-tertiary" />
+                      </Breadcrumbs.Icon>
+                    }
+                    isLast
+                  />
+                }
+                isLast
+              />
+            </Breadcrumbs>
+          </div>
         </Header.LeftItem>
 
         <Header.RightItem className="items-center">

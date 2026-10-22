@@ -226,7 +226,12 @@ class IntakeIssuePublicViewSet(BaseViewSet):
             issue,
             data=issue_data,
             partial=True,
-            context={"project_id": project_deploy_board.project_id, "allow_triage_state": True},
+            context={
+                "project_id": project_deploy_board.project_id,
+                "workspace_id": project_deploy_board.workspace_id,
+                "allow_triage_state": True,
+                "actor": request.user,
+            },
         )
 
         if issue_serializer.is_valid():

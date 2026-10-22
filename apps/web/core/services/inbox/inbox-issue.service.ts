@@ -11,6 +11,7 @@ import { EInboxIssueSource } from "@plane/types";
 // helpers
 // services
 import { APIService } from "@/services/api.service";
+import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 
 export class InboxIssueService extends APIService {
   constructor() {
@@ -55,7 +56,10 @@ export class InboxIssueService extends APIService {
     data: Partial<TInboxIssue>
   ): Promise<TInboxIssue> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/inbox-issues/${inboxIssueId}/`, data)
-      .then((response) => response?.data)
+      .then((response) => {
+        notifyWorkspaceTodosUpdated();
+        return response?.data;
+      })
       .catch((error) => {
         throw error?.response?.data;
       });
@@ -70,7 +74,10 @@ export class InboxIssueService extends APIService {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/inbox-issues/${inboxIssueId}/`, {
       issue: data,
     })
-      .then((response) => response?.data)
+      .then((response) => {
+        notifyWorkspaceTodosUpdated();
+        return response?.data;
+      })
       .catch((error) => {
         throw error?.response?.data;
       });

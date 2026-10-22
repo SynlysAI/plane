@@ -177,6 +177,7 @@ def user_has_issue_permission(user_id, project_id, issue=None, allowed_roles=Non
         return True
     from plane.utils.administrative_projects import effective_project_member
     from plane.db.models import User
+
     project = Project.objects.select_related("workspace").filter(pk=project_id).first()
     user = User.objects.filter(pk=user_id, is_active=True).first()
     member = effective_project_member(user, project.workspace.slug, project_id) if project and user else None
@@ -466,6 +467,7 @@ class IssueListCreateAPIEndpoint(BaseAPIView):
                 "project_id": project_id,
                 "workspace_id": project.workspace_id,
                 "default_assignee_id": project.default_assignee_id,
+                "actor": request.user,
             },
         )
 
@@ -656,6 +658,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     context={
                         "project_id": project_id,
                         "workspace_id": project.workspace_id,
+                        "actor": request.user,
                     },
                     partial=True,
                 )
@@ -702,6 +705,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                         "project_id": project_id,
                         "workspace_id": project.workspace_id,
                         "default_assignee_id": project.default_assignee_id,
+                        "actor": request.user,
                     },
                 )
 
@@ -787,7 +791,7 @@ class IssueDetailAPIEndpoint(BaseAPIView):
         serializer = IssueSerializer(
             issue,
             data=request.data,
-            context={"project_id": project_id, "workspace_id": project.workspace_id},
+            context={"project_id": project_id, "workspace_id": project.workspace_id, "actor": request.user},
             partial=True,
         )
         if serializer.is_valid():

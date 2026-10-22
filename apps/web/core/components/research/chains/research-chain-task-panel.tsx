@@ -462,6 +462,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                         <ResearchAssigneeSelect
                           candidates={candidates}
                           value={task.assignee ?? ""}
+                          selectedLabel={task.assignee_detail?.display_name}
                           label={t("research.chain_tasks.assignee")}
                           disabled={!canAssign || candidateState !== "ready" || Boolean(actionBusy)}
                           allowClear={!task.assignee}

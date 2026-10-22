@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import { Link, useLocation } from "react-router";
-import type { EUserPermissions } from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import type { EUserProjectRoles } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 import { useProject } from "@/hooks/store/use-project";
@@ -32,6 +32,12 @@ export const TabNavigationRoot = observer(function TabNavigationRoot({
   const { t } = useTranslation();
   const project = getPartialProjectById(projectId);
   const items = useNavigationItems({ workspaceSlug, projectId, project, allowPermissions });
+  const canAccessProjectSettings = allowPermissions(
+    [EUserPermissions.ADMIN],
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug,
+    projectId
+  );
   if (!project) return null;
   return (
     <div className="flex h-full min-w-0 flex-1 items-center gap-3">
@@ -54,9 +60,11 @@ export const TabNavigationRoot = observer(function TabNavigationRoot({
         >
           归档
         </Link>
-        <Link to={`/${workspaceSlug}/settings/projects/${projectId}`} className="text-13 text-secondary">
-          设置
-        </Link>
+        {canAccessProjectSettings && (
+          <Link to={`/${workspaceSlug}/settings/projects/${projectId}`} className="text-13 text-secondary">
+            设置
+          </Link>
+        )}
       </nav>
     </div>
   );

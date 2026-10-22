@@ -201,6 +201,34 @@ def actor_can_manage_chain_tasks(workspace, chain, actor) -> bool:
     return chain_writer(workspace, actor, chain)
 
 
+def assignable_project_members(workspace, chain):
+    """查询可承担科研任务的有效课题成员。
+
+    Args:
+        workspace: 当前工作区。
+        chain: 任务所属研究链。
+
+    Returns:
+        账号、工作区关系及课题关系均有效的成员查询集。
+    """
+    workspace_members = WorkspaceMember.objects.filter(
+        workspace_id=workspace.id,
+        role__in=READABLE_WORKSPACE_ROLES,
+        is_active=True,
+        deleted_at__isnull=True,
+    ).values("member_id")
+    return ProjectMember.objects.filter(
+        workspace_id=workspace.id,
+        project_id=chain.project_id,
+        project__workspace_id=workspace.id,
+        member_id__in=workspace_members,
+        member__is_active=True,
+        role__in=READABLE_WORKSPACE_ROLES,
+        is_active=True,
+        deleted_at__isnull=True,
+    )
+
+
 def _candidate_items(workspace, chain) -> list[dict]:
     """Build the complete assignable-user boundary for a chain.
 
@@ -212,15 +240,8 @@ def _candidate_items(workspace, chain) -> list[dict]:
         Serialized candidate users ordered by scope and research identity.
     """
     today = timezone.localdate()
-    active_workspace_user_ids = set(
-        WorkspaceMember.objects.filter(
-            workspace_id=workspace.id,
-            member__is_active=True,
-            role__in=READABLE_WORKSPACE_ROLES,
-            is_active=True,
-            deleted_at__isnull=True,
-        ).values_list("member_id", flat=True)
-    )
+    project_members = assignable_project_members(workspace, chain)
+    active_project_user_ids = set(project_members.values_list("member_id", flat=True))
     profile = getattr(chain.project, "research_profile", None)
     unit_ids = []
     if profile is not None and profile.org_unit_id:
@@ -235,7 +256,7 @@ def _candidate_items(workspace, chain) -> list[dict]:
             workspace_id=workspace.id,
             org_unit_id__in=unit_ids,
             org_unit__deleted_at__isnull=True,
-            user_id__in=active_workspace_user_ids,
+            user_id__in=active_project_user_ids,
             user__is_active=True,
         ).select_related("org_unit", "user")
         for membership in memberships:
@@ -266,17 +287,7 @@ def _candidate_items(workspace, chain) -> list[dict]:
     ]
     org_user_ids = set(memberships_by_user)
 
-    collaborators = (
-        ProjectMember.objects.filter(
-            project_id=chain.project_id,
-            member_id__in=active_workspace_user_ids,
-            member__is_active=True,
-            is_active=True,
-            deleted_at__isnull=True,
-        )
-        .exclude(member_id__in=org_user_ids)
-        .select_related("member")
-    )
+    collaborators = project_members.exclude(member_id__in=org_user_ids).select_related("member")
     data.extend(
         {
             "user_id": str(collaborator.member_id),
@@ -321,6 +332,19 @@ def list_assignable_users(workspace, chain, actor) -> list[dict]:
     return _candidate_items(workspace, chain)
 
 
+def chain_assignable_user_ids(workspace, chain) -> set[UUID]:
+    """Return the server-side assignable-user ID set for one Chain.
+
+    Args:
+        workspace: Workspace that must own the chain.
+        chain: Research chain whose assignable-user boundary is resolved.
+
+    Returns:
+        A set of user IDs that can currently own tasks in the chain.
+    """
+    return set(assignable_project_members(workspace, chain).values_list("member_id", flat=True))
+
+
 def validate_assignable_user(workspace, chain, user_id) -> bool:
     """Validate that a user is in a chain's server-side assignee candidate set.
 
@@ -337,7 +361,7 @@ def validate_assignable_user(workspace, chain, user_id) -> bool:
     except (TypeError, ValueError):
         return False
 
-    return str(parsed_user_id) in {item["user_id"] for item in _candidate_items(workspace, chain)}
+    return assignable_project_members(workspace, chain).filter(member_id=parsed_user_id).exists()
 
 
 def actor_can_review_task(workspace, task, actor) -> bool:
@@ -374,23 +398,28 @@ def actor_can_cancel_task(workspace, task, actor) -> bool:
     return chain_manager(workspace, actor, task.chain)
 
 
-def actor_can_submit_task(workspace, task, actor) -> bool:
+def actor_can_submit_task(workspace, task, actor, *, assignee_is_valid=None) -> bool:
     """Return whether the current assignee may submit a task now.
 
     Args:
         workspace: Workspace used for future scope extensions.
         task: Research Chain node task to submit.
         actor: User requesting submission.
+        assignee_is_valid: 本次只读投影已计算的资格；写操作不传入缓存值。
 
     Returns:
         True when the actor is the assignee and the state accepts submission.
     """
     if actor is None or not getattr(actor, "is_authenticated", False):
         return False
-    return task.assignee_id == actor.id and task.status in (
+    if task.assignee_id != actor.id or task.status not in (
         ResearchChainNodeTask.Status.ASSIGNED,
         ResearchChainNodeTask.Status.NEEDS_REVISION,
-    )
+    ):
+        return False
+    if assignee_is_valid is None:
+        assignee_is_valid = validate_assignable_user(workspace, task.chain, task.assignee_id)
+    return assignee_is_valid
 
 
 def _request_id(payload) -> str:
@@ -467,7 +496,7 @@ def _assignee_from_payload(workspace, chain, payload):
         return None
     user_id = value.id if hasattr(value, "id") else value
     if not validate_assignable_user(workspace, chain, user_id):
-        raise ChainTaskPermissionError("assignee is outside the chain's assignable-user boundary.")
+        raise ChainTaskPermissionError("请先将负责人添加为有效课题成员。")
     return User.objects.get(pk=user_id, is_active=True)
 
 
@@ -642,7 +671,7 @@ def create_task(*, workspace, chain, node, actor, payload, request=None):
             if not actor_can_manage_chain_tasks(workspace, locked_chain, actor):
                 raise ChainTaskPermissionError("Only chain writers can create tasks.")
             if assignee is not None and not validate_assignable_user(workspace, locked_chain, assignee.id):
-                raise ChainTaskPermissionError("assignee is outside the chain's assignable-user boundary.")
+                raise ChainTaskPermissionError("请先将负责人添加为有效课题成员。")
             _ensure_task_parent_writable(locked_chain, node)
             task = ResearchChainNodeTask.objects.create(
                 workspace=workspace,
@@ -767,7 +796,7 @@ def update_task(*, task, actor, payload, request=None):
             if not actor_can_manage_chain_tasks(locked_task.workspace, locked_chain, actor):
                 raise ChainTaskPermissionError("Only chain writers can update tasks.")
             if assignee_changed and not validate_assignable_user(locked_task.workspace, locked_chain, next_assignee.id):
-                raise ChainTaskPermissionError("assignee is outside the chain's assignable-user boundary.")
+                raise ChainTaskPermissionError("请先将负责人添加为有效课题成员。")
             if locked_task.status not in (
                 ResearchChainNodeTask.Status.DRAFT,
                 ResearchChainNodeTask.Status.ASSIGNED,
@@ -909,8 +938,8 @@ def submit_task(*, task, actor, request_id, content_hash, request=None):
 
 def _require_submit_permission(task, actor):
     """Recheck submit authority after the task row has been locked."""
-    if task.assignee_id != actor.id:
-        raise ChainTaskPermissionError("Only the current assignee can submit this task.")
+    if not actor_can_submit_task(task.workspace, task, actor):
+        raise ChainTaskPermissionError("仅有效课题成员中的当前负责人可以提交任务。")
 
 
 def return_task(*, task, actor, reason, request_id, content_hash, request=None):
