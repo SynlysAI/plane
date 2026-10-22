@@ -30,10 +30,7 @@ function LabelsSettingsPage() {
   const scrollableContainerRef = useRef<HTMLDivElement | null>(null);
 
   // derived values
-  const canPerformProjectMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canPerformProjectAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
 
   // Enable Auto Scroll for Labels list
   useEffect(() => {
@@ -48,7 +45,7 @@ function LabelsSettingsPage() {
     );
   }, []);
 
-  if (workspaceUserInfo && !canPerformProjectMemberActions) {
+  if (workspaceUserInfo && !canPerformProjectAdminActions) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
   }
 
