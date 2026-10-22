@@ -200,7 +200,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           projectId={projectId}
           issueId={issueId}
           issueOperations={issueOperations}
-          disabled={!isContentEditable}
+          disabled={!canEditWorkItem}
         />
       )}
 

@@ -248,7 +248,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
 
   // issue details
   const issue = getIssueById(issueId);
-  // 冻结态：工作项详情默认只读，点击"编辑"后才允许修改
+  // 冻结态：标题与描述默认只读；属性区仍可直接编辑
   const [isEditMode, setIsEditMode] = useState(false);
   useEffect(() => {
     setIsEditMode(false);
@@ -296,7 +296,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
               projectId={projectId}
               issueId={issueId}
               issueOperations={issueOperations}
-              isEditable={!is_archived && isEditable && isEditMode}
+              isEditable={!is_archived && isEditable}
             />
           </div>
         </div>

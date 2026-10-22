@@ -61,7 +61,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const [isDuplicateIssueModalOpen, setIsDuplicateIssueModalOpen] = useState(false);
   const [isEditIssueModalOpen, setIsEditIssueModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
-  // 冻结态：工作项详情默认只读，点击"编辑"后才允许修改
+  // 冻结态：标题、描述与挂件默认只读；属性区仍可直接编辑
   const [isEditMode, setIsEditMode] = useState(false);
   useEffect(() => {
     setIsEditMode(false);
@@ -223,7 +223,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       projectId={projectId}
                       issueId={issueId}
                       issueOperations={issueOperations}
-                      disabled={disabled || is_archived || !isEditMode}
+                      disabled={disabled || is_archived}
                     />
 
                     <IssueActivity
@@ -279,7 +279,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                         projectId={projectId}
                         issueId={issueId}
                         issueOperations={issueOperations}
-                        disabled={disabled || is_archived || !isEditMode}
+                        disabled={disabled || is_archived}
                       />
                     </div>
                   </div>

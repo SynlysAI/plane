@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({
   descriptionDisabled: null as boolean | null,
+  propertiesDisabled: null as boolean | null,
   widgetsDisabled: null as boolean | null,
   titleDisabled: null as boolean | null,
 }));
@@ -36,7 +37,12 @@ vi.mock("@/components/issues/issue-detail-widgets", () => ({
     return <div data-testid="widgets" />;
   },
 }));
-vi.mock("@/components/issues/peek-overview/properties", () => ({ PeekOverviewProperties: () => <div /> }));
+vi.mock("@/components/issues/peek-overview/properties", () => ({
+  PeekOverviewProperties: (props: { disabled: boolean }) => {
+    captured.propertiesDisabled = props.disabled;
+    return <div data-testid="properties" />;
+  },
+}));
 vi.mock("@/hooks/store/use-issue-detail", () => ({
   useIssueDetail: () => ({
     issue: {
@@ -53,7 +59,7 @@ vi.mock("@/hooks/store/use-issue-detail", () => ({
 vi.mock("@/hooks/store/use-member", () => ({ useMember: () => ({ getUserDetails: () => null }) }));
 vi.mock("@/hooks/store/user", () => ({ useUser: () => ({ data: { id: "user-1" } }) }));
 vi.mock("@/hooks/use-reload-confirmation", () => ({ default: () => ({ setShowAlert: vi.fn() }) }));
-vi.mock("@/hooks/use-window-size", () => ({ default: () => [1440, 900] }));
+vi.mock("@/hooks/use-window-size", () => ({ default: () => [500, 900] }));
 vi.mock("@/services/issue", () => ({ WorkItemVersionService: vi.fn() }));
 
 const { IssueMainContent } = await import("@/components/issues/issue-detail/main-content");
@@ -66,7 +72,7 @@ const issueOperations = {
   remove: vi.fn(),
 } as never;
 
-function Harness(props: { isEditable: boolean }) {
+function Harness(props: { isArchived?: boolean; isEditable: boolean }) {
   const [isEditMode, setIsEditMode] = useState(false);
   return (
     <IssueMainContent
@@ -75,15 +81,15 @@ function Harness(props: { isEditable: boolean }) {
       issueId="issue-1"
       issueOperations={issueOperations}
       isEditable={props.isEditable}
-      isArchived={false}
+      isArchived={props.isArchived ?? false}
       isEditMode={isEditMode}
       onToggleEditMode={setIsEditMode}
     />
   );
 }
 
-function renderMainContent(isEditable: boolean) {
-  root.render(<Harness isEditable={isEditable} />);
+function renderMainContent(isEditable: boolean, isArchived = false) {
+  root.render(<Harness isEditable={isEditable} isArchived={isArchived} />);
 }
 
 beforeEach(() => {
@@ -91,6 +97,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   captured.descriptionDisabled = null;
+  captured.propertiesDisabled = null;
   captured.widgetsDisabled = null;
   captured.titleDisabled = null;
 });
@@ -107,18 +114,21 @@ it("renders frozen by default and toggles editing through the edit button", asyn
   expect(editButton?.textContent).toContain("common.edit");
   expect(captured.titleDisabled).toBe(true);
   expect(captured.descriptionDisabled).toBe(true);
+  expect(captured.propertiesDisabled).toBe(false);
   expect(captured.widgetsDisabled).toBe(true);
 
   await act(async () => editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(container.querySelector("button")?.textContent).toContain("common.done");
   expect(captured.titleDisabled).toBe(false);
   expect(captured.descriptionDisabled).toBe(false);
+  expect(captured.propertiesDisabled).toBe(false);
   expect(captured.widgetsDisabled).toBe(false);
 
   await act(async () => container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(container.querySelector("button")?.textContent).toContain("common.edit");
   expect(captured.titleDisabled).toBe(true);
   expect(captured.descriptionDisabled).toBe(true);
+  expect(captured.propertiesDisabled).toBe(false);
   expect(captured.widgetsDisabled).toBe(true);
 });
 
@@ -128,5 +138,13 @@ it("hides the edit entry and stays read-only when the user cannot edit", async (
   expect(container.querySelector("button")).toBeNull();
   expect(captured.titleDisabled).toBe(true);
   expect(captured.descriptionDisabled).toBe(true);
+  expect(captured.propertiesDisabled).toBe(true);
+  expect(captured.widgetsDisabled).toBe(true);
+});
+
+it("keeps mobile properties disabled for archived work items", async () => {
+  await act(async () => renderMainContent(true, true));
+
+  expect(captured.propertiesDisabled).toBe(true);
   expect(captured.widgetsDisabled).toBe(true);
 });
