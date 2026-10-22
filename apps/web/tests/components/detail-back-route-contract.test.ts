@@ -78,6 +78,30 @@ const DETAIL_PARENTS: Array<{
   },
 ];
 
+/** 功能禁用空态的“启用功能”按钮必须指向对应 feature 设置子路由。 */
+const FEATURE_EMPTY_STATES: Array<{ feature: string; pageFile: string }> = [
+  {
+    feature: "cycles",
+    pageFile: "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/cycles/(list)/page.tsx",
+  },
+  {
+    feature: "modules",
+    pageFile: "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/modules/(list)/page.tsx",
+  },
+  {
+    feature: "pages",
+    pageFile: "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/pages/(list)/page.tsx",
+  },
+  {
+    feature: "views",
+    pageFile: "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/views/(list)/page.tsx",
+  },
+  {
+    feature: "intake",
+    pageFile: "app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/intake/page.tsx",
+  },
+];
+
 /** 递归收集 React Router 配置中的全部路由路径。 */
 function collectRoutePaths(routes: ConfigRoute[]): string[] {
   return routes.flatMap((route) => [...(route.path ? [route.path] : []), ...collectRoutePaths(route.children ?? [])]);
@@ -104,5 +128,21 @@ it("renders a fixed-parent back link before breadcrumbs on every traditional det
     expect(source.indexOf("<DetailBackLink"), expected.headerFile).toBeLessThan(source.indexOf("<Breadcrumbs"));
     expect(source, expected.headerFile).not.toContain("onBack={router.back}");
     expect(source, expected.headerFile).not.toContain("router.back()");
+  }
+});
+
+it("points every disabled-feature empty state at its feature settings route", () => {
+  const webRoot = path.resolve(__dirname, "../..");
+  const routePaths = new Set(collectRoutePaths(coreRoutes));
+
+  for (const expected of FEATURE_EMPTY_STATES) {
+    const featureRoute = `:workspaceSlug/settings/projects/:projectId/features/${expected.feature}`;
+    expect(routePaths, featureRoute).toContain(featureRoute);
+
+    const source = readFileSync(path.join(webRoot, expected.pageFile), "utf8");
+    expect(source, expected.pageFile).toContain(
+      `\${workspaceSlug}/settings/projects/\${projectId}/features/${expected.feature}`
+    );
+    expect(source, expected.pageFile).not.toContain("`/${workspaceSlug}/settings/projects/${projectId}/features`");
   }
 });
