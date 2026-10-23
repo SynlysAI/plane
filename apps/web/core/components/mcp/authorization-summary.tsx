@@ -62,7 +62,9 @@ export function AuthorizationSummary({
           </li>
         ))}
       </ul>
-      <p>科研写入仍须经过“准备提案 → 人工确认 → 执行”。选择写入能力不会批准任何具体提案。</p>
+      <p>
+        科研写入在 Codex 等 Agent 客户端确认后提交，平台校验权限并执行，无需再次审批。连接仅允许所选节点和写入能力。
+      </p>
       <label className="block">
         连接名称
         <input

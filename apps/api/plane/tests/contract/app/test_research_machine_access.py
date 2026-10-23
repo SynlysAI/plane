@@ -165,7 +165,7 @@ def test_direct_mcp_discovery_and_calls_use_the_same_scope(machine, settings):
     url = machine["root"] + "mcp/"
     response = api.post(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, format="json")
     assert response.status_code == 200
-    assert len(response.json()["result"]["tools"]) == 10
+    assert {tool["name"] for tool in response.json()["result"]["tools"]} == TOOL_NAMES
     response = api.post(url, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
         "params": {"name": "get_research_node_context", "arguments": {"node_id": str(machine["other"].id)}}}, format="json")
     assert response.json()["result"]["isError"] is True
