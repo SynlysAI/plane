@@ -4,6 +4,7 @@
 
 # Third party imports
 import pytest
+from django.utils import timezone
 from rest_framework import status
 
 # Module imports
@@ -81,6 +82,8 @@ class TestSystemAnnouncements:
         member = create_workspace_user(workspace, "member@plane.so", 15)
         create_workspace_user(workspace, "inactive@plane.so", 15, is_active=False)
         create_workspace_user(workspace, "bot@plane.so", 15, is_bot=True)
+        removed = create_workspace_user(workspace, "removed@plane.so", 15)
+        WorkspaceMember.objects.filter(workspace=workspace, member=removed).update(deleted_at=timezone.now())
 
         response = session_client.post(
             announcement_url(workspace),

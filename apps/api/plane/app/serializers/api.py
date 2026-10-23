@@ -26,6 +26,14 @@ class APITokenSerializer(BaseSerializer):
         ]
 
 
+class APITokenCreateSerializer(serializers.Serializer):
+    """Validate user-supplied API token metadata before creating a credential."""
+
+    label = serializers.CharField(max_length=255, required=False, allow_blank=False, trim_whitespace=True)
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True, trim_whitespace=False)
+    expired_at = serializers.DateTimeField(required=False, allow_null=True)
+
+
 class APITokenReadSerializer(BaseSerializer):
     is_active = serializers.SerializerMethodField()
     masked_token = serializers.SerializerMethodField()

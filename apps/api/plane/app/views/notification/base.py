@@ -350,6 +350,7 @@ class SystemAnnouncementEndpoint(BaseViewSet, BasePaginator):
                 WorkspaceMember.objects.filter(
                     workspace=workspace,
                     is_active=True,
+                    deleted_at__isnull=True,
                     member__is_active=True,
                 )
                 .exclude(member__is_bot=True)

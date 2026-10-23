@@ -1,6 +1,6 @@
 """Report comment threads with snapshot-scoped anchors and explicit HITL feedback."""
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -60,6 +60,40 @@ def _load_visible_report(view, request, slug, report_id):
 def _latest_snapshot(report):
     """Return the newest immutable formal snapshot, if one exists."""
     return report.official_snapshots.order_by("-version_no").first()
+
+
+def _existing_comment(report, user, request_id, thread=None):
+    """Find an active idempotent comment after a concurrent duplicate insert.
+
+    Args:
+        report: Report owning the comment thread.
+        user: Actor that supplied the idempotency key.
+        request_id: Idempotency key from the request.
+        thread: Optional thread for a reply lookup.
+
+    Returns:
+        The existing active comment, or ``None`` when the key is unused.
+    """
+    queryset = (
+        PeriodicReportComment.objects.select_related("thread", "actor", "thread__report")
+        .prefetch_related("ai_feedback")
+        .filter(
+            thread__report=report,
+            actor=user,
+            request_id=request_id,
+            deleted_at__isnull=True,
+        )
+    )
+    if thread is not None:
+        queryset = queryset.filter(thread=thread)
+    else:
+        queryset = queryset.filter(parent__isnull=True)
+    return queryset.first()
+
+
+def _existing_feedback(comment):
+    """Return explicit AI feedback already attached to a comment."""
+    return PeriodicReportCommentFeedback.objects.filter(comment=comment).first()
 
 
 def _thread_queryset(report):
@@ -175,18 +209,7 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
         request_id, error = _request_id_error(request)
         if error:
             return error
-        existing = (
-            PeriodicReportComment.objects.select_related("thread", "actor", "thread__report")
-            .prefetch_related("ai_feedback")
-            .filter(
-                thread__report=report,
-                actor=request.user,
-                request_id=request_id,
-                parent__isnull=True,
-                deleted_at__isnull=True,
-            )
-            .first()
-        )
+        existing = _existing_comment(report, request.user, request_id)
         if existing is not None:
             return Response(_serialize_thread(existing.thread, request, context), status=status.HTTP_200_OK)
 
@@ -216,23 +239,36 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
                 "A non-empty, valid comment is required.",
             )
 
-        with transaction.atomic():
-            thread = PeriodicReportCommentThread.objects.create(
-                report=report,
-                anchor=anchor,
-                quoted_text=quoted_text,
-                snapshot_version=snapshot.version_no,
-                content_hash=snapshot_content_hash(snapshot),
-                created_by=request.user,
-                status_updated_by=request.user,
-            )
-            comment = serializer.save(
-                thread=thread,
-                actor=request.user,
-                comment_stripped=strip_tags(serializer.validated_data["comment_html"]),
-                request_id=request_id,
-                created_by=request.user,
-            )
+        try:
+            with transaction.atomic():
+                # Root threads are idempotent per report and actor. Hold the
+                # report lock through insert so a concurrent retry observes the
+                # winner instead of creating a second thread.
+                type(report).objects.select_for_update().get(pk=report.pk)
+                existing = _existing_comment(report, request.user, request_id)
+                if existing is not None:
+                    return Response(_serialize_thread(existing.thread, request, context), status=status.HTTP_200_OK)
+                thread = PeriodicReportCommentThread.objects.create(
+                    report=report,
+                    anchor=anchor,
+                    quoted_text=quoted_text,
+                    snapshot_version=snapshot.version_no,
+                    content_hash=snapshot_content_hash(snapshot),
+                    created_by=request.user,
+                    status_updated_by=request.user,
+                )
+                comment = serializer.save(
+                    thread=thread,
+                    actor=request.user,
+                    comment_stripped=strip_tags(serializer.validated_data["comment_html"]),
+                    request_id=request_id,
+                    created_by=request.user,
+                )
+        except IntegrityError:
+            existing = _existing_comment(report, request.user, request_id)
+            if existing is None:
+                raise
+            return Response(_serialize_thread(existing.thread, request, context), status=status.HTTP_200_OK)
 
         _audit_comment(report, thread, comment, request, ResearchAuditAction.REPORT_COMMENT_CREATE)
         notify_report_comment(report, thread, comment, request.user, action="created")
@@ -255,12 +291,7 @@ class ResearchReportCommentThreadCommentEndpoint(ResearchAPIView):
         request_id, error = _request_id_error(request)
         if error:
             return error
-        existing = (
-            PeriodicReportComment.objects.select_related("thread", "actor")
-            .prefetch_related("ai_feedback")
-            .filter(thread__report=report, actor=request.user, request_id=request_id, deleted_at__isnull=True)
-            .first()
-        )
+        existing = _existing_comment(report, request.user, request_id, thread=thread)
         if existing is not None:
             if existing.thread_id != thread.id:
                 return research_error(
@@ -293,17 +324,23 @@ class ResearchReportCommentThreadCommentEndpoint(ResearchAPIView):
                 "A non-empty, valid comment is required.",
             )
 
-        with transaction.atomic():
-            comment = serializer.save(
-                thread=thread,
-                parent=parent,
-                actor=request.user,
-                comment_stripped=strip_tags(serializer.validated_data["comment_html"]),
-                request_id=request_id,
-                created_by=request.user,
-            )
-            thread.last_activity_at = comment.created_at
-            thread.save(update_fields=["last_activity_at", "updated_at"])
+        try:
+            with transaction.atomic():
+                comment = serializer.save(
+                    thread=thread,
+                    parent=parent,
+                    actor=request.user,
+                    comment_stripped=strip_tags(serializer.validated_data["comment_html"]),
+                    request_id=request_id,
+                    created_by=request.user,
+                )
+                thread.last_activity_at = comment.created_at
+                thread.save(update_fields=["last_activity_at", "updated_at"])
+        except IntegrityError:
+            existing = _existing_comment(report, request.user, request_id, thread=thread)
+            if existing is None:
+                raise
+            return Response(PeriodicReportCommentSerializer(existing, context={"request": request}).data)
 
         _audit_comment(report, thread, comment, request, ResearchAuditAction.REPORT_COMMENT_CREATE)
         notify_report_comment(report, thread, comment, request.user, action="created")
@@ -470,8 +507,9 @@ class ResearchReportCommentFeedbackEndpoint(ResearchAPIView):
             return research_not_found(ResearchErrorCode.REPORT_COMMENT_NOT_FOUND, "Comment not found.")
         if comment.actor_id != request.user.id:
             return research_permission_denied()
-        if hasattr(comment, "ai_feedback"):
-            return Response(PeriodicReportCommentFeedbackSerializer(comment.ai_feedback).data)
+        feedback = _existing_feedback(comment)
+        if feedback is not None:
+            return Response(PeriodicReportCommentFeedbackSerializer(feedback).data)
 
         snapshot = report.official_snapshots.filter(version_no=comment.thread.snapshot_version).first()
         if snapshot is None:
@@ -506,19 +544,25 @@ class ResearchReportCommentFeedbackEndpoint(ResearchAPIView):
             submitted_at=submitted_at,
             agent_session=agent_session,
         )
-        with transaction.atomic():
-            feedback = PeriodicReportCommentFeedback.objects.create(
-                comment=comment,
-                report=report,
-                thread=comment.thread,
-                feedback_type=comment.feedback_type,
-                payload=payload,
-                payload_hash=payload_hash,
-                submitted_by=request.user,
-                submitted_at=submitted_at,
-                agent_session=agent_session,
-                created_by=request.user,
-            )
+        try:
+            with transaction.atomic():
+                feedback = PeriodicReportCommentFeedback.objects.create(
+                    comment=comment,
+                    report=report,
+                    thread=comment.thread,
+                    feedback_type=comment.feedback_type,
+                    payload=payload,
+                    payload_hash=payload_hash,
+                    submitted_by=request.user,
+                    submitted_at=submitted_at,
+                    agent_session=agent_session,
+                    created_by=request.user,
+                )
+        except IntegrityError:
+            feedback = _existing_feedback(comment)
+            if feedback is None:
+                raise
+            return Response(PeriodicReportCommentFeedbackSerializer(feedback).data)
 
         record_audit_event(
             workspace=report.workspace,

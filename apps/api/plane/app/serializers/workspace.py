@@ -398,7 +398,7 @@ class WorkspaceHomePreferenceSerializer(BaseSerializer):
     class Meta:
         model = WorkspaceHomePreference
         fields = ["key", "is_enabled", "config", "sort_order"]
-        read_only_fields = ["workspace", "created_by", "updated_by"]
+        read_only_fields = ["key", "workspace", "created_by", "updated_by"]
 
     def validate_config(self, value):
         """Reject malformed layout metadata before it reaches the home client."""

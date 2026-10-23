@@ -59,6 +59,21 @@ def test_creation_is_only_secret_response_and_inactive_is_honoured(db):
     assert response["Cache-Control"] == "no-store"
 
 
+@pytest.mark.django_db
+def test_creation_rejects_invalid_metadata_before_storing_a_credential(db):
+    api = APIClient()
+    api.force_authenticate(make_user())
+
+    invalid_payloads = (
+        {"label": ""},
+        {"label": "x" * 256},
+        {"expired_at": "not-a-date"},
+    )
+    for payload in invalid_payloads:
+        assert api.post("/api/users/api-tokens/", payload, format="json").status_code == 400
+    assert APIToken.objects.count() == 0
+
+
 def test_rename_validates_name_and_preserves_the_credential(db):
     owner = make_user()
     token = APIToken.objects.create(user=owner, label="Original")

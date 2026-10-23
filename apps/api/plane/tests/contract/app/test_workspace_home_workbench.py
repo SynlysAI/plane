@@ -74,6 +74,14 @@ def test_home_preferences_initialize_and_stay_user_scoped(env):
     assert rows["workbench_layout"]["config"] == {"density": "compact"}
     assert rows["my_todos"]["is_enabled"] is True
 
+    key_change = env["client"].patch(
+        reverse("workspace-home-preference", kwargs={"slug": env["workspace"].slug, "key": "workbench_layout"}),
+        {"key": "my_todos", "config": {"density": "detailed"}},
+        format="json",
+    )
+    assert key_change.status_code == status.HTTP_200_OK, key_change.data
+    assert key_change.json()["key"] == "workbench_layout"
+
     response = env["client"].patch(
         reverse("workspace-home-preference", kwargs={"slug": env["workspace"].slug, "key": "my_todos"}),
         {"is_enabled": False, "config": {"size": "full"}, "sort_order": 2000},

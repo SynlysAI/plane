@@ -21,6 +21,7 @@ from plane.db.models import (
     ResearchAuditEvent,
 )
 from plane.research.services.chain_context import ResearchReadService
+from plane.research.views import report_comments as report_comments_views
 from plane.tests.research_fixtures import add_workspace_member, enable_research, make_user, make_workspace
 
 pytestmark = pytest.mark.contract
@@ -214,6 +215,76 @@ def test_comment_request_id_is_idempotent(env):
     assert retry.status_code == 200
     assert retry.json()["id"] == first.json()["id"]
     assert PeriodicReportComment.objects.filter(thread__report_id=report["id"]).count() == 1
+
+
+def make_comment_lookup_stale_once(monkeypatch):
+    """Simulate the pre-check losing a concurrent idempotency race once."""
+    real_lookup = report_comments_views._existing_comment
+    calls = 0
+
+    def stale_once(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_lookup(*args, **kwargs) if calls > 1 else None
+
+    monkeypatch.setattr(report_comments_views, "_existing_comment", stale_once)
+
+
+def test_concurrent_thread_replay_returns_existing_comment(env, monkeypatch):
+    report = make_report(env)
+    request_id = uuid4().hex
+    first = create_thread(env, report, request_id=request_id)
+    assert first.status_code == 201
+
+    make_comment_lookup_stale_once(monkeypatch)
+    concurrent_retry = create_thread(env, report, request_id=request_id)
+
+    assert concurrent_retry.status_code == 200, concurrent_retry.data
+    assert concurrent_retry.json()["id"] == first.json()["id"]
+    assert PeriodicReportComment.objects.filter(thread__report_id=report["id"]).count() == 1
+
+
+def test_concurrent_reply_replay_returns_existing_comment(env, monkeypatch):
+    report = make_report(env)
+    thread = create_thread(env, report).json()
+    request_id = uuid4().hex
+    payload = {
+        "comment_html": "<p>已补充三次重复实验。</p>",
+        "parent": thread["comments"][0]["id"],
+        "request_id": request_id,
+    }
+    url = f"{threads_url(env, report['id'])}{thread['id']}/comments/"
+    first = env["student_client"].post(url, payload, format="json")
+    assert first.status_code == 201, first.data
+
+    make_comment_lookup_stale_once(monkeypatch)
+    concurrent_retry = env["student_client"].post(url, payload, format="json")
+
+    assert concurrent_retry.status_code == 200, concurrent_retry.data
+    assert concurrent_retry.json()["id"] == first.json()["id"]
+    assert PeriodicReportComment.objects.filter(thread__report_id=report["id"]).count() == 2
+
+
+def test_concurrent_ai_feedback_replay_returns_existing_feedback(env, monkeypatch):
+    report = make_report(env)
+    thread = create_thread(env, report).json()
+    comment_id = thread["comments"][0]["id"]
+    url = f"/api/research/workspaces/{env['workspace'].slug}/reports/{report['id']}/comments/{comment_id}/ai-feedback/"
+    assert env["advisor_client"].post(url, {}, format="json").status_code == 201
+
+    real_lookup = report_comments_views._existing_feedback
+    calls = 0
+
+    def stale_once(comment):
+        nonlocal calls
+        calls += 1
+        return real_lookup(comment) if calls > 1 else None
+
+    monkeypatch.setattr(report_comments_views, "_existing_feedback", stale_once)
+    concurrent_retry = env["advisor_client"].post(url, {}, format="json")
+
+    assert concurrent_retry.status_code == 200, concurrent_retry.data
+    assert PeriodicReportCommentFeedback.objects.filter(comment_id=comment_id).count() == 1
 
 
 def test_new_comments_use_generic_discussion_and_legacy_types_stay_read_only(env):

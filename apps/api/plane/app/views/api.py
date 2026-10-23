@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 # Module import
 from .base import BaseAPIView
 from plane.db.models import APIToken
-from plane.app.serializers import APITokenSerializer, APITokenReadSerializer
+from plane.app.serializers import APITokenCreateSerializer, APITokenSerializer, APITokenReadSerializer
 
 
 class ApiTokenEndpoint(BaseAPIView):
@@ -28,9 +28,13 @@ class ApiTokenEndpoint(BaseAPIView):
         return get_object_or_404(APIToken, user=request.user, pk=pk, is_service=False)
 
     def post(self, request: Request) -> Response:
-        label = request.data.get("label", str(uuid4().hex))
-        description = request.data.get("description", "")
-        expired_at = request.data.get("expired_at", None)
+        serializer = APITokenCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        label = serializer.validated_data.get("label") or str(uuid4().hex)
+        description = serializer.validated_data.get("description") or ""
+        expired_at = serializer.validated_data.get("expired_at", None)
 
         # Check the user type
         user_type = 1 if request.user.is_bot else 0
