@@ -41,19 +41,19 @@ export const WORKBENCH_WIDGET_CATALOG: {
     key: "administrative_projects",
     titleKey: "research.home_workbench.widget_administrative_projects",
     hintKey: "research.home_workbench.widget_administrative_projects_hint",
-    defaultSize: "medium",
+    defaultSize: "small",
   },
   {
     key: "recent_activity",
     titleKey: "research.home_workbench.widget_recent_activity",
     hintKey: "research.home_workbench.widget_recent_activity_hint",
-    defaultSize: "medium",
+    defaultSize: "small",
   },
   {
     key: "report_summary",
     titleKey: "research.home_workbench.widget_report_summary",
     hintKey: "research.home_workbench.widget_report_summary_hint",
-    defaultSize: "medium",
+    defaultSize: "small",
   },
 ];
 
@@ -85,7 +85,8 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
   const [density, setDensityState] = useState<THomeWorkbenchDensity>("compact");
   const [syncError, setSyncError] = useState<string | null>(null);
   const [savingCount, setSavingCount] = useState(0);
-  const legacyMigrated = useRef(false);
+  const densityHydrated = useRef(false);
+  const saveQueue = useRef(Promise.resolve());
 
   const widgets = useMemo(() => {
     const rows = new Map(preferenceRows?.map((row) => [row.key as string, row]) ?? []);
@@ -117,25 +118,31 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
       for (const changedRow of changedRows) previousByKey.set(changedRow.key as string, changedRow);
       const optimistic = [...previousByKey.values()];
 
-      setSyncError(null);
-      setSavingCount((count) => count + 1);
-      await mutate(optimistic, { revalidate: false });
-      try {
-        await Promise.all(
-          changedRows.map((changedRow) =>
-            workspaceService.updateWorkspaceWidget(workspaceSlug, changedRow.key, {
-              is_enabled: changedRow.is_enabled,
-              config: changedRow.config,
-              sort_order: changedRow.sort_order,
-            })
-          )
-        );
-      } catch {
-        await mutate(previous, { revalidate: false });
-        setSyncError("preferences_sync_error");
-      } finally {
-        setSavingCount((count) => count - 1);
-      }
+      const save = async () => {
+        setSyncError(null);
+        setSavingCount((count) => count + 1);
+        await mutate(optimistic, { revalidate: false });
+        try {
+          await Promise.all(
+            changedRows.map((changedRow) =>
+              workspaceService.updateWorkspaceWidget(workspaceSlug, changedRow.key, {
+                is_enabled: changedRow.is_enabled,
+                config: changedRow.config,
+                sort_order: changedRow.sort_order,
+              })
+            )
+          );
+        } catch {
+          await mutate(previous, { revalidate: false });
+          setSyncError("preferences_sync_error");
+        } finally {
+          setSavingCount((count) => count - 1);
+        }
+      };
+
+      const queued = saveQueue.current.then(save, save);
+      saveQueue.current = queued;
+      await queued;
     },
     [mutate, preferenceRows, workspaceSlug]
   );
@@ -209,7 +216,6 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
   const setDensity = useCallback(
     async (nextDensity: THomeWorkbenchDensity) => {
       setDensityState(nextDensity);
-      if (typeof window !== "undefined") window.localStorage.setItem(LEGACY_DENSITY_KEY, nextDensity);
       const row = preferenceRows?.find((item) => item.key === LAYOUT_KEY);
       await saveChangedRows([
         {
@@ -224,28 +230,23 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
   );
 
   useEffect(() => {
+    if (isLoading) return;
+    if (densityHydrated.current) return;
     const row = preferenceRows?.find((item) => item.key === LAYOUT_KEY);
     const stored = row?.config?.density;
     if (DENSITY_VALUES.has(stored as THomeWorkbenchDensity)) {
       const serverDensity = stored as THomeWorkbenchDensity;
       setDensityState(serverDensity);
-      // 服务端首次初始化会写入 compact；若旧版本本机已是 detailed，则迁移一次。
-      if (
-        !legacyMigrated.current &&
-        serverDensity === "compact" &&
-        typeof window !== "undefined" &&
-        window.localStorage.getItem(LEGACY_DENSITY_KEY) === "detailed"
-      ) {
-        legacyMigrated.current = true;
-        void setDensity("detailed");
-      }
+      densityHydrated.current = true;
       return;
     }
-    if (legacyMigrated.current || typeof window === "undefined") return;
-    legacyMigrated.current = true;
+    if (typeof window === "undefined") return;
     const legacy = window.localStorage.getItem(LEGACY_DENSITY_KEY);
-    if (legacy === "detailed") void setDensity("detailed");
-  }, [preferenceRows, setDensity]);
+    if (DENSITY_VALUES.has(legacy as THomeWorkbenchDensity)) {
+      setDensityState(legacy as THomeWorkbenchDensity);
+      densityHydrated.current = true;
+    }
+  }, [isLoading, preferenceRows]);
 
   return {
     loading: isLoading,

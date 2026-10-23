@@ -1,8 +1,11 @@
 """首页个性化偏好与真实业务动态契约。"""
 
 from datetime import timedelta
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
 import pytest
+from django.apps import apps
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -66,11 +69,46 @@ def preference_map(client, slug):
     return {row["key"]: row for row in response.data}
 
 
+def load_default_grid_migration():
+    """加载 0199 首页默认栅格迁移，直接验证数据迁移函数。"""
+    path = Path(__file__).parents[3] / "db/migrations/0199_restore_home_workbench_default_grid.py"
+    spec = spec_from_file_location("restore_home_workbench_default_grid_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def create_preference_group(workspace, user, *, enabled=True):
+    """创建一组旧默认首页偏好，供数据迁移测试使用。"""
+    rows = [
+        ("my_todos", {"size": "medium"}, 1100),
+        ("research_projects", {"size": "large"}, 1000),
+        ("administrative_projects", {"size": "medium"}, 900),
+        ("recent_activity", {"size": "medium"}, 800),
+        ("report_summary", {"size": "medium"}, 700),
+        ("workbench_layout", {"density": "compact"}, 100),
+    ]
+    WorkspaceHomePreference.objects.bulk_create(
+        WorkspaceHomePreference(
+            workspace=workspace,
+            user=user,
+            key=key,
+            is_enabled=enabled,
+            config=config,
+            sort_order=sort_order,
+        )
+        for key, config, sort_order in rows
+    )
+
+
 def test_home_preferences_initialize_and_stay_user_scoped(env):
     """首次进入有默认布局；后续修改只作用于当前用户。"""
     rows = preference_map(env["client"], env["workspace"].slug)
     assert rows["my_todos"]["config"] == {"size": "medium"}
     assert rows["research_projects"]["config"] == {"size": "large"}
+    for key in ("administrative_projects", "recent_activity", "report_summary"):
+        assert rows[key]["config"] == {"size": "small"}
     assert rows["workbench_layout"]["config"] == {"density": "compact"}
     assert rows["my_todos"]["is_enabled"] is True
 
@@ -109,6 +147,26 @@ def test_home_preferences_initialize_and_stay_user_scoped(env):
     assert rows["my_todos"]["is_enabled"] is False
     assert rows["my_todos"]["config"] == {"size": "full"}
     assert rows["workbench_layout"]["config"] == {"density": "detailed"}
+
+
+def test_default_grid_migration_updates_only_untouched_legacy_defaults(env):
+    """旧默认组合升级为下三栏，用户自定义组合保持不变且默认组合可回滚。"""
+    module = load_default_grid_migration()
+    other = make_user(first_name="Other")
+    create_preference_group(env["workspace"], env["user"])
+    create_preference_group(env["workspace"], other, enabled=False)
+
+    module.restore_default_grid(apps, None)
+
+    bottom_keys = ("administrative_projects", "recent_activity", "report_summary")
+    migrated = WorkspaceHomePreference.objects.filter(user=env["user"], key__in=bottom_keys)
+    assert {row.config["size"] for row in migrated} == {"small"}
+    customized = WorkspaceHomePreference.objects.filter(user=other, key__in=bottom_keys)
+    assert {row.config["size"] for row in customized} == {"medium"}
+
+    module.restore_default_grid_reverse(apps, None)
+    migrated = WorkspaceHomePreference.objects.filter(user=env["user"], key__in=bottom_keys)
+    assert {row.config["size"] for row in migrated} == {"medium"}
 
 
 def test_existing_home_preferences_are_not_reset(env):

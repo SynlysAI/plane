@@ -206,9 +206,9 @@ beforeEach(() => {
   mocks.fetchWorkspaceWidgets.mockResolvedValue([
     { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
     { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1000 },
-    { key: "administrative_projects", is_enabled: true, config: { size: "medium" }, sort_order: 900 },
-    { key: "recent_activity", is_enabled: true, config: { size: "medium" }, sort_order: 800 },
-    { key: "report_summary", is_enabled: true, config: { size: "medium" }, sort_order: 700 },
+    { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+    { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+    { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 700 },
     { key: "workbench_layout", is_enabled: true, config: { density: "compact" }, sort_order: 100 },
   ]);
   mocks.updateWorkspaceWidget.mockImplementation((_slug: string, key: string, data: unknown) =>
@@ -342,16 +342,19 @@ it("renders the action-first bento home information architecture without generic
   expect(container.textContent).not.toContain("草稿");
 });
 
-it("migrates a legacy detailed density preference to the user account", async () => {
+it("treats the saved account density as authoritative over legacy local storage", async () => {
   window.localStorage.setItem("plane.home.workbench.density", "detailed");
   await renderHome();
   await act(async () => undefined);
-  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
+  const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
+  await act(async () => customize?.click());
+  const compactButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "紧凑");
+  expect(compactButton?.getAttribute("aria-pressed")).toBe("true");
+  expect(mocks.updateWorkspaceWidget).not.toHaveBeenCalledWith(
     "lab",
     "workbench_layout",
     expect.objectContaining({ config: expect.objectContaining({ density: "detailed" }) })
   );
-  expect(window.localStorage.getItem("plane.home.workbench.density")).toBe("detailed");
 });
 
 it("supports a focused one-widget home without fetching hidden modules", async () => {
@@ -396,6 +399,13 @@ it("persists order and width for a focused two-widget home", async () => {
     { key: "workbench_layout", is_enabled: true, config: { density: "compact" }, sort_order: 100 },
   ]);
   await renderHome();
+  await act(async () => undefined);
+  const initialGrid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  expect(initialGrid.className).not.toContain("xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]");
+  expect([...initialGrid.querySelectorAll("section")].every((card) => !card.className.includes("xl:h-full"))).toBe(
+    true
+  );
+  expect(initialGrid.querySelectorAll("section div.overflow-y-auto")).toHaveLength(0);
   const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
   await act(async () => customize?.click());
 
@@ -440,36 +450,84 @@ it("persists order and width for a focused two-widget home", async () => {
   expect(visualOrder).toEqual(["最近动态", "我的待办"]);
 });
 
-it("keeps enabled widgets on a natural long page and persists density", async () => {
+it("restores the compact two-row grid and persists density changes", async () => {
   await renderHome();
   await act(async () => undefined);
 
   const cards = [...container.querySelectorAll('[data-testid="workspace-home-columns"] > section')];
+  const grid = container.querySelector("[data-testid='workspace-home-columns']");
+  const workbench = grid?.parentElement;
+  expect([...cards].map((card) => card.className.match(/xl:col-span-\d+/)?.[0])).toEqual([
+    "xl:col-span-5",
+    "xl:col-span-7",
+    "xl:col-span-4",
+    "xl:col-span-4",
+    "xl:col-span-4",
+  ]);
+  expect(workbench?.className).toContain("xl:h-full");
+  expect(grid?.className).toContain("xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]");
   expect(cards.length).toBeGreaterThanOrEqual(5);
+  for (const card of cards) {
+    expect(card.className).toMatch(/max-xl:h-\[(400|320)px\]/);
+    expect(card.className).toContain("xl:h-full");
+    expect(card.className).toContain("xl:min-h-0");
+    const body = card.querySelector("div.border-t");
+    expect(body?.className).toContain("overflow-y-auto");
+  }
+
+  const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
+  await act(async () => customize?.click());
+  const detailedButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "详细");
+  await act(async () => detailedButton?.click());
+  expect(workbench?.className).not.toContain("xl:h-full");
+  expect(grid?.className).not.toContain("xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]");
   for (const card of cards) {
     expect(card.className).not.toMatch(/max-xl:h-\[(400|320)px\]/);
     expect(card.className).not.toContain("xl:h-full");
     const body = card.querySelector("div.border-t");
     expect(body?.className).not.toContain("overflow-y-auto");
   }
-  const grid = container.querySelector("[data-testid='workspace-home-columns']");
-  expect(grid?.className).not.toContain("xl:flex-1");
-  const workbench = grid?.parentElement;
-  expect(workbench?.className).toContain("min-h-full");
-  expect(workbench?.className).not.toContain("overflow-hidden");
-  expect(workbench?.className).not.toContain("xl:h-full");
-  expect(workbench?.className).not.toContain("xl:flex-1");
-
-  const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
-  await act(async () => customize?.click());
-  const detailedButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "详细");
-  await act(async () => detailedButton?.click());
-  expect(window.localStorage.getItem("plane.home.workbench.density")).toBe("detailed");
   expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
     "lab",
     "workbench_layout",
     expect.objectContaining({ config: expect.objectContaining({ density: "detailed" }) })
   );
+});
+
+it("serializes rapid density changes so the latest selection wins", async () => {
+  const pending: { data: unknown; resolve: (row: unknown) => void }[] = [];
+  mocks.updateWorkspaceWidget.mockImplementation(
+    (_slug: string, key: string, data: unknown) =>
+      new Promise((resolve) => {
+        pending.push({ data, resolve: (row) => resolve({ key, ...(row as object) }) });
+      })
+  );
+  await renderHome();
+  await act(async () => undefined);
+  const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
+  await act(async () => customize?.click());
+  const detailedButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "详细");
+  const compactButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "紧凑");
+
+  await act(async () => detailedButton?.click());
+  await act(async () => compactButton?.click());
+  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledTimes(1);
+  expect(mocks.updateWorkspaceWidget).toHaveBeenLastCalledWith(
+    "lab",
+    "workbench_layout",
+    expect.objectContaining({ config: expect.objectContaining({ density: "detailed" }) })
+  );
+
+  await act(async () => pending[0].resolve({ config: { density: "detailed" } }));
+  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledTimes(2);
+  expect(mocks.updateWorkspaceWidget).toHaveBeenLastCalledWith(
+    "lab",
+    "workbench_layout",
+    expect.objectContaining({ config: expect.objectContaining({ density: "compact" }) })
+  );
+  await act(async () => pending[1].resolve({ config: { density: "compact" } }));
+  expect(compactButton?.getAttribute("aria-pressed")).toBe("true");
+  expect(detailedButton?.getAttribute("aria-pressed")).toBe("false");
 });
 
 it.each([
@@ -491,10 +549,10 @@ it.each([
     expect(grid.children).toHaveLength(count);
     expect(Boolean(section("科研项目概览"))).toBe(research);
     expect(Boolean(section("报告提交摘要"))).toBe(summary);
-    expect(section("我的待办")?.classList.contains("xl:col-span-6")).toBe(true);
-    if (research) expect(section("科研项目概览")?.classList.contains("xl:col-span-8")).toBe(true);
+    expect(section("我的待办")?.classList.contains("xl:col-span-5")).toBe(true);
+    if (research) expect(section("科研项目概览")?.classList.contains("xl:col-span-7")).toBe(true);
     for (const title of ["行政项目概览", "最近动态", ...(summary ? ["报告提交摘要"] : [])]) {
-      expect(section(title)?.classList.contains("xl:col-span-6")).toBe(true);
+      expect(section(title)?.classList.contains("xl:col-span-4")).toBe(true);
     }
     if (!research) expect(mocks.getChains).not.toHaveBeenCalled();
     if (!summary) expect(mocks.getReportSummary).not.toHaveBeenCalled();

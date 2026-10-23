@@ -18,9 +18,9 @@ from rest_framework import status
 DEFAULT_HOME_PREFERENCES = (
     (WorkspaceHomePreference.HomeWidgetKeys.MY_TODOS, True, {"size": "medium"}, 1100),
     (WorkspaceHomePreference.HomeWidgetKeys.RESEARCH_PROJECTS, True, {"size": "large"}, 1000),
-    (WorkspaceHomePreference.HomeWidgetKeys.ADMINISTRATIVE_PROJECTS, True, {"size": "medium"}, 900),
-    (WorkspaceHomePreference.HomeWidgetKeys.RECENT_ACTIVITY, True, {"size": "medium"}, 800),
-    (WorkspaceHomePreference.HomeWidgetKeys.REPORT_SUMMARY, True, {"size": "medium"}, 700),
+    (WorkspaceHomePreference.HomeWidgetKeys.ADMINISTRATIVE_PROJECTS, True, {"size": "small"}, 900),
+    (WorkspaceHomePreference.HomeWidgetKeys.RECENT_ACTIVITY, True, {"size": "small"}, 800),
+    (WorkspaceHomePreference.HomeWidgetKeys.REPORT_SUMMARY, True, {"size": "small"}, 700),
     (WorkspaceHomePreference.HomeWidgetKeys.QUICK_LINKS, True, {}, 500),
     (WorkspaceHomePreference.HomeWidgetKeys.RECENTS, True, {}, 400),
     (WorkspaceHomePreference.HomeWidgetKeys.MY_STICKIES, True, {}, 300),

@@ -98,6 +98,13 @@ const PERIOD_OPTIONS = [
   { value: "90" as const, labelKey: "research.overview.period_90" },
   { value: "all" as const, labelKey: "research.overview.period_all" },
 ];
+const DEFAULT_WORKBENCH_LAYOUT = [
+  { key: "my_todos", size: "medium" },
+  { key: "research_projects", size: "large" },
+  { key: "administrative_projects", size: "small" },
+  { key: "recent_activity", size: "small" },
+  { key: "report_summary", size: "small" },
+] as const;
 
 /** 渲染行动优先的 Bento 工作台首页：待办与科研在首行，辅助模块在次行。 */
 export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({ workspaceSlug }: Props) {
@@ -175,12 +182,19 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     const size = widgetByKey.get(key)?.size ?? "medium";
     const spanClass = {
       small: "xl:col-span-4",
-      medium: "xl:col-span-6",
-      large: "xl:col-span-8",
+      medium: "xl:col-span-5",
+      large: "xl:col-span-7",
       full: "xl:col-span-12",
     }[size];
     return `${orderClass} ${spanClass}`;
   };
+  const isDefaultTwoRowLayout =
+    density === "compact" &&
+    enabledWidgets.length === DEFAULT_WORKBENCH_LAYOUT.length &&
+    enabledWidgets.every(
+      (widget, index) =>
+        widget.key === DEFAULT_WORKBENCH_LAYOUT[index].key && widget.size === DEFAULT_WORKBENCH_LAYOUT[index].size
+    );
 
   useEffect(() => {
     if (research.identityWorkspaceSlug !== workspaceSlug || !research.identity) {
@@ -362,7 +376,11 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
   return (
-    <div className="flex min-h-full min-w-0 flex-col gap-5">
+    <div
+      className={`flex min-h-full min-w-0 flex-col gap-5 ${
+        isDefaultTwoRowLayout ? "xl:h-full xl:min-h-0 xl:flex-1 xl:overflow-hidden" : ""
+      }`}
+    >
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-22 font-semibold text-primary">{t("research.home_workbench.title")}</h1>
@@ -438,11 +456,18 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
           </div>
         </div>
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12" data-testid="workspace-home-columns">
+        <div
+          className={`grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12 ${
+            isDefaultTwoRowLayout ? "xl:min-h-0 xl:flex-1 xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]" : ""
+          }`}
+          data-testid="workspace-home-columns"
+        >
           {isWidgetVisible("my_todos") && (
             <HomeSectionCard
               className={widgetClassName("my_todos")}
               density={density}
+              fixedLayout={isDefaultTwoRowLayout}
+              size="primary"
               title={t("research.home_workbench.widget_my_todos")}
               hint={t("research.home_workbench.widget_my_todos_hint")}
               action={
@@ -459,6 +484,8 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("research_projects")}
               density={density}
+              fixedLayout={isDefaultTwoRowLayout}
+              size="primary"
               title={t("research.home_workbench.research_overview")}
               hint={t("research.home_workbench.research_hint")}
               action={
@@ -547,6 +574,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("administrative_projects")}
               density={density}
+              fixedLayout={isDefaultTwoRowLayout}
               title={t("research.home_workbench.administrative_overview")}
               hint={t("research.home_workbench.administrative_hint")}
               action={
@@ -629,6 +657,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("recent_activity")}
               density={density}
+              fixedLayout={isDefaultTwoRowLayout}
               title={t("research.home_workbench.recent_activity")}
               hint={t("research.home_workbench.widget_recent_activity_hint")}
             >
@@ -640,6 +669,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("report_summary")}
               density={density}
+              fixedLayout={isDefaultTwoRowLayout}
               title={t("research.home_workbench.report_summary")}
               action={
                 canSeeSummary ? (

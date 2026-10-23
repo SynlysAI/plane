@@ -218,9 +218,9 @@ ProjectService.prototype.getProjectAnalyticsCount = async () => [
 WorkspaceService.prototype.fetchWorkspaceWidgets = async () => [
   { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
   { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1000 },
-  { key: "administrative_projects", is_enabled: true, config: { size: "medium" }, sort_order: 900 },
-  { key: "recent_activity", is_enabled: true, config: { size: "medium" }, sort_order: 800 },
-  { key: "report_summary", is_enabled: true, config: { size: "medium" }, sort_order: 700 },
+  { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+  { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+  { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 700 },
   { key: "workbench_layout", is_enabled: true, config: { density: "compact" }, sort_order: 100 },
 ];
 WorkspaceService.prototype.updateWorkspaceWidget = async (_workspaceSlug, key, data) => ({ key, ...data });
