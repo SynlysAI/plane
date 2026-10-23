@@ -44,6 +44,7 @@ export type TNotification = {
   id: string;
   title: string | undefined;
   data: TNotificationData | undefined;
+  announcement_details: TSystemAnnouncement | undefined;
   entity_identifier: string | undefined;
   entity_name: string | undefined;
   message_html: string | undefined;
@@ -64,6 +65,21 @@ export type TNotification = {
   updated_at: string | undefined;
   created_by: string | undefined;
   updated_by: string | undefined;
+};
+
+export type TSystemAnnouncement = {
+  id: string;
+  workspace: string | undefined;
+  title: string;
+  body: string;
+  recipient_count: number;
+  published_at: string | undefined;
+  idempotency_key: string | undefined;
+  created_by: string | undefined;
+  created_by_details: IUserLite | undefined;
+  created_at: string | undefined;
+  updated_at: string | undefined;
+  delivery_status: "published" | "pending";
 };
 
 // notification paginated information
@@ -89,6 +105,10 @@ export type TNotificationPaginatedInfo = {
   results: TNotification[] | undefined;
   grouped_by: string | undefined;
   sub_grouped_by: string | undefined;
+};
+
+export type TSystemAnnouncementPaginatedInfo = Omit<TNotificationPaginatedInfo, "results"> & {
+  results: TSystemAnnouncement[] | undefined;
 };
 
 // notification count

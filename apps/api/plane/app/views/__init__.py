@@ -230,6 +230,7 @@ from .analytic.project_analytics import (
 
 from .notification.base import (
     NotificationViewSet,
+    SystemAnnouncementEndpoint,
     UnreadNotificationEndpoint,
     UserNotificationPreferenceEndpoint,
 )

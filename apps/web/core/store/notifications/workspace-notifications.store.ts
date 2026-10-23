@@ -16,6 +16,8 @@ import type {
   TNotificationLite,
   TNotificationPaginatedInfo,
   TNotificationPaginatedInfoQueryParams,
+  TSystemAnnouncement,
+  TSystemAnnouncementPaginatedInfo,
   TUnreadNotificationsCount,
 } from "@plane/types";
 // helpers
@@ -23,6 +25,7 @@ import { convertToEpoch } from "@plane/utils";
 import { adjustUnreadNotificationsCount, isNotificationInTab } from "@/lib/notification-counts";
 // services
 import workspaceNotificationService from "@/services/workspace-notification.service";
+import systemAnnouncementService, { type TSystemAnnouncementPayload } from "@/services/system-announcement.service";
 // store
 import type { INotification } from "@/store/notifications/notification";
 import { Notification } from "@/store/notifications/notification";
@@ -30,6 +33,7 @@ import type { CoreRootStore } from "@/store/root.store";
 
 type TNotificationLoader = ENotificationLoader | undefined;
 type TNotificationQueryParamType = ENotificationQueryParamType;
+type TSystemAnnouncementLoader = "loading" | "publishing" | undefined;
 
 export interface IWorkspaceNotificationStore {
   // observables
@@ -40,6 +44,9 @@ export interface IWorkspaceNotificationStore {
   currentSelectedNotificationId: string | undefined;
   paginationInfo: Omit<TNotificationPaginatedInfo, "results"> | undefined;
   filters: TNotificationFilter;
+  systemAnnouncements: TSystemAnnouncement[];
+  systemAnnouncementLoader: TSystemAnnouncementLoader;
+  systemAnnouncementError: boolean;
   // computed
   // computed functions
   notificationIdsByWorkspaceId: (workspaceId: string) => string[] | undefined;
@@ -58,6 +65,11 @@ export interface IWorkspaceNotificationStore {
     loader?: TNotificationLoader,
     queryCursorType?: TNotificationQueryParamType
   ) => Promise<TNotificationPaginatedInfo | undefined>;
+  getSystemAnnouncements: (workspaceSlug: string) => Promise<TSystemAnnouncementPaginatedInfo | undefined>;
+  publishSystemAnnouncement: (
+    workspaceSlug: string,
+    payload: TSystemAnnouncementPayload
+  ) => Promise<TSystemAnnouncement | undefined>;
   markAllNotificationsAsRead: (workspaceId: string) => Promise<void>;
 }
 
@@ -84,6 +96,9 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
     archived: false,
     read: false,
   };
+  systemAnnouncements: TSystemAnnouncement[] = [];
+  systemAnnouncementLoader: TSystemAnnouncementLoader = undefined;
+  systemAnnouncementError = false;
 
   constructor(protected store: CoreRootStore) {
     makeObservable(this, {
@@ -95,6 +110,9 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
       currentSelectedNotificationId: observable,
       paginationInfo: observable,
       filters: observable,
+      systemAnnouncements: observable,
+      systemAnnouncementLoader: observable.ref,
+      systemAnnouncementError: observable,
       // computed
       // helper actions
       setCurrentNotificationTab: action,
@@ -106,6 +124,8 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
       // actions
       getUnreadNotificationsCount: action,
       getNotifications: action,
+      getSystemAnnouncements: action,
+      publishSystemAnnouncement: action,
       markAllNotificationsAsRead: action,
     });
   }
@@ -204,6 +224,66 @@ export class WorkspaceNotificationStore implements IWorkspaceNotificationStore {
         set(this.notifications, notification.id, new Notification(this.store, notification));
       }
     });
+  };
+
+  /**
+   * @description get announcements published by the current administrator
+   * @param { string } workspaceSlug
+   * @returns { TSystemAnnouncementPaginatedInfo | undefined }
+   */
+  getSystemAnnouncements = async (workspaceSlug: string): Promise<TSystemAnnouncementPaginatedInfo | undefined> => {
+    this.systemAnnouncementLoader = "loading";
+    this.systemAnnouncementError = false;
+    try {
+      const response = await systemAnnouncementService.fetchAnnouncements(workspaceSlug, {
+        per_page: 20,
+        cursor: "20:0:0",
+      });
+      runInAction(() => {
+        this.systemAnnouncements = response?.results ?? [];
+      });
+      return response;
+    } catch (error) {
+      runInAction(() => (this.systemAnnouncementError = true));
+      console.error("WorkspaceNotificationStore -> getSystemAnnouncements -> error", error);
+      throw error;
+    } finally {
+      runInAction(() => (this.systemAnnouncementLoader = undefined));
+    }
+  };
+
+  /**
+   * @description publish an announcement and refresh inbox data
+   * @param { string } workspaceSlug
+   * @param { TSystemAnnouncementPayload } payload
+   * @returns { TSystemAnnouncement | undefined }
+   */
+  publishSystemAnnouncement = async (
+    workspaceSlug: string,
+    payload: TSystemAnnouncementPayload
+  ): Promise<TSystemAnnouncement | undefined> => {
+    this.systemAnnouncementLoader = "publishing";
+    this.systemAnnouncementError = false;
+    try {
+      const announcement = await systemAnnouncementService.publishAnnouncement(workspaceSlug, payload);
+      try {
+        await Promise.all([
+          this.getNotifications(workspaceSlug, ENotificationLoader.MUTATION_LOADER, ENotificationQueryParamType.INIT),
+          this.getSystemAnnouncements(workspaceSlug),
+        ]);
+      } catch (refreshError) {
+        // A refresh failure must not turn an already successful publish into a user-facing failure.
+        console.error("WorkspaceNotificationStore -> publishSystemAnnouncement refresh -> error", refreshError);
+        runInAction(() => (this.systemAnnouncementError = true));
+      }
+      return announcement;
+    } catch (error) {
+      runInAction(() => (this.systemAnnouncementError = true));
+      console.error("WorkspaceNotificationStore -> publishSystemAnnouncement -> error", error);
+      throw error;
+    } finally {
+      runInAction(() => (this.systemAnnouncementLoader = undefined));
+    }
   };
 
   /**

@@ -15,12 +15,14 @@ import { cn } from "@plane/utils";
 import { LogoSpinner } from "@/components/common/logo-spinner";
 // hooks
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
+import { useNotification } from "@/hooks/store/notifications/use-notification";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-properties";
 import { useNotificationPreview } from "@/hooks/use-notification-preview";
 // local imports
 import { InboxContentRoot } from "../inbox/content";
+import { SystemAnnouncementDetail } from "./announcement-detail";
 
 type NotificationsRootProps = {
   workspaceSlug?: string;
@@ -36,11 +38,14 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
     notificationIdsByWorkspaceId,
     getNotifications,
   } = useWorkspaceNotifications();
+  const selectedNotificationStore = useNotification(currentSelectedNotificationId);
+  const selectedNotification = selectedNotificationStore.asJson;
   const { fetchUserProjectInfo } = useUserPermissions();
   const { isWorkItem, PeekOverviewComponent, setPeekWorkItem } = useNotificationPreview();
   // derived values
   const { workspace_slug, project_id, issue_id, is_inbox_issue } =
     notificationLiteByNotificationId(currentSelectedNotificationId);
+  const selectedAnnouncement = selectedNotification.announcement_details;
 
   // fetching workspace work item properties
   useWorkspaceIssueProperties(workspaceSlug);
@@ -90,7 +95,9 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
         </div>
       ) : (
         <>
-          {is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
+          {selectedAnnouncement && workspaceSlug ? (
+            <SystemAnnouncementDetail workspaceSlug={workspaceSlug} notificationId={selectedNotification.id} />
+          ) : is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
             <>
               {projectMemberInfoLoader ? (
                 <div className="flex h-full w-full items-center justify-center">

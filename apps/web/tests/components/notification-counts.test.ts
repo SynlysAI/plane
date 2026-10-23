@@ -15,6 +15,7 @@ const serviceMocks = vi.hoisted(() => ({
   markNotificationAsArchived: vi.fn(),
   markNotificationAsUnArchived: vi.fn(),
   updateNotificationById: vi.fn(),
+  deleteNotificationById: vi.fn(),
 }));
 
 vi.mock("@/services/workspace-notification.service", () => ({
@@ -25,16 +26,21 @@ const { Notification: NotificationStore } = await import("@/store/notifications/
 
 function createNotification(overrides: Partial<TNotification>) {
   const setUnreadNotificationsCount = vi.fn();
-  const store = {
-    workspaceNotification: { setUnreadNotificationsCount },
-  } as never;
+  const setCurrentSelectedNotificationId = vi.fn();
+  const workspaceNotification = {
+    setUnreadNotificationsCount,
+    setCurrentSelectedNotificationId,
+    currentSelectedNotificationId: "notification-1",
+    notifications: { "notification-1": null },
+  };
+  const store = { workspaceNotification } as never;
   const notification = new NotificationStore(store, {
     id: "notification-1",
     is_mentioned_notification: false,
     ...overrides,
   } as TNotification);
 
-  return { notification, setUnreadNotificationsCount };
+  return { notification, setUnreadNotificationsCount, setCurrentSelectedNotificationId, workspaceNotification };
 }
 
 describe("workspace notification count helpers", () => {
@@ -168,5 +174,36 @@ describe("workspace notification count helpers", () => {
     await expect(notification.unArchiveNotification("lab")).rejects.toThrow("network error");
 
     expect(setUnreadNotificationsCount).toHaveBeenCalledWith("decrement", 1, false);
+  });
+
+  it("deletes an unread notification and clears its selected detail", async () => {
+    serviceMocks.deleteNotificationById.mockResolvedValueOnce(undefined);
+    const { notification, setUnreadNotificationsCount, setCurrentSelectedNotificationId, workspaceNotification } =
+      createNotification({
+        read_at: undefined,
+        archived_at: undefined,
+        snoozed_till: undefined,
+      });
+
+    await notification.deleteNotification("lab");
+
+    expect(serviceMocks.deleteNotificationById).toHaveBeenCalledWith("lab", "notification-1");
+    expect(setUnreadNotificationsCount).toHaveBeenCalledWith("decrement", 1, false);
+    expect(workspaceNotification.notifications["notification-1"]).toBeUndefined();
+    expect(setCurrentSelectedNotificationId).toHaveBeenCalledWith(undefined);
+  });
+
+  it("keeps an unread notification when deletion fails", async () => {
+    serviceMocks.deleteNotificationById.mockRejectedValueOnce(new Error("network error"));
+    const { notification, setUnreadNotificationsCount, workspaceNotification } = createNotification({
+      read_at: undefined,
+      archived_at: undefined,
+      snoozed_till: undefined,
+    });
+
+    await expect(notification.deleteNotification("lab")).rejects.toThrow("network error");
+
+    expect(setUnreadNotificationsCount).not.toHaveBeenCalled();
+    expect(workspaceNotification.notifications["notification-1"]).not.toBeUndefined();
   });
 });

@@ -10,9 +10,47 @@ from django.db import models
 from .base import BaseModel
 
 
+class SystemAnnouncement(BaseModel):
+    """Canonical announcement content shared by all recipient notifications."""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        related_name="system_announcements",
+        on_delete=models.CASCADE,
+    )
+    title = models.CharField(max_length=255)
+    body = models.TextField()
+    recipient_count = models.PositiveIntegerField(default=0)
+    published_at = models.DateTimeField(null=True)
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = "System Announcement"
+        verbose_name_plural = "System Announcements"
+        db_table = "system_announcements"
+        ordering = ("-published_at", "-created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="sys_announcement_ws_key_unique",
+            )
+        ]
+
+    def __str__(self):
+        """Return the announcement title and workspace name."""
+        return f"{self.title} <{self.workspace.name}>"
+
+
 class Notification(BaseModel):
     workspace = models.ForeignKey("db.Workspace", related_name="notifications", on_delete=models.CASCADE)
     project = models.ForeignKey("db.Project", related_name="notifications", on_delete=models.CASCADE, null=True)
+    announcement = models.ForeignKey(
+        "db.SystemAnnouncement",
+        related_name="notifications",
+        on_delete=models.CASCADE,
+        null=True,
+    )
     data = models.JSONField(null=True)
     entity_identifier = models.UUIDField(null=True)
     entity_name = models.CharField(max_length=255)
@@ -57,6 +95,10 @@ class Notification(BaseModel):
             models.Index(
                 fields=["receiver", "workspace", "sender"],
                 name="notif_receiver_sender_idx",
+            ),
+            models.Index(
+                fields=["receiver", "workspace", "announcement"],
+                name="notif_recv_ws_announce_idx",
             ),
             models.Index(
                 fields=["workspace", "entity_identifier", "entity_name"],

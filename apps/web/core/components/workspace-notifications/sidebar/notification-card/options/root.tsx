@@ -12,12 +12,14 @@ import { cn } from "@plane/utils";
 import { useNotification } from "@/hooks/store/notifications/use-notification";
 // local imports
 import { NotificationItemArchiveOption } from "./archive";
+import { NotificationItemDeleteOption } from "./delete";
 import { NotificationItemReadOption } from "./read";
 import { NotificationItemSnoozeOption } from "./snooze";
 
 type TNotificationOption = {
   workspaceSlug: string;
   notificationId: string;
+  isAnnouncement: boolean;
   isSnoozeStateModalOpen: boolean;
   setIsSnoozeStateModalOpen: Dispatch<SetStateAction<boolean>>;
   customSnoozeModal: boolean;
@@ -28,6 +30,7 @@ export const NotificationOption = observer(function NotificationOption(props: TN
   const {
     workspaceSlug,
     notificationId,
+    isAnnouncement,
     isSnoozeStateModalOpen,
     setIsSnoozeStateModalOpen,
     customSnoozeModal,
@@ -47,16 +50,20 @@ export const NotificationOption = observer(function NotificationOption(props: TN
         <NotificationItemReadOption workspaceSlug={workspaceSlug} notification={notification} />
 
         {/* archive */}
-        <NotificationItemArchiveOption workspaceSlug={workspaceSlug} notification={notification} />
+        {!isAnnouncement && <NotificationItemArchiveOption workspaceSlug={workspaceSlug} notification={notification} />}
+
+        {isAnnouncement && <NotificationItemDeleteOption workspaceSlug={workspaceSlug} notification={notification} />}
 
         {/* snooze notification */}
-        <NotificationItemSnoozeOption
-          workspaceSlug={workspaceSlug}
-          notification={notification}
-          setIsSnoozeStateModalOpen={setIsSnoozeStateModalOpen}
-          customSnoozeModal={customSnoozeModal}
-          setCustomSnoozeModal={setCustomSnoozeModal}
-        />
+        {!isAnnouncement && (
+          <NotificationItemSnoozeOption
+            workspaceSlug={workspaceSlug}
+            notification={notification}
+            setIsSnoozeStateModalOpen={setIsSnoozeStateModalOpen}
+            customSnoozeModal={customSnoozeModal}
+            setCustomSnoozeModal={setCustomSnoozeModal}
+          />
+        )}
       </div>
     </div>
   );

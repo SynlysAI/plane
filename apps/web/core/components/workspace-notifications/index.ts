@@ -5,3 +5,5 @@
  */
 
 export * from "./root";
+export * from "./announcement-composer";
+export * from "./announcement-detail";

@@ -53,6 +53,45 @@
       "1_week": "1 周",
       "2_weeks": "2 周",
       "custom": "自定义"
+    },
+    "announcement": {
+      "label": "系统公告",
+      "compose": "发布公告",
+      "compose_title": "发布系统公告",
+      "compose_hint": "公告将发送给当前工作区的全部活跃真人成员。",
+      "title_placeholder": "公告标题",
+      "body_placeholder": "公告正文",
+      "preview": "预览公告",
+      "back_to_edit": "返回编辑",
+      "publish": "发布",
+      "publishing": "正在发布",
+      "confirm_title": "确认发布这条公告？",
+      "confirm_content": "发布后会立即出现在当前工作区每位活跃真人成员的收件箱中。",
+      "published": "已发布公告",
+      "empty_published": "暂无已发布公告。",
+      "list_error": "已发布公告暂时不可用。",
+      "recipients": "{count, plural, other {# 位接收人}}",
+      "publisher_system": "系统",
+      "options": {
+        "delete": "删除"
+      },
+      "toasts": {
+        "published": "公告已发布",
+        "published_count": "已发送给 {count, plural, other {# 位成员}}",
+        "publish_failed": "公告发布失败，请重试。",
+        "deleted": "公告已从你的收件箱删除",
+        "delete_failed": "公告删除失败，请重试。"
+      },
+      "delete": {
+        "title": "删除这条公告？",
+        "content": "删除只影响你的收件箱，其他成员仍会保留各自的消息。",
+        "confirm": "删除",
+        "loading": "正在删除"
+      },
+      "status": {
+        "published": "已发布",
+        "pending": "待发布"
+      }
     }
   }
 }
