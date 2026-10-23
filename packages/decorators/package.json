@@ -1,6 +1,6 @@
 {
   "name": "@plane/decorators",
-  "version": "7.0.1",
+  "version": "8.0.0",
   "private": true,
   "description": "Controller and route decorators for Express.js applications",
   "license": "AGPL-3.0",

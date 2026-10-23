@@ -47,7 +47,7 @@ class PeriodicReportCommentSerializer(serializers.ModelSerializer):
             "can_submit_ai_feedback",
             "ai_feedback",
         ]
-        read_only_fields = [field for field in fields if field not in {"comment_html", "feedback_type"}]
+        read_only_fields = [field for field in fields if field != "comment_html"]
         extra_kwargs = {"comment_html": {"max_length": 50000}}
 
     def validate_comment_html(self, value):

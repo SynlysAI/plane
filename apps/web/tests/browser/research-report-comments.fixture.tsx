@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AxiosHeaders } from "axios";
 import { TranslationProvider } from "@plane/i18n";
@@ -99,20 +99,30 @@ const report = {
 createRoot(document.getElementById("root")!).render(
   <StoreProvider>
     <TranslationProvider>
-      <main className="flex h-screen justify-end overflow-hidden bg-canvas p-6">
-        <ResearchReportComments
-          report={report}
-          workspaceSlug="sample"
-          workspaceId="workspace-1"
-          locale="zh-CN"
-          draftAnchor={null}
-          onDraftConsumed={() => undefined}
-          onFocusThread={() => true}
-          onAnchorsChange={() => undefined}
-          activeThreadId="thread-1"
-          onActiveThreadIdChange={() => undefined}
-        />
-      </main>
+      <ReportCommentsFixture />
     </TranslationProvider>
   </StoreProvider>
 );
+
+/** Render the discussion panel with local state so collapse behavior stays inspectable. */
+function ReportCommentsFixture() {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <main className="flex h-screen justify-end overflow-hidden bg-canvas p-6">
+      <ResearchReportComments
+        report={report}
+        workspaceSlug="sample"
+        workspaceId="workspace-1"
+        locale="zh-CN"
+        draftAnchor={null}
+        onDraftConsumed={() => undefined}
+        onFocusThread={() => true}
+        onAnchorsChange={() => undefined}
+        activeThreadId="thread-1"
+        onActiveThreadIdChange={() => undefined}
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+      />
+    </main>
+  );
+}

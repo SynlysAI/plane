@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getReportCommentThreads: vi.fn(),
   createReportCommentThread: vi.fn(),
   createReportCommentReply: vi.fn(),
+  updateReportComment: vi.fn(),
   updateReportCommentThreadStatus: vi.fn(),
   submitReportCommentFeedback: vi.fn(),
 }));
@@ -58,6 +59,7 @@ vi.mock("@/services/research/report.service", () => ({
     getReportCommentThreads = mocks.getReportCommentThreads;
     createReportCommentThread = mocks.createReportCommentThread;
     createReportCommentReply = mocks.createReportCommentReply;
+    updateReportComment = mocks.updateReportComment;
     updateReportCommentThreadStatus = mocks.updateReportCommentThreadStatus;
     submitReportCommentFeedback = mocks.submitReportCommentFeedback;
   },
@@ -119,13 +121,17 @@ const report = {
   latest_official_version: 1,
 } as TPeriodicReport;
 
-async function renderComments(focusResult = true) {
+async function renderComments({
+  focusResult = true,
+  collapsed = false,
+}: { focusResult?: boolean; collapsed?: boolean } = {}) {
   const container = document.createElement("div");
   const root = createRoot(container);
   const onFocusThread = vi.fn(() => focusResult);
   const onDraftConsumed = vi.fn();
   const onAnchorsChange = vi.fn();
   const onActiveThreadIdChange = vi.fn();
+  const onCollapsedChange = vi.fn();
   await act(async () => {
     root.render(
       <div>
@@ -142,21 +148,25 @@ async function renderComments(focusResult = true) {
             onAnchorsChange={onAnchorsChange}
             activeThreadId={null}
             onActiveThreadIdChange={onActiveThreadIdChange}
+            collapsed={collapsed}
+            onCollapsedChange={onCollapsedChange}
           />
         ))}
       </div>
     );
   });
-  return { container, onFocusThread, onDraftConsumed, onAnchorsChange, onActiveThreadIdChange };
+  return { container, onFocusThread, onDraftConsumed, onAnchorsChange, onActiveThreadIdChange, onCollapsedChange };
 }
 
 function button(container: HTMLElement, text: string) {
-  return [...container.querySelectorAll("button")].find((item) => item.textContent === text);
+  const normalized = text.replace(/\s+/g, "");
+  return [...container.querySelectorAll("button")].find((item) => item.textContent?.replace(/\s+/g, "") === normalized);
 }
 
 describe("ResearchReportComments", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mocks.getReportCommentThreads.mockResolvedValue({
       results: [thread as TReportCommentThread],
       count: 1,
@@ -171,9 +181,10 @@ describe("ResearchReportComments", () => {
 
     expect(container.textContent).toContain("催化剂活性实验");
     expect(onAnchorsChange).toHaveBeenCalledWith([{ threadId: "thread-1", anchor }]);
-    act(() => button(container, "催化剂活性实验正式版本 v1 · 开放")?.click());
+    act(() => button(container, "催化剂活性实验正式版本v1·开放")?.click());
     expect(onFocusThread).toHaveBeenCalledWith("thread-1");
     expect(onActiveThreadIdChange).toHaveBeenCalledWith("thread-1");
+    expect(container.textContent).not.toContain("修改建议");
   });
 
   it("creates an anchored thread from a report selection", async () => {
@@ -185,16 +196,84 @@ describe("ResearchReportComments", () => {
       editor?.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      button(container, "发起批注")?.click();
+      button(container, "发起讨论")?.click();
     });
 
     expect(mocks.createReportCommentThread).toHaveBeenCalledWith("lab", "report-1", {
       anchor,
       comment_html: "<p></p>",
-      feedback_type: "DISCUSSION",
       request_id: expect.any(String),
     });
     expect(onDraftConsumed).toHaveBeenCalled();
+  });
+
+  it("sends replies and edits without a feedback type", async () => {
+    mocks.createReportCommentReply.mockResolvedValue({ ...comment, id: "comment-2", feedback_type: "DISCUSSION" });
+    mocks.updateReportComment.mockResolvedValue({ ...comment, comment_html: "<p>更新讨论</p>" });
+    const { container } = await renderComments();
+
+    await act(async () => button(container, "回复")?.click());
+    const editor = [...container.querySelectorAll<HTMLTextAreaElement>('textarea[aria-label="评论编辑器"]')].at(-1);
+    await act(async () => {
+      editor?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => button(container, "回复讨论")?.click());
+    expect(mocks.createReportCommentReply).toHaveBeenCalledWith("lab", "report-1", "thread-1", {
+      comment_html: "<p></p>",
+      parent: "comment-1",
+      request_id: expect.any(String),
+    });
+
+    await act(async () => button(container, "编辑")?.click());
+    const editingEditor = [...container.querySelectorAll<HTMLTextAreaElement>('textarea[aria-label="评论编辑器"]')].at(
+      -1
+    );
+    await act(async () => {
+      editingEditor?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => button(container, "保存修改")?.click());
+    expect(mocks.updateReportComment).toHaveBeenCalledWith("lab", "report-1", "comment-1", {
+      comment_html: comment.comment_html,
+    });
+  });
+
+  it("supports a compact collapsed rail while anchors remain available", async () => {
+    const { container, onAnchorsChange, onCollapsedChange } = await renderComments({ collapsed: true });
+
+    const rail = container.querySelector('button[aria-expanded="false"]');
+    expect(rail?.getAttribute("aria-label")).toBe("展开讨论");
+    expect(container.textContent).toContain("讨论");
+    expect(container.textContent).not.toContain("催化剂活性实验正式版本");
+    expect(onAnchorsChange).toHaveBeenCalledWith([{ threadId: "thread-1", anchor }]);
+
+    act(() => rail?.click());
+    expect(onCollapsedChange).toHaveBeenCalledWith(false);
+  });
+
+  it("remembers the panel preference in local storage", async () => {
+    window.localStorage.setItem("research_report_comments_panel_open", "false");
+    const Probe = await import("@/components/research/reports/report-comments").then(
+      ({ useResearchReportCommentsPanel }) => {
+        function PanelProbe() {
+          const panel = useResearchReportCommentsPanel();
+          return (
+            <button type="button" aria-expanded={panel.open} onClick={() => panel.setOpen(true)}>
+              {panel.open ? "展开" : "收起"}
+            </button>
+          );
+        }
+        return PanelProbe;
+      }
+    );
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    await act(async () => root.render(<Probe />));
+
+    expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => container.querySelector("button")?.click());
+
+    expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe("true");
+    expect(window.localStorage.getItem("research_report_comments_panel_open")).toBe("true");
   });
 
   it("supports explicit AI feedback and resolve state transitions", async () => {
@@ -208,15 +287,15 @@ describe("ResearchReportComments", () => {
 
     await act(async () => button(container, "解决")?.click());
     expect(mocks.updateReportCommentThreadStatus).toHaveBeenCalledWith("lab", "report-1", "thread-1", "RESOLVED");
-    expect(container.textContent).toContain("暂无符合条件的批注。");
+    expect(container.textContent).toContain("暂无符合条件的讨论。");
   });
 
   it("keeps an unresolvable quote in the sidebar instead of jumping to other content", async () => {
-    const { container } = await renderComments(false);
+    const { container } = await renderComments({ focusResult: false });
 
-    act(() => button(container, "催化剂活性实验正式版本 v1 · 开放")?.click());
+    act(() => button(container, "催化剂活性实验正式版本v1·开放")?.click());
 
-    expect(container.textContent).toContain("这条批注引用的原文已变化，暂不能在正文定位。");
+    expect(container.textContent).toContain("这条讨论引用的原文已变化，暂不能在正文定位。");
     expect(container.textContent).toContain("催化剂活性实验");
   });
 });

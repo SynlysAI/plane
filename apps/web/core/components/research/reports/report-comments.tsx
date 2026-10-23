@@ -1,28 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuid } from "uuid";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { Avatar } from "@makeplane/propel/components/avatar";
 import type { EditorRefApi } from "@plane/editor";
-import type {
-  TPeriodicReport,
-  TReportComment,
-  TReportCommentFeedbackType,
-  TReportCommentThread,
-  TReportSelectionAnchor,
-} from "@plane/types";
+import type { TPeriodicReport, TReportComment, TReportCommentThread, TReportSelectionAnchor } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { LiteTextEditor } from "@/components/editor/lite-text";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchReportService } from "@/services/research/report.service";
 import { isCommentEmpty } from "@plane/utils";
 
-const FEEDBACK_TYPE_LABELS: Record<TReportCommentFeedbackType, string> = {
-  DISCUSSION: "讨论",
-  SUGGESTION: "修改建议",
-  CORRECTION: "内容纠错",
-  QUESTION: "问题",
-  APPROVAL: "人工认可",
-  REJECTION: "人工否定",
-};
+const COMMENTS_PANEL_ID = "research-report-comments-panel";
+const COMMENTS_PANEL_STORAGE_KEY = "research_report_comments_panel_open";
+
+/** Read the browser-level report discussion panel preference. */
+function readCommentsPanelPreference(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(COMMENTS_PANEL_STORAGE_KEY) !== "false";
+}
+
+/** Keep the report discussion panel preference in the current browser.
+ *
+ * Returns:
+ * - `open`: whether the expanded discussion panel is visible.
+ * - `setOpen`: updates and persists the panel preference.
+ * - `openForDiscussion`: expands the panel for anchored discussion entry points.
+ */
+export function useResearchReportCommentsPanel() {
+  const [open, setOpen] = useState(readCommentsPanelPreference);
+
+  useEffect(() => {
+    window.localStorage.setItem(COMMENTS_PANEL_STORAGE_KEY, String(open));
+  }, [open]);
+
+  const openForDiscussion = useCallback(() => setOpen(true), []);
+
+  return { open, setOpen, openForDiscussion };
+}
 
 type Props = {
   report: TPeriodicReport;
@@ -35,6 +49,8 @@ type Props = {
   onAnchorsChange: (anchors: Array<{ threadId: string; anchor: TReportSelectionAnchor }>) => void;
   activeThreadId: string | null;
   onActiveThreadIdChange: (threadId: string | null) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 };
 
 /** 报告评论侧栏：所有讨论都固定在创建时的正式快照版本。 */
@@ -49,6 +65,8 @@ export function ResearchReportComments({
   onAnchorsChange,
   activeThreadId,
   onActiveThreadIdChange,
+  collapsed,
+  onCollapsedChange,
 }: Props) {
   const service = useMemo(() => new ResearchReportService(), []);
   const [threads, setThreads] = useState<TReportCommentThread[]>([]);
@@ -126,7 +144,7 @@ export function ResearchReportComments({
   const focusThread = useCallback(
     (threadId: string) => {
       onActiveThreadIdChange(threadId);
-      if (!onFocusThread(threadId)) setActionError("这条批注引用的原文已变化，暂不能在正文定位。");
+      if (!onFocusThread(threadId)) setActionError("这条讨论引用的原文已变化，暂不能在正文定位。");
     },
     [onActiveThreadIdChange, onFocusThread]
   );
@@ -143,105 +161,152 @@ export function ResearchReportComments({
     [onActiveThreadIdChange, onDraftConsumed]
   );
 
+  if (collapsed) {
+    return (
+      <aside
+        id={COMMENTS_PANEL_ID}
+        className="flex h-11 w-full shrink-0 items-center justify-between self-start rounded-xl border border-subtle bg-surface-1 px-2 xl:sticky xl:top-5 xl:h-auto xl:w-12 xl:flex-col xl:justify-start xl:gap-3 xl:py-3"
+      >
+        <button
+          type="button"
+          aria-expanded="false"
+          aria-controls={COMMENTS_PANEL_ID}
+          aria-label="展开讨论"
+          title="展开讨论"
+          className="flex size-8 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-surface-2 hover:text-primary"
+          onClick={() => onCollapsedChange(false)}
+        >
+          <PanelRightOpen className="size-4" aria-hidden="true" />
+        </button>
+        <span className="text-11 font-medium text-tertiary xl:[writing-mode:vertical-rl]">讨论</span>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="flex min-w-0 flex-col gap-3 border-subtle xl:sticky xl:top-0 xl:w-80 xl:shrink-0 xl:border-l xl:pl-4">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+    <aside
+      id={COMMENTS_PANEL_ID}
+      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-subtle bg-surface-1 xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:w-[340px] xl:shrink-0"
+    >
+      <header className="flex shrink-0 flex-col gap-3 border-b border-subtle px-3.5 py-3">
         <div>
-          <h2 className="text-14 font-semibold text-primary">批注与讨论</h2>
-          <p className="mt-0.5 text-11 text-tertiary">围绕正式版本 v{report.latest_official_version ?? "—"}</p>
+          <h2 className="text-14 font-semibold text-primary">讨论</h2>
+          <p className="mt-0.5 text-11 text-tertiary">固定于正式版本 v{report.latest_official_version ?? "—"}</p>
         </div>
-        <div className="flex items-center gap-1" role="tablist" aria-label="批注状态过滤">
-          {(["OPEN", "RESOLVED", "ALL"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              role="tab"
-              aria-selected={filter === item}
-              className={`rounded-md px-2 py-1 text-11 ${
-                filter === item ? "bg-surface-2 text-primary" : "text-tertiary hover:text-secondary"
-              }`}
-              onClick={() => setFilter(item)}
-            >
-              {item === "OPEN" ? "开放" : item === "RESOLVED" ? "已解决" : "全部"}
-            </button>
-          ))}
+
+        <div className="flex items-center justify-between gap-2">
+          <div
+            className="flex items-center gap-0.5 rounded-md bg-surface-2 p-0.5"
+            role="tablist"
+            aria-label="讨论状态过滤"
+          >
+            {(["OPEN", "RESOLVED", "ALL"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={filter === item}
+                className={`rounded px-2 py-1 text-11 transition-colors ${
+                  filter === item ? "bg-surface-1 text-primary" : "text-tertiary hover:text-secondary"
+                }`}
+                onClick={() => setFilter(item)}
+              >
+                {item === "OPEN" ? "开放" : item === "RESOLVED" ? "已解决" : "全部"}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            aria-expanded="true"
+            aria-controls={COMMENTS_PANEL_ID}
+            aria-label="收起讨论"
+            title="收起讨论"
+            className="flex size-7 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-surface-2 hover:text-primary"
+            onClick={() => onCollapsedChange(true)}
+          >
+            <PanelRightClose className="size-4" aria-hidden="true" />
+          </button>
         </div>
       </header>
 
-      {actionError && (
-        <p role="alert" className="text-12 text-danger-primary">
-          {actionError}
-        </p>
-      )}
-      {loading && <p className="text-12 text-tertiary">批注加载中</p>}
-      {loadError && (
-        <div role="alert" className="text-12 text-danger-primary">
-          批注加载失败
-          <button type="button" className="ml-2 underline" onClick={() => setRefresh((value) => value + 1)}>
-            重试
-          </button>
-        </div>
-      )}
-      {!loading && !loadError && !canComment && (
-        <p className="text-12 text-tertiary">报告提交生成正式版本后，有查看权限的成员可以参与批注。</p>
-      )}
-
-      {canComment && (draftAnchor || generalComposerOpen) && (
-        <section className="border-b border-subtle pb-3">
-          {draftAnchor ? (
-            <blockquote className="border-accent-primary/50 mb-2 border-l-2 pl-2 text-12 text-secondary">
-              {draftAnchor.selected_text}
-            </blockquote>
-          ) : (
-            <p className="mb-2 text-12 text-tertiary">发起全篇讨论</p>
-          )}
-          <CommentComposer
-            workspaceSlug={workspaceSlug}
-            workspaceId={workspaceId}
-            title="发起批注"
-            onCancel={() => {
-              setGeneralComposerOpen(false);
-              onDraftConsumed();
-            }}
-            onSave={async (html, feedbackType, requestId) => {
-              const created = await service.createReportCommentThread(workspaceSlug, report.id, {
-                anchor: draftAnchor,
-                comment_html: html,
-                feedback_type: feedbackType,
-                request_id: requestId,
-              });
-              handleThreadCreated(created);
-            }}
-          />
-        </section>
-      )}
-
-      {canComment && !draftAnchor && !generalComposerOpen && (
-        <Button variant="secondary" size="sm" onClick={() => setGeneralComposerOpen(true)}>
-          全篇讨论
-        </Button>
-      )}
-
-      <div className="flex flex-col gap-4">
-        {threads.map((thread) => (
-          <ThreadCard
-            key={thread.id}
-            thread={thread}
-            workspaceSlug={workspaceSlug}
-            workspaceId={workspaceId}
-            locale={locale}
-            active={thread.id === activeThreadId}
-            replyOpen={replyThreadId === thread.id}
-            onReplyToggle={() => setReplyThreadId((current) => (current === thread.id ? null : thread.id))}
-            onFocus={() => focusThread(thread.id)}
-            onUpdate={updateThread}
-            onCommentUpdate={updateComment}
-            onError={setActionError}
-          />
-        ))}
-        {!loading && !loadError && threads.length === 0 && (
-          <p className="text-12 text-tertiary">暂无符合条件的批注。</p>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">
+        {actionError && (
+          <p role="alert" className="rounded-md bg-danger-subtle px-2.5 py-2 text-12 text-danger-primary">
+            {actionError}
+          </p>
         )}
+        {loading && <p className="text-12 text-tertiary">讨论加载中</p>}
+        {loadError && (
+          <div
+            role="alert"
+            className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary"
+          >
+            讨论加载失败
+            <button type="button" className="ml-2 underline" onClick={() => setRefresh((value) => value + 1)}>
+              重试
+            </button>
+          </div>
+        )}
+        {!loading && !loadError && !canComment && (
+          <p className="text-12 leading-5 text-tertiary">报告提交生成正式版本后，有查看权限的成员可以参与讨论。</p>
+        )}
+
+        {canComment && (draftAnchor || generalComposerOpen) && (
+          <section className="rounded-lg border border-subtle bg-canvas p-3">
+            {draftAnchor ? (
+              <blockquote className="border-accent-primary/60 mb-3 rounded-md border-l-2 bg-surface-2 px-2.5 py-2 text-12 leading-5 text-secondary">
+                {draftAnchor.selected_text}
+              </blockquote>
+            ) : (
+              <p className="mb-3 text-12 font-medium text-secondary">全篇讨论</p>
+            )}
+            <CommentComposer
+              workspaceSlug={workspaceSlug}
+              workspaceId={workspaceId}
+              title="发起讨论"
+              onCancel={() => {
+                setGeneralComposerOpen(false);
+                onDraftConsumed();
+              }}
+              onSave={async (html, requestId) => {
+                const created = await service.createReportCommentThread(workspaceSlug, report.id, {
+                  anchor: draftAnchor,
+                  comment_html: html,
+                  request_id: requestId,
+                });
+                handleThreadCreated(created);
+              }}
+            />
+          </section>
+        )}
+
+        {canComment && !draftAnchor && !generalComposerOpen && (
+          <Button variant="secondary" size="sm" onClick={() => setGeneralComposerOpen(true)}>
+            发起全篇讨论
+          </Button>
+        )}
+
+        <div className="flex flex-col gap-3">
+          {threads.map((thread) => (
+            <ThreadCard
+              key={thread.id}
+              thread={thread}
+              workspaceSlug={workspaceSlug}
+              workspaceId={workspaceId}
+              locale={locale}
+              active={thread.id === activeThreadId}
+              replyOpen={replyThreadId === thread.id}
+              onReplyToggle={() => setReplyThreadId((current) => (current === thread.id ? null : thread.id))}
+              onFocus={() => focusThread(thread.id)}
+              onUpdate={updateThread}
+              onCommentUpdate={updateComment}
+              onError={setActionError}
+            />
+          ))}
+          {!loading && !loadError && threads.length === 0 && (
+            <p className="rounded-lg border border-subtle px-3 py-3 text-12 text-tertiary">暂无符合条件的讨论。</p>
+          )}
+        </div>
       </div>
     </aside>
   );
@@ -287,7 +352,7 @@ function ThreadCard({
     try {
       onUpdate(await service.updateReportCommentThreadStatus(workspaceSlug, thread.report, thread.id, status));
     } catch {
-      onError("批注状态更新失败，请重试。");
+      onError("讨论状态更新失败，请重试。");
     } finally {
       setBusy(false);
     }
@@ -297,13 +362,13 @@ function ThreadCard({
     <article
       ref={articleRef}
       data-thread-id={thread.id}
-      className={`rounded-lg border p-3 ${active ? "border-accent-primary/50 bg-surface-1" : "border-subtle"}`}
-      aria-label={thread.quoted_text ? `批注：${thread.quoted_text}` : "全篇讨论"}
+      className={`rounded-lg border p-3 ${active ? "border-accent-primary/60 bg-canvas" : "border-subtle bg-canvas/60"}`}
+      aria-label={thread.quoted_text ? `讨论：${thread.quoted_text}` : "全篇讨论"}
     >
       <div className="flex items-start justify-between gap-2">
         <button type="button" className="min-w-0 flex-1 text-left" onClick={onFocus}>
           {thread.quoted_text ? (
-            <blockquote className="border-accent-primary/50 border-l-2 pl-2 text-12 text-secondary">
+            <blockquote className="border-accent-primary/60 rounded-md border-l-2 bg-surface-2 px-2.5 py-2 text-12 leading-5 text-secondary">
               {thread.quoted_text}
             </blockquote>
           ) : (
@@ -345,13 +410,12 @@ function ThreadCard({
           <CommentComposer
             workspaceSlug={workspaceSlug}
             workspaceId={workspaceId}
-            title="回复批注"
+            title="回复讨论"
             onCancel={onReplyToggle}
-            onSave={async (html, feedbackType, requestId) => {
+            onSave={async (html, requestId) => {
               const root = thread.comments[0];
               const created = await service.createReportCommentReply(workspaceSlug, thread.report, thread.id, {
                 comment_html: html,
-                feedback_type: feedbackType,
                 parent: root?.id ?? null,
                 request_id: requestId,
               });
@@ -447,7 +511,6 @@ function CommentCard({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-11">
           <span className="font-medium text-primary">{comment.actor_detail.display_name}</span>
-          <span className="text-tertiary">{FEEDBACK_TYPE_LABELS[comment.feedback_type]}</span>
           <time className="text-tertiary" dateTime={comment.created_at}>
             {formatResearchDateTime(comment.created_at, locale)}
           </time>
@@ -461,12 +524,10 @@ function CommentCard({
               workspaceId={workspaceId}
               title="保存修改"
               initialHtml={comment.comment_html}
-              initialFeedbackType={comment.feedback_type}
               onCancel={() => setEditing(false)}
-              onSave={async (html, feedbackType) => {
+              onSave={async (html) => {
                 const updated = await service.updateReportComment(workspaceSlug, thread.report, comment.id, {
                   comment_html: html,
-                  feedback_type: feedbackType,
                 });
                 onCommentUpdate(updated);
                 setEditing(false);
@@ -543,7 +604,6 @@ function CommentComposer({
   workspaceId,
   title,
   initialHtml = "<p></p>",
-  initialFeedbackType = "DISCUSSION",
   onCancel,
   onSave,
 }: {
@@ -551,14 +611,12 @@ function CommentComposer({
   workspaceId: string;
   title: string;
   initialHtml?: string;
-  initialFeedbackType?: TReportCommentFeedbackType;
   onCancel?: () => void;
-  onSave: (html: string, feedbackType: TReportCommentFeedbackType, requestId: string) => Promise<void>;
+  onSave: (html: string, requestId: string) => Promise<void>;
 }) {
   const editor = useRef<EditorRefApi>(null);
   const requestId = useRef(uuid());
   const [html, setHtml] = useState(initialHtml);
-  const [feedbackType, setFeedbackType] = useState(initialFeedbackType);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const empty = isCommentEmpty(html);
@@ -568,9 +626,8 @@ function CommentComposer({
     setBusy(true);
     setError("");
     try {
-      await onSave(html, feedbackType, requestId.current);
+      await onSave(html, requestId.current);
       setHtml("<p></p>");
-      setFeedbackType("DISCUSSION");
       editor.current?.clearEditor();
       requestId.current = uuid();
     } catch {
@@ -581,21 +638,7 @@ function CommentComposer({
   };
 
   return (
-    <div>
-      <div className="mb-2 flex flex-wrap gap-1">
-        {(Object.keys(FEEDBACK_TYPE_LABELS) as TReportCommentFeedbackType[]).map((type) => (
-          <button
-            key={type}
-            type="button"
-            className={`rounded-md px-2 py-1 text-11 ${
-              feedbackType === type ? "bg-surface-2 text-primary" : "text-tertiary hover:text-secondary"
-            }`}
-            onClick={() => setFeedbackType(type)}
-          >
-            {FEEDBACK_TYPE_LABELS[type]}
-          </button>
-        ))}
-      </div>
+    <div className="rounded-md bg-surface-2 p-2">
       <LiteTextEditor
         ref={editor}
         id={`${title}-${workspaceSlug}`}
@@ -604,13 +647,13 @@ function CommentComposer({
         workspaceSlug={workspaceSlug}
         initialValue={html}
         value={null}
-        placeholder="输入批注，可 @ 相关成员。"
+        placeholder="输入讨论内容，可 @ 相关成员。"
         disabledExtensions={["image", "issue-embed"]}
         uploadFile={async () => {
-          throw new Error("报告批注暂不支持图片。");
+          throw new Error("报告讨论暂不支持图片。");
         }}
         duplicateFile={async () => {
-          throw new Error("报告批注暂不支持图片。");
+          throw new Error("报告讨论暂不支持图片。");
         }}
         isSubmitting={busy}
         isSubmitDisabled={empty}

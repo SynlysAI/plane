@@ -26,7 +26,7 @@ import { ResearchDeleteButton } from "@/components/research/common/research-dele
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ResearchReportAttachments } from "@/components/research/reports/report-attachments";
-import { ResearchReportComments } from "@/components/research/reports/report-comments";
+import { ResearchReportComments, useResearchReportCommentsPanel } from "@/components/research/reports/report-comments";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -69,6 +69,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [commentAnchors, setCommentAnchors] = useState<TEditorCommentAnchor[]>([]);
   const readReceiptKeyRef = useRef<string | null>(null);
+  const commentsPanel = useResearchReportCommentsPanel();
 
   const report = research.reports[reportId];
   const history = research.reportHistory[reportId] ?? [];
@@ -266,7 +267,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
           {workspaceId && (
             <ReportBody
               ref={bodyRef}
@@ -277,8 +278,14 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
               onBusy={setBodyBusy}
               commentAnchors={commentAnchors}
               activeThreadId={activeThreadId}
-              onCreateComment={setDraftAnchor}
-              onCommentAnchorClick={setActiveThreadId}
+              onCreateComment={(anchor) => {
+                setDraftAnchor(anchor);
+                commentsPanel.openForDiscussion();
+              }}
+              onCommentAnchorClick={(threadId) => {
+                setActiveThreadId(threadId);
+                commentsPanel.openForDiscussion();
+              }}
             />
           )}
           <ResearchReportAttachments
@@ -379,6 +386,8 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
             onAnchorsChange={setCommentAnchors}
             activeThreadId={activeThreadId}
             onActiveThreadIdChange={setActiveThreadId}
+            collapsed={!commentsPanel.open}
+            onCollapsedChange={(collapsed) => commentsPanel.setOpen(!collapsed)}
           />
         )}
       </div>

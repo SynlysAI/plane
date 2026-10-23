@@ -123,6 +123,17 @@ def _request_id_error(request):
     return request_id, None
 
 
+def _feedback_type_error(request):
+    """Keep new report discussions generic while retaining legacy read values."""
+    feedback_type = request.data.get("feedback_type")
+    if feedback_type is None or feedback_type == PeriodicReportComment.FeedbackType.DISCUSSION:
+        return None
+    return research_error(
+        ResearchErrorCode.REPORT_COMMENT_INVALID,
+        "feedback_type must be DISCUSSION.",
+    )
+
+
 class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
     """``GET/POST /api/research/workspaces/<slug>/reports/<report_id>/comment-threads/``"""
 
@@ -179,6 +190,9 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
         if existing is not None:
             return Response(_serialize_thread(existing.thread, request, context), status=status.HTTP_200_OK)
 
+        error = _feedback_type_error(request)
+        if error:
+            return error
         anchor = request.data.get("anchor")
         quoted_text = ""
         if anchor is not None:
@@ -194,7 +208,6 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
 
         payload = {
             "comment_html": request.data.get("comment_html"),
-            "feedback_type": request.data.get("feedback_type") or PeriodicReportComment.FeedbackType.DISCUSSION,
         }
         serializer = PeriodicReportCommentSerializer(data=payload, context={"request": request})
         if not serializer.is_valid():
@@ -257,6 +270,9 @@ class ResearchReportCommentThreadCommentEndpoint(ResearchAPIView):
                 )
             return Response(PeriodicReportCommentSerializer(existing, context={"request": request}).data)
 
+        error = _feedback_type_error(request)
+        if error:
+            return error
         parent_id = request.data.get("parent")
         parent = None
         if parent_id:
@@ -269,7 +285,6 @@ class ResearchReportCommentThreadCommentEndpoint(ResearchAPIView):
 
         payload = {
             "comment_html": request.data.get("comment_html"),
-            "feedback_type": request.data.get("feedback_type") or PeriodicReportComment.FeedbackType.DISCUSSION,
         }
         serializer = PeriodicReportCommentSerializer(data=payload, context={"request": request})
         if not serializer.is_valid():
@@ -328,9 +343,15 @@ class ResearchReportCommentDetailEndpoint(ResearchAPIView):
         report, thread, comment, error = self._comment(request, slug, report_id, comment_id)
         if error:
             return error
+        error = _feedback_type_error(request)
+        if error:
+            return error
+        if "comment_html" not in request.data:
+            return Response(PeriodicReportCommentSerializer(comment, context={"request": request}).data)
+        payload = {"comment_html": request.data.get("comment_html")}
         serializer = PeriodicReportCommentSerializer(
             comment,
-            data=request.data,
+            data=payload,
             partial=True,
             context={"request": request},
         )

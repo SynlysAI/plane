@@ -11,7 +11,6 @@ import type {
   TReportAttachment,
   TReportComment,
   TReportCommentFeedback,
-  TReportCommentFeedbackType,
   TReportCommentThread,
   TReportCommentThreadList,
   TReportReadReceipt,
@@ -53,13 +52,11 @@ export type TReportCreatePayload = {
 export type TReportCommentThreadCreatePayload = {
   anchor?: TReportSelectionAnchor | null;
   comment_html: string;
-  feedback_type?: TReportCommentFeedbackType;
   request_id: string;
 };
 
 export type TReportCommentCreatePayload = {
   comment_html: string;
-  feedback_type?: TReportCommentFeedbackType;
   parent?: string | null;
   request_id: string;
 };
@@ -181,7 +178,7 @@ export class ResearchReportService extends APIService {
     workspaceSlug: string,
     reportId: string,
     commentId: string,
-    payload: Partial<Pick<TReportComment, "comment_html" | "feedback_type">>
+    payload: Partial<Pick<TReportComment, "comment_html">>
   ) {
     return this.patch(researchEndpoints.reportComment(workspaceSlug, reportId, commentId), payload)
       .then((res) => res?.data as TReportComment)

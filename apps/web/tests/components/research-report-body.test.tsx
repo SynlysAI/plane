@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   markReportRead: vi.fn(),
   submitReport: vi.fn(),
   updateReportVisibility: vi.fn(),
+  commentsProps: {} as Record<string, unknown>,
 }));
 
 vi.mock("mobx-react", () => ({ enableStaticRendering: vi.fn(), observer: (component: unknown) => component }));
@@ -91,7 +92,25 @@ vi.mock("@/components/research/reports/report-attachments", () => ({
   ResearchReportAttachments: () => <section aria-label="附件" />,
 }));
 vi.mock("@/components/research/reports/report-comments", () => ({
-  ResearchReportComments: () => <aside aria-label="批注与讨论" />,
+  ResearchReportComments: (props: Record<string, unknown>) => {
+    mocks.commentsProps = props;
+    return (
+      <aside aria-label="讨论">
+        <button type="button" onClick={() => props.onCollapsedChange(true)}>
+          模拟收起讨论
+        </button>
+      </aside>
+    );
+  },
+  useResearchReportCommentsPanel: () => {
+    const [open, setOpen] = React.useState(
+      () => window.localStorage.getItem("research_report_comments_panel_open") !== "false"
+    );
+    React.useEffect(() => {
+      window.localStorage.setItem("research_report_comments_panel_open", String(open));
+    }, [open]);
+    return { open, setOpen, openForDiscussion: () => setOpen(true) };
+  },
 }));
 vi.mock("@/components/editor/document/editor", () => ({
   /** 用可编辑 DOM 与公开编辑器 API 隔离富文本依赖，保留正文变更行为。 */
@@ -291,6 +310,29 @@ afterEach(async () => {
 });
 
 describe("报告详情正文保存与替换", () => {
+  it("记忆讨论栏收起状态并在正文发起批注时自动展开", async () => {
+    vi.stubGlobal(
+      "getSelection",
+      vi.fn(() => ({
+        rangeCount: 1,
+        getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 100, top: 100 }) }),
+      }))
+    );
+    await renderDetail();
+    expect(mocks.commentsProps.collapsed).toBe(false);
+
+    await act(async () => button("模拟收起讨论").click());
+    expect(mocks.commentsProps.collapsed).toBe(true);
+    expect(window.localStorage.getItem("research_report_comments_panel_open")).toBe("false");
+
+    await act(async () => button("触发选区").click());
+    await act(async () => button("批注选中文字").click());
+
+    expect(mocks.commentsProps.collapsed).toBe(false);
+    expect(window.localStorage.getItem("research_report_comments_panel_open")).toBe("true");
+    expect((mocks.commentsProps.draftAnchor as { selected_text?: string })?.selected_text).toBe("催化剂活性实验");
+  });
+
   it.each(["WEEKLY", "MONTHLY"] as const)("详情页元信息显示 %s 撰写人显示名", async (reportType) => {
     mocks.reports["report-1"] = {
       ...report(),

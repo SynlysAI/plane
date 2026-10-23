@@ -231,8 +231,8 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
   };
 
   return (
-    <section className="border-t border-subtle pt-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <section className="flex flex-col rounded-xl border border-subtle bg-surface-1 px-4 py-3.5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-subtle pb-3">
         <h2 className="text-14 font-semibold text-primary">报告正文</h2>
         <div className="flex flex-wrap items-center gap-2">
           <span role="status" className="text-12 text-secondary">

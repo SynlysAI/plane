@@ -158,7 +158,6 @@ def create_thread(env, report, client=None, **overrides):
     payload = {
         "anchor": valid_anchor(),
         "comment_html": "<p>请补充重复实验次数。</p>",
-        "feedback_type": "SUGGESTION",
         "request_id": uuid4().hex,
         **overrides,
     }
@@ -179,7 +178,6 @@ def test_visible_reader_can_anchor_comment_reply_and_reload(env):
         f"{threads_url(env, report['id'])}{thread['id']}/comments/",
         {
             "comment_html": "<p>已补充三次重复实验。</p>",
-            "feedback_type": "DISCUSSION",
             "parent": thread["comments"][0]["id"],
             "request_id": uuid4().hex,
         },
@@ -190,7 +188,7 @@ def test_visible_reader_can_anchor_comment_reply_and_reload(env):
     reloaded = env["advisor_client"].get(threads_url(env, report["id"]), {"status": "ALL"}).json()
     assert reloaded["can_comment"] is True
     assert reloaded["count"] == 1
-    assert [item["feedback_type"] for item in reloaded["results"][0]["comments"]] == ["SUGGESTION", "DISCUSSION"]
+    assert [item["feedback_type"] for item in reloaded["results"][0]["comments"]] == ["DISCUSSION", "DISCUSSION"]
     assert Notification.objects.filter(entity_name="research_report", receiver=env["student"]).exists()
     edited = env["advisor_client"].patch(
         f"/api/research/workspaces/{env['workspace'].slug}/reports/{report['id']}/comments/{thread['comments'][0]['id']}/",
@@ -215,6 +213,54 @@ def test_comment_request_id_is_idempotent(env):
     assert retry.status_code == 200
     assert retry.json()["id"] == first.json()["id"]
     assert PeriodicReportComment.objects.filter(thread__report_id=report["id"]).count() == 1
+
+
+def test_new_comments_use_generic_discussion_and_legacy_types_stay_read_only(env):
+    report = make_report(env)
+    explicit = create_thread(env, report, feedback_type="DISCUSSION")
+    assert explicit.status_code == 201
+    assert explicit.json()["comments"][0]["feedback_type"] == "DISCUSSION"
+
+    rejected = create_thread(env, report, feedback_type="SUGGESTION")
+    assert rejected.status_code == 400
+    assert rejected.json()["error_code"] == "report_comment_invalid"
+
+    thread = explicit.json()
+    rejected_reply = env["student_client"].post(
+        f"{threads_url(env, report['id'])}{thread['id']}/comments/",
+        {
+            "comment_html": "<p>尝试写入人工认可。</p>",
+            "feedback_type": "APPROVAL",
+            "parent": thread["comments"][0]["id"],
+            "request_id": uuid4().hex,
+        },
+        format="json",
+    )
+    assert rejected_reply.status_code == 400
+    assert rejected_reply.json()["error_code"] == "report_comment_invalid"
+
+    root = PeriodicReportComment.objects.get(pk=thread["comments"][0]["id"])
+    legacy = PeriodicReportComment.objects.create(
+        thread=root.thread,
+        actor=env["advisor"],
+        comment_html="<p>历史修改建议。</p>",
+        comment_stripped="历史修改建议。",
+        feedback_type=PeriodicReportComment.FeedbackType.SUGGESTION,
+        request_id=uuid4().hex,
+        created_by=env["advisor"],
+    )
+    reloaded = env["student_client"].get(threads_url(env, report["id"]), {"status": "ALL"}).json()
+    assert {item["feedback_type"] for item in reloaded["results"][0]["comments"]} == {"DISCUSSION", "SUGGESTION"}
+
+    detail = f"/api/research/workspaces/{env['workspace'].slug}/reports/{report['id']}/comments/{legacy.id}/"
+    rejected_patch = env["advisor_client"].patch(detail, {"feedback_type": "CORRECTION"}, format="json")
+    assert rejected_patch.status_code == 400
+    assert rejected_patch.json()["error_code"] == "report_comment_invalid"
+
+    no_op_patch = env["advisor_client"].patch(detail, {"feedback_type": "DISCUSSION"}, format="json")
+    assert no_op_patch.status_code == 200
+    legacy.refresh_from_db()
+    assert legacy.feedback_type == PeriodicReportComment.FeedbackType.SUGGESTION
 
 
 def test_unauthorized_workspace_member_cannot_read_or_comment(env):
