@@ -244,7 +244,15 @@ export const ResearchPlatformSettingsForm = observer(function ResearchPlatformSe
                 value={(draft[field] as string | null) ?? ""}
                 onChange={(event) => setDraft({ ...draft, [field]: event.target.value || null })}
               >
-                {field !== "default_report_visibility" && <option value="">{t("research.platform.inherit")}</option>}
+                {field !== "default_report_visibility" && (
+                  <option value="">
+                    {t(
+                      field === "weekly_default_visibility"
+                        ? "research.platform.weekly_inherit"
+                        : "research.platform.inherit"
+                    )}
+                  </option>
+                )}
                 {REPORT_VISIBILITIES.map((visibility: TReportVisibility) => (
                   <option key={visibility} value={visibility}>
                     {t(REPORT_VISIBILITY_LABELS[visibility])}

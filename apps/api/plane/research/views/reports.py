@@ -85,8 +85,17 @@ def report_queryset(workspace):
     )
 
 
-def serialize_report(report, request, context=None, *, include_draft_content=False, mentor_cache=None):
+def serialize_report(
+    report,
+    request,
+    context=None,
+    *,
+    include_draft_content=False,
+    mentor_cache=None,
+    confidential_cache=None,
+):
     context = context if context is not None else build_actor_context(request.user, report.workspace_id)
+    confidential_cache = confidential_cache if confidential_cache is not None else {}
     return PeriodicReportSerializer(
         report,
         context={
@@ -94,6 +103,7 @@ def serialize_report(report, request, context=None, *, include_draft_content=Fal
             "actor_context": context,
             "include_draft_content": include_draft_content,
             "mentor_cache": mentor_cache,
+            "confidential_cache": confidential_cache,
         },
     ).data
 
@@ -184,7 +194,9 @@ def grant_is_within_visibility(report, default_visibility, grantee_user, grantee
 
 def validate_report_access_update(report, workspace, payload):
     """Validate a visibility/grant mutation against the locked report state."""
-    default_visibility = default_visibility_for(report.report_type, workspace)
+    default_visibility = default_visibility_for(report.report_type, workspace, report.org_unit)
+    workspace_default_visibility = default_visibility_for(report.report_type, workspace)
+    confidential_policy = default_visibility != workspace_default_visibility
     requested_visibility = report.visibility
     if "visibility" in payload:
         requested_visibility = str(payload.get("visibility") or "").strip().upper()
@@ -202,7 +214,7 @@ def validate_report_access_update(report, workspace, payload):
 
     validated_grants = None
     if "grants" in payload:
-        if visibility_breadth(requested_visibility) == 0:
+        if visibility_breadth(requested_visibility) == 0 or confidential_policy:
             return (
                 None,
                 None,
@@ -333,7 +345,8 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             queryset = queryset.filter(owner=request.user)
 
         context = build_actor_context(request.user, workspace.id)
-        visible_queryset = visible_reports_queryset(queryset, context)
+        confidential_cache = {}
+        visible_queryset = visible_reports_queryset(queryset, context, confidential_cache=confidential_cache)
         keyword = str(request.GET.get("q") or "").strip()[:200]
         if keyword:
             visible_queryset = visible_queryset.filter(
@@ -367,7 +380,14 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             request=request,
             queryset=visible_queryset,
             on_results=lambda reports: [
-                serialize_report(report, request, context, mentor_cache=mentor_cache) for report in reports
+                serialize_report(
+                    report,
+                    request,
+                    context,
+                    mentor_cache=mentor_cache,
+                    confidential_cache=confidential_cache,
+                )
+                for report in reports
             ],
             default_per_page=50,
             max_per_page=100,
@@ -442,7 +462,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             return research_permission_denied()
 
         current_key, _, _ = current_period(report_type, timezone_name=report_timezone)
-        default_visibility = default_visibility_for(report_type, workspace)
+        default_visibility = default_visibility_for(report_type, workspace, report_org_unit)
         requested_visibility = str(request.data.get("visibility") or default_visibility).strip().upper()
         if not can_narrow(default_visibility, requested_visibility):
             return research_error(
@@ -937,7 +957,7 @@ class ResearchReportAccessEndpoint(ResearchAPIView):
         return report, None
 
     def _payload(self, workspace, report):
-        default_visibility = default_visibility_for(report.report_type, workspace)
+        default_visibility = default_visibility_for(report.report_type, workspace, report.org_unit)
         grants = list(ReportAccessGrant.objects.filter(report=report, is_revoked=False))
         return {
             "visibility": report.visibility,

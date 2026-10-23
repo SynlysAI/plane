@@ -5,9 +5,29 @@ import { afterEach, expect, it, vi } from "vitest";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
-  units: [{ id: "root", name: "public", unit_type: "ROOT", parent: null, depth: 0, business_category: null }],
+  units: [
+    {
+      id: "root",
+      name: "public",
+      unit_type: "ROOT",
+      parent: null,
+      depth: 0,
+      business_category: null,
+      weekly_report_confidential: false,
+    },
+    {
+      id: "group",
+      name: "器件",
+      unit_type: "GROUP",
+      parent: "root",
+      depth: 1,
+      business_category: "BASIC_RESEARCH",
+      weekly_report_confidential: false,
+    },
+  ],
   createOrgUnit: vi.fn(),
   fetchOrgUnits: vi.fn().mockResolvedValue(undefined),
+  updateOrgUnit: vi.fn().mockResolvedValue(undefined),
   getIncomplete: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -83,6 +103,22 @@ it("creates a TEAM beneath the existing root with an explicit business category"
     business_category: "BASIC_RESEARCH",
   });
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("enables weekly report confidentiality for the selected group", async () => {
+  root = createRoot(container);
+  await act(async () => root.render(<ResearchOrgTreeEditor workspaceSlug="lab" />));
+  await act(async () => {
+    const group = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "器件");
+    group?.click();
+  });
+  const toggle = container.querySelector('label[aria-label="周报保密"] input[type="checkbox"]') as HTMLInputElement;
+  expect(toggle).toBeDefined();
+  await act(async () => toggle.click());
+
+  expect(mocks.updateOrgUnit).toHaveBeenCalledWith("lab", "group", {
+    weekly_report_confidential: true,
+  });
 });
 it("keeps failed creation visible with an error in the dialog", async () => {
   mocks.createOrgUnit.mockRejectedValueOnce(new Error("create failed"));

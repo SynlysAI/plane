@@ -44,6 +44,7 @@ class ResearchErrorCode:
     ORG_UNIT_ROOT_UNDELETABLE = "org_unit_root_undeletable"
     ORG_UNIT_HAS_CHILDREN = "org_unit_has_children"
     ORG_UNIT_TYPE_INVALID = "org_unit_type_invalid"
+    ORG_UNIT_WEEKLY_CONFIDENTIAL_INVALID = "org_unit_weekly_confidential_invalid"
 
     ORG_MEMBER_NOT_FOUND = "org_member_not_found"
     ORG_MEMBER_EXISTS = "org_member_exists"

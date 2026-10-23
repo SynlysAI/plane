@@ -64,6 +64,7 @@ class TestResearchSettingsEndpoint:
         payload = response.json()
         assert payload["module_enabled"] is True
         assert payload["default_report_visibility"] == "DIRECT_ADVISOR"
+        assert payload["weekly_default_visibility"] == "WORKSPACE"
         assert payload["image_max_mb"] == 20
         assert payload["pdf_max_mb"] == 100
         assert payload["markdown_max_mb"] == 5
@@ -146,11 +147,17 @@ class TestResearchSettingsEndpoint:
         assert settings.FILE_SIZE_LIMIT == default_limit
 
     def test_invalid_visibility_is_rejected(self, env):
-        response = env["admin_client"].patch(
-            env["url"], {"default_report_visibility": "EVERYONE"}, format="json"
-        )
+        response = env["admin_client"].patch(env["url"], {"default_report_visibility": "EVERYONE"}, format="json")
         assert response.status_code == 400
         assert response.json()["error_code"] == "report_visibility_exceeds_default"
+
+    def test_empty_weekly_visibility_uses_the_workspace_default(self, env):
+        response = env["admin_client"].patch(env["url"], {"weekly_default_visibility": None}, format="json")
+
+        assert response.status_code == 200
+        assert response.json()["weekly_default_visibility"] is None
+        setting = WorkspaceResearchSetting.objects.get(workspace=env["workspace"])
+        assert setting.default_visibility_for("WEEKLY") == "WORKSPACE"
 
     def test_invalid_timezone_is_rejected(self, env):
         response = env["admin_client"].patch(env["url"], {"timezone": "Mars/Olympus"}, format="json")

@@ -15,10 +15,14 @@ from plane.research.utils.config import (
     research_file_limits,
     research_gate_defaults,
     research_module_enabled,
-    research_submodule_defaults,
     research_phase_zero_defaults,
+    research_submodule_defaults,
 )
+from plane.research.utils.acl import visibility_breadth
 from plane.utils.constants import DEFAULT_TIMEZONE
+
+WEEKLY_DEFAULT_VISIBILITY = "WORKSPACE"
+WEEKLY_CONFIDENTIAL_VISIBILITY = "UNIT"
 
 
 def default_workspace_research_settings():
@@ -33,7 +37,7 @@ def default_workspace_research_settings():
         "approval_enabled": True,
         "allow_multiple_projects": False,
         "default_report_visibility": "DIRECT_ADVISOR",
-        "weekly_default_visibility": None,
+        "weekly_default_visibility": WEEKLY_DEFAULT_VISIBILITY,
         "monthly_default_visibility": None,
         "timezone": DEFAULT_TIMEZONE,
         "audit_retention_days": 0,
@@ -128,10 +132,82 @@ def workspace_research_sections(workspace):
     }
 
 
-def default_visibility_for(report_type, workspace):
+def weekly_confidential_paths(workspace, cache=None):
+    """返回当前标记为周报保密的组织节点路径。
+
+    Args:
+        workspace: 工作区对象或 ID。
+        cache: 可选的请求级字典，用于避免列表接口重复查询。
+
+    Returns:
+        保密节点的 materialised path 列表。
+    """
+    workspace_id = getattr(workspace, "id", workspace)
+    cache_key = f"weekly-confidential-paths:{workspace_id}"
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+
+    try:
+        from plane.db.models import OrgUnit
+    except ImportError:  # pragma: no cover - model not shipped yet
+        paths = []
+    else:
+        paths = list(
+            OrgUnit.objects.filter(
+                workspace_id=workspace_id,
+                weekly_report_confidential=True,
+                deleted_at__isnull=True,
+            ).values_list("path", flat=True)
+        )
+
+    if cache is not None:
+        cache[cache_key] = paths
+    return paths
+
+
+def org_unit_is_weekly_confidential(org_unit, workspace, cache=None):
+    """判断组织节点是否位于任一周报保密子树。
+
+    Args:
+        org_unit: 待判断的组织节点对象；``None`` 表示报告没有组织归属。
+        workspace: 工作区对象或 ID。
+        cache: 可选的请求级字典，用于避免列表接口重复查询。
+
+    Returns:
+        节点是否需要套用周报保密规则。
+    """
+    if org_unit is None:
+        return False
+    workspace_id = getattr(workspace, "id", workspace)
+    if str(getattr(org_unit, "workspace_id", workspace_id)) != str(workspace_id):
+        return False
+
+    unit_path = getattr(org_unit, "path", "") or ""
+    if not unit_path:
+        return False
+    return any(unit_path.startswith(path) for path in weekly_confidential_paths(workspace_id, cache=cache))
+
+
+def default_visibility_for(report_type, workspace, org_unit=None, cache=None):
+    """解析报告类型的有效默认可见性。
+
+    Args:
+        report_type: 报告类型（WEEKLY 或 MONTHLY）。
+        workspace: 工作区对象或 ID。
+        org_unit: 报告所属组织节点；保密子树会收窄周报上限。
+        cache: 可选的请求级字典，用于避免重复查询保密节点。
+
+    Returns:
+        该报告创建或修改可见性时可用的默认级别。
+    """
     settings = get_workspace_research_settings(workspace)
-    if report_type == "WEEKLY" and settings["weekly_default_visibility"]:
-        return settings["weekly_default_visibility"]
+    if report_type == "WEEKLY":
+        configured = settings["weekly_default_visibility"] or WEEKLY_DEFAULT_VISIBILITY
+        if org_unit_is_weekly_confidential(org_unit, workspace, cache=cache) and visibility_breadth(
+            configured
+        ) > visibility_breadth(WEEKLY_CONFIDENTIAL_VISIBILITY):
+            return WEEKLY_CONFIDENTIAL_VISIBILITY
+        return configured
     if report_type == "MONTHLY" and settings["monthly_default_visibility"]:
         return settings["monthly_default_visibility"]
     return settings["default_report_visibility"]

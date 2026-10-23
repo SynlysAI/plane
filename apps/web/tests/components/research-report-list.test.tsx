@@ -40,6 +40,7 @@ vi.mock("@plane/i18n", () => ({
         "research.reports.columns.read_state": "已读状态",
         "research.reports.read.waiting": "待阅读",
         "research.reports.read.read_pending_review": "已读 · 待审阅",
+        "research.report_visibility.unit_confidential": "本组（保密）",
       })[key] ?? key,
     currentLocale: "zh-CN",
   }),
@@ -291,4 +292,30 @@ it("报告审核列表区分待阅读和已读待审阅", async () => {
   const rows = [...container.querySelectorAll("tr")];
   expect(rows[1]?.textContent).toContain("待阅读");
   expect(rows[2]?.textContent).toContain("已读 · 待审阅");
+});
+
+it("保密周报按有效可见范围展示为本组保密", async () => {
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-confidential",
+      period_key: "2026-W40",
+      status: "SUBMITTED",
+      visibility: "WORKSPACE",
+      effective_visibility: "UNIT",
+      weekly_confidential: true,
+      has_read: true,
+      read_count: 1,
+      latest_read_at: null,
+    },
+  ]);
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/approvals?tab=report_review"]}>
+        <ResearchReportList workspaceSlug="lab" variant="review" />
+      </MemoryRouter>
+    )
+  );
+
+  expect(container.querySelectorAll("tr")[1]?.textContent).toContain("本组（保密）");
 });

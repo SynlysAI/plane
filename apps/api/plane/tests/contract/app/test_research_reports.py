@@ -23,6 +23,7 @@ from plane.db.models import (
     ReportAccessGrant,
     ReportReviewLog,
     ReportTemplate,
+    WorkspaceResearchSetting,
 )
 from plane.tests.research_fixtures import (
     add_workspace_member,
@@ -106,6 +107,7 @@ def env(db):
         "advisor": advisor,
         "colleague": colleague,
         "workspace": workspace,
+        "root": root,
         "group": group,
         "admin_client": client_for(admin),
         "student_client": student_client,
@@ -134,7 +136,7 @@ class TestReportCreation:
         assert payload["period_start"] == str(timezone.localdate() - timedelta(days=timezone.localdate().weekday()))
         assert payload["period_end"] == str(timezone.localdate() + timedelta(days=6 - timezone.localdate().weekday()))
         assert payload["status"] == "DRAFT"
-        assert payload["visibility"] == "DIRECT_ADVISOR"
+        assert payload["visibility"] == "WORKSPACE"
         assert payload["is_backfill"] is False
         assert Page.objects.filter(pk=payload["page"]).exists()
 
@@ -189,9 +191,7 @@ class TestReportCreation:
         assert payload["template_detail"]["name"] == "Default weekly framework"
         assert payload["template_detail"]["sections_json"]["sections"][0]["id"] == "progress"
         headings = [
-            node
-            for node in payload["draft_content"]["description_json"]["content"]
-            if node.get("type") == "heading"
+            node for node in payload["draft_content"]["description_json"]["content"] if node.get("type") == "heading"
         ]
         assert headings[0]["attrs"]["id"] == "progress"
 
@@ -233,6 +233,9 @@ class TestReportCreation:
         assert response.status_code == 400
 
     def test_visibility_cannot_exceed_the_default(self, env):
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+            weekly_default_visibility="DIRECT_ADVISOR"
+        )
         response = create_report(env, visibility="WORKSPACE")
         assert response.status_code == 422
         assert response.json()["error_code"] == "report_visibility_exceeds_default"
@@ -614,10 +617,97 @@ class TestReportAccessControl:
         assert {item["id"] for item in colleague_list["results"]} == {unit["id"]}
 
     def test_direct_advisor_scope_default(self, env):
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+            weekly_default_visibility="DIRECT_ADVISOR"
+        )
         report = create_report(env).json()
         env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
         advisor_list = env["advisor_client"].get(env["url"]).json()
         assert {item["id"] for item in advisor_list["results"]} == {report["id"]}
+
+    def test_confidential_subtree_hides_history_and_new_weekly_reports_in_real_time(self, env):
+        outsider = make_user(first_name="Outsider", email="outsider@example.com")
+        principal = make_user(first_name="Principal", email="principal@example.com")
+        manager = make_user(first_name="Manager", email="manager@example.com")
+        for user in (outsider, principal, manager):
+            add_workspace_member(env["workspace"], user)
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=env["root"],
+            user=manager,
+            org_role=OrgUnitMember.OrgRole.PI,
+            is_primary=True,
+        )
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(main_pi=principal)
+
+        public_group = create_unit(env["workspace"], "Public Group", env["root"])
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=public_group,
+            user=outsider,
+            org_role=OrgUnitMember.OrgRole.REVIEWER,
+            is_primary=True,
+        )
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=public_group,
+            user=principal,
+            org_role=OrgUnitMember.OrgRole.REVIEWER,
+            is_primary=True,
+        )
+        confidential_parent = create_unit(env["workspace"], "Confidential Institute", env["root"])
+        moved = env["admin_client"].patch(
+            f"/api/research/workspaces/{env['workspace'].slug}/org-units/{env['group'].id}/",
+            {"parent": str(confidential_parent.id)},
+            format="json",
+        )
+        assert moved.status_code == 200
+        env["group"].refresh_from_db()
+
+        historical = create_report(env, period_key="2026-W20").json()
+        assert historical["visibility"] == "WORKSPACE"
+        env["student_client"].post(f"{env['url']}{historical['id']}/submit/", {}, format="json")
+        outsider_client = client_for(outsider)
+        principal_client = client_for(principal)
+        manager_client = client_for(manager)
+
+        assert outsider_client.get(f"{env['url']}{historical['id']}/").status_code == 200
+        assert outsider_client.get(f"{env['url']}{historical['id']}/comment-threads/").status_code == 200
+        assert outsider_client.get(f"{env['url']}{historical['id']}/attachments/").status_code == 200
+
+        confidential_parent.weekly_report_confidential = True
+        confidential_parent.save(update_fields=["weekly_report_confidential"])
+
+        assert outsider_client.get(env["url"]).json()["count"] == 0
+        assert outsider_client.get(f"{env['url']}{historical['id']}/").status_code == 404
+        assert outsider_client.get(f"{env['url']}{historical['id']}/comment-threads/").status_code == 404
+        assert outsider_client.get(f"{env['url']}{historical['id']}/attachments/").status_code == 404
+        author_detail = env["student_client"].get(f"{env['url']}{historical['id']}/").json()
+        assert author_detail["visibility"] == "WORKSPACE"
+        assert author_detail["effective_visibility"] == "UNIT"
+        assert author_detail["weekly_confidential"] is True
+        assert historical["id"] in {item["id"] for item in env["colleague_client"].get(env["url"]).json()["results"]}
+        assert historical["id"] in {item["id"] for item in env["advisor_client"].get(env["url"]).json()["results"]}
+        assert historical["id"] in {item["id"] for item in manager_client.get(env["url"]).json()["results"]}
+        assert historical["id"] in {item["id"] for item in principal_client.get(env["url"]).json()["results"]}
+
+        widened = create_report(env, period_key="2026-W21", visibility="WORKSPACE")
+        assert widened.status_code == 422
+        assert widened.json()["error_code"] == "report_visibility_exceeds_default"
+        narrowed = create_report(env, period_key="2026-W22").json()
+        assert narrowed["visibility"] == "UNIT"
+        access = env["student_client"].get(f"{env['url']}{narrowed['id']}/access/").json()
+        assert access["default_visibility"] == "UNIT"
+        custom = env["student_client"].patch(
+            f"{env['url']}{narrowed['id']}/access/",
+            {"grants": [{"grantee_user": str(outsider.id)}]},
+            format="json",
+        )
+        assert custom.status_code == 422
+
+        confidential_parent.weekly_report_confidential = False
+        confidential_parent.save(update_fields=["weekly_report_confidential"])
+        assert outsider_client.get(env["url"]).json()["count"] == 1
 
     def test_joint_advisor_reads_formal_report_but_cannot_review_it(self, env):
         joint = make_user(first_name="JointAdvisor", email="joint@example.com")
@@ -649,6 +739,9 @@ class TestReportAccessControl:
         assert denied.status_code == 403
 
     def test_same_unit_advisor_without_binding_cannot_read_formal_report(self, env):
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+            weekly_default_visibility="DIRECT_ADVISOR"
+        )
         unbound = make_user(first_name="UnboundAdvisor", email="unbound@example.com")
         add_workspace_member(env["workspace"], unbound)
         OrgUnitMember.objects.create(
@@ -668,6 +761,9 @@ class TestReportAccessControl:
         assert response.status_code == 404
 
     def test_author_can_narrow_but_not_widen(self, env):
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+            weekly_default_visibility="DIRECT_ADVISOR"
+        )
         report = create_report(env).json()
         access_url = f"{env['url']}{report['id']}/access/"
 
@@ -680,6 +776,9 @@ class TestReportAccessControl:
         assert narrowed.json()["can_widen"] is False
 
     def test_custom_grants_cannot_expand_a_direct_advisor_policy_to_a_colleague(self, env):
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+            weekly_default_visibility="DIRECT_ADVISOR"
+        )
         report = create_report(env).json()
         access_url = f"{env['url']}{report['id']}/access/"
         response = env["student_client"].patch(
@@ -691,6 +790,9 @@ class TestReportAccessControl:
         assert ReportAccessGrant.objects.filter(report_id=report["id"], is_revoked=False).count() == 0
 
     def test_custom_grant_can_select_an_existing_direct_advisor(self, env):
+        WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(
+            weekly_default_visibility="DIRECT_ADVISOR"
+        )
         report = create_report(env).json()
         response = env["student_client"].patch(
             f"{env['url']}{report['id']}/access/",

@@ -12,6 +12,7 @@ import {
   REPORT_STATUS_LABELS,
   REPORT_TYPE_LABELS,
   REPORT_VISIBILITIES,
+  REPORT_VISIBILITY_ORDER,
   REPORT_VISIBILITY_LABELS,
 } from "@plane/constants";
 import type { TReportVisibility } from "@plane/constants";
@@ -77,6 +78,13 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const currentUserId = research.identity?.user.id;
   const readState = report ? reportReadState(report) : null;
   const authorName = report?.owner_detail?.display_name || report?.owner_detail?.email || report?.owner;
+  const effectiveVisibility = report?.effective_visibility ?? report?.visibility;
+  const weeklyConfidential = report?.weekly_confidential ?? false;
+  const visibilityOptions = REPORT_VISIBILITIES.filter(
+    (visibility) =>
+      visibility !== "CUSTOM" &&
+      (!weeklyConfidential || REPORT_VISIBILITY_ORDER[visibility] <= REPORT_VISIBILITY_ORDER.UNIT)
+  );
 
   useEffect(() => {
     void (async () => {
@@ -172,7 +180,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
       setPendingAction("visibility");
       try {
         await research.updateReportVisibility(workspaceSlug, reportId, visibility);
-        await research.fetchReports(workspaceSlug);
+        await Promise.all([research.fetchReport(workspaceSlug, reportId), research.fetchReports(workspaceSlug)]);
         setErrorKey(null);
         setToast({
           type: TOAST_TYPE.SUCCESS,
@@ -296,13 +304,13 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
 
           <ResearchDetailSurface title={t("research.reports.visibility")} collapsible>
             <div className="mt-2 flex flex-wrap gap-2">
-              {REPORT_VISIBILITIES.filter((visibility) => visibility !== "CUSTOM").map((visibility) => (
+              {visibilityOptions.map((visibility) => (
                 <button
                   key={visibility}
                   type="button"
                   disabled={!report.can_edit || pendingAction !== null}
                   className={`rounded-md border px-2 py-1 text-12 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    report.visibility === visibility
+                    effectiveVisibility === visibility
                       ? "border-accent-primary text-accent-primary"
                       : "border-subtle text-tertiary hover:text-secondary"
                   }`}
@@ -313,6 +321,9 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
               ))}
             </div>
             <p className="mt-2 text-11 text-tertiary">{t("research.reports.visibility_hint")}</p>
+            {weeklyConfidential && (
+              <p className="mt-1 text-11 text-tertiary">{t("research.reports.visibility_confidential_hint")}</p>
+            )}
           </ResearchDetailSurface>
 
           <ModalCore isOpen={showReturn} handleClose={() => pendingAction === null && setShowReturn(false)}>

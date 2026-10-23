@@ -11,7 +11,12 @@ from plane.db.models import (
     ReportReviewLog,
 )
 
-from plane.research.utils.reports import supervisor_reader_ids
+from plane.research.utils.reports import (
+    effective_report_visibility,
+    report_resource,
+    supervisor_reader_ids,
+    weekly_report_is_confidential,
+)
 
 from .org import ResearchUserSerializer
 from .template import ReportTemplateGuideSerializer
@@ -77,6 +82,8 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     can_edit = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
     can_review = serializers.SerializerMethodField()
+    effective_visibility = serializers.SerializerMethodField()
+    weekly_confidential = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
     team_projects = serializers.SerializerMethodField()
     latest_official_version = serializers.SerializerMethodField()
@@ -110,6 +117,8 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             "timezone",
             "status",
             "visibility",
+            "effective_visibility",
+            "weekly_confidential",
             "is_backfill",
             "submitted_at",
             "accepted_at",
@@ -134,6 +143,12 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             return None
         return {"id": str(obj.org_unit_id), "name": obj.org_unit.name, "unit_type": obj.org_unit.unit_type}
 
+    def get_effective_visibility(self, obj):
+        return effective_report_visibility(obj, cache=self.context.get("confidential_cache"))
+
+    def get_weekly_confidential(self, obj):
+        return weekly_report_is_confidential(obj, cache=self.context.get("confidential_cache"))
+
     def get_can_edit(self, obj):
         request = self.context.get("request")
         if request is None:
@@ -145,12 +160,16 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
         if context is None:
             return False
         from plane.research.utils.acl import check_access
-        from plane.research.utils.reports import report_resource
 
         request = self.context.get("request")
         if request is None:
             return False
-        return check_access(request.user, "review", report_resource(obj), context=context)
+        return check_access(
+            request.user,
+            "review",
+            report_resource(obj, self.context.get("confidential_cache")),
+            context=context,
+        )
 
     def get_can_delete(self, obj):
         request = self.context.get("request")
@@ -233,11 +252,7 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
 
     def get_draft_content(self, obj):
         request = self.context.get("request")
-        if (
-            request is None
-            or obj.owner_id != request.user.id
-            or not self.context.get("include_draft_content", False)
-        ):
+        if request is None or obj.owner_id != request.user.id or not self.context.get("include_draft_content", False):
             return None
         return {
             "description_json": obj.page.description_json,
@@ -251,8 +266,6 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             project_id = next((link.project_id for link in prefetched if link.deleted_at is None), None)
         else:
             project_id = (
-                obj.page.project_pages.filter(deleted_at__isnull=True)
-                .values_list("project_id", flat=True)
-                .first()
+                obj.page.project_pages.filter(deleted_at__isnull=True).values_list("project_id", flat=True).first()
             )
         return str(project_id) if project_id else None

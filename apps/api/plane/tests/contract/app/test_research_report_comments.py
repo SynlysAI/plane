@@ -15,6 +15,7 @@ from plane.db.models import (
     OrgUnit,
     OrgUnitMember,
     Page,
+    PeriodicReport,
     PeriodicReportComment,
     PeriodicReportCommentFeedback,
     ResearchAuditEvent,
@@ -265,6 +266,7 @@ def test_new_comments_use_generic_discussion_and_legacy_types_stay_read_only(env
 
 def test_unauthorized_workspace_member_cannot_read_or_comment(env):
     report = make_report(env)
+    PeriodicReport.objects.filter(pk=report["id"]).update(visibility="PRIVATE")
     response = env["colleague_client"].get(threads_url(env, report["id"]))
     posted = create_thread(env, report, client=env["colleague_client"])
 

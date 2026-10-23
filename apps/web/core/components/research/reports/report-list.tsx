@@ -410,7 +410,13 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                     })()}
                   </TableCell>
                   <TableCell className="text-tertiary">
-                    {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}
+                    {report.weekly_confidential
+                      ? t("research.report_visibility.unit_confidential")
+                      : t(
+                          `research.report_visibility.${(
+                            report.effective_visibility ?? report.visibility
+                          ).toLowerCase()}`
+                        )}
                   </TableCell>
                   <TableCell className="text-right text-tertiary tabular-nums">
                     {formatResearchDate(report.updated_at, currentLocale)}

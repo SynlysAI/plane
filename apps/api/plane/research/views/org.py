@@ -71,6 +71,8 @@ def _unit_payload(payload):
         data["unit_type"] = str(payload.get("unit_type") or "").strip().upper()
     if "business_category" in payload:
         data["business_category"] = str(payload.get("business_category") or "").strip().upper() or None
+    if "weekly_report_confidential" in payload:
+        data["weekly_report_confidential"] = truthy(payload.get("weekly_report_confidential"))
     if "sort_order" in payload:
         try:
             data["sort_order"] = float(payload.get("sort_order"))
@@ -268,6 +270,7 @@ class ResearchOrgUnitListCreateEndpoint(ResearchAPIView):
 
         unit_type = data.get("unit_type") or ""
         business_category = data.get("business_category")
+        weekly_report_confidential = data.get("weekly_report_confidential", False)
         if business_category and business_category not in OrgUnit.BusinessCategory.values:
             return research_error(ResearchErrorCode.ORG_UNIT_TYPE_INVALID, "Unknown business category.")
         if parent is None:
@@ -297,6 +300,11 @@ class ResearchOrgUnitListCreateEndpoint(ResearchAPIView):
                 )
             if not user_can_manage_org_unit(request.user, workspace, parent):
                 return research_permission_denied()
+            if weekly_report_confidential:
+                return research_error(
+                    ResearchErrorCode.ORG_UNIT_WEEKLY_CONFIDENTIAL_INVALID,
+                    "Only a non-root org unit can mark weekly reports confidential.",
+                )
 
         sort_order = data.get("sort_order")
         if sort_order is None:
@@ -310,6 +318,7 @@ class ResearchOrgUnitListCreateEndpoint(ResearchAPIView):
                     parent=parent,
                     unit_type=unit_type,
                     business_category=business_category,
+                    weekly_report_confidential=weekly_report_confidential,
                     sort_order=sort_order,
                     depth=(parent.depth + 1) if parent else 0,
                     path="",
@@ -334,6 +343,7 @@ class ResearchOrgUnitListCreateEndpoint(ResearchAPIView):
                 "unit_type": unit.unit_type,
                 "parent": str(parent.id) if parent else None,
                 "depth": unit.depth,
+                "weekly_report_confidential": unit.weekly_report_confidential,
             },
             request=request,
         )
@@ -371,7 +381,11 @@ class ResearchOrgUnitDetailEndpoint(ResearchAPIView):
             return research_permission_denied()
 
         data = _unit_payload(request.data)
-        previous = {"name": unit.name, "parent": str(unit.parent_id) if unit.parent_id else None}
+        previous = {
+            "name": unit.name,
+            "parent": str(unit.parent_id) if unit.parent_id else None,
+            "weekly_report_confidential": unit.weekly_report_confidential,
+        }
         fields = []
 
         if "name" in data:
@@ -407,6 +421,16 @@ class ResearchOrgUnitDetailEndpoint(ResearchAPIView):
                 return research_error(ResearchErrorCode.ORG_UNIT_TYPE_INVALID, "Unknown business category.")
             unit.business_category = data["business_category"]
             fields.append("business_category")
+
+        if "weekly_report_confidential" in data:
+            if data["weekly_report_confidential"] and unit.unit_type == OrgUnit.UnitType.ROOT:
+                return research_error(
+                    ResearchErrorCode.ORG_UNIT_WEEKLY_CONFIDENTIAL_INVALID,
+                    "The root org unit cannot mark weekly reports confidential.",
+                )
+            if data["weekly_report_confidential"] != unit.weekly_report_confidential:
+                unit.weekly_report_confidential = data["weekly_report_confidential"]
+                fields.append("weekly_report_confidential")
 
         if "is_active" in data:
             unit.is_active = data["is_active"]
@@ -472,7 +496,11 @@ class ResearchOrgUnitDetailEndpoint(ResearchAPIView):
                 resource_id=unit.id,
                 org_unit=unit,
                 actor=request.user,
-                metadata={"previous": previous, "name": unit.name},
+                metadata={
+                    "previous": previous,
+                    "name": unit.name,
+                    "weekly_report_confidential": unit.weekly_report_confidential,
+                },
                 request=request,
             )
 

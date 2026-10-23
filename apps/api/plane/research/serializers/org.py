@@ -34,6 +34,7 @@ class OrgUnitSerializer(serializers.ModelSerializer):
             "depth",
             "unit_type",
             "business_category",
+            "weekly_report_confidential",
             "sort_order",
             "is_active",
             "created_at",

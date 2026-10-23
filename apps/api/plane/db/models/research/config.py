@@ -75,6 +75,7 @@ class WorkspaceResearchSetting(BaseModel):
     weekly_default_visibility = models.CharField(
         max_length=32,
         choices=ReportVisibility.choices,
+        default=ReportVisibility.WORKSPACE,
         null=True,
         blank=True,
     )
@@ -132,8 +133,8 @@ class WorkspaceResearchSetting(BaseModel):
         return f"{self.workspace_id} <research>"
 
     def default_visibility_for(self, report_type):
-        if report_type == "WEEKLY" and self.weekly_default_visibility:
-            return self.weekly_default_visibility
+        if report_type == "WEEKLY":
+            return self.weekly_default_visibility or ReportVisibility.WORKSPACE
         if report_type == "MONTHLY" and self.monthly_default_visibility:
             return self.monthly_default_visibility
         return self.default_report_visibility

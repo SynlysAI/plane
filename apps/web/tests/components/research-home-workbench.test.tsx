@@ -454,6 +454,11 @@ it("keeps enabled widgets on a natural long page and persists density", async ()
   }
   const grid = container.querySelector("[data-testid='workspace-home-columns']");
   expect(grid?.className).not.toContain("xl:flex-1");
+  const workbench = grid?.parentElement;
+  expect(workbench?.className).toContain("min-h-full");
+  expect(workbench?.className).not.toContain("overflow-hidden");
+  expect(workbench?.className).not.toContain("xl:h-full");
+  expect(workbench?.className).not.toContain("xl:flex-1");
 
   const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
   await act(async () => customize?.click());

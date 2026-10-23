@@ -362,11 +362,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
   return (
-    <div
-      className={`flex min-w-0 flex-col gap-5 ${
-        density === "compact" ? "min-h-full xl:h-full xl:min-h-0 xl:flex-1 xl:overflow-hidden" : "min-h-full"
-      }`}
-    >
+    <div className="flex min-h-full min-w-0 flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-22 font-semibold text-primary">{t("research.home_workbench.title")}</h1>

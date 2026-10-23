@@ -346,6 +346,7 @@ def collect_report_todos(workspace, user, scope):
     if not workspace_research_sections(workspace).get("reports"):
         return []
     context = build_actor_context(user, workspace.id)
+    confidential_cache = {}
     statuses = (
         PeriodicReport.Status.DRAFT,
         PeriodicReport.Status.SUBMITTED,
@@ -360,7 +361,7 @@ def collect_report_todos(workspace, user, scope):
     if scope == "mine":
         queryset = queryset.filter(owner=user)
     else:
-        queryset = visible_reports_queryset(queryset, context)
+        queryset = visible_reports_queryset(queryset, context, confidential_cache=confidential_cache)
     result = []
     for report in queryset:
         report_handlers = _report_assignees(report)
@@ -376,12 +377,12 @@ def collect_report_todos(workspace, user, scope):
             ).exists()
         )
         editable = report.status in (PeriodicReport.Status.DRAFT, PeriodicReport.Status.NEEDS_REVISION)
-        can_edit = editable and check_access(user, "edit", report_resource(report), context=context)
+        can_edit = editable and check_access(user, "edit", report_resource(report, confidential_cache), context=context)
         can_return = report.status == PeriodicReport.Status.SUBMITTED and check_access(
-            user, "return", report_resource(report), context=context
+            user, "return", report_resource(report, confidential_cache), context=context
         )
         can_accept = report.status == PeriodicReport.Status.SUBMITTED and check_access(
-            user, "accept", report_resource(report), context=context
+            user, "accept", report_resource(report, confidential_cache), context=context
         )
         decisions = {
             "view": True,

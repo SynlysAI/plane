@@ -22,6 +22,7 @@ const RESEARCH_ERROR_KEYS: Record<string, string> = {
   org_unit_root_undeletable: "research.errors.org_unit_root_undeletable",
   org_unit_parent_invalid: "research.errors.org_unit_parent_invalid",
   org_unit_type_invalid: "research.errors.org_unit_type_invalid",
+  org_unit_weekly_confidential_invalid: "research.errors.org_unit_weekly_confidential_invalid",
   org_member_exists: "research.errors.org_member_exists",
   org_member_invalid: "research.errors.org_member_invalid",
   org_member_not_found: "research.errors.org_member_not_found",

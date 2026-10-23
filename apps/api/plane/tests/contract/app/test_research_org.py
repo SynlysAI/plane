@@ -190,6 +190,59 @@ class TestResearchOrgTreeApi:
         assert str(moved.parent_id) == basic_research["id"]
         assert moved.business_category == OrgUnit.BusinessCategory.BASIC_RESEARCH
 
+    def test_weekly_confidential_switch_is_audited_and_reversible(self, env):
+        env.admin_client.get(org_units_url(env.workspace))
+        root = OrgUnit.objects.get(workspace=env.workspace)
+        lab = create_unit(env.admin_client, env.workspace, "Confidential Lab", root, "LAB").json()
+
+        enabled = env.admin_client.patch(
+            org_units_url(env.workspace, f"{lab['id']}/"),
+            {"weekly_report_confidential": True},
+            format="json",
+        )
+
+        assert enabled.status_code == 200
+        assert enabled.json()["weekly_report_confidential"] is True
+        assert OrgUnit.objects.get(pk=lab["id"]).weekly_report_confidential is True
+        event = ResearchAuditEvent.objects.filter(
+            workspace=env.workspace,
+            action="org.unit.update",
+            resource_id=lab["id"],
+        ).first()
+        assert event is not None
+        assert event.metadata["previous"]["weekly_report_confidential"] is False
+        assert event.metadata["weekly_report_confidential"] is True
+
+        disabled = env.admin_client.patch(
+            org_units_url(env.workspace, f"{lab['id']}/"),
+            {"weekly_report_confidential": False},
+            format="json",
+        )
+        assert disabled.status_code == 200
+        assert disabled.json()["weekly_report_confidential"] is False
+
+    def test_root_and_unauthorised_member_cannot_enable_weekly_confidential(self, env):
+        env.admin_client.get(org_units_url(env.workspace))
+        root = OrgUnit.objects.get(workspace=env.workspace)
+        lab = create_unit(env.admin_client, env.workspace, "Lab", root, "LAB").json()
+
+        root_response = env.admin_client.patch(
+            org_units_url(env.workspace, f"{root.id}/"),
+            {"weekly_report_confidential": True},
+            format="json",
+        )
+        assert root_response.status_code == 400
+        assert root_response.json()["error_code"] == "org_unit_weekly_confidential_invalid"
+        assert OrgUnit.objects.get(pk=root.id).weekly_report_confidential is False
+
+        forbidden = env.member_client.patch(
+            org_units_url(env.workspace, f"{lab['id']}/"),
+            {"weekly_report_confidential": True},
+            format="json",
+        )
+        assert forbidden.status_code == 403
+        assert OrgUnit.objects.get(pk=lab["id"]).weekly_report_confidential is False
+
     def test_soft_delete_removes_subtree_from_tree_but_keeps_history(self, env):
         env.admin_client.get(org_units_url(env.workspace))
         root = OrgUnit.objects.get(workspace=env.workspace)
@@ -212,9 +265,7 @@ class TestResearchOrgTreeApi:
         # history is retained in the database and in the audit trail
         assert OrgUnit.all_objects.filter(pk__in=[lab["id"], group["id"]]).count() == 2
         assert OrgUnitMember.objects.filter(org_unit_id=group["id"]).count() == 1
-        assert ResearchAuditEvent.objects.filter(
-            workspace=env.workspace, action="org.unit.delete"
-        ).exists()
+        assert ResearchAuditEvent.objects.filter(workspace=env.workspace, action="org.unit.delete").exists()
 
     def test_root_unit_cannot_be_deleted(self, env):
         env.admin_client.get(org_units_url(env.workspace))
@@ -232,9 +283,7 @@ class TestResearchOrgTreeApi:
             {"name": "College of Science"},
             format="json",
         )
-        actions = set(
-            ResearchAuditEvent.objects.filter(workspace=env.workspace).values_list("action", flat=True)
-        )
+        actions = set(ResearchAuditEvent.objects.filter(workspace=env.workspace).values_list("action", flat=True))
         assert {"org.unit.create", "org.unit.update"} <= actions
         event = ResearchAuditEvent.objects.filter(action="org.unit.create").first()
         assert event.actor_id == env.admin.id
@@ -288,9 +337,7 @@ class TestResearchOrgMembershipApi:
     def test_duplicate_role_assignment_is_rejected(self, env):
         group = self._bootstrap(env)
         payload = {"user": str(env.member.id), "org_role": "PI"}
-        created = env.admin_client.post(
-            org_units_url(env.workspace, f"{group['id']}/members/"), payload, format="json"
-        )
+        created = env.admin_client.post(org_units_url(env.workspace, f"{group['id']}/members/"), payload, format="json")
         assert created.status_code == 201
         duplicate = env.admin_client.post(
             org_units_url(env.workspace, f"{group['id']}/members/"), payload, format="json"
@@ -318,9 +365,7 @@ class TestResearchOrgMembershipApi:
         assert pi_user_ids == {str(successor.id)}
 
         # the previous PI keeps their history but loses the management role
-        assert not OrgUnitMember.objects.filter(
-            org_unit_id=group["id"], user=env.member, org_role="PI"
-        ).exists()
+        assert not OrgUnitMember.objects.filter(org_unit_id=group["id"], user=env.member, org_role="PI").exists()
         event = ResearchAuditEvent.objects.filter(action="org.pi.transfer").first()
         assert event is not None
         assert str(env.member.id) in event.metadata["removed"]
@@ -358,9 +403,7 @@ class TestResearchOrgMembershipApi:
             {"user": str(env.member.id), "org_role": "PI"},
             format="json",
         ).json()
-        response = env.admin_client.delete(
-            org_units_url(env.workspace, f"{group['id']}/members/{member['id']}/")
-        )
+        response = env.admin_client.delete(org_units_url(env.workspace, f"{group['id']}/members/{member['id']}/"))
         assert response.status_code == 204
         assert not OrgUnitMember.objects.filter(pk=member["id"]).exists()
         assert OrgUnitMember.all_objects.filter(pk=member["id"]).exists()
@@ -404,20 +447,12 @@ class TestResearchOrgMembershipApi:
             is_primary=True,
         )
 
-        response = env.admin_client.get(
-            f"/api/research/workspaces/{env.workspace.slug}/org/incomplete/"
-        )
+        response = env.admin_client.get(f"/api/research/workspaces/{env.workspace.slug}/org/incomplete/")
 
         assert response.status_code == 200
-        assert str(unassigned.id) in {
-            item["id"] for item in response.json()["missing_primary_org"]
-        }
-        assert str(student.id) in {
-            item["id"] for item in response.json()["missing_primary_advisor"]
-        }
-        assert group["id"] in {
-            item["id"] for item in response.json()["unclassified_org_units"]
-        }
+        assert str(unassigned.id) in {item["id"] for item in response.json()["missing_primary_org"]}
+        assert str(student.id) in {item["id"] for item in response.json()["missing_primary_advisor"]}
+        assert group["id"] in {item["id"] for item in response.json()["unclassified_org_units"]}
 
 
 @pytest.mark.django_db
@@ -573,9 +608,7 @@ class TestResearchMentorBindingsApi:
     def test_manager_cannot_bind_mentee_by_spoofing_a_managed_org_unit(self, env):
         managed_group = self._group(env)
         root = OrgUnit.objects.get(workspace=env.workspace, unit_type=OrgUnit.UnitType.ROOT)
-        actual_group = create_unit(
-            env.admin_client, env.workspace, "Actual group", root, "GROUP"
-        ).json()
+        actual_group = create_unit(env.admin_client, env.workspace, "Actual group", root, "GROUP").json()
         manager = env.member
         student = make_user(first_name="Student")
         advisor = make_user(first_name="Advisor")
@@ -600,16 +633,12 @@ class TestResearchMentorBindingsApi:
         )
 
         assert response.status_code == 403
-        assert not MentorBinding.objects.filter(
-            workspace=env.workspace, mentee=student, mentor=advisor
-        ).exists()
+        assert not MentorBinding.objects.filter(workspace=env.workspace, mentee=student, mentor=advisor).exists()
 
     def test_secondary_membership_does_not_grant_mentor_binding_control(self, env):
         managed_group = self._group(env)
         root = OrgUnit.objects.get(workspace=env.workspace, unit_type=OrgUnit.UnitType.ROOT)
-        primary_group = create_unit(
-            env.admin_client, env.workspace, "Primary group", root, "GROUP"
-        ).json()
+        primary_group = create_unit(env.admin_client, env.workspace, "Primary group", root, "GROUP").json()
         student = make_user(first_name="Student")
         advisor = make_user(first_name="Advisor")
         for user in (student, advisor):
@@ -675,11 +704,15 @@ class TestResearchMentorBindingsApi:
             org_role=OrgUnitMember.OrgRole.REVIEWER,
             is_primary=True,
         )
-        binding = client_for(env.member).post(
-            mentors_url(env.workspace),
-            {"mentee": str(student.id), "mentor": str(advisor.id)},
-            format="json",
-        ).json()
+        binding = (
+            client_for(env.member)
+            .post(
+                mentors_url(env.workspace),
+                {"mentee": str(student.id), "mentor": str(advisor.id)},
+                format="json",
+            )
+            .json()
+        )
         env.admin_client.post(
             org_units_url(env.workspace, f"{new_group['id']}/members/"),
             {
@@ -727,6 +760,4 @@ class TestResearchMentorBindingsApi:
         response = client_for(env.member).get(mentors_url(env.workspace))
 
         assert response.status_code == 200
-        assert {item["mentee"] for item in response.json()["results"]} == {
-            str(visible_student.id)
-        }
+        assert {item["mentee"] for item in response.json()["results"]} == {str(visible_student.id)}

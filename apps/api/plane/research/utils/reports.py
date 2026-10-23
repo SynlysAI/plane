@@ -9,6 +9,10 @@ from django.utils import timezone
 
 from plane.db.models import ReportAccessGrant
 from plane.research.utils.acl import ResearchResource, direct_advisor_ids
+from plane.research.utils.settings import (
+    org_unit_is_weekly_confidential,
+    weekly_confidential_paths,
+)
 
 # Only the transitions drawn in the PRD state diagram are allowed (P0-RPT-06).
 STATE_TRANSITIONS = {
@@ -49,13 +53,44 @@ def active_grants(report):
     return grants
 
 
-def report_resource(report) -> ResearchResource:
+def weekly_report_is_confidential(report, cache=None):
+    """判断报告是否位于周报保密子树。
+
+    Args:
+        report: 周期报告对象。
+        cache: 可选的请求级字典，用于避免列表序列化重复查询。
+
+    Returns:
+        报告是否需要按保密组展示。
+    """
+    if report.report_type != "WEEKLY":
+        return False
+    return org_unit_is_weekly_confidential(report.org_unit, report.workspace_id, cache=cache)
+
+
+def effective_report_visibility(report, cache=None):
+    """返回读取权限使用的有效可见性。
+
+    Args:
+        report: 周期报告对象。
+        cache: 可选的请求级字典，用于避免列表序列化重复查询。
+
+    Returns:
+        保密组内历史全员可见周报会被实时投影为本组可见。
+    """
+    if report.report_type == "WEEKLY" and report.visibility == "WORKSPACE":
+        if weekly_report_is_confidential(report, cache=cache):
+            return "UNIT"
+    return report.visibility
+
+
+def report_resource(report, confidential_cache=None) -> ResearchResource:
     return ResearchResource(
         kind="report",
         workspace_id=report.workspace_id,
         owner_id=report.owner_id,
         org_unit_id=report.org_unit_id,
-        visibility=report.visibility,
+        visibility=effective_report_visibility(report, cache=confidential_cache),
         state=report.status,
         # A returned report has a new private revision while readers receive the
         # last immutable snapshot. Before the first submission it is all draft.
@@ -82,7 +117,7 @@ def supervisor_reader_ids(report, actor_context, mentor_cache=None):
     return reader_ids
 
 
-def visible_reports_queryset(queryset, context):
+def visible_reports_queryset(queryset, context, confidential_cache=None):
     """Apply the complete report visibility matrix in SQL before pagination."""
     if context.is_workspace_admin:
         return queryset
@@ -91,6 +126,19 @@ def visible_reports_queryset(queryset, context):
     if context.is_main_pi:
         audience = formal
     else:
+        confidential_paths = weekly_confidential_paths(context.workspace_id, cache=confidential_cache)
+        confidential_subtree = Q()
+        for path in confidential_paths:
+            normalized_path = path if path.endswith("/") else f"{path}/"
+            confidential_subtree |= Q(org_unit__path__startswith=normalized_path)
+        confidential_weekly = Q(report_type="WEEKLY") & confidential_subtree
+        workspace_audience = Q(visibility="WORKSPACE")
+        if confidential_paths:
+            workspace_audience &= ~confidential_weekly
+            if context.unit_ids:
+                workspace_audience |= (
+                    Q(visibility="WORKSPACE") & confidential_weekly & Q(org_unit_id__in=context.unit_ids)
+                )
         formal_audience = Q()
         if context.managing_unit_ids:
             formal_audience |= Q(org_unit_id__in=context.managing_unit_ids)
@@ -104,7 +152,7 @@ def visible_reports_queryset(queryset, context):
                 visibility="UNIT",
                 org_unit_id__in=context.unit_ids,
             )
-        formal_audience |= Q(visibility="WORKSPACE")
+        formal_audience |= workspace_audience
 
         active_grant = Q(
             visibility="CUSTOM",

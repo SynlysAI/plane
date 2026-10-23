@@ -66,6 +66,7 @@ export type TOrgUnit = {
   depth: number;
   unit_type: TOrgUnitType;
   business_category: TOrgBusinessCategory | null;
+  weekly_report_confidential?: boolean;
   sort_order: number;
   is_active: boolean;
   created_at: string;
@@ -801,6 +802,10 @@ export type TPeriodicReport = {
   timezone: string;
   status: TReportStatus;
   visibility: TReportVisibility;
+  /** Effective visibility after group-level weekly confidentiality. */
+  effective_visibility?: TReportVisibility;
+  /** Whether the report's organisation subtree marks weekly reports confidential. */
+  weekly_confidential?: boolean;
   is_backfill: boolean;
   submitted_at: string | null;
   accepted_at: string | null;
