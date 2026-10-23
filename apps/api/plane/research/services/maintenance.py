@@ -80,7 +80,9 @@ def _deletion_order(models, conditions):
             for field in model._meta.get_fields()
             if getattr(field, "many_to_one", False)
             for _ in (None,)
-            if field.related_model in remaining
+            # A self-reference is cleared by the same DELETE statement and must
+            # not keep the table in a circular-reference fallback forever.
+            if field.related_model in remaining and field.related_model is not model
         }
         leaves = [model for model in remaining if model not in referenced]
         if not leaves:

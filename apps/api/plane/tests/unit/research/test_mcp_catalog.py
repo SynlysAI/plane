@@ -29,7 +29,8 @@ def test_scoped_catalogue_cannot_advertise_ungranted_tools():
     assert [tool["name"] for tool in result] == ["get_research_node_context"]
     result[0]["inputSchema"]["properties"]["node_id"]["type"] = "object"
     assert tools_for(grant)[0]["inputSchema"]["properties"]["node_id"]["type"] == "string"
-    assert len(TOOL_NAMES) == 10
+    assert len(TOOL_NAMES) == 11
+    assert "list_research_report_feedback" in TOOL_NAMES
     assert all(tool["annotations"]["readOnlyHint"] for tool in tools_for())
 
 
