@@ -204,7 +204,13 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
 
   useEffect(() => {
     if (!isCreateDialogOpen) return;
-    void research.fetchReportTemplateOptions(workspaceSlug, { report_type: reportType }).catch(() => undefined);
+    void research
+      .fetchReportTemplateOptions(workspaceSlug, { report_type: reportType })
+      .then((loaded) => {
+        const defaultTemplate = loaded.find((template) => template.report_type === reportType && template.is_default);
+        return setTemplateId(defaultTemplate?.id ?? "");
+      })
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCreateDialogOpen, reportType, workspaceSlug]);
 
@@ -491,6 +497,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>
                   {template.name}
+                  {template.is_default ? ` · ${t("research.templates.default_option")}` : ""}
                 </option>
               ))}
               {!templates.length && (

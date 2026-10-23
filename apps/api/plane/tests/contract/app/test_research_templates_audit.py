@@ -16,6 +16,29 @@ from plane.tests.research_fixtures import (
 pytestmark = pytest.mark.contract
 
 
+def structured_sections():
+    """Return a compact structured-template payload used by contract tests."""
+    return {
+        "version": 1,
+        "guidance": "按实验室选题判据填写。",
+        "sections": [
+            {
+                "id": "uniqueness",
+                "title": "独特性",
+                "guidance": "你想做什么？",
+                "required": True,
+                "max_chars": 100,
+            },
+            {
+                "id": "feasibility",
+                "title": "可行性",
+                "guidance": "说明风险、成本和时间。",
+                "required": False,
+            },
+        ],
+    }
+
+
 @pytest.fixture(autouse=True)
 def research_module_on(settings):
     settings.RESEARCH_MODULE_ENABLED = True
@@ -66,6 +89,105 @@ class TestReportTemplateApi:
         assert denied.status_code == 403
         assert denied.json()["error_code"] == "research_permission_denied"
 
+    def test_structured_template_returns_sections_and_generates_content(self, env):
+        created = env["admin_client"].post(
+            env["templates_url"],
+            {
+                "name": "课题报告（预开题）",
+                "scope": "STAGE_MATERIAL",
+                "stage": "PRE_OPENING",
+                "material_type": "TOPIC_DESCRIPTION",
+                "is_default": True,
+                "sections_json": structured_sections(),
+            },
+            format="json",
+        )
+
+        assert created.status_code == 201
+        payload = created.json()
+        assert payload["target_key"] == "STAGE_MATERIAL:PRE_OPENING:TOPIC_DESCRIPTION"
+        assert payload["sections_json"]["sections"][0]["id"] == "uniqueness"
+        heading_nodes = [
+            node for node in payload["content_json"]["content"] if node.get("type") == "heading"
+        ]
+        assert [node["attrs"]["id"] for node in heading_nodes] == ["uniqueness", "feasibility"]
+        assert heading_nodes[0]["content"][0]["text"] == "独特性"
+
+    def test_updating_sections_regenerates_content(self, env):
+        template = env["admin_client"].post(
+            env["templates_url"],
+            {
+                "name": "Editable weekly",
+                "report_type": "WEEKLY",
+                "sections_json": structured_sections(),
+            },
+            format="json",
+        ).json()
+
+        updated = env["admin_client"].patch(
+            f"{env['templates_url']}{template['id']}/",
+            {
+                "sections_json": {
+                    "version": 1,
+                    "guidance": "更新后的说明。",
+                    "sections": [
+                        {
+                            "id": "impact",
+                            "title": "非做不可",
+                            "guidance": "说明研究影响。",
+                            "required": True,
+                            "max_chars": 200,
+                        }
+                    ],
+                }
+            },
+            format="json",
+        )
+
+        assert updated.status_code == 200
+        headings = [
+            node for node in updated.json()["content_json"]["content"] if node.get("type") == "heading"
+        ]
+        assert [node["attrs"]["id"] for node in headings] == ["impact"]
+
+    @pytest.mark.parametrize(
+        "section,error_fragment",
+        [
+            ({"id": "bad id", "title": "标题", "guidance": "说明"}, "章节 ID"),
+            ({"id": "unique", "title": " ", "guidance": "说明"}, "章节标题"),
+            ({"id": "unique", "title": "标题", "guidance": " "}, "章节说明"),
+            ({"id": "unique", "title": "标题", "guidance": "说明", "max_chars": 0}, "字数上限"),
+        ],
+    )
+    def test_invalid_structured_sections_are_rejected(self, env, section, error_fragment):
+        response = env["admin_client"].post(
+            env["templates_url"],
+            {
+                "name": "Invalid",
+                "report_type": "WEEKLY",
+                "sections_json": {"version": 1, "sections": [section]},
+            },
+            format="json",
+        )
+
+        assert response.status_code == 400
+        assert error_fragment in response.json()["message"]
+
+    def test_duplicate_section_ids_are_rejected(self, env):
+        section = {"id": "same", "title": "标题", "guidance": "说明"}
+        response = env["admin_client"].post(
+            env["templates_url"],
+            {
+                "name": "Duplicate section",
+                "report_type": "WEEKLY",
+                "sections_json": {"version": 1, "sections": [section, section]},
+            },
+            format="json",
+        )
+
+        assert response.status_code == 400
+        assert "重复" in response.json()["message"]
+
     def test_member_cannot_create_templates(self, env):
         response = env["member_client"].post(
             env["templates_url"],
@@ -109,7 +231,37 @@ class TestReportTemplateApi:
         assert [item["name"] for item in active.json()["results"]] == ["Active weekly"]
         assert with_inactive.status_code == 200
         assert str(inactive["id"]) not in {item["id"] for item in with_inactive.json()["results"]}
-        assert set(active.json()["results"][0]) == {"id", "report_type", "name", "is_default", "is_active"}
+        assert set(active.json()["results"][0]) == {
+            "id",
+            "report_type",
+            "name",
+            "is_default",
+            "is_active",
+            "target_key",
+        }
+
+    def test_stage_templates_do_not_leak_into_report_options(self, env):
+        env["admin_client"].post(
+            env["templates_url"],
+            {"name": "Weekly", "report_type": "WEEKLY", "is_default": True},
+            format="json",
+        )
+        env["admin_client"].post(
+            env["templates_url"],
+            {
+                "name": "Pre-opening topic",
+                "scope": "STAGE_MATERIAL",
+                "stage": "PRE_OPENING",
+                "material_type": "TOPIC_DESCRIPTION",
+                "is_default": True,
+            },
+            format="json",
+        )
+        options_url = f"/api/research/workspaces/{env['workspace'].slug}/reports/template-options/"
+
+        payload = env["admin_client"].get(options_url, {"report_type": "WEEKLY"}).json()
+
+        assert [item["name"] for item in payload["results"]] == ["Weekly"]
 
     def test_duplicate_template_name_is_rejected(self, env):
         payload = {"name": "Standard", "report_type": "WEEKLY"}
@@ -139,6 +291,28 @@ class TestReportTemplateApi:
         env["admin_client"].post(
             env["templates_url"], {"name": "M", "report_type": "MONTHLY", "is_default": True}, format="json"
         )
+        assert ReportTemplate.objects.filter(is_default=True).count() == 2
+
+    def test_stage_and_report_defaults_are_scoped_by_target(self, env):
+        report = env["admin_client"].post(
+            env["templates_url"],
+            {"name": "Weekly default", "report_type": "WEEKLY", "is_default": True},
+            format="json",
+        ).json()
+        stage = env["admin_client"].post(
+            env["templates_url"],
+            {
+                "name": "Pre-opening default",
+                "scope": "STAGE_MATERIAL",
+                "stage": "PRE_OPENING",
+                "material_type": "TOPIC_DESCRIPTION",
+                "is_default": True,
+            },
+            format="json",
+        ).json()
+
+        assert report["target_key"] == "REPORT:WEEKLY"
+        assert stage["target_key"] == "STAGE_MATERIAL:PRE_OPENING:TOPIC_DESCRIPTION"
         assert ReportTemplate.objects.filter(is_default=True).count() == 2
 
     def test_update_and_soft_delete_are_audited(self, env):

@@ -275,14 +275,32 @@ export interface IResearchStore {
     workspaceSlug: string,
     params?: { period_key?: string; report_type?: string; org_unit?: string }
   ) => Promise<TReportSummary>;
-  fetchReportTemplates: (workspaceSlug: string, params?: { report_type?: string }) => Promise<TReportTemplate[]>;
+  fetchReportTemplates: (
+    workspaceSlug: string,
+    params?: {
+      scope?: string;
+      report_type?: string;
+      stage?: string;
+      material_type?: string;
+      include_inactive?: string;
+    }
+  ) => Promise<TReportTemplate[]>;
   fetchReportTemplateOptions: (
     workspaceSlug: string,
     params?: { report_type?: string }
   ) => Promise<TReportTemplateOption[]>;
   createReportTemplate: (
     workspaceSlug: string,
-    payload: { name: string; report_type: string; is_default?: boolean }
+    payload: {
+      name: string;
+      scope?: string;
+      report_type?: string;
+      stage?: string;
+      material_type?: string;
+      sections_json?: TReportTemplate["sections_json"];
+      is_default?: boolean;
+      is_active?: boolean;
+    }
   ) => Promise<TReportTemplate>;
   updateReportTemplate: (
     workspaceSlug: string,
@@ -1388,7 +1406,16 @@ export class ResearchStore implements IResearchStore {
     return summary;
   };
 
-  fetchReportTemplates = async (workspaceSlug: string, params: { report_type?: string } = {}) => {
+  fetchReportTemplates = async (
+    workspaceSlug: string,
+    params: {
+      scope?: string;
+      report_type?: string;
+      stage?: string;
+      material_type?: string;
+      include_inactive?: string;
+    } = {}
+  ) => {
     this.templatesLoader = true;
     try {
       const response = await this.reportService.getTemplates(workspaceSlug, params);
@@ -1427,7 +1454,16 @@ export class ResearchStore implements IResearchStore {
 
   createReportTemplate = async (
     workspaceSlug: string,
-    payload: { name: string; report_type: string; is_default?: boolean }
+    payload: {
+      name: string;
+      scope?: string;
+      report_type?: string;
+      stage?: string;
+      material_type?: string;
+      sections_json?: TReportTemplate["sections_json"];
+      is_default?: boolean;
+      is_active?: boolean;
+    }
   ) => {
     const template = await this.reportService.createTemplate(workspaceSlug, payload);
     await this.fetchReportTemplates(workspaceSlug);

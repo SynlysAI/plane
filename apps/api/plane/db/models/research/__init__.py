@@ -69,6 +69,11 @@ from .report import (
     ReportAccessGrant,
     ReportReviewLog,
 )
+from .report_comments import (
+    PeriodicReportComment,
+    PeriodicReportCommentFeedback,
+    PeriodicReportCommentThread,
+)
 from .review import (
     DEFAULT_MIN_REVIEWERS,
     DEFAULT_PASS_RATIO,
@@ -148,6 +153,9 @@ __all__ = [
     "PeriodicReportSnapshot",
     "ReportAccessGrant",
     "ReportAttachment",
+    "PeriodicReportComment",
+    "PeriodicReportCommentFeedback",
+    "PeriodicReportCommentThread",
     "ResearchTaskCommentAttachment",
     "ApprovalAction",
     "ApprovalFlow",

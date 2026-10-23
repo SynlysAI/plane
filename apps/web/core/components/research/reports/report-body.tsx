@@ -1,22 +1,41 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { EditorRefApi, TFileHandler } from "@plane/editor";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import type { EditorRefApi, TEditorCommentAnchor, TEditorSelectionAnchor, TFileHandler } from "@plane/editor";
 import type { JSONContent, TPeriodicReport } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { ModalCore } from "@plane/ui";
 import { DocumentEditor } from "@/components/editor/document/editor";
+import { templateSectionStats } from "@/components/research/common/template-section-stats";
 import { useResearch } from "@/hooks/store/use-research";
 
-export type ReportBodyRef = { save: () => Promise<boolean> };
+export type ReportBodyRef = {
+  focusComment: (threadId: string) => boolean;
+  save: () => Promise<boolean>;
+};
 type Props = {
   report: TPeriodicReport;
   workspaceSlug: string;
   workspaceId: string;
   onBusy: (busy: boolean) => void;
+  commentAnchors?: TEditorCommentAnchor[];
+  activeThreadId?: string | null;
+  onCreateComment?: (anchor: TEditorSelectionAnchor) => void;
+  onCommentAnchorClick?: (threadId: string) => void;
 };
+
+const EMPTY_COMMENT_ANCHORS: TEditorCommentAnchor[] = [];
 
 /** 在报告详情统一编辑正文，保存失败和后台刷新均保留本地修改。 */
 export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
-  { report, workspaceSlug, workspaceId, onBusy },
+  {
+    report,
+    workspaceSlug,
+    workspaceId,
+    onBusy,
+    commentAnchors = EMPTY_COMMENT_ANCHORS,
+    activeThreadId = null,
+    onCreateComment,
+    onCommentAnchorClick,
+  },
   ref
 ) {
   const research = useResearch();
@@ -32,6 +51,8 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
   const [saveFailed, setSaveFailed] = useState(false);
   const [error, setError] = useState("");
   const [editorGeneration, setEditorGeneration] = useState(0);
+  const [selectionAnchor, setSelectionAnchor] = useState<TEditorSelectionAnchor | null>(null);
+  const [selectionPosition, setSelectionPosition] = useState<{ left: number; top: number } | null>(null);
   const [replacement, setReplacement] = useState<File | null>(null);
   const [localImages, setLocalImages] = useState<string[]>([]);
   const editable = Boolean(report.can_edit);
@@ -41,8 +62,17 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
       ? (content.description_json as JSONContent)
       : content?.description_html || "<p></p>"
   );
+  const [currentDocument, setCurrentDocument] = useState<string | JSONContent>(initialContent);
   const syncedContent = useRef(JSON.stringify(initialContent));
   const imageBase = `/api/research/workspaces/${workspaceSlug}/reports/${report.id}/images/`;
+  const sectionStats = useMemo(
+    () => templateSectionStats(currentDocument, report.template_detail?.sections_json?.sections ?? []),
+    [currentDocument, report.template_detail?.sections_json?.sections]
+  );
+
+  useEffect(() => {
+    editor.current?.setCommentAnchors?.(commentAnchors);
+  }, [activeThreadId, commentAnchors, content, editorGeneration]);
 
   useEffect(() => {
     if (dirtyRef.current || saving || !content) return;
@@ -53,6 +83,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
     if (serialized === syncedContent.current) return;
     syncedContent.current = serialized;
     setInitialContent(nextContent);
+    setCurrentDocument(nextContent);
     // DocumentEditor consumes value only on mount, so reload pristine server content explicitly.
     setEditorGeneration((value) => value + 1);
   }, [content, saving]);
@@ -125,7 +156,31 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
     }
   }, [content, editable, report.id, research, saving, workspaceSlug]);
 
-  useImperativeHandle(ref, () => ({ save }), [save]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      save,
+      focusComment: (threadId: string) => editor.current?.focusCommentAnchor?.(threadId) ?? false,
+    }),
+    [save]
+  );
+
+  /** 同步正文选区，并把批注入口放在浏览器原生选区附近。 */
+  const handleStateChange = useCallback(() => {
+    const anchor = editor.current?.getSelectionAnchor?.() ?? null;
+    setSelectionAnchor(anchor);
+    if (!anchor || !onCreateComment) {
+      setSelectionPosition(null);
+      return;
+    }
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0) {
+      setSelectionPosition(null);
+      return;
+    }
+    const rect = domSelection.getRangeAt(0).getBoundingClientRect();
+    setSelectionPosition({ left: rect.left, top: rect.top });
+  }, [onCreateComment]);
 
   /** 导入文件后重新挂载编辑器，避免旧 JSON 或二进制状态覆盖新 HTML。 */
   const importMarkdown = useCallback(
@@ -141,6 +196,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
         setDirty(false);
         setSaveFailed(false);
         setInitialContent(fresh?.description_html || "<p></p>");
+        setCurrentDocument((fresh?.description_json ?? {}) as JSONContent);
         setEditorGeneration((value) => value + 1);
         setLocalImages(paths);
         setReplacement(null);
@@ -242,6 +298,45 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
           {error}
         </p>
       )}
+      {report.template_detail?.sections_json?.sections?.length ? (
+        <section className="mb-4 border border-subtle bg-surface-1 px-3 py-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-subtle pb-2">
+            <h3 className="text-13 font-semibold text-primary">填写框架</h3>
+            <span className="text-11 text-tertiary">字数提示仅作引导，不会阻止保存或提交</span>
+          </div>
+          {report.template_detail.sections_json.guidance && (
+            <p className="mt-2 border-l border-subtle pl-2 text-12 leading-6 text-tertiary">
+              {report.template_detail.sections_json.guidance}
+            </p>
+          )}
+          <dl className="mt-2 grid gap-2 md:grid-cols-2">
+            {sectionStats.map(({ section, count }) => {
+              const missing = section.required && count === 0;
+              const overLimit = Boolean(section.max_chars && count > section.max_chars);
+              return (
+                <div key={section.id} className="border-b border-subtle pb-2 last:border-b-0">
+                  <dt className="flex items-baseline justify-between gap-2 text-12 font-medium text-primary">
+                    <span>
+                      {section.title}
+                      {section.required ? " *" : ""}
+                    </span>
+                    <span className="font-normal text-11 text-tertiary">
+                      {count}
+                      {section.max_chars ? ` / ${section.max_chars}` : ""}
+                    </span>
+                  </dt>
+                  <dd className="mt-1 text-11 leading-5 text-tertiary">{section.guidance}</dd>
+                  {(missing || overLimit) && (
+                    <dd className="mt-1 text-11 text-warning-primary">
+                      {missing ? "必填章节尚未填写。" : `已超过建议字数上限 ${section.max_chars} 字。`}
+                    </dd>
+                  )}
+                </div>
+              );
+            })}
+          </dl>
+        </section>
+      ) : null}
       {localImages.map((path) => (
         <label key={path} className="mb-2 flex flex-wrap items-center gap-2 text-12 text-secondary">
           相对路径图片 {path}：请选择对应图片上传替换
@@ -281,47 +376,84 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
         }}
       />
       {content && (
-        <DocumentEditor
-          ref={editor}
-          key={`${report.id}:${editorGeneration}:${editable}`}
-          id={`${report.id}-body`}
-          value={initialContent}
-          workspaceId={workspaceId}
-          workspaceSlug={workspaceSlug}
-          containerClassName="min-h-64 border-none !p-0"
-          editorClassName="pl-0"
-          editable={editable}
-          disabledExtensions={["issue-embed"]}
-          searchMentionCallback={async () => ({})}
-          uploadFile={uploadImage}
-          duplicateFile={async () => {
-            throw new Error("请重新选择图片上传到此报告。");
+        <div
+          className="relative"
+          role="presentation"
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            const anchorElement = target.closest("[data-comment-thread-id]");
+            const threadId = anchorElement?.getAttribute("data-comment-thread-id");
+            if (threadId) onCommentAnchorClick?.(threadId);
           }}
-          fileHandlerOverrides={{
-            getAssetSrc: async (source) =>
-              source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
-            getAssetDownloadSrc: async (source) =>
-              source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
-            delete: async (source) => {
-              if (!source.startsWith(imageBase)) return;
-              const response = await fetch(source, { method: "DELETE" });
-              if (!response.ok) throw new Error("图片移除失败，请重试。");
-            },
-            restore: async (source) => {
-              if (!source.startsWith(imageBase)) return;
-              const response = await fetch(source, { method: "POST" });
-              if (!response.ok) throw new Error("图片恢复失败，请重试。");
-            },
-            validation: { maxFileSize: (research.settings[workspaceSlug]?.image_max_mb ?? 20) * 1024 * 1024 },
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            const target = event.target as HTMLElement;
+            const threadId = target.closest("[data-comment-thread-id]")?.getAttribute("data-comment-thread-id");
+            if (threadId) onCommentAnchorClick?.(threadId);
           }}
-          onChange={(_json, _html, options) => {
-            // 编辑器初始化时会补充稳定的块 ID；这类迁移更新不应把刚加载的报告标记为未保存。
-            if (options?.isMigrationUpdate) return;
-            revision.current += 1;
-            dirtyRef.current = true;
-            setDirty(true);
-          }}
-        />
+        >
+          {selectionAnchor && selectionPosition && onCreateComment && (
+            <button
+              type="button"
+              className="fixed z-20 rounded-md border border-subtle bg-surface-1 px-2 py-1 text-12 text-secondary hover:text-primary"
+              style={{
+                left: `${Math.max(selectionPosition.left - 24, 0)}px`,
+                top: `${Math.max(selectionPosition.top - 36, 0)}px`,
+              }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onCreateComment(selectionAnchor);
+                setSelectionAnchor(null);
+                setSelectionPosition(null);
+              }}
+            >
+              批注选中文字
+            </button>
+          )}
+          <DocumentEditor
+            ref={editor}
+            key={`${report.id}:${editorGeneration}:${editable}`}
+            id={`${report.id}-body`}
+            value={initialContent}
+            workspaceId={workspaceId}
+            workspaceSlug={workspaceSlug}
+            containerClassName="min-h-64 border-none !p-0"
+            editorClassName="pl-0"
+            editable={editable}
+            disabledExtensions={["issue-embed"]}
+            searchMentionCallback={async () => ({})}
+            uploadFile={uploadImage}
+            duplicateFile={async () => {
+              throw new Error("请重新选择图片上传到此报告。");
+            }}
+            fileHandlerOverrides={{
+              getAssetSrc: async (source) =>
+                source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
+              getAssetDownloadSrc: async (source) =>
+                source.startsWith("http") || source.startsWith(imageBase) ? source : `${imageBase}${source}/`,
+              delete: async (source) => {
+                if (!source.startsWith(imageBase)) return;
+                const response = await fetch(source, { method: "DELETE" });
+                if (!response.ok) throw new Error("图片移除失败，请重试。");
+              },
+              restore: async (source) => {
+                if (!source.startsWith(imageBase)) return;
+                const response = await fetch(source, { method: "POST" });
+                if (!response.ok) throw new Error("图片恢复失败，请重试。");
+              },
+              validation: { maxFileSize: (research.settings[workspaceSlug]?.image_max_mb ?? 20) * 1024 * 1024 },
+            }}
+            onTransaction={handleStateChange}
+            onChange={(_json, _html, options) => {
+              // 编辑器初始化时会补充稳定的块 ID；这类迁移更新不应把刚加载的报告标记为未保存。
+              if (options?.isMigrationUpdate) return;
+              setCurrentDocument(_json as JSONContent);
+              revision.current += 1;
+              dirtyRef.current = true;
+              setDirty(true);
+            }}
+          />
+        </div>
       )}
       <ModalCore isOpen={Boolean(replacement)} handleClose={() => setReplacement(null)}>
         <div className="bg-surface-1 p-5">

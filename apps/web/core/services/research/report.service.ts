@@ -9,12 +9,19 @@ import type {
   TPeriodicReport,
   TPaginationInfo,
   TReportAttachment,
+  TReportComment,
+  TReportCommentFeedback,
+  TReportCommentFeedbackType,
+  TReportCommentThread,
+  TReportCommentThreadList,
   TReportReadReceipt,
   TReportReadResult,
   TReportReviewLog,
+  TReportSelectionAnchor,
   TReportSummary,
   TReportTemplate,
   TReportTemplateOption,
+  TReportTemplateSections,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -41,6 +48,20 @@ export type TReportCreatePayload = {
   template?: string | null;
   visibility?: string;
   is_backfill?: boolean;
+};
+
+export type TReportCommentThreadCreatePayload = {
+  anchor?: TReportSelectionAnchor | null;
+  comment_html: string;
+  feedback_type?: TReportCommentFeedbackType;
+  request_id: string;
+};
+
+export type TReportCommentCreatePayload = {
+  comment_html: string;
+  feedback_type?: TReportCommentFeedbackType;
+  parent?: string | null;
+  request_id: string;
 };
 
 export class ResearchReportService extends APIService {
@@ -122,6 +143,75 @@ export class ResearchReportService extends APIService {
   async getReportHistory(workspaceSlug: string, reportId: string) {
     return this.get(researchEndpoints.reportHistory(workspaceSlug, reportId))
       .then((res) => res?.data as { results: TReportReviewLog[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async getReportCommentThreads(workspaceSlug: string, reportId: string, status: "OPEN" | "RESOLVED" | "ALL" = "OPEN") {
+    return this.get(researchEndpoints.reportCommentThreads(workspaceSlug, reportId), { params: { status } })
+      .then((res) => res?.data as TReportCommentThreadList)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async createReportCommentThread(workspaceSlug: string, reportId: string, payload: TReportCommentThreadCreatePayload) {
+    return this.post(researchEndpoints.reportCommentThreads(workspaceSlug, reportId), payload)
+      .then((res) => res?.data as TReportCommentThread)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async createReportCommentReply(
+    workspaceSlug: string,
+    reportId: string,
+    threadId: string,
+    payload: TReportCommentCreatePayload
+  ) {
+    return this.post(researchEndpoints.reportCommentThreadComments(workspaceSlug, reportId, threadId), payload)
+      .then((res) => res?.data as TReportComment)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async updateReportComment(
+    workspaceSlug: string,
+    reportId: string,
+    commentId: string,
+    payload: Partial<Pick<TReportComment, "comment_html" | "feedback_type">>
+  ) {
+    return this.patch(researchEndpoints.reportComment(workspaceSlug, reportId, commentId), payload)
+      .then((res) => res?.data as TReportComment)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async deleteReportComment(workspaceSlug: string, reportId: string, commentId: string) {
+    return this.delete(researchEndpoints.reportComment(workspaceSlug, reportId, commentId)).catch((err) => {
+      throw err?.response?.data;
+    });
+  }
+
+  async updateReportCommentThreadStatus(
+    workspaceSlug: string,
+    reportId: string,
+    threadId: string,
+    status: TReportCommentThread["status"]
+  ) {
+    return this.post(researchEndpoints.reportCommentThreadStatus(workspaceSlug, reportId, threadId), { status })
+      .then((res) => res?.data as TReportCommentThread)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  async submitReportCommentFeedback(workspaceSlug: string, reportId: string, commentId: string) {
+    return this.post(researchEndpoints.reportCommentFeedback(workspaceSlug, reportId, commentId), {})
+      .then((res) => res?.data as TReportCommentFeedback)
       .catch((err) => {
         throw err?.response?.data;
       });
@@ -229,7 +319,16 @@ export class ResearchReportService extends APIService {
       });
   }
 
-  async getTemplates(workspaceSlug: string, params: { report_type?: string } = {}) {
+  async getTemplates(
+    workspaceSlug: string,
+    params: {
+      scope?: string;
+      report_type?: string;
+      stage?: string;
+      material_type?: string;
+      include_inactive?: string;
+    } = {}
+  ) {
     return this.get(researchEndpoints.reportTemplates(workspaceSlug), { params })
       .then((res) => res?.data as { results: TReportTemplate[]; count: number })
       .catch((err) => {
@@ -248,7 +347,17 @@ export class ResearchReportService extends APIService {
 
   async createTemplate(
     workspaceSlug: string,
-    payload: { name: string; report_type: string; content_json?: Record<string, unknown>; is_default?: boolean }
+    payload: {
+      name: string;
+      scope?: string;
+      report_type?: string;
+      stage?: string;
+      material_type?: string;
+      content_json?: Record<string, unknown>;
+      sections_json?: TReportTemplateSections;
+      is_default?: boolean;
+      is_active?: boolean;
+    }
   ) {
     return this.post(researchEndpoints.reportTemplates(workspaceSlug), payload)
       .then((res) => res?.data as TReportTemplate)

@@ -65,7 +65,12 @@ from plane.research.utils.errors import (
 )
 from plane.research.utils.roles import is_research_admin
 from plane.research.utils.stages import material_resource, stage_resource
-from plane.research.utils.templates import find_material_template, resolve_variables, template_values
+from plane.research.utils.templates import (
+    find_material_template,
+    resolve_variables,
+    template_target_key,
+    template_values,
+)
 from plane.research.views.base import ResearchAPIView
 
 MANAGING_SECTION = "stages"
@@ -168,7 +173,7 @@ def serialize_stage(instance, *, actor, material_list=None, include_materials=Tr
         if materials is None:
             materials = list(
                 instance.materials.filter(deleted_at__isnull=True)
-                .select_related("page", "owner")
+                .select_related("page", "owner", "template")
                 .prefetch_related("versions")
             )
         data["materials"] = [serialize_material(material, actor=actor) for material in materials]
@@ -287,7 +292,7 @@ class ResearchStageDetailEndpoint(ResearchStageEndpointMixin, ResearchAPIView):
         context = build_actor_context(request.user, workspace.id)
         material_queryset = (
             instance.materials.filter(deleted_at__isnull=True)
-            .select_related("page", "owner")
+            .select_related("page", "owner", "template")
             .prefetch_related("versions")
         )
         materials = [
@@ -452,7 +457,7 @@ class ResearchStageMaterialListCreateEndpoint(ResearchStageEndpointMixin, Resear
         context = build_actor_context(request.user, workspace.id)
         material_queryset = (
             instance.materials.filter(deleted_at__isnull=True)
-            .select_related("page", "owner")
+            .select_related("page", "owner", "template")
             .prefetch_related("versions")
         )
         materials = [
@@ -504,11 +509,20 @@ class ResearchStageMaterialListCreateEndpoint(ResearchStageEndpointMixin, Resear
 
         template = None
         if request.data.get("template"):
+            target_key = template_target_key(
+                ReportTemplate.Scope.STAGE_MATERIAL,
+                stage=instance.stage,
+                material_type=material_type,
+            )
             template = ReportTemplate.objects.filter(
                 workspace=workspace,
                 pk=request.data["template"],
                 scope=ReportTemplate.Scope.STAGE_MATERIAL,
+                stage=instance.stage,
+                material_type=material_type,
+                target_key=target_key,
                 is_active=True,
+                deleted_at__isnull=True,
             ).first()
             if template is None:
                 return research_not_found(
@@ -559,6 +573,7 @@ class ResearchStageMaterialListCreateEndpoint(ResearchStageEndpointMixin, Resear
                 material = StageMaterial.objects.create(
                     stage_instance=instance,
                     material_type=material_type,
+                    template=template,
                     page=page,
                     status=StageMaterial.Status.DRAFT,
                     is_required=material_type in allowed,
@@ -580,7 +595,11 @@ class ResearchStageMaterialListCreateEndpoint(ResearchStageEndpointMixin, Resear
             resource_id=material.id,
             org_unit=instance.org_unit,
             actor=request.user,
-            metadata={"stage": instance.stage, "material_type": material_type},
+            metadata={
+                "stage": instance.stage,
+                "material_type": material_type,
+                "template": str(template.id) if template else None,
+            },
             request=request,
         )
         return Response(serialize_material(material, actor=request.user), status=status.HTTP_201_CREATED)
@@ -594,7 +613,7 @@ class ResearchStageMaterialDetailEndpoint(ResearchAPIView):
             StageMaterial.objects.filter(
                 stage_instance__workspace=workspace, pk=material_id, deleted_at__isnull=True
             )
-            .select_related("page", "owner", "stage_instance")
+            .select_related("page", "owner", "template", "stage_instance")
             .prefetch_related("versions")
             .first()
         )
@@ -688,7 +707,7 @@ class ResearchStageMaterialSubmitEndpoint(ResearchAPIView):
             StageMaterial.objects.filter(
                 stage_instance__workspace=workspace, pk=material_id, deleted_at__isnull=True
             )
-            .select_related("page", "owner", "stage_instance")
+            .select_related("page", "owner", "template", "stage_instance")
             .first()
         )
         if material is None:

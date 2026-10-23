@@ -160,6 +160,57 @@ class TestReportCreation:
         assert response.status_code == 201
         assert response.json()["draft_content"]["description_json"] == template.content_json
 
+    def test_default_template_is_loaded_and_linked_without_explicit_selection(self, env):
+        template = ReportTemplate.objects.create(
+            workspace=env["workspace"],
+            report_type="WEEKLY",
+            name="Default weekly framework",
+            is_default=True,
+            sections_json={
+                "version": 1,
+                "guidance": "按框架填写。",
+                "sections": [
+                    {
+                        "id": "progress",
+                        "title": "本周进展",
+                        "guidance": "请填写本周进展。",
+                        "required": True,
+                    }
+                ],
+            },
+            created_by=env["admin"],
+        )
+
+        response = create_report(env, period_key="2026-W16")
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["template"] == str(template.id)
+        assert payload["template_detail"]["name"] == "Default weekly framework"
+        assert payload["template_detail"]["sections_json"]["sections"][0]["id"] == "progress"
+        headings = [
+            node
+            for node in payload["draft_content"]["description_json"]["content"]
+            if node.get("type") == "heading"
+        ]
+        assert headings[0]["attrs"]["id"] == "progress"
+
+    def test_stage_material_template_cannot_be_used_for_periodic_report(self, env):
+        template = ReportTemplate.objects.create(
+            workspace=env["workspace"],
+            report_type="WEEKLY",
+            name="Pre-opening framework",
+            scope=ReportTemplate.Scope.STAGE_MATERIAL,
+            stage="PRE_OPENING",
+            material_type="TOPIC_DESCRIPTION",
+            created_by=env["admin"],
+        )
+
+        response = create_report(env, period_key="2026-W17", template=str(template.id))
+
+        assert response.status_code == 400
+        assert response.json()["error_code"] == "report_template_not_found"
+
     def test_historical_period_is_marked_as_backfill(self, env):
         response = create_report(env, period_key="2026-W10")
         assert response.status_code == 201

@@ -18,6 +18,7 @@ from plane.db.models import (
     LiteratureEntry,
     PeriodicReport,
     Project,
+    ReportTemplate,
     ResearchAuditEvent,
     ResearchOutcome,
     ResearchProjectProfile,
@@ -79,6 +80,26 @@ def test_seed_is_idempotent(seeded):
     second = ResearchSeedBuilder(workspace, seeded["owner"], with_files=False).run()
     assert sum(second.values()) == 0, dict(second)
     assert PeriodicReport.objects.filter(workspace=workspace).count() == before
+
+
+@pytest.mark.django_db
+def test_pre_opening_five_criteria_template_is_seeded(seeded):
+    template = ReportTemplate.objects.get(
+        workspace=seeded["workspace"],
+        name="课题报告（预开题）五点判据模板",
+    )
+    sections = template.sections_json["sections"]
+
+    assert template.target_key == "STAGE_MATERIAL:PRE_OPENING:TOPIC_DESCRIPTION"
+    assert template.is_default is True
+    assert [section["id"] for section in sections] == [
+        "uniqueness",
+        "innovation",
+        "impact",
+        "feasibility",
+        "irreplaceability",
+    ]
+    assert [section["max_chars"] for section in sections] == [100, 300, 200, 100, 100]
 
 
 @pytest.mark.django_db

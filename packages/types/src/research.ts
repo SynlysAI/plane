@@ -688,6 +688,96 @@ export type TReportOfficialContent = {
 
 export type TReportDraftContent = Omit<TReportOfficialContent, "version_no">;
 
+export type TReportCommentFeedbackType =
+  | "DISCUSSION"
+  | "SUGGESTION"
+  | "CORRECTION"
+  | "QUESTION"
+  | "APPROVAL"
+  | "REJECTION";
+
+export type TReportSelectionAnchor = {
+  version: 1;
+  block_id: string;
+  block_type: string;
+  selected_text: string;
+  prefix: string;
+  suffix: string;
+  start_offset: number;
+  end_offset: number;
+};
+
+export type TReportCommentFeedbackInfo = {
+  id: string;
+  status: "SUBMITTED" | "CONSUMED" | "WITHDRAWN";
+  submitted_at: string;
+  agent_session: string | null;
+};
+
+export type TResearchReportCommentActor = {
+  id: string;
+  display_name: string;
+  avatar_url?: string | null;
+};
+
+export type TReportComment = {
+  id: string;
+  thread: string;
+  parent: string | null;
+  actor: string;
+  actor_detail: TResearchReportCommentActor;
+  comment_html: string;
+  comment_stripped: string;
+  feedback_type: TReportCommentFeedbackType;
+  created_at: string;
+  updated_at: string;
+  edited_at: string | null;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_submit_ai_feedback: boolean;
+  ai_feedback: TReportCommentFeedbackInfo | null;
+};
+
+export type TReportCommentThread = {
+  id: string;
+  report: string;
+  anchor: TReportSelectionAnchor | null;
+  quoted_text: string;
+  snapshot_version: number;
+  content_hash: string;
+  status: "OPEN" | "RESOLVED";
+  status_updated_at: string;
+  status_updated_by: string | null;
+  status_updated_by_detail?: TResearchReportCommentActor | null;
+  created_by: string | null;
+  created_by_detail?: TResearchReportCommentActor | null;
+  created_at: string;
+  updated_at: string;
+  last_activity_at: string;
+  comment_count: number;
+  can_resolve: boolean;
+  comments: TReportComment[];
+};
+
+export type TReportCommentThreadList = {
+  results: TReportCommentThread[];
+  count: number;
+  status_filter: "OPEN" | "RESOLVED" | "ALL";
+  can_comment: boolean;
+  snapshot_version: number | null;
+};
+
+export type TReportCommentFeedback = {
+  id: string;
+  comment: string;
+  report: string;
+  thread: string;
+  feedback_type: TReportCommentFeedbackType;
+  status: "SUBMITTED" | "CONSUMED" | "WITHDRAWN";
+  submitted_at: string;
+  agent_session: string | null;
+};
+
 export type TPeriodicReport = {
   id: string;
   workspace: string;
@@ -700,6 +790,8 @@ export type TPeriodicReport = {
   page: string;
   /** Project that owns the Plane Page; null when the report is edited only in the research flow. */
   page_project: string | null;
+  template: string | null;
+  template_detail: TReportTemplateGuide | null;
   report_type: TReportType;
   period_key: string;
   period_start: string;
@@ -837,11 +929,37 @@ export type TReportSummary = {
   }[];
 };
 
+export type TReportTemplateSection = {
+  id: string;
+  title: string;
+  guidance: string;
+  required: boolean;
+  max_chars?: number;
+};
+
+export type TReportTemplateSections = {
+  version: 1;
+  guidance: string;
+  sections: TReportTemplateSection[];
+};
+
+export type TReportTemplateGuide = {
+  id: string;
+  name: string;
+  sections_json: TReportTemplateSections;
+};
+
 export type TReportTemplate = {
   id: string;
+  scope: "REPORT" | "STAGE_MATERIAL" | "EXPERIMENT";
   report_type: TReportType;
+  stage: string;
+  material_type: string;
   name: string;
   content_json: Record<string, unknown>;
+  variables: string[];
+  sections_json: TReportTemplateSections;
+  target_key: string;
   is_default: boolean;
   is_active: boolean;
   created_at: string;
@@ -854,6 +972,7 @@ export type TReportTemplateOption = {
   name: string;
   is_default: boolean;
   is_active: boolean;
+  target_key: string;
 };
 
 export type TIdentityMapping = {
@@ -1059,6 +1178,8 @@ export type TStageMaterial = {
   stage_instance: string;
   material_type: string;
   page: string | null;
+  template: string | null;
+  template_detail: TReportTemplateGuide | null;
   page_detail?: {
     id: string;
     name: string;

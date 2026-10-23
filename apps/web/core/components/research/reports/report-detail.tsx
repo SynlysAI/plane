@@ -16,6 +16,7 @@ import {
 } from "@plane/constants";
 import type { TReportVisibility } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import type { TEditorCommentAnchor, TEditorSelectionAnchor } from "@plane/editor";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, ModalCore } from "@plane/ui";
@@ -25,6 +26,7 @@ import { ResearchDeleteButton } from "@/components/research/common/research-dele
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
 import { ResearchReportAttachments } from "@/components/research/reports/report-attachments";
+import { ResearchReportComments } from "@/components/research/reports/report-comments";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -63,6 +65,9 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const [pendingAction, setPendingAction] = useState<"save" | "submit" | "return" | "accept" | "visibility" | null>(
     null
   );
+  const [draftAnchor, setDraftAnchor] = useState<TEditorSelectionAnchor | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [commentAnchors, setCommentAnchors] = useState<TEditorCommentAnchor[]>([]);
   const readReceiptKeyRef = useRef<string | null>(null);
 
   const report = research.reports[reportId];
@@ -260,93 +265,123 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         }
       />
 
-      {workspaceId && (
-        <ReportBody
-          ref={bodyRef}
-          key={report.id}
-          report={report}
-          workspaceSlug={workspaceSlug}
-          workspaceId={workspaceId}
-          onBusy={setBodyBusy}
-        />
-      )}
-      <ResearchReportAttachments
-        workspaceSlug={workspaceSlug}
-        reportId={reportId}
-        editable={Boolean(report.can_edit)}
-      />
-
-      <ResearchDetailSurface title={t("research.reports.visibility")} collapsible>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {REPORT_VISIBILITIES.filter((visibility) => visibility !== "CUSTOM").map((visibility) => (
-            <button
-              key={visibility}
-              type="button"
-              disabled={!report.can_edit || pendingAction !== null}
-              className={`rounded-md border px-2 py-1 text-12 disabled:cursor-not-allowed disabled:opacity-50 ${
-                report.visibility === visibility
-                  ? "border-accent-primary text-accent-primary"
-                  : "border-subtle text-tertiary hover:text-secondary"
-              }`}
-              onClick={() => void handleVisibility(visibility)}
-            >
-              {t(REPORT_VISIBILITY_LABELS[visibility])}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-11 text-tertiary">{t("research.reports.visibility_hint")}</p>
-      </ResearchDetailSurface>
-
-      <ModalCore isOpen={showReturn} handleClose={() => pendingAction === null && setShowReturn(false)}>
-        <section className="bg-surface-1 p-5">
-          <h3 className="text-13 font-medium text-primary">{t("research.reports.return_reason")}</h3>
-          <p className="mt-1 text-11 text-secondary">
-            {t("research.reports.return_target", {
-              from: t(REPORT_STATUS_LABELS.SUBMITTED),
-              to: t(REPORT_STATUS_LABELS.NEEDS_REVISION),
-            })}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Input
-              aria-label={t("research.reports.return_reason")}
-              className="min-w-0 flex-1 sm:!w-96 sm:flex-none"
-              value={returnReason}
-              onChange={(event) => setReturnReason(event.target.value)}
-              placeholder={t("research.reports.return_placeholder")}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+        <div className="min-w-0 flex-1">
+          {workspaceId && (
+            <ReportBody
+              ref={bodyRef}
+              key={report.id}
+              report={report}
+              workspaceSlug={workspaceSlug}
+              workspaceId={workspaceId}
+              onBusy={setBodyBusy}
+              commentAnchors={commentAnchors}
+              activeThreadId={activeThreadId}
+              onCreateComment={setDraftAnchor}
+              onCommentAnchorClick={setActiveThreadId}
             />
-            <Button
-              variant="primary"
-              size="sm"
-              loading={pendingAction === "return"}
-              disabled={pendingAction !== null || !returnReason.trim()}
-              onClick={() => void handleReturn()}
-            >
-              {t("research.common.confirm")}
-            </Button>
-            <Button variant="ghost" size="sm" disabled={pendingAction !== null} onClick={() => setShowReturn(false)}>
-              {t("research.common.cancel")}
-            </Button>
-          </div>
-        </section>
-      </ModalCore>
+          )}
+          <ResearchReportAttachments
+            workspaceSlug={workspaceSlug}
+            reportId={reportId}
+            editable={Boolean(report.can_edit)}
+          />
 
-      <ResearchDetailSurface title={t("research.reports.history")} collapsible>
-        <ol className="mt-3 flex flex-col gap-3">
-          {history.map((entry) => (
-            <li key={entry.id} className="flex flex-col gap-0.5 border-l border-subtle pl-3">
-              <span className="text-12 text-secondary">
-                {entry.action} · {entry.from_status} → {entry.to_status}
-              </span>
-              <span className="text-11 text-tertiary">
-                {entry.actor_detail?.display_name ?? entry.actor_detail?.email ?? entry.actor} ·{" "}
-                {formatResearchDateTime(entry.created_at, currentLocale)}
-              </span>
-              {entry.comment && <span className="text-12 text-secondary">{entry.comment}</span>}
-            </li>
-          ))}
-          {history.length === 0 && <li className="text-12 text-tertiary">{t("research.reports.no_history")}</li>}
-        </ol>
-      </ResearchDetailSurface>
+          <ResearchDetailSurface title={t("research.reports.visibility")} collapsible>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {REPORT_VISIBILITIES.filter((visibility) => visibility !== "CUSTOM").map((visibility) => (
+                <button
+                  key={visibility}
+                  type="button"
+                  disabled={!report.can_edit || pendingAction !== null}
+                  className={`rounded-md border px-2 py-1 text-12 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    report.visibility === visibility
+                      ? "border-accent-primary text-accent-primary"
+                      : "border-subtle text-tertiary hover:text-secondary"
+                  }`}
+                  onClick={() => void handleVisibility(visibility)}
+                >
+                  {t(REPORT_VISIBILITY_LABELS[visibility])}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-11 text-tertiary">{t("research.reports.visibility_hint")}</p>
+          </ResearchDetailSurface>
+
+          <ModalCore isOpen={showReturn} handleClose={() => pendingAction === null && setShowReturn(false)}>
+            <section className="bg-surface-1 p-5">
+              <h3 className="text-13 font-medium text-primary">{t("research.reports.return_reason")}</h3>
+              <p className="mt-1 text-11 text-secondary">
+                {t("research.reports.return_target", {
+                  from: t(REPORT_STATUS_LABELS.SUBMITTED),
+                  to: t(REPORT_STATUS_LABELS.NEEDS_REVISION),
+                })}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Input
+                  aria-label={t("research.reports.return_reason")}
+                  className="min-w-0 flex-1 sm:!w-96 sm:flex-none"
+                  value={returnReason}
+                  onChange={(event) => setReturnReason(event.target.value)}
+                  placeholder={t("research.reports.return_placeholder")}
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={pendingAction === "return"}
+                  disabled={pendingAction !== null || !returnReason.trim()}
+                  onClick={() => void handleReturn()}
+                >
+                  {t("research.common.confirm")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={pendingAction !== null}
+                  onClick={() => setShowReturn(false)}
+                >
+                  {t("research.common.cancel")}
+                </Button>
+              </div>
+            </section>
+          </ModalCore>
+
+          <ResearchDetailSurface title={t("research.reports.history")} collapsible>
+            <ol className="mt-3 flex flex-col gap-3">
+              {history.map((entry) => (
+                <li key={entry.id} className="flex flex-col gap-0.5 border-l border-subtle pl-3">
+                  <span className="text-12 text-secondary">
+                    {entry.action} · {entry.from_status} → {entry.to_status}
+                  </span>
+                  <span className="text-11 text-tertiary">
+                    {entry.actor_detail?.display_name ?? entry.actor_detail?.email ?? entry.actor} ·{" "}
+                    {formatResearchDateTime(entry.created_at, currentLocale)}
+                  </span>
+                  {entry.comment && <span className="text-12 text-secondary">{entry.comment}</span>}
+                </li>
+              ))}
+              {history.length === 0 && <li className="text-12 text-tertiary">{t("research.reports.no_history")}</li>}
+            </ol>
+          </ResearchDetailSurface>
+        </div>
+        {workspaceId && (
+          <ResearchReportComments
+            report={report}
+            workspaceSlug={workspaceSlug}
+            workspaceId={workspaceId}
+            locale={currentLocale}
+            draftAnchor={draftAnchor}
+            onDraftConsumed={() => setDraftAnchor(null)}
+            onFocusThread={(threadId) => {
+              setActiveThreadId(threadId);
+              return bodyRef.current?.focusComment(threadId) ?? false;
+            }}
+            onAnchorsChange={setCommentAnchors}
+            activeThreadId={activeThreadId}
+            onActiveThreadIdChange={setActiveThreadId}
+          />
+        )}
+      </div>
     </div>
   );
 });

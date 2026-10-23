@@ -23,6 +23,7 @@ const template = {
   created_at: "2026-10-08T00:00:00Z",
   updated_at: "2026-10-08T00:00:00Z",
 };
+let activeTemplate = { ...template };
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
 vi.mock("next/link", () => ({
@@ -83,7 +84,7 @@ vi.mock("@/hooks/store/use-research", () => ({
     getReports: () => mocks.getReports(),
     getOrgUnits: () => [],
     getResearchProjects: () => [],
-    getReportTemplateOptions: () => [template],
+    getReportTemplateOptions: () => [activeTemplate],
     templatesLoader: false,
     fetchReports: mocks.fetchReports,
     fetchResearchProjects: mocks.fetchResearchProjects,
@@ -113,10 +114,14 @@ function button(label: string) {
 }
 
 beforeEach(() => {
+  activeTemplate = { ...template };
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  mocks.fetchReportTemplateOptions.mockResolvedValue([template]);
+  mocks.fetchReportTemplateOptions.mockImplementation(async (_workspaceSlug: string, params = {}) => {
+    activeTemplate = { ...activeTemplate, report_type: params.report_type ?? "WEEKLY" };
+    return [activeTemplate];
+  });
   mocks.fetchReports.mockResolvedValue([]);
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
@@ -154,6 +159,7 @@ it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () 
 
   const select = container.querySelector<HTMLSelectElement>('select[aria-label="模板"]');
   if (!select) throw new Error("模板选择未显示");
+  expect(select.value).toBe("template-1");
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(select, "template-1");
     select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -167,6 +173,32 @@ it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () 
     template: "template-1",
   });
   expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/reports/report-1");
+});
+
+it("切换周报和月报时自动选择对应默认模板", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => button("创建报告").click());
+
+  const typeSelect = [...container.querySelectorAll<HTMLSelectElement>("select")].find((select) => {
+    const values = Array.from(select.options).map((option) => option.value);
+    return values.length === 2 && values[0] === "WEEKLY" && values[1] === "MONTHLY";
+  });
+  if (!typeSelect) throw new Error("报告类型选择未显示");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(typeSelect, "MONTHLY");
+    typeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => undefined);
+
+  expect(mocks.fetchReportTemplateOptions).toHaveBeenLastCalledWith("lab", { report_type: "MONTHLY" });
+  const templateSelect = container.querySelector<HTMLSelectElement>('select[aria-label="模板"]');
+  expect(templateSelect?.value).toBe("template-1");
 });
 
 it("报告列表回放 mine 旧链接并只携带报告领域参数", async () => {

@@ -122,6 +122,11 @@ from plane.research.views import (
     ResearchReportReturnEndpoint,
     ResearchReportSubmitEndpoint,
     ResearchReportSummaryEndpoint,
+    ResearchReportCommentDetailEndpoint,
+    ResearchReportCommentFeedbackEndpoint,
+    ResearchReportCommentThreadCommentEndpoint,
+    ResearchReportCommentThreadListCreateEndpoint,
+    ResearchReportCommentThreadStatusEndpoint,
     ResearchReportTemplateDetailEndpoint,
     ResearchReportTemplateListCreateEndpoint,
     ResearchReportTemplateOptionListEndpoint,
@@ -1223,6 +1228,31 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/access/",
         ResearchReportAccessEndpoint.as_view(),
         name="research-report-access",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/",
+        ResearchReportCommentThreadListCreateEndpoint.as_view(),
+        name="research-report-comment-threads",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/<uuid:thread_id>/comments/",
+        ResearchReportCommentThreadCommentEndpoint.as_view(),
+        name="research-report-comment-thread-comments",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/<uuid:thread_id>/status/",
+        ResearchReportCommentThreadStatusEndpoint.as_view(),
+        name="research-report-comment-thread-status",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comments/<uuid:comment_id>/",
+        ResearchReportCommentDetailEndpoint.as_view(),
+        name="research-report-comment",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comments/<uuid:comment_id>/ai-feedback/",
+        ResearchReportCommentFeedbackEndpoint.as_view(),
+        name="research-report-comment-ai-feedback",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/attachments/",

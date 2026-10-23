@@ -75,7 +75,7 @@ AGENT_MANIFEST = {
     "manifest_version": "agent-plugin.v1",
     "entrypoints": ["workspace_home", "research_chain", "chain_node"],
     "required_scopes": ["context.read", "agent.session.create"],
-    "capabilities": ["chat", "knowledge.search", "artifact.save"],
+    "capabilities": ["chat", "knowledge.search", "artifact.save", "report.feedback.read"],
     "ui": {"desktop": "side_panel", "mobile": "stacked_panel"},
     "feature_flag": "research_agent_enabled",
     "ui_states": [

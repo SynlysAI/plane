@@ -14,6 +14,7 @@ from plane.db.models import (
 from plane.research.utils.reports import supervisor_reader_ids
 
 from .org import ResearchUserSerializer
+from .template import ReportTemplateGuideSerializer
 
 
 class ReportReviewLogSerializer(serializers.ModelSerializer):
@@ -85,6 +86,7 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     official_content = serializers.SerializerMethodField()
     draft_content = serializers.SerializerMethodField()
     page_project = serializers.SerializerMethodField()
+    template_detail = ReportTemplateGuideSerializer(source="template", read_only=True)
 
     class Meta:
         model = PeriodicReport
@@ -99,6 +101,8 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             "org_unit_detail",
             "page",
             "page_project",
+            "template",
+            "template_detail",
             "report_type",
             "period_key",
             "period_start",

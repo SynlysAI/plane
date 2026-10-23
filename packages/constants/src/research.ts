@@ -792,6 +792,16 @@ export const researchEndpoints = {
   reportReadReceipts: (slug: string, reportId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/read-receipts/`,
   reportAccess: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/access/`,
+  reportCommentThreads: (slug: string, reportId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comment-threads/`,
+  reportCommentThreadComments: (slug: string, reportId: string, threadId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comment-threads/${threadId}/comments/`,
+  reportCommentThreadStatus: (slug: string, reportId: string, threadId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comment-threads/${threadId}/status/`,
+  reportComment: (slug: string, reportId: string, commentId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comments/${commentId}/`,
+  reportCommentFeedback: (slug: string, reportId: string, commentId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comments/${commentId}/ai-feedback/`,
   reportAttachments: (slug: string, reportId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/attachments/`,
   reportAttachment: (slug: string, reportId: string, attachmentId: string) =>

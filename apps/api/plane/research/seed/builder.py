@@ -86,6 +86,7 @@ from plane.research.utils.notifications import (
 )
 from plane.research.utils.org import build_path, ensure_root_org_unit
 from plane.research.utils.periods import current_period
+from plane.research.utils.templates import sections_to_content, validate_template_sections
 from plane.utils.constants import DEFAULT_TIMEZONE
 
 PROJECT_ADMIN_ROLE = 20
@@ -583,10 +584,43 @@ class ResearchSeedBuilder:
                 deleted_at__isnull=True,
             ).first()
             created = template is None
-            blocks = [(f"h{min(index + 1, 3)}", heading) for index, heading in enumerate(spec.headings)]
+            if spec.sections:
+                sections_json = {
+                    "version": 1,
+                    "guidance": spec.guidance,
+                    "sections": [dict(section) for section in spec.sections],
+                }
+            else:
+                sections_json = {
+                    "version": 1,
+                    "guidance": spec.guidance,
+                    "sections": [
+                        {
+                            "id": f"section-{index + 1}",
+                            "title": heading,
+                            "guidance": f"请填写{heading}。",
+                            "required": False,
+                        }
+                        for index, heading in enumerate(spec.headings)
+                    ],
+                }
+            sections_json, section_error = validate_template_sections(sections_json)
+            if section_error:
+                raise ValueError(f"Invalid seed template {spec.name}: {section_error}")
+            description_json = sections_to_content(sections_json)
             if spec.scope == "STAGE_MATERIAL":
-                blocks.insert(0, ("p", "负责人：{{user}} ｜ 项目：{{project}} ｜ 阶段：{{stage}}"))
-            description_json, _html, _stripped = document_from_blocks(blocks)
+                description_json["content"].insert(
+                    0,
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "负责人：{{user}} ｜ 项目：{{project}} ｜ 阶段：{{stage}}",
+                            }
+                        ],
+                    },
+                )
             if created:
                 template = ReportTemplate.objects.create(
                     workspace=self.workspace,
@@ -597,6 +631,7 @@ class ResearchSeedBuilder:
                     material_type=spec.material_type,
                     is_default=spec.is_default,
                     variables=list(spec.variables),
+                    sections_json=sections_json,
                     content_json=description_json,
                     is_active=True,
                     created_by=self.actor,

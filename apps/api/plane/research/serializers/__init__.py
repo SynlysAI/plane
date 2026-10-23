@@ -27,6 +27,11 @@ from .report import (
     ReportAccessGrantSerializer,
     ReportReviewLogSerializer,
 )
+from .report_comments import (
+    PeriodicReportCommentFeedbackSerializer,
+    PeriodicReportCommentSerializer,
+    PeriodicReportCommentThreadSerializer,
+)
 from .attachment import ReportAttachmentSerializer
 from .literature import LiteratureEntrySerializer
 from .experiment import (
@@ -87,6 +92,9 @@ __all__ = [
     "PeriodicReportReadReceiptSerializer",
     "ReportAccessGrantSerializer",
     "ReportReviewLogSerializer",
+    "PeriodicReportCommentFeedbackSerializer",
+    "PeriodicReportCommentSerializer",
+    "PeriodicReportCommentThreadSerializer",
     "ReportAttachmentSerializer",
     "LiteratureEntrySerializer",
     "ExperimentAmendmentSerializer",

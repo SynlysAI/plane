@@ -125,6 +125,33 @@ export const StageMaterialDetail = observer(function StageMaterialDetail({
         }
       />
 
+      {material.template_detail?.sections_json?.sections?.length ? (
+        <ResearchDetailSurface
+          title={t("research.templates.framework_title")}
+          hint={t("research.templates.framework_hint")}
+        >
+          {material.template_detail.sections_json.guidance && (
+            <p className="border-l border-subtle pl-2 text-12 leading-6 text-tertiary">
+              {material.template_detail.sections_json.guidance}
+            </p>
+          )}
+          <div className="grid gap-2 md:grid-cols-2">
+            {material.template_detail.sections_json.sections.map((section) => (
+              <div key={section.id} className="border-b border-subtle pb-2 last:border-b-0">
+                <p className="text-12 font-medium text-primary">
+                  {section.title}
+                  {section.required ? " *" : ""}
+                </p>
+                <p className="mt-1 text-11 leading-5 text-tertiary">
+                  {section.guidance}
+                  {section.max_chars ? `（${section.max_chars} 字以内）` : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        </ResearchDetailSurface>
+      ) : null}
+
       <ResearchDetailSurface
         title={t("research.stages.materials.edit_title")}
         hint={t("research.stages.materials.edit_hint")}

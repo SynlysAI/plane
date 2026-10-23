@@ -16,6 +16,7 @@ from plane.db.models import (
 )
 
 from .org import ResearchUserSerializer
+from .template import ReportTemplateGuideSerializer
 
 
 class ResearchStageInstanceSerializer(serializers.ModelSerializer):
@@ -64,6 +65,7 @@ class StageTransitionSerializer(serializers.ModelSerializer):
 
 class StageMaterialSerializer(serializers.ModelSerializer):
     owner_detail = ResearchUserSerializer(source="owner", read_only=True)
+    template_detail = ReportTemplateGuideSerializer(source="template", read_only=True)
 
     class Meta:
         model = StageMaterial
@@ -72,6 +74,8 @@ class StageMaterialSerializer(serializers.ModelSerializer):
             "stage_instance",
             "material_type",
             "page",
+            "template",
+            "template_detail",
             "status",
             "visibility",
             "is_required",

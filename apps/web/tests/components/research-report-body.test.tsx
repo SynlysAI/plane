@@ -7,6 +7,16 @@ import translations from "../../../../packages/i18n/src/locales/zh-CN/common.jso
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+  selectionAnchor: {
+    version: 1,
+    block_id: "block-1",
+    block_type: "paragraph",
+    selected_text: "催化剂活性实验",
+    prefix: "本周完成",
+    suffix: "，结果稳定",
+    start_offset: 4,
+    end_offset: 11,
+  },
   deleteReport: vi.fn(),
   editorMigrationUpdate: false,
   reports: {} as Record<string, TPeriodicReport>,
@@ -23,7 +33,7 @@ const mocks = vi.hoisted(() => ({
   updateReportVisibility: vi.fn(),
 }));
 
-vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
+vi.mock("mobx-react", () => ({ enableStaticRendering: vi.fn(), observer: (component: unknown) => component }));
 vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
@@ -80,6 +90,9 @@ vi.mock("@/components/research/common/research-data-surface", () => ({
 vi.mock("@/components/research/reports/report-attachments", () => ({
   ResearchReportAttachments: () => <section aria-label="附件" />,
 }));
+vi.mock("@/components/research/reports/report-comments", () => ({
+  ResearchReportComments: () => <aside aria-label="批注与讨论" />,
+}));
 vi.mock("@/components/editor/document/editor", () => ({
   /** 用可编辑 DOM 与公开编辑器 API 隔离富文本依赖，保留正文变更行为。 */
   DocumentEditor: React.forwardRef(function Editor(
@@ -87,10 +100,14 @@ vi.mock("@/components/editor/document/editor", () => ({
       value,
       editable,
       onChange,
+      onTransaction,
+      onCommentAnchorClick,
     }: {
       value: string | object;
       editable: boolean;
       onChange: (json: object, html: string, options?: { isMigrationUpdate?: boolean }) => void;
+      onTransaction?: () => void;
+      onCommentAnchorClick?: (threadId: string) => void;
     },
     ref
   ) {
@@ -102,6 +119,9 @@ vi.mock("@/components/editor/document/editor", () => ({
       () => ({
         getDocument: () => ({ html: body, json: { type: "doc", body }, binary: new Uint8Array([1, 2]) }),
         getMarkDown: () => body,
+        getSelectionAnchor: () => mocks.selectionAnchor,
+        setCommentAnchors: vi.fn(),
+        focusCommentAnchor: vi.fn(() => true),
         setEditorValueAtCursorPosition: (content: string) => {
           setBody((current) => current + content);
           onChange({ type: "doc", body: body + content }, body + content);
@@ -113,20 +133,35 @@ vi.mock("@/components/editor/document/editor", () => ({
       if (mocks.editorMigrationUpdate) onChange({}, initial, { isMigrationUpdate: true });
     }, [initial, onChange]);
     return (
-      <textarea
-        aria-label="正文编辑器"
-        readOnly={!editable}
-        value={body}
-        onChange={(event) => {
-          setBody(event.target.value);
-          onChange({ type: "doc", body: event.target.value }, event.target.value);
+      <div
+        role="presentation"
+        onClick={(event) => {
+          const target = event.target as HTMLElement;
+          const threadId = target.closest("[data-comment-thread-id]")?.getAttribute("data-comment-thread-id");
+          if (threadId) onCommentAnchorClick?.(threadId);
         }}
-      />
+        onKeyDown={() => undefined}
+      >
+        <textarea
+          aria-label="正文编辑器"
+          readOnly={!editable}
+          value={body}
+          onChange={(event) => {
+            setBody(event.target.value);
+            onChange({ type: "doc", body: event.target.value }, event.target.value);
+          }}
+        />
+        <button type="button" onClick={onTransaction}>
+          触发选区
+        </button>
+        <span data-comment-thread-id="thread-1">正文批注锚点</span>
+      </div>
     );
   }),
 }));
 
 const { ResearchReportDetail } = await import("@/components/research/reports/report-detail");
+const { ReportBody } = await import("@/components/research/reports/report-body");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
@@ -139,6 +174,24 @@ function report(projectBound = true): TPeriodicReport {
     project: projectBound ? "project-1" : null,
     page_project: projectBound ? "project-1" : null,
     page: "page-1",
+    template: "template-1",
+    template_detail: {
+      id: "template-1",
+      name: "结构化周报模板",
+      sections_json: {
+        version: 1,
+        guidance: "按研究进展框架填写。",
+        sections: [
+          {
+            id: "progress",
+            title: "本周进展",
+            guidance: "请填写本周进展。",
+            required: true,
+            max_chars: 100,
+          },
+        ],
+      },
+    },
     owner: "student-1",
     report_type: "WEEKLY",
     period_key: "2026-W40",
@@ -150,6 +203,16 @@ function report(projectBound = true): TPeriodicReport {
     official_content: null,
   } as TPeriodicReport;
 }
+
+it("报告正文显示模板章节引导和软性字数警告", async () => {
+  await renderBody();
+
+  expect(container.textContent).toContain("填写框架");
+  expect(container.textContent).toContain("按研究进展框架填写。");
+  expect(container.textContent).toContain("本周进展 *");
+  expect(container.textContent).toContain("0 / 100");
+  expect(container.textContent).toContain("必填章节尚未填写。");
+});
 
 /** 返回当前可见的正文编辑器。 */
 function editor(): HTMLTextAreaElement {
@@ -195,6 +258,15 @@ function deferred<T>() {
 /** 从当前 store 渲染完整详情，让提交流程使用真实 ReportBody。 */
 async function renderDetail() {
   await act(async () => root.render(<ResearchReportDetail workspaceSlug="lab" reportId="report-1" />));
+}
+
+/** 直接渲染正文，用于验证批注选区和锚点交互。 */
+async function renderBody(props: Partial<React.ComponentProps<typeof ReportBody>> = {}) {
+  await act(async () =>
+    root.render(
+      <ReportBody report={report()} workspaceSlug="lab" workspaceId="workspace-1" onBusy={vi.fn()} {...props} />
+    )
+  );
 }
 
 beforeEach(() => {
@@ -488,5 +560,31 @@ describe("报告详情已读回执", () => {
     await renderDetail();
     await act(async () => undefined);
     expect(mocks.markReportRead).not.toHaveBeenCalled();
+  });
+});
+
+describe("报告正文批注交互", () => {
+  it("选中文本后可把稳定锚点交给评论侧栏", async () => {
+    const onCreateComment = vi.fn();
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      rangeCount: 1,
+      getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 100, top: 100 }) }),
+    } as unknown as Selection);
+    await renderBody({ onCreateComment });
+
+    await act(async () => button("触发选区").click());
+    await act(async () => button("批注选中文字").click());
+
+    expect(onCreateComment).toHaveBeenCalledWith(mocks.selectionAnchor);
+  });
+
+  it("点击正文批注装饰会打开对应线程", async () => {
+    const onCommentAnchorClick = vi.fn();
+    await renderBody({ onCommentAnchorClick });
+    const anchor = container.querySelector<HTMLElement>("[data-comment-thread-id]");
+
+    await act(async () => anchor?.click());
+
+    expect(onCommentAnchorClick).toHaveBeenCalledWith("thread-1");
   });
 });

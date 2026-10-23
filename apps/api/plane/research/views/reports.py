@@ -59,14 +59,20 @@ from plane.research.utils.notifications import (
 from plane.research.utils.periods import InvalidPeriod, current_period, parse_period
 from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, is_editable, report_resource, visible_reports_queryset
-from plane.research.utils.settings import default_visibility_for, get_workspace_research_settings, report_timezone_for
+from plane.research.utils.settings import default_visibility_for, report_timezone_for
+from plane.research.utils.templates import (
+    find_report_template,
+    resolve_variables,
+    template_target_key,
+    template_values,
+)
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
 
 
 def report_queryset(workspace):
     return (
         PeriodicReport.objects.filter(workspace=workspace)
-        .select_related("owner", "org_unit", "page", "project")
+        .select_related("owner", "org_unit", "page", "project", "template")
         .prefetch_related(
             "team_projects",
             "attachments",
@@ -448,10 +454,38 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
         template = None
         if request.data.get("template"):
             template = ReportTemplate.objects.filter(
-                workspace=workspace, pk=request.data["template"], is_active=True
+                workspace=workspace,
+                pk=request.data["template"],
+                scope=ReportTemplate.Scope.REPORT,
+                report_type=report_type,
+                target_key=template_target_key(ReportTemplate.Scope.REPORT, report_type=report_type),
+                is_active=True,
+                deleted_at__isnull=True,
             ).first()
             if template is None:
                 return research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Template not found.")
+        else:
+            template = find_report_template(workspace, report_type)
+
+        template_content = template.content_json if template is not None else {"type": "doc", "content": []}
+        if template is not None:
+            resolved, unresolved = resolve_variables(
+                template_content,
+                template_values(
+                    user=request.user,
+                    project=profile.project if profile else None,
+                    stage="",
+                    org_unit=str(report_org_unit.id) if report_org_unit else "",
+                    period=period_key,
+                ),
+            )
+            if unresolved:
+                return research_error(
+                    ResearchErrorCode.TEMPLATE_VARIABLES_UNRESOLVED,
+                    f"Unresolved template variables: {', '.join(unresolved)}.",
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            template_content = resolved
 
         if PeriodicReport.objects.filter(
             workspace=workspace,
@@ -469,7 +503,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                 page = Page.objects.create(
                     workspace=workspace,
                     name=f"{period_key} {report_type}",
-                    description_json=(template.content_json if template else {"type": "doc", "content": []}),
+                    description_json=template_content,
                     description_html="<p></p>",
                     owned_by=request.user,
                     access=Page.PRIVATE_ACCESS,
@@ -492,6 +526,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                     owner=request.user,
                     org_unit=report_org_unit,
                     page=page,
+                    template=template,
                     report_type=report_type,
                     period_key=period_key,
                     period_start=period_start,
@@ -528,6 +563,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                 "report_type": report_type,
                 "period_key": period_key,
                 "is_backfill": report.is_backfill,
+                "template": str(template.id) if template else None,
             },
             request=request,
         )
@@ -581,12 +617,37 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
         # through this research endpoint.
         if request.data.get("template"):
             template = ReportTemplate.objects.filter(
-                workspace=workspace, pk=request.data["template"], is_active=True
+                workspace=workspace,
+                pk=request.data["template"],
+                scope=ReportTemplate.Scope.REPORT,
+                report_type=report.report_type,
+                target_key=template_target_key(ReportTemplate.Scope.REPORT, report_type=report.report_type),
+                is_active=True,
+                deleted_at__isnull=True,
             ).first()
             if template is None:
                 return research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Template not found.")
-            report.page.description_json = template.content_json
+            resolved, unresolved = resolve_variables(
+                template.content_json,
+                template_values(
+                    user=request.user,
+                    project=report.project,
+                    stage="",
+                    org_unit=str(report.org_unit_id or ""),
+                    period=report.period_key,
+                ),
+            )
+            if unresolved:
+                return research_error(
+                    ResearchErrorCode.TEMPLATE_VARIABLES_UNRESOLVED,
+                    f"Unresolved template variables: {', '.join(unresolved)}.",
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            report.page.description_json = resolved
             report.page.save(update_fields=["description_json", "updated_at"])
+            if report.template_id != template.id:
+                report.template = template
+                report.save(update_fields=["template", "updated_at"])
 
         body_fields = ("description_json", "description_html", "description_binary")
         body_payload = {field: request.data[field] for field in body_fields if field in request.data}

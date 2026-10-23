@@ -10,9 +10,12 @@ notification centre and email fan-out keep working (P0-RPT-12, P0-APR-06).
 """
 
 from django.utils import timezone
+from bs4 import BeautifulSoup
+from uuid import UUID
 
 from plane.db.models import Notification
-from plane.research.utils.acl import direct_advisor_ids, org_unit_scope_ids
+from plane.research.utils.acl import build_actor_context, check_access, direct_advisor_ids, org_unit_scope_ids
+from plane.research.utils.reports import report_resource
 
 RESEARCH_REPORT_ENTITY = "research_report"
 RESEARCH_APPROVAL_ENTITY = "research_approval"
@@ -114,5 +117,74 @@ def notify_report_accepted(report, actor):
             "action": "accepted",
             "period_key": report.period_key,
             "reviewer": str(actor.id),
+        },
+    )
+
+
+def mentioned_user_ids(comment_html) -> set:
+    """Extract valid user mentions from sanitized report-comment HTML.
+
+    Args:
+        comment_html: Sanitized rich-text HTML submitted by a workspace member.
+
+    Returns:
+        A set of user IDs explicitly mentioned with ``entity_name=user_mention``.
+    """
+    identifiers = set()
+    for node in BeautifulSoup(comment_html or "", "html.parser").find_all("mention-component"):
+        if node.get("entity_name") != "user_mention":
+            continue
+        value = node.get("entity_identifier")
+        try:
+            identifiers.add(str(UUID(str(value))))
+        except (ValueError, TypeError):
+            continue
+    return identifiers
+
+
+def notify_report_comment(report, thread, comment, actor, *, action="created"):
+    """Notify only report-visible participants and users mentioned in a comment.
+
+    Args:
+        report: The report owning the comment thread.
+        thread: The persisted comment thread.
+        comment: The newly created or updated comment.
+        actor: The authenticated comment actor.
+        action: One of ``created``, ``updated``, ``resolved``, or ``reopened``.
+
+    Returns:
+        The notifications created by the existing shared notification pipeline.
+    """
+    from plane.db.models import User
+
+    receiver_ids = {report.owner_id, thread.created_by_id}
+    receiver_ids.update(thread.comments.exclude(actor_id=actor.id).values_list("actor_id", flat=True))
+    if action in {"created", "updated"}:
+        receiver_ids.update(mentioned_user_ids(comment.comment_html))
+    receiver_ids.discard(actor.id)
+    users = User.objects.filter(id__in=receiver_ids, is_active=True)
+    receivers = []
+    for user in users:
+        context = build_actor_context(user, report.workspace_id)
+        if check_access(user, "view", report_resource(report), context=context):
+            receivers.append(user)
+    action_labels = {
+        "created": "新批注",
+        "updated": "批注更新",
+        "resolved": "批注已解决",
+        "reopened": "批注重新开放",
+    }
+    return _notify(
+        report,
+        receivers,
+        actor=actor,
+        title=f"{report.period_key} 报告有{action_labels.get(action, '批注更新')}",
+        message={
+            "action": f"comment.{action}",
+            "report_id": str(report.id),
+            "thread_id": str(thread.id),
+            "comment_id": str(comment.id),
+            "snapshot_version": thread.snapshot_version,
+            "quoted_text": thread.quoted_text[:500],
         },
     )
