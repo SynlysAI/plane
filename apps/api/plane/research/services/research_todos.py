@@ -20,6 +20,7 @@ from plane.db.models import (
     MentorBinding,
     PeriodicReport,
     ResearchAgentSession,
+    ResearchChainStage,
     ResearchChainNodeTask,
     ResearchPaperReview,
     ResearchStageInstance,
@@ -35,6 +36,7 @@ from plane.research.services.chain_tasks import (
     chain_writer,
     chain_assignable_user_ids,
 )
+from plane.research.services.chain_stage_approvals import ChainStageRuleError, resolve_advisor, resolve_principal
 from plane.research.services.paper_review import (
     actor_can_review_paper,
     actor_can_submit_paper,
@@ -728,6 +730,66 @@ def collect_office_approval_todos(workspace, user, scope):
     return result
 
 
+def collect_chain_stage_approval_todos(workspace, user, scope):
+    """Project pending thirteen-stage Research Chain approvals."""
+    if not _chain_feature_enabled(workspace):
+        return []
+    stages = (
+        ResearchChainStage.objects.filter(
+            workspace=workspace,
+            status__in=("AWAITING_ADVISOR", "AWAITING_PI"),
+            deleted_at__isnull=True,
+            chain__status="ACTIVE",
+            chain__project__research_profile__workflow_status="ACTIVE",
+        )
+        .select_related(
+            "chain__project__research_profile",
+            "chain__project",
+            "chain__owner",
+        )
+        .order_by("-updated_at", "-created_at")
+    )
+    result = []
+    for stage in stages:
+        profile = getattr(stage.chain.project, "research_profile", None)
+        if profile is None or not can_read_project_research_metadata(workspace, user, profile):
+            continue
+        if scope == "mine" and stage.chain.owner_id != user.id:
+            continue
+        try:
+            reviewer = (
+                resolve_advisor(stage.chain) if stage.status == "AWAITING_ADVISOR" else resolve_principal(stage.chain)
+            )
+        except ChainStageRuleError:
+            reviewer = None
+        can_decide = reviewer is not None and reviewer.id == user.id
+        if scope == "to_me" and not can_decide:
+            continue
+        reviewer_step = "ADVISOR" if stage.status == "AWAITING_ADVISOR" else "PI"
+        todo = _todo(
+            source="CHAIN_STAGE_APPROVAL",
+            project_id=stage.chain.project_id,
+            object_id=stage.id,
+            title=f"{stage.chain.project.name} · {stage.stage_code}",
+            context=f"科研链阶段审批 · {reviewer_step}",
+            requester=_participant(stage.chain.owner),
+            assignees=_participants([reviewer] if reviewer else []),
+            business_status=stage.status,
+            handling_status="BLOCKED" if reviewer is None else "IN_PROGRESS",
+            next_action="APPROVE",
+            due_at=None,
+            href=f"/{workspace.slug}/research/chains/{stage.chain_id}?tab=nodes&stage={stage.stage_code.lower()}",
+            capabilities=capability_map(
+                ("view", "approve", "reject"),
+                {"view": True, "approve": can_decide, "reject": can_decide},
+            ),
+            trace_ref={"resource_type": "research_chain_stage", "resource_id": str(stage.id)},
+            updated_at=stage.updated_at,
+        )
+        result.append(todo)
+    return result
+
+
 def _todo_sort_key(todo, now=None):
     """Return the stable urgency-first ordering key for one todo."""
     now = now or timezone.now()
@@ -776,6 +838,7 @@ def collect_research_todos(workspace, user, scope, request_id=None):
         ("REPORT", collect_report_todos),
         ("PAPER_REVIEW", collect_paper_review_todos),
         ("STAGE_REVIEW", collect_stage_review_todos),
+        ("CHAIN_STAGE_APPROVAL", collect_chain_stage_approval_todos),
         ("AGENT_APPROVAL", collect_agent_approval_todos),
         ("OFFICE_APPROVAL", collect_office_approval_todos),
     )

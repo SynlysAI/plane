@@ -216,6 +216,104 @@ export type TResearchActionCapabilities = {
 
 export type TResearchChainNodeAction = "START" | "SUBMIT_REVIEW" | "APPROVE" | "RETURN" | "FAIL" | "ARCHIVE";
 
+export type TResearchChainStageStatus =
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "AWAITING_ADVISOR"
+  | "AWAITING_PI"
+  | "NEEDS_REVISION"
+  | "APPROVED";
+
+export type TResearchChainStageMaterialItem = {
+  id: string;
+  title: string;
+  description: string;
+  source_node: string | null;
+  external_reference: string;
+  created_at: string;
+};
+
+export type TResearchChainStageMaterial = {
+  id: string;
+  code: string;
+  title: string;
+  minimum_count: number;
+  submitted_count: number;
+  complete: boolean;
+  items: TResearchChainStageMaterialItem[];
+};
+
+export type TResearchChainStageReviewer = {
+  user: { id: string; display_name: string; email: string } | null;
+  error: string | null;
+};
+
+export type TResearchChainStageReviewAction = {
+  schema_version: "research-chain-stage-review-action.v1";
+  id: string;
+  attempt_no: number;
+  reviewer_role: "ADVISOR" | "PI";
+  reviewer_detail?: { id: string; display_name: string; email: string } | null;
+  action: "APPROVE" | "RETURN";
+  comment: string;
+  escalated_to_pi: boolean;
+  material_snapshot: Array<Record<string, unknown>>;
+  declaration_snapshot: Record<string, unknown>;
+  created_at: string;
+};
+
+export type TResearchChainStagePrecheck = {
+  schema_version: "research-chain-stage-precheck.v1";
+  id: string;
+  status: "READY" | "WARNING" | "FAILED";
+  summary: string;
+  checks: Array<Record<string, unknown>>;
+  recommendations: string[];
+  generated_by: string;
+  model_version: string;
+  created_at: string;
+};
+
+export type TResearchChainStageApproval = {
+  schema_version: "research-chain-stage.v1";
+  id: string;
+  chain: string;
+  stage_code: string;
+  sort_order: number;
+  status: TResearchChainStageStatus;
+  pi_policy: "ADVISOR_ONLY" | "ALWAYS_PI" | "CONDITIONAL_PI";
+  requires_pi: boolean;
+  escalation_reason: string;
+  attempt_count: number;
+  submitted_node: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
+  materials: TResearchChainStageMaterial[];
+  review_actions: TResearchChainStageReviewAction[];
+  latest_precheck: TResearchChainStagePrecheck | null;
+  advisor: TResearchChainStageReviewer;
+  principal_investigator: TResearchChainStageReviewer;
+  current_review_step: "ADVISOR" | "PI" | null;
+  capabilities?: TResearchActionCapabilities;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchChainStageApprovalSummary = {
+  chain: string;
+  chain_status: string;
+  stages: TResearchChainStageApproval[];
+  progress: {
+    total: number;
+    approved: number;
+    awaiting_advisor: number;
+    awaiting_pi: number;
+    needs_revision: number;
+    in_progress: number;
+    not_started: number;
+  };
+};
+
 export type TResearchChainEvent = {
   schema_version: "research-event.v1";
   id?: string;
@@ -430,6 +528,7 @@ export type TResearchPaperReviewVersion = {
 
 export type TResearchTodoSource =
   | "CHAIN_TASK"
+  | "CHAIN_STAGE_APPROVAL"
   | "REPORT"
   | "PAPER_REVIEW"
   | "STAGE_REVIEW"

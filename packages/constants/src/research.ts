@@ -684,6 +684,18 @@ export const researchEndpoints = {
   chainArchive: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/archive/`,
   chainRestore: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/restore/`,
   chainMembers: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/`,
+  chainStageApprovals: (slug: string, chainId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/`,
+  chainStageMaterials: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/materials/`,
+  chainStageMaterial: (slug: string, chainId: string, stageCode: string, materialId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/materials/${materialId}/`,
+  chainStagePrecheck: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/precheck/`,
+  chainStageSubmit: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/submit/`,
+  chainStageReview: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/review/`,
   chainMember: (slug: string, chainId: string, userId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/${userId}/`,
   chainAssignableUsers: (slug: string, chainId: string) =>

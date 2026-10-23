@@ -12,6 +12,7 @@ import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 // components
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
+import { ChainStageApprovalInbox } from "@/components/research/approvals/chain-stage-approval-inbox";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 import { ReviewInbox } from "@/components/research/reviews/review-inbox";
@@ -22,7 +23,7 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ApprovalTab = "stage_review" | "report_review" | "office";
+type ApprovalTab = "chain_stage" | "stage_review" | "report_review" | "office";
 
 type ApprovalShell = {
   titleKey: string;
@@ -45,6 +46,14 @@ function approvalTabHref(searchParams: URLSearchParams, workspaceSlug: string, t
 /** 按当前科研队列选择页面门禁。 */
 function approvalShell(tab: ApprovalTab): ApprovalShell {
   if (tab === "stage_review") {
+    return {
+      titleKey: "research.nav.approvals_v2",
+      descriptionKey: "research.approvals.description",
+      section: "stages",
+      navKey: "reviews",
+    };
+  }
+  if (tab === "chain_stage") {
     return {
       titleKey: "research.nav.approvals_v2",
       descriptionKey: "research.approvals.description",
@@ -79,6 +88,11 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
   const sections = research.identity?.sections;
 
   const domainTabs = [
+    {
+      id: "chain_stage" as const,
+      labelKey: "research.approvals.tabs.chain_stage",
+      visible: Boolean(sections?.research_chain) && research.canSee("reviews"),
+    },
     {
       id: "stage_review" as const,
       labelKey: "research.approvals.tabs.stage_review",
@@ -119,6 +133,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
           </TabNavigationList>
         </nav>
         <div className="min-h-0 flex-1 overflow-hidden">
+          {activeTab === "chain_stage" && <ChainStageApprovalInbox workspaceSlug={workspaceSlug} />}
           {activeTab === "stage_review" && <ReviewInbox workspaceSlug={workspaceSlug} />}
           {activeTab === "report_review" && <ResearchReportList workspaceSlug={workspaceSlug} variant="review" />}
           {(activeTab === "office" || !activeTab) && (

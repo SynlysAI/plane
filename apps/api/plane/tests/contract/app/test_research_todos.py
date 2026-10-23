@@ -624,6 +624,7 @@ class TestResearchTodoProjectionContract:
             ("REPORT", "collect_report_todos"),
             ("PAPER_REVIEW", "collect_paper_review_todos"),
             ("STAGE_REVIEW", "collect_stage_review_todos"),
+            ("CHAIN_STAGE_APPROVAL", "collect_chain_stage_approval_todos"),
             ("OFFICE_APPROVAL", "collect_office_approval_todos"),
         ],
     )

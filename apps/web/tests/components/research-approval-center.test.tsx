@@ -41,6 +41,9 @@ vi.mock("@/components/research/common/research-page-shell", () => ({
 vi.mock("@/components/research/approvals/approval-list", () => ({
   ResearchApprovalList: () => <div>office-approvals</div>,
 }));
+vi.mock("@/components/research/approvals/chain-stage-approval-inbox", () => ({
+  ChainStageApprovalInbox: () => <div>chain-stage-approvals</div>,
+}));
 vi.mock("@/components/research/reports/report-list", () => ({
   ResearchReportList: () => <div>report-list</div>,
 }));
@@ -108,6 +111,7 @@ it("renders only research queues with canonical page-level links", async () => {
   expect(container.querySelector("[data-hide-header='true']")).not.toBeNull();
   const nav = container.querySelector('nav[aria-label="审批中心"]');
   expect(Array.from(nav?.querySelectorAll("a") ?? []).map((link) => link.textContent)).toEqual([
+    "科研链阶段",
     "阶段评审",
     "报告审核",
     "办公审批",
@@ -122,6 +126,17 @@ it("renders only research queues with canonical page-level links", async () => {
 
   expect(container.textContent).toContain("review-inbox");
   expect(container.textContent).not.toContain("report-list");
+});
+
+it("renders the research chain stage queue and keeps its deep link", async () => {
+  await renderCenter("/lab/approvals?domain=research&tab=chain_stage&todo_scope=visible");
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("chain-stage-approvals");
+  const chainStageTab = [...container.querySelectorAll("a")].find((link) =>
+    link.getAttribute("href")?.includes("tab=chain_stage")
+  );
+  expect(chainStageTab?.getAttribute("href")).toBe("/lab/approvals?domain=research&tab=chain_stage&todo_scope=visible");
 });
 
 it("keeps todo scope while switching research queues", async () => {

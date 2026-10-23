@@ -27,6 +27,13 @@ from .chain import (
     ResearchAnalysisResult,
     ResearchReflectionLog,
 )
+from .chain_stage import (
+    ResearchChainStage,
+    ResearchChainStageMaterialItem,
+    ResearchChainStageMaterialRequirement,
+    ResearchChainStagePrecheck,
+    ResearchChainStageReviewAction,
+)
 from .context import ResearchContextGrant
 from .agent_operation import ResearchAgentOperation, ResearchAgentOperationApproval, ResearchAgentWriteGrant
 from .agent import ResearchAgentRunEvent, ResearchAgentSession
@@ -95,6 +102,11 @@ __all__ = [
     "IdentityMapping",
     "AccountLink",
     "ResearchChain",
+    "ResearchChainStage",
+    "ResearchChainStageMaterialItem",
+    "ResearchChainStageMaterialRequirement",
+    "ResearchChainStagePrecheck",
+    "ResearchChainStageReviewAction",
     "ResearchChainNode",
     "ResearchChainEvent",
     "ResearchChainSnapshot",

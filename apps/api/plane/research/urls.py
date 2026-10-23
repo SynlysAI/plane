@@ -36,6 +36,14 @@ from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
 from plane.research.views.report_context import ResearchFormalReportContentEndpoint, ResearchFormalReportOptionsEndpoint
+from plane.research.views.chain_stage_approvals import (
+    ResearchChainStageApprovalListEndpoint,
+    ResearchChainStageMaterialDetailEndpoint,
+    ResearchChainStageMaterialEndpoint,
+    ResearchChainStagePrecheckEndpoint,
+    ResearchChainStageReviewEndpoint,
+    ResearchChainStageSubmitEndpoint,
+)
 from plane.research.views.feedback import (
     ResearchFeedbackEndpoint,
     ResearchFeedbackStatusEndpoint,
@@ -355,6 +363,36 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/",
         ResearchChainDetailEndpoint.as_view(),
         name="research-chain-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/",
+        ResearchChainStageApprovalListEndpoint.as_view(),
+        name="research-chain-stage-approvals",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/materials/",
+        ResearchChainStageMaterialEndpoint.as_view(),
+        name="research-chain-stage-materials",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/materials/<uuid:material_id>/",
+        ResearchChainStageMaterialDetailEndpoint.as_view(),
+        name="research-chain-stage-material-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/precheck/",
+        ResearchChainStagePrecheckEndpoint.as_view(),
+        name="research-chain-stage-precheck",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/submit/",
+        ResearchChainStageSubmitEndpoint.as_view(),
+        name="research-chain-stage-submit",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/review/",
+        ResearchChainStageReviewEndpoint.as_view(),
+        name="research-chain-stage-review",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/archive/",

@@ -11,7 +11,13 @@ import { TabNavigationList } from "@plane/propel/tab-navigation";
 import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from "@plane/propel/table";
 import { ListFilterField, ListFilterSelect } from "@plane/ui";
 import { ResearchFilterToolbar, ResearchTableSurface } from "@/components/research/common/research-data-surface";
-import type { TResearchChain, TResearchChainMember, TResearchChainNode, TResearchChainNodeAction } from "@plane/types";
+import type {
+  TResearchChain,
+  TResearchChainMember,
+  TResearchChainNode,
+  TResearchChainNodeAction,
+  TResearchChainStageApprovalSummary,
+} from "@plane/types";
 // components
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
@@ -22,6 +28,7 @@ import { ResearchTabLink } from "@/components/research/common/research-tab-link"
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { pickCurrentNode } from "@/components/research/chains/research-selection";
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
+import { ResearchChainStageApprovalPanel } from "@/components/research/chains/research-chain-stage-approval-panel";
 import { ResearchChainKnowledgePanel } from "@/components/research/chains/research-chain-knowledge-panel";
 import {
   buildResearchWorkflow,
@@ -77,7 +84,7 @@ const ACTIONS_BY_STATUS: Record<TResearchChainNode["status"], TResearchChainNode
 
 const NODE_TYPE_BY_STAGE: Record<TResearchWorkflowStage["id"], string> = {
   literature_review: "LITERATURE_REVIEW",
-  topic_selection: "TOPIC_EVALUATION",
+  topic_selection: "TOPIC_SELECTION",
   topic_evaluation: "TOPIC_EVALUATION",
   pre_experiment: "PRE_EXPERIMENT",
   analysis_pre_experiment: "ANALYSIS",
@@ -110,6 +117,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const activeTab = resolveChainTab(requestedTab);
   const [chain, setChain] = useState<TResearchChain | null>(null);
   const [nodes, setNodes] = useState<TResearchChainNode[]>([]);
+  const [stageApprovalSummary, setStageApprovalSummary] = useState<TResearchChainStageApprovalSummary | null>(null);
   const [members, setMembers] = useState<TResearchChainMember[]>([]);
   const [stageDetails, setStageDetails] = useState<TResearchChainStageNodeDetail[]>([]);
   const [selected, setSelected] = useState<TResearchChainStageNodeDetail | null>(null);
@@ -130,7 +138,10 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [memberBusy, setMemberBusy] = useState(false);
   const [memberError, setMemberError] = useState("");
   const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
-  const workflow = useMemo(() => buildResearchWorkflow(nodes, current?.id ?? null), [current, nodes]);
+  const workflow = useMemo(
+    () => buildResearchWorkflow(nodes, current?.id ?? null, stageApprovalSummary?.stages ?? []),
+    [current, nodes, stageApprovalSummary]
+  );
   const requestedStageId = searchParams.get("stage");
   const requestedNode = nodes.find((node) => node.id === requestedNodeId);
   const selectedStage =
@@ -150,6 +161,9 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   }, [nodes, requestedNode, selectedStage]);
   const stageNodeIds = stageNodes.map((node) => node.id).join(",");
   const preferredNodeId = requestedNode?.id ?? selectedStage?.preferredNodeId ?? null;
+  const selectedStageApproval = stageApprovalSummary?.stages.find(
+    (stage) => stage.stage_code === selectedStage?.stageCode
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,14 +173,16 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
     setSelected(null);
     setStageDetailError(false);
     try {
-      const [chainDetail, chainNodes, chainMembers] = await Promise.all([
+      const [chainDetail, chainNodes, chainMembers, stageApprovals] = await Promise.all([
         chainService.getChain(workspaceSlug, chainId),
         chainService.getChainNodes(workspaceSlug, chainId),
         chainService.getChainMembers(workspaceSlug, chainId).catch(() => []),
+        chainService.getChainStageApprovals(workspaceSlug, chainId),
       ]);
       setChain(chainDetail);
       setNodes(chainNodes);
       setMembers(chainMembers);
+      setStageApprovalSummary(stageApprovals);
     } catch (error) {
       const errorCode = (error as { error_code?: string })?.error_code;
       setForbidden(errorCode === "research_permission_denied");
@@ -375,6 +391,13 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           const capability = selected.node.capabilities?.actions.transition;
           return capability ? capability.allowed : true;
         })
+        .filter(
+          (action) =>
+            !(
+              Object.values(NODE_TYPE_BY_STAGE).includes(selected.node.node_type) &&
+              ["SUBMIT_REVIEW", "APPROVE", "RETURN"].includes(action)
+            )
+        )
         .map((action) => (
           <Button
             key={action}
@@ -502,6 +525,46 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 </div>
               </div>
             )}
+            {stageApprovalSummary && (
+              <div className="mt-3 border-t border-subtle pt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-12 font-medium text-primary">
+                    {t("research.chains.stage_approval.progress", {
+                      approved: stageApprovalSummary.progress.approved,
+                      total: stageApprovalSummary.progress.total,
+                    })}
+                  </p>
+                  <p className="text-11 text-tertiary">
+                    {[
+                      {
+                        label: t("research.chains.workflow.stage_status.awaiting_advisor"),
+                        count: stageApprovalSummary.progress.awaiting_advisor,
+                      },
+                      {
+                        label: t("research.chains.workflow.stage_status.awaiting_pi"),
+                        count: stageApprovalSummary.progress.awaiting_pi,
+                      },
+                      {
+                        label: t("research.chains.workflow.stage_status.needs_revision"),
+                        count: stageApprovalSummary.progress.needs_revision,
+                      },
+                    ]
+                      .filter((item) => item.count > 0)
+                      .map((item) => `${item.label} ${item.count}`)
+                      .join(" · ") || t("research.chains.stage_approval.no_pending")}
+                  </p>
+                </div>
+                <div className="mt-2 h-1 w-full max-w-md overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    className="h-full bg-accent-primary"
+                    style={{
+                      width: `${(stageApprovalSummary.progress.approved / stageApprovalSummary.progress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-1.5 text-11 text-tertiary">{t("research.chains.stage_approval.completion_rule")}</p>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {chain?.capabilities?.actions.delete?.allowed && (
@@ -522,6 +585,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
 
       <ResearchChainWorkflowRail
         nodes={nodes}
+        stageApprovals={stageApprovalSummary?.stages ?? []}
         currentNodeId={current?.id ?? null}
         selectedStageId={selectedStage?.id ?? null}
         onSelectStage={(stage) => {
@@ -670,6 +734,17 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                 detailSlot={
                   selected ? (
                     <>
+                      {selectedStageApproval && (
+                        <ResearchChainStageApprovalPanel
+                          key={selectedStageApproval.id}
+                          workspaceSlug={workspaceSlug}
+                          chainId={chainId}
+                          stage={selectedStageApproval}
+                          nodes={nodes}
+                          preferredNodeId={preferredNodeId}
+                          onChanged={() => void load()}
+                        />
+                      )}
                       <ResearchChainTaskPanel
                         workspaceSlug={workspaceSlug}
                         chainId={chainId}

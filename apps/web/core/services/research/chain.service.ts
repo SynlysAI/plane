@@ -10,6 +10,9 @@ import type {
   TResearchChainMember,
   TResearchChainNode,
   TResearchChainNodeAction,
+  TResearchChainStageApproval,
+  TResearchChainStageApprovalSummary,
+  TResearchChainStageMaterialItem,
   TResearchChainSnapshot,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
@@ -26,6 +29,14 @@ type TResearchChainNodeDetail = {
   node: TResearchChainNode;
   events: TResearchChainEvent[];
   snapshots: TResearchChainSnapshot[];
+};
+
+type TResearchChainStageMaterialCreatePayload = {
+  requirement_code: string;
+  title: string;
+  description?: string;
+  source_node_id?: string;
+  external_reference?: string;
 };
 
 function request_id() {
@@ -161,6 +172,106 @@ export class ResearchChainService extends APIService {
       .then((res) => {
         const payload = res?.data as TResearchEnvelope<TResearchChainMember[]> | undefined;
         return payload?.data ?? [];
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  /** 读取十三阶段审批的权威状态、材料清单和审批历史。 */
+  async getChainStageApprovals(workspaceSlug: string, chainId: string) {
+    return this.get(researchEndpoints.chainStageApprovals(workspaceSlug, chainId))
+      .then((res) => {
+        const payload = res?.data as TResearchEnvelope<TResearchChainStageApprovalSummary> | undefined;
+        if (!payload?.data) throw payload ?? {};
+        return payload.data;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async createChainStageMaterial(
+    workspaceSlug: string,
+    chainId: string,
+    stageCode: string,
+    payload: TResearchChainStageMaterialCreatePayload
+  ) {
+    return this.post(researchEndpoints.chainStageMaterials(workspaceSlug, chainId, stageCode), {
+      ...payload,
+      request_id: request_id(),
+    })
+      .then((res) => {
+        const response = res?.data as TResearchEnvelope<TResearchChainStageMaterialItem> | undefined;
+        if (!response?.data) throw response ?? {};
+        return response.data;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async deleteChainStageMaterial(
+    workspaceSlug: string,
+    chainId: string,
+    stageCode: string,
+    materialId: string
+  ): Promise<void> {
+    await this.delete(researchEndpoints.chainStageMaterial(workspaceSlug, chainId, stageCode, materialId)).catch(
+      (err) => {
+        throw err?.response?.data ?? err;
+      }
+    );
+  }
+
+  async runChainStagePrecheck(workspaceSlug: string, chainId: string, stageCode: string) {
+    return this.post(researchEndpoints.chainStagePrecheck(workspaceSlug, chainId, stageCode), {
+      request_id: request_id(),
+    })
+      .then((res) => {
+        const payload = res?.data as TResearchEnvelope<TResearchChainStageApproval["latest_precheck"]> | undefined;
+        if (!payload?.data) throw payload ?? {};
+        return payload.data;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async submitChainStage(
+    workspaceSlug: string,
+    chainId: string,
+    stageCode: string,
+    payload: { node_id: string; requires_pi?: boolean; escalation_reason?: string }
+  ) {
+    return this.post(researchEndpoints.chainStageSubmit(workspaceSlug, chainId, stageCode), {
+      ...payload,
+      request_id: request_id(),
+    })
+      .then((res) => {
+        const response = res?.data as TResearchEnvelope<TResearchChainStageApproval> | undefined;
+        if (!response?.data) throw response ?? {};
+        return response.data;
+      })
+      .catch((err) => {
+        throw err?.response?.data ?? err;
+      });
+  }
+
+  async reviewChainStage(
+    workspaceSlug: string,
+    chainId: string,
+    stageCode: string,
+    payload: { action: "APPROVE" | "RETURN"; comment?: string; escalate_to_pi?: boolean }
+  ) {
+    return this.post(researchEndpoints.chainStageReview(workspaceSlug, chainId, stageCode), {
+      ...payload,
+      request_id: request_id(),
+    })
+      .then((res) => {
+        const response = res?.data as TResearchEnvelope<TResearchChainStageApproval> | undefined;
+        if (!response?.data) throw response ?? {};
+        return response.data;
       })
       .catch((err) => {
         throw err?.response?.data ?? err;
