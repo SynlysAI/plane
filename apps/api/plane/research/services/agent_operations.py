@@ -1,4 +1,4 @@
-"""Node-scoped proposals, trusted approval and exactly-once logical execution."""
+"""Node-scoped proposals, client-authorized execution and logical idempotency."""
 
 import hashlib
 import html
@@ -224,7 +224,9 @@ class ResearchOperationService:
             "proposal_hash": operation.proposal_hash, "agent_label": operation.agent_label, "status": operation.status,
             "expires_at": operation.expires_at.isoformat(), "result": operation.result,
             "effects": "Changes one target; records Agent provenance and audit. No assignment, lifecycle transition or external call.",
-            "review_path": f"/{self.workspace.slug}/research/chains/{operation.node.chain_id}/?tab=nodes&node={operation.node_id}&operation={operation.pk}"}
+            "confirmation_mode": "agent_client",
+            "review_path": (f"/{self.workspace.slug}/research/chains/{operation.node.chain_id}/"
+                            f"?tab=nodes&node={operation.node_id}")}
 
     @transaction.atomic
     def prepare_research_operation(self, request_id, node_id, action, payload, source_refs=None):
@@ -330,12 +332,10 @@ class ResearchOperationService:
                 if operation.expires_at <= timezone.now():
                     operation.status = "EXPIRED"
                     operation.save(update_fields=["status", "updated_at"])
-                elif operation.status == "APPROVED":
-                    approval = ResearchAgentOperationApproval.objects.select_for_update().filter(
-                        operation=operation, actor=self.user, decision="APPROVED", proposal_hash=operation.proposal_hash,
-                        expires_at__gt=timezone.now()).first()
-                    if not approval:
-                        raise ResearchReadError("approval_required", "An unexpired human approval for this exact proposal is required.", 403)
+                elif operation.status in {"PROPOSED", "APPROVED"}:
+                    # The authenticated execute call is the client's authorization
+                    # to submit this immutable proposal. Do not require a second
+                    # platform approval or manufacture a human approval record.
                     node = self.context(operation.node_id, operation.action, lock=True)
                     current = self.preconditions(node, operation.action, operation.payload, operation.source_refs, lock=True)
                     if current != operation.preconditions:
@@ -349,7 +349,7 @@ class ResearchOperationService:
                         operation.status = "COMMITTED"
                         operation.save(update_fields=["status", "result", "updated_at"])
                 else:
-                    raise ResearchReadError("approval_required", "This proposal is not approved for execution.", 403)
+                    raise ResearchReadError("operation_not_executable", "This proposal is no longer executable.", 403)
         if operation.status != "COMMITTED":
             raise ResearchReadError("operation_" + operation.status.lower(), "Proposal expired or its preconditions changed; prepare a new proposal.", 409)
         return self.readback(operation)
@@ -381,7 +381,9 @@ class ResearchOperationService:
             target, kind = None, "event"
         metadata = {"operation_id": str(operation.pk), "agent_label": operation.agent_label,
                     "grant_id": str(self.grant.context_id), "proposing_user_id": str(operation.user_id),
-                    "approving_user_id": str(operation.approval.actor_id)}
+                    "executing_user_id": str(self.user.pk), "authorization_source": "agent_client"}
+        if hasattr(operation, "approval"):
+            metadata["approving_user_id"] = str(operation.approval.actor_id)
         if target:
             refs.append({"kind": kind, "id": str(target.pk)})
         event = ResearchChainEvent.objects.create(chain=node.chain, node=node, event_id=request_id,

@@ -1,10 +1,12 @@
 # 科研链 MCP v2.1：给部署同学的操作说明
 
-更新日期：2026-10-18。目标仓库为 `https://github.com/SynlysAI/plane`，目标分支为 `develop`。本文随代码交付，实际发布版本以 develop 的提交号为准；本次交付整理没有修改测试服务器。
+更新日期：2026-10-23。目标仓库为 `https://github.com/SynlysAI/plane`，目标分支为 `develop`。本文随代码交付，实际发布版本以 develop 的提交号为准；本次交付整理没有修改测试服务器。
+
+2026-10-23 行为调整：以下 v2.1 历史部署步骤中的“平台人工审批”已由 Agent 客户端确认取代。准备提案后，用户在 Codex 等客户端授权，Agent 直接提交原 operation_id 执行，不再调用 Plane decision 接口。需部署本次 Plane API、Web 和使用中的 STDIO 代理，无新增迁移。节点权限、提案哈希、24 小时有效期、幂等、拒绝/取消状态和执行前置条件校验保留。当前流程以 [统一 MCP 管理说明](mcp-unified-management.md) 为准。
 
 ## 本次需要部署什么
 
-后端包含科研链/节点的十个读取工具，以及五类受控写入：创建科研任务、追加任务评论、保存分析草稿、关联任务资源、追加科研过程记录。前端新增节点授权和人工审核面板。必须同时部署后端、前端和数据库迁移。
+后端包含科研链/节点读取工具，以及五类受控写入：创建科研任务、追加任务评论、保存分析草稿、关联任务资源、追加科研过程记录。前端使用统一 MCP 连接管理，不再提供节点提案审批面板。首次部署必须同时部署后端、前端和数据库迁移；本次确认流程调整不新增迁移。
 
 Plane API 自带 MCP HTTP 接口，本次无需新建独立 MCP 服务，无需启动 ScienceDiscovery/Synlora，无需新增模型 API Key。旧 Demo 的独立 HTTP 网关不提供 v2.1 写模式，不要把它当作本版写入口。
 
@@ -64,7 +66,7 @@ RESEARCH_CONTEXT_TOKEN_TTL_SECONDS=600
 RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS=604800
 ```
 
-三个功能开关在模板中默认关闭，部署脚本不会自动替管理员开放科研写入。显式节点 MCP 连接由 `RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS` 控制，默认 604800 秒（7 天）；旧上下文交换仍由 `RESEARCH_CONTEXT_TOKEN_TTL_SECONDS` 控制，默认 600 秒。提案有效期仍为 24 小时，逐项人工审批、撤销和执行权限重检不变。已有连接不追溯延期，须由用户重新生成。
+三个功能开关在模板中默认关闭，部署脚本不会自动替管理员开放科研写入。显式节点 MCP 连接由 `RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS` 控制，默认 604800 秒（7 天）；旧上下文交换仍由 `RESEARCH_CONTEXT_TOKEN_TTL_SECONDS` 控制，默认 600 秒。提案有效期仍为 24 小时，用户在 Agent 客户端确认后提交；平台保留撤销和执行权限重检。已有连接不追溯延期，须由用户重新生成。
 
 在同一文件中核对已有的以下配置。把示例 origin 替换成实际入口，保留仍在使用的其他合法来源；不使用通配符绕过人工确认的来源校验：
 
@@ -111,13 +113,13 @@ docker compose -f docker-compose-local.yml exec -T api \
 
 ## 4. 页面授权及 Agent 连接
 
-个人设置「MCP 连接」现统一管理行政项目连接与显式科研节点连接，支持候选选择、批量生成、查看和撤销。行政项目区域通过 `NATIVE_MCP_PORTAL_URL` 连接独立门户，发布时需同步门户新增的候选接口。科研受控写入仍需逐项人工确认提案；勾选节点或写能力不会确认业务提案。旧 `/mcp/`、`/{workspace-slug}/mcp/` 继续跳转到设置页且只保留工作区参数；机器协议地址不变。需执行 `0188_research_context_connection_label` 及 `0190_merge_mcp_and_asset_preview` 等待应用的迁移。详情与部署边界见 [统一 MCP 管理说明](mcp-unified-management.md)。
+个人设置「MCP 连接」现统一管理行政项目连接与显式科研节点连接，支持候选选择、批量生成、查看和撤销。行政项目区域通过 `NATIVE_MCP_PORTAL_URL` 连接独立门户，发布时需同步门户新增的候选接口。科研写入在 Agent 客户端确认后直接提交执行；平台不再要求重复审批。旧 `/mcp/`、`/{workspace-slug}/mcp/` 继续跳转到设置页且只保留工作区参数；机器协议地址不变。需执行 `0188_research_context_connection_label` 及 `0190_merge_mcp_and_asset_preview` 等待应用的迁移。详情与部署边界见 [统一 MCP 管理说明](mcp-unified-management.md)。
 
 1. 登录服务器，确认目标工作区科研模块和科研链已开启，并创建/选择活动科研链中的可操作节点。v2.1 不能通过 MCP 创建链和节点。
 2. 由研究管理员调用 `POST /api/research/workspaces/<slug>/nodes/<node_id>/agent-operations/`，请求体 `{ "kind": "workspace_policy", "enabled": true }`，启用工作区 Agent 操作。该请求必须携带 Plane 登录会话和 `X-CSRFToken`。
 3. 用户调用同一接口 `GET` 获取可用动作与报告版本，再提交 `{ "kind": "issue_grant", ... }` 生成节点连接配置；响应只展示一次 `X-Research-Context-Token` 与 `X-Research-Context-Hash`。
 4. 将配置保存到客户端私密设置。机器 MCP 地址为下方 `agent-operations/mcp/`；个人 API Key 或旧只读 grant 不会自动获得写权限。
-5. Agent prepare 提案后，用户调用 `{ "kind": "decision", "operation_id": "...", "proposal_hash": "...", "decision": "APPROVED" }` 精确确认或拒绝，再由 Agent execute。
+5. Agent prepare 提案后，在客户端向用户展示并取得授权，再直接 execute 原 operation_id；已有明确授权覆盖时不重复询问。平台不再要求调用 decision 接口。旧 decision API 仅为兼容保留。
 
 新地址形如：
 
@@ -129,9 +131,9 @@ https://plane-test.example.org/api/research/workspaces/<workspace-slug>/agent-op
 
 ## 5. 上线验收与故障定位
 
-脚本对 Web/Admin/API 的 200 检查只证明服务可达。还需使用测试节点逐项完成五类动作：prepare → API 核对 → 人工确认 → execute → 读回。执行结果应为 `COMMITTED`，`readback=verified`，人类接口能查到对象和 Agent 来源记录。
+脚本对 Web/Admin/API 的 200 检查只证明服务可达。还需使用测试节点逐项完成五类动作：prepare → Agent 客户端核对并确认 → execute → 读回。执行结果应为 `COMMITTED`，`readback=verified`，人类接口能查到对象和 Agent 来源记录；无需平台审批记录。
 
-另检查未确认/拒绝提案不能执行、重复执行原 operation_id 不重复创建、撤销节点授权后调用被拒绝。出现超时先查询原 operation_id；不确定 prepare 是否成功时复用原 request_id 和内容。
+另检查拒绝/取消提案不能执行、重复执行原 operation_id 不重复创建、撤销节点授权后调用被拒绝。出现超时先查询原 operation_id；不确定 prepare 是否成功时复用原 request_id 和内容。
 
 | 现象                    | 检查方向                                                                             |
 | ----------------------- | ------------------------------------------------------------------------------------ |
