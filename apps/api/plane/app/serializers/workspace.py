@@ -394,8 +394,14 @@ class WorkspaceRecentVisitSerializer(BaseSerializer):
 class WorkspaceHomePreferenceSerializer(BaseSerializer):
     class Meta:
         model = WorkspaceHomePreference
-        fields = ["key", "is_enabled", "sort_order"]
+        fields = ["key", "is_enabled", "config", "sort_order"]
         read_only_fields = ["workspace", "created_by", "updated_by"]
+
+    def validate_config(self, value):
+        """Reject malformed layout metadata before it reaches the home client."""
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Config must be an object.")
+        return value
 
 
 class StickySerializer(BaseSerializer):

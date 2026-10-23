@@ -1,17 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
-import type { TProject, TProjectAnalyticsCount, TReportSummary, TResearchChain, TResearchIdentity } from "@plane/types";
+import type {
+  TProject,
+  TProjectAnalyticsCount,
+  TReportSummary,
+  TResearchChain,
+  TResearchIdentity,
+  TWorkbenchWidgetKey,
+} from "@plane/types";
 // components
-import { HomeSectionCard, type THomeDensity } from "@/components/home/home-section-card";
+import { HomeSectionCard } from "@/components/home/home-section-card";
 import { ReportPeriodSelector, type TCustomReportPeriod } from "@/components/home/report-period-selector";
-import { RecentActivityWidget } from "@/components/home/widgets/recents";
+import { HomeActivityWidget } from "@/components/home/widgets/activity";
 import {
   formatResearchDate,
   formatResearchReadAt,
@@ -20,6 +27,8 @@ import {
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { chainOwnerLabel, visibleResearchChains } from "@/components/research/common/research-overview-rows";
 import { WorkspaceTodos } from "@/components/home/workspace-todos";
+import { WorkbenchPreferencesPanel } from "@/components/home/workbench-preferences-panel";
+import { useHomeWorkbenchPreferences } from "@/hooks/home/use-home-workbench-preferences";
 import { useWorkspaceContext } from "@/hooks/use-workspace-context";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
 // hooks
@@ -90,18 +99,6 @@ const PERIOD_OPTIONS = [
   { value: "all" as const, labelKey: "research.overview.period_all" },
 ];
 
-const DENSITY_OPTIONS = [
-  { value: "compact" as const, labelKey: "research.home_workbench.density_compact" },
-  { value: "detailed" as const, labelKey: "research.home_workbench.density_detailed" },
-];
-
-const DENSITY_STORAGE_KEY = "plane.home.workbench.density";
-
-/** 读取持久化的首页密度偏好；环境不可用或值非法时回退紧凑模式。 */
-function readStoredDensity(): THomeDensity {
-  if (typeof window === "undefined") return "compact";
-  return window.localStorage.getItem(DENSITY_STORAGE_KEY) === "detailed" ? "detailed" : "compact";
-}
 /** 渲染行动优先的 Bento 工作台首页：待办与科研在首行，辅助模块在次行。 */
 export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({ workspaceSlug }: Props) {
   const { t, currentLocale } = useTranslation();
@@ -109,7 +106,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const { context } = useWorkspaceContext();
   const { fetchProjects, fetchProjectAnalyticsCount } = useProject();
   const [period, setPeriod] = useState<TPeriod>("30");
-  const [density, setDensity] = useState<THomeDensity>(readStoredDensity);
+  const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
   const [chains, setChains] = useState<TResearchChain[]>([]);
@@ -140,6 +137,50 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     research.identity?.sections?.reports &&
     (research.canSee("summary") || research.isResearchAdmin)
   );
+
+  const availableWidgetKeys = useMemo<TWorkbenchWidgetKey[]>(
+    () => [
+      "my_todos",
+      ...(canSeeResearch ? (["research_projects"] as const) : []),
+      "administrative_projects",
+      "recent_activity",
+      ...(canSeeSummary ? (["report_summary"] as const) : []),
+    ],
+    [canSeeResearch, canSeeSummary]
+  );
+  const {
+    loading: preferencesLoading,
+    error: preferencesError,
+    syncError,
+    saving,
+    widgets,
+    enabledWidgets,
+    density,
+    toggleWidget,
+    setWidgetSize,
+    moveWidget,
+    resetWidgets,
+    setDensity,
+  } = useHomeWorkbenchPreferences(workspaceSlug, availableWidgetKeys);
+  const widgetByKey = new Map(enabledWidgets.map((widget) => [widget.key, widget]));
+  const isWidgetVisible = (key: TWorkbenchWidgetKey) => Boolean(widgetByKey.get(key)?.is_enabled);
+  const showResearchWidget = canSeeResearch && isWidgetVisible("research_projects");
+  const showAdministrativeWidget = isWidgetVisible("administrative_projects");
+  const showActivityWidget = isWidgetVisible("recent_activity");
+  const showReportWidget = canSeeSummary && isWidgetVisible("report_summary");
+  const widgetClassName = (key: TWorkbenchWidgetKey) => {
+    const orderIndex = enabledWidgets.findIndex((widget) => widget.key === key);
+    const orderClass = ["order-1", "order-2", "order-3", "order-4", "order-5"][orderIndex] ?? "order-last";
+    if (enabledWidgets.length === 1) return `${orderClass} xl:col-span-12 xl:min-h-[60vh]`;
+    const size = widgetByKey.get(key)?.size ?? "medium";
+    const spanClass = {
+      small: "xl:col-span-4",
+      medium: "xl:col-span-6",
+      large: "xl:col-span-8",
+      full: "xl:col-span-12",
+    }[size];
+    return `${orderClass} ${spanClass}`;
+  };
 
   useEffect(() => {
     if (research.identityWorkspaceSlug !== workspaceSlug || !research.identity) {
@@ -237,7 +278,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   }, [canSeeSummary, reportIdentity, selectedReportPeriod, workspaceSlug]);
 
   useEffect(() => {
-    if (canSeeResearch) void loadChains();
+    if (showResearchWidget) void loadChains();
     else {
       setChains([]);
       setChainState("forbidden");
@@ -245,21 +286,34 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     return () => {
       researchVersion.current += 1;
     };
-  }, [canSeeResearch, loadChains, refreshToken]);
+  }, [loadChains, refreshToken, showResearchWidget]);
 
   useEffect(() => {
+    if (!showAdministrativeWidget) {
+      setAdministrativeProjects([]);
+      setAdministrativeState("empty");
+      return () => {
+        administrativeVersion.current += 1;
+      };
+    }
     void loadAdministrativeProjects();
     return () => {
       administrativeVersion.current += 1;
     };
-  }, [loadAdministrativeProjects, refreshToken]);
+  }, [loadAdministrativeProjects, refreshToken, showAdministrativeWidget]);
 
   useEffect(() => {
+    if (!showReportWidget) {
+      setReportSummaryState(null);
+      return () => {
+        reportVersion.current += 1;
+      };
+    }
     void loadReportSummary();
     return () => {
       reportVersion.current += 1;
     };
-  }, [loadReportSummary, refreshToken]);
+  }, [loadReportSummary, refreshToken, showReportWidget]);
 
   const periodDays = period === "all" ? null : Number(period);
   const periodStart = periodDays ? Date.now() - periodDays * 86400000 : 0;
@@ -275,11 +329,6 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     setRefreshToken((value) => value + 1);
     setRefreshedAt(new Date());
   };
-  /** 将密度偏好写入本地存储，保证下次进入首页时保持一致。 */
-  useEffect(() => {
-    window.localStorage.setItem(DENSITY_STORAGE_KEY, density);
-  }, [density]);
-
   const currentReportSummaryState =
     reportSummaryState?.workspaceSlug === workspaceSlug &&
     reportSummaryState.identity === reportIdentity &&
@@ -311,8 +360,6 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   });
   const todosHref = `/${workspaceSlug}/todos`;
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
-  const hasThreeSections = !canSeeResearch && !canSeeSummary;
-  const secondarySpan = canSeeResearch && canSeeSummary ? "xl:col-span-4" : "xl:col-span-6";
 
   return (
     <div
@@ -330,351 +377,377 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div
-            className="flex overflow-hidden rounded-md border border-subtle"
-            role="group"
-            aria-label={t("research.overview.period")}
+          {showResearchWidget && (
+            <div
+              className="flex overflow-hidden rounded-md border border-subtle"
+              role="group"
+              aria-label={t("research.overview.period")}
+            >
+              {PERIOD_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={period === option.value}
+                  className={`px-2.5 py-1.5 text-12 transition-colors ${
+                    period === option.value ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
+                  }`}
+                  onClick={() => setPeriod(option.value)}
+                >
+                  {t(option.labelKey)}
+                </button>
+              ))}
+            </div>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-pressed={isEditingLayout}
+            onClick={() => setIsEditingLayout((value) => !value)}
           >
-            {PERIOD_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={period === option.value}
-                className={`px-2.5 py-1.5 text-12 transition-colors ${
-                  period === option.value ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
-                }`}
-                onClick={() => setPeriod(option.value)}
-              >
-                {t(option.labelKey)}
-              </button>
-            ))}
-          </div>
-          <div
-            className="flex overflow-hidden rounded-md border border-subtle"
-            role="group"
-            aria-label={t("research.home_workbench.density_label")}
-          >
-            {DENSITY_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={density === option.value}
-                className={`px-2.5 py-1.5 text-12 transition-colors ${
-                  density === option.value ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
-                }`}
-                onClick={() => setDensity(option.value)}
-              >
-                {t(option.labelKey)}
-              </button>
-            ))}
-          </div>
+            {isEditingLayout
+              ? t("research.home_workbench.finish_customization")
+              : t("research.home_workbench.customize")}
+          </Button>
           <Button variant="secondary" size="sm" onClick={refresh}>
             {t("research.common.refresh")}
           </Button>
         </div>
       </header>
 
-      <div
-        className={`grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12 ${
-          density === "compact"
-            ? `xl:min-h-0 xl:flex-1 ${hasThreeSections ? "xl:grid-rows-2" : "xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]"}`
-            : ""
-        }`}
-        data-testid="workspace-home-columns"
-      >
-        <HomeSectionCard
-          className={
-            hasThreeSections ? "xl:col-span-6 xl:row-span-2" : canSeeResearch ? "xl:col-span-5" : "xl:col-span-6"
-          }
-          size="primary"
+      {isEditingLayout && (
+        <WorkbenchPreferencesPanel
+          widgets={widgets}
           density={density}
-          title="我的待办"
-          hint="指派给我的任务与待我处理的审批"
-          action={
-            <Link href={todosHref} className={cardLinkClassName}>
-              {t("research.home_workbench.view_todos")}
-            </Link>
-          }
-        >
-          <WorkspaceTodos key={`todo-${refreshToken}`} workspaceSlug={workspaceSlug} embedded />
-        </HomeSectionCard>
-
-        {canSeeResearch && (
-          <HomeSectionCard
-            className="xl:col-span-7"
-            size="primary"
-            density={density}
-            title={t("research.home_workbench.research_overview")}
-            hint={t("research.home_workbench.research_hint")}
-            action={
-              canSeeResearch ? (
-                <Link href={`/${workspaceSlug}/research/chains`} className={cardLinkClassName}>
-                  {t("research.home_workbench.all_research")}
+          saving={saving}
+          syncError={syncError}
+          onToggle={(key, enabled) => void toggleWidget(key, enabled)}
+          onMove={(key, direction) => void moveWidget(key, direction)}
+          onSizeChange={(key, size) => void setWidgetSize(key, size)}
+          onDensityChange={(nextDensity) => void setDensity(nextDensity)}
+          onReset={() => void resetWidgets()}
+        />
+      )}
+      {preferencesError && (
+        <p className="rounded-xl border border-subtle bg-surface-2 px-4 py-3 text-12 text-secondary" role="alert">
+          {t("research.home_workbench.preferences_load_fallback")}
+        </p>
+      )}
+      {preferencesLoading ? (
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12" data-testid="workspace-home-columns">
+          <div className="xl:col-span-6">
+            <Skeleton.Item height="280px" width="100%" />
+          </div>
+          <div className="xl:col-span-6">
+            <Skeleton.Item height="280px" width="100%" />
+          </div>
+        </div>
+      ) : (
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12" data-testid="workspace-home-columns">
+          {isWidgetVisible("my_todos") && (
+            <HomeSectionCard
+              className={widgetClassName("my_todos")}
+              density={density}
+              title={t("research.home_workbench.widget_my_todos")}
+              hint={t("research.home_workbench.widget_my_todos_hint")}
+              action={
+                <Link href={todosHref} className={cardLinkClassName}>
+                  {t("research.home_workbench.view_todos")}
                 </Link>
-              ) : undefined
-            }
-            footer={
-              chainState === "ready"
-                ? t("research.home_workbench.total_chains", { count: visibleChains.length })
-                : undefined
-            }
-          >
-            {chainState === "loading" && (
-              <div className="space-y-2 p-4" role="status" aria-busy="true">
-                {[0, 1, 2].map((row) => (
-                  <Skeleton.Item key={row} height="44px" width="100%" />
-                ))}
-              </div>
-            )}
-            {chainState === "forbidden" && (
-              <p className="p-4 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
-            )}
-            {chainState === "error" && (
-              <p className="p-4 text-12 text-secondary" role="alert">
-                {t("research.portal.load_failed")}
-              </p>
-            )}
-            {chainState === "empty" && (
-              <p className="p-4 text-12 text-secondary">{t("research.home_workbench.research_empty")}</p>
-            )}
-            {chainState === "ready" && (
-              <>
-                <div className="grid shrink-0 grid-cols-3 divide-x divide-subtle border-b border-subtle">
-                  <div className="px-4 py-3">
-                    <p className="text-11 text-tertiary">{t("research.home_summary.active_chains")}</p>
-                    <p className="mt-1 text-20 font-semibold text-primary tabular-nums">{activeChains.length}</p>
-                  </div>
-                  <div className="px-4 py-3">
-                    <p className="text-11 text-tertiary">{t("research.home_workbench.open_tasks")}</p>
-                    <p className="mt-1 text-20 font-semibold text-primary tabular-nums">{openTaskCount}</p>
-                  </div>
-                  <div className="min-w-0 px-4 py-3">
-                    <p className="text-11 text-tertiary">{t("research.chains.next_due_at")}</p>
-                    <p className="mt-1 truncate text-13 font-medium text-primary">
-                      {nextDueAt ? formatResearchDate(nextDueAt, currentLocale) : "-"}
-                    </p>
-                  </div>
+              }
+            >
+              <WorkspaceTodos key={`todo-${refreshToken}`} workspaceSlug={workspaceSlug} embedded />
+            </HomeSectionCard>
+          )}
+
+          {showResearchWidget && (
+            <HomeSectionCard
+              className={widgetClassName("research_projects")}
+              density={density}
+              title={t("research.home_workbench.research_overview")}
+              hint={t("research.home_workbench.research_hint")}
+              action={
+                canSeeResearch ? (
+                  <Link href={`/${workspaceSlug}/research/chains`} className={cardLinkClassName}>
+                    {t("research.home_workbench.all_research")}
+                  </Link>
+                ) : undefined
+              }
+              footer={
+                chainState === "ready"
+                  ? t("research.home_workbench.total_chains", { count: visibleChains.length })
+                  : undefined
+              }
+            >
+              {chainState === "loading" && (
+                <div className="space-y-2 p-4" role="status" aria-busy="true">
+                  {[0, 1, 2].map((row) => (
+                    <Skeleton.Item key={row} height="44px" width="100%" />
+                  ))}
                 </div>
+              )}
+              {chainState === "forbidden" && (
+                <p className="p-4 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
+              )}
+              {chainState === "error" && (
+                <p className="p-4 text-12 text-secondary" role="alert">
+                  {t("research.portal.load_failed")}
+                </p>
+              )}
+              {chainState === "empty" && (
+                <p className="p-4 text-12 text-secondary">{t("research.home_workbench.research_empty")}</p>
+              )}
+              {chainState === "ready" && (
+                <>
+                  <div className="grid shrink-0 grid-cols-3 divide-x divide-subtle border-b border-subtle">
+                    <div className="px-4 py-3">
+                      <p className="text-11 text-tertiary">{t("research.home_summary.active_chains")}</p>
+                      <p className="mt-1 text-20 font-semibold text-primary tabular-nums">{activeChains.length}</p>
+                    </div>
+                    <div className="px-4 py-3">
+                      <p className="text-11 text-tertiary">{t("research.home_workbench.open_tasks")}</p>
+                      <p className="mt-1 text-20 font-semibold text-primary tabular-nums">{openTaskCount}</p>
+                    </div>
+                    <div className="min-w-0 px-4 py-3">
+                      <p className="text-11 text-tertiary">{t("research.chains.next_due_at")}</p>
+                      <p className="mt-1 truncate text-13 font-medium text-primary">
+                        {nextDueAt ? formatResearchDate(nextDueAt, currentLocale) : "-"}
+                      </p>
+                    </div>
+                  </div>
+                  <ul className="divide-y divide-subtle" role="list">
+                    {visibleChains.map((chain) => (
+                      <li key={chain.id} className="px-4 py-3 hover:bg-surface-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Link
+                            href={`/${workspaceSlug}/research/chains/${chain.id}`}
+                            className="min-w-0 truncate text-13 font-medium text-primary hover:text-accent-primary"
+                          >
+                            {chain.project_name ?? chain.project}
+                          </Link>
+                          <ResearchStatusBadge status={chain.status} size="sm">
+                            {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
+                          </ResearchStatusBadge>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-11 text-tertiary">
+                          <span className="min-w-0 [overflow-wrap:anywhere] break-words">
+                            {t("research.chains.owner")}：
+                            {chainOwnerLabel(research.identity, chain) || t("research.projects.owner_unset")}
+                          </span>
+                          <span className="truncate">
+                            {t("research.chains.current_node")}：{chain.current_node?.title ?? "-"}
+                          </span>
+                          <span>{t("research.chains.open_task_count", { count: chain.open_task_count ?? 0 })}</span>
+                          {chain.next_due_at && <ResearchTodoUrgency dueAt={chain.next_due_at} />}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </HomeSectionCard>
+          )}
+
+          {showAdministrativeWidget && (
+            <HomeSectionCard
+              className={widgetClassName("administrative_projects")}
+              density={density}
+              title={t("research.home_workbench.administrative_overview")}
+              hint={t("research.home_workbench.administrative_hint")}
+              action={
+                <Link href={`/${workspaceSlug}/projects`} className={cardLinkClassName}>
+                  {t("research.home_workbench.all_administrative")}
+                </Link>
+              }
+              footer={
+                administrativeState === "ready"
+                  ? t("research.home_workbench.total_administrative", { count: administrativeProjects.length })
+                  : undefined
+              }
+            >
+              {administrativeState === "loading" && (
+                <div className="space-y-2 p-4" role="status" aria-busy="true">
+                  {[0, 1].map((row) => (
+                    <Skeleton.Item key={row} height="40px" width="100%" />
+                  ))}
+                </div>
+              )}
+              {administrativeState === "error" && (
+                <p className="p-4 text-12 text-secondary" role="alert">
+                  {t("research.home_workbench.administrative_error")}
+                </p>
+              )}
+              {administrativeState === "empty" && (
+                <p className="p-4 text-12 text-secondary">{t("research.home_workbench.administrative_empty")}</p>
+              )}
+              {administrativeState === "ready" && (
                 <ul className="divide-y divide-subtle" role="list">
-                  {visibleChains.map((chain) => (
-                    <li key={chain.id} className="px-4 py-3 hover:bg-surface-1">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Link
-                          href={`/${workspaceSlug}/research/chains/${chain.id}`}
-                          className="min-w-0 truncate text-13 font-medium text-primary hover:text-accent-primary"
-                        >
-                          {chain.project_name ?? chain.project}
-                        </Link>
-                        <ResearchStatusBadge status={chain.status} size="sm">
-                          {t(`research.chains.chain_status.${chain.status.toLowerCase()}`)}
-                        </ResearchStatusBadge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-11 text-tertiary">
-                        <span className="min-w-0 [overflow-wrap:anywhere] break-words">
-                          {t("research.chains.owner")}：
-                          {chainOwnerLabel(research.identity, chain) || t("research.projects.owner_unset")}
-                        </span>
-                        <span className="truncate">
-                          {t("research.chains.current_node")}：{chain.current_node?.title ?? "-"}
-                        </span>
-                        <span>{t("research.chains.open_task_count", { count: chain.open_task_count ?? 0 })}</span>
-                        {chain.next_due_at && <ResearchTodoUrgency dueAt={chain.next_due_at} />}
+                  {sortedAdministrativeProjects.map((project) => (
+                    <li key={project.id} className="min-w-0 px-4 py-3 hover:bg-surface-1">
+                      <Link
+                        href={`/${workspaceSlug}/projects/${project.id}/issues`}
+                        className="block min-w-0 text-13 font-medium break-words text-primary hover:text-accent-primary"
+                      >
+                        {project.name}
+                      </Link>
+                      <p className="mt-1 text-11 text-tertiary tabular-nums">
+                        {t("research.home_workbench.administrative_updated_at", {
+                          value:
+                            formatResearchReadAt(administrativeStats[project.id]?.last_activity_at, currentLocale) ||
+                            "-",
+                        })}
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-11 text-secondary tabular-nums">
+                        {typeof administrativeStats[project.id]?.open_issues === "number" &&
+                        typeof administrativeStats[project.id]?.done_issues === "number" ? (
+                          <>
+                            <span>
+                              {t("research.home_workbench.administrative_open_issues", {
+                                count: administrativeStats[project.id].open_issues,
+                              })}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>
+                              {t("research.home_workbench.administrative_done_issues", {
+                                count: administrativeStats[project.id].done_issues,
+                              })}
+                            </span>
+                          </>
+                        ) : (
+                          <span>
+                            {t(
+                              administrativeStatsLoading
+                                ? "loading"
+                                : "research.home_workbench.administrative_stats_unavailable"
+                            )}
+                          </span>
+                        )}
                       </div>
                     </li>
                   ))}
                 </ul>
-              </>
-            )}
-          </HomeSectionCard>
-        )}
+              )}
+            </HomeSectionCard>
+          )}
 
-        <HomeSectionCard
-          className={`${secondarySpan} ${hasThreeSections ? "xl:col-start-7 xl:row-start-1" : ""}`}
-          density={density}
-          title={t("research.home_workbench.administrative_overview")}
-          hint={t("research.home_workbench.administrative_hint")}
-          action={
-            <Link href={`/${workspaceSlug}/projects`} className={cardLinkClassName}>
-              {t("research.home_workbench.all_administrative")}
-            </Link>
-          }
-          footer={
-            administrativeState === "ready"
-              ? t("research.home_workbench.total_administrative", { count: administrativeProjects.length })
-              : undefined
-          }
-        >
-          {administrativeState === "loading" && (
-            <div className="space-y-2 p-4" role="status" aria-busy="true">
-              {[0, 1].map((row) => (
-                <Skeleton.Item key={row} height="40px" width="100%" />
-              ))}
-            </div>
+          {showActivityWidget && (
+            <HomeSectionCard
+              className={widgetClassName("recent_activity")}
+              density={density}
+              title={t("research.home_workbench.recent_activity")}
+              hint={t("research.home_workbench.widget_recent_activity_hint")}
+            >
+              <HomeActivityWidget workspaceSlug={workspaceSlug} density={density} refreshToken={refreshToken} />
+            </HomeSectionCard>
           )}
-          {administrativeState === "error" && (
-            <p className="p-4 text-12 text-secondary" role="alert">
-              {t("research.home_workbench.administrative_error")}
-            </p>
-          )}
-          {administrativeState === "empty" && (
-            <p className="p-4 text-12 text-secondary">{t("research.home_workbench.administrative_empty")}</p>
-          )}
-          {administrativeState === "ready" && (
-            <ul className="divide-y divide-subtle" role="list">
-              {sortedAdministrativeProjects.map((project) => (
-                <li key={project.id} className="min-w-0 px-4 py-3 hover:bg-surface-1">
-                  <Link
-                    href={`/${workspaceSlug}/projects/${project.id}/issues`}
-                    className="block min-w-0 text-13 font-medium break-words text-primary hover:text-accent-primary"
-                  >
-                    {project.name}
+
+          {showReportWidget && (
+            <HomeSectionCard
+              className={widgetClassName("report_summary")}
+              density={density}
+              title={t("research.home_workbench.report_summary")}
+              action={
+                canSeeSummary ? (
+                  <Link href={reportSummaryHref} className={cardLinkClassName}>
+                    {t("research.home_workbench.view_summary")}
                   </Link>
-                  <p className="mt-1 text-11 text-tertiary tabular-nums">
-                    {t("research.home_workbench.administrative_updated_at", {
-                      value:
-                        formatResearchReadAt(administrativeStats[project.id]?.last_activity_at, currentLocale) || "-",
-                    })}
-                  </p>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-11 text-secondary tabular-nums">
-                    {typeof administrativeStats[project.id]?.open_issues === "number" &&
-                    typeof administrativeStats[project.id]?.done_issues === "number" ? (
-                      <>
-                        <span>
-                          {t("research.home_workbench.administrative_open_issues", {
-                            count: administrativeStats[project.id].open_issues,
-                          })}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>
-                          {t("research.home_workbench.administrative_done_issues", {
-                            count: administrativeStats[project.id].done_issues,
-                          })}
-                        </span>
-                      </>
-                    ) : (
-                      <span>
-                        {t(
-                          administrativeStatsLoading
-                            ? "loading"
-                            : "research.home_workbench.administrative_stats_unavailable"
-                        )}
-                      </span>
+                ) : undefined
+              }
+            >
+              {!canSeeSummary ? (
+                <p className="p-4 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
+              ) : (
+                <>
+                  <div className="px-4 py-3">
+                    <div className="flex max-w-full flex-wrap items-center gap-1.5">
+                      <div
+                        className="inline-flex max-w-full flex-wrap overflow-hidden rounded-md border border-subtle"
+                        role="group"
+                        aria-label={t("research.overview.period")}
+                      >
+                        {REPORT_PERIOD_PRESETS.map((preset) => (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            aria-pressed={
+                              selectedReportPeriod.kind === "preset" &&
+                              selectedReportPeriod.preset.value === preset.value
+                            }
+                            className={`min-w-0 px-2.5 py-1.5 text-12 transition-colors ${
+                              selectedReportPeriod.kind === "preset" &&
+                              selectedReportPeriod.preset.value === preset.value
+                                ? "bg-surface-1 text-primary"
+                                : "text-secondary hover:bg-surface-1"
+                            }`}
+                            onClick={() => setSelectedReportPeriod({ kind: "preset", preset })}
+                          >
+                            {t(preset.labelKey)}
+                          </button>
+                        ))}
+                      </div>
+                      <ReportPeriodSelector
+                        customPeriod={customReportPeriod}
+                        reportTimezone={reportIdentity?.workspace?.report_timezone}
+                        onSelect={(selection) => setSelectedReportPeriod({ kind: "custom", ...selection })}
+                      />
+                    </div>
+                  </div>
+                  <div className="min-w-0 border-t border-subtle px-4 py-3" role="group" aria-label={reportPeriodLabel}>
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                      <h3 className="text-13 font-medium text-primary">{reportPeriodLabel}</h3>
+                      {reportSummary && <span className="text-11 text-tertiary">{reportSummary.period_key}</span>}
+                    </div>
+                    {reportSummary && (
+                      <p className="mt-0.5 text-11 text-tertiary">
+                        {reportSummary.period_start} ~ {reportSummary.period_end}
+                      </p>
+                    )}
+                    {reportState === "loading" && (
+                      <div className="mt-2" role="status" aria-busy="true">
+                        <Skeleton.Item height="48px" width="100%" />
+                      </div>
+                    )}
+                    {reportState === "error" && (
+                      <p className="mt-2 text-12 text-secondary" role="alert">
+                        {t("research.home_workbench.report_error")}
+                      </p>
+                    )}
+                    {reportState === "forbidden" && (
+                      <p className="mt-2 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
+                    )}
+                    {reportSummary && reportState === "ready" && (
+                      <div className="mt-2 grid min-w-0 grid-cols-2 gap-y-2 sm:grid-cols-4">
+                        {REPORT_BUCKETS.map((bucket) => (
+                          <Link
+                            key={bucket}
+                            href={reportSummaryHref}
+                            className="min-w-0 rounded-sm py-1 pr-2 transition-colors hover:bg-surface-1"
+                          >
+                            <p className="text-11 text-tertiary">{t(`research.summary.${bucket}`)}</p>
+                            <p className="mt-1 text-20 font-semibold break-all text-primary tabular-nums">
+                              {reportSummary.counts[bucket]}
+                            </p>
+                          </Link>
+                        ))}
+                      </div>
                     )}
                   </div>
-                </li>
-              ))}
-            </ul>
+                </>
+              )}
+            </HomeSectionCard>
           )}
-        </HomeSectionCard>
-
-        <HomeSectionCard
-          className={`${secondarySpan} ${hasThreeSections ? "xl:col-start-7 xl:row-start-2" : ""}`}
-          density={density}
-          title={t("research.home_workbench.recent_activity")}
-        >
-          <RecentActivityWidget
-            workspaceSlug={workspaceSlug}
-            showFilterSelect={false}
-            embedded
-            scope="administrative"
-            refreshToken={refreshToken}
-          />
-        </HomeSectionCard>
-
-        {canSeeSummary && (
-          <HomeSectionCard
-            className={secondarySpan}
-            density={density}
-            title={t("research.home_workbench.report_summary")}
-            action={
-              canSeeSummary ? (
-                <Link href={reportSummaryHref} className={cardLinkClassName}>
-                  {t("research.home_workbench.view_summary")}
-                </Link>
-              ) : undefined
-            }
-          >
-            {!canSeeSummary ? (
-              <p className="p-4 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
-            ) : (
-              <>
-                <div className="px-4 py-3">
-                  <div className="flex max-w-full flex-wrap items-center gap-1.5">
-                    <div
-                      className="inline-flex max-w-full flex-wrap overflow-hidden rounded-md border border-subtle"
-                      role="group"
-                      aria-label={t("research.overview.period")}
-                    >
-                      {REPORT_PERIOD_PRESETS.map((preset) => (
-                        <button
-                          key={preset.value}
-                          type="button"
-                          aria-pressed={
-                            selectedReportPeriod.kind === "preset" && selectedReportPeriod.preset.value === preset.value
-                          }
-                          className={`min-w-0 px-2.5 py-1.5 text-12 transition-colors ${
-                            selectedReportPeriod.kind === "preset" && selectedReportPeriod.preset.value === preset.value
-                              ? "bg-surface-1 text-primary"
-                              : "text-secondary hover:bg-surface-1"
-                          }`}
-                          onClick={() => setSelectedReportPeriod({ kind: "preset", preset })}
-                        >
-                          {t(preset.labelKey)}
-                        </button>
-                      ))}
-                    </div>
-                    <ReportPeriodSelector
-                      customPeriod={customReportPeriod}
-                      reportTimezone={reportIdentity?.workspace?.report_timezone}
-                      onSelect={(selection) => setSelectedReportPeriod({ kind: "custom", ...selection })}
-                    />
-                  </div>
-                </div>
-                <div className="min-w-0 border-t border-subtle px-4 py-3" role="group" aria-label={reportPeriodLabel}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-                    <h3 className="text-13 font-medium text-primary">{reportPeriodLabel}</h3>
-                    {reportSummary && <span className="text-11 text-tertiary">{reportSummary.period_key}</span>}
-                  </div>
-                  {reportSummary && (
-                    <p className="mt-0.5 text-11 text-tertiary">
-                      {reportSummary.period_start} ~ {reportSummary.period_end}
-                    </p>
-                  )}
-                  {reportState === "loading" && (
-                    <div className="mt-2" role="status" aria-busy="true">
-                      <Skeleton.Item height="48px" width="100%" />
-                    </div>
-                  )}
-                  {reportState === "error" && (
-                    <p className="mt-2 text-12 text-secondary" role="alert">
-                      {t("research.home_workbench.report_error")}
-                    </p>
-                  )}
-                  {reportState === "forbidden" && (
-                    <p className="mt-2 text-12 text-secondary">{t("research.home_summary.forbidden")}</p>
-                  )}
-                  {reportSummary && reportState === "ready" && (
-                    <div className="mt-2 grid min-w-0 grid-cols-2 gap-y-2 sm:grid-cols-4">
-                      {REPORT_BUCKETS.map((bucket) => (
-                        <Link
-                          key={bucket}
-                          href={reportSummaryHref}
-                          className="min-w-0 rounded-sm py-1 pr-2 transition-colors hover:bg-surface-1"
-                        >
-                          <p className="text-11 text-tertiary">{t(`research.summary.${bucket}`)}</p>
-                          <p className="mt-1 text-20 font-semibold break-all text-primary tabular-nums">
-                            {reportSummary.counts[bucket]}
-                          </p>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </HomeSectionCard>
-        )}
-      </div>
+          {enabledWidgets.length === 0 && (
+            <section className="rounded-xl border border-subtle bg-surface-2 px-4 py-12 text-center xl:col-span-12">
+              <h2 className="text-14 font-semibold text-primary">{t("research.home_workbench.minimal_empty_title")}</h2>
+              <p className="mx-auto mt-1 max-w-md text-12 text-tertiary">
+                {t("research.home_workbench.minimal_empty_hint")}
+              </p>
+              <Button variant="secondary" size="sm" className="mt-4" onClick={() => setIsEditingLayout(true)}>
+                {t("research.home_workbench.add_widget")}
+              </Button>
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 });

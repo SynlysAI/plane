@@ -31,6 +31,36 @@ export const HOME_WIDGETS_LIST: {
     title: string;
   };
 } = {
+  workbench_layout: {
+    component: null,
+    fullWidth: false,
+    title: "research.home_workbench.customize_workbench",
+  },
+  my_todos: {
+    component: null,
+    fullWidth: false,
+    title: "research.home_workbench.widget_my_todos",
+  },
+  research_projects: {
+    component: null,
+    fullWidth: false,
+    title: "research.home_workbench.widget_research_projects",
+  },
+  administrative_projects: {
+    component: null,
+    fullWidth: false,
+    title: "research.home_workbench.widget_administrative_projects",
+  },
+  recent_activity: {
+    component: null,
+    fullWidth: false,
+    title: "research.home_workbench.widget_recent_activity",
+  },
+  report_summary: {
+    component: null,
+    fullWidth: false,
+    title: "research.home_workbench.widget_report_summary",
+  },
   quick_links: {
     component: DashboardQuickLinks,
     fullWidth: false,

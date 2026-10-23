@@ -487,6 +487,12 @@ class WorkspaceHomePreference(BaseModel):
     """Preference for the home page of a workspace for a user"""
 
     class HomeWidgetKeys(models.TextChoices):
+        WORKBENCH_LAYOUT = "workbench_layout", "Workbench layout"
+        MY_TODOS = "my_todos", "My todos"
+        RESEARCH_PROJECTS = "research_projects", "Research projects"
+        ADMINISTRATIVE_PROJECTS = "administrative_projects", "Administrative projects"
+        RECENT_ACTIVITY = "recent_activity", "Recent activity"
+        REPORT_SUMMARY = "report_summary", "Report summary"
         QUICK_LINKS = "quick_links", "Quick Links"
         RECENTS = "recents", "Recents"
         MY_STICKIES = "my_stickies", "My Stickies"
@@ -524,6 +530,73 @@ class WorkspaceHomePreference(BaseModel):
 
     def __str__(self):
         return f"{self.workspace.name} {self.user.email} {self.key}"
+
+
+class HomeActivityEventQuerySet(models.QuerySet):
+    """Reject mutations because the home feed is an append-only audit surface."""
+
+    def update(self, **kwargs):
+        raise TypeError("Home activity events are append-only and cannot be updated.")
+
+    def delete(self, *args, **kwargs):
+        raise TypeError("Home activity events are append-only and cannot be deleted.")
+
+
+class HomeActivityEventManager(models.Manager.from_queryset(HomeActivityEventQuerySet)):
+    pass
+
+
+class HomeActivityEvent(BaseModel):
+    """Append-only business event used by the personalized home feed.
+
+    The model intentionally stores a detached project id instead of a foreign key:
+    deleting a project must not erase the feed event or make historical rows point
+    at a missing database object.
+    """
+
+    class EntityType(models.TextChoices):
+        PROJECT = "project", "Project"
+
+    objects = HomeActivityEventManager()
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="home_activity_events",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="home_activity_events",
+    )
+    entity_type = models.CharField(max_length=32, choices=EntityType.choices)
+    entity_id = models.UUIDField(db_index=True)
+    entity_name = models.TextField()
+    project_id = models.UUIDField(null=True, blank=True, db_index=True)
+    action = models.CharField(max_length=64, db_index=True)
+    summary = models.TextField(blank=True, default="")
+    changes = models.JSONField(default=list, blank=True)
+    occurred_at = models.DateTimeField(db_index=True)
+
+    def save(self, *args, **kwargs):
+        """Reject updates after creation to preserve a traceable feed history."""
+        if not self._state.adding:
+            raise TypeError("Home activity events are append-only and cannot be updated.")
+        return super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "Home Activity Event"
+        verbose_name_plural = "Home Activity Events"
+        db_table = "home_activity_events"
+        ordering = ("-occurred_at", "-created_at")
+        indexes = [
+            models.Index(fields=["workspace", "occurred_at"], name="home_activity_ws_time_idx"),
+            models.Index(fields=["workspace", "entity_type", "entity_id"], name="home_activity_entity_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.action} {self.entity_type} {self.entity_id}"
 
 
 class WorkspaceUserPreference(BaseModel):

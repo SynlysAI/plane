@@ -77,6 +77,7 @@ from .workspace import (
     WorkspaceUserProperties,
     WorkspaceUserLink,
     WorkspaceHomePreference,
+    HomeActivityEvent,
     WorkspaceUserPreference,
 )
 
