@@ -79,7 +79,14 @@ function stageLabelKey(stageCode: string): string {
 
 /** 读取最新一次退回意见。 */
 function latestReturn(stage: TResearchChainStageApproval): TResearchChainStageReviewAction | null {
-  return [...stage.review_actions].toReversed().find((action) => action.action === "RETURN") ?? null;
+  return reverseReviewActions(stage.review_actions).find((action) => action.action === "RETURN") ?? null;
+}
+
+/** 返回按时间倒序排列的审核记录副本，兼容当前 TypeScript 运行目标。 */
+function reverseReviewActions(actions: TResearchChainStageReviewAction[]): TResearchChainStageReviewAction[] {
+  const copied = [...actions];
+  copied.reverse();
+  return copied;
 }
 
 /** 提取意见的第一行，避免折叠摘要被长文本撑开。 */
@@ -623,7 +630,7 @@ export function ResearchChainStageApprovalPanel({
               </button>
               {historyOpen && (
                 <ol className="mt-1 divide-y divide-subtle text-11" role="list">
-                  {[...stage.review_actions].toReversed().map((action) => (
+                  {reverseReviewActions(stage.review_actions).map((action) => (
                     <li key={action.id} className="py-2 first:pt-0 last:pb-0">
                       <p className="text-primary">
                         {action.reviewer_detail?.display_name ?? "-"} ·{" "}

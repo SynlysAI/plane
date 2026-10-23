@@ -19,7 +19,6 @@ from plane.tests.research_fixtures import (
     make_user,
     make_workspace,
 )
-from plane.db.models import OrgUnit
 
 
 @pytest.mark.django_db
