@@ -15,6 +15,7 @@ import { APITokenService } from "@plane/services";
 // components
 import { CreateApiTokenModal } from "@/components/api-token/modal/create-token-modal";
 import { ApiTokenListItem } from "@/components/api-token/token-list-item";
+import { tokenErrorKey } from "@/components/api-token/error";
 import { ProfileSettingsHeading } from "@/components/settings/profile/heading";
 import { APITokenSettingsLoader } from "@/components/ui/loader/settings/api-token";
 // constants
@@ -26,11 +27,16 @@ export const APITokensProfileSettings = observer(function APITokensProfileSettin
   // states
   const [isCreateTokenModalOpen, setIsCreateTokenModalOpen] = useState(false);
   // store hooks
-  const { data: tokens } = useSWR(API_TOKENS_LIST, () => apiTokenService.list());
+  const {
+    data: tokens,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR(API_TOKENS_LIST, () => apiTokenService.list(), { shouldRetryOnError: false });
   // translation
   const { t } = useTranslation();
 
-  if (!tokens) {
+  if (isLoading && !tokens) {
     return <APITokenSettingsLoader />;
   }
 
@@ -38,8 +44,8 @@ export const APITokensProfileSettings = observer(function APITokensProfileSettin
     <div className="size-full">
       <CreateApiTokenModal isOpen={isCreateTokenModalOpen} onClose={() => setIsCreateTokenModalOpen(false)} />
       <ProfileSettingsHeading
-        title={t("account_settings.api_tokens.title")}
-        description={t("account_settings.api_tokens.description")}
+        title="Plane API"
+        description={t("api_token_management.list_description")}
         control={
           <Button variant="primary" size="lg" onClick={() => setIsCreateTokenModalOpen(true)}>
             {t("workspace_settings.settings.api_tokens.add_token")}
@@ -47,15 +53,51 @@ export const APITokensProfileSettings = observer(function APITokensProfileSettin
         }
       />
       <div className="mt-7">
-        {tokens.length > 0 ? (
-          <>
-            <div>
-              {tokens.map((token) => (
-                <ApiTokenListItem key={token.id} token={token} />
-              ))}
-            </div>
-          </>
-        ) : (
+        {error && (
+          <div role="alert" className="mb-4 space-y-2 text-danger-primary">
+            <p>{t(tokenErrorKey(error))}</p>
+            {tokenErrorKey(error) === "api_token_management.login_expired" ? (
+              <a href="/">{t("api_token_management.sign_in")}</a>
+            ) : (
+              <Button variant="secondary" onClick={() => void mutate()}>
+                {t("api_token_management.retry")}
+              </Button>
+            )}
+          </div>
+        )}
+        {tokens && tokens.length > 0 ? (
+          <div className="overflow-x-auto rounded-lg bg-surface-2 p-3">
+            <table
+              className="w-full min-w-[600px] text-left text-14"
+              aria-label={t("account_settings.api_tokens.title")}
+            >
+              <thead className="border-b border-subtle text-secondary">
+                <tr>
+                  <th scope="col" className="px-3 py-3 font-medium">
+                    {t("name")}
+                  </th>
+                  <th scope="col" className="px-3 py-3 font-medium">
+                    Key
+                  </th>
+                  <th scope="col" className="px-3 py-3 font-medium">
+                    {t("api_token_management.created_date")}
+                  </th>
+                  <th scope="col" className="px-3 py-3 font-medium">
+                    {t("api_token_management.last_used_date")}
+                  </th>
+                  <th scope="col" className="px-3 py-3">
+                    <span className="sr-only">{t("api_token_management.actions")}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokens.map((token) => (
+                  <ApiTokenListItem key={token.id} token={token} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : !error && tokens ? (
           <EmptyStateCompact
             assetKey="token"
             assetClassName="size-20"
@@ -72,7 +114,7 @@ export const APITokensProfileSettings = observer(function APITokensProfileSettin
             align="start"
             rootClassName="py-20"
           />
-        )}
+        ) : null}
       </div>
     </div>
   );

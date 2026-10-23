@@ -28,15 +28,20 @@ class APITokenSerializer(BaseSerializer):
 
 class APITokenReadSerializer(BaseSerializer):
     is_active = serializers.SerializerMethodField()
+    masked_token = serializers.SerializerMethodField()
 
     class Meta:
         model = APIToken
         exclude = ("token",)
 
     def get_is_active(self, obj: APIToken) -> bool:
-        if obj.expired_at is None:
-            return True
-        return timezone.now() < obj.expired_at
+        return obj.is_active and (obj.expired_at is None or timezone.now() < obj.expired_at)
+
+    def get_masked_token(self, obj: APIToken) -> str:
+        # Reveal only an identifying fragment, never a usable credential.
+        if len(obj.token) <= 22:
+            return "********"
+        return f"{obj.token[:14]}********{obj.token[-4:]}"
 
 
 class APIActivityLogSerializer(BaseSerializer):

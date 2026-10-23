@@ -1,3 +1,7 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Isolated, network-free bridge checks: python -m plane.mcp.tests.
 
 Uses no application database, Redis, migrations, credentials, or Docker stack.
@@ -16,7 +20,10 @@ if __name__ == "__main__":
         INSTALLED_APPS=["django.contrib.auth", "django.contrib.contenttypes"],
         DATABASES={}, DATABASE_ROUTERS=[], AUTH_USER_MODEL="auth.User", ALLOWED_HOSTS=["testserver"], MIDDLEWARE=[],
         CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
-        REST_FRAMEWORK={"DEFAULT_THROTTLE_CLASSES": []},
+        REST_FRAMEWORK={
+            "DEFAULT_THROTTLE_CLASSES": [],
+            "EXCEPTION_HANDLER": "plane.authentication.adapter.exception.auth_exception_handler",
+        },
     )
     if settings.configured:
         for key, value in isolated.items():
@@ -84,8 +91,15 @@ class NativeBridgeTests(SimpleTestCase):
         self.assertEqual(str(self.seen[0].url), "https://native.test/connect/api/options")
         self.assertEqual(response["Cache-Control"], "no-store")
 
+    def test_candidates_use_the_bound_independent_portal_session(self):
+        response = self.request("candidates", cookie=self.bound_cookie())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(str(self.seen[0].url), "https://native.test/connect/api/candidates")
+        self.assertEqual(self.seen[0].headers["cookie"], "plane_mcp_portal=upstream-session")
+        self.assertNotIn("X-API-Key", self.seen[0].headers)
+
     def test_anonymous_and_bearer_only_cannot_manage(self):
-        self.assertEqual(self.request(user=None).status_code, 403)
+        self.assertEqual(self.request(user=None).status_code, 401)
         self.assertFalse(self.seen)
 
     def test_login_requires_plane_csrf(self):

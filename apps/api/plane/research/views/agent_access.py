@@ -1,3 +1,7 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Machine-only research reads over REST and stateless MCP Streamable HTTP."""
 
 import json
@@ -5,6 +9,7 @@ import hashlib
 from hmac import compare_digest
 
 from django.conf import settings
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 
@@ -47,6 +52,7 @@ class ResearchMachineReadBase(ResearchAPIView):
             supplied = self.request.headers.get("X-Research-Context-Hash", "")
             if grant.workspace_id != workspace.id or not supplied.isascii() or not compare_digest(supplied, grant.context_hash):
                 raise ResearchReadError("scope_denied", "Research context does not match this workspace.", 403)
+            ResearchContextGrant.objects.filter(pk=grant.pk).update(last_used_at=timezone.now())
         else:
             token = APIToken.objects.filter(token=self.request.auth, is_active=True).first()
             if token is None or token.workspace_id is not None and token.workspace_id != workspace.id:

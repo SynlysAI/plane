@@ -3,7 +3,7 @@
     "label": "Workspace settings",
     "page_label": "{workspace} - General settings",
     "key_created": "Key created",
-    "copy_key": "Copy and save this secret key in PiLab Pages. You can't see this key after you hit Close. A CSV file containing the key has been downloaded.",
+    "copy_key": "Copy and securely save this secret key. After closing, only a masked key is shown and the full key cannot be viewed again.",
     "token_copied": "Token copied to clipboard.",
     "settings": {
       "general": {
