@@ -1,21 +1,17 @@
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "react-router";
 import { useWorkspaceContext } from "@/hooks/use-workspace-context";
-import { AdministrativeApprovalPanel } from "@/components/administrative/approval-panel";
 import { ResearchTodoEnvelopeList } from "@/components/research/common/research-todo-index";
 import { ResearchApprovalCenter } from "@/components/research/approvals/research-approval-center";
 
-type ApprovalDomain = "shared_todos" | "administrative" | "research";
+type ApprovalDomain = "shared_todos" | "research";
 
 type ApprovalDomainTab = {
   id: ApprovalDomain;
   name: string;
 };
 
-const APPROVAL_DOMAIN_TABS: ApprovalDomainTab[] = [
-  { id: "shared_todos", name: "跨组件待办" },
-  { id: "administrative", name: "行政审批" },
-];
+const APPROVAL_DOMAIN_TABS: ApprovalDomainTab[] = [{ id: "shared_todos", name: "跨组件待办" }];
 
 /** 构造页面级审批域链接参数，仅保留跨域有效的待办范围。 */
 function approvalDomainParams(searchParams: URLSearchParams, domain: ApprovalDomain) {
@@ -40,7 +36,7 @@ export default observer(function WorkspaceApprovalsPage() {
   const domain =
     requestedDomain && domainTabs.some((tab) => tab.id === requestedDomain)
       ? requestedDomain
-      : (domainTabs[0]?.id ?? "administrative");
+      : (domainTabs[0]?.id ?? "shared_todos");
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface-1">
       <h1 className="text-22 px-5 py-4 font-semibold">审批中心</h1>
@@ -68,9 +64,7 @@ export default observer(function WorkspaceApprovalsPage() {
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-auto">
-        {domain === "administrative" ? (
-          <AdministrativeApprovalPanel key={workspaceSlug} workspaceSlug={workspaceSlug} />
-        ) : domain === "research" ? (
+        {domain === "research" ? (
           <ResearchApprovalCenter workspaceSlug={workspaceSlug} />
         ) : (
           <div className="h-full overflow-y-auto bg-canvas p-5">

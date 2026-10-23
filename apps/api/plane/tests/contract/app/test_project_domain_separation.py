@@ -1,4 +1,4 @@
-"""Domain boundary and read-only administrative approval history."""
+"""Domain boundary tests after retiring administrative approvals."""
 
 from datetime import timedelta
 from unittest.mock import patch
@@ -6,10 +6,6 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 from plane.db.models import (
-    AdministrativeApprovalAction,
-    AdministrativeApprovalFlow,
-    AdministrativeApprovalRequest,
-    AdministrativeApprovalStep,
     AdministrativeOrganization,
     AdministrativeOrganizationMember,
     Issue,
@@ -59,30 +55,11 @@ def domain_env(workspace, create_user):
     return locals()
 
 
-def make_flow(env):
-    """直接用 ORM 构造历史审批流程，模拟接口下线前遗留的数据。"""
-    flow = AdministrativeApprovalFlow.objects.create(
-        workspace=env["workspace"], organization=env["organization"], name="采购审批"
-    )
-    AdministrativeApprovalStep.objects.create(flow=flow, order=1, approver_kind="ORG_ADMIN")
-    return flow
-
-
-def submit(env):
-    return env["client"].post(
-        f"{env['base']}/administrative/approval-requests/",
-        {
-            "project_id": str(env["project"].id),
-            "issue_id": str(env["issue"].id),
-        },
-        format="json",
-    )
-
-
 def test_todos_include_old_assigned_tasks_and_degrade_independently(domain_env):
     env = domain_env
     response = env["client"].get(f"{env['base']}/todos/")
     assert response.status_code == 200, response.data
+    assert response.data["results"] and all(item["source"] == "WORK_ITEM" for item in response.data["results"])
     assert response.data["results"][0]["domain"] == "ADMINISTRATIVE"
     assert response.data["results"][0]["urgency"] == "OVERDUE"
     assert response.data["results"][0]["object_id"] == str(env["issue"].id)
@@ -122,6 +99,15 @@ def test_project_member_is_visible_in_tree_without_organization_membership(domai
 def test_retired_approval_configuration_endpoints_are_removed(domain_env):
     env = domain_env
     assert env["admin_client"].get(f"{env['base']}/administrative/approval-flows/").status_code == 404
+    assert env["admin_client"].get(f"{env['base']}/administrative/approval-requests/").status_code == 404
+    assert (
+        env["admin_client"].post(
+            f"{env['base']}/administrative/approval-requests/",
+            {"project_id": str(env["project"].id), "issue_id": str(env["issue"].id)},
+            format="json",
+        ).status_code
+        == 404
+    )
     assert (
         env["admin_client"].get(
             f"{env['base']}/administrative/organizations/{env['organization'].id}/approvers/"
@@ -131,47 +117,3 @@ def test_retired_approval_configuration_endpoints_are_removed(domain_env):
     assert (
         env["admin_client"].get(f"{env['base']}/projects/{env['project'].id}/approval-setting/").status_code == 404
     )
-
-
-def test_assignment_approves_pending_administrative_request(domain_env):
-    """Replacing an administrative work-item owner completes its pending request."""
-    env = domain_env
-    flow = make_flow(env)
-    approval = AdministrativeApprovalRequest.objects.create(
-        workspace=env["workspace"],
-        project=env["project"],
-        issue=env["issue"],
-        flow=flow,
-        requested_by=env["member"],
-    )
-
-    with (
-        patch("plane.app.views.issue.base.issue_activity.delay"),
-        patch("plane.app.views.issue.base.model_activity.delay"),
-        patch("plane.app.views.issue.base.issue_description_version_task.delay"),
-    ):
-        response = env["admin_client"].patch(
-            f"{env['base']}/projects/{env['project'].id}/issues/{env['issue'].id}/",
-            {"assignee_ids": [str(env["create_user"].id)]},
-            format="json",
-        )
-
-    assert response.status_code == 204, response.data
-    approval.refresh_from_db()
-    assert approval.status == "APPROVED"
-    action = AdministrativeApprovalAction.objects.filter(request=approval).latest("created_at")
-    assert action.action == "APPROVE"
-    assert action.actor_id == env["create_user"].id
-    assert action.comment == "负责人指派后自动完成审批。"
-    assert list(IssueAssignee.objects.filter(issue=env["issue"]).values_list("assignee_id", flat=True)) == [
-        env["create_user"].id
-    ]
-
-
-def test_administrative_approval_submission_is_retired(domain_env):
-    """New administrative approval requests cannot bypass direct assignment."""
-    env = domain_env
-    response = submit(env)
-
-    assert response.status_code == 400
-    assert not AdministrativeApprovalRequest.objects.exists()

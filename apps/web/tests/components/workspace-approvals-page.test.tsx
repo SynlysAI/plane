@@ -14,11 +14,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/hooks/use-workspace-context", () => ({
   useWorkspaceContext: () => ({ context: mocks.context, error: null, retry: vi.fn() }),
 }));
-vi.mock("@/components/administrative/approval-panel", () => ({
-  AdministrativeApprovalPanel: ({ workspaceSlug }: { workspaceSlug: string }) => (
-    <div data-testid="administrative-approvals">{`administrative:${workspaceSlug}`}</div>
-  ),
-}));
 vi.mock("@/components/research/approvals/research-approval-center", () => ({
   ResearchApprovalCenter: ({ workspaceSlug }: { workspaceSlug: string }) => (
     <div data-testid="research-approvals">{`research:${workspaceSlug}`}</div>
@@ -89,21 +84,20 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-it("将跨组件待办置于行政审批与科研审批同级且默认展示", async () => {
+it("默认展示跨组件待办且不再出现行政审批页签", async () => {
   await renderPage("/lab/approvals");
 
-  expect(topTabNames()).toEqual(["跨组件待办", "行政审批", "科研审批"]);
+  expect(topTabNames()).toEqual(["跨组件待办", "科研审批"]);
   expect(container.querySelector('section[aria-label="跨组件待办"]')?.textContent).toBe("shared-todos:lab");
-  expect(container.querySelector('[data-testid="administrative-approvals"]')).toBeNull();
   expect(container.querySelector('[data-testid="research-approvals"]')).toBeNull();
 });
 
-it("无科研权限时仍显示跨组件待办与行政审批", async () => {
+it("无科研权限时仅显示跨组件待办", async () => {
   mocks.context = { workspace_enabled: true, capabilities: { nav: [] } };
 
-  await renderPage("/lab/approvals?domain=research&todo_scope=visible");
+  await renderPage("/lab/approvals?todo_scope=visible");
 
-  expect(topTabNames()).toEqual(["跨组件待办", "行政审批"]);
+  expect(topTabNames()).toEqual(["跨组件待办"]);
   expect(container.querySelector('section[aria-label="跨组件待办"]')?.textContent).toBe("shared-todos:lab");
   expect(findTab("跨组件待办")?.getAttribute("aria-current")).toBe("page");
   expect(container.querySelector('[data-testid="research-approvals"]')).toBeNull();
@@ -123,8 +117,8 @@ it("切换页面级页签时保留待办范围并清理队列参数", async () =
   await act(async () => findTab("科研审批")?.click());
   expect(currentPath).toBe("/lab/approvals?todo_scope=visible&domain=research");
 
-  await act(async () => findTab("行政审批")?.click());
-  expect(currentPath).toBe("/lab/approvals?todo_scope=visible&domain=administrative");
+  await act(async () => findTab("跨组件待办")?.click());
+  expect(currentPath).toBe("/lab/approvals?todo_scope=visible&domain=shared_todos");
 });
 
 it("兼容历史科研审批深链", async () => {
