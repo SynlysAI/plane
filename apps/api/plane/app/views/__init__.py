@@ -61,6 +61,7 @@ from .workspace.member import (
     WorkspaceProjectMemberEndpoint,
     WorkspaceMemberUserViewsEndpoint,
 )
+from .workspace.member_account import WorkspaceMemberAccountConfigBulkEndpoint
 from .workspace.invite import (
     WorkspaceMemberInvitationImportEndpoint,
     WorkspaceMemberInvitationImportTemplateEndpoint,

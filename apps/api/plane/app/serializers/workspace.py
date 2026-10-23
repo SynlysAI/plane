@@ -97,6 +97,7 @@ class WorkspaceLiteSerializer(BaseSerializer):
 class WorkSpaceMemberSerializer(DynamicBaseSerializer):
     member = UserLiteSerializer(read_only=True)
     tags = serializers.SerializerMethodField()
+    is_operations_account = serializers.BooleanField(read_only=True)
 
     def get_tags(self, instance):
         """返回成员已关联的标签，供成员列表一次性渲染。"""
@@ -112,6 +113,7 @@ class WorkSpaceMemberSerializer(DynamicBaseSerializer):
 
 class WorkspaceMemberMeSerializer(BaseSerializer):
     draft_issue_count = serializers.IntegerField(read_only=True)
+    is_operations_account = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = WorkspaceMember
@@ -121,6 +123,7 @@ class WorkspaceMemberMeSerializer(BaseSerializer):
 class WorkspaceMemberAdminSerializer(DynamicBaseSerializer):
     member = UserAdminLiteSerializer(read_only=True)
     tags = serializers.SerializerMethodField()
+    is_operations_account = serializers.BooleanField(read_only=True)
 
     def get_tags(self, instance):
         """返回成员已关联的标签，供管理员成员列表一次性渲染。"""

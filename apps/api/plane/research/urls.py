@@ -46,6 +46,7 @@ from plane.research.views.chain_stage_approvals import (
 )
 from plane.research.views.feedback import (
     ResearchFeedbackEndpoint,
+    ResearchFeedbackReplyEndpoint,
     ResearchFeedbackStatusEndpoint,
     ResearchFeedbackScreenshotEndpoint,
 )
@@ -319,6 +320,11 @@ urlpatterns = [
         name="administrative-project-organization",
     ),
     path("research/workspaces/<str:slug>/feedback/", ResearchFeedbackEndpoint.as_view(), name="research-feedback"),
+    path(
+        "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/replies/",
+        ResearchFeedbackReplyEndpoint.as_view(),
+        name="research-feedback-reply",
+    ),
     path(
         "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/status/",
         ResearchFeedbackStatusEndpoint.as_view(),

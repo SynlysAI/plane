@@ -144,6 +144,7 @@ from .research import (
     ExperimentRecord,
     ExperimentRecordVersion,
     ResearchFeedback,
+    ResearchFeedbackReply,
     ResearchFeedbackScreenshot,
     ApprovalAction,
     ApprovalFlow,

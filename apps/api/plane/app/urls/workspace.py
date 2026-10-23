@@ -40,6 +40,7 @@ from plane.app.views import (
     WorkspaceUserPreferenceViewSet,
     WorkspaceMemberInvitationImportEndpoint,
     WorkspaceMemberInvitationImportTemplateEndpoint,
+    WorkspaceMemberAccountConfigBulkEndpoint,
     WorkspaceMemberTagAssignmentEndpoint,
     WorkspaceMemberTagBulkAssignmentEndpoint,
     WorkspaceMemberTagDetailEndpoint,
@@ -128,6 +129,11 @@ urlpatterns = [
         "workspaces/<str:slug>/members/leave/",
         WorkSpaceMemberViewSet.as_view({"post": "leave"}),
         name="leave-workspace-members",
+    ),
+    path(
+        "workspaces/<str:slug>/members/account-config/bulk/",
+        WorkspaceMemberAccountConfigBulkEndpoint.as_view(),
+        name="workspace-member-account-config-bulk",
     ),
     path(
         "workspaces/<str:slug>/member-tag-groups/",

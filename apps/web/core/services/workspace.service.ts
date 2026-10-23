@@ -268,6 +268,18 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  /** 批量设置或取消工作区运维账号。 */
+  async bulkUpdateWorkspaceMemberAccounts(
+    workspaceSlug: string,
+    data: { member_ids: string[]; is_operations_account: boolean }
+  ) {
+    return this.post(`/api/workspaces/${workspaceSlug}/members/account-config/bulk/`, data)
+      .then((response) => response?.data as { members: IWorkspaceMember[] })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async updateWorkspaceMember(
     workspaceSlug: string,
     memberId: string,

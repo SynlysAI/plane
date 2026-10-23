@@ -881,6 +881,13 @@ export type TResearchFeedbackHistory = {
   created_at: string;
 };
 
+export type TResearchFeedbackReply = {
+  id: string;
+  content: string;
+  author_name: string;
+  created_at: string;
+};
+
 export type TResearchFeedback = {
   feedback_id: string;
   content: string;
@@ -892,6 +899,7 @@ export type TResearchFeedback = {
   module: string;
   screenshots: TResearchFeedbackScreenshot[];
   history: TResearchFeedbackHistory[];
+  replies: TResearchFeedbackReply[];
   created_at: string;
   updated_at: string;
 };
@@ -1032,6 +1040,7 @@ export type TResearchIdentity = {
   user: {
     id: string;
     is_workspace_admin: boolean;
+    is_feedback_operator?: boolean;
     /** Configuration rights: workspace administrator or administrator tag. */
     is_research_admin?: boolean;
     is_system_admin?: boolean;

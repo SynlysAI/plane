@@ -32,6 +32,7 @@ export interface IWorkspaceMembership {
   member: string;
   role: TUserPermissions;
   is_active?: boolean;
+  is_operations_account?: boolean;
   tags?: IWorkspaceMemberTag[];
 }
 
@@ -63,6 +64,10 @@ export interface IWorkspaceMemberStore {
   bulkUpdateMemberTags: (
     workspaceSlug: string,
     data: { member_ids: string[]; add_tag_ids: string[]; remove_tag_ids: string[] }
+  ) => Promise<IWorkspaceMember[]>;
+  bulkUpdateMemberAccounts: (
+    workspaceSlug: string,
+    data: { member_ids: string[]; is_operations_account: boolean }
   ) => Promise<IWorkspaceMember[]>;
   removeMemberFromWorkspace: (workspaceSlug: string, userId: string) => Promise<void>;
   // invite actions
@@ -108,6 +113,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       updateMember: action,
       updateMemberTags: action,
       bulkUpdateMemberTags: action,
+      bulkUpdateMemberAccounts: action,
       removeMemberFromWorkspace: action,
       fetchWorkspaceMemberInvitations: action,
       updateMemberInvitation: action,
@@ -228,6 +234,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       role: workspaceMember.role,
       member: this.memberRoot?.memberMap?.[workspaceMember.member],
       is_active: workspaceMember.is_active,
+      is_operations_account: workspaceMember.is_operations_account ?? false,
       tags: workspaceMember.tags ?? [],
     };
     return memberDetails;
@@ -263,6 +270,7 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
             member: member.member.id,
             role: member.role as TUserPermissions,
             is_active: member.is_active,
+            is_operations_account: member.is_operations_account ?? false,
             tags: member.tags ?? [],
           };
         });
@@ -304,6 +312,21 @@ export class WorkspaceMemberStore implements IWorkspaceMemberStore {
       response.members.forEach((member) => {
         const current = this.workspaceMemberMap[workspaceSlug]?.[member.member.id];
         if (current) current.tags = member.tags ?? [];
+      });
+    });
+    return response.members;
+  };
+
+  /** 批量更新成员运维账号状态并同步本地缓存。 */
+  bulkUpdateMemberAccounts = async (
+    workspaceSlug: string,
+    data: { member_ids: string[]; is_operations_account: boolean }
+  ) => {
+    const response = await this.workspaceService.bulkUpdateWorkspaceMemberAccounts(workspaceSlug, data);
+    runInAction(() => {
+      response.members.forEach((member) => {
+        const current = this.workspaceMemberMap[workspaceSlug]?.[member.member.id];
+        if (current) current.is_operations_account = member.is_operations_account ?? false;
       });
     });
     return response.members;
