@@ -12,11 +12,14 @@ from plane.research.services.chain_stage_approvals import (
     CHAIN_STAGE_PI_POLICIES,
     ChainStageRuleError,
     material_state,
+    precheck_material_version,
     resolve_advisor,
     resolve_principal,
+    stage_material_version,
 )
 from plane.research.services.chain_tasks import chain_writer
 from plane.research.utils.action_capabilities import capability_map
+from plane.research.utils.errors import ResearchErrorCode
 
 
 STAGE_ACTIONS = ("view", "edit_materials", "remove_material", "precheck", "submit", "review")
@@ -98,6 +101,8 @@ class ResearchChainStagePrecheckSerializer(serializers.ModelSerializer):
     """Expose one advisory stage precheck."""
 
     schema_version = serializers.SerializerMethodField()
+    material_version = serializers.SerializerMethodField()
+    is_current = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChainStagePrecheck
@@ -107,6 +112,8 @@ class ResearchChainStagePrecheckSerializer(serializers.ModelSerializer):
             "stage",
             "status",
             "summary",
+            "material_version",
+            "is_current",
             "checks",
             "recommendations",
             "generated_by",
@@ -117,6 +124,13 @@ class ResearchChainStagePrecheckSerializer(serializers.ModelSerializer):
 
     def get_schema_version(self, _obj):
         return "research-chain-stage-precheck.v1"
+
+    def get_material_version(self, obj):
+        return precheck_material_version(obj)
+
+    def get_is_current(self, obj):
+        version = precheck_material_version(obj)
+        return bool(version) and version == stage_material_version(obj.stage)
 
 
 class ResearchChainStageSerializer(serializers.ModelSerializer):
@@ -170,7 +184,8 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
 
     def get_review_actions(self, obj):
         return ResearchChainStageReviewActionSerializer(
-            obj.review_actions.select_related("reviewer").all(), many=True
+            obj.review_actions.all(),
+            many=True,
         ).data
 
     def get_latest_precheck(self, obj):
@@ -178,11 +193,11 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
         return ResearchChainStagePrecheckSerializer(precheck).data if precheck else None
 
     def get_advisor(self, obj):
-        user, error = _safe_reviewer(resolve_advisor, obj.chain)
+        user, error = self._cached_reviewer("advisor", resolve_advisor, obj.chain)
         return {"user": user, "error": error}
 
     def get_principal_investigator(self, obj):
-        user, error = _safe_reviewer(resolve_principal, obj.chain)
+        user, error = self._cached_reviewer("principal", resolve_principal, obj.chain)
         return {"user": user, "error": error}
 
     def get_current_review_step(self, obj):
@@ -197,20 +212,26 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
         actor = self.context.get("actor")
         if actor is None:
             return capability_map(STAGE_ACTIONS, {})
-        writable = obj.chain.status == "ACTIVE" and chain_writer(obj.workspace, actor, obj.chain)
+        writable = self._cached_writable(obj, actor)
         editable = writable and obj.status in ("NOT_STARTED", "IN_PROGRESS", "NEEDS_REVISION")
         reviewer_allowed = False
         reasons = {}
         if obj.status == "AWAITING_ADVISOR":
-            try:
-                reviewer_allowed = resolve_advisor(obj.chain).id == actor.id
-            except ChainStageRuleError as error:
-                reasons["review"] = {"reason_code": error.error_code, "reason": error.message}
+            reviewer, reviewer_error = self._cached_reviewer("advisor", resolve_advisor, obj.chain)
+            reviewer_allowed = reviewer is not None and str(reviewer.get("id")) == str(actor.id)
+            if reviewer_error:
+                reasons["review"] = {
+                    "reason_code": ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
+                    "reason": reviewer_error,
+                }
         elif obj.status == "AWAITING_PI":
-            try:
-                reviewer_allowed = resolve_principal(obj.chain).id == actor.id
-            except ChainStageRuleError as error:
-                reasons["review"] = {"reason_code": error.error_code, "reason": error.message}
+            reviewer, reviewer_error = self._cached_reviewer("principal", resolve_principal, obj.chain)
+            reviewer_allowed = reviewer is not None and str(reviewer.get("id")) == str(actor.id)
+            if reviewer_error:
+                reasons["review"] = {
+                    "reason_code": ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
+                    "reason": reviewer_error,
+                }
         decisions = {
             "view": True,
             "edit_materials": editable,
@@ -220,3 +241,33 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
             "review": obj.chain.status == "ACTIVE" and reviewer_allowed,
         }
         return capability_map(STAGE_ACTIONS, decisions, reasons=reasons)
+
+    def _cached_reviewer(self, key, resolver, chain):
+        """Resolve one reviewer once per serialized chain.
+
+        Args:
+            key: Cache key for the reviewer role.
+            resolver: Advisor or principal resolver.
+            chain: The Research Chain shared by the serialized stages.
+
+        Returns:
+            A reviewer projection and optional configuration error.
+        """
+        cache = self.context.setdefault("reviewer_cache", {})
+        if key not in cache:
+            cache[key] = _safe_reviewer(resolver, chain)
+        return cache[key]
+
+    def _cached_writable(self, obj, actor):
+        """Resolve chain write permission once per serialized chain.
+
+        Args:
+            obj: The stage being serialized.
+            actor: The requesting user.
+
+        Returns:
+            Whether the actor can write the stage's chain.
+        """
+        if "writable" not in self.context:
+            self.context["writable"] = obj.chain.status == "ACTIVE" and chain_writer(obj.workspace, actor, obj.chain)
+        return self.context["writable"]

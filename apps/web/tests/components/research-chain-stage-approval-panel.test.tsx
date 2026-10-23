@@ -98,10 +98,23 @@ const nodes = [
     id: "node-1",
     chain: "chain-1",
     node_type: "TOPIC_EVALUATION",
-    title: "选题评估",
+    title: "可提交节点",
     parent_node: null,
     loop_iteration: 0,
     status: "ACTIVE",
+    assignee: null,
+    created_at: "2026-10-22T01:00:00Z",
+    updated_at: "2026-10-22T01:00:00Z",
+  },
+  {
+    schema_version: "research-node.v1",
+    id: "node-2",
+    chain: "chain-1",
+    node_type: "TOPIC_EVALUATION",
+    title: "已完成节点",
+    parent_node: null,
+    loop_iteration: 0,
+    status: "COMPLETED",
     assignee: null,
     created_at: "2026-10-22T01:00:00Z",
     updated_at: "2026-10-22T01:00:00Z",
@@ -112,6 +125,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 const onChanged = vi.fn();
+const onCreateNode = vi.fn();
 
 beforeEach(() => {
   container = document.createElement("div");
@@ -125,37 +139,146 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
+async function renderPanel(
+  options: { stage?: ReturnType<typeof stage>; nodes?: typeof nodes; expanded?: boolean } = {}
+) {
+  await act(async () => {
+    root.render(
+      <ResearchChainStageApprovalPanel
+        workspaceSlug="lab"
+        chainId="chain-1"
+        stage={options.stage ?? stage({})}
+        nodes={options.nodes ?? nodes}
+        preferredNodeId="node-1"
+        applicantName="研究负责人"
+        defaultExpanded={options.expanded ?? false}
+        onCreateNode={onCreateNode}
+        onChanged={onChanged}
+      />
+    );
+  });
+}
+
 function button(label: string) {
   return [...container.querySelectorAll<HTMLButtonElement>("button")].find(
     (item) => item.textContent?.trim() === label
   );
 }
 
-it("disables submission while hard materials are incomplete and can run precheck", async () => {
-  mocks.runChainStagePrecheck.mockResolvedValue({});
+async function expand() {
   await act(async () => {
-    root.render(
-      <ResearchChainStageApprovalPanel
-        workspaceSlug="lab"
-        chainId="chain-1"
-        stage={stage({})}
-        nodes={nodes}
-        preferredNodeId="node-1"
-        onChanged={onChanged}
-      />
-    );
+    container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click();
   });
+}
 
-  expect(container.textContent).toContain("已提交 0/1");
-  expect(container.textContent).toContain("还有 1 项材料未满足要求");
+it("keeps the panel collapsed with a high-signal summary by default", async () => {
+  await renderPanel();
+
+  const disclosure = container.querySelector<HTMLButtonElement>("button[aria-expanded]");
+  expect(disclosure?.getAttribute("aria-expanded")).toBe("false");
+  expect(disclosure?.getAttribute("aria-controls")).toBe("stage-1-stage-approval-content");
+  expect(disclosure?.textContent).toContain("进行中");
+  expect(disclosure?.textContent).toContain("材料 0/1");
+  expect(disclosure?.textContent).toContain("待提交");
+  expect(container.textContent).not.toContain("原理可行性分析");
+
+  await expand();
+  expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
+  expect(container.textContent).toContain("原理可行性分析");
+});
+
+it("opens automatically from an approval-center deep link", async () => {
+  await renderPanel({ expanded: true });
+
+  expect(container.querySelector("button[aria-expanded]")?.getAttribute("aria-expanded")).toBe("true");
+  expect(container.textContent).toContain("原理可行性分析");
+});
+
+it("shows the first missing material nearby and parses backend missing names", async () => {
+  mocks.createChainStageMaterial.mockRejectedValue({
+    error_code: "research_chain_stage_material_incomplete",
+    message: "All required stage materials must be submitted.",
+    missing: ["PRINCIPLE_FEASIBILITY"],
+  });
+  await renderPanel({ expanded: true });
+
+  expect(button("补充")).not.toBeNull();
+  const title = [...container.querySelectorAll<HTMLInputElement>("input")].find((input) =>
+    input.getAttribute("placeholder")?.includes("原理可行性分析")
+  );
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(title, "可行性说明");
+    title?.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button("添加材料")?.click());
+
+  expect(mocks.createChainStageMaterial).toHaveBeenCalled();
+  expect(container.querySelector("[role='alert']")?.textContent).toContain("缺少材料：原理可行性分析");
+});
+
+it("offers node creation when the stage has no business node", async () => {
+  await renderPanel({ nodes: [], expanded: true });
+
+  expect(container.textContent).toContain("尚无阶段业务节点");
+  expect(button("创建阶段节点")?.disabled).toBe(false);
+  await act(async () => button("创建阶段节点")?.click());
+  expect(onCreateNode).toHaveBeenCalledTimes(1);
+});
+
+it("only lists nodes the backend allows for submission", async () => {
+  await renderPanel({ expanded: true });
+
+  const select = container.querySelector<HTMLSelectElement>('select[aria-label="提交节点"]');
+  expect([...(select?.options ?? [])].map((option) => option.text)).toEqual(["可提交节点"]);
+});
+
+it("marks an outdated stage-three precheck and blocks submission", async () => {
+  const outdated = stage({
+    latest_precheck: {
+      schema_version: "research-chain-stage-precheck.v1",
+      id: "precheck-1",
+      status: "READY",
+      summary: "材料完整性预检通过。",
+      material_version: "old-version",
+      is_current: false,
+      checks: [{ code: "PRINCIPLE_FEASIBILITY", passed: true, submitted_count: 1, minimum_count: 1 }],
+      recommendations: [],
+      generated_by: "research-agent-precheck",
+      model_version: "rule-material-v1",
+      created_at: "2026-10-22T01:00:00Z",
+    },
+    materials: [
+      {
+        id: "material-1",
+        code: "PRINCIPLE_FEASIBILITY",
+        title: "原理可行性分析",
+        minimum_count: 1,
+        submitted_count: 1,
+        complete: true,
+        items: [
+          {
+            id: "item-1",
+            title: "可行性说明",
+            description: "",
+            source_node: null,
+            external_reference: "",
+            created_at: "2026-10-22T01:00:00Z",
+          },
+        ],
+      },
+    ],
+  });
+  mocks.runChainStagePrecheck.mockResolvedValue({});
+  await renderPanel({ stage: outdated, expanded: true });
+
+  expect(container.textContent).toContain("结果已过期，需重新检查");
   expect(button("提交阶段审核")?.disabled).toBe(true);
-
-  await act(async () => button("生成 AI 预检")?.click());
+  await act(async () => button("重新检查")?.click());
   expect(mocks.runChainStagePrecheck).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION");
 });
 
-it("requires an explicit advisor decision before conditional PI escalation", async () => {
-  mocks.reviewChainStage.mockResolvedValue({});
+it("keeps only one advisor approve action when PI review was declared", async () => {
   const conditional = stage({
     stage_code: "EXPERIMENT",
     status: "AWAITING_ADVISOR",
@@ -174,21 +297,12 @@ it("requires an explicit advisor decision before conditional PI escalation", asy
       },
     },
   });
-  await act(async () => {
-    root.render(
-      <ResearchChainStageApprovalPanel
-        workspaceSlug="lab"
-        chainId="chain-1"
-        stage={conditional}
-        nodes={nodes}
-        preferredNodeId="node-1"
-        onChanged={onChanged}
-      />
-    );
-  });
+  mocks.reviewChainStage.mockResolvedValue({});
+  await renderPanel({ stage: conditional, nodes: [], expanded: true });
 
+  expect(container.textContent).toContain("申请人: 研究负责人");
   expect(button("通过并转主 PI")).not.toBeNull();
-  expect(button("导师通过，不转 PI")).not.toBeNull();
+  expect(button("导师通过，不转 PI")).toBeUndefined();
   expect(button("驳回")?.disabled).toBe(true);
 
   const textarea = container.querySelector("textarea")!;
@@ -204,4 +318,31 @@ it("requires an explicit advisor decision before conditional PI escalation", asy
     comment: "同意启动",
     escalate_to_pi: true,
   });
+});
+
+it("keeps review history collapsed until requested", async () => {
+  const reviewed = stage({
+    review_actions: [
+      {
+        schema_version: "research-chain-stage-review-action.v1",
+        id: "review-1",
+        attempt_no: 1,
+        reviewer_role: "ADVISOR",
+        reviewer_detail: { id: "advisor", display_name: "直接导师", email: "a@example.com" },
+        action: "RETURN",
+        comment: "补充实验边界",
+        escalated_to_pi: false,
+        material_snapshot: [],
+        declaration_snapshot: {},
+        created_at: "2026-10-22T01:00:00Z",
+      },
+    ],
+  });
+  await renderPanel({ stage: reviewed, expanded: true });
+
+  expect(container.textContent).toContain("历史审核 1 次");
+  expect(container.textContent).not.toContain("补充实验边界");
+  await act(async () => button("历史审核 1 次")?.click());
+  expect(container.textContent).toContain("直接导师");
+  expect(container.textContent).toContain("补充实验边界");
 });

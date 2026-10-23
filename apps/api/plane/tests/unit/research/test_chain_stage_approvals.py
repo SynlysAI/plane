@@ -29,7 +29,10 @@ from plane.research.services.chain_stage_approvals import (
     submit_chain_stage,
 )
 from plane.research.services.chain_stage_approvals import mark_chain_stage_in_progress
+from plane.research.serializers.chain_stage import ResearchChainStagePrecheckSerializer
 from plane.tests.research_fixtures import enable_research, make_user, make_workspace
+
+import plane.research.services.chain_stage_approvals as approval_service
 
 pytestmark = pytest.mark.unit
 
@@ -126,6 +129,76 @@ def test_initialize_chain_stages_is_idempotent(env):
     assert stages.first().status == "NOT_STARTED"
     assert stages.count() == 13
     assert sum(stage.material_requirements.count() for stage in stages) > 13
+
+
+def test_initialize_chain_stages_replaces_soft_deleted_stage_without_active_duplicates(env):
+    initialize_chain_stages(env["chain"], env["owner"])
+    literature = env["chain"].stage_approvals.get(stage_code="LITERATURE_REVIEW")
+    type(literature).all_objects.filter(pk=literature.pk).update(deleted_at=timezone.now())
+
+    initialize_chain_stages(env["chain"], env["owner"])
+
+    active_literature = env["chain"].stage_approvals.filter(stage_code="LITERATURE_REVIEW")
+    assert active_literature.count() == 1
+    assert active_literature.get().pk != literature.pk
+    assert env["chain"].stage_approvals.count() == 13
+
+
+def test_add_material_rolls_back_when_audit_fails(env, monkeypatch):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="PRE_EXPERIMENT")
+
+    def fail_audit(*args, **kwargs):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(approval_service, "_audit_stage", fail_audit)
+    with pytest.raises(RuntimeError):
+        approval_service.add_stage_material(
+            stage,
+            env["owner"],
+            requirement_code="PRE_EXPERIMENT_PLAN",
+            title="Plan",
+            request_id=f"material-{uuid4().hex}",
+        )
+
+    assert stage.material_items.filter(deleted_at__isnull=True).count() == 0
+
+
+def test_remove_material_rolls_back_when_audit_fails(env, monkeypatch):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="PRE_EXPERIMENT")
+    item = ResearchChainStageMaterialItem.objects.create(
+        stage=stage,
+        requirement=stage.material_requirements.get(),
+        title="Plan",
+        request_id=f"material-{uuid4().hex}",
+        created_by=env["owner"],
+    )
+
+    def fail_audit(*args, **kwargs):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(approval_service, "_audit_stage", fail_audit)
+    with pytest.raises(RuntimeError):
+        approval_service.remove_stage_material(stage, item, env["owner"])
+
+    item.refresh_from_db()
+    assert item.deleted_at is None
+
+
+def test_precheck_rolls_back_when_audit_fails(env, monkeypatch):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="TOPIC_EVALUATION")
+    fill_materials(stage)
+
+    def fail_audit(*args, **kwargs):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(approval_service, "_audit_stage", fail_audit)
+    with pytest.raises(RuntimeError):
+        approval_service.create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
+
+    assert stage.prechecks.count() == 0
 
 
 def fill_materials(stage, prefix="Material"):
@@ -346,6 +419,54 @@ def test_owner_and_wrong_review_step_cannot_review(env):
     with pytest.raises(ChainStageRuleError) as pi_error:
         review_chain_stage(stage, env["principal"], action="APPROVE", request_id=f"pi-{uuid4().hex}")
     assert pi_error.value.error_code == "research_chain_stage_reviewer_invalid"
+
+
+def test_precheck_expires_after_material_version_changes_and_blocks_stage_three(env):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="TOPIC_EVALUATION")
+    fill_materials(stage)
+    precheck = create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
+    original_data = ResearchChainStagePrecheckSerializer(precheck).data
+    assert original_data["material_version"]
+    assert original_data["is_current"] is True
+
+    requirement = stage.material_requirements.first()
+    original_item = requirement.items.first()
+    approval_service.remove_stage_material(stage, original_item, env["owner"])
+    approval_service.add_stage_material(
+        stage,
+        env["owner"],
+        requirement_code=requirement.code,
+        title=f"Replaced {requirement.code}",
+        request_id=f"material-{uuid4().hex}",
+    )
+    assert ResearchChainStageMaterialItem.all_objects.filter(stage=stage).count() == 5
+    assert approval_service.stage_material_version(stage) != original_data["material_version"]
+    expired_data = ResearchChainStagePrecheckSerializer(precheck).data
+    assert expired_data["material_version"] == original_data["material_version"]
+    assert expired_data["is_current"] is False
+
+    node = make_node(env, "TOPIC_EVALUATION")
+    with pytest.raises(ChainStageRuleError) as error:
+        submit_chain_stage(stage, env["owner"], node=node, request_id=f"submit-{uuid4().hex}")
+    assert error.value.error_code == "research_chain_stage_precheck_required"
+
+    replacement_precheck = create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
+    assert ResearchChainStagePrecheckSerializer(replacement_precheck).data["is_current"] is True
+    submitted = submit_chain_stage(stage, env["owner"], node=node, request_id=f"submit-{uuid4().hex}")
+    assert submitted.status == "AWAITING_ADVISOR"
+
+
+def test_precheck_cannot_be_generated_in_non_editable_stage(env):
+    initialize_chain_stages(env["chain"], env["owner"])
+    stage = env["chain"].stage_approvals.get(stage_code="TOPIC_EVALUATION")
+    stage.status = "AWAITING_ADVISOR"
+    stage.save(update_fields=["status", "updated_at"])
+
+    with pytest.raises(ChainStageRuleError) as error:
+        create_stage_precheck(stage, env["owner"], request_id=f"precheck-{uuid4().hex}")
+
+    assert error.value.error_code == "research_chain_stage_material_read_only"
 
 
 def test_migration_seeds_existing_chain_with_thirteen_stages(env):

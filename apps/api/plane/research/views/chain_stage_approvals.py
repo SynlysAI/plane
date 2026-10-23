@@ -92,7 +92,7 @@ class ResearchChainStageApprovalListEndpoint(ResearchAPIView):
             chain.stage_approvals.filter(deleted_at__isnull=True)
             .prefetch_related(
                 "material_requirements__items",
-                "review_actions",
+                "review_actions__reviewer",
                 "prechecks",
             )
             .order_by("sort_order")
@@ -243,6 +243,8 @@ class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint)
             )
         except ChainStageRuleError as rule_error:
             return _rule_error(rule_error)
+        except IntegrityError:
+            return conflict_response()
         return Response(
             _envelope(
                 ResearchChainStageMaterialItemSerializer(item).data,
@@ -309,6 +311,8 @@ class ResearchChainStagePrecheckEndpoint(ResearchChainStageApprovalBaseEndpoint)
             precheck = create_stage_precheck(stage, request.user, request_id=request_id)
         except ChainStageRuleError as rule_error:
             return _rule_error(rule_error)
+        except IntegrityError:
+            return conflict_response()
         return Response(
             _envelope(
                 ResearchChainStagePrecheckSerializer(precheck).data,
@@ -374,6 +378,8 @@ class ResearchChainStageSubmitEndpoint(ResearchChainStageApprovalBaseEndpoint):
             )
         except ChainStageRuleError as rule_error:
             return _rule_error(rule_error)
+        except IntegrityError:
+            return conflict_response()
         return Response(
             _envelope(
                 ResearchChainStageSerializer(submitted, context={"actor": request.user}).data,
@@ -400,6 +406,12 @@ class ResearchChainStageReviewEndpoint(ResearchChainStageApprovalBaseEndpoint):
         digest = payload_hash(request.data)
         existing_action = stage.review_actions.filter(request_id=request_id).first()
         if existing_action is not None:
+            if existing_action.reviewer_id != request.user.id:
+                return research_error(
+                    ResearchErrorCode.PERMISSION_DENIED,
+                    "Only the original reviewer can replay this review action.",
+                    status.HTTP_403_FORBIDDEN,
+                )
             if existing_action.declaration_snapshot.get("payload_hash") != digest:
                 return conflict_response()
             stage.refresh_from_db()

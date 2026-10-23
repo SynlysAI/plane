@@ -24,6 +24,27 @@ const SCOPES = ["to_me", "visible"] as const;
 
 const todoService = new ResearchTodoService();
 
+/** 读取审批待办的当前审核步骤。 */
+function stepLabelKey(item: TResearchTodoEnvelope): string {
+  if (item.business_status === "AWAITING_ADVISOR") return "research.approvals.stage_step_advisor";
+  if (item.business_status === "AWAITING_PI") return "research.approvals.stage_step_pi";
+  return item.context;
+}
+
+/** 读取审批待办相对于当前用户的可读状态。 */
+function statusLabelKey(item: TResearchTodoEnvelope): string {
+  if (item.assignees.length === 0) return "research.approvals.stage_status_blocked";
+  return item.capabilities?.actions.approve?.allowed
+    ? "research.approvals.stage_status_waiting_me"
+    : "research.approvals.stage_status_waiting_others";
+}
+
+/** 为审批中心直达链接追加自动展开参数。 */
+function approvalHref(href: string): string {
+  if (href.includes("approval=1")) return href;
+  return href.includes("?") ? `${href}&approval=1` : `${href}?approval=1`;
+}
+
 /** 科研链十三阶段审批收件箱。 */
 export function ChainStageApprovalInbox({ workspaceSlug }: Props) {
   const { t, currentLocale } = useTranslation();
@@ -83,6 +104,7 @@ export function ChainStageApprovalInbox({ workspaceSlug }: Props) {
                 <TableRow>
                   <TableHead>{t("research.approvals.stage_queue_topic")}</TableHead>
                   <TableHead>{t("research.approvals.stage_queue_step")}</TableHead>
+                  <TableHead>{t("research.approvals.stage_queue_status")}</TableHead>
                   <TableHead>{t("research.approvals.stage_queue_requester")}</TableHead>
                   <TableHead>{t("research.approvals.stage_queue_updated")}</TableHead>
                 </TableRow>
@@ -91,11 +113,15 @@ export function ChainStageApprovalInbox({ workspaceSlug }: Props) {
                 {items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
-                      <Link to={item.href} className="text-13 font-medium text-primary hover:text-accent-primary">
+                      <Link
+                        to={approvalHref(item.href)}
+                        className="text-13 font-medium text-primary hover:text-accent-primary"
+                      >
                         {item.title}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-12 text-secondary">{item.context}</TableCell>
+                    <TableCell className="text-12 text-secondary">{t(stepLabelKey(item))}</TableCell>
+                    <TableCell className="text-12 text-secondary">{t(statusLabelKey(item))}</TableCell>
                     <TableCell className="text-12 text-secondary">{item.requester?.display_name ?? "-"}</TableCell>
                     <TableCell className="text-12 text-tertiary">
                       {formatResearchDateTime(item.updated_at, currentLocale)}

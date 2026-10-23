@@ -3,6 +3,8 @@
 from uuid import uuid4
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -95,6 +97,7 @@ def env(db):
         "chain": chain,
         "owner_client": _client(owner),
         "advisor_client": _client(advisor),
+        "principal_client": _client(principal),
     }
 
 
@@ -117,6 +120,22 @@ def test_stage_list_returns_thirteen_stages_and_progress(env):
         "in_progress": 0,
         "not_started": 13,
     }
+
+
+def test_stage_list_query_count_is_bounded(env):
+    """Stage list serialization must not regress into per-stage N+1 queries."""
+    assert env["owner_client"].get(url(env)).status_code == 200
+
+    with CaptureQueriesContext(connection) as capture:
+        response = env["owner_client"].get(url(env))
+
+    assert response.status_code == 200, response.json()
+    queries = [query["sql"] for query in capture.captured_queries]
+    assert len(queries) < 40
+    assert sum("research_chain_stage_material_requirements" in sql for sql in queries) <= 4
+    assert sum("research_chain_stage_material_items" in sql for sql in queries) <= 4
+    assert sum("mentor_bindings" in sql for sql in queries) <= 2
+    assert sum("org_unit_members" in sql for sql in queries) <= 2
 
 
 def test_creating_a_later_stage_node_does_not_require_earlier_approval(env):
@@ -186,7 +205,7 @@ def test_material_submit_and_review_flow(env):
     )
     assert todos.status_code == 200, todos.json()
     approval_todos = [item for item in todos.json()["results"] if item["source"] == "CHAIN_STAGE_APPROVAL"]
-    assert approval_todos[0]["href"].endswith("tab=nodes&stage=pre_experiment")
+    assert approval_todos[0]["href"].endswith("tab=nodes&stage=pre_experiment&approval=1")
 
     reviewed = env["advisor_client"].post(
         url(env, "PRE_EXPERIMENT/review/"),
@@ -232,6 +251,40 @@ def test_topic_evaluation_precheck_is_required_before_submission(env):
     )
     assert precheck.status_code == 201, precheck.json()
     assert precheck.json()["data"]["status"] == "READY"
+    assert precheck.json()["data"]["material_version"]
+    assert precheck.json()["data"]["is_current"] is True
+
+
+def test_review_idempotency_replay_rejects_a_different_reviewer(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="PRE_EXPERIMENT",
+        title="Replay review",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/materials/"),
+        {
+            "request_id": f"material-{uuid4().hex}",
+            "requirement_code": "PRE_EXPERIMENT_PLAN",
+            "title": "Pre-experiment plan",
+        },
+        format="json",
+    )
+    env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/submit/"),
+        {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
+        format="json",
+    )
+    review_payload = {"request_id": f"review-{uuid4().hex}", "action": "APPROVE"}
+    reviewed = env["advisor_client"].post(url(env, "PRE_EXPERIMENT/review/"), review_payload, format="json")
+    replay = env["principal_client"].post(url(env, "PRE_EXPERIMENT/review/"), review_payload, format="json")
+
+    assert reviewed.status_code == 200, reviewed.json()
+    assert replay.status_code == 403
+    assert replay.json()["error_code"] == "research_permission_denied"
 
 
 def test_legacy_node_transition_cannot_bypass_stage_approval(env):

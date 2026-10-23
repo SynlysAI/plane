@@ -361,6 +361,13 @@ it("renders the authoritative stage approval summary and material gaps", async (
   expect(container.textContent).toContain("需修改 1");
   expect(container.textContent).toContain("阶段可并行推进；13 个阶段全部通过后课题自动完成。");
   expect(container.textContent).toContain("阶段审批要求");
+  expect(container.textContent).toContain("材料 0/1");
+  expect(container.querySelector("button[aria-expanded]")?.getAttribute("aria-expanded")).toBe("false");
+  expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("3");
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click();
+  });
   expect(container.textContent).toContain("已提交 2/5");
   expect(container.textContent).toContain("待补充");
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("提交审核");
@@ -430,6 +437,7 @@ it("navigates to an empty stage through the workflow itself", async () => {
   expect(nextParams.get("tab")).toBe("nodes");
   expect(nextParams.get("stage")).toBe("transfer");
   expect(nextParams.get("node")).toBeNull();
+  expect(nextParams.get("approval")).toBeNull();
 });
 
 it("normalizes legacy replay links into the workflow detail view", async () => {

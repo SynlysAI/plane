@@ -144,6 +144,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   );
   const requestedStageId = searchParams.get("stage");
   const requestedNode = nodes.find((node) => node.id === requestedNodeId);
+  const approvalDeepLink = searchParams.get("approval") === "1";
   const selectedStage =
     workflow.stages.find((stage) => stage.id === requestedStageId) ??
     workflow.stages.find(
@@ -229,6 +230,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("tab", "nodes");
       nextParams.set("stage", stage.id);
+      nextParams.delete("approval");
       if (stage.preferredNodeId) nextParams.set("node", stage.preferredNodeId);
       else nextParams.delete("node");
       setSearchParams(nextParams);
@@ -554,7 +556,21 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                       .join(" · ") || t("research.chains.stage_approval.no_pending")}
                   </p>
                 </div>
-                <div className="mt-2 h-1 w-full max-w-md overflow-hidden rounded-full bg-surface-2">
+                <div
+                  role="progressbar"
+                  aria-label={t("research.chains.stage_approval.progress", {
+                    approved: stageApprovalSummary.progress.approved,
+                    total: stageApprovalSummary.progress.total,
+                  })}
+                  aria-valuemin={0}
+                  aria-valuemax={stageApprovalSummary.progress.total}
+                  aria-valuenow={stageApprovalSummary.progress.approved}
+                  aria-valuetext={t("research.chains.stage_approval.progress", {
+                    approved: stageApprovalSummary.progress.approved,
+                    total: stageApprovalSummary.progress.total,
+                  })}
+                  className="mt-2 h-1 w-full max-w-md overflow-hidden rounded-full bg-surface-2"
+                >
                   <div
                     className="h-full bg-accent-primary"
                     style={{
@@ -732,44 +748,52 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                   </>
                 }
                 detailSlot={
-                  selected ? (
-                    <>
-                      {selectedStageApproval && (
-                        <ResearchChainStageApprovalPanel
-                          key={selectedStageApproval.id}
+                  <>
+                    {selectedStageApproval && (
+                      <ResearchChainStageApprovalPanel
+                        key={selectedStageApproval.id}
+                        workspaceSlug={workspaceSlug}
+                        chainId={chainId}
+                        stage={selectedStageApproval}
+                        nodes={nodes}
+                        preferredNodeId={preferredNodeId}
+                        applicantName={chain?.owner_name ?? null}
+                        defaultExpanded={approvalDeepLink}
+                        onCreateNode={() => {
+                          setCreatingNodeInline(true);
+                          setNodeTitle("");
+                        }}
+                        onChanged={() => void load()}
+                      />
+                    )}
+                    {selected ? (
+                      <>
+                        <ResearchChainTaskPanel
                           workspaceSlug={workspaceSlug}
                           chainId={chainId}
-                          stage={selectedStageApproval}
-                          nodes={nodes}
-                          preferredNodeId={preferredNodeId}
-                          onChanged={() => void load()}
+                          nodeId={selected.node.id}
                         />
-                      )}
-                      <ResearchChainTaskPanel
-                        workspaceSlug={workspaceSlug}
-                        chainId={chainId}
-                        nodeId={selected.node.id}
-                      />
-                      <ResearchChainKnowledgePanel
-                        workspaceSlug={workspaceSlug}
-                        chainId={chainId}
-                        nodeId={selected.node.id}
-                      />
-                      {selected.node.node_type === "PAPER_WRITING" && (
-                        <details className="border-t border-subtle">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-13 font-medium text-primary">
-                            {t("research.paper_reviews.panel_title")}
-                          </summary>
-                          <ResearchPaperReviewPanel
-                            workspaceSlug={workspaceSlug}
-                            chainId={chainId}
-                            nodeId={selected.node.id}
-                            events={selected.events}
-                          />
-                        </details>
-                      )}
-                    </>
-                  ) : null
+                        <ResearchChainKnowledgePanel
+                          workspaceSlug={workspaceSlug}
+                          chainId={chainId}
+                          nodeId={selected.node.id}
+                        />
+                        {selected.node.node_type === "PAPER_WRITING" && (
+                          <details className="border-t border-subtle">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-13 font-medium text-primary">
+                              {t("research.paper_reviews.panel_title")}
+                            </summary>
+                            <ResearchPaperReviewPanel
+                              workspaceSlug={workspaceSlug}
+                              chainId={chainId}
+                              nodeId={selected.node.id}
+                              events={selected.events}
+                            />
+                          </details>
+                        )}
+                      </>
+                    ) : null}
+                  </>
                 }
               />
             )}

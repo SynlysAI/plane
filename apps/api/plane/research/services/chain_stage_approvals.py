@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from django.db import transaction
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 from rest_framework import status
 
@@ -220,30 +221,56 @@ def initialize_chain_stages(chain, actor=None):
     """
     from plane.db.models import ResearchChainStage, ResearchChainStageMaterialRequirement
 
-    created_count = 0
-    for sort_order, rule in enumerate(STAGE_RULES, start=1):
-        stage, created = ResearchChainStage.objects.get_or_create(
-            chain=chain,
-            stage_code=rule.code,
-            defaults={
-                "workspace": chain.workspace,
-                "sort_order": sort_order,
-                "created_by": actor,
-            },
-        )
-        created_count += int(created)
-        for requirement_order, material in enumerate(rule.materials, start=1):
-            ResearchChainStageMaterialRequirement.objects.get_or_create(
-                stage=stage,
-                code=material.code,
-                defaults={
-                    "title": material.title,
-                    "minimum_count": material.minimum_count,
-                    "sort_order": requirement_order,
-                    "created_by": actor,
-                },
+    with transaction.atomic():
+        type(chain).objects.select_for_update().get(pk=chain.pk)
+        existing_stages = {
+            stage.stage_code: stage
+            for stage in ResearchChainStage.objects.filter(chain=chain, deleted_at__isnull=True)
+        }
+        missing_stages = []
+        for sort_order, rule in enumerate(STAGE_RULES, start=1):
+            if rule.code in existing_stages:
+                continue
+            missing_stages.append(
+                ResearchChainStage(
+                    workspace=chain.workspace,
+                    chain=chain,
+                    stage_code=rule.code,
+                    sort_order=sort_order,
+                    created_by=actor,
+                )
             )
-    return created_count
+        if missing_stages:
+            ResearchChainStage.objects.bulk_create(missing_stages)
+        stages_by_code = {stage.stage_code: stage for stage in existing_stages.values()}
+        stages_by_code.update({stage.stage_code: stage for stage in missing_stages})
+
+        existing_requirements = {
+            (requirement.stage_id, requirement.code): requirement
+            for requirement in ResearchChainStageMaterialRequirement.objects.filter(
+                stage__chain=chain,
+                deleted_at__isnull=True,
+            )
+        }
+        missing_requirements = []
+        for rule in STAGE_RULES:
+            stage = stages_by_code[rule.code]
+            for requirement_order, material in enumerate(rule.materials, start=1):
+                if (stage.id, material.code) in existing_requirements:
+                    continue
+                missing_requirements.append(
+                    ResearchChainStageMaterialRequirement(
+                        stage=stage,
+                        code=material.code,
+                        title=material.title,
+                        minimum_count=material.minimum_count,
+                        sort_order=requirement_order,
+                        created_by=actor,
+                    )
+                )
+        if missing_requirements:
+            ResearchChainStageMaterialRequirement.objects.bulk_create(missing_requirements)
+        return len(missing_stages)
 
 
 def _ancestor_node_types(node):
@@ -416,9 +443,18 @@ def material_state(stage):
     Returns:
         A list of requirement projection dictionaries.
     """
-    requirements = (
-        stage.material_requirements.filter(deleted_at__isnull=True).prefetch_related("items").order_by("sort_order")
-    )
+    prefetch_cache = getattr(stage, "_prefetched_objects_cache", {})
+    if "material_requirements" in prefetch_cache:
+        requirements = sorted(
+            (requirement for requirement in prefetch_cache["material_requirements"] if requirement.deleted_at is None),
+            key=lambda requirement: requirement.sort_order,
+        )
+    else:
+        requirements = list(
+            stage.material_requirements.filter(deleted_at__isnull=True)
+            .prefetch_related("items")
+            .order_by("sort_order")
+        )
     result = []
     for requirement in requirements:
         items = [item for item in requirement.items.all() if item.deleted_at is None]
@@ -449,6 +485,59 @@ def material_state(stage):
 def missing_material_requirements(stage):
     """Return codes for stage requirements without enough submitted items."""
     return [item["code"] for item in material_state(stage) if not item["complete"]]
+
+
+def stage_material_version(stage):
+    """Compute a deterministic version from all stage material rows.
+
+    Soft-deleted rows are included so deleting and recreating an item always
+    invalidates a previously generated precheck.
+
+    Args:
+        stage: The Research Chain stage being inspected.
+
+    Returns:
+        A stable version derived from the latest update timestamp and row counts.
+    """
+    from plane.db.models import ResearchChainStageMaterialItem, ResearchChainStageMaterialRequirement
+
+    requirement_state = ResearchChainStageMaterialRequirement.all_objects.filter(stage=stage).aggregate(
+        latest=Max("updated_at"),
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(deleted_at__isnull=True)),
+    )
+    item_state = ResearchChainStageMaterialItem.all_objects.filter(stage=stage).aggregate(
+        latest=Max("updated_at"),
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(deleted_at__isnull=True)),
+    )
+    latest = max(
+        (state["latest"] for state in (requirement_state, item_state) if state["latest"] is not None),
+        default=None,
+    )
+    if latest is None:
+        return ""
+    return (
+        f"{latest.isoformat()}:"
+        f"{requirement_state['total_count']}:{requirement_state['active_count']}:"
+        f"{item_state['total_count']}:{item_state['active_count']}"
+    )
+
+
+def precheck_material_version(precheck):
+    """Read the material version captured when a precheck was generated.
+
+    Args:
+        precheck: A stage precheck containing rule check metadata.
+
+    Returns:
+        The stored version, or an empty string for legacy prechecks.
+    """
+    checks = precheck.checks if isinstance(precheck.checks, list) else []
+    for check in checks:
+        if isinstance(check, dict) and check.get("material_version"):
+            return str(check["material_version"])
+    return ""
 
 
 def _stage_event(stage, event_type, actor, request_id, summary, metadata=None, node=None):
@@ -504,117 +593,133 @@ def add_stage_material(
     """Add one student material item and mark the stage as in progress."""
     from plane.db.models import ResearchChainStageMaterialItem
 
-    if stage.status not in EDITABLE_STAGE_STATUSES:
-        raise ChainStageRuleError(
-            ResearchErrorCode.CHAIN_STAGE_MATERIAL_READ_ONLY,
-            "Materials can only be edited before submission or after a return.",
-            status.HTTP_409_CONFLICT,
+    with transaction.atomic():
+        locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
+        if locked_stage.status not in EDITABLE_STAGE_STATUSES:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_MATERIAL_READ_ONLY,
+                "Materials can only be edited before submission or after a return.",
+                status.HTTP_409_CONFLICT,
+            )
+        requirement = locked_stage.material_requirements.filter(
+            code=str(requirement_code or "").strip(),
+            deleted_at__isnull=True,
+        ).first()
+        if requirement is None:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_INVALID,
+                "requirement_code is not defined for this stage.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if source_node is not None and source_node.chain_id != locked_stage.chain_id:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_INVALID,
+                "source_node is not in this chain.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        item = ResearchChainStageMaterialItem.objects.create(
+            stage=locked_stage,
+            requirement=requirement,
+            title=str(title or "").strip(),
+            description=str(description or "").strip(),
+            source_node=source_node,
+            external_reference=str(external_reference or "").strip(),
+            request_id=request_id,
+            created_by=actor,
         )
-    requirement = stage.material_requirements.filter(
-        code=str(requirement_code or "").strip(),
-        deleted_at__isnull=True,
-    ).first()
-    if requirement is None:
-        raise ChainStageRuleError(
-            ResearchErrorCode.CHAIN_INVALID,
-            "requirement_code is not defined for this stage.",
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        if locked_stage.status == "NOT_STARTED":
+            locked_stage.status = "IN_PROGRESS"
+            locked_stage.save(update_fields=["status", "updated_at"])
+        _stage_event(
+            locked_stage,
+            "CHAIN_STAGE_MATERIAL_ADDED",
+            actor,
+            request_id or str(item.id),
+            f"Added material: {item.title}",
+            {"requirement": requirement.code},
+            node=source_node,
         )
-    if source_node is not None and source_node.chain_id != stage.chain_id:
-        raise ChainStageRuleError(
-            ResearchErrorCode.CHAIN_INVALID,
-            "source_node is not in this chain.",
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        _audit_stage(
+            ResearchAuditAction.CHAIN_STAGE_MATERIAL_ADD, locked_stage, actor, {"requirement": requirement.code}
         )
-    item = ResearchChainStageMaterialItem.objects.create(
-        stage=stage,
-        requirement=requirement,
-        title=str(title or "").strip(),
-        description=str(description or "").strip(),
-        source_node=source_node,
-        external_reference=str(external_reference or "").strip(),
-        request_id=request_id,
-        created_by=actor,
-    )
-    if stage.status == "NOT_STARTED":
-        stage.status = "IN_PROGRESS"
-        stage.save(update_fields=["status", "updated_at"])
-    _stage_event(
-        stage,
-        "CHAIN_STAGE_MATERIAL_ADDED",
-        actor,
-        request_id or str(item.id),
-        f"Added material: {item.title}",
-        {"requirement": requirement.code},
-        node=source_node,
-    )
-    _audit_stage(ResearchAuditAction.CHAIN_STAGE_MATERIAL_ADD, stage, actor, {"requirement": requirement.code})
-    return item
+        return item
 
 
 def remove_stage_material(stage, item, actor):
     """Soft-delete an editable stage material item."""
-    if stage.status not in EDITABLE_STAGE_STATUSES:
-        raise ChainStageRuleError(
-            ResearchErrorCode.CHAIN_STAGE_MATERIAL_READ_ONLY,
-            "Materials can only be edited before submission or after a return.",
-            status.HTTP_409_CONFLICT,
+    with transaction.atomic():
+        locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
+        if locked_stage.status not in EDITABLE_STAGE_STATUSES:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_MATERIAL_READ_ONLY,
+                "Materials can only be edited before submission or after a return.",
+                status.HTTP_409_CONFLICT,
+            )
+        if item.stage_id != locked_stage.id or item.deleted_at is not None:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_INVALID,
+                "Material item is not active on this stage.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        item.deleted_at = timezone.now()
+        item.updated_by = actor
+        item.save(update_fields=["deleted_at", "updated_by", "updated_at"])
+        _audit_stage(
+            ResearchAuditAction.CHAIN_STAGE_MATERIAL_REMOVE,
+            locked_stage,
+            actor,
+            {"requirement": item.requirement.code, "item": str(item.id)},
         )
-    if item.stage_id != stage.id or item.deleted_at is not None:
-        raise ChainStageRuleError(
-            ResearchErrorCode.CHAIN_INVALID,
-            "Material item is not active on this stage.",
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
-    item.deleted_at = timezone.now()
-    item.updated_by = actor
-    item.save(update_fields=["deleted_at", "updated_by", "updated_at"])
-    _audit_stage(
-        ResearchAuditAction.CHAIN_STAGE_MATERIAL_REMOVE,
-        stage,
-        actor,
-        {"requirement": item.requirement.code, "item": str(item.id)},
-    )
-    return item
+        return item
 
 
 def create_stage_precheck(stage, actor, *, request_id=""):
-    """Create an advisory rule/AI precheck for stage 03."""
+    """Create an advisory rule-based material precheck for stage 03."""
     from plane.db.models import ResearchChainStagePrecheck
 
-    if stage.stage_code != "TOPIC_EVALUATION":
-        raise ChainStageRuleError(
-            ResearchErrorCode.CHAIN_STAGE_PRECHECK_ONLY_TOPIC_EVALUATION,
-            "AI precheck is only available for TOPIC_EVALUATION.",
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+    with transaction.atomic():
+        locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
+        if locked_stage.stage_code != "TOPIC_EVALUATION":
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_PRECHECK_ONLY_TOPIC_EVALUATION,
+                "Material precheck is only available for TOPIC_EVALUATION.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if locked_stage.status not in EDITABLE_STAGE_STATUSES:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_MATERIAL_READ_ONLY,
+                "Materials can only be prechecked before submission or after a return.",
+                status.HTTP_409_CONFLICT,
+            )
+        requirements = material_state(locked_stage)
+        material_version = stage_material_version(locked_stage)
+        checks = [
+            {
+                "code": requirement["code"],
+                "passed": requirement["complete"],
+                "submitted_count": requirement["submitted_count"],
+                "minimum_count": requirement["minimum_count"],
+                "material_version": material_version,
+            }
+            for requirement in requirements
+        ]
+        missing = [check["code"] for check in checks if not check["passed"]]
+        precheck = ResearchChainStagePrecheck.objects.create(
+            stage=locked_stage,
+            status="READY" if not missing else "WARNING",
+            summary="材料完整性预检通过。" if not missing else "以下材料尚未满足最低数量：" + "、".join(missing),
+            checks=checks,
+            recommendations=[] if not missing else [f"补充 {code} 对应材料。" for code in missing],
+            generated_by="research-agent-precheck",
+            model_version="rule-material-v1",
+            request_id=request_id,
         )
-    requirements = material_state(stage)
-    checks = [
-        {
-            "code": requirement["code"],
-            "passed": requirement["complete"],
-            "submitted_count": requirement["submitted_count"],
-            "minimum_count": requirement["minimum_count"],
-        }
-        for requirement in requirements
-    ]
-    missing = [check["code"] for check in checks if not check["passed"]]
-    precheck = ResearchChainStagePrecheck.objects.create(
-        stage=stage,
-        status="READY" if not missing else "WARNING",
-        summary="材料完整性预检通过。" if not missing else "以下材料尚未满足最低数量：" + "、".join(missing),
-        checks=checks,
-        recommendations=[] if not missing else [f"补充 {code} 对应材料。" for code in missing],
-        generated_by="research-agent-precheck",
-        model_version="rule-material-v1",
-        request_id=request_id,
-    )
-    if stage.status == "NOT_STARTED":
-        stage.status = "IN_PROGRESS"
-        stage.save(update_fields=["status", "updated_at"])
-    _stage_event(stage, "CHAIN_STAGE_PRECHECK", actor, request_id or str(precheck.id), "AI 预检已生成")
-    _audit_stage(ResearchAuditAction.CHAIN_STAGE_PRECHECK, stage, actor, {"status": precheck.status})
-    return precheck
+        if locked_stage.status == "NOT_STARTED":
+            locked_stage.status = "IN_PROGRESS"
+            locked_stage.save(update_fields=["status", "updated_at"])
+        _stage_event(locked_stage, "CHAIN_STAGE_PRECHECK", actor, request_id or str(precheck.id), "材料预检已生成")
+        _audit_stage(ResearchAuditAction.CHAIN_STAGE_PRECHECK, locked_stage, actor, {"status": precheck.status})
+        return precheck
 
 
 def _validate_submission(stage, node, requires_pi, escalation_reason):
@@ -654,10 +759,13 @@ def _validate_submission(stage, node, requires_pi, escalation_reason):
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             missing=missing,
         )
-    if stage.stage_code == "TOPIC_EVALUATION" and not stage.prechecks.exists():
+    latest_precheck = stage.prechecks.first() if stage.stage_code == "TOPIC_EVALUATION" else None
+    if stage.stage_code == "TOPIC_EVALUATION" and (
+        latest_precheck is None or precheck_material_version(latest_precheck) != stage_material_version(stage)
+    ):
         raise ChainStageRuleError(
             ResearchErrorCode.CHAIN_STAGE_PRECHECK_REQUIRED,
-            "Generate the AI precheck before submitting this stage.",
+            "Generate a current material precheck before submitting this stage.",
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
     resolve_advisor(stage.chain)
@@ -737,7 +845,6 @@ def submit_chain_stage(
     Returns:
         The refreshed stage after submission.
     """
-    final_requires_pi = _validate_submission(stage, node, requires_pi, str(escalation_reason or ""))
     with transaction.atomic():
         locked_stage = type(stage).objects.select_for_update().get(pk=stage.pk)
         locked_node = node.__class__.objects.select_for_update().get(pk=node.pk)

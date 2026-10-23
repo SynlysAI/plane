@@ -778,7 +778,7 @@ def collect_chain_stage_approval_todos(workspace, user, scope):
             handling_status="BLOCKED" if reviewer is None else "IN_PROGRESS",
             next_action="APPROVE",
             due_at=None,
-            href=f"/{workspace.slug}/research/chains/{stage.chain_id}?tab=nodes&stage={stage.stage_code.lower()}",
+            href=f"/{workspace.slug}/research/chains/{stage.chain_id}?tab=nodes&stage={stage.stage_code.lower()}&approval=1",
             capabilities=capability_map(
                 ("view", "approve", "reject"),
                 {"view": True, "approve": can_decide, "reject": can_decide},

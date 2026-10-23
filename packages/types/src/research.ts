@@ -267,6 +267,8 @@ export type TResearchChainStagePrecheck = {
   id: string;
   status: "READY" | "WARNING" | "FAILED";
   summary: string;
+  material_version: string;
+  is_current: boolean;
   checks: Array<Record<string, unknown>>;
   recommendations: string[];
   generated_by: string;
