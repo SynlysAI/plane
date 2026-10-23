@@ -4,34 +4,28 @@
  * See the LICENSE file for details.
  */
 
-import React, { useState } from "react";
+import React from "react";
 import { observer } from "mobx-react";
 import { ChatOutline, HelpOutline, PagesOutline, UserOutline } from "@makeplane/propel/icons";
-import { CHANGELOG_URL, DOCUMENTATION_URL, FEEDBACK_URL, SUPPORT_EMAIL, SUPPORT_URL } from "@plane/constants";
+import { DOCUMENTATION_URL, FEEDBACK_URL, SUPPORT_EMAIL, SUPPORT_URL, VERSION_NOTES_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // ui
 import { CustomMenu } from "@plane/ui";
 // components
-import { ProductUpdatesModal } from "@/components/global";
 import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 import { PlaneVersionNumber } from "@/components/global/version-number";
-import { useInstance } from "@/hooks/store/use-instance";
 // hooks
 import { usePowerK } from "@/hooks/store/use-power-k";
 
 export const HelpMenuRoot = observer(function HelpMenuRoot() {
   // store hooks
-  const { config } = useInstance();
   const { t } = useTranslation();
   const { toggleShortcutsListModal } = usePowerK();
   // states
-  const [isNeedHelpOpen, setIsNeedHelpOpen] = useState(false);
-  const [isProductUpdatesModalOpen, setProductUpdatesModalOpen] = useState(false);
+  const [isNeedHelpOpen, setIsNeedHelpOpen] = React.useState(false);
 
   return (
     <>
-      <ProductUpdatesModal isOpen={isProductUpdatesModalOpen} handleClose={() => setProductUpdatesModalOpen(false)} />
-
       <CustomMenu
         customButton={<AppSidebarItem.Icon icon={<HelpOutline className="size-5" />} highlight={isNeedHelpOpen} />}
         customButtonClassName="group flex flex-col items-center justify-center gap-0.5 text-tertiary"
@@ -73,14 +67,12 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
         >
           <span className="text-11">{t("keyboard_shortcuts")}</span>
         </CustomMenu.MenuItem>
-        {(config?.instance_changelog_url || CHANGELOG_URL) && (
-          <CustomMenu.MenuItem
-            onClick={() => setProductUpdatesModalOpen(true)}
-            className="justify-sbg-layer-211 flex w-full items-center hover:bg-layer-1"
-          >
-            <span className="text-11">{t("whats_new")}</span>
-          </CustomMenu.MenuItem>
-        )}
+        <CustomMenu.MenuItem
+          onClick={() => window.open(VERSION_NOTES_URL, "_blank", "noopener,noreferrer")}
+          className="justify-sbg-layer-211 flex w-full items-center hover:bg-layer-1"
+        >
+          <span className="text-11">{t("whats_new")}</span>
+        </CustomMenu.MenuItem>
         <div className="mt-1 border-t border-subtle px-1 pt-2 text-11 text-secondary">
           <PlaneVersionNumber />
         </div>

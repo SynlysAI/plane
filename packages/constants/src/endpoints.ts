@@ -33,5 +33,6 @@ export const SUPPORT_URL = process.env.VITE_SUPPORT_URL || "";
 export const FEEDBACK_URL = process.env.VITE_FEEDBACK_URL || "";
 export const STATUS_URL = process.env.VITE_STATUS_URL || "";
 export const CHANGELOG_URL = process.env.VITE_CHANGELOG_URL || "";
+export const VERSION_NOTES_URL = "https://gcnpf55d0gns.feishu.cn/wiki/KSOBw5jtEiFDMckX9cMcPgScnEc";
 export const TERMS_OF_SERVICE_URL = process.env.VITE_TERMS_OF_SERVICE_URL || "";
 export const PRIVACY_POLICY_URL = process.env.VITE_PRIVACY_POLICY_URL || "";
