@@ -152,6 +152,10 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(retire_administrative_approvals, migrations.RunPython.noop),
+        # 关闭存量请求时写入的行会挂起延迟外键触发器（FK 为 DEFERRABLE
+        # INITIALLY DEFERRED），同事务内直接 DROP TABLE 会报
+        # "has pending trigger events"；先强制触发器立即执行再删表。
+        migrations.RunSQL("SET CONSTRAINTS ALL IMMEDIATE", migrations.RunSQL.noop),
         migrations.DeleteModel(name="AdministrativeProjectApprovalSetting"),
         migrations.DeleteModel(name="AdministrativeApprovalAction"),
         migrations.DeleteModel(name="AdministrativeApprovalRequest"),
