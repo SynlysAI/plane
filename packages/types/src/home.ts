@@ -8,7 +8,69 @@ import type { TLogoProps } from "./common";
 import type { TIssuePriorities } from "./issues";
 
 export type TRecentActivityFilterKeys = "all item" | "issue" | "page" | "project" | "workspace_page";
-export type THomeWidgetKeys = "quick_links" | "recents" | "my_stickies" | "quick_tutorial" | "new_at_plane";
+export type TWorkbenchWidgetKey =
+  | "my_todos"
+  | "research_projects"
+  | "administrative_projects"
+  | "recent_activity"
+  | "report_summary";
+
+export type TWorkbenchLayoutKey = "workbench_layout";
+
+export type THomeWidgetKeys =
+  | TWorkbenchWidgetKey
+  | TWorkbenchLayoutKey
+  | "quick_links"
+  | "recents"
+  | "my_stickies"
+  | "quick_tutorial"
+  | "new_at_plane";
+
+export type THomeWidgetSize = "small" | "medium" | "large" | "full";
+
+export type THomeWorkbenchDensity = "compact" | "detailed";
+
+export type THomeActivityChange = {
+  field?: string | null;
+  old_value?: string | null;
+  new_value?: string | null;
+};
+
+export type THomeActivityActor = {
+  id: string;
+  display_name: string | null;
+  avatar_url?: string | null;
+  is_bot?: boolean;
+};
+
+export type THomeActivityProject = {
+  id: string;
+  name: string;
+  identifier: string;
+} | null;
+
+export type THomeActivity = {
+  id: string;
+  source: "project" | "work_item" | "comment" | "research";
+  actor: THomeActivityActor | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  entity_name: string;
+  project?: THomeActivityProject;
+  url?: string | null;
+  occurred_at: string;
+  changes: THomeActivityChange[];
+  summary?: string;
+};
+
+export type THomeActivityResponse = {
+  results: THomeActivity[];
+  next_offset: number | null;
+  has_more: boolean;
+  offset: number;
+  per_page: number;
+};
 
 export type THomeWidgetProps = {
   workspaceSlug: string;
@@ -77,7 +139,8 @@ export type TLinkIdMap = {
 
 export type TWidgetEntityData = {
   key: THomeWidgetKeys;
-  name: string;
+  name?: string;
   is_enabled: boolean;
+  config?: Record<string, unknown>;
   sort_order: number;
 };

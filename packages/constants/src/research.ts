@@ -675,6 +675,7 @@ export const researchEndpoints = {
   identityMe: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/me/`,
   researchTodos: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/research-todos/`,
   feedback: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/`,
+  feedbackReply: (slug: string, feedbackId: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/replies/`,
   feedbackStatus: (slug: string, feedbackId: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/status/`,
   feedbackScreenshot: (slug: string, feedbackId: string, screenshotId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/screenshots/${screenshotId}/`,
@@ -684,6 +685,18 @@ export const researchEndpoints = {
   chainArchive: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/archive/`,
   chainRestore: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/restore/`,
   chainMembers: (slug: string, chainId: string) => `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/`,
+  chainStageApprovals: (slug: string, chainId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/`,
+  chainStageMaterials: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/materials/`,
+  chainStageMaterial: (slug: string, chainId: string, stageCode: string, materialId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/materials/${materialId}/`,
+  chainStagePrecheck: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/precheck/`,
+  chainStageSubmit: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/submit/`,
+  chainStageReview: (slug: string, chainId: string, stageCode: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/stage-approvals/${stageCode}/review/`,
   chainMember: (slug: string, chainId: string, userId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/chains/${chainId}/members/${userId}/`,
   chainAssignableUsers: (slug: string, chainId: string) =>
@@ -780,6 +793,16 @@ export const researchEndpoints = {
   reportReadReceipts: (slug: string, reportId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/read-receipts/`,
   reportAccess: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/access/`,
+  reportCommentThreads: (slug: string, reportId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comment-threads/`,
+  reportCommentThreadComments: (slug: string, reportId: string, threadId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comment-threads/${threadId}/comments/`,
+  reportCommentThreadStatus: (slug: string, reportId: string, threadId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comment-threads/${threadId}/status/`,
+  reportComment: (slug: string, reportId: string, commentId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comments/${commentId}/`,
+  reportCommentFeedback: (slug: string, reportId: string, commentId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/comments/${commentId}/ai-feedback/`,
   reportAttachments: (slug: string, reportId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/attachments/`,
   reportAttachment: (slug: string, reportId: string, attachmentId: string) =>

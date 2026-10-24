@@ -7,6 +7,7 @@ from django.urls import path
 
 from plane.app.views import (
     NotificationViewSet,
+    SystemAnnouncementEndpoint,
     UnreadNotificationEndpoint,
     MarkAllReadNotificationViewSet,
     UserNotificationPreferenceEndpoint,
@@ -14,6 +15,11 @@ from plane.app.views import (
 
 
 urlpatterns = [
+    path(
+        "workspaces/<str:slug>/system-announcements/",
+        SystemAnnouncementEndpoint.as_view({"get": "list", "post": "create"}),
+        name="system-announcements",
+    ),
     path(
         "workspaces/<str:slug>/users/notifications/",
         NotificationViewSet.as_view({"get": "list"}),

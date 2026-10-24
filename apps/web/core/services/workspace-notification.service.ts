@@ -106,6 +106,14 @@ export class WorkspaceNotificationService extends APIService {
     }
   }
 
+  async deleteNotificationById(workspaceSlug: string, notificationId: string): Promise<void> {
+    try {
+      await this.delete(`/api/workspaces/${workspaceSlug}/users/notifications/${notificationId}/`);
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async markAllNotificationsAsRead(
     workspaceSlug: string,
     payload: TNotificationPaginatedInfoQueryParams

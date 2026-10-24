@@ -59,14 +59,20 @@ from plane.research.utils.notifications import (
 from plane.research.utils.periods import InvalidPeriod, current_period, parse_period
 from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, is_editable, report_resource, visible_reports_queryset
-from plane.research.utils.settings import default_visibility_for, get_workspace_research_settings, report_timezone_for
+from plane.research.utils.settings import default_visibility_for, report_timezone_for
+from plane.research.utils.templates import (
+    find_report_template,
+    resolve_variables,
+    template_target_key,
+    template_values,
+)
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
 
 
 def report_queryset(workspace):
     return (
         PeriodicReport.objects.filter(workspace=workspace)
-        .select_related("owner", "org_unit", "page", "project")
+        .select_related("owner", "org_unit", "page", "project", "template")
         .prefetch_related(
             "team_projects",
             "attachments",
@@ -79,8 +85,17 @@ def report_queryset(workspace):
     )
 
 
-def serialize_report(report, request, context=None, *, include_draft_content=False, mentor_cache=None):
+def serialize_report(
+    report,
+    request,
+    context=None,
+    *,
+    include_draft_content=False,
+    mentor_cache=None,
+    confidential_cache=None,
+):
     context = context if context is not None else build_actor_context(request.user, report.workspace_id)
+    confidential_cache = confidential_cache if confidential_cache is not None else {}
     return PeriodicReportSerializer(
         report,
         context={
@@ -88,6 +103,7 @@ def serialize_report(report, request, context=None, *, include_draft_content=Fal
             "actor_context": context,
             "include_draft_content": include_draft_content,
             "mentor_cache": mentor_cache,
+            "confidential_cache": confidential_cache,
         },
     ).data
 
@@ -178,7 +194,9 @@ def grant_is_within_visibility(report, default_visibility, grantee_user, grantee
 
 def validate_report_access_update(report, workspace, payload):
     """Validate a visibility/grant mutation against the locked report state."""
-    default_visibility = default_visibility_for(report.report_type, workspace)
+    default_visibility = default_visibility_for(report.report_type, workspace, report.org_unit)
+    workspace_default_visibility = default_visibility_for(report.report_type, workspace)
+    confidential_policy = default_visibility != workspace_default_visibility
     requested_visibility = report.visibility
     if "visibility" in payload:
         requested_visibility = str(payload.get("visibility") or "").strip().upper()
@@ -196,7 +214,7 @@ def validate_report_access_update(report, workspace, payload):
 
     validated_grants = None
     if "grants" in payload:
-        if visibility_breadth(requested_visibility) == 0:
+        if visibility_breadth(requested_visibility) == 0 or confidential_policy:
             return (
                 None,
                 None,
@@ -327,7 +345,8 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             queryset = queryset.filter(owner=request.user)
 
         context = build_actor_context(request.user, workspace.id)
-        visible_queryset = visible_reports_queryset(queryset, context)
+        confidential_cache = {}
+        visible_queryset = visible_reports_queryset(queryset, context, confidential_cache=confidential_cache)
         keyword = str(request.GET.get("q") or "").strip()[:200]
         if keyword:
             visible_queryset = visible_queryset.filter(
@@ -361,7 +380,14 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             request=request,
             queryset=visible_queryset,
             on_results=lambda reports: [
-                serialize_report(report, request, context, mentor_cache=mentor_cache) for report in reports
+                serialize_report(
+                    report,
+                    request,
+                    context,
+                    mentor_cache=mentor_cache,
+                    confidential_cache=confidential_cache,
+                )
+                for report in reports
             ],
             default_per_page=50,
             max_per_page=100,
@@ -436,7 +462,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             return research_permission_denied()
 
         current_key, _, _ = current_period(report_type, timezone_name=report_timezone)
-        default_visibility = default_visibility_for(report_type, workspace)
+        default_visibility = default_visibility_for(report_type, workspace, report_org_unit)
         requested_visibility = str(request.data.get("visibility") or default_visibility).strip().upper()
         if not can_narrow(default_visibility, requested_visibility):
             return research_error(
@@ -448,10 +474,38 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
         template = None
         if request.data.get("template"):
             template = ReportTemplate.objects.filter(
-                workspace=workspace, pk=request.data["template"], is_active=True
+                workspace=workspace,
+                pk=request.data["template"],
+                scope=ReportTemplate.Scope.REPORT,
+                report_type=report_type,
+                target_key=template_target_key(ReportTemplate.Scope.REPORT, report_type=report_type),
+                is_active=True,
+                deleted_at__isnull=True,
             ).first()
             if template is None:
                 return research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Template not found.")
+        else:
+            template = find_report_template(workspace, report_type)
+
+        template_content = template.content_json if template is not None else {"type": "doc", "content": []}
+        if template is not None:
+            resolved, unresolved = resolve_variables(
+                template_content,
+                template_values(
+                    user=request.user,
+                    project=profile.project if profile else None,
+                    stage="",
+                    org_unit=str(report_org_unit.id) if report_org_unit else "",
+                    period=period_key,
+                ),
+            )
+            if unresolved:
+                return research_error(
+                    ResearchErrorCode.TEMPLATE_VARIABLES_UNRESOLVED,
+                    f"Unresolved template variables: {', '.join(unresolved)}.",
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            template_content = resolved
 
         if PeriodicReport.objects.filter(
             workspace=workspace,
@@ -469,7 +523,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                 page = Page.objects.create(
                     workspace=workspace,
                     name=f"{period_key} {report_type}",
-                    description_json=(template.content_json if template else {"type": "doc", "content": []}),
+                    description_json=template_content,
                     description_html="<p></p>",
                     owned_by=request.user,
                     access=Page.PRIVATE_ACCESS,
@@ -492,6 +546,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                     owner=request.user,
                     org_unit=report_org_unit,
                     page=page,
+                    template=template,
                     report_type=report_type,
                     period_key=period_key,
                     period_start=period_start,
@@ -528,6 +583,7 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                 "report_type": report_type,
                 "period_key": period_key,
                 "is_backfill": report.is_backfill,
+                "template": str(template.id) if template else None,
             },
             request=request,
         )
@@ -581,12 +637,37 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
         # through this research endpoint.
         if request.data.get("template"):
             template = ReportTemplate.objects.filter(
-                workspace=workspace, pk=request.data["template"], is_active=True
+                workspace=workspace,
+                pk=request.data["template"],
+                scope=ReportTemplate.Scope.REPORT,
+                report_type=report.report_type,
+                target_key=template_target_key(ReportTemplate.Scope.REPORT, report_type=report.report_type),
+                is_active=True,
+                deleted_at__isnull=True,
             ).first()
             if template is None:
                 return research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Template not found.")
-            report.page.description_json = template.content_json
+            resolved, unresolved = resolve_variables(
+                template.content_json,
+                template_values(
+                    user=request.user,
+                    project=report.project,
+                    stage="",
+                    org_unit=str(report.org_unit_id or ""),
+                    period=report.period_key,
+                ),
+            )
+            if unresolved:
+                return research_error(
+                    ResearchErrorCode.TEMPLATE_VARIABLES_UNRESOLVED,
+                    f"Unresolved template variables: {', '.join(unresolved)}.",
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            report.page.description_json = resolved
             report.page.save(update_fields=["description_json", "updated_at"])
+            if report.template_id != template.id:
+                report.template = template
+                report.save(update_fields=["template", "updated_at"])
 
         body_fields = ("description_json", "description_html", "description_binary")
         body_payload = {field: request.data[field] for field in body_fields if field in request.data}
@@ -876,7 +957,7 @@ class ResearchReportAccessEndpoint(ResearchAPIView):
         return report, None
 
     def _payload(self, workspace, report):
-        default_visibility = default_visibility_for(report.report_type, workspace)
+        default_visibility = default_visibility_for(report.report_type, workspace, report.org_unit)
         grants = list(ReportAccessGrant.objects.filter(report=report, is_revoked=False))
         return {
             "visibility": report.visibility,

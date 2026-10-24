@@ -1,3 +1,9 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
 import { beforeEach, expect, it, vi } from "vitest";
 
 const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -9,7 +15,7 @@ vi.mock("@/services/api.service", () => ({
   },
 }));
 vi.mock("axios", () => ({ create: () => ({ get: calls.get, post: calls.post }) }));
-import { NativeMCPService } from "@/services/mcp.service";
+import { NativeMCPService, ResearchMCPService } from "@/services/mcp.service";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -26,6 +32,25 @@ it("sends both human CSRF values only to the native bridge", async () => {
       headers: { "X-CSRFToken": "plane-csrf", "X-MCP-CSRF": "native-csrf" },
     }
   );
+});
+
+it("uses only session CSRF on research issuance and revocation, preserving workspace and grant routes", async () => {
+  const service = new ResearchMCPService();
+  const payload = { node_id: "node", label: "Read", mode: "read" as const, actions: [] };
+  await service.issue("workspace", payload, "research-csrf");
+  expect(calls.post).toHaveBeenLastCalledWith("/api/research/workspaces/workspace/mcp/connections/", payload, {
+    headers: { "X-CSRFToken": "research-csrf" },
+  });
+  await service.revoke("workspace", "grant", "research-csrf");
+  expect(calls.post).toHaveBeenLastCalledWith(
+    "/api/research/workspaces/workspace/mcp/connections/grant/revoke/",
+    {},
+    { headers: { "X-CSRFToken": "research-csrf" } }
+  );
+  await service.candidates("workspace", { q: "node", chain_id: "chain", cursor: "next" });
+  expect(calls.get).toHaveBeenLastCalledWith("/api/research/workspaces/workspace/mcp/candidates/", {
+    params: { q: "node", chain_id: "chain", cursor: "next" },
+  });
 });
 
 it("does not turn a native service rejection into successful connection data", async () => {

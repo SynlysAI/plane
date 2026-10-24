@@ -19,6 +19,7 @@ import { ConfirmWorkspaceMemberRemove } from "@/components/workspace/confirm-wor
 import type { RowData } from "@/components/workspace/settings/member-columns";
 import { WorkspacePasswordResetModal } from "./password-reset-modal";
 import { BulkMemberTagsEditor } from "./bulk-member-tags-editor";
+import { BulkMemberAccountConfigEditor } from "./bulk-member-account-config-editor";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -35,6 +36,7 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
   const { memberDetails } = props;
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [isBulkTagEditorOpen, setIsBulkTagEditorOpen] = useState(false);
+  const [isAccountConfigOpen, setIsAccountConfigOpen] = useState(false);
   const toggleMember = (memberId: string) => {
     setSelectedMemberIds((current) =>
       current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId]
@@ -132,6 +134,17 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
           onSuccess={() => setSelectedMemberIds([])}
         />
       )}
+      {isAccountConfigOpen && workspaceSlug && (
+        <BulkMemberAccountConfigEditor
+          workspaceSlug={workspaceSlug}
+          memberIds={selectedMemberIds}
+          members={selectedMemberIds
+            .map((memberId) => getWorkspaceMemberDetails(memberId))
+            .filter((member): member is IWorkspaceMember => member !== null)}
+          onClose={() => setIsAccountConfigOpen(false)}
+          onSuccess={() => setSelectedMemberIds([])}
+        />
+      )}
       {removeMemberModal && (
         <ConfirmWorkspaceMemberRemove
           isOpen={removeMemberModal.member.id.length > 0}
@@ -150,8 +163,25 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
             <Button variant="secondary" size="sm" onClick={() => setSelectedMemberIds([])}>
               取消选择
             </Button>
-            <Button variant="primary" size="sm" onClick={() => setIsBulkTagEditorOpen(true)}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setIsAccountConfigOpen(false);
+                setIsBulkTagEditorOpen(true);
+              }}
+            >
               批量调整标签
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setIsBulkTagEditorOpen(false);
+                setIsAccountConfigOpen(true);
+              }}
+            >
+              账号配置
             </Button>
           </div>
         </div>

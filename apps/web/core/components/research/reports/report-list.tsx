@@ -204,7 +204,13 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
 
   useEffect(() => {
     if (!isCreateDialogOpen) return;
-    void research.fetchReportTemplateOptions(workspaceSlug, { report_type: reportType }).catch(() => undefined);
+    void research
+      .fetchReportTemplateOptions(workspaceSlug, { report_type: reportType })
+      .then((loaded) => {
+        const defaultTemplate = loaded.find((template) => template.report_type === reportType && template.is_default);
+        return setTemplateId(defaultTemplate?.id ?? "");
+      })
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCreateDialogOpen, reportType, workspaceSlug]);
 
@@ -404,7 +410,13 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                     })()}
                   </TableCell>
                   <TableCell className="text-tertiary">
-                    {t(`research.report_visibility.${report.visibility.toLowerCase()}`)}
+                    {report.weekly_confidential
+                      ? t("research.report_visibility.unit_confidential")
+                      : t(
+                          `research.report_visibility.${(
+                            report.effective_visibility ?? report.visibility
+                          ).toLowerCase()}`
+                        )}
                   </TableCell>
                   <TableCell className="text-right text-tertiary tabular-nums">
                     {formatResearchDate(report.updated_at, currentLocale)}
@@ -491,6 +503,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>
                   {template.name}
+                  {template.is_default ? ` · ${t("research.templates.default_option")}` : ""}
                 </option>
               ))}
               {!templates.length && (

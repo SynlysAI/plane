@@ -10,7 +10,7 @@ import type { TMentorBinding, TOrgUnit, TOrgUnitMember, TResearchOrgIncomplete }
 import { APIService } from "@/services/api.service";
 
 export type TOrgUnitPayload = Partial<
-  Pick<TOrgUnit, "name" | "unit_type" | "business_category" | "sort_order" | "is_active">
+  Pick<TOrgUnit, "name" | "unit_type" | "business_category" | "weekly_report_confidential" | "sort_order" | "is_active">
 > & {
   parent?: string | null;
 };

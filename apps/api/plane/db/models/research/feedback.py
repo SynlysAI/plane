@@ -107,3 +107,27 @@ class ResearchFeedbackScreenshot(BaseModel):
 
     def __str__(self):
         return f"{self.feedback_id} <{self.asset_id}>"
+
+
+class ResearchFeedbackReply(BaseModel):
+    """A persisted operations reply attached to one feedback item."""
+
+    feedback = models.ForeignKey(
+        ResearchFeedback,
+        on_delete=models.CASCADE,
+        related_name="replies",
+    )
+    content = models.TextField()
+    author_name = models.CharField(max_length=255)
+
+    class Meta:
+        verbose_name = "Research Feedback Reply"
+        verbose_name_plural = "Research Feedback Replies"
+        db_table = "research_feedback_replies"
+        ordering = ("created_at", "id")
+        indexes = [
+            models.Index(fields=["feedback", "created_at"], name="rsch_fb_reply_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.feedback_id} <{self.author_name}>"

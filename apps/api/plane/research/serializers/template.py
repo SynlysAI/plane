@@ -19,12 +19,14 @@ class ReportTemplateSerializer(serializers.ModelSerializer):
             "name",
             "content_json",
             "variables",
+            "sections_json",
+            "target_key",
             "is_default",
             "is_active",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "target_key", "created_at", "updated_at"]
 
 
 class ReportTemplateOptionSerializer(serializers.ModelSerializer):
@@ -32,4 +34,13 @@ class ReportTemplateOptionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ReportTemplate
-        fields = ["id", "report_type", "name", "is_default", "is_active"]
+        fields = ["id", "report_type", "name", "is_default", "is_active", "target_key"]
+
+
+class ReportTemplateGuideSerializer(serializers.ModelSerializer):
+    """Template fields needed while an author keeps filling a report."""
+
+    class Meta:
+        model = ReportTemplate
+        fields = ["id", "name", "sections_json"]
+        read_only_fields = fields

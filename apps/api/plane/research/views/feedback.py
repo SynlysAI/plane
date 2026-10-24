@@ -4,6 +4,7 @@ from django.http import StreamingHttpResponse
 from rest_framework.response import Response
 
 from plane.research.services.feedback import (
+    create_feedback_reply,
     create_feedback,
     list_feedback,
     open_feedback_screenshot,
@@ -71,6 +72,34 @@ class ResearchFeedbackEndpoint(ResearchAPIView):
             return error
         try:
             data = create_feedback(request, request.user, workspace)
+        except ResearchAPIException as exception:
+            return _error_response(exception)
+        return Response({"code": 0, "data": data})
+
+
+class ResearchFeedbackReplyEndpoint(ResearchAPIView):
+    """Create a reply on feedback visible to an operations account or manager."""
+
+    nav_capability = None
+    research_module_required = False
+    research_membership_required = False
+
+    def post(self, request, slug, feedback_id):
+        """Validate and persist one feedback reply.
+
+        Args:
+            request: Authenticated DRF JSON request.
+            slug: Workspace slug from the URL.
+            feedback_id: UUID of the target feedback record.
+
+        Returns:
+            The updated feedback record or a controlled error.
+        """
+        workspace, error = self.get_workspace(nav=None, require_enabled=False)
+        if error:
+            return error
+        try:
+            data = create_feedback_reply(request, request.user, workspace, feedback_id)
         except ResearchAPIException as exception:
             return _error_response(exception)
         return Response({"code": 0, "data": data})

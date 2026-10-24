@@ -56,6 +56,7 @@ class OrgUnit(BaseModel):
         null=True,
         blank=True,
     )
+    weekly_report_confidential = models.BooleanField(default=False, db_default=False)
     sort_order = models.FloatField(default=get_default_org_unit_sort_order)
     is_active = models.BooleanField(default=True)
 

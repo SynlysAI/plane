@@ -309,6 +309,13 @@ class StageMaterial(BaseModel):
         null=True,
         blank=True,
     )
+    template = models.ForeignKey(
+        "db.ReportTemplate",
+        on_delete=models.SET_NULL,
+        related_name="stage_materials",
+        null=True,
+        blank=True,
+    )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     visibility = models.CharField(
         max_length=32,

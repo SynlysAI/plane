@@ -24,6 +24,7 @@ import type {
   TSearchResponse,
   TSearchEntityRequestPayload,
   TWidgetEntityData,
+  THomeActivityResponse,
   TActivityEntityData,
   IWorkspaceSidebarNavigationItem,
   IWorkspaceSidebarNavigation,
@@ -267,6 +268,18 @@ export class WorkspaceService extends APIService {
       });
   }
 
+  /** 批量设置或取消工作区运维账号。 */
+  async bulkUpdateWorkspaceMemberAccounts(
+    workspaceSlug: string,
+    data: { member_ids: string[]; is_operations_account: boolean }
+  ) {
+    return this.post(`/api/workspaces/${workspaceSlug}/members/account-config/bulk/`, data)
+      .then((response) => response?.data as { members: IWorkspaceMember[] })
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async updateWorkspaceMember(
     workspaceSlug: string,
     memberId: string,
@@ -492,6 +505,18 @@ export class WorkspaceService extends APIService {
         scope,
       },
     })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response;
+      });
+  }
+
+  /** 获取权限范围内的真实业务动态，不包含浏览行为。 */
+  async fetchWorkspaceActivities(
+    workspaceSlug: string,
+    params?: { days?: "30" | "90" | "all"; offset?: number; per_page?: number }
+  ): Promise<THomeActivityResponse> {
+    return this.get(`/api/workspaces/${workspaceSlug}/home-activities/`, { params })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response;

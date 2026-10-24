@@ -56,6 +56,7 @@ from plane.db.models import (
 )
 from plane.db.models.intake import IntakeIssueStatus
 from plane.utils.host import base_host
+from plane.utils.home_activity import record_project_activity
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
 from plane.utils.administrative_projects import (
     administrative_organization_project_ids,
@@ -525,6 +526,7 @@ class ProjectViewSet(BaseViewSet):
             ).exists()
         ):
             project = Project.objects.get(pk=pk, workspace__slug=slug)
+            record_project_activity(project, request.user, "deleted")
             project.delete()
             webhook_activity.delay(
                 event="project",
@@ -559,6 +561,7 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         project.archived_at = timezone.now()
         project.save()
+        record_project_activity(project, request.user, "archived")
         UserFavorite.objects.filter(workspace__slug=slug, project=project_id).delete()
         return Response({"archived_at": str(project.archived_at)}, status=status.HTTP_200_OK)
 
@@ -567,6 +570,7 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
         project.archived_at = None
         project.save()
+        record_project_activity(project, request.user, "restored")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -43,14 +43,19 @@ def tool(name, description, schema, readonly=False):
 
 
 OPERATION_TOOLS = (
-    tool("prepare_research_operation", "Prepare an immutable node-scoped proposal. Human approval in Plane is required before execution. No target business objects are changed.",
+    tool("prepare_research_operation",
+         "Prepare an immutable node-scoped proposal for review in the Agent client. "
+         "No target business objects are changed. Plane does not require a separate approval.",
          {"oneOf": [obj({"request_id": text(128), "node_id": UUID, "action": {"const": action},
                           "payload": payload, "source_refs": {"type": "array", "items": SOURCE, "maxItems": 8}},
                          ["request_id", "node_id", "action", "payload"]) for action, payload in PAYLOADS.items()]}),
     tool("get_research_operation", "Read an operation and recover its durable commit/readback result.", obj({"operation_id": UUID}, ["operation_id"]), True),
     tool("list_research_operations", "List your proposals in the authorised node. Follow the returned cursor.",
          obj({"node_id": UUID, "cursor": text(4096), "limit": {"type": "integer", "minimum": 1, "maximum": 20}}, ["node_id"]), True),
-    tool("execute_research_operation", "Execute an already approved proposal once; cannot approve or replace its payload. After timeout query the same operation_id.", obj({"operation_id": UUID}, ["operation_id"])),
+    tool("execute_research_operation",
+         "Submit the prepared proposal once after user authorization in the Agent client. "
+         "No separate Plane approval is required. Cannot replace its payload. "
+         "After timeout query the same operation_id.", obj({"operation_id": UUID}, ["operation_id"])),
     tool("cancel_research_operation", "Cancel an unexecuted proposal. Committed business data cannot be undone with this tool.", obj({"operation_id": UUID}, ["operation_id"])),
 )
 OPERATION_TOOL_NAMES = frozenset(tool["name"] for tool in OPERATION_TOOLS)

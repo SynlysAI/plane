@@ -1,4 +1,4 @@
-import type { TResearchChainNode } from "@plane/types";
+import type { TResearchChainNode, TResearchChainStageApproval } from "@plane/types";
 import { pickCurrentNode } from "./research-selection";
 
 /** Fixed thirteen-stage research process definition used by the workflow map. */
@@ -20,7 +20,7 @@ export const RESEARCH_WORKFLOW_STAGE_DEFINITIONS = [
 
 export type TResearchWorkflowStageId = (typeof RESEARCH_WORKFLOW_STAGE_DEFINITIONS)[number]["id"];
 
-type TResearchWorkflowStageStatus = TResearchChainNode["status"] | "NOT_STARTED";
+type TResearchWorkflowStageStatus = TResearchChainStageApproval["status"] | TResearchChainNode["status"];
 
 export type TResearchWorkflowStage = {
   id: TResearchWorkflowStageId;
@@ -34,8 +34,8 @@ export type TResearchWorkflowStage = {
   associatedNodeIds: string[];
   /** Node opened when the stage is clicked; may be an associated preparation node. */
   preferredNodeId: string | null;
-  /** True when one business node is deliberately shared by two visual stages. */
-  shared: boolean;
+  /** Backend stage code used by the authoritative approval API. */
+  stageCode: string;
 };
 
 type TResearchWorkflow = {
@@ -46,6 +46,8 @@ type TResearchWorkflow = {
 
 const PRIMARY_TYPES: Partial<Record<TResearchWorkflowStageId, string[]>> = {
   literature_review: ["LITERATURE_REVIEW"],
+  topic_selection: ["TOPIC_SELECTION"],
+  topic_evaluation: ["TOPIC_EVALUATION"],
   pre_experiment: ["PRE_EXPERIMENT"],
   opening: ["OPENING"],
   experiment: ["EXPERIMENT"],
@@ -142,14 +144,14 @@ function stageStatus(nodes: TResearchChainNode[], currentNodeId: string | null):
  */
 export function buildResearchWorkflow(
   nodes: TResearchChainNode[],
-  currentNodeId: string | null = null
+  currentNodeId: string | null = null,
+  stageApprovals: TResearchChainStageApproval[] = []
 ): TResearchWorkflow {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const ordered = orderedNodes(nodes);
   const orderedIndex = new Map(ordered.map((node, index) => [node.id, index]));
   const primary = new Map<TResearchWorkflowStageId, string[]>();
   const associated = new Map<TResearchWorkflowStageId, string[]>();
-  const shared = new Set<TResearchWorkflowStageId>();
   const unmappedNodes: TResearchChainNode[] = [];
 
   const addPrimary = (stage: TResearchWorkflowStageId, node: TResearchChainNode) => {
@@ -160,12 +162,6 @@ export function buildResearchWorkflow(
   };
 
   for (const node of ordered) {
-    if (node.node_type === "TOPIC_EVALUATION") {
-      addPrimary("topic_evaluation", node);
-      shared.add("topic_selection");
-      shared.add("topic_evaluation");
-      continue;
-    }
     if (node.node_type === "ANALYSIS") {
       const ancestors = ancestorTypes(node, byId);
       if (ancestors.has("EXPERIMENT") || ancestors.has("ITERATION")) addPrimary("analysis_experiment", node);
@@ -199,28 +195,12 @@ export function buildResearchWorkflow(
     const associatedNodes = (associated.get(definition.id) ?? [])
       .map((nodeId) => byId.get(nodeId))
       .filter((node): node is TResearchChainNode => Boolean(node));
-    const sharedNodes =
-      definition.id === "topic_selection" || definition.id === "topic_evaluation"
-        ? (primary.get("topic_evaluation") ?? [])
-            .map((nodeId) => byId.get(nodeId))
-            .filter((node): node is TResearchChainNode => Boolean(node))
-        : [];
-    const statusNodes = [...primaryNodes, ...sharedNodes];
+    const statusNodes = primaryNodes;
+    const approvalStage = stageApprovals.find((stage) => stage.stage_code === definition.id.toUpperCase());
 
-    let status = stageStatus(statusNodes, currentNodeId);
-    let isCurrent = Boolean(currentNodeId && statusNodes.some((item) => item.id === currentNodeId));
-    if ((definition.id === "topic_selection" || definition.id === "topic_evaluation") && sharedNodes.length) {
-      const topicNode = sharedNodes[0];
-      if (definition.id === "topic_selection" && topicNode.status !== "DRAFT" && topicNode.status !== "ACTIVE") {
-        status = "COMPLETED";
-        isCurrent = false;
-      }
-      if (definition.id === "topic_evaluation" && (topicNode.status === "DRAFT" || topicNode.status === "ACTIVE")) {
-        status = "NOT_STARTED";
-        isCurrent = false;
-      }
-    }
-    const clickableNodes = [...primaryNodes, ...sharedNodes, ...associatedNodes];
+    const status = approvalStage?.status ?? stageStatus(statusNodes, currentNodeId);
+    const isCurrent = Boolean(currentNodeId && statusNodes.some((item) => item.id === currentNodeId));
+    const clickableNodes = [...primaryNodes, ...associatedNodes];
     const preferred = preferredNode(clickableNodes, currentNodeId);
 
     return {
@@ -228,10 +208,10 @@ export function buildResearchWorkflow(
       labelKey: definition.labelKey,
       status,
       isCurrent,
-      nodeIds: [...new Set([...primaryNodes, ...sharedNodes].map((node) => node.id))],
+      nodeIds: primaryNodes.map((node) => node.id),
       associatedNodeIds: associatedNodes.map((node) => node.id),
       preferredNodeId: preferred?.id ?? null,
-      shared: shared.has(definition.id),
+      stageCode: definition.id.toUpperCase(),
     };
   });
 

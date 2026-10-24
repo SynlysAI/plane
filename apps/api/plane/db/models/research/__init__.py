@@ -15,7 +15,7 @@ from .experiment import (
     ExperimentRecord,
     ExperimentRecordVersion,
 )
-from .feedback import ResearchFeedback, ResearchFeedbackScreenshot
+from .feedback import ResearchFeedback, ResearchFeedbackReply, ResearchFeedbackScreenshot
 from .identity import IdentityMapping
 from .account_link import AccountLink
 from .chain import (
@@ -26,6 +26,13 @@ from .chain import (
     ResearchChainUpload,
     ResearchAnalysisResult,
     ResearchReflectionLog,
+)
+from .chain_stage import (
+    ResearchChainStage,
+    ResearchChainStageMaterialItem,
+    ResearchChainStageMaterialRequirement,
+    ResearchChainStagePrecheck,
+    ResearchChainStageReviewAction,
 )
 from .context import ResearchContextGrant
 from .agent_operation import ResearchAgentOperation, ResearchAgentOperationApproval, ResearchAgentWriteGrant
@@ -62,6 +69,11 @@ from .report import (
     ReportAccessGrant,
     ReportReviewLog,
 )
+from .report_comments import (
+    PeriodicReportComment,
+    PeriodicReportCommentFeedback,
+    PeriodicReportCommentThread,
+)
 from .review import (
     DEFAULT_MIN_REVIEWERS,
     DEFAULT_PASS_RATIO,
@@ -95,6 +107,11 @@ __all__ = [
     "IdentityMapping",
     "AccountLink",
     "ResearchChain",
+    "ResearchChainStage",
+    "ResearchChainStageMaterialItem",
+    "ResearchChainStageMaterialRequirement",
+    "ResearchChainStagePrecheck",
+    "ResearchChainStageReviewAction",
     "ResearchChainNode",
     "ResearchChainEvent",
     "ResearchChainSnapshot",
@@ -127,6 +144,7 @@ __all__ = [
     "ExperimentRecord",
     "ExperimentRecordVersion",
     "ResearchFeedback",
+    "ResearchFeedbackReply",
     "ResearchFeedbackScreenshot",
     "ReportVisibility",
     "ReportTemplate",
@@ -136,6 +154,9 @@ __all__ = [
     "PeriodicReportSnapshot",
     "ReportAccessGrant",
     "ReportAttachment",
+    "PeriodicReportComment",
+    "PeriodicReportCommentFeedback",
+    "PeriodicReportCommentThread",
     "ResearchTaskCommentAttachment",
     "ApprovalAction",
     "ApprovalFlow",

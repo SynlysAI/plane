@@ -28,6 +28,7 @@ export interface INotification extends TNotification {
   unArchiveNotification: (workspaceSlug: string) => Promise<TNotification | undefined>;
   snoozeNotification: (workspaceSlug: string, snoozeTill: Date) => Promise<TNotification | undefined>;
   unSnoozeNotification: (workspaceSlug: string) => Promise<TNotification | undefined>;
+  deleteNotification: (workspaceSlug: string) => Promise<void>;
 }
 
 export class Notification implements INotification {
@@ -35,6 +36,7 @@ export class Notification implements INotification {
   id: string;
   title: string | undefined = undefined;
   data: TNotificationData | undefined = undefined;
+  announcement_details: TNotification["announcement_details"] = undefined;
   entity_identifier: string | undefined = undefined;
   entity_name: string | undefined = undefined;
   message_html: string | undefined = undefined;
@@ -96,9 +98,11 @@ export class Notification implements INotification {
       unArchiveNotification: action,
       snoozeNotification: action,
       unSnoozeNotification: action,
+      deleteNotification: action,
     });
     this.title = this.notification.title;
     this.data = this.notification.data;
+    this.announcement_details = this.notification.announcement_details;
     this.entity_identifier = this.notification.entity_identifier;
     this.entity_name = this.notification.entity_name;
     this.message_html = this.notification.message_html;
@@ -130,6 +134,7 @@ export class Notification implements INotification {
       id: this.id,
       title: this.title,
       data: this.data,
+      announcement_details: this.announcement_details,
       entity_identifier: this.entity_identifier,
       entity_name: this.entity_name,
       message_html: this.message_html,
@@ -334,6 +339,27 @@ export class Notification implements INotification {
     } catch (error) {
       if (countAdjusted) this.adjustUnreadCount("decrement");
       runInAction(() => this.mutateNotification({ snoozed_till: currentNotificationSnoozeTill }));
+      throw error;
+    }
+  };
+
+  /**
+   * @description delete the notification from the current user's inbox
+   * @param { string } workspaceSlug
+   * @returns { void }
+   */
+  deleteNotification = async (workspaceSlug: string): Promise<void> => {
+    const shouldDecrementUnread = !this.read_at && !this.archived_at && !this.snoozed_till;
+    try {
+      await workspaceNotificationService.deleteNotificationById(workspaceSlug, this.id);
+      if (shouldDecrementUnread) this.adjustUnreadCount("decrement");
+      runInAction(() => {
+        delete this.store.workspaceNotification.notifications[this.id];
+        if (this.store.workspaceNotification.currentSelectedNotificationId === this.id) {
+          this.store.workspaceNotification.setCurrentSelectedNotificationId(undefined);
+        }
+      });
+    } catch (error) {
       throw error;
     }
   };

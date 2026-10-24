@@ -4,14 +4,13 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
-import { mutate } from "swr";
+import { useEffect, useRef, useState } from "react";
+import { useSWRConfig } from "swr";
 // plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { APITokenService } from "@plane/services";
 import type { IApiToken } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { renderFormattedDate, csvDownload } from "@plane/utils";
 // constants
 import { API_TOKENS_LIST } from "@plane/constants";
 // local imports
@@ -27,48 +26,42 @@ type Props = {
 const apiTokenService = new APITokenService();
 
 export function CreateApiTokenModal(props: Props) {
+  const { mutate } = useSWRConfig();
   const { isOpen, onClose } = props;
   // states
   const [neverExpires, setNeverExpires] = useState<boolean>(false);
   const [generatedToken, setGeneratedToken] = useState<IApiToken | null | undefined>(null);
+  const generation = useRef(0);
+  useEffect(() => {
+    generation.current += 1;
+    if (!isOpen) {
+      setGeneratedToken(null);
+      setNeverExpires(false);
+    }
+    return () => {
+      generation.current += 1;
+    };
+  }, [isOpen]);
 
   const handleClose = () => {
+    generation.current += 1;
+    setNeverExpires(false);
+    setGeneratedToken(null);
     onClose();
-
-    setTimeout(() => {
-      setNeverExpires(false);
-      setGeneratedToken(null);
-    }, 350);
-  };
-
-  const downloadSecretKey = (data: IApiToken) => {
-    const csvData = {
-      Title: data.label,
-      Description: data.description,
-      Expiry: data.expired_at ? (renderFormattedDate(data.expired_at)?.replace(",", " ") ?? "") : "Never expires",
-      "Secret key": data.token ?? "",
-    };
-
-    csvDownload(csvData, `secret-key-${Date.now()}`);
   };
 
   const handleCreateToken = async (data: Partial<IApiToken>) => {
+    const expected = generation.current;
     // make the request to generate the token
     await apiTokenService
       .create(data)
       .then((res) => {
-        setGeneratedToken(res);
-        downloadSecretKey(res);
-
-        mutate<IApiToken[]>(
-          API_TOKENS_LIST,
-          (prevData) => {
-            if (!prevData) return;
-
-            return [res, ...prevData];
-          },
-          false
-        );
+        if (generation.current === expected) setGeneratedToken(res);
+        // Only the read endpoint's metadata may enter the shared list cache.
+        void mutate(API_TOKENS_LIST).catch(() => {
+          /* The list displays refresh failures. */
+        });
+        return undefined;
       })
       .catch((err) => {
         setToast({

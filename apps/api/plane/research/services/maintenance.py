@@ -44,7 +44,8 @@ def _workspace_condition(model, workspace, seen=None):
         return "workspace_id = %s", [str(workspace.id)]
 
     for field in model._meta.get_fields():
-        if not getattr(field, "many_to_one", False) or getattr(field, "auto_created", False):
+        is_child_link = getattr(field, "many_to_one", False) or getattr(field, "one_to_one", False)
+        if not is_child_link or getattr(field, "auto_created", False):
             continue
         parent = field.related_model
         if parent is None or parent is model:
@@ -80,7 +81,9 @@ def _deletion_order(models, conditions):
             for field in model._meta.get_fields()
             if getattr(field, "many_to_one", False)
             for _ in (None,)
-            if field.related_model in remaining
+            # A self-reference is cleared by the same DELETE statement and must
+            # not keep the table in a circular-reference fallback forever.
+            if field.related_model in remaining and field.related_model is not model
         }
         leaves = [model for model in remaining if model not in referenced]
         if not leaves:

@@ -35,10 +35,12 @@ from plane.app.views import (
     QuickLinkViewSet,
     UserRecentVisitViewSet,
     WorkspaceHomePreferenceViewSet,
+    WorkspaceHomeActivityEndpoint,
     WorkspaceStickyViewSet,
     WorkspaceUserPreferenceViewSet,
     WorkspaceMemberInvitationImportEndpoint,
     WorkspaceMemberInvitationImportTemplateEndpoint,
+    WorkspaceMemberAccountConfigBulkEndpoint,
     WorkspaceMemberTagAssignmentEndpoint,
     WorkspaceMemberTagBulkAssignmentEndpoint,
     WorkspaceMemberTagDetailEndpoint,
@@ -127,6 +129,11 @@ urlpatterns = [
         "workspaces/<str:slug>/members/leave/",
         WorkSpaceMemberViewSet.as_view({"post": "leave"}),
         name="leave-workspace-members",
+    ),
+    path(
+        "workspaces/<str:slug>/members/account-config/bulk/",
+        WorkspaceMemberAccountConfigBulkEndpoint.as_view(),
+        name="workspace-member-account-config-bulk",
     ),
     path(
         "workspaces/<str:slug>/member-tag-groups/",
@@ -289,6 +296,11 @@ urlpatterns = [
         "workspaces/<str:slug>/home-preferences/<str:key>/",
         WorkspaceHomePreferenceViewSet.as_view(),
         name="workspace-home-preference",
+    ),
+    path(
+        "workspaces/<str:slug>/home-activities/",
+        WorkspaceHomeActivityEndpoint.as_view(),
+        name="workspace-home-activities",
     ),
     path(
         "workspaces/<str:slug>/recent-visits/",

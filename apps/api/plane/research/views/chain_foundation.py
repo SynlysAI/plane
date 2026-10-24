@@ -28,6 +28,11 @@ from plane.research.serializers.chain import annotate_chain_summaries
 from plane.research.services.group_knowledge import ensure_group_knowledge_binding
 from plane.research.services.idempotency import conflict_response, payload_hash, request_id_from
 from plane.research.services.chain_state import NODE_TYPE_PATTERN, normalize_action, resolve_transition
+from plane.research.services.chain_stage_approvals import (
+    NODE_TYPE_BY_STAGE,
+    initialize_chain_stages,
+    mark_chain_stage_in_progress,
+)
 from plane.research.services.chain_tasks import (
     chain_lifecycle_manager as _chain_lifecycle_manager,
     chain_manager as _chain_manager,
@@ -307,6 +312,7 @@ class ResearchChainListCreateEndpoint(ResearchAPIView):
                 },
             )
             ensure_group_knowledge_binding(chain, request.user)
+            initialize_chain_stages(chain, request.user)
         return Response(
             _envelope(
                 data=ResearchChainSerializer(chain, context=_serializer_context(request)).data,
@@ -770,6 +776,7 @@ class ResearchChainNodeListCreateEndpoint(ResearchAPIView):
                     summary=f"Created node: {node.title}",
                     content_hash=payload_hash({"request_id": request_id, "kind": "NODE_CREATED"}),
                 )
+                mark_chain_stage_in_progress(node)
         except IntegrityError:
             return conflict_response()
         return Response(
@@ -865,6 +872,12 @@ class ResearchChainNodeTransitionEndpoint(ResearchAPIView):
         action = normalize_action(request.data.get("action"))
         if not action:
             return research_error(ResearchErrorCode.CHAIN_INVALID, "action is required.")
+        if action in {"SUBMIT_REVIEW", "APPROVE", "RETURN"} and node.node_type in set(NODE_TYPE_BY_STAGE.values()):
+            return research_error(
+                ResearchErrorCode.CHAIN_STAGE_STATE_CONFLICT,
+                "Mapped Research Chain stages must use the stage approval API.",
+                status.HTTP_409_CONFLICT,
+            )
         reason = str(request.data.get("reason") or "").strip()
         if action in {"FAIL", "RETURN"} and not reason:
             return research_error(ResearchErrorCode.CHAIN_INVALID, "reason is required for FAIL and RETURN.")

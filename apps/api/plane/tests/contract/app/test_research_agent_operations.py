@@ -14,6 +14,7 @@ from plane.db.models import (
     WorkspaceResearchSetting,
 )
 from plane.research.services.agent_operations import ResearchOperationService, issue_write_grant
+from plane.research.services.mcp_catalog import TOOL_NAMES
 from plane.research.services.operation_catalog import ACTIONS, OPERATION_TOOL_NAMES
 from plane.tests.contract.app.test_research_chain_mvp import env  # noqa: F401
 from plane.tests.contract.app.test_research_machine_access import machine, scoped_client  # noqa: F401
@@ -56,8 +57,9 @@ def test_separate_catalogue_preserves_read_only_entry(operations):
     e = operations
     old = e["api"].get(e["root"] + "tools/").json()["tools"]
     new = e["agent"].get(e["operations_root"] + "tools/").json()["tools"]
-    assert len(old) == 10 and all(tool["annotations"]["readOnlyHint"] for tool in old)
-    assert len(new) == 15
+    assert {tool["name"] for tool in old} == TOOL_NAMES
+    assert all(tool["annotations"]["readOnlyHint"] for tool in old)
+    assert len(new) == len(TOOL_NAMES) + len(OPERATION_TOOL_NAMES)
     assert {tool["name"] for tool in new} - {tool["name"] for tool in old} == OPERATION_TOOL_NAMES
     assert not next(tool for tool in new if tool["name"] == "prepare_research_operation")["annotations"]["readOnlyHint"]
     rpc = e["agent"].post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -74,19 +76,24 @@ def test_read_key_read_grant_and_session_cannot_gain_write_permission(operations
     assert e["api"].post(e["human"], {"kind": "workspace_policy", "enabled": True}, format="json").status_code == 401
 
 
-def test_prepare_does_not_write_target_and_execution_requires_approval(operations):
+def test_prepare_does_not_write_target_and_client_can_execute_without_platform_approval(operations):
     e = operations
     before = (ResearchChainNodeTask.objects.count(), ResearchTaskComment.objects.count(), ResearchChainEvent.objects.count())
     prepared = prepare(e)
     assert prepared.status_code == 200, prepared.json()
     proposal = prepared.json()
     assert proposal["status"] == "PROPOSED"
-    assert call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]}).status_code == 403
     assert before == (ResearchChainNodeTask.objects.count(), ResearchTaskComment.objects.count(), ResearchChainEvent.objects.count())
+    assert proposal["confirmation_mode"] == "agent_client"
+    response = call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]})
+    assert response.status_code == 200, response.json()
+    assert response.json()["status"] == "COMMITTED"
+    assert not ResearchAgentOperationApproval.objects.filter(operation_id=proposal["operation_id"]).exists()
 
 
 @pytest.mark.parametrize("action", sorted(ACTIONS))
-def test_five_actions_commit_once_and_read_back(operations, action):
+@pytest.mark.parametrize("legacy_approval", [False, True])
+def test_five_actions_commit_once_and_read_back(operations, action, legacy_approval):
     e = operations
     payloads = {
         "create_task": {"title": "  Three repetitions  ", "instruction": "Verify conditions first"},
@@ -96,17 +103,25 @@ def test_five_actions_commit_once_and_read_back(operations, action):
         "append_research_note": {"text": "Awaiting human review of the evidence"},
     }
     proposal = prepare(e, action, payloads[action]).json()
-    assert decide(e, proposal).status_code == 200
+    if legacy_approval:
+        assert decide(e, proposal).status_code == 200
     response = call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]})
     assert response.status_code == 200, response.json()
     value = response.json()
     assert value["status"] == "COMMITTED" and value["result"]["readback"] == "verified"
     again = call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]})
     assert again.json()["result"]["object_id"] == value["result"]["object_id"]
-    assert ResearchAgentOperationApproval.objects.filter(operation_id=proposal["operation_id"]).count() == 1
+    approvals = ResearchAgentOperationApproval.objects.filter(operation_id=proposal["operation_id"])
+    assert approvals.count() == int(legacy_approval)
     assert ResearchChainEvent.objects.filter(trace_id=proposal["operation_id"]).count() == 1
     provenance = ResearchChainEvent.objects.get(trace_id=proposal["operation_id"])
     assert provenance.actor_type == "AGENT" and provenance.metadata["agent_label"] == "Codex test"
+    assert provenance.metadata["authorization_source"] == "agent_client"
+    assert provenance.metadata["executing_user_id"] == str(e["owner"].pk)
+    if legacy_approval:
+        assert provenance.metadata["approving_user_id"] == str(e["owner"].pk)
+    else:
+        assert "approving_user_id" not in provenance.metadata
     if action == "create_task":
         task = ResearchChainNodeTask.objects.get(pk=value["result"]["object_id"])
         assert task.status == "DRAFT" and task.assignee is None and task.due_at is None
@@ -125,6 +140,15 @@ def test_five_actions_commit_once_and_read_back(operations, action):
 @pytest.mark.parametrize("field,value", [("confirmed", True), ("assignee", str(uuid4())), ("status", "COMPLETED"), ("approved", True)])
 def test_unknown_payload_fields_never_bypass_the_contract(operations, field, value):
     assert prepare(operations, payload={"title": "Untrusted", field: value}).status_code == 400
+
+
+@pytest.mark.parametrize("extra", [{"approved": True}, {"payload": {"title": "Replacement"}}])
+def test_execute_only_accepts_the_prepared_operation_id(operations, extra):
+    e = operations
+    proposal = prepare(e).json()
+    assert call(e, "execute_research_operation", {"operation_id": proposal["operation_id"], **extra}).status_code == 400
+    assert ResearchAgentOperation.objects.get(pk=proposal["operation_id"]).status == "PROPOSED"
+    assert ResearchChainNodeTask.objects.count() == 1
 
 
 def test_idempotent_prepare_and_changed_payload_conflict(operations):
@@ -163,6 +187,7 @@ def test_rejection_and_cancellation_cannot_be_executed(operations):
     assert call(e, "execute_research_operation", {"operation_id": rejected["operation_id"]}).status_code == 403
     cancelled = prepare(e).json()
     assert call(e, "cancel_research_operation", {"operation_id": cancelled["operation_id"]}).json()["status"] == "CANCELLED"
+    assert call(e, "execute_research_operation", {"operation_id": cancelled["operation_id"]}).status_code == 403
     assert decide(e, cancelled).status_code == 409
     assert ResearchChainNodeTask.objects.count() == 1
 
@@ -170,7 +195,6 @@ def test_rejection_and_cancellation_cannot_be_executed(operations):
 def test_web_task_edit_causes_full_precondition_conflict(operations):
     e = operations
     proposal = prepare(e, "append_task_comment", {"task_id": str(e["task"].pk), "text": "Proposed comment"}).json()
-    decide(e, proposal)
     ResearchChainNodeTask.objects.filter(pk=e["task"].pk).update(instruction="Changed after approval")
     response = call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]})
     assert response.status_code == 409
@@ -183,7 +207,6 @@ def test_source_hash_uses_full_body_beyond_display_limit(operations):
     source = ResearchAnalysisResult.objects.create(workspace=e["workspace"], chain=e["chain"], node=e["node"],
         method="Comparison", summary="A" * 12000 + "old", request_id=uuid4().hex, payload_hash="b" * 64)
     proposal = prepare(e, source_refs=[{"kind": "analysis", "id": str(source.pk), "usage": "body"}]).json()
-    decide(e, proposal)
     ResearchAnalysisResult.objects.filter(pk=source.pk).update(summary="A" * 12000 + "new")
     assert call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]}).status_code == 409
     assert ResearchChainNodeTask.objects.count() == 1
@@ -202,7 +225,6 @@ def test_already_bound_resource_and_wrong_version_are_rejected(operations):
 def test_live_revocation_and_lifecycle_are_rechecked(operations, change):
     e = operations
     proposal = prepare(e).json()
-    decide(e, proposal)
     if change == "revoke":
         e["grant"].revoked_at = timezone.now(); e["grant"].save(update_fields=["revoked_at"])
     elif change == "expire":
@@ -224,6 +246,8 @@ def test_payload_tampering_is_detected(operations):
     ResearchAgentOperation.objects.filter(pk=proposal["operation_id"]).update(payload={"title": "Tampered"})
     assert decide(e, proposal).status_code == 409
     assert call(e, "get_research_operation", {"operation_id": proposal["operation_id"]}).status_code == 409
+    assert call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]}).status_code == 409
+    assert ResearchChainNodeTask.objects.count() == 1
 
 
 def test_postcommit_readback_failure_is_recoverable_without_duplicate_write(operations):
@@ -267,11 +291,18 @@ def test_human_issues_and_revokes_a_node_connection(operations):
     assert api.get(e["operations_root"] + "tools/").status_code == 401
 
 
-def test_expired_approval_and_expired_proposal_do_not_commit(operations):
+def test_expired_legacy_approval_does_not_require_platform_reapproval(operations):
     e = operations
     proposal = prepare(e).json(); decide(e, proposal)
     ResearchAgentOperationApproval.objects.filter(operation_id=proposal["operation_id"]).update(expires_at=timezone.now() - timedelta(seconds=1))
-    assert call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]}).status_code == 403
+    response = call(e, "execute_research_operation", {"operation_id": proposal["operation_id"]})
+    assert response.status_code == 200, response.json()
+    assert response.json()["status"] == "COMMITTED"
+
+
+def test_expired_proposal_does_not_commit_without_platform_approval(operations):
+    e = operations
+    proposal = prepare(e).json()
     e["grant"].expires_at = timezone.now() + timedelta(days=3)
     e["grant"].save(update_fields=["expires_at"])
     future = timezone.now() + timedelta(days=2)
@@ -333,7 +364,6 @@ def test_mcp_jsonrpc_prepares_and_executes_real_operation(operations):
     response = e["agent"].post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
         "params": {"name": "prepare_research_operation", "arguments": args}}, format="json")
     proposal = response.json()["result"]["structuredContent"]
-    assert decide(e, proposal).status_code == 200
     response = e["agent"].post(e["operations_root"] + "mcp/", {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
         "params": {"name": "execute_research_operation", "arguments": {"operation_id": proposal["operation_id"]}}}, format="json")
     result = response.json()["result"]
@@ -405,7 +435,7 @@ def test_concurrent_execute_has_one_business_effect(operations):
     from plane.db.models import ResearchContextGrant
 
     e = operations
-    proposal = prepare(e).json(); decide(e, proposal)
+    proposal = prepare(e).json()
 
     def execute_once():
         close_old_connections()

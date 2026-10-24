@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
+from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Q, Case, When, BooleanField
 from django.utils import timezone
 
@@ -12,6 +13,8 @@ from rest_framework.response import Response
 
 from plane.app.serializers import (
     NotificationSerializer,
+    SystemAnnouncementCreateSerializer,
+    SystemAnnouncementSerializer,
     UserNotificationPreferenceSerializer,
 )
 from plane.db.models import (
@@ -19,7 +22,9 @@ from plane.db.models import (
     IssueAssignee,
     IssueSubscriber,
     Notification,
+    SystemAnnouncement,
     UserNotificationPreference,
+    Workspace,
     WorkspaceMember,
 )
 from plane.utils.paginator import BasePaginator
@@ -47,19 +52,19 @@ def parse_request_flag(value, default=False):
     return str(value).lower() in {"true", "1", "yes"}
 
 
-def renderable_issue_notifications(workspace_slug, receiver_id):
-    """Return notifications that the workspace inbox can render and open.
+def renderable_inbox_notifications(workspace_slug, receiver_id):
+    """Return work item and system notifications that the inbox can render.
 
-    The inbox currently renders work item activity only. Research and future
-    system notifications must stay out of unread counts until card rendering and
-    navigation are added for their entity types.
+    Work item notifications keep their existing entity validation. System
+    announcements are rendered from their canonical announcement record and are
+    safe to include without a project or work item.
 
     Args:
         workspace_slug: Workspace slug from the request.
         receiver_id: User whose notifications are being read.
 
     Returns:
-        Notification queryset scoped to valid, renderable work item activity.
+        Notification queryset scoped to the requesting user's valid inbox items.
     """
     linked_issue = Issue.objects.filter(
         pk=OuterRef("entity_identifier"),
@@ -75,18 +80,23 @@ def renderable_issue_notifications(workspace_slug, receiver_id):
         issue_intake__status__in=[0, 2, -2],
     )
 
+    renderable_issue = (
+        Q(project__isnull=False)
+        & Q(entity_name="issue")
+        & Q(entity_identifier__isnull=False)
+        & Q(data__issue__id__isnull=False)
+        & Q(data__issue_activity__field__isnull=False)
+        & ~Q(data__issue__id="")
+        & ~Q(data__issue_activity__field="")
+    )
+    renderable_announcement = Q(announcement__isnull=False) & Q(announcement__deleted_at__isnull=True)
+
     return (
         Notification.objects.filter(
             workspace__slug=workspace_slug,
             receiver_id=receiver_id,
-            entity_name="issue",
-            project__isnull=False,
-            entity_identifier__isnull=False,
-            data__issue__id__isnull=False,
-            data__issue_activity__field__isnull=False,
         )
-        .exclude(data__issue__id="")
-        .exclude(data__issue_activity__field="")
+        .filter(renderable_issue | renderable_announcement)
         .annotate(is_inbox_issue=Exists(intake_issue))
         .annotate(is_intake_issue=Exists(intake_issue))
         .annotate(
@@ -97,8 +107,8 @@ def renderable_issue_notifications(workspace_slug, receiver_id):
             )
         )
         .annotate(is_renderable_issue=Exists(linked_issue))
-        .filter(is_renderable_issue=True)
-        .select_related("workspace", "project", "triggered_by", "receiver")
+        .filter(Q(is_renderable_issue=True) | renderable_announcement)
+        .select_related("workspace", "project", "triggered_by", "receiver", "announcement", "announcement__workspace")
     )
 
 
@@ -172,7 +182,7 @@ class NotificationViewSet(BaseViewSet, BasePaginator):
     serializer_class = NotificationSerializer
 
     def get_queryset(self):
-        return renderable_issue_notifications(
+        return renderable_inbox_notifications(
             self.kwargs.get("slug"),
             self.request.user.id,
         ).order_by("snoozed_till", "-created_at")
@@ -237,6 +247,14 @@ class NotificationViewSet(BaseViewSet, BasePaginator):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def destroy(self, request, *args, **kwargs):
+        notification = self.get_queryset().get(pk=kwargs.get("pk"))
+        # Soft-delete only this recipient row without scheduling unrelated cascade work.
+        notification.deleted_at = timezone.now()
+        notification.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def mark_read(self, request, slug, pk):
         notification = self.get_queryset().get(pk=pk)
         notification.read_at = timezone.now()
@@ -269,6 +287,103 @@ class NotificationViewSet(BaseViewSet, BasePaginator):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class SystemAnnouncementEndpoint(BaseViewSet, BasePaginator):
+    """Publish and list workspace-wide system announcements."""
+
+    model = SystemAnnouncement
+    serializer_class = SystemAnnouncementSerializer
+    use_read_replica = False
+
+    def get_queryset(self):
+        return SystemAnnouncement.objects.filter(
+            workspace__slug=self.kwargs.get("slug"),
+            created_by=self.request.user,
+        ).select_related("workspace", "created_by")
+
+    @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE")
+    def list(self, request, slug):
+        """Return announcements published by the requesting administrator."""
+        announcements = self.get_queryset().order_by("-published_at", "-created_at")
+        return self.paginate(
+            request=request,
+            queryset=announcements,
+            on_results=lambda announcements: SystemAnnouncementSerializer(announcements, many=True).data,
+            default_per_page=20,
+        )
+
+    @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE")
+    def create(self, request, slug):
+        """Atomically publish an announcement to all active human members."""
+        request_serializer = SystemAnnouncementCreateSerializer(data=request.data)
+        if not request_serializer.is_valid():
+            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        title = request_serializer.validated_data["title"]
+        body = request_serializer.validated_data["body"]
+        idempotency_key = request_serializer.validated_data.get("idempotency_key", "")
+
+        with transaction.atomic():
+            # Lock the workspace row to serialize concurrent idempotent publishes.
+            workspace = Workspace.objects.select_for_update().get(slug=slug)
+
+            existing_announcement = (
+                SystemAnnouncement.objects.filter(workspace=workspace, idempotency_key=idempotency_key).first()
+                if idempotency_key
+                else None
+            )
+            if existing_announcement:
+                return Response(
+                    SystemAnnouncementSerializer(existing_announcement).data,
+                    status=status.HTTP_200_OK,
+                )
+
+            published_at = timezone.now()
+            announcement = SystemAnnouncement.objects.create(
+                workspace=workspace,
+                title=title,
+                body=body,
+                published_at=published_at,
+                idempotency_key=idempotency_key,
+                created_by=request.user,
+            )
+            recipient_ids = list(
+                WorkspaceMember.objects.filter(
+                    workspace=workspace,
+                    is_active=True,
+                    deleted_at__isnull=True,
+                    member__is_active=True,
+                )
+                .exclude(member__is_bot=True)
+                .values_list("member_id", flat=True)
+            )
+            Notification.objects.bulk_create(
+                [
+                    Notification(
+                        workspace=workspace,
+                        announcement=announcement,
+                        receiver_id=recipient_id,
+                        entity_identifier=announcement.id,
+                        entity_name="system_announcement",
+                        title=announcement.title,
+                        message_html="",
+                        message_stripped="",
+                        sender="system:announcement",
+                        triggered_by=request.user,
+                        created_by=request.user,
+                    )
+                    for recipient_id in recipient_ids
+                ],
+                batch_size=500,
+            )
+            announcement.recipient_count = len(recipient_ids)
+            announcement.save()
+
+        return Response(
+            SystemAnnouncementSerializer(announcement).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class UnreadNotificationEndpoint(BaseAPIView):
     # Keep the count on the primary database so it immediately reflects read,
     # archive, and snooze mutations for refreshes and multi-device clients.
@@ -276,7 +391,7 @@ class UnreadNotificationEndpoint(BaseAPIView):
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def get(self, request, slug):
-        unread_notifications = renderable_issue_notifications(slug, request.user.id).filter(
+        unread_notifications = renderable_inbox_notifications(slug, request.user.id).filter(
             read_at__isnull=True,
             archived_at__isnull=True,
             snoozed_till__isnull=True,
@@ -309,7 +424,7 @@ class MarkAllReadNotificationViewSet(BaseViewSet):
         notification_type = request.data.get("type", "all")
         mentioned = parse_request_flag(request.data.get("mentioned"), False)
 
-        notifications = renderable_issue_notifications(slug, request.user.id).filter(
+        notifications = renderable_inbox_notifications(slug, request.user.id).filter(
             read_at__isnull=True,
         )
         notifications = filter_notifications_by_state(

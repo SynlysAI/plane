@@ -21,6 +21,7 @@ from plane.db.models import (
     ResearchAuditEvent,
     ResearchFeedback,
     ResearchFeedbackScreenshot,
+    Workspace,
     WorkspaceMember,
 )
 from plane.tests.research_fixtures import add_workspace_member, make_instance_admin, make_user
@@ -364,6 +365,93 @@ def test_status_update_is_audited_and_returned_as_history(env, storage):
         feedback_url(env, f"{feedback['feedback_id']}/status/"), {"status": "done", "comment": " "}, format="json"
     )
     assert empty.status_code == 422
+
+
+@pytest.mark.django_db
+def test_operations_account_can_reply_without_gaining_management_permissions(env, storage):
+    """运维账号仅获得回复权限，不能进入管理范围或修改状态。"""
+    from plane.db.models import ResearchFeedbackReply
+
+    feedback = client_for(env["student"]).post(feedback_url(env), submission(), format="multipart").json()["data"]
+    reply_url = feedback_url(env, f"{feedback['feedback_id']}/replies/")
+
+    denied = client_for(env["student"]).post(reply_url, {"content": "Cannot reply"}, format="json")
+    assert denied.status_code == 403
+    assert not ResearchFeedbackReply.objects.exists()
+
+    WorkspaceMember.objects.filter(workspace=env["workspace"], member=env["colleague"]).update(
+        is_operations_account=True
+    )
+    operator_client = client_for(env["colleague"])
+    assert operator_client.get(feedback_url(env), {"scope": "manage"}).status_code == 403
+    assert (
+        operator_client.patch(
+            feedback_url(env, f"{feedback['feedback_id']}/status/"),
+            {"status": "done", "comment": "Not allowed"},
+            format="json",
+        ).status_code
+        == 403
+    )
+
+    invalid = operator_client.post(reply_url, {"content": "   "}, format="json")
+    response = operator_client.post(reply_url, {"content": "已复现，正在处理。"}, format="json")
+
+    assert invalid.status_code == 422
+    assert response.status_code == 200, response.json()
+    reply = response.json()["data"]["replies"][0]
+    assert reply["content"] == "已复现，正在处理。"
+    assert reply["author_name"] == env["colleague"].display_name
+    assert ResearchFeedbackReply.objects.filter(feedback_id=feedback["feedback_id"]).count() == 1
+
+    listed = operator_client.get(feedback_url(env), {"scope": "workspace"}).json()["data"]["results"][0]
+    assert listed["replies"][0]["id"] == reply["id"]
+    assert (
+        client_for(env["pi"])
+        .post(feedback_url(env, f"{feedback['feedback_id']}/replies/"), {"content": "PI reply"}, format="json")
+        .status_code
+        == 200
+    )
+
+    WorkspaceMember.objects.filter(workspace=env["workspace"], member=env["colleague"]).update(
+        is_operations_account=False
+    )
+    assert operator_client.post(reply_url, {"content": "Should now fail"}, format="json").status_code == 403
+
+
+@pytest.mark.django_db
+def test_operations_account_marker_is_workspace_scoped(env, storage):
+    """一个工作区的运维标记不会授予另一个工作区的回复权限。"""
+    other_workspace = Workspace.objects.create(
+        name="Other feedback workspace",
+        owner=env["admin"],
+        slug=f"other-feedback-{uuid4().hex[:8]}",
+    )
+    WorkspaceMember.objects.create(
+        workspace=other_workspace,
+        member=env["colleague"],
+        role=15,
+        is_operations_account=False,
+    )
+    other_feedback = ResearchFeedback.objects.create(
+        workspace=other_workspace,
+        username="Other member",
+        feedback_type="other",
+        content="Other workspace feedback",
+        created_by=env["admin"],
+        idempotency_key=uuid4().hex,
+        payload_hash=uuid4().hex,
+    )
+    WorkspaceMember.objects.filter(workspace=env["workspace"], member=env["colleague"]).update(
+        is_operations_account=True
+    )
+
+    response = client_for(env["colleague"]).post(
+        f"/api/research/workspaces/{other_workspace.slug}/feedback/{other_feedback.id}/replies/",
+        {"content": "Cross-workspace reply"},
+        format="json",
+    )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db

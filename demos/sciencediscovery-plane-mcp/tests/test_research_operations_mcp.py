@@ -6,12 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from plane_client import PlaneError
-from research_client import ResearchClient
 from research_operations_mcp import OPERATION_TOOLS, READ_OPERATION_TOOLS, ResearchOperationProxy, load_client
 
 
@@ -36,6 +35,12 @@ class OperationProxyTests(unittest.IsolatedAsyncioTestCase):
         result = await self.proxy.call_tool("execute_research_operation", {"operation_id": "id", "approved": True, "payload": {}})
         self.assertTrue(result.isError)
         self.client.call_tool.assert_not_awaited()
+
+    async def test_execute_submits_operation_without_platform_approval(self):
+        self.client.call_tool.return_value = {"status": "COMMITTED"}
+        result = await self.proxy.call_tool("execute_research_operation", {"operation_id": "prepared-id"})
+        self.assertFalse(result.isError)
+        self.client.call_tool.assert_awaited_once_with("execute_research_operation", {"operation_id": "prepared-id"})
 
     async def test_recovery_guidance_is_preserved(self):
         self.client.call_tool.side_effect = PlaneError("research_unavailable", "Query the same operation_id", write_outcome_unknown=True)

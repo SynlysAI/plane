@@ -2,7 +2,7 @@ import {
   buildResearchWorkflow,
   RESEARCH_WORKFLOW_STAGE_DEFINITIONS,
 } from "@/components/research/chains/research-chain-workflow";
-import type { TResearchChainNode } from "@plane/types";
+import type { TResearchChainNode, TResearchChainStageApproval } from "@plane/types";
 import { expect, it } from "vitest";
 
 type TNodeSeed = Partial<TResearchChainNode> & { id: string; node_type: string; title: string };
@@ -22,6 +22,32 @@ function node(seed: TNodeSeed): TResearchChainNode {
   };
 }
 
+function stageApproval(seed: { stage_code: string; status?: TResearchChainStageApproval["status"] }) {
+  return {
+    schema_version: "research-chain-stage.v1",
+    id: `stage-${seed.stage_code}`,
+    chain: "chain-1",
+    sort_order: 1,
+    status: seed.status ?? "NOT_STARTED",
+    pi_policy: "ADVISOR_ONLY",
+    requires_pi: false,
+    escalation_reason: "",
+    attempt_count: 0,
+    submitted_node: null,
+    submitted_at: null,
+    approved_at: null,
+    materials: [],
+    review_actions: [],
+    latest_precheck: null,
+    advisor: { user: null, error: null },
+    principal_investigator: { user: null, error: null },
+    current_review_step: null,
+    created_at: "2026-09-23T01:00:00Z",
+    updated_at: "2026-09-23T01:00:00Z",
+    ...seed,
+  } satisfies TResearchChainStageApproval;
+}
+
 it("keeps all thirteen research stages visible for an empty chain", () => {
   const workflow = buildResearchWorkflow([]);
 
@@ -32,28 +58,29 @@ it("keeps all thirteen research stages visible for an empty chain", () => {
   expect(workflow.stages.every((stage) => stage.preferredNodeId === null)).toBe(true);
 });
 
-it("maps one topic evaluation node to selection and evaluation without duplicating business state", () => {
-  const topic = node({ id: "topic", node_type: "TOPIC_EVALUATION", title: "选题评估", status: "DRAFT" });
-  const workflow = buildResearchWorkflow([topic], topic.id);
+it("maps selection and evaluation to independent business nodes", () => {
+  const selectionNode = node({ id: "selection", node_type: "TOPIC_SELECTION", title: "选题", status: "DRAFT" });
+  const evaluationNode = node({
+    id: "topic",
+    node_type: "TOPIC_EVALUATION",
+    title: "选题评估",
+    status: "WAITING_HUMAN",
+  });
+  const workflow = buildResearchWorkflow([selectionNode, evaluationNode], evaluationNode.id);
   const selection = workflow.stages.find((stage) => stage.id === "topic_selection");
   const evaluation = workflow.stages.find((stage) => stage.id === "topic_evaluation");
 
-  expect(selection?.status).toBe("DRAFT");
-  expect(selection?.shared).toBe(true);
-  expect(selection?.preferredNodeId).toBe(topic.id);
-  expect(evaluation?.status).toBe("NOT_STARTED");
-  expect(evaluation?.preferredNodeId).toBe(topic.id);
+  expect(selection?.nodeIds).toEqual(["selection"]);
+  expect(evaluation?.nodeIds).toEqual(["topic"]);
 });
 
-it("moves the shared topic state to evaluation once human work starts", () => {
-  const topic = node({ id: "topic", node_type: "TOPIC_EVALUATION", title: "选题评估", status: "WAITING_HUMAN" });
-  const workflow = buildResearchWorkflow([topic], topic.id);
-  const selection = workflow.stages.find((stage) => stage.id === "topic_selection");
-  const evaluation = workflow.stages.find((stage) => stage.id === "topic_evaluation");
+it("uses backend stage approval status instead of the mapped node status", () => {
+  const literature = node({ id: "literature", node_type: "LITERATURE_REVIEW", title: "文献调研", status: "COMPLETED" });
+  const workflow = buildResearchWorkflow([literature], literature.id, [
+    stageApproval({ stage_code: "LITERATURE_REVIEW", status: "AWAITING_ADVISOR" }),
+  ]);
 
-  expect(selection?.status).toBe("COMPLETED");
-  expect(evaluation?.status).toBe("WAITING_HUMAN");
-  expect(evaluation?.preferredNodeId).toBe(topic.id);
+  expect(workflow.stages.find((stage) => stage.id === "literature_review")?.status).toBe("AWAITING_ADVISOR");
 });
 
 it("separates the two analysis stages by chain structure", () => {

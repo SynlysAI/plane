@@ -215,6 +215,51 @@ ProjectService.prototype.getProjectAnalyticsCount = async () => [
   { id: "admin-project-2", open_issues: 12, done_issues: 8, last_activity_at: "2026-10-12T03:15:00Z" },
   { id: "admin-project-3", open_issues: 0, done_issues: 5, last_activity_at: "2025-09-01T02:00:00Z" },
 ];
+WorkspaceService.prototype.fetchWorkspaceWidgets = async () => [
+  { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
+  { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1000 },
+  { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+  { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+  { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 700 },
+  { key: "workbench_layout", is_enabled: true, config: { density: "compact" }, sort_order: 100 },
+];
+WorkspaceService.prototype.updateWorkspaceWidget = async (_workspaceSlug, key, data) => ({ key, ...data });
+WorkspaceService.prototype.fetchWorkspaceActivities = async () => ({
+  results: [
+    {
+      id: "activity-1",
+      source: "project",
+      actor: { id: "student-1", display_name: "隔离学生" },
+      action: "updated",
+      entity_type: "project",
+      entity_id: "admin-project-1",
+      entity_name: "设备采购协作",
+      project: { id: "admin-project-1", name: "设备采购协作", identifier: "PROC" },
+      url: "#activity-project",
+      occurred_at: now,
+      changes: [{ field: "name", old_value: "旧项目名", new_value: "设备采购协作" }],
+      summary: "",
+    },
+    {
+      id: "activity-2",
+      source: "research",
+      actor: { id: "student-1", display_name: "隔离学生" },
+      action: "report.submit",
+      entity_type: "report",
+      entity_id: "report-1",
+      entity_name: "WEEKLY 2026-W42",
+      project: { id: "project-1", name: "催化剂界面失活机理研究", identifier: "RES" },
+      url: "#activity-report",
+      occurred_at: now,
+      changes: [{ field: "period", new_value: "2026-W42" }],
+      summary: "",
+    },
+  ],
+  next_offset: null,
+  has_more: false,
+  offset: 0,
+  per_page: 12,
+});
 WorkspaceService.prototype.fetchWorkspaceRecents = async () => [
   {
     id: "recent-project",

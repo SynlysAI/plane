@@ -47,7 +47,7 @@ from .issue import (
     IssueDescriptionVersion,
 )
 from .module import Module, ModuleIssue, ModuleLink, ModuleMember, ModuleUserProperties
-from .notification import EmailNotificationLog, Notification, UserNotificationPreference
+from .notification import EmailNotificationLog, Notification, SystemAnnouncement, UserNotificationPreference
 from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion
 from .project import (
     Project,
@@ -77,6 +77,7 @@ from .workspace import (
     WorkspaceUserProperties,
     WorkspaceUserLink,
     WorkspaceHomePreference,
+    HomeActivityEvent,
     WorkspaceUserPreference,
 )
 
@@ -105,6 +106,11 @@ from .research import (
     IdentityMapping,
     AccountLink,
     ResearchChain,
+    ResearchChainStage,
+    ResearchChainStageMaterialItem,
+    ResearchChainStageMaterialRequirement,
+    ResearchChainStagePrecheck,
+    ResearchChainStageReviewAction,
     ResearchChainEvent,
     ResearchChainNode,
     ResearchChainNodeTask,
@@ -138,6 +144,7 @@ from .research import (
     ExperimentRecord,
     ExperimentRecordVersion,
     ResearchFeedback,
+    ResearchFeedbackReply,
     ResearchFeedbackScreenshot,
     ApprovalAction,
     ApprovalFlow,
@@ -155,6 +162,9 @@ from .research import (
     PeriodicReportReadReceipt,
     PeriodicReportProjectReference,
     PeriodicReportSnapshot,
+    PeriodicReportComment,
+    PeriodicReportCommentFeedback,
+    PeriodicReportCommentThread,
     ReportAccessGrant,
     ReportAttachment,
     ReportReviewLog,
@@ -184,14 +194,6 @@ from .research import (
     UserImportRow,
     WorkspaceResearchSetting,
     ResearchWorkspaceAccessGrant,
-)
-
-from .administrative_approval import (
-    AdministrativeApprovalFlow,
-    AdministrativeApprovalStep,
-    AdministrativeProjectApprovalSetting,
-    AdministrativeApprovalRequest,
-    AdministrativeApprovalAction,
 )
 
 from .asset_preview import AssetPreview

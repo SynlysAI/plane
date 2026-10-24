@@ -125,6 +125,13 @@ from .reports import (
     ResearchReportReturnEndpoint,
     ResearchReportSubmitEndpoint,
 )
+from .report_comments import (
+    ResearchReportCommentDetailEndpoint,
+    ResearchReportCommentFeedbackEndpoint,
+    ResearchReportCommentThreadCommentEndpoint,
+    ResearchReportCommentThreadListCreateEndpoint,
+    ResearchReportCommentThreadStatusEndpoint,
+)
 from .stages import (
     ResearchProjectStageListCreateEndpoint,
     ResearchStageDetailEndpoint,
@@ -386,6 +393,11 @@ __all__ = [
     "ResearchReportReadReceiptListEndpoint",
     "ResearchReportReturnEndpoint",
     "ResearchReportSubmitEndpoint",
+    "ResearchReportCommentDetailEndpoint",
+    "ResearchReportCommentFeedbackEndpoint",
+    "ResearchReportCommentThreadCommentEndpoint",
+    "ResearchReportCommentThreadListCreateEndpoint",
+    "ResearchReportCommentThreadStatusEndpoint",
     "ResearchInviteCodeListCreateEndpoint",
     "ResearchInviteCodeDetailEndpoint",
     "ResearchInviteCodeToggleEndpoint",

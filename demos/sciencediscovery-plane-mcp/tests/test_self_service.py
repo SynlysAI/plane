@@ -1,3 +1,7 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Self-service credential lifecycle and real HTTP-to-MCP integration."""
 from __future__ import annotations
 
@@ -227,6 +231,38 @@ async def mcp(url, auth):
 
 
 class PortalHTTPTests(unittest.IsolatedAsyncioTestCase):
+    async def test_candidates_intersect_admin_allowlist_with_verified_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            async with running_portal(folder) as (url, app, upstreams, started):
+                async with httpx.AsyncClient(trust_env=False) as http:
+                    self.assertEqual((await http.get(url + "/connect/api/candidates")).status_code, 401)
+                    await login(http, url)
+                    result = await http.get(url + "/connect/api/candidates")
+                    self.assertEqual(result.status_code, 200)
+                    self.assertEqual(result.json()["workspaces"], ["lab"])
+                    self.assertEqual(result.json()["account"]["id"], ALICE["id"])
+                    self.assertEqual(result.json()["identity_mapping"], "independent")
+                    self.assertEqual(result.json()["failures"], [])
+                    self.assertNotIn(PAT_A, result.text)
+                    self.assertEqual(result.headers["cache-control"], "no-store")
+                self.assertEqual(started, [])
+
+    async def test_candidates_report_unreachable_targets_instead_of_silently_dropping_them(self):
+        from self_service import SelfServicePortal
+        from starlette.applications import Starlette
+        async def verifier(config, pat, workspace=None):
+            if workspace == "denied":
+                raise PortalError("Upstream unavailable", 502)
+            return ALICE
+        with tempfile.TemporaryDirectory() as folder:
+            portal = SelfServicePortal(settings(), CredentialStore(Path(folder)), verifier=verifier)
+            app = Starlette(routes=portal.routes())
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=settings().public_url) as http:
+                await login(http, settings().public_url)
+                result = (await http.get("/connect/api/candidates")).json()
+                self.assertEqual(result["workspaces"], ["lab"])
+                self.assertEqual(result["failures"], [{"workspace": "denied", "status": 502, "error": "Upstream unavailable"}])
+
     async def test_page_assets_and_csrf_host_body_protection(self):
         with tempfile.TemporaryDirectory() as folder:
             async with running_portal(folder) as (url, app, upstreams, started):

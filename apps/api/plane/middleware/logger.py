@@ -140,7 +140,12 @@ class APITokenLogMiddleware:
         # 即使会话请求额外携带 X-Api-Key 也必须脱敏。
         is_password_reset = request.path.startswith("/api/workspaces/") and request.path.endswith("/reset-password/")
         try:
-            if is_password_reset or request.path.startswith("/api/mcp/native/"):
+            is_credential_management = (
+                request.path.startswith("/api/mcp/native/")
+                or request.path.startswith("/api/users/api-tokens/")
+                or (request.path.startswith("/api/research/") and "/mcp/connections/" in request.path)
+            )
+            if is_password_reset or is_credential_management:
                 logged_body = logged_response_body = "[REDACTED]"
             else:
                 logged_body = self._safe_decode_body(request_body) if request_body else None

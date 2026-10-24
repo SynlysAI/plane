@@ -63,11 +63,15 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         workspace_members = self.get_queryset()
         if workspace_member.role > 5:
             serializer = WorkspaceMemberAdminSerializer(
-                workspace_members, fields=("id", "member", "role", "is_active", "created_at", "tags"), many=True
+                workspace_members,
+                fields=("id", "member", "role", "is_active", "is_operations_account", "created_at", "tags"),
+                many=True,
             )
         else:
             serializer = WorkSpaceMemberSerializer(
-                workspace_members, fields=("id", "member", "role", "is_active", "created_at", "tags"), many=True
+                workspace_members,
+                fields=("id", "member", "role", "is_active", "is_operations_account", "created_at", "tags"),
+                many=True,
             )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -86,11 +90,13 @@ class WorkSpaceMemberViewSet(BaseViewSet):
 
         if workspace_member.role > ROLE.GUEST.value:
             serializer = WorkspaceMemberAdminSerializer(
-                member, fields=("id", "member", "role", "is_active", "created_at", "tags")
+                member,
+                fields=("id", "member", "role", "is_active", "is_operations_account", "created_at", "tags"),
             )
         else:
             serializer = WorkSpaceMemberSerializer(
-                member, fields=("id", "member", "role", "is_active", "created_at", "tags")
+                member,
+                fields=("id", "member", "role", "is_active", "is_operations_account", "created_at", "tags"),
             )
         return Response(serializer.data, status=status.HTTP_200_OK)
 

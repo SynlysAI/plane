@@ -15,6 +15,7 @@ import { Spinner } from "@plane/ui";
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
+import { SystemAnnouncementComposer } from "@/components/workspace-notifications/announcement-composer";
 import { NotificationFilter } from "../../filters/menu";
 import { NotificationHeaderMenuOption } from "./menu-option";
 import { IconButton } from "@plane/propel/icon-button";
@@ -53,6 +54,9 @@ export const NotificationSidebarHeaderOptions = observer(function NotificationSi
 
   return (
     <div className="relative flex items-center justify-center gap-2 text-body-xs-medium">
+      {/* publish workspace announcement */}
+      <SystemAnnouncementComposer workspaceSlug={workspaceSlug} />
+
       {/* mark all notifications as read*/}
       <Tooltip label={t("notification.options.mark_all_as_read")} side="bottom" disabled={isMobile}>
         <IconButton

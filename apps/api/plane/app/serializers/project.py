@@ -35,6 +35,7 @@ from plane.utils.administrative_projects import (
     research_project_ids,
     assignable_project_member_ids,
 )
+from plane.utils.home_activity import record_project_activity, resolve_project_change_values
 from plane.utils.project_identifier import random_identifier, unique_identifier
 
 
@@ -224,6 +225,41 @@ class ProjectSerializer(BaseSerializer):
 
         return data
 
+    PROJECT_ACTIVITY_FIELDS = (
+        "name",
+        "description",
+        "project_lead",
+        "network",
+        "guest_view_all_features",
+        "start_date",
+        "target_date",
+    )
+
+    @staticmethod
+    def _project_changes(instance, validated_data):
+        """Build readable change records for meaningful project updates.
+
+        Args:
+            instance: Project state before the update.
+            validated_data: Serializer fields supplied by the requester.
+
+        Returns:
+            A list of field-level before/after dictionaries.
+        """
+        changes = []
+        for field in ProjectSerializer.PROJECT_ACTIVITY_FIELDS:
+            if field not in validated_data:
+                continue
+            old_value = getattr(instance, field, None)
+            new_value = validated_data.get(field)
+            old_id = getattr(old_value, "id", old_value)
+            new_id = getattr(new_value, "id", new_value)
+            if str(old_id or "") == str(new_id or ""):
+                continue
+            old_display, new_display = resolve_project_change_values(field, old_id, new_id)
+            changes.append({"field": field, "old_value": old_display, "new_value": new_display})
+        return changes
+
     def create(self, validated_data):
         workspace_id = self.context["workspace_id"]
         if not validated_data.get("identifier"):
@@ -250,6 +286,14 @@ class ProjectSerializer(BaseSerializer):
 
         ProjectIdentifier.objects.create(name=project.identifier, project=project, workspace_id=workspace_id)
 
+        record_project_activity(project, self.context.get("request").user, "created")
+        return project
+
+    def update(self, instance, validated_data):
+        changes = self._project_changes(instance, validated_data)
+        project = super().update(instance, validated_data)
+        if changes:
+            record_project_activity(project, self.context.get("request").user, "updated", changes)
         return project
 
 

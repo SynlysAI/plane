@@ -10,6 +10,9 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.mcp_management import (
+    ResearchMCPCandidatesEndpoint, ResearchMCPConnectionsEndpoint, ResearchMCPRevokeEndpoint,
+)
 from plane.research.views.agent_operations import (
     ResearchHumanOperationsEndpoint, ResearchOperationMCPHTTPEndpoint,
     ResearchOperationToolsEndpoint, ResearchOperationToolEndpoint,
@@ -33,8 +36,17 @@ from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
 from plane.research.views.report_context import ResearchFormalReportContentEndpoint, ResearchFormalReportOptionsEndpoint
+from plane.research.views.chain_stage_approvals import (
+    ResearchChainStageApprovalListEndpoint,
+    ResearchChainStageMaterialDetailEndpoint,
+    ResearchChainStageMaterialEndpoint,
+    ResearchChainStagePrecheckEndpoint,
+    ResearchChainStageReviewEndpoint,
+    ResearchChainStageSubmitEndpoint,
+)
 from plane.research.views.feedback import (
     ResearchFeedbackEndpoint,
+    ResearchFeedbackReplyEndpoint,
     ResearchFeedbackStatusEndpoint,
     ResearchFeedbackScreenshotEndpoint,
 )
@@ -111,6 +123,11 @@ from plane.research.views import (
     ResearchReportReturnEndpoint,
     ResearchReportSubmitEndpoint,
     ResearchReportSummaryEndpoint,
+    ResearchReportCommentDetailEndpoint,
+    ResearchReportCommentFeedbackEndpoint,
+    ResearchReportCommentThreadCommentEndpoint,
+    ResearchReportCommentThreadListCreateEndpoint,
+    ResearchReportCommentThreadStatusEndpoint,
     ResearchReportTemplateDetailEndpoint,
     ResearchReportTemplateListCreateEndpoint,
     ResearchReportTemplateOptionListEndpoint,
@@ -240,6 +257,21 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path(
+        "research/workspaces/<str:slug>/mcp/candidates/",
+        ResearchMCPCandidatesEndpoint.as_view(),
+        name="research-mcp-candidates",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/connections/",
+        ResearchMCPConnectionsEndpoint.as_view(),
+        name="research-mcp-connections",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/connections/<uuid:context_id>/revoke/",
+        ResearchMCPRevokeEndpoint.as_view(),
+        name="research-mcp-revoke",
+    ),
     path("research/workspaces/<str:slug>/agent-operations/mcp/", ResearchOperationMCPHTTPEndpoint.as_view(), name="research-operations-mcp"),
     path("research/workspaces/<str:slug>/agent-operations/tools/", ResearchOperationToolsEndpoint.as_view(), name="research-operation-tools"),
     path("research/workspaces/<str:slug>/agent-operations/tools/<str:tool_name>/", ResearchOperationToolEndpoint.as_view(), name="research-operation-tool"),
@@ -289,6 +321,11 @@ urlpatterns = [
     ),
     path("research/workspaces/<str:slug>/feedback/", ResearchFeedbackEndpoint.as_view(), name="research-feedback"),
     path(
+        "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/replies/",
+        ResearchFeedbackReplyEndpoint.as_view(),
+        name="research-feedback-reply",
+    ),
+    path(
         "research/workspaces/<str:slug>/feedback/<uuid:feedback_id>/status/",
         ResearchFeedbackStatusEndpoint.as_view(),
         name="research-feedback-status",
@@ -337,6 +374,36 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/",
         ResearchChainDetailEndpoint.as_view(),
         name="research-chain-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/",
+        ResearchChainStageApprovalListEndpoint.as_view(),
+        name="research-chain-stage-approvals",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/materials/",
+        ResearchChainStageMaterialEndpoint.as_view(),
+        name="research-chain-stage-materials",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/materials/<uuid:material_id>/",
+        ResearchChainStageMaterialDetailEndpoint.as_view(),
+        name="research-chain-stage-material-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/precheck/",
+        ResearchChainStagePrecheckEndpoint.as_view(),
+        name="research-chain-stage-precheck",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/submit/",
+        ResearchChainStageSubmitEndpoint.as_view(),
+        name="research-chain-stage-submit",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/stage-approvals/<str:stage_code>/review/",
+        ResearchChainStageReviewEndpoint.as_view(),
+        name="research-chain-stage-review",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/archive/",
@@ -1167,6 +1234,31 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/access/",
         ResearchReportAccessEndpoint.as_view(),
         name="research-report-access",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/",
+        ResearchReportCommentThreadListCreateEndpoint.as_view(),
+        name="research-report-comment-threads",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/<uuid:thread_id>/comments/",
+        ResearchReportCommentThreadCommentEndpoint.as_view(),
+        name="research-report-comment-thread-comments",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/<uuid:thread_id>/status/",
+        ResearchReportCommentThreadStatusEndpoint.as_view(),
+        name="research-report-comment-thread-status",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comments/<uuid:comment_id>/",
+        ResearchReportCommentDetailEndpoint.as_view(),
+        name="research-report-comment",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comments/<uuid:comment_id>/ai-feedback/",
+        ResearchReportCommentFeedbackEndpoint.as_view(),
+        name="research-report-comment-ai-feedback",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/attachments/",

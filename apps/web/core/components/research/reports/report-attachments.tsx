@@ -76,9 +76,9 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
   );
 
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-subtle bg-surface-1 p-4">
+    <section className="flex flex-col gap-3 rounded-xl border border-subtle bg-surface-1 p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-13 font-medium text-primary">{t("research.attachments.title")}</h3>
+        <h3 className="text-13 font-semibold text-primary">{t("research.attachments.title")}</h3>
         {editable && (
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="xl" onClick={() => fileInputRef.current?.click()}>

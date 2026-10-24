@@ -191,6 +191,20 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
     [research, units, workspaceSlug]
   );
 
+  const handleWeeklyConfidential = useCallback(
+    async (unit: TOrgUnit, weeklyReportConfidential: boolean) => {
+      try {
+        await research.updateOrgUnit(workspaceSlug, unit.id, {
+          weekly_report_confidential: weeklyReportConfidential,
+        });
+        setErrorKey(null);
+      } catch (error) {
+        setErrorKey(getResearchErrorKey(error));
+      }
+    },
+    [research, workspaceSlug]
+  );
+
   const handleRename = useCallback(
     async (unit: TOrgUnit) => {
       const nextName = nameDraft.trim();
@@ -322,6 +336,25 @@ export const ResearchOrgTreeEditor = observer(function ResearchOrgTreeEditor({ w
                     ))}
                   </ListFilterSelect>
                 </ListFilterField>
+              )}
+              {selectedUnit.unit_type !== "ROOT" && (
+                <label
+                  className="flex min-w-56 items-start gap-2 text-12 text-secondary"
+                  aria-label={t("research.org.weekly_confidential")}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={selectedUnit.weekly_report_confidential}
+                    onChange={(event) => void handleWeeklyConfidential(selectedUnit, event.target.checked)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-primary">{t("research.org.weekly_confidential")}</span>
+                    <span className="mt-0.5 block text-11 text-tertiary">
+                      {t("research.org.weekly_confidential_hint")}
+                    </span>
+                  </span>
+                </label>
               )}
               <div className="flex flex-wrap gap-2">
                 <Button variant="primary" size="xl" onClick={() => openCreateDialog(selectedUnit)}>

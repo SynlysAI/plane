@@ -73,7 +73,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
 }) {
   const { t } = useTranslation();
   const research = useResearch();
-  const identity = research.identity;
+  const { identity, fetchIdentity } = research;
   const identityKnown = Boolean(identity);
   const [open, setOpen] = useState(managementOnly);
   const [view, setView] = useState<FeedbackView>(managementOnly ? "manage" : "submit");
@@ -88,6 +88,9 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const [selected, setSelected] = useState<Feedback | null>(null);
   const [status, setStatus] = useState<TFeedbackStatus>("in_progress");
   const [comment, setComment] = useState("");
+  const [replyContent, setReplyContent] = useState("");
+  const [replySubmitting, setReplySubmitting] = useState(false);
+  const [replyError, setReplyError] = useState("");
   const [filterDraft, setFilterDraft] = useState({
     status: "",
     feedback_type: "",
@@ -111,6 +114,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     identity?.user?.is_workspace_admin ||
     identity?.user?.is_system_admin
   );
+  const canReply = canManage || Boolean(identity?.user?.is_feedback_operator);
   const usesWorkspaceLayout = managementOnly || view === "statistics";
   const listScope: FeedbackScope = managementOnly ? "manage" : view === "statistics" ? "workspace" : "own";
   const screenshotScope: FeedbackScope = listScope;
@@ -124,6 +128,10 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     },
     []
   );
+  useEffect(() => {
+    if (!open || !fetchIdentity) return;
+    void fetchIdentity(workspaceSlug).catch(() => undefined);
+  }, [fetchIdentity, open, workspaceSlug]);
   useEffect(() => {
     if (!open || view === "submit") return;
     if (managementOnly && !canManage) return;
@@ -187,13 +195,13 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     setFilter((current) => ({ ...current, ...next }));
     setPage(1);
   };
-  const availableTabs = (managementOnly
-      ? []
-      : ([
-          ["submit", "提交反馈"],
-          ["mine", "我的反馈"],
-          ["statistics", t("research.nav.feedback_statistics")],
-        ] as const));
+  const availableTabs = managementOnly
+    ? []
+    : ([
+        ["submit", "提交反馈"],
+        ["mine", "我的反馈"],
+        ["statistics", t("research.nav.feedback_statistics")],
+      ] as const);
   /** 按方向键在可用反馈视图之间切换。 */
   const moveTab = (direction: 1 | -1) => {
     const current = availableTabs.findIndex(([value]) => value === view);
@@ -403,6 +411,71 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     </form>
   ) : null;
 
+  const replies = selected?.replies ?? [];
+  const replyTimeline = replies.length ? (
+    <section aria-label="反馈回复" className="border-t border-subtle pt-4">
+      <h4 className="text-12 font-semibold text-primary">回复记录</h4>
+      <ol className="mt-3 space-y-3">
+        {replies.map((reply) => (
+          <li key={reply.id} className="border-l border-subtle pl-3 text-12">
+            <p className="text-secondary">{reply.author_name}</p>
+            <p className="mt-1 whitespace-pre-wrap text-primary">{reply.content}</p>
+            <time className="mt-1 block text-tertiary" dateTime={reply.created_at}>
+              {formatResearchDateTime(reply.created_at)}
+            </time>
+          </li>
+        ))}
+      </ol>
+    </section>
+  ) : null;
+
+  const replyForm =
+    selected && canReply ? (
+      <form
+        data-reply-form="true"
+        className="border-t border-subtle pt-4"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (replySubmitting || !replyContent.trim()) return;
+          setReplySubmitting(true);
+          setReplyError("");
+          try {
+            const updated = await service.createReply(workspaceSlug, selected.feedback_id, {
+              content: replyContent,
+            });
+            setSelected(updated);
+            setReplyContent("");
+            queryVersion.current += 1;
+            setRefresh((value) => value + 1);
+          } catch {
+            setReplyError("回复失败，内容已保留，请刷新后重试。");
+          } finally {
+            setReplySubmitting(false);
+          }
+        }}
+      >
+        <h4 className="text-12 font-semibold text-primary">回复反馈</h4>
+        <textarea
+          aria-label="反馈回复"
+          className={`${className} mt-3 min-h-24`}
+          required
+          maxLength={2000}
+          value={replyContent}
+          onChange={(event) => setReplyContent(event.target.value)}
+        />
+        {replyError && (
+          <p role="alert" className="mt-2 text-12 text-danger-primary">
+            {replyError}
+          </p>
+        )}
+        <div className="mt-3 flex justify-end">
+          <Button type="submit" variant="primary" size="sm" disabled={replySubmitting || !replyContent.trim()}>
+            {replySubmitting ? "回复中" : "发送回复"}
+          </Button>
+        </div>
+      </form>
+    ) : null;
+
   const body = (
     <section
       className={
@@ -604,6 +677,8 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                                 onClick={() => {
                                   setSelected(record);
                                   setComment("");
+                                  setReplyContent("");
+                                  setReplyError("");
                                 }}
                               >
                                 <span className="line-clamp-2 text-13 leading-5 whitespace-pre-wrap text-primary">
@@ -744,6 +819,8 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                             <div className="mt-3">{statusForm}</div>
                           </section>
                         )}
+                        {replyTimeline}
+                        {replyForm}
                       </article>
                     ) : (
                       <aside className="max-w-md rounded-lg bg-surface-2 px-4 py-5">
@@ -777,6 +854,8 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                             onClick={() => {
                               setSelected(record);
                               setComment("");
+                              setReplyContent("");
+                              setReplyError("");
                             }}
                           >
                             {record.content.slice(0, 60)}
@@ -872,6 +951,8 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                       </li>
                     ))}
                   </ol>
+                  {replyTimeline}
+                  {replyForm}
                   {usesWorkspaceLayout && canManage && (
                     <section aria-label="状态处置" className="mt-4 border-t border-subtle pt-4">
                       <h4 className="text-12 font-semibold text-primary">状态处置</h4>

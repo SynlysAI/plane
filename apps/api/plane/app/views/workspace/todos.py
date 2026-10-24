@@ -2,13 +2,13 @@
 
 import logging
 from datetime import datetime
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
-from plane.app.views.administrative import AdministrativeBaseEndpoint
-from plane.db.models import Issue
+from plane.app.views.base import BaseAPIView
+from plane.db.models import Issue, Workspace, WorkspaceMember
 from plane.utils.administrative_projects import visible_administrative_projects
-from plane.utils.administrative_approvals import visible_requests, current_approvers
 from plane.utils.project_domains import research_admitted
+from plane.utils.workspace_access import user_can_access_workspace
 from plane.research.services.research_todos import collect_research_todos, research_todo_urgency
 from plane.research.views.research_todos import encode_todo_cursor, decode_todo_cursor
 
@@ -57,29 +57,6 @@ def administrative_todos(workspace, user):
         }
         for issue in issues
     ]
-    for approval in visible_requests(workspace, user).filter(status="PENDING", project__archived_at__isnull=True):
-        if user.id not in {actor.id for actor in current_approvers(approval)}:
-            continue
-        result.append(
-            {
-                "id": f"administrative:approval:{approval.id}",
-                "domain": "ADMINISTRATIVE",
-                "source": "APPROVAL",
-                "object_id": str(approval.id),
-                "title": approval.issue.name,
-                "project_id": str(approval.project_id),
-                "context": approval.project.name,
-                "requester": _participant(approval.requested_by),
-                "business_status": "待审批",
-                "handling_status": "TODO",
-                "due_at": approval.issue.target_date.isoformat() if approval.issue.target_date else None,
-                "urgency": research_todo_urgency(approval.issue.target_date),
-                "updated_at": approval.updated_at.isoformat(),
-                "href": f"/{workspace.slug}/approvals?domain=administrative&request={approval.id}",
-                "next_action": "APPROVE",
-                "capabilities": {"actions": {"approve": {"allowed": True}}},
-            }
-        )
     return result
 
 
@@ -89,9 +66,34 @@ def todo_sort_key(todo):
     return (ranks.get(todo["urgency"], 3), todo.get("due_at") or "9999", -updated.timestamp(), todo["id"])
 
 
-class WorkspaceTodoEndpoint(AdministrativeBaseEndpoint):
+class WorkspaceTodoEndpoint(BaseAPIView):
+    @staticmethod
+    def _workspace(request, slug):
+        """解析并校验当前用户可访问的工作区。
+
+        Args:
+            request: 当前请求对象。
+            slug: 工作区别名。
+
+        Returns:
+            可访问的工作区实例。
+
+        Raises:
+            NotFound: 工作区不存在。
+            PermissionDenied: 用户未获工作区准入或成员身份失效。
+        """
+        workspace = Workspace.objects.filter(slug=slug).first()
+        if workspace is None:
+            raise NotFound()
+        if (
+            not user_can_access_workspace(request.user, workspace_slug=slug)
+            or not WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True).exists()
+        ):
+            raise PermissionDenied()
+        return workspace
+
     def get(self, request, slug):
-        workspace = self.workspace(request, slug)
+        workspace = self._workspace(request, slug)
         domain = request.GET.get("domain", "all").lower()
         if domain not in ("all", "research", "administrative"):
             raise ValidationError("待办类型无效。")

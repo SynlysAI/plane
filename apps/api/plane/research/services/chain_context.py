@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_datetime
 
 from plane.db.models import (
     ExperimentRecord, FileAsset, PeriodicReport, ResearchAgentRunEvent,
-    ResearchAnalysisResult, ResearchChain, ResearchChainEvent, ResearchChainNode,
+    PeriodicReportCommentFeedback, ResearchAnalysisResult, ResearchChain, ResearchChainEvent, ResearchChainNode,
     ResearchChainNodeTask, ResearchChainSnapshot, ResearchChainUpload,
     ResearchExternalReference, ResearchPaperReview, ResearchTaskComment, StageMaterial,
 )
@@ -340,6 +340,67 @@ class ResearchReadService:
             "content_ref": {"kind": "task_comment", "id": str(row.id), "node_id": str(task.node_id)},
             "text_truncated": len(row.comment_stripped) > 2000, "created_at": row.created_at.isoformat(),
         }, cursor=cursor, limit=limit)
+
+    def list_research_report_feedback(self, cursor=None, limit=20):
+        """Read explicit report-comment feedback within the pinned Context scope.
+
+        Args:
+            cursor: Opaque pagination cursor from a previous page.
+            limit: Page size requested by the Agent plugin.
+
+        Returns:
+            A bounded feedback page containing only explicit human submissions.
+        """
+        if self.grant is None:
+            raise ResearchReadError("scope_denied", "This tool requires a research context grant.", 403)
+        allowed = {
+            str(item.get("report_id")): int(item.get("version_no") or 0)
+            for item in self.grant.allowed_reports
+        }
+        rows = (
+            PeriodicReportCommentFeedback.objects.filter(
+                report__workspace=self.workspace,
+                report__deleted_at__isnull=True,
+                thread__deleted_at__isnull=True,
+                comment__deleted_at__isnull=True,
+                status=PeriodicReportCommentFeedback.Status.SUBMITTED,
+                deleted_at__isnull=True,
+            )
+            .select_related("report", "thread", "comment", "submitted_by", "agent_session")
+            .order_by("created_at", "id")
+        )
+
+        def project(feedback):
+            report_id = str(feedback.report_id)
+            expected_version = allowed.get(report_id)
+            if expected_version is None or feedback.thread.snapshot_version != expected_version:
+                return None
+            if not check_access(self.user, "view", report_resource(feedback.report), context=self.actor):
+                return None
+            payload = dict(feedback.payload or {})
+            comment_payload = dict(payload.get("comment") or {})
+            original_text = str(comment_payload.get("text") or "")
+            original_html = str(comment_payload.get("html") or "")
+            comment_payload["text"] = _clip(original_text, 8000)
+            comment_payload["html"] = _clip(original_html, 8000)
+            comment_payload["truncated"] = len(original_text) > 8000 or len(original_html) > 8000
+            payload["comment"] = comment_payload
+            return {
+                "id": str(feedback.id),
+                "feedback_type": feedback.feedback_type,
+                "status": feedback.status,
+                "submitted_at": feedback.submitted_at.isoformat(),
+                "report_ref": {
+                    "kind": "report",
+                    "id": report_id,
+                    "version": feedback.thread.snapshot_version,
+                },
+                "thread_id": str(feedback.thread_id),
+                "comment_id": str(feedback.comment_id),
+                "payload": payload,
+            }
+
+        return self._page(rows, project, cursor=cursor, limit=limit)
 
     def _candidates(self, node, kind):
         model = MODELS[kind]

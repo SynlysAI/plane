@@ -10,7 +10,28 @@ vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { ERROR: "error" },
   setToast: vi.fn(),
 }));
-vi.mock("@plane/propel/button", () => ({ Button: () => <button type="button" /> }));
+vi.mock("@plane/propel/button", () => ({
+  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  ),
+}));
+vi.mock("@plane/propel/table", () => ({
+  Table: ({ columns, data }: { columns?: { tdRender?: (row: unknown) => React.ReactNode }[]; data?: unknown[] }) => (
+    <table>
+      <tbody>
+        {(data ?? []).map((row) => (
+          <tr key={String(row)}>
+            {(columns ?? []).map((column) => (
+              <td key={String(column)}>{column.tdRender?.(row)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  ),
+}));
 vi.mock("@plane/utils", () => ({
   cn: (...values: unknown[]) => values.filter(Boolean).join(" "),
   renderFormattedDate: (value: string) => value,
@@ -29,6 +50,9 @@ vi.mock("@/components/workspace/settings/password-reset-modal", () => ({
   WorkspacePasswordResetModal: () => <div />,
 }));
 vi.mock("@/components/workspace/settings/bulk-member-tags-editor", () => ({ BulkMemberTagsEditor: () => <div /> }));
+vi.mock("@/components/workspace/settings/bulk-member-account-config-editor", () => ({
+  BulkMemberAccountConfigEditor: () => <div role="dialog">账号配置面板</div>,
+}));
 vi.mock("@/hooks/store/use-member", () => ({
   useMember: () => ({
     workspace: {
@@ -123,4 +147,22 @@ it("shows saved tags immediately when the cached member is re-rendered", async (
   await act(async () => root.render(<WorkspaceMembersListItem memberDetails={[createMember(savedTags)]} />));
 
   expect(container.textContent).toContain("保存后标签");
+});
+
+it("opens the account configuration panel from the member bulk action bar", async () => {
+  await act(async () => root.render(<WorkspaceMembersListItem memberDetails={[createMember([])]} />));
+
+  await act(async () => {
+    container.querySelector<HTMLInputElement>('input[aria-label="选择 Alice Chen"]')?.click();
+  });
+
+  expect(container.textContent).toContain("已选择 1 名成员");
+  const accountButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (button) => button.textContent === "账号配置"
+  );
+  expect(accountButton).not.toBeNull();
+
+  await act(async () => accountButton?.click());
+
+  expect(container.textContent).toContain("账号配置面板");
 });

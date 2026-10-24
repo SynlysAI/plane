@@ -127,6 +127,32 @@ def is_research_admin(user, workspace) -> bool:
     return membership.role == WORKSPACE_ADMIN_ROLE or is_instance_admin(user)
 
 
+def is_feedback_operator(user, workspace) -> bool:
+    """Return whether the user is a feedback operator in one workspace.
+
+    Args:
+        user: Authenticated Plane user.
+        workspace: Workspace model or workspace identifier.
+
+    Returns:
+        True only when the user has an active ordinary-member seat carrying the
+        workspace-scoped operations marker.
+    """
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+    workspace_id = _workspace_id(workspace)
+    if workspace_id is None:
+        return False
+    return WorkspaceMember.objects.filter(
+        workspace_id=workspace_id,
+        member=user,
+        role=WORKSPACE_MEMBER_ROLE,
+        is_active=True,
+        is_operations_account=True,
+        deleted_at__isnull=True,
+    ).exists()
+
+
 def has_admin_duty(user, role) -> bool:
     return role in admin_roles(user)
 

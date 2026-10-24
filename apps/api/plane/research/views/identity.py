@@ -22,7 +22,13 @@ from plane.research.utils.errors import (
     research_permission_denied,
 )
 from plane.research.utils.org import effective_mentee_ids, effective_mentor_ids, is_workspace_admin
-from plane.research.utils.roles import ADMIN_ROLES, admin_roles, is_research_admin, is_system_admin
+from plane.research.utils.roles import (
+    ADMIN_ROLES,
+    admin_roles,
+    is_feedback_operator,
+    is_research_admin,
+    is_system_admin,
+)
 from plane.research.utils.settings import (
     get_workspace_research_settings,
     report_timezone_for,
@@ -97,6 +103,7 @@ class ResearchIdentityMeEndpoint(ResearchAPIView):
                 "user": {
                     "id": str(request.user.id),
                     "is_workspace_admin": is_workspace_admin(request.user, workspace.id),
+                    "is_feedback_operator": is_feedback_operator(request.user, workspace.id),
                     "is_research_admin": capabilities["management"]["workspace"],
                     "is_system_admin": is_system_admin(request.user),
                     "is_main_pi": capabilities["is_main_pi"],

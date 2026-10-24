@@ -145,10 +145,16 @@ class ResearchReportSummaryEndpoint(ResearchAPIView):
                 period_key=period_key,
             ).select_related("owner", "org_unit")
         )
+        confidential_cache = {}
         visible_reports = [
             report
             for report in reports
-            if check_access(request.user, "view", report_resource(report), context=context)
+            if check_access(
+                request.user,
+                "view",
+                report_resource(report, confidential_cache),
+                context=context,
+            )
         ]
 
         today = timezone.localdate()

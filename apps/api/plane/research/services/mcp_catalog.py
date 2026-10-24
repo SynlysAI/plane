@@ -61,6 +61,12 @@ TOOLS = (
           {"node_id": _uuid(), "status": _text(20)}, ("node_id",), paged=True),
     _tool("list_research_task_comments", "Read a page of discussion on a research task, not IssueComment.",
           {"task_id": _uuid()}, ("task_id",), paged=True),
+    _tool(
+        "list_research_report_feedback",
+        "Read explicit human feedback pinned to granted formal report versions; ordinary discussion is never returned.",
+        {},
+        paged=True,
+    ),
     _tool("list_research_node_resources", "List one kind of directly attached or explicitly referenced resource. File metadata is not parsed content.",
           {"node_id": _uuid(), "kind": _enum(RESOURCE_KINDS)}, ("node_id", "kind"), paged=True),
     _tool("read_research_resource", "Read bounded task instructions, research comments, process events, analyses, snapshots, public assistant output, experiments or formal reports attached to this node. Other kinds return unsupported_content; arbitrary URLs are never fetched.",

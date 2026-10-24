@@ -82,6 +82,25 @@ export class ResearchFeedbackService extends APIService {
       });
   }
 
+  /**
+   * Create a feedback reply authorized by the backend.
+   *
+   * Args:
+   *   workspaceSlug: Workspace identifier.
+   *   feedbackId: Feedback record identifier.
+   *   content: Reply body submitted by an operations account or manager.
+   *
+   * Returns:
+   *   The updated feedback record containing all replies.
+   */
+  async createReply(workspaceSlug: string, feedbackId: string, payload: { content: string }) {
+    return this.post(researchEndpoints.feedbackReply(workspaceSlug, feedbackId), payload)
+      .then((response) => response?.data?.data as TResearchFeedback)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   /** Build an authenticated same-origin screenshot URL.
    *
    * Args:

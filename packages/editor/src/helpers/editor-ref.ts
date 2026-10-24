@@ -17,6 +17,8 @@ import { getEditorMenuItems } from "@/components/menus";
 // constants
 import { CORE_EXTENSIONS } from "@/constants/extension";
 import { CORE_EDITOR_META } from "@/constants/meta";
+// extensions
+import { commentAnchorsPluginKey, getSelectionAnchorFromDocument } from "@/extensions/comment-anchors";
 // types
 import type { EditorRefApi, IEditorProps, TEditorCommands } from "@/types";
 // local imports
@@ -180,6 +182,11 @@ export const getEditorRefHelpers = (args: TArgs): EditorRefApi => {
       const selection = nodesArray.join("");
       return selection;
     },
+    getSelectionAnchor: () => {
+      if (!editor) return null;
+      const { from, to } = editor.state.selection;
+      return getSelectionAnchorFromDocument(editor.state.doc, from, to);
+    },
     insertText: (contentHTML, insertOnNextLine) => {
       if (!editor) return;
       const { from, to, empty } = editor.state.selection;
@@ -269,6 +276,20 @@ export const getEditorRefHelpers = (args: TArgs): EditorRefApi => {
       const resolvedPos = pos ?? editor?.state.selection.from;
       if (!editor || !resolvedPos) return;
       scrollToNodeViaDOMCoordinates(editor, resolvedPos, behavior);
+    },
+    setCommentAnchors: (anchors) => {
+      if (!editor || editor.isDestroyed) return;
+      const transaction = editor.state.tr.setMeta(commentAnchorsPluginKey, { anchors });
+      editor.view.dispatch(transaction);
+    },
+    focusCommentAnchor: (threadId) => {
+      if (!editor || editor.isDestroyed) return false;
+      const transaction = editor.state.tr.setMeta(commentAnchorsPluginKey, { activeThreadId: threadId });
+      editor.view.dispatch(transaction);
+      const element = editor.view.dom.querySelector(`[data-comment-thread-id="${CSS.escape(threadId)}"]`);
+      if (!(element instanceof HTMLElement)) return false;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      return true;
     },
     setEditorValueAtCursorPosition: (content) => {
       if (editor?.state.selection) {

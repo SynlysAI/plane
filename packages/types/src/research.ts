@@ -66,6 +66,7 @@ export type TOrgUnit = {
   depth: number;
   unit_type: TOrgUnitType;
   business_category: TOrgBusinessCategory | null;
+  weekly_report_confidential?: boolean;
   sort_order: number;
   is_active: boolean;
   created_at: string;
@@ -215,6 +216,106 @@ export type TResearchActionCapabilities = {
 };
 
 export type TResearchChainNodeAction = "START" | "SUBMIT_REVIEW" | "APPROVE" | "RETURN" | "FAIL" | "ARCHIVE";
+
+export type TResearchChainStageStatus =
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "AWAITING_ADVISOR"
+  | "AWAITING_PI"
+  | "NEEDS_REVISION"
+  | "APPROVED";
+
+export type TResearchChainStageMaterialItem = {
+  id: string;
+  title: string;
+  description: string;
+  source_node: string | null;
+  external_reference: string;
+  created_at: string;
+};
+
+export type TResearchChainStageMaterial = {
+  id: string;
+  code: string;
+  title: string;
+  minimum_count: number;
+  submitted_count: number;
+  complete: boolean;
+  items: TResearchChainStageMaterialItem[];
+};
+
+export type TResearchChainStageReviewer = {
+  user: { id: string; display_name: string; email: string } | null;
+  error: string | null;
+};
+
+export type TResearchChainStageReviewAction = {
+  schema_version: "research-chain-stage-review-action.v1";
+  id: string;
+  attempt_no: number;
+  reviewer_role: "ADVISOR" | "PI";
+  reviewer_detail?: { id: string; display_name: string; email: string } | null;
+  action: "APPROVE" | "RETURN";
+  comment: string;
+  escalated_to_pi: boolean;
+  material_snapshot: Array<Record<string, unknown>>;
+  declaration_snapshot: Record<string, unknown>;
+  created_at: string;
+};
+
+export type TResearchChainStagePrecheck = {
+  schema_version: "research-chain-stage-precheck.v1";
+  id: string;
+  status: "READY" | "WARNING" | "FAILED";
+  summary: string;
+  material_version: string;
+  is_current: boolean;
+  checks: Array<Record<string, unknown>>;
+  recommendations: string[];
+  generated_by: string;
+  model_version: string;
+  created_at: string;
+};
+
+export type TResearchChainStageApproval = {
+  schema_version: "research-chain-stage.v1";
+  id: string;
+  chain: string;
+  stage_code: string;
+  sort_order: number;
+  status: TResearchChainStageStatus;
+  pi_policy: "ADVISOR_ONLY" | "ALWAYS_PI" | "CONDITIONAL_PI";
+  requires_pi: boolean;
+  escalation_reason: string;
+  attempt_count: number;
+  submitted_node: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
+  materials: TResearchChainStageMaterial[];
+  review_actions: TResearchChainStageReviewAction[];
+  latest_precheck: TResearchChainStagePrecheck | null;
+  advisor: TResearchChainStageReviewer;
+  principal_investigator: TResearchChainStageReviewer;
+  current_review_step: "ADVISOR" | "PI" | null;
+  capabilities?: TResearchActionCapabilities;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TResearchChainStageApprovalSummary = {
+  chain: string;
+  chain_status: string;
+  stages: TResearchChainStageApproval[];
+  progress: {
+    total: number;
+    approved: number;
+    awaiting_advisor: number;
+    awaiting_pi: number;
+    needs_revision: number;
+    in_progress: number;
+    not_started: number;
+  };
+};
 
 export type TResearchChainEvent = {
   schema_version: "research-event.v1";
@@ -430,6 +531,7 @@ export type TResearchPaperReviewVersion = {
 
 export type TResearchTodoSource =
   | "CHAIN_TASK"
+  | "CHAIN_STAGE_APPROVAL"
   | "REPORT"
   | "PAPER_REVIEW"
   | "STAGE_REVIEW"
@@ -589,6 +691,96 @@ export type TReportOfficialContent = {
 
 export type TReportDraftContent = Omit<TReportOfficialContent, "version_no">;
 
+export type TReportCommentFeedbackType =
+  | "DISCUSSION"
+  | "SUGGESTION"
+  | "CORRECTION"
+  | "QUESTION"
+  | "APPROVAL"
+  | "REJECTION";
+
+export type TReportSelectionAnchor = {
+  version: 1;
+  block_id: string;
+  block_type: string;
+  selected_text: string;
+  prefix: string;
+  suffix: string;
+  start_offset: number;
+  end_offset: number;
+};
+
+export type TReportCommentFeedbackInfo = {
+  id: string;
+  status: "SUBMITTED" | "CONSUMED" | "WITHDRAWN";
+  submitted_at: string;
+  agent_session: string | null;
+};
+
+export type TResearchReportCommentActor = {
+  id: string;
+  display_name: string;
+  avatar_url?: string | null;
+};
+
+export type TReportComment = {
+  id: string;
+  thread: string;
+  parent: string | null;
+  actor: string;
+  actor_detail: TResearchReportCommentActor;
+  comment_html: string;
+  comment_stripped: string;
+  feedback_type: TReportCommentFeedbackType;
+  created_at: string;
+  updated_at: string;
+  edited_at: string | null;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_submit_ai_feedback: boolean;
+  ai_feedback: TReportCommentFeedbackInfo | null;
+};
+
+export type TReportCommentThread = {
+  id: string;
+  report: string;
+  anchor: TReportSelectionAnchor | null;
+  quoted_text: string;
+  snapshot_version: number;
+  content_hash: string;
+  status: "OPEN" | "RESOLVED";
+  status_updated_at: string;
+  status_updated_by: string | null;
+  status_updated_by_detail?: TResearchReportCommentActor | null;
+  created_by: string | null;
+  created_by_detail?: TResearchReportCommentActor | null;
+  created_at: string;
+  updated_at: string;
+  last_activity_at: string;
+  comment_count: number;
+  can_resolve: boolean;
+  comments: TReportComment[];
+};
+
+export type TReportCommentThreadList = {
+  results: TReportCommentThread[];
+  count: number;
+  status_filter: "OPEN" | "RESOLVED" | "ALL";
+  can_comment: boolean;
+  snapshot_version: number | null;
+};
+
+export type TReportCommentFeedback = {
+  id: string;
+  comment: string;
+  report: string;
+  thread: string;
+  feedback_type: TReportCommentFeedbackType;
+  status: "SUBMITTED" | "CONSUMED" | "WITHDRAWN";
+  submitted_at: string;
+  agent_session: string | null;
+};
+
 export type TPeriodicReport = {
   id: string;
   workspace: string;
@@ -601,6 +793,8 @@ export type TPeriodicReport = {
   page: string;
   /** Project that owns the Plane Page; null when the report is edited only in the research flow. */
   page_project: string | null;
+  template: string | null;
+  template_detail: TReportTemplateGuide | null;
   report_type: TReportType;
   period_key: string;
   period_start: string;
@@ -608,6 +802,10 @@ export type TPeriodicReport = {
   timezone: string;
   status: TReportStatus;
   visibility: TReportVisibility;
+  /** Effective visibility after group-level weekly confidentiality. */
+  effective_visibility?: TReportVisibility;
+  /** Whether the report's organisation subtree marks weekly reports confidential. */
+  weekly_confidential?: boolean;
   is_backfill: boolean;
   submitted_at: string | null;
   accepted_at: string | null;
@@ -690,6 +888,13 @@ export type TResearchFeedbackHistory = {
   created_at: string;
 };
 
+export type TResearchFeedbackReply = {
+  id: string;
+  content: string;
+  author_name: string;
+  created_at: string;
+};
+
 export type TResearchFeedback = {
   feedback_id: string;
   content: string;
@@ -701,6 +906,7 @@ export type TResearchFeedback = {
   module: string;
   screenshots: TResearchFeedbackScreenshot[];
   history: TResearchFeedbackHistory[];
+  replies: TResearchFeedbackReply[];
   created_at: string;
   updated_at: string;
 };
@@ -738,11 +944,37 @@ export type TReportSummary = {
   }[];
 };
 
+export type TReportTemplateSection = {
+  id: string;
+  title: string;
+  guidance: string;
+  required: boolean;
+  max_chars?: number;
+};
+
+export type TReportTemplateSections = {
+  version: 1;
+  guidance: string;
+  sections: TReportTemplateSection[];
+};
+
+export type TReportTemplateGuide = {
+  id: string;
+  name: string;
+  sections_json: TReportTemplateSections;
+};
+
 export type TReportTemplate = {
   id: string;
+  scope: "REPORT" | "STAGE_MATERIAL" | "EXPERIMENT";
   report_type: TReportType;
+  stage: string;
+  material_type: string;
   name: string;
   content_json: Record<string, unknown>;
+  variables: string[];
+  sections_json: TReportTemplateSections;
+  target_key: string;
   is_default: boolean;
   is_active: boolean;
   created_at: string;
@@ -755,6 +987,7 @@ export type TReportTemplateOption = {
   name: string;
   is_default: boolean;
   is_active: boolean;
+  target_key: string;
 };
 
 export type TIdentityMapping = {
@@ -814,6 +1047,7 @@ export type TResearchIdentity = {
   user: {
     id: string;
     is_workspace_admin: boolean;
+    is_feedback_operator?: boolean;
     /** Configuration rights: workspace administrator or administrator tag. */
     is_research_admin?: boolean;
     is_system_admin?: boolean;
@@ -960,6 +1194,8 @@ export type TStageMaterial = {
   stage_instance: string;
   material_type: string;
   page: string | null;
+  template: string | null;
+  template_detail: TReportTemplateGuide | null;
   page_detail?: {
     id: string;
     name: string;

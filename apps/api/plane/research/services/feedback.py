@@ -21,12 +21,18 @@ from plane.db.models import (
     OrgUnitMember,
     ResearchAuditEvent,
     ResearchFeedback,
+    ResearchFeedbackReply,
     ResearchFeedbackScreenshot,
 )
 from plane.research.utils.acl import active_org_units_for, managing_org_units_for
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.errors import ResearchErrorCode, ResearchAPIException
-from plane.research.utils.roles import is_instance_admin, is_main_pi, is_research_admin
+from plane.research.utils.roles import (
+    is_feedback_operator,
+    is_instance_admin,
+    is_main_pi,
+    is_research_admin,
+)
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
 
@@ -53,6 +59,18 @@ def _invalid(message, error_code=ResearchErrorCode.FEEDBACK_INVALID):
         A research API exception carrying an HTTP 422 status.
     """
     return ResearchAPIException(error_code, message, status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+def _actor_name(user):
+    """Build the stable display name stored with feedback activity.
+
+    Args:
+        user: Authenticated actor submitting feedback or a reply.
+
+    Returns:
+        A bounded display string suitable for long-lived records.
+    """
+    return (user.display_name or user.first_name or user.email or str(user.id))[:255]
 
 
 def _storage_unavailable():
@@ -364,6 +382,21 @@ def _management_queryset(user, workspace):
     return None
 
 
+def _reply_queryset(user, workspace):
+    """Resolve feedback records on which the caller may create replies.
+
+    Args:
+        user: Authenticated Plane user.
+        workspace: Workspace resolved from the URL.
+
+    Returns:
+        An authorized queryset, or ``None`` when the caller cannot reply.
+    """
+    if is_feedback_operator(user, workspace):
+        return _workspace_queryset(workspace)
+    return _management_queryset(user, workspace)
+
+
 def visible_feedback_queryset(user, workspace, *, scope="own"):
     """Return the feedback queryset allowed for this caller.
 
@@ -411,12 +444,40 @@ def _history_entries(feedback_ids):
     return entries
 
 
-def serialize_feedback(feedback, *, history=None):
+def _reply_entries(feedback_ids):
+    """Bulk-read persisted replies for a page of feedback records.
+
+    Args:
+        feedback_ids: Feedback IDs included in the current response.
+
+    Returns:
+        A mapping from feedback ID to ordered reply payloads.
+    """
+    entries = {str(feedback_id): [] for feedback_id in feedback_ids}
+    replies = (
+        ResearchFeedbackReply.objects.filter(feedback_id__in=feedback_ids, deleted_at__isnull=True)
+        .order_by("created_at", "id")
+        .only("id", "feedback", "content", "author_name", "created_at")
+    )
+    for reply in replies:
+        entries.setdefault(str(reply.feedback_id), []).append(
+            {
+                "id": str(reply.id),
+                "content": reply.content,
+                "author_name": reply.author_name,
+                "created_at": reply.created_at,
+            }
+        )
+    return entries
+
+
+def serialize_feedback(feedback, *, history=None, replies=None):
     """Convert a feedback model and its registrations to the API contract.
 
     Args:
         feedback: Feedback record with prefetched screenshots and assets.
         history: Optional preloaded status history.
+        replies: Optional preloaded replies.
 
     Returns:
         The JSON-facing feedback record.
@@ -429,6 +490,8 @@ def serialize_feedback(feedback, *, history=None):
         }
         for item in feedback.screenshots.all()
     ]
+    if replies is None:
+        replies = list(feedback.replies.filter(deleted_at__isnull=True).order_by("created_at", "id"))
     return {
         "feedback_id": str(feedback.id),
         "content": feedback.content,
@@ -440,6 +503,7 @@ def serialize_feedback(feedback, *, history=None):
         "module": feedback.module,
         "screenshots": screenshots,
         "history": history if history is not None else [],
+        "replies": replies,
         "created_at": feedback.created_at,
         "updated_at": feedback.updated_at,
     }
@@ -549,7 +613,11 @@ def create_feedback(request, user, workspace):
     if existing is not None:
         if existing.payload_hash != digest:
             raise _conflict()
-        return serialize_feedback(existing, history=[])
+        return serialize_feedback(
+            existing,
+            history=[],
+            replies=_reply_entries([existing.id]).get(str(existing.id), []),
+        )
 
     with _submission_lock(workspace, user):
         _reject_submission_abuse(user, workspace, screenshots)
@@ -625,11 +693,15 @@ def create_feedback(request, user, workspace):
                     },
                 )
             cleanup = False
-            return serialize_feedback(feedback, history=[])
+            return serialize_feedback(feedback, history=[], replies=[])
         except IntegrityError:
             existing = _existing_feedback(workspace, user, payload["idempotency_key"])
             if existing is not None and existing.payload_hash == digest:
-                return serialize_feedback(existing, history=[])
+                return serialize_feedback(
+                    existing,
+                    history=[],
+                    replies=_reply_entries([existing.id]).get(str(existing.id), []),
+                )
             if existing is None:
                 raise _storage_unavailable() from None
             raise _conflict() from None
@@ -710,8 +782,16 @@ def list_feedback(request, user, workspace):
     count = queryset.count()
     results = list(queryset[(page - 1) * page_size : page * page_size])
     histories = _history_entries([item.id for item in results])
+    reply_entries = _reply_entries([item.id for item in results])
     return {
-        "results": [serialize_feedback(item, history=histories.get(str(item.id), [])) for item in results],
+        "results": [
+            serialize_feedback(
+                item,
+                history=histories.get(str(item.id), []),
+                replies=reply_entries.get(str(item.id), []),
+            )
+            for item in results
+        ],
         "count": count,
         "page": page,
         "page_size": page_size,
@@ -745,7 +825,7 @@ def update_feedback_status(request, user, workspace, feedback_id):
         raise _invalid("处置说明不能为空且不超过 2000 字。")
 
     with transaction.atomic():
-        feedback = queryset.select_for_update().filter(pk=feedback_id).first()
+        feedback = queryset.select_for_update(of=("self",)).filter(pk=feedback_id).first()
         if feedback is None:
             raise ResearchAPIException(
                 ResearchErrorCode.FEEDBACK_NOT_FOUND,
@@ -784,7 +864,83 @@ def update_feedback_status(request, user, workspace, feedback_id):
             status.HTTP_404_NOT_FOUND,
         )
     history = _history_entries([feedback.id]).get(str(feedback.id), [])
-    return serialize_feedback(feedback, history=history)
+    return serialize_feedback(
+        feedback,
+        history=history,
+        replies=_reply_entries([feedback.id]).get(str(feedback.id), []),
+    )
+
+
+def create_feedback_reply(request, user, workspace, feedback_id):
+    """Persist an authorized reply and return the complete feedback record.
+
+    Args:
+        request: DRF reply request.
+        user: Authenticated operations account or feedback manager.
+        workspace: Workspace resolved from the URL.
+        feedback_id: UUID of the target feedback record.
+
+    Returns:
+        The updated feedback payload containing the new reply.
+    """
+    queryset = _reply_queryset(user, workspace)
+    if queryset is None:
+        raise ResearchAPIException(
+            ResearchErrorCode.PERMISSION_DENIED,
+            "没有反馈回复权限。",
+            status.HTTP_403_FORBIDDEN,
+        )
+    content = str(request.data.get("content") or "").strip()
+    if not content or len(content) > 2000:
+        raise _invalid("回复内容不能为空且不超过 2000 字。")
+
+    with transaction.atomic():
+        feedback = queryset.select_for_update(of=("self",)).filter(pk=feedback_id).first()
+        if feedback is None:
+            raise ResearchAPIException(
+                ResearchErrorCode.FEEDBACK_NOT_FOUND,
+                "反馈不存在。",
+                status.HTTP_404_NOT_FOUND,
+            )
+        reply = ResearchFeedbackReply(
+            feedback=feedback,
+            content=content,
+            author_name=_actor_name(user),
+        )
+        reply.save(created_by_id=user.id)
+        feedback.updated_by = user
+        feedback.save(update_fields=["updated_at", "updated_by"])
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.FEEDBACK_REPLY_CREATE,
+            resource_type=ResearchResourceType.RESEARCH_FEEDBACK,
+            resource_id=feedback.id,
+            org_unit=feedback.org_unit,
+            actor=user,
+            request=request,
+            metadata={
+                "actor_name": _actor_name(user),
+                "reply_id": str(reply.id),
+            },
+        )
+
+    feedback = (
+        ResearchFeedback.objects.filter(workspace=workspace, pk=feedback_id)
+        .select_related("workspace", "org_unit", "created_by")
+        .prefetch_related("screenshots__asset")
+        .first()
+    )
+    if feedback is None:
+        raise ResearchAPIException(
+            ResearchErrorCode.FEEDBACK_NOT_FOUND,
+            "反馈不存在。",
+            status.HTTP_404_NOT_FOUND,
+        )
+    return serialize_feedback(
+        feedback,
+        history=_history_entries([feedback.id]).get(str(feedback.id), []),
+        replies=_reply_entries([feedback.id]).get(str(feedback.id), []),
+    )
 
 
 def _authorized_screenshot(user, workspace, feedback_id, screenshot_id, *, scope):

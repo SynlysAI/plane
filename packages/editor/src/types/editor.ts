@@ -105,6 +105,22 @@ export type TDocumentInfo = {
   words: number;
 };
 
+export type TEditorSelectionAnchor = {
+  version: 1;
+  block_id: string;
+  block_type: string;
+  selected_text: string;
+  prefix: string;
+  suffix: string;
+  start_offset: number;
+  end_offset: number;
+};
+
+export type TEditorCommentAnchor = {
+  threadId: string;
+  anchor: TEditorSelectionAnchor;
+};
+
 export type CoreEditorRefApi = {
   blur: () => void;
   clearEditor: (emitUpdate?: boolean) => void;
@@ -128,6 +144,7 @@ export type CoreEditorRefApi = {
   getMarkDown: () => string;
   copyMarkdownToClipboard: () => void;
   getSelectedText: () => string | null;
+  getSelectionAnchor: () => TEditorSelectionAnchor | null;
   insertText: (contentHTML: string, insertOnNextLine?: boolean) => void;
   isAnyDropbarOpen: () => boolean;
   isEditorReadyToDiscard: () => boolean;
@@ -140,6 +157,8 @@ export type CoreEditorRefApi = {
   scrollSummary: (marking: IMarking) => void;
 
   scrollToNodeViaDOMCoordinates: ({ pos, behavior }: { pos?: number; behavior?: ScrollBehavior }) => void;
+  setCommentAnchors: (anchors: TEditorCommentAnchor[]) => void;
+  focusCommentAnchor: (threadId: string) => boolean;
   setEditorValue: (content: string, emitUpdate?: boolean) => void;
   setEditorValueAtCursorPosition: (content: string) => void;
   setFocusAtPosition: (position: number) => void;

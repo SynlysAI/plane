@@ -11,6 +11,7 @@ const researchState = {
       is_research_admin?: boolean;
       is_workspace_admin: boolean;
       is_system_admin: boolean;
+      is_feedback_operator?: boolean;
     };
   } | null,
   identityLoader: false,
@@ -25,6 +26,8 @@ vi.mock("@/services/research/feedback.service", () => ({
       mocks.post(`/api/research/workspaces/${workspaceSlug}/feedback/`, form);
     updateStatus = (workspaceSlug: string, feedbackId: string, payload: unknown) =>
       mocks.patch(`/api/research/workspaces/${workspaceSlug}/feedback/${feedbackId}/status/`, payload);
+    createReply = (workspaceSlug: string, feedbackId: string, payload: unknown) =>
+      mocks.post(`/api/research/workspaces/${workspaceSlug}/feedback/${feedbackId}/replies/`, payload);
     screenshotUrl = (
       workspaceSlug: string,
       feedbackId: string,
@@ -393,6 +396,95 @@ it("普通成员查看工作空间反馈统计，只读且可读取他人截图�
   expect(container.textContent).toContain("Assigned to platform team");
   expect(container.querySelector('img[alt="反馈截图 1"]')?.getAttribute("src")).toContain("?scope=workspace");
   expect(container.querySelector('textarea[aria-label="处置说明"]')).toBeNull();
+  expect(container.querySelector('textarea[aria-label="反馈回复"]')).toBeNull();
+  expect(mocks.patch).not.toHaveBeenCalled();
+});
+
+it("运维账号可在反馈统计详情回复，但不能处置状态", async () => {
+  researchState.identity = {
+    user: {
+      is_main_pi: false,
+      is_research_admin: false,
+      is_workspace_admin: false,
+      is_system_admin: false,
+      is_feedback_operator: true,
+    },
+  };
+  const feedback = {
+    feedback_id: "feedback-operator",
+    content: "Operator feedback",
+    feedback_type: "bug",
+    status: "open",
+    username: "Student",
+    path: "/lab/research",
+    browser: "Browser",
+    module: "research",
+    created_at: "2026-10-08T00:00:00Z",
+    screenshots: [],
+    history: [],
+    replies: [
+      {
+        id: "reply-1",
+        content: "Existing reply",
+        author_name: "Operations",
+        created_at: "2026-10-08T01:00:00Z",
+      },
+    ],
+  };
+  const updatedFeedback = {
+    ...feedback,
+    replies: [
+      ...feedback.replies,
+      {
+        id: "reply-2",
+        content: "We are checking the deployment.",
+        author_name: "Operations",
+        created_at: "2026-10-08T02:00:00Z",
+      },
+    ],
+  };
+  mocks.get.mockResolvedValue({ count: 1, results: [feedback] });
+  let resolveReply: (value: unknown) => void;
+  mocks.post.mockImplementation(() => new Promise((resolve) => (resolveReply = resolve)));
+
+  await open();
+  await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(3)')?.click());
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Operator feedback"))
+      ?.click()
+  );
+
+  expect(container.textContent).toContain("Existing reply");
+  expect(container.querySelector('textarea[aria-label="处置说明"]')).toBeNull();
+  const replyBox = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="反馈回复"]');
+  if (!replyBox) throw new Error("反馈回复输入未显示");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      replyBox,
+      "We are checking the deployment."
+    );
+    replyBox.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  mocks.get.mockResolvedValue({ count: 1, results: [updatedFeedback] });
+  await act(async () =>
+    container
+      .querySelector('form[data-reply-form="true"]')
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+  );
+  const sendReplyButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (button) => button.textContent === "回复中"
+  );
+  expect(sendReplyButton?.disabled).toBe(true);
+  await act(async () => {
+    resolveReply(updatedFeedback);
+  });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  expect(mocks.post).toHaveBeenCalledWith("/api/research/workspaces/lab/feedback/feedback-operator/replies/", {
+    content: "We are checking the deployment.",
+  });
+  expect(container.textContent).toContain("We are checking the deployment.");
   expect(mocks.patch).not.toHaveBeenCalled();
 });
 

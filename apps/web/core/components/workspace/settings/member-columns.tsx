@@ -120,6 +120,9 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
   const isAdminRole = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
   const isRoleNonEditable = isCurrentUser || !isAdminRole;
   const isSuspended = rowData.is_active === false;
+  const operationsMarker = rowData.is_operations_account ? (
+    <span className="text-11 text-tertiary">运维账号</span>
+  ) : null;
 
   return (
     <>
@@ -130,8 +133,9 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
           </Pill>
         </div>
       ) : isRoleNonEditable ? (
-        <div className="flex w-32">
+        <div className="flex w-32 flex-col gap-0.5">
           <span>{ROLE[rowData.role]}</span>
+          {operationsMarker}
         </div>
       ) : (
         <Controller
@@ -157,8 +161,9 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
                 }
               }}
               label={
-                <div className="flex">
+                <div className="flex flex-col items-start gap-0.5">
                   <span>{ROLE[rowData.role]}</span>
+                  {operationsMarker}
                 </div>
               }
               buttonClassName={`!px-0 !justify-start hover:bg-surface-1 ${errors.role ? "border-danger-strong" : "border-none"}`}

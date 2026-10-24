@@ -55,6 +55,7 @@ it("renders archived stages with a muted archived style instead of a future styl
   await act(async () => {
     root.render(
       <ResearchChainWorkflowRail
+        stageApprovals={[]}
         nodes={[archived]}
         currentNodeId={null}
         selectedStageId="summary"
@@ -70,11 +71,12 @@ it("renders archived stages with a muted archived style instead of a future styl
   expect(upcomingButton?.className).not.toContain("opacity-70");
 });
 
-it("keeps the shared marker readable inside shared stage buttons", async () => {
+it("keeps selection independent from evaluation without a shared marker", async () => {
   const topic = node({ id: "topic", node_type: "TOPIC_EVALUATION", title: "选题评估", status: "WAITING_HUMAN" });
   await act(async () => {
     root.render(
       <ResearchChainWorkflowRail
+        stageApprovals={[]}
         nodes={[topic]}
         currentNodeId={topic.id}
         selectedStageId="topic_evaluation"
@@ -84,13 +86,15 @@ it("keeps the shared marker readable inside shared stage buttons", async () => {
   });
   const buttons = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')];
   const selectionButton = buttons.find((button) => button.textContent?.includes("选题"));
-  expect(selectionButton?.textContent).toContain("共享节点");
+  expect(selectionButton?.textContent).toContain("未开始");
+  expect(selectionButton?.textContent).not.toContain("共享节点");
 });
 
 it("keeps a stage without nodes clickable and explains its empty state", async () => {
   await act(async () => {
     root.render(
       <ResearchChainWorkflowRail
+        stageApprovals={[]}
         nodes={[]}
         currentNodeId={null}
         selectedStageId={null}
@@ -108,7 +112,13 @@ it("selects the clicked stage without deriving it from a node", async () => {
   const onSelectStage = vi.fn();
   await act(async () => {
     root.render(
-      <ResearchChainWorkflowRail nodes={[]} currentNodeId={null} selectedStageId={null} onSelectStage={onSelectStage} />
+      <ResearchChainWorkflowRail
+        stageApprovals={[]}
+        nodes={[]}
+        currentNodeId={null}
+        selectedStageId={null}
+        onSelectStage={onSelectStage}
+      />
     );
   });
   const transfer = [...container.querySelectorAll<HTMLButtonElement>('[role="listitem"] button')].find((button) =>
@@ -123,6 +133,7 @@ it("uses a wrapping responsive layout instead of a fixed horizontal rail", async
   await act(async () => {
     root.render(
       <ResearchChainWorkflowRail
+        stageApprovals={[]}
         nodes={[]}
         currentNodeId={null}
         selectedStageId={null}
@@ -157,6 +168,7 @@ it("renders a wrapping process map with visible status and a distinct viewing st
   await act(async () => {
     root.render(
       <ResearchChainWorkflowRail
+        stageApprovals={[]}
         nodes={[literature, experiment]}
         currentNodeId={literature.id}
         selectedStageId="transfer"

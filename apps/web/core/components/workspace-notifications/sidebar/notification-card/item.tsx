@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { ClockOutline } from "@makeplane/propel/icons";
+import { ClockOutline, InboxOutline } from "@makeplane/propel/icons";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { Row } from "@plane/ui";
@@ -43,9 +43,26 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
 
   const notificationField = notification?.data?.issue_activity.field || undefined;
   const notificationTriggeredBy = notification.triggered_by_details || undefined;
+  const announcement = notification.announcement_details;
+  const isAnnouncement = Boolean(announcement?.id);
 
-  const handleNotificationIssuePeekOverview = async () => {
-    if (workspaceSlug && projectId && issueId && !isSnoozeStateModalOpen && !customSnoozeModal) {
+  const handleNotificationSelect = async () => {
+    if (!workspaceSlug || isSnoozeStateModalOpen || customSnoozeModal) return;
+
+    if (isAnnouncement) {
+      setPeekIssue(undefined);
+      setCurrentSelectedNotificationId(notificationId);
+      if (notification.read_at === null) {
+        try {
+          await markNotificationAsRead(workspaceSlug);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      return;
+    }
+
+    if (projectId && issueId) {
       setPeekIssue(undefined);
       setCurrentSelectedNotificationId(notificationId);
 
@@ -58,15 +75,19 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
         }
       }
 
-      if (notification?.is_inbox_issue === false) {
-        if (!getIsIssuePeeked(issueId)) {
-          setPeekIssue({ workspaceSlug, projectId, issueId });
-        }
+      if (notification?.is_inbox_issue === false && !getIsIssuePeeked(issueId)) {
+        setPeekIssue({ workspaceSlug, projectId, issueId });
       }
     }
   };
 
-  if (!workspaceSlug || !notificationId || !notification?.id || !notificationField || !workspace?.id || !projectId)
+  if (
+    !workspaceSlug ||
+    !notificationId ||
+    !notification?.id ||
+    !workspace?.id ||
+    (!isAnnouncement && (!notificationField || !projectId))
+  )
     return <></>;
 
   return (
@@ -78,7 +99,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
           "bg-accent-primary/5": notification.read_at === null,
         }
       )}
-      onClick={handleNotificationIssuePeekOverview}
+      onClick={handleNotificationSelect}
     >
       {notification.read_at === null && (
         <div className="absolute top-[50%] left-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent-primary" />
@@ -86,30 +107,39 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
 
       <div className="relative flex w-full gap-2">
         <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-layer-1">
-          {notificationTriggeredBy && (
-            <Avatar
-              alt={notificationTriggeredBy.display_name || notificationTriggeredBy?.first_name}
-              fallback={(notificationTriggeredBy.display_name ||
-                notificationTriggeredBy?.first_name)?.[0]?.toUpperCase()}
-              src={getFileURL(notificationTriggeredBy.avatar_url)}
-              size="xl"
-            />
+          {isAnnouncement ? (
+            <InboxOutline className="size-4 text-secondary" />
+          ) : (
+            notificationTriggeredBy && (
+              <Avatar
+                alt={notificationTriggeredBy.display_name || notificationTriggeredBy?.first_name}
+                fallback={(notificationTriggeredBy.display_name ||
+                  notificationTriggeredBy?.first_name)?.[0]?.toUpperCase()}
+                src={getFileURL(notificationTriggeredBy.avatar_url)}
+                size="xl"
+              />
+            )
           )}
         </div>
 
         <div className="-mt-2 w-full space-y-1">
           <div className="relative flex h-8 items-center gap-3">
             <div className="line-clamp-1 w-full truncate overflow-hidden text-body-xs-medium break-all whitespace-normal text-primary">
-              <NotificationContent
-                notification={notification}
-                workspaceId={workspace.id}
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-              />
+              {isAnnouncement ? (
+                announcement?.title
+              ) : (
+                <NotificationContent
+                  notification={notification}
+                  workspaceId={workspace.id}
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId ?? ""}
+                />
+              )}
             </div>
             <NotificationOption
               workspaceSlug={workspaceSlug}
               notificationId={notification?.id}
+              isAnnouncement={isAnnouncement}
               isSnoozeStateModalOpen={isSnoozeStateModalOpen}
               setIsSnoozeStateModalOpen={setIsSnoozeStateModalOpen}
               customSnoozeModal={customSnoozeModal}
@@ -119,8 +149,9 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
 
           <div className="relative flex items-center gap-3 text-caption-sm-regular text-secondary">
             <div className="line-clamp-1 w-full truncate overflow-hidden break-words whitespace-normal">
-              {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;
-              {notification?.data?.issue?.name}
+              {isAnnouncement
+                ? announcement?.body
+                : `${notification?.data?.issue?.identifier}-${notification?.data?.issue?.sequence_id} ${notification?.data?.issue?.name}`}
             </div>
             <div className="flex-shrink-0">
               {notification?.snoozed_till ? (

@@ -10,18 +10,31 @@ from typing import Optional
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework import status
+from django.shortcuts import get_object_or_404
 
 # Module import
 from .base import BaseAPIView
 from plane.db.models import APIToken
-from plane.app.serializers import APITokenSerializer, APITokenReadSerializer
+from plane.app.serializers import APITokenCreateSerializer, APITokenSerializer, APITokenReadSerializer
 
 
 class ApiTokenEndpoint(BaseAPIView):
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Cache-Control"] = "no-store"
+        return response
+
+    def owned_token(self, request, pk):
+        return get_object_or_404(APIToken, user=request.user, pk=pk, is_service=False)
+
     def post(self, request: Request) -> Response:
-        label = request.data.get("label", str(uuid4().hex))
-        description = request.data.get("description", "")
-        expired_at = request.data.get("expired_at", None)
+        serializer = APITokenCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        label = serializer.validated_data.get("label") or str(uuid4().hex)
+        description = serializer.validated_data.get("description") or ""
+        expired_at = serializer.validated_data.get("expired_at", None)
 
         # Check the user type
         user_type = 1 if request.user.is_bot else 0
@@ -44,19 +57,23 @@ class ApiTokenEndpoint(BaseAPIView):
             serializer = APITokenReadSerializer(api_tokens, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            api_tokens = APIToken.objects.get(user=request.user, pk=pk, is_service=False)
+            api_tokens = self.owned_token(request, pk)
             serializer = APITokenReadSerializer(api_tokens)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
     def delete(self, request: Request, pk: str) -> Response:
-        api_token = APIToken.objects.get(user=request.user, pk=pk, is_service=False)
+        api_token = self.owned_token(request, pk)
         api_token.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def patch(self, request: Request, pk: str) -> Response:
-        api_token = APIToken.objects.get(user=request.user, pk=pk, is_service=False)
-        serializer = APITokenSerializer(api_token, data=request.data, partial=True)
+        api_token = self.owned_token(request, pk)
+        serializer = APITokenSerializer(
+            api_token,
+            data={key: request.data[key] for key in ("label", "description") if key in request.data},
+            partial=True,
+        )
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(APITokenReadSerializer(api_token).data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

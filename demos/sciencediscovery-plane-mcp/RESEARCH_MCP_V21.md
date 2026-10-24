@@ -1,6 +1,6 @@
-# 科研链 MCP v2.1：任务、草稿与人工确认
+# 科研链 MCP v2.1：任务、草稿与客户端确认
 
-2026-10-20 更新：个人设置中的「MCP 连接」仅保留行政项目配置；科研链节点、科研任务和统一页不再提供科研操作 UI。旧管理页地址自动跳转并只保留工作区参数；历史 `review_path` 打开节点页但忽略 `operation`。科研授权、精确提案确认及执行流程继续通过 API 使用。见 [统一管理说明](../../docs/operations/mcp-unified-management.md)。
+2026-10-23 更新：个人设置「MCP 连接」统一管理行政与科研节点连接。科研链节点不再提供 MCP 提案审批 UI；科研写入由 Codex 等 Agent 客户端确认后提交，平台校验并执行，不再要求第二次审批。旧 `decision` API 保留兼容。见 [统一管理说明](../../docs/operations/mcp-unified-management.md)。
 
 实现日期：2026-10-17。本版新增受控写入代码，保留 v1 的十个只读工具与原连接入口。部署、人工业务确认和真实 Codex 操作验收须与代码测试区分。
 
@@ -34,7 +34,7 @@
 4. 用户通过同一接口执行 `GET` 和 `{ "kind": "issue_grant", ... }`，按允许的动作和需要引用的正式报告版本生成当前节点连接配置。普通个人 API Key 与原来的只读 context grant 不会自动获得写能力。
 5. 将配置保存到自己的本地私密设置。连接密钥只展示一次，可隐藏、撤销；显式节点连接由 `RESEARCH_MCP_NODE_TOKEN_TTL_SECONDS` 控制，默认 604800 秒（7 天）。旧上下文交换仍用 `RESEARCH_CONTEXT_TOKEN_TTL_SECONDS`，默认 600 秒。已有连接不追溯延期；到期后重新生成连接，旧操作仍可在同一用户、同一节点、相同动作范围下恢复。
 
-工作区写开关、节点写授权、现有业务角色与每项操作确认共同决定最终权限。用户只能确认自己的提案，不借用另一审核人的高权限执行操作。
+工作区写开关、节点写授权和现有业务角色共同决定最终权限。用户只能执行自己的节点范围内提案；客户端负责落实用户确认，平台不会借用另一审核人的高权限执行操作。
 
 旧 `research_mcp.py`、`research-read-only` 网关模式及 v1 `/agent-access/mcp/` 均保留。v2.1 直接使用新后端 HTTP 地址或下列独立 STDIO 入口；现有独立 HTTP 网关的模式枚举没有扩展为写模式。
 
@@ -86,18 +86,18 @@ http_headers = { "X-Research-Context-Token" = "REPLACE_LOCALLY", "X-Research-Con
 
 如需依据，`source_refs` 最多 8 项，每项为 `{ "kind": "analysis", "id": "UUID", "usage": "body" }`，可附 `version`。`usage=metadata` 只引用元数据；`body` 必须有正文读取能力，不能给附件元数据伪造全文依据。此标记声明引用方式，不代表已经证明模型完整阅读过全文。
 
-3. 返回 `operation_id`、不可变提案哈希、内容、来源与 `review_path`。用户打开 Plane 链接，核对目标节点、任务和全部内容，选择确认或拒绝。准备提案会写提案表与审计，但不新增目标科研任务/评论/分析。
-4. Agent 调用 `execute_research_operation`，参数只有 `{ "operation_id": "UUID" }`。它没有批准工具，也不能传入替换载荷或 `approved=true`。
+3. 返回 `operation_id`、不可变提案哈希、内容、来源与 `confirmation_mode=agent_client`。Agent 在客户端向用户展示目标节点、任务和内容，并沿用已有明确授权或取得用户确认。`review_path` 仅用于查看节点。准备提案会写提案表与审计，但不新增目标科研任务/评论/分析。
+4. Agent 调用 `execute_research_operation`，参数只有 `{ "operation_id": "UUID" }`，HTTP API 共用相同规则。平台无需额外审批，收到有效写授权的提交后校验并执行；不能传入替换载荷或 `approved=true`，也不生成虚假的人工审批记录。平台无法验证客户端是否展示确认界面，由客户端落实授权。
 5. 成功返回 `COMMITTED`、真实对象 ID、Agent 来源事件 ID、审计 ID，以及读回状态：`verified` 表示内容相符，`pending` 表示待读回，`changed` 表示对象已有后续修改。Agent 可继续使用 v1 读取正文。
 
 其余工具：`get_research_operation`、`list_research_operations`、`cancel_research_operation`。工具目录按当前授权裁剪允许的动作；工具标签不能取代后端权限检查。
 
 ## 并发、到期与恢复
 
-- 提案有效期 24 小时，显式节点 MCP 连接默认 7 天；这两个期限不同。审核记录绑定同一提案哈希及有效期。
+- 提案有效期 24 小时，显式节点 MCP 连接默认 7 天；这两个期限不同。无需平台审核记录；历史已批准提案也可在有效期内提交，已拒绝和已取消提案禁止执行。
 - 同一用户和工作区的同一 `request_id` 返回同一提案；改载荷返回冲突。重新连接后仍可以查询自己同节点、动作范围允许的提案。
 - 执行重新检查当前授权、业务角色、链/节点状态、任务完整数据和来源完整哈希。网页改了目标、资源已有绑定或依据变化后，不覆盖执行，需要准备新提案。
-- 同一操作并发或重复执行只产生一次业务结果，事件与审计随业务事务一起提交。原生任务事件保留实际用户，另有明确 `actor_type=AGENT` 的来源事件关联操作、Agent、提出者、确认者及当前连接。
+- 同一操作并发或重复执行只产生一次业务结果，事件与审计随业务事务一起提交。原生任务事件保留实际用户，另有明确 `actor_type=AGENT` 的来源事件关联操作、Agent、提出者、执行者及当前连接，记录 `authorization_source=agent_client`；仅历史实际审核记录附带确认者。
 - 提交后读回失败仍返回 `COMMITTED`，读回为 `pending`；查询同一操作补读，不重建任务。响应丢失时也先查询同一操作。
 - 不确定 `prepare` 是否成功时，重复相同 `request_id` 与载荷，不生成新 ID。执行重试始终使用原来的 `operation_id`。
 - 取消只对未执行提案有效。多个提案独立执行，不能自动删除已经写入的数据来模拟整批回滚。
@@ -107,7 +107,7 @@ http_headers = { "X-Research-Context-Token" = "REPLACE_LOCALLY", "X-Research-Con
 
 人工界面 API：`GET/POST /api/research/workspaces/{slug}/nodes/{node_id}/agent-operations/`。
 
-仅接受真实登录会话，采用 DRF 标准 `SessionAuthentication` 校验 CSRF。GET 返回受保护页面需要的 CSRF token；POST 必须携带 `X-CSRFToken`。个人 Key/context token 无法调用人工确认接口。`issue_grant`、`revoke_grant`、`decision` 与管理员 `workspace_policy` 都在此可信入口处理。
+管理接口仅接受真实登录会话，采用 DRF 标准 `SessionAuthentication` 校验 CSRF。GET 返回 CSRF token；POST 必须携带 `X-CSRFToken`。个人 Key/context token 无法调用管理接口。`issue_grant`、`revoke_grant` 与管理员 `workspace_policy` 在此处理；`decision` 仅为旧客户端保留兼容，不是 execute 前置步骤。
 
 机器接口另设 `/agent-operations/tools/`、`/tools/{name}/`、`/mcp/`，不接受登录 Cookie 回退。读功能与操作工具分别保留白名单；ScienceDiscovery、Synlora 的写会话分发及最终联调不在本版范围。
 

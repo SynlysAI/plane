@@ -28,6 +28,7 @@ const TODO_SCOPE_PARAM = "todo_scope";
 
 const SOURCE_LABEL_KEYS: Record<TResearchTodoSource, string> = {
   CHAIN_TASK: "research.todo.source_chain_task",
+  CHAIN_STAGE_APPROVAL: "research.todo.source_chain_stage",
   REPORT: "research.todo.source_report_v2",
   PAPER_REVIEW: "research.todo.source_paper_review",
   STAGE_REVIEW: "research.todo.source_stage_review",

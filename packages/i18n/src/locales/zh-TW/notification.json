@@ -53,6 +53,45 @@
       "1_week": "1 週",
       "2_weeks": "2 週",
       "custom": "自訂"
+    },
+    "announcement": {
+      "label": "系统公告",
+      "compose": "发布公告",
+      "compose_title": "发布系统公告",
+      "compose_hint": "公告將發送給目前工作區的全部活躍真人成員。",
+      "title_placeholder": "公告标题",
+      "body_placeholder": "公告正文",
+      "preview": "預覽公告",
+      "back_to_edit": "返回編輯",
+      "publish": "发布",
+      "publishing": "正在发布",
+      "confirm_title": "確認發布這則公告？",
+      "confirm_content": "發布後會立即出現在目前工作區每位活躍真人成員的收件匣中。",
+      "published": "已發布公告",
+      "empty_published": "暫無已發布公告。",
+      "list_error": "已發布公告暫時無法使用。",
+      "recipients": "{count, plural, other {# 位接收人}}",
+      "publisher_system": "系统",
+      "options": {
+        "delete": "删除"
+      },
+      "toasts": {
+        "published": "公告已發布",
+        "published_count": "已發送給 {count, plural, other {# 位成員}}",
+        "publish_failed": "公告發布失敗，請重試。",
+        "deleted": "公告已從你的收件匣刪除",
+        "delete_failed": "公告刪除失敗，請重試。"
+      },
+      "delete": {
+        "title": "刪除這則公告？",
+        "content": "刪除只影響你的收件匣，其他成員仍會保留各自的訊息。",
+        "confirm": "刪除",
+        "loading": "正在刪除"
+      },
+      "status": {
+        "published": "已發布",
+        "pending": "待發布"
+      }
     }
   }
 }

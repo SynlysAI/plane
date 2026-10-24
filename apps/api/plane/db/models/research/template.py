@@ -12,6 +12,10 @@ def get_default_template_content():
     return {"type": "doc", "content": []}
 
 
+def get_default_template_sections():
+    return {"version": 1, "guidance": "", "sections": []}
+
+
 class ReportTemplate(BaseModel):
     """Weekly / monthly report template (P0-CFG-05).
 
@@ -44,22 +48,24 @@ class ReportTemplate(BaseModel):
     material_type = models.CharField(max_length=48, blank=True, default="")
     stage = models.CharField(max_length=16, blank=True, default="")
     variables = models.JSONField(default=list, blank=True)
+    sections_json = models.JSONField(default=get_default_template_sections, blank=True)
+    target_key = models.CharField(max_length=128, default="", editable=False, db_index=True)
 
     class Meta:
         verbose_name = "Research Report Template"
         verbose_name_plural = "Research Report Templates"
         db_table = "research_report_templates"
-        ordering = ("report_type", "name")
+        ordering = ("target_key", "name")
         constraints = [
             models.UniqueConstraint(
-                fields=["workspace", "report_type", "name"],
+                fields=["workspace", "target_key", "name"],
                 condition=Q(deleted_at__isnull=True),
-                name="rsch_template_uq_ws_type_name",
+                name="rsch_template_uq_ws_target_name",
             ),
             models.UniqueConstraint(
-                fields=["workspace", "report_type"],
+                fields=["workspace", "target_key"],
                 condition=Q(is_default=True, deleted_at__isnull=True),
-                name="rsch_template_uq_default",
+                name="rsch_template_uq_target_default",
             ),
         ]
         indexes = [
@@ -68,3 +74,17 @@ class ReportTemplate(BaseModel):
 
     def __str__(self):
         return f"{self.report_type} <{self.name}>"
+
+    def save(self, *args, **kwargs):
+        """保存前同步目标键，并让结构化章节生成稳定正文。"""
+        from plane.research.utils.templates import sections_to_content, template_target_key
+
+        self.target_key = template_target_key(
+            self.scope,
+            report_type=self.report_type,
+            stage=self.stage,
+            material_type=self.material_type,
+        )
+        if self.sections_json and self.sections_json.get("sections"):
+            self.content_json = sections_to_content(self.sections_json)
+        super().save(*args, **kwargs)

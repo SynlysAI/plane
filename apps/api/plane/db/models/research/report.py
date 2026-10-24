@@ -61,6 +61,13 @@ class PeriodicReport(BaseModel):
         on_delete=models.CASCADE,
         related_name="research_report",
     )
+    template = models.ForeignKey(
+        "db.ReportTemplate",
+        on_delete=models.SET_NULL,
+        related_name="periodic_reports",
+        null=True,
+        blank=True,
+    )
     report_type = models.CharField(max_length=16, choices=ReportType.choices)
     period_key = models.CharField(max_length=16, db_index=True)
     period_start = models.DateField()

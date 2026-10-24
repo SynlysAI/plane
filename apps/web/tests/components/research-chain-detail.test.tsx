@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getChainNodes: vi.fn(),
   getChainNodeDetail: vi.fn(),
   getChainMembers: vi.fn(),
+  getChainStageApprovals: vi.fn(),
   createChainNode: vi.fn(),
   transitionChainNode: vi.fn(),
   openAssistant: vi.fn(),
@@ -110,6 +111,7 @@ vi.mock("@/services/research/chain.service", () => ({
     getChainNodes = mocks.getChainNodes;
     getChainNodeDetail = mocks.getChainNodeDetail;
     getChainMembers = mocks.getChainMembers;
+    getChainStageApprovals = mocks.getChainStageApprovals;
     createChainNode = mocks.createChainNode;
     transitionChainNode = mocks.transitionChainNode;
   },
@@ -138,6 +140,76 @@ const node = {
   assignee: "user-1",
   created_at: "2026-09-23T01:00:00Z",
   updated_at: "2026-09-23T01:00:00Z",
+};
+const stageApproval = {
+  schema_version: "research-chain-stage.v1",
+  id: "stage-literature",
+  chain: "chain-1",
+  stage_code: "LITERATURE_REVIEW",
+  sort_order: 1,
+  status: "IN_PROGRESS",
+  pi_policy: "ADVISOR_ONLY",
+  requires_pi: false,
+  escalation_reason: "",
+  attempt_count: 0,
+  submitted_node: null,
+  submitted_at: null,
+  approved_at: null,
+  materials: [
+    {
+      id: "material-1",
+      code: "DIRECT_ORIGINAL_STUDIES",
+      title: "直接相关原创研究",
+      minimum_count: 5,
+      submitted_count: 2,
+      complete: false,
+      items: [
+        {
+          id: "item-1",
+          title: "论文一",
+          description: "",
+          source_node: null,
+          external_reference: "",
+          created_at: "2026-09-23T01:00:00Z",
+        },
+        {
+          id: "item-2",
+          title: "论文二",
+          description: "",
+          source_node: null,
+          external_reference: "",
+          created_at: "2026-09-23T01:00:00Z",
+        },
+      ],
+    },
+  ],
+  review_actions: [],
+  latest_precheck: null,
+  advisor: { user: { id: "advisor", display_name: "直接导师", email: "advisor@example.com" }, error: null },
+  principal_investigator: { user: null, error: null },
+  current_review_step: null,
+  capabilities: {
+    schema_version: "research-capabilities.v1",
+    actions: {
+      edit_materials: { allowed: false, reason_code: "research_permission_denied", reason: "当前身份无权执行此操作" },
+    },
+  },
+  created_at: "2026-09-23T01:00:00Z",
+  updated_at: "2026-09-23T01:00:00Z",
+};
+const stageApprovalSummary = {
+  chain: "chain-1",
+  chain_status: "ACTIVE",
+  stages: [stageApproval],
+  progress: {
+    total: 13,
+    approved: 3,
+    awaiting_advisor: 1,
+    awaiting_pi: 0,
+    needs_revision: 1,
+    in_progress: 2,
+    not_started: 6,
+  },
 };
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
@@ -172,6 +244,7 @@ beforeEach(() => {
   mocks.getChain.mockResolvedValue(chain);
   mocks.getChainNodes.mockResolvedValue([node]);
   mocks.getChainMembers.mockResolvedValue([]);
+  mocks.getChainStageApprovals.mockResolvedValue(stageApprovalSummary);
   mocks.getChainNodeDetail.mockResolvedValue({
     node,
     events: [
@@ -276,6 +349,30 @@ it("opens node evidence and runs lifecycle actions through the service", async (
   expect(mocks.transitionChainNode).toHaveBeenCalledWith("lab", "node-1", "START", undefined);
 });
 
+it("renders the authoritative stage approval summary and material gaps", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("阶段审批 3/13");
+  expect(container.textContent).toContain("待导师审 1");
+  expect(container.textContent).toContain("需修改 1");
+  expect(container.textContent).toContain("阶段可并行推进；13 个阶段全部通过后课题自动完成。");
+  expect(container.textContent).toContain("阶段审批要求");
+  expect(container.textContent).toContain("材料 0/1");
+  expect(container.querySelector("button[aria-expanded]")?.getAttribute("aria-expanded")).toBe("false");
+  expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("3");
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click();
+  });
+  expect(container.textContent).toContain("已提交 2/5");
+  expect(container.textContent).toContain("待补充");
+  expect([...container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("提交审核");
+});
+
 it("mounts the paper review panel with selected node events for paper writing replay", async () => {
   const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
   const paperNode = { ...node, node_type: "PAPER_WRITING", title: "论文撰写" };
@@ -340,6 +437,7 @@ it("navigates to an empty stage through the workflow itself", async () => {
   expect(nextParams.get("tab")).toBe("nodes");
   expect(nextParams.get("stage")).toBe("transfer");
   expect(nextParams.get("node")).toBeNull();
+  expect(nextParams.get("approval")).toBeNull();
 });
 
 it("normalizes legacy replay links into the workflow detail view", async () => {

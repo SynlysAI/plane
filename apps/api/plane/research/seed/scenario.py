@@ -926,6 +926,8 @@ class TemplateSpec:
     is_default: bool = False
     variables: tuple = ()
     headings: tuple = ()
+    guidance: str = ""
+    sections: tuple = ()
 
 
 TEMPLATES = (
@@ -958,6 +960,59 @@ TEMPLATES = (
         material_type="TECHNICAL_ROUTE",
         variables=("user", "project", "stage"),
         headings=("总体技术路线", "关键步骤", "里程碑"),
+    ),
+    TemplateSpec(
+        name="课题报告（预开题）五点判据模板",
+        report_type="WEEKLY",
+        scope="STAGE_MATERIAL",
+        stage="PRE_OPENING",
+        material_type="TOPIC_DESCRIPTION",
+        is_default=True,
+        variables=("user", "project", "stage"),
+        guidance=(
+            "2026 年选题五点判据：智能化、护城河、独特性、分级分类、非我莫属。"
+            "请结合实验室 AI for Science、单分子和半导体方向逐项自查。"
+        ),
+        sections=(
+            {
+                "id": "uniqueness",
+                "title": "独特性",
+                "guidance": "你想做什么？用通俗语言清楚阐明目标，注意智能化、护城河和独特性。",
+                "required": True,
+                "max_chars": 100,
+            },
+            {
+                "id": "innovation",
+                "title": "创新性",
+                "guidance": (
+                    "已有的最相关 5 项研究是怎样的？研究的局限是什么？我们的创新性是什么？"
+                    "请上传知识库相关论文或文件，供后续 AI 形成客观评价。"
+                ),
+                "required": True,
+                "max_chars": 300,
+            },
+            {
+                "id": "impact",
+                "title": "非做不可",
+                "guidance": "如果成功，你的工作带来什么改变？谁会关心你的研究？请说明预期论文或样机样件。",
+                "required": True,
+                "max_chars": 200,
+            },
+            {
+                "id": "feasibility",
+                "title": "可行性",
+                "guidance": "这项工作的风险是什么？会花费多少成本和时间？",
+                "required": True,
+                "max_chars": 100,
+            },
+            {
+                "id": "irreplaceability",
+                "title": "非我莫属",
+                "guidance": "依托什么项目，具有什么独特设施？",
+                "required": True,
+                "max_chars": 100,
+            },
+        ),
     ),
 )
 

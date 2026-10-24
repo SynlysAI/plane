@@ -70,10 +70,11 @@ def build_progress(workspace, project_id, actor, *, period_key=None):
     ).select_related("owner")
     if period_key:
         reports_query = reports_query.filter(period_key=period_key)
+    confidential_cache = {}
     reports = [
         report
         for report in reports_query.order_by("-period_start")[:50]
-        if check_access(actor, "view", report_resource(report), context=context)
+        if check_access(actor, "view", report_resource(report, confidential_cache), context=context)
     ]
 
     # outcomes arrive with P1-B4; an earlier build simply reports none

@@ -53,6 +53,45 @@
       "1_week": "1주",
       "2_weeks": "2주",
       "custom": "사용자 정의"
+    },
+    "announcement": {
+      "label": "System announcement",
+      "compose": "Publish announcement",
+      "compose_title": "Publish a system announcement",
+      "compose_hint": "The announcement will be sent to all active human members of this workspace.",
+      "title_placeholder": "Announcement title",
+      "body_placeholder": "Announcement body",
+      "preview": "Preview announcement",
+      "back_to_edit": "Back to edit",
+      "publish": "Publish",
+      "publishing": "Publishing",
+      "confirm_title": "Publish this announcement?",
+      "confirm_content": "It will immediately appear in the inbox of every active human member of this workspace.",
+      "published": "Published announcements",
+      "empty_published": "No announcements have been published yet.",
+      "list_error": "Published announcements are currently unavailable.",
+      "recipients": "{count, plural, one {# recipient} other {# recipients}}",
+      "publisher_system": "System",
+      "options": {
+        "delete": "Delete"
+      },
+      "toasts": {
+        "published": "Announcement published",
+        "published_count": "Sent to {count, plural, one {# member} other {# members}}",
+        "publish_failed": "Failed to publish the announcement. Please try again.",
+        "deleted": "Announcement deleted from your inbox",
+        "delete_failed": "Failed to delete the announcement. Please try again."
+      },
+      "delete": {
+        "title": "Delete this announcement?",
+        "content": "It will only be removed from your inbox. Other members will keep their copies.",
+        "confirm": "Delete",
+        "loading": "Deleting"
+      },
+      "status": {
+        "published": "Published",
+        "pending": "Pending"
+      }
     }
   }
 }

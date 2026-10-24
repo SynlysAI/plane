@@ -13,8 +13,11 @@ from plane.db.models import (
     OrgUnitMember,
     ResearchProjectProfile,
     ResearchStageInstance,
+    ReportTemplate,
+    Project,
     StageMaterial,
     StageTransition,
+    StageType,
 )
 from plane.tests.research_fixtures import (
     add_workspace_member,
@@ -403,6 +406,68 @@ class TestStageMaterials:
         versions = env["owner_client"].get(material_url(env, material["id"], "versions/")).json()
         assert versions["count"] == 2
         assert {item["version_no"] for item in versions["results"]} == {1, 2}
+
+    def test_pre_opening_default_template_is_loaded_and_variables_resolve(self, env):
+        template = ReportTemplate.objects.create(
+            workspace=env["workspace"],
+            report_type="WEEKLY",
+            name="课题报告（预开题）五点判据模板",
+            scope=ReportTemplate.Scope.STAGE_MATERIAL,
+            stage="PRE_OPENING",
+            material_type="TOPIC_DESCRIPTION",
+            is_default=True,
+            variables=["user", "project", "stage"],
+            sections_json={
+                "version": 1,
+                "guidance": "负责人：{{user}} ｜ 项目：{{project}} ｜ 阶段：{{stage}}",
+                "sections": [
+                    {
+                        "id": "uniqueness",
+                        "title": "独特性",
+                        "guidance": "你想做什么？",
+                        "required": True,
+                        "max_chars": 100,
+                    }
+                ],
+            },
+            created_by=env["admin"],
+        )
+        project = Project.objects.create(
+            workspace=env["workspace"],
+            name="Pre-opening topic project",
+            identifier="PRETOP",
+            created_by=env["admin"],
+        )
+        ResearchProjectProfile.objects.create(
+            workspace=env["workspace"],
+            project=project,
+            owner=env["owner"],
+            org_unit=env["group"],
+            research_type=ResearchProjectProfile.ResearchType.PHD,
+        )
+        pre = ResearchStageInstance.objects.create(
+            workspace=env["workspace"],
+            project=project,
+            org_unit=env["group"],
+            stage=StageType.PRE_OPENING,
+            status=ResearchStageInstance.Status.IN_PROGRESS,
+            sort_order=1,
+            created_by=env["admin"],
+        )
+
+        response = env["owner_client"].post(
+            stage_url(env, pre.id, "materials/"),
+            {"material_type": "TOPIC_DESCRIPTION"},
+            format="json",
+        )
+
+        assert response.status_code == 201
+        material = response.json()
+        assert material["template"] == str(template.id)
+        assert material["template_detail"]["sections_json"]["sections"][0]["id"] == "uniqueness"
+        content = material["page_detail"]["description_json"]["content"]
+        assert all("{{user}}" not in str(node) for node in content)
+        assert any(node.get("type") == "heading" for node in content)
 
     def test_material_type_must_belong_to_the_stage(self, env):
         stages = bootstrap(env)

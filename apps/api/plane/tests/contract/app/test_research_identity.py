@@ -8,7 +8,7 @@ import pytest
 from django.test import Client
 from rest_framework.test import APIClient
 
-from plane.db.models import IdentityMapping, ResearchAuditEvent
+from plane.db.models import IdentityMapping, ResearchAuditEvent, WorkspaceMember
 from plane.license.models import Instance
 from plane.tests.research_fixtures import (
     add_workspace_member,
@@ -78,6 +78,7 @@ class TestResearchIdentityMe:
             "research_chain": False,
         }
         assert payload["user"]["is_workspace_admin"] is False
+        assert payload["user"]["is_feedback_operator"] is False
         assert payload["user"]["is_research_owner"] is False
         assert payload["identity"]["configured"] is False
         assert payload["workspace"]["report_timezone"] == workspace.timezone
@@ -91,6 +92,19 @@ class TestResearchIdentityMe:
 
         assert response.status_code == 200
         assert response.json()["workspace"]["report_timezone"] == "Asia/Shanghai"
+
+    def test_reports_workspace_scoped_feedback_operator_marker(self):
+        admin = make_user()
+        workspace = make_workspace(admin)
+        enable_research(workspace)
+        member = make_user()
+        add_workspace_member(workspace, member)
+        WorkspaceMember.objects.filter(workspace=workspace, member=member).update(is_operations_account=True)
+
+        response = client_for(member).get(f"/api/research/workspaces/{workspace.slug}/identity/me/")
+
+        assert response.status_code == 200
+        assert response.json()["user"]["is_feedback_operator"] is True
 
     def test_reports_org_roles_and_identity_mapping(self, settings):
         configure_oidc(settings)
