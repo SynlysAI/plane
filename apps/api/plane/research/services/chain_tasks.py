@@ -6,11 +6,13 @@
 
 from uuid import UUID, uuid4
 
+from bs4 import BeautifulSoup
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from plane.db.models import (
+    FileAsset,
     OrgUnitMember,
     ProjectMember,
     ResearchChain,
@@ -38,6 +40,7 @@ from plane.research.utils.collaboration_notifications import (
 )
 from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q
 from plane.research.utils.roles import is_research_admin
+from plane.utils.content_validator import validate_html_content
 
 ORG_SCOPE = "ORG_SCOPE"
 COLLABORATOR_SCOPE = "COLLABORATOR"
@@ -183,6 +186,53 @@ def chain_writer(workspace, user, chain) -> bool:
         is_active=True,
         deleted_at__isnull=True,
     ).exists()
+
+
+def _clean_instruction(value, task=None):
+    """清洗任务说明并限制内嵌图片来源。
+
+    Args:
+        value: 原始任务说明 HTML。
+        task: 已存在的科研任务；创建阶段为空。
+
+    Returns:
+        清洗后的任务说明 HTML。
+    """
+    valid, _error, cleaned = validate_html_content(str(value or ""))
+    if not valid:
+        raise ChainTaskValidationError("instruction is not valid rich text.")
+    cleaned = cleaned or ""
+    document = BeautifulSoup(cleaned, "html.parser")
+    nodes = document.find_all(["img", "image-component"])
+    if not nodes:
+        return cleaned
+    if task is None:
+        raise ChainTaskValidationError("task instructions cannot reference images before the task exists.")
+    prefix = (
+        f"/api/research/workspaces/{task.workspace.slug}/chains/{task.chain_id}/"
+        f"nodes/{task.node_id}/tasks/{task.id}/instruction-images/"
+    )
+    for node in nodes:
+        source = node.get("src", "")
+        asset_id = str(source[len(prefix) :]).rstrip("/") if source.startswith(prefix) else ""
+        try:
+            valid_asset = bool(UUID(asset_id)) if asset_id else False
+        except ValueError:
+            valid_asset = False
+        if (
+            not valid_asset
+            or not FileAsset.objects.filter(
+                pk=asset_id,
+                workspace_id=task.workspace_id,
+                entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_INSTRUCTION_IMAGE,
+                entity_identifier=str(task.id),
+                is_uploaded=True,
+                is_deleted=False,
+                deleted_at__isnull=True,
+            ).exists()
+        ):
+            raise ChainTaskValidationError("task instructions do not accept external images.")
+    return cleaned
 
 
 def actor_can_manage_chain_tasks(workspace, chain, actor) -> bool:
@@ -614,7 +664,7 @@ def list_tasks(*, workspace, chain, node, status=None, assignee_id=None, due_bef
     """
     rows = ResearchChainNodeTask.objects.filter(workspace=workspace, chain=chain, node=node).select_related(
         "workspace", "chain", "node", "assignee", "assigned_by"
-    )
+    ).prefetch_related("instruction_attachments__asset")
     if status:
         normalized_status = str(status).upper()
         if normalized_status not in ResearchChainNodeTask.Status.values:
@@ -678,7 +728,7 @@ def create_task(*, workspace, chain, node, actor, payload, request=None):
                 chain=chain,
                 node=node,
                 title=title,
-                instruction=str(payload.get("instruction") or ""),
+                instruction=_clean_instruction(payload.get("instruction")),
                 status=(
                     ResearchChainNodeTask.Status.ASSIGNED
                     if assignee is not None
@@ -758,7 +808,7 @@ def update_task(*, task, actor, payload, request=None):
             raise ChainTaskValidationError("title is required and must contain at most 500 characters.")
     next_instruction = task.instruction
     if "instruction" in payload:
-        next_instruction = str(payload["instruction"] or "")
+        next_instruction = _clean_instruction(payload["instruction"], task)
     next_due_at = task.due_at
     if "due_at" in payload:
         next_due_at = _parse_datetime(payload["due_at"], "due_at")

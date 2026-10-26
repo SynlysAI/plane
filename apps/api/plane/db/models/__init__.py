@@ -122,6 +122,7 @@ from .research import (
     ResearchChainNodeTask,
     ResearchTaskComment,
     ResearchTaskCommentAttachment,
+    ResearchChainNodeTaskAttachment,
     ResearchChainSnapshot,
     ResearchChainUpload,
     ResearchGroupKnowledgeBinding,
