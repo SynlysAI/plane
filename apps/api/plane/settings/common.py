@@ -355,6 +355,9 @@ FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))
 RESEARCH_MODULE_ENABLED = os.environ.get("RESEARCH_MODULE_ENABLED", "0") == "1"
 RESEARCH_MCP_ENABLED = os.environ.get("RESEARCH_MCP_ENABLED", "0") == "1"
 RESEARCH_MCP_WRITE_ENABLED = os.environ.get("RESEARCH_MCP_WRITE_ENABLED", "0") == "1"
+# Independently opt out of registering Plane's read connector in SD runtimes
+# without the custom MCP server API. Keep existing deployments' binding behavior.
+SCIENCE_DISCOVERY_RESEARCH_MCP_ENABLED = os.environ.get("SCIENCE_DISCOVERY_RESEARCH_MCP_ENABLED", "1") == "1"
 # Backend origin reachable by the user's ScienceDiscovery instance (no /api suffix).
 RESEARCH_MCP_PUBLIC_BASE_URL = os.environ.get("RESEARCH_MCP_PUBLIC_BASE_URL", "").rstrip("/")
 
