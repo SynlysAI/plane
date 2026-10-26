@@ -11,6 +11,7 @@ import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { WorkItemStateDropdownBase } from "@/components/dropdowns/intake-state/base";
 import { DateDropdown } from "@/components/dropdowns/date";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
+import { ResearchAssigneeSelect } from "@/components/research/chains/research-assignee-select";
 import { ResearchPersonSelect } from "@/components/research/common/person-select";
 import { ProjectMultiSelectModal } from "@/components/project/multi-select-modal";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
@@ -31,6 +32,17 @@ const states = {
   pending: { id: "pending", name: "待处理", group: "pending", color: "#999999" },
   accepted: { id: "accepted", name: "已接受", group: "accepted", color: "#00aa55" },
 };
+const assignableUsers = [
+  {
+    user_id: "user-1",
+    display_name: "Alice",
+    org_unit_id: "unit-1",
+    org_unit_name: "材料组",
+    org_role: "REVIEWER",
+    is_primary: true,
+    scope: "ORG_SCOPE",
+  },
+] as Parameters<typeof ResearchAssigneeSelect>[0]["candidates"];
 runInAction(() => {
   store.projectRoot.project.projectMap["project-1"] = {
     id: "project-1",
@@ -150,6 +162,14 @@ function Fixture() {
               value={value ?? ""}
               onChange={setValue}
               people={[{ id: "user-1", display_name: "Alice", email: "alice@example.test" }]}
+            />
+          )}
+          {scenario === "research-assignee" && (
+            <ResearchAssigneeSelect
+              candidates={assignableUsers}
+              value={value ?? ""}
+              label="责任人"
+              onChange={setValue}
             />
           )}
         </div>

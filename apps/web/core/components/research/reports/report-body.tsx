@@ -290,7 +290,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
                     disabled={!content || saving || uploadCount > 0 || exporting}
                     onClick={() => void exportMarkdown()}
                   >
-                    导出 Markdown（含图片）
+                    导出 Markdown
                   </Button>
                 </div>
               </details>
@@ -312,7 +312,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
               disabled={!content || exporting}
               onClick={() => void exportMarkdown()}
             >
-              导出 Markdown（含图片）
+              导出 Markdown
             </Button>
           )}
         </div>

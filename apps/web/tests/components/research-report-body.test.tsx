@@ -625,7 +625,7 @@ describe("周报 Markdown 导出与链接复制", () => {
       await renderDetail();
       await editBody("# 当前编辑内容\n\n![图](/api/research/workspaces/lab/reports/report-1/images/image-1/)");
 
-      await act(async () => button("导出 Markdown（含图片）").click());
+      await act(async () => button("导出 Markdown").click());
 
       expect(mocks.exportReportMarkdown).toHaveBeenCalledWith(
         "lab",
@@ -657,7 +657,7 @@ describe("周报 Markdown 导出与链接复制", () => {
     mocks.reports["report-1"] = official;
 
     await renderDetail();
-    await act(async () => button("导出 Markdown（含图片）").click());
+    await act(async () => button("导出 Markdown").click());
 
     expect(mocks.exportReportMarkdown).toHaveBeenCalledWith("lab", "report-1", "# 正式版本");
   });
@@ -667,11 +667,11 @@ describe("周报 Markdown 导出与链接复制", () => {
     await renderDetail();
     await editBody("# 需要保留的正文");
 
-    await act(async () => button("导出 Markdown（含图片）").click());
+    await act(async () => button("导出 Markdown").click());
 
     expect(editor().value).toBe("# 需要保留的正文");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("周报导出失败");
-    expect(button("导出 Markdown（含图片）").disabled).toBe(false);
+    expect(button("导出 Markdown").disabled).toBe(false);
   });
 
   it("导出进行中禁用按钮并在完成后恢复", async () => {
@@ -679,12 +679,12 @@ describe("周报 Markdown 导出与链接复制", () => {
     mocks.exportReportMarkdown.mockReturnValue(pendingExport.promise);
     await renderDetail();
 
-    await act(async () => button("导出 Markdown（含图片）").click());
+    await act(async () => button("导出 Markdown").click());
 
-    expect(button("导出 Markdown（含图片）").disabled).toBe(true);
+    expect(button("导出 Markdown").disabled).toBe(true);
     await act(async () => pendingExport.resolve(new Blob(["ZIP"], { type: "application/zip" })));
 
-    expect(button("导出 Markdown（含图片）").disabled).toBe(false);
+    expect(button("导出 Markdown").disabled).toBe(false);
   });
 
   it("复制授权详情页完整链接并提示结果", async () => {

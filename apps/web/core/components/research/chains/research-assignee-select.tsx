@@ -1,8 +1,9 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import type { TResearchAssignableUser, TResearchAssignableUserScope } from "@plane/types";
+import { useTransientMenu } from "@/hooks/use-transient-menu";
 
 type Props = {
   candidates: TResearchAssignableUser[];
@@ -66,7 +67,8 @@ export function ResearchAssigneeSelect({
   onChange,
 }: Props) {
   const { t } = useTranslation();
-  const selectId = useId();
+  const listboxId = useId();
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -83,16 +85,22 @@ export function ResearchAssigneeSelect({
       ),
     [candidates, normalizedQuery]
   );
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+  }, []);
+  const { handleKeyDown } = useTransientMenu({ ref: menuRef, isOpen: open, onClose: closeMenu });
 
   return (
-    <div className="relative min-w-0" data-peek-trigger="">
+    <div role="presentation" ref={menuRef} className="relative min-w-0" data-peek-trigger="" onKeyDown={handleKeyDown}>
       <button
-        id={selectId}
         type="button"
         aria-label={label}
         aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={open ? listboxId : undefined}
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => (open ? closeMenu() : setOpen(true))}
         className={`flex h-7 items-center gap-1.5 rounded-sm px-1.5 text-left text-12 hover:bg-surface-2 disabled:cursor-default disabled:hover:bg-transparent ${
           fullWidth ? "w-full" : "max-w-40"
         } ${selected ? "text-secondary" : placeholder ? "text-placeholder" : "text-secondary"}`}
@@ -106,6 +114,7 @@ export function ResearchAssigneeSelect({
       </button>
       {open && !disabled && (
         <div
+          id={listboxId}
           role="listbox"
           aria-label={label}
           className={`absolute top-8 z-20 w-72 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)] ${
@@ -119,6 +128,12 @@ export function ResearchAssigneeSelect({
             aria-label={t("research.chain_tasks.search_assignee")}
             placeholder={t("research.chain_tasks.search_assignee")}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !query) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setQuery("");
+            }}
             className="mb-2 w-full rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
           />
           {allowClear && (
@@ -129,7 +144,7 @@ export function ResearchAssigneeSelect({
               className="block w-full rounded-sm px-2 py-1.5 text-left text-12 text-secondary hover:bg-surface-2"
               onClick={() => {
                 onChange("");
-                setOpen(false);
+                closeMenu();
               }}
             >
               {t("research.chain_tasks.unassigned")}
@@ -157,7 +172,7 @@ export function ResearchAssigneeSelect({
                     className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-surface-2"
                     onClick={() => {
                       onChange(candidate.user_id);
-                      setOpen(false);
+                      closeMenu();
                     }}
                   >
                     <span className="block text-12 text-primary">{candidate.display_name}</span>

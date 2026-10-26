@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityOutline,
   ArrowNarrowRightOutline,
@@ -45,6 +45,7 @@ import {
 } from "@/components/research/chains/research-chain-workbench-peek";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 import { ResearchTaskComments } from "@/components/research/chains/research-task-comments";
+import { useTransientMenu } from "@/hooks/use-transient-menu";
 
 type TTaskFormState = {
   taskId: string | null;
@@ -621,6 +622,20 @@ function TaskPeekHeader({
   const { t } = useTranslation();
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const layoutMenuRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const closeLayoutMenu = useCallback(() => setLayoutOpen(false), []);
+  const closeMoreMenu = useCallback(() => setMoreOpen(false), []);
+  const { handleKeyDown: handleLayoutMenuKeyDown } = useTransientMenu({
+    ref: layoutMenuRef,
+    isOpen: layoutOpen,
+    onClose: closeLayoutMenu,
+  });
+  const { handleKeyDown: handleMoreMenuKeyDown } = useTransientMenu({
+    ref: moreMenuRef,
+    isOpen: moreOpen,
+    onClose: closeMoreMenu,
+  });
   const current = PEEK_MODES.find((item) => item.key === mode) ?? PEEK_MODES[0];
   const CurrentIcon = current.icon;
 
@@ -635,10 +650,18 @@ function TaskPeekHeader({
         >
           <ArrowNarrowRightOutline className="h-4 w-4" />
         </button>
-        <div className="relative" data-task-menu="">
+        <div
+          role="presentation"
+          className="relative"
+          data-task-menu=""
+          ref={layoutMenuRef}
+          onKeyDown={handleLayoutMenuKeyDown}
+        >
           <button
             type="button"
             aria-label={t("research.chain_tasks.peek_layout")}
+            aria-expanded={layoutOpen}
+            aria-haspopup="menu"
             className="text-tertiary hover:text-secondary"
             onClick={() => setLayoutOpen((open) => !open)}
           >
@@ -657,7 +680,7 @@ function TaskPeekHeader({
                   className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-12 text-secondary hover:bg-surface-2"
                   onClick={() => {
                     onModeChange(item.key);
-                    setLayoutOpen(false);
+                    closeLayoutMenu();
                   }}
                 >
                   <item.icon className="h-4 w-4" />
@@ -671,7 +694,13 @@ function TaskPeekHeader({
       <div className="flex items-center gap-3">
         {formBusy && <span className="text-11 text-tertiary">{t("research.chain_tasks.saving")}</span>}
         {lifecycle.length > 0 && (
-          <div className="relative" data-task-menu="">
+          <div
+            role="presentation"
+            className="relative"
+            data-task-menu=""
+            ref={moreMenuRef}
+            onKeyDown={handleMoreMenuKeyDown}
+          >
             <button
               type="button"
               aria-label={t("research.chain_tasks.more")}
@@ -701,7 +730,7 @@ function TaskPeekHeader({
                         : "text-primary hover:bg-surface-2"
                     )}
                     onClick={() => {
-                      setMoreOpen(false);
+                      closeMoreMenu();
                       onAction(action);
                     }}
                   >
@@ -765,6 +794,9 @@ function StatusControl({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
+  const { handleKeyDown } = useTransientMenu({ ref: menuRef, isOpen: open, onClose: closeMenu });
   if (!actions.length) {
     return (
       <ResearchStatusBadge status={status} size="sm">
@@ -773,9 +805,12 @@ function StatusControl({
     );
   }
   return (
-    <div className="relative" data-task-menu="">
+    <div role="presentation" className="relative" data-task-menu="" ref={menuRef} onKeyDown={handleKeyDown}>
       <button
         type="button"
+        aria-label={t("common.state")}
+        aria-expanded={open}
+        aria-haspopup="menu"
         className="rounded-sm px-1 hover:bg-surface-2"
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
@@ -796,7 +831,7 @@ function StatusControl({
               role="menuitem"
               className="block w-full rounded-sm px-2 py-1.5 text-left text-12 text-primary hover:bg-surface-2"
               onClick={() => {
-                setOpen(false);
+                closeMenu();
                 onAction(action);
               }}
             >
@@ -859,13 +894,18 @@ function DueDateControl({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
+  const { handleKeyDown } = useTransientMenu({ ref: menuRef, isOpen: open, onClose: closeMenu });
   const display = formatResearchDate(value, locale);
   if (disabled) return <ReadOnlyValue value={display} />;
   return (
-    <div className="relative" data-task-menu="">
+    <div role="presentation" className="relative" data-task-menu="" ref={menuRef} onKeyDown={handleKeyDown}>
       <button
         type="button"
         aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         className={cn(
           "flex h-7 items-center gap-2 rounded-sm px-2 text-12 hover:bg-surface-2",
           display ? "text-primary" : "text-placeholder"
@@ -876,13 +916,17 @@ function DueDateControl({
         {value && <ResearchTodoUrgency dueAt={value} />}
       </button>
       {open && (
-        <div className="absolute top-8 left-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]">
+        <div
+          role="dialog"
+          aria-label={label}
+          className="absolute top-8 left-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
+        >
           <input
             type="date"
             aria-label={label}
             value={toDateInput(value)}
             onChange={(event) => {
-              setOpen(false);
+              closeMenu();
               onChange(event.target.value);
             }}
             className="rounded-md border border-subtle bg-surface-1 px-2 py-1 text-12 text-primary"

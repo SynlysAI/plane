@@ -151,6 +151,14 @@ async function setInput(selector: string, value: string) {
   });
 }
 
+/** 在面板内部触发一次菜单外部点击，并等待延迟关闭回调。 */
+async function clickOutsideMenu(target: Element) {
+  await act(async () => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+}
+
 it("opens an existing research task read-only until editing is explicitly enabled", async () => {
   await renderPanel();
   await act(async () => button("整理开题文献").click());
@@ -349,6 +357,77 @@ it("requires and submits a return reason", async () => {
   expect(container.textContent).toContain("需修订");
 });
 
+it("cancels row date and status menus after clicking elsewhere without invoking APIs", async () => {
+  await renderPanel();
+  const panelHeading = container.querySelector("h3");
+  if (!panelHeading) throw new Error("任务面板标题未找到");
+
+  const dateButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((item) =>
+    item.textContent?.includes("2026/10/20")
+  );
+  if (!dateButton) throw new Error("截止日期按钮未找到");
+  await act(async () => dateButton.click());
+  expect(container.querySelector('input[type="date"]')).not.toBeNull();
+
+  await clickOutsideMenu(panelHeading);
+  expect(container.querySelector('input[type="date"]')).toBeNull();
+  expect(mocks.updateNodeTask).not.toHaveBeenCalled();
+
+  await act(async () => button("已提交").click());
+  expect([...container.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "退回")).toBe(true);
+
+  await clickOutsideMenu(panelHeading);
+  expect(container.querySelector('[role="menu"]')).toBeNull();
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+});
+
+it("cancels peek layout and more menus without closing the task peek", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+  const peek = container.querySelector("aside");
+  const peekTitle = peek?.querySelector("h2");
+  if (!peek || !peekTitle) throw new Error("任务 Peek 标题未找到");
+
+  const layout = peek.querySelector<HTMLButtonElement>('button[aria-label="切换预览布局"]');
+  if (!layout) throw new Error("预览布局按钮未找到");
+  await act(async () => layout.click());
+  expect(peek.querySelector('[role="menu"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+
+  const more = peek.querySelector<HTMLButtonElement>('button[aria-label="更多"]');
+  if (!more) throw new Error("更多按钮未找到");
+  await act(async () => more.click());
+  expect(peek.querySelector('[role="menu"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+
+  const status = peek.querySelector<HTMLButtonElement>('button[aria-label="状态"]');
+  if (!status) throw new Error("Peek 状态按钮未找到");
+  await act(async () => status.click());
+  expect(peek.querySelector('[role="menu"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+
+  const dueDate = peek.querySelector<HTMLButtonElement>('button[aria-label="截止时间"]');
+  if (!dueDate) throw new Error("Peek 截止时间按钮未找到");
+  await act(async () => dueDate.click());
+  expect(peek.querySelector('input[type="date"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('input[type="date"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+  expect(mocks.updateNodeTask).not.toHaveBeenCalled();
+});
+
 it("keeps task cancellation in the header menu and requires a reason before cancelling", async () => {
   const draft = task({ status: "DRAFT", instruction: "", return_reason: null });
   draft.capabilities!.actions.return = capability(false);
@@ -422,5 +501,7 @@ it("retains an invalid assignee name and explains how to restore membership", as
   const select = peek?.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
   await act(async () => select.click());
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
+  await clickOutsideMenu(peek.querySelector("h2") as Element);
+  expect(container.querySelector('[role="listbox"]')).toBeNull();
   expect(mocks.updateNodeTask).not.toHaveBeenCalled();
 });

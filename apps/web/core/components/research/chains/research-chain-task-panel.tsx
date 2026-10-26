@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
@@ -19,6 +19,7 @@ import {
   useResearchChainWorkbenchPeek,
   type TWorkbenchPeekMode,
 } from "@/components/research/chains/research-chain-workbench-peek";
+import { useTransientMenu } from "@/hooks/use-transient-menu";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 
 type Props = {
@@ -128,6 +129,8 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
   const [actionError, setActionError] = useState("");
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
   const [dateMenuId, setDateMenuId] = useState<string | null>(null);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
+  const dateMenuRef = useRef<HTMLDivElement | null>(null);
   const [peekMode, setPeekMode] = useState<TWorkbenchPeekMode>("side");
   const [isTaskEditMode, setIsTaskEditMode] = useState(false);
   const peek: TLocalPeek = sharedPeek
@@ -138,6 +141,18 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
   const activeTask = peek?.kind === "task" ? (tasks.find((task) => task.id === peek.taskId) ?? null) : null;
   const peekKind = peek?.kind ?? "closed";
   const peekTaskId = peek?.kind === "task" ? peek.taskId : null;
+  const closeStatusMenu = useCallback(() => setStatusMenuId(null), []);
+  const closeDateMenu = useCallback(() => setDateMenuId(null), []);
+  const { handleKeyDown: handleStatusMenuKeyDown } = useTransientMenu({
+    ref: statusMenuRef,
+    isOpen: statusMenuId !== null,
+    onClose: closeStatusMenu,
+  });
+  const { handleKeyDown: handleDateMenuKeyDown } = useTransientMenu({
+    ref: dateMenuRef,
+    isOpen: dateMenuId !== null,
+    onClose: closeDateMenu,
+  });
 
   // 共享 Peek 可能从其他入口切换任务或进入创建态，这里统一重置主内容编辑态。
   useEffect(() => {
@@ -521,17 +536,33 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                           onChange={(userId) => void updateProperty(task, { assignee: userId || null })}
                         />
                         {canEdit ? (
-                          <div className="relative">
+                          <div
+                            role="presentation"
+                            className="relative"
+                            data-task-menu=""
+                            ref={dateMenuId === task.id ? dateMenuRef : undefined}
+                            onKeyDown={handleDateMenuKeyDown}
+                          >
                             <button
                               type="button"
+                              aria-label={t("research.chain_tasks.due_at")}
+                              aria-expanded={dateMenuId === task.id}
+                              aria-haspopup="dialog"
                               className="h-7 rounded-sm px-1.5 text-12 text-secondary hover:bg-surface-2"
-                              onClick={() => setDateMenuId((current) => (current === task.id ? null : task.id))}
+                              onClick={() => {
+                                setStatusMenuId(null);
+                                setDateMenuId((current) => (current === task.id ? null : task.id));
+                              }}
                             >
                               {formatResearchDate(task.due_at, currentLocale) || "—"}
                               {task.due_at && <ResearchTodoUrgency dueAt={task.due_at} />}
                             </button>
                             {dateMenuId === task.id && (
-                              <div className="absolute top-8 right-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]">
+                              <div
+                                role="dialog"
+                                aria-label={t("research.chain_tasks.due_at")}
+                                className="absolute top-8 right-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
+                              >
                                 <input
                                   type="date"
                                   aria-label={t("research.chain_tasks.due_at")}
@@ -552,12 +583,24 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                             {formatResearchDate(task.due_at, currentLocale) || "—"}
                           </span>
                         )}
-                        <div className="relative">
+                        <div
+                          role="presentation"
+                          className="relative"
+                          data-task-menu=""
+                          ref={statusMenuId === task.id ? statusMenuRef : undefined}
+                          onKeyDown={handleStatusMenuKeyDown}
+                        >
                           {lifecycle.length ? (
                             <button
                               type="button"
+                              aria-label={t("common.state")}
+                              aria-expanded={statusMenuId === task.id}
+                              aria-haspopup="menu"
                               className="h-7 rounded-sm px-1"
-                              onClick={() => setStatusMenuId((current) => (current === task.id ? null : task.id))}
+                              onClick={() => {
+                                setDateMenuId(null);
+                                setStatusMenuId((current) => (current === task.id ? null : task.id));
+                              }}
                             >
                               <ResearchStatusBadge status={task.status} size="sm">
                                 {t(TASK_STATUS_KEYS[task.status])}
@@ -583,9 +626,10 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                                     if (action === "return" || action === "cancel") {
                                       setReasonAction({ taskId: task.id, action, reason: "" });
                                       setActionError("");
-                                      setStatusMenuId(null);
+                                      closeStatusMenu();
                                       return;
                                     }
+                                    closeStatusMenu();
                                     void runAction(task, action);
                                   }}
                                 >
