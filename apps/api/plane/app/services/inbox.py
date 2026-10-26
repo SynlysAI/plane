@@ -8,11 +8,12 @@ import base64
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone as datetime_timezone
 
 from django.utils import timezone
 
-from plane.db.models import InboxTodoState
+from plane.db.models import InboxTodoState, Notification
 
 logger = logging.getLogger("plane.api")
 
@@ -63,18 +64,17 @@ def todo_payload_hash(todo):
         todo: One ``research-todo.v2`` envelope.
 
     Returns:
-        A SHA-256 digest of the mutable handling fields.
+        A versioned SHA-256 fingerprint of the mutable handling fields.
     """
     fingerprint = {
         "business_status": todo.get("business_status"),
         "handling_status": todo.get("handling_status"),
         "next_action": todo.get("next_action"),
         "due_at": todo.get("due_at"),
-        "updated_at": todo.get("updated_at"),
         "assignees": todo.get("assignees"),
     }
     encoded = json.dumps(fingerprint, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return f"v2:{hashlib.sha256(encoded.encode('utf-8')).hexdigest()}"
 
 
 def todo_dedupe_key(todo):
@@ -100,38 +100,94 @@ def synchronize_todo_states(workspace, user, todos):
     Returns:
         States keyed by ``(source, object_id)``.
     """
-    states = {}
+    if not todos:
+        return {}
+
     now = timezone.now()
+    source_object_pairs = {(todo["source"], str(todo["object_id"])) for todo in todos}
+    source_values = {source for source, _object_id in source_object_pairs}
+    object_id_values = {_object_id for _source, _object_id in source_object_pairs}
+    existing_states = {
+        (state.source, state.object_id): state
+        for state in InboxTodoState.objects.filter(
+            workspace=workspace,
+            receiver=user,
+            source__in=source_values,
+            object_id__in=object_id_values,
+        )
+        if (state.source, state.object_id) in source_object_pairs
+    }
+    new_states = []
+    changed_states = []
+
     for todo in todos:
         source = todo["source"]
         object_id = str(todo["object_id"])
         fingerprint = todo_payload_hash(todo)
-        state = InboxTodoState.objects.filter(
+        state = existing_states.get((source, object_id))
+        if state is None:
+            new_states.append(
+                InboxTodoState(
+                    workspace=workspace,
+                    receiver=user,
+                    source=source,
+                    object_id=object_id,
+                    dedupe_key=todo_dedupe_key(todo),
+                    payload_hash=fingerprint,
+                    last_seen_at=now,
+                    created_by=user,
+                    updated_by=user,
+                )
+            )
+            continue
+
+        if state.payload_hash != fingerprint:
+            legacy_fingerprint = re.fullmatch(r"[0-9a-f]{64}", state.payload_hash or "") is not None
+            state.payload_hash = fingerprint
+            if not legacy_fingerprint:
+                state.read_at = None
+                state.snoozed_till = None
+            state.last_seen_at = now
+            state.updated_by = user
+            state.updated_at = now
+            changed_states.append(state)
+
+    if new_states:
+        InboxTodoState.objects.bulk_create(new_states, ignore_conflicts=True, batch_size=100)
+    if changed_states:
+        InboxTodoState.objects.bulk_update(
+            changed_states,
+            ["payload_hash", "read_at", "snoozed_till", "last_seen_at", "updated_by", "updated_at"],
+            batch_size=100,
+        )
+
+    if not new_states and not changed_states:
+        return existing_states
+
+    return {
+        (state.source, state.object_id): state
+        for state in InboxTodoState.objects.filter(
             workspace=workspace,
             receiver=user,
-            source=source,
-            object_id=object_id,
-        ).first()
-        if state is None:
-            state = InboxTodoState.objects.create(
-                workspace=workspace,
-                receiver=user,
-                source=source,
-                object_id=object_id,
-                dedupe_key=todo_dedupe_key(todo),
-                payload_hash=fingerprint,
-                last_seen_at=now,
-                created_by=user,
-                updated_by=user,
-            )
-        elif state.payload_hash != fingerprint:
-            state.payload_hash = fingerprint
-            state.read_at = None
-            state.snoozed_till = None
-            state.last_seen_at = now
-            state.save(update_fields=["payload_hash", "read_at", "snoozed_till", "last_seen_at", "updated_at"])
-        states[(source, object_id)] = state
-    return states
+            source__in=source_values,
+            object_id__in=object_id_values,
+        )
+        if (state.source, state.object_id) in source_object_pairs
+    }
+
+
+def todo_state_is_active(state, now=None):
+    """Determine whether a todo state belongs in the active inbox bucket.
+
+    Args:
+        state: Receiver-specific presentation state.
+        now: Current timezone-aware timestamp; defaults to the server clock.
+
+    Returns:
+        ``True`` when the item is neither archived nor snoozed for the future.
+    """
+    current_time = now or timezone.now()
+    return state.archived_at is None and (state.snoozed_till is None or state.snoozed_till <= current_time)
 
 
 def reminder_key_for_todo(todo, now=None):
@@ -366,18 +422,30 @@ def _todo_item(todo, state):
     }
 
 
-def _is_active(item, archived=False, snoozed=False):
+def _is_active(item, archived=False, snoozed=False, now=None):
     """Apply mutually understood archive and snooze state filters.
 
     Args:
         item: Unified inbox item.
         archived: Whether archived items are requested.
         snoozed: Whether snoozed items are requested.
+        now: Current timezone-aware timestamp; defaults to the server clock.
 
     Returns:
         ``True`` when the item belongs to the requested state bucket.
     """
-    return (item["archived_at"] is not None) == archived and (item["snoozed_till"] is not None) == snoozed
+    current_time = now or timezone.now()
+    snoozed_till = None
+    if item["snoozed_till"] is not None:
+        try:
+            snoozed_till = datetime.fromisoformat(str(item["snoozed_till"]).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            snoozed_till = None
+        if timezone.is_naive(snoozed_till):
+            snoozed_till = timezone.make_aware(snoozed_till)
+
+    item_is_snoozed = snoozed_till is not None and snoozed_till > current_time
+    return (item["archived_at"] is not None) == archived and item_is_snoozed == snoozed
 
 
 def unread_counts(items):
@@ -472,12 +540,13 @@ def project_inbox(workspace, user):
                 "exception_type": type(error).__name__,
             },
         )
-        todos, degraded_sources = [], []
+        todos, degraded_sources = [], ["RESEARCH_TODOS"]
     states = synchronize_todo_states(workspace, user, todos)
     todo_items = [_todo_item(todo, states.get((todo["source"], str(todo["object_id"])))) for todo in todos]
     notifications = _notification_query(workspace, user).select_related("triggered_by")
     todo_keys = {(todo["source"], str(todo["object_id"])) for todo in todos}
     notification_items = []
+    superseded_notification_ids = []
     for notification in notifications:
         category = notification_category(notification)
         entity_todo_source = next(
@@ -491,15 +560,23 @@ def project_inbox(workspace, user):
         )
         alias_key = (alias_source, str(notification.entity_identifier)) if alias_source else None
         if category != "mention" and (duplicate_key in todo_keys or alias_key in todo_keys):
+            superseded_notification_ids.append(notification.id)
             continue
         notification_items.append(_notification_item(notification))
 
+    if superseded_notification_ids and not degraded_sources:
+        now = timezone.now()
+        Notification.objects.filter(id__in=superseded_notification_ids, read_at__isnull=True).update(
+            read_at=now,
+            updated_at=now,
+        )
+
     items = [*todo_items, *notification_items]
-    items.sort(key=lambda item: (item["read_at"] is not None, _updated_at(item)), reverse=True)
+    items.sort(key=lambda item: (item["read_at"] is None, _updated_at(item)), reverse=True)
     return items, degraded_sources
 
 
-def filter_inbox_items(items, tab="all", read="all", archived=False, snoozed=False):
+def filter_inbox_items(items, tab="all", read="all", archived=False, snoozed=False, now=None):
     """Filter projected items for one API request.
 
     Args:
@@ -508,11 +585,12 @@ def filter_inbox_items(items, tab="all", read="all", archived=False, snoozed=Fal
         read: ``all``, ``true`` or ``false``.
         archived: Whether archived items are requested.
         snoozed: Whether snoozed items are requested.
+        now: Current timezone-aware timestamp used for snooze expiry.
 
     Returns:
         Items matching every requested filter.
     """
-    filtered = [item for item in items if _is_active(item, archived=archived, snoozed=snoozed)]
+    filtered = [item for item in items if _is_active(item, archived=archived, snoozed=snoozed, now=now)]
     if tab == "mentions":
         filtered = [item for item in filtered if item["category"] == "mention"]
     elif tab == "todos":

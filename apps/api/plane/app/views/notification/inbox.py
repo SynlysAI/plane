@@ -7,6 +7,7 @@
 from datetime import datetime
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -20,6 +21,7 @@ from plane.app.services.inbox import (
     encode_inbox_cursor,
     filter_inbox_items,
     unread_counts,
+    todo_state_is_active,
 )
 from plane.app.views.base import BaseAPIView
 from plane.app.views.notification.base import renderable_inbox_notifications
@@ -139,10 +141,14 @@ class InboxItemActionEndpoint(BaseAPIView):
         now = timezone.now()
         snoozed_till = None
         if action == "snooze":
+            if not request.data.get("snoozed_till"):
+                return Response({"error": "snoozed_till is required."}, status=status.HTTP_400_BAD_REQUEST)
             try:
                 snoozed_till = self._parse_timestamp(request)
             except (TypeError, ValueError):
                 return Response({"error": "snoozed_till is invalid."}, status=status.HTTP_400_BAD_REQUEST)
+            if snoozed_till <= now:
+                return Response({"error": "snoozed_till must be in the future."}, status=status.HTTP_400_BAD_REQUEST)
 
         if parts[0] == "notification" and len(parts) == 2:
             notification = renderable_inbox_notifications(slug, request.user.id).filter(pk=parts[1]).first()
@@ -206,14 +212,16 @@ class InboxMarkAllReadEndpoint(BaseAPIView):
         todos, degraded_sources = inbox_service.collect_inbox_todos(workspace, request.user)
         with transaction.atomic():
             notifications = list(
-                renderable_inbox_notifications(slug, request.user.id).filter(
+                renderable_inbox_notifications(slug, request.user.id)
+                .filter(
                     read_at__isnull=True,
                     archived_at__isnull=True,
-                    snoozed_till__isnull=True,
                 )
+                .filter(Q(snoozed_till__isnull=True) | Q(snoozed_till__lte=now))
             )
             for notification in notifications:
                 notification.read_at = now
+                notification.updated_at = now
             Notification.objects.bulk_update(
                 notifications,
                 ["read_at", "updated_at"],
@@ -223,7 +231,7 @@ class InboxMarkAllReadEndpoint(BaseAPIView):
             active_state_ids = []
             for todo in todos:
                 state = states[(todo["source"], str(todo["object_id"]))]
-                if state.read_at is None and state.archived_at is None and state.snoozed_till is None:
+                if state.read_at is None and todo_state_is_active(state, now=now):
                     active_state_ids.append(state.id)
             InboxTodoState.objects.filter(id__in=active_state_ids).update(
                 read_at=now,
