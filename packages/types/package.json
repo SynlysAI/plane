@@ -1,6 +1,6 @@
 {
   "name": "@plane/types",
-  "version": "8.1.4",
+  "version": "8.2.0",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",
