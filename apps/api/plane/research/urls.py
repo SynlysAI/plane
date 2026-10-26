@@ -1271,6 +1271,11 @@ urlpatterns = [
         name="research-report-attachment-presign",
     ),
     path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/attachments/<uuid:attachment_id>/download/",
+        ResearchReportAttachmentDetailEndpoint.as_view(),
+        name="research-report-attachment-download",
+    ),
+    path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/attachments/<uuid:attachment_id>/",
         ResearchReportAttachmentDetailEndpoint.as_view(),
         name="research-report-attachment",
