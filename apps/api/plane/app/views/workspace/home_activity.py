@@ -419,7 +419,7 @@ def _research_url(workspace_slug, kind, resource):
         return f"/{workspace_slug}/research/reports/{resource}/"
     if kind == "task":
         task_id, chain_id, node_id = resource
-        return f"/{workspace_slug}/research/chains/{chain_id}/nodes/{node_id}/tasks/{task_id}/"
+        return f"/{workspace_slug}/research/chains/{chain_id}/?tab=nodes&node={node_id}&task={task_id}"
     if kind == "chain" and resource is not None:
         return f"/{workspace_slug}/research/chains/{resource}/"
     return None

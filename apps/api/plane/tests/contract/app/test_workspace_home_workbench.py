@@ -1,8 +1,9 @@
 """首页个性化偏好与真实业务动态契约。"""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from django.apps import apps
@@ -17,8 +18,13 @@ from plane.db.models import (
     Issue,
     IssueActivity,
     IssueComment,
+    Page,
+    PeriodicReport,
     Project,
     ResearchAuditEvent,
+    ResearchChain,
+    ResearchChainNode,
+    ResearchChainNodeTask,
     ResearchProjectProfile,
     State,
     UserRecentVisit,
@@ -533,3 +539,105 @@ def test_home_activity_feed_includes_visible_research_audit_events(env, monkeypa
     )
     assert other_response.status_code == status.HTTP_200_OK, other_response.data
     assert all(item["source"] != "research" for item in other_response.data["results"])
+
+
+def test_home_activity_research_links_use_frontend_routes(env, monkeypatch):
+    """科研动态必须链接到前端真实路由，任务链接直达节点工作台。"""
+    from plane.app.views.workspace import home_activity
+
+    monkeypatch.setattr(home_activity, "research_module_enabled", lambda: True)
+    monkeypatch.setattr(home_activity, "workspace_research_enabled", lambda workspace: True)
+    research_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Research links",
+        identifier="RLK",
+        network=0,
+    )
+    ResearchProjectProfile.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        chain_visibility=ResearchProjectProfile.ChainVisibility.PRIVATE,
+    )
+    suffix = uuid4().hex
+    chain = ResearchChain.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        request_id=f"home-chain-{suffix}",
+        payload_hash=suffix,
+    )
+    node = ResearchChainNode.objects.create(
+        chain=chain,
+        node_type="EXPERIMENT",
+        title="电池工况表征",
+        status=ResearchChainNode.Status.ACTIVE,
+        request_id=f"home-node-{suffix}",
+        payload_hash=suffix,
+    )
+    task = ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain=chain,
+        node=node,
+        title="电池工况过程的荧光多模态表征",
+        status=ResearchChainNodeTask.Status.ASSIGNED,
+        request_id=f"home-task-{suffix}",
+        payload_hash=suffix,
+    )
+    page = Page.objects.create(
+        workspace=env["workspace"],
+        name="2026-W43 weekly report",
+        description_json={"type": "doc", "content": []},
+        description_html="<p>Draft</p>",
+        owned_by=env["user"],
+        access=Page.PRIVATE_ACCESS,
+    )
+    report = PeriodicReport.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        page=page,
+        report_type=PeriodicReport.ReportType.WEEKLY,
+        period_key="2026-W43",
+        period_start=date(2026, 10, 19),
+        period_end=date(2026, 10, 25),
+    )
+
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="task.update",
+        resource_type="research_chain_node_task",
+        resource_id=task.id,
+        metadata={"fields": ["assignee"]},
+    )
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="chain.update",
+        resource_type="research_chain",
+        resource_id=chain.id,
+        metadata={"fields": ["status"]},
+    )
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="report.update",
+        resource_type="report",
+        resource_id=report.id,
+        metadata={"period_key": report.period_key},
+    )
+
+    response = env["client"].get(
+        reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug}),
+        {"per_page": 20},
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.data
+    rows = {row["entity_id"]: row for row in response.data["results"] if row["source"] == "research"}
+    slug = env["workspace"].slug
+    assert rows[str(task.id)]["url"] == (
+        f"/{slug}/research/chains/{chain.id}/?tab=nodes&node={node.id}&task={task.id}"
+    )
+    assert rows[str(chain.id)]["url"] == f"/{slug}/research/chains/{chain.id}/"
+    assert rows[str(report.id)]["url"] == f"/{slug}/research/reports/{report.id}/"

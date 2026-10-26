@@ -74,8 +74,16 @@ vi.mock("@/components/research/chains/research-chain-knowledge-panel", () => ({
   ),
 }));
 vi.mock("@/components/research/chains/research-chain-task-panel", () => ({
-  ResearchChainTaskPanel: ({ chainId, nodeId }: { chainId: string; nodeId: string }) => (
-    <div data-testid="chain-task-panel" data-chain={chainId} data-node={nodeId}>
+  ResearchChainTaskPanel: ({
+    chainId,
+    nodeId,
+    initialTaskId,
+  }: {
+    chainId: string;
+    nodeId: string;
+    initialTaskId?: string;
+  }) => (
+    <div data-testid="chain-task-panel" data-chain={chainId} data-node={nodeId} data-task={initialTaskId ?? ""}>
       task-panel
     </div>
   ),
@@ -234,6 +242,16 @@ it("ignores historical operation review parameters on the selected node", async 
   await act(async () => undefined);
   expect(container.textContent).not.toContain("MCP / Agent 操作");
   expect(container.querySelector('a[href*="/mcp/"]')).toBeNull();
+});
+
+it("passes the task deep link to the selected node task panel", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=nodes&node=node-1&task=task-1";
+  await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
+  await act(async () => undefined);
+
+  expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-node")).toBe("node-1");
+  expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-task")).toBe("task-1");
 });
 
 beforeEach(() => {
