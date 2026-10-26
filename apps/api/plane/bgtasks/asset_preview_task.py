@@ -1,6 +1,7 @@
 """有界、可重试的私有附件转换及缓存清理任务。"""
 
 import io
+import hashlib
 import json
 import logging
 import time
@@ -17,6 +18,8 @@ from plane.db.models import AssetPreview, ReportAttachment
 from plane.preview.service import (
     OFFICE,
     PreviewError,
+    chain_upload_fingerprint,
+    read_chain_upload_source,
     read_source,
     source_metadata,
     text_payload,
@@ -38,16 +41,41 @@ def build_asset_preview(preview_id, attempt):
     rows = AssetPreview.objects.filter(pk=preview_id, attempt=attempt)
     if not rows.filter(status="pending").update(status="processing", updated_at=timezone.now()):
         return
-    preview = rows.select_related("asset").get()
+    preview = rows.select_related("asset", "chain_upload__workspace").get()
     started = time.monotonic()
     key = ""
     storage = S3Storage()
     try:
         asset = preview.asset
-        if not settings.ATTACHMENT_PREVIEW_ENABLED or asset is None or asset.is_deleted or asset.deleted_at:
+        upload = preview.chain_upload
+        source_is_valid = True
+        if upload is not None:
+            source_is_valid = (
+                settings.ATTACHMENT_PREVIEW_ENABLED
+                and upload.deleted_at is None
+                and upload.chain.deleted_at is None
+                and upload.node.deleted_at is None
+                and bool(upload.knowledge_id)
+            )
+            if not source_is_valid:
+                raise PreviewError("source_missing")
+            name = upload.file_name
+            workspace_id = upload.workspace_id
+            content = read_chain_upload_source(upload, preview.fingerprint)
+            if hashlib.sha256(content).hexdigest() != upload.file_hash:
+                raise PreviewError("source_changed")
+        else:
+            source_is_valid = (
+                settings.ATTACHMENT_PREVIEW_ENABLED
+                and asset is not None
+                and not asset.is_deleted
+                and asset.deleted_at is None
+            )
+            name = asset.attributes.get("name", "")
+            workspace_id = asset.workspace_id
+            content = read_source(storage, asset, preview.fingerprint)
+        if not source_is_valid:
             raise PreviewError("source_missing")
-        name = asset.attributes.get("name", "")
-        content = read_source(storage, asset, preview.fingerprint)
         validate_content(name, content)
         if Path(name).suffix.lower() in OFFICE:
             # 只发送文件字节；转换器不接收用户控制的远端 URL。
@@ -78,9 +106,14 @@ def build_asset_preview(preview_id, attempt):
             mime = "application/json"
         if len(content) > settings.ATTACHMENT_PREVIEW_MAX_BYTES:
             raise PreviewError("file_too_large")
-        if source_metadata(storage, asset)[0] != preview.fingerprint:
+        source_unchanged = (
+            chain_upload_fingerprint(upload) == preview.fingerprint
+            if upload is not None
+            else source_metadata(storage, asset)[0] == preview.fingerprint
+        )
+        if not source_unchanged:
             raise PreviewError("source_changed")
-        key = f"{asset.workspace_id}/previews/{preview.id}/{attempt}"
+        key = f"{workspace_id}/previews/{preview.id}/{attempt}"
         storage.server_s3_client.put_object(
             Bucket=storage.aws_storage_bucket_name, Key=key, Body=content, ContentType=mime
         )
@@ -106,13 +139,22 @@ def cleanup_asset_previews():
     """清理无有效引用或长期未使用的派生物；正式报告快照引用保持有效。"""
     storage = S3Storage()
     for preview in (
-        AssetPreview.objects.select_related("asset")
+        AssetPreview.objects.select_related("asset", "chain_upload__chain__project", "chain_upload__node")
         .filter(updated_at__lt=timezone.now() - timedelta(days=1))
         .iterator()
     ):
         asset = preview.asset
-        keep = asset is not None and not asset.is_deleted and not asset.deleted_at
-        if keep and asset.entity_type == "REPORT_ATTACHMENT":
+        upload = preview.chain_upload
+        if upload is not None:
+            keep = (
+                upload.deleted_at is None
+                and upload.chain.deleted_at is None
+                and upload.chain.project.deleted_at is None
+                and upload.node.deleted_at is None
+            )
+        else:
+            keep = asset is not None and not asset.is_deleted and not asset.deleted_at
+        if keep and asset is not None and asset.entity_type == "REPORT_ATTACHMENT":
             keep = (
                 ReportAttachment.all_objects.filter(asset=asset, report__deleted_at__isnull=True)
                 .filter(Q(deleted_at__isnull=True) | Q(official_version_no__isnull=False))

@@ -14,7 +14,7 @@ from django.db import transaction
 from django.utils import timezone
 from PIL import Image
 from pypdf import PdfReader
-from plane.db.models import AssetPreview
+from plane.db.models import AssetPreview, ExternalSystemConnection
 from plane.research.utils.files import validate_office_container
 from plane.settings.storage import S3Storage
 
@@ -136,6 +136,69 @@ def text_payload(name, content):
     return {"rows": rows}
 
 
+def chain_upload_fingerprint(upload):
+    """Build the immutable source fingerprint for an external chain upload.
+
+    Args:
+        upload: ResearchChainUpload projection with external ids and file hash.
+
+    Returns:
+        A 64-character SHA-256 source-version fingerprint.
+    """
+    identity = {
+        "knowledge_id": upload.knowledge_id,
+        "external_upload_id": upload.external_upload_id,
+        "file_hash": upload.file_hash,
+        "file_name": upload.file_name,
+        "file_size": upload.file_size,
+    }
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def read_chain_upload_source(upload, expected):
+    """Fetch and validate the external source body for one preview attempt.
+
+    Args:
+        upload: ResearchChainUpload whose source is stored in RAGPortal.
+        expected: Fingerprint recorded on the preview job.
+
+    Returns:
+        The bounded original file content.
+
+    Raises:
+        PreviewError: The source changed, is too large, or the upstream is unavailable.
+    """
+    if chain_upload_fingerprint(upload) != expected:
+        raise PreviewError("source_changed")
+    from plane.research.services.integrations import client_for
+
+    setting = getattr(upload.workspace, "research_setting", None)
+    external_rag_enabled = bool(setting and setting.research_external_rag_enabled)
+    connection = ExternalSystemConnection.objects.filter(
+        workspace=upload.workspace,
+        system="RAGPORTAL",
+        deleted_at__isnull=True,
+    ).first()
+    if not external_rag_enabled:
+        connection = None
+    client = client_for("RAGPORTAL", connection)
+    result = client.download_research_file(
+        knowledge_id=upload.knowledge_id,
+        chain_id=upload.chain_id,
+        node_id=upload.node_id,
+        kb_id=upload.knowledge_base_id,
+        file_hash=upload.file_hash,
+    )
+    if result.degraded:
+        raise PreviewError("upstream_unavailable")
+    content = result.content
+    if len(content) > settings.ATTACHMENT_PREVIEW_MAX_BYTES:
+        raise PreviewError("file_too_large")
+    if not content or hashlib.sha256(content).hexdigest() != upload.file_hash:
+        raise PreviewError("source_changed")
+    return content
+
+
 def get_preview(asset, *, create=False, retry=False):
     """查询或原子创建预览；同一源版本仅派发一个转换任务。"""
     storage = S3Storage()
@@ -183,4 +246,60 @@ def get_preview(asset, *, create=False, retry=False):
                 transaction.on_commit(enqueue)
         else:
             LOGGER.info("preview_cache_hit asset_id=%s status=%s", asset.id, preview.status)
+    return preview
+
+
+def get_chain_upload_preview(upload, *, create=False, retry=False):
+    """Query or atomically create the preview job for one chain upload.
+
+    Args:
+        upload: ResearchChainUpload sourced from RAGPortal.
+        create: Whether this request should enqueue a new attempt.
+        retry: Whether a failed preview may be retried.
+
+    Returns:
+        The current preview cache row, or ``None`` before creation.
+    """
+    fingerprint = chain_upload_fingerprint(upload)
+    lookup = dict(chain_upload=upload, fingerprint=fingerprint, converter_version=settings.ATTACHMENT_PREVIEW_VERSION)
+    if not create:
+        preview = AssetPreview.objects.filter(**lookup).first()
+        stale_at = timezone.now() - timedelta(minutes=5)
+        if preview and preview.status in {"pending", "processing"} and preview.updated_at < stale_at:
+            AssetPreview.objects.filter(pk=preview.pk, attempt=preview.attempt).update(
+                status="failed", error_code="timeout"
+            )
+            preview.refresh_from_db()
+        return preview
+    with transaction.atomic():
+        preview, created = AssetPreview.objects.get_or_create(**lookup, defaults={"kind": file_kind(upload.file_name)})
+        preview = AssetPreview.objects.select_for_update().get(pk=preview.pk)
+        stale = preview.updated_at < timezone.now() - timedelta(minutes=5)
+        if (
+            created
+            or (retry and preview.status == "failed" and preview.error_code not in PERMANENT_ERRORS)
+            or (stale and preview.status in {"pending", "processing"})
+        ):
+            preview.status = "unsupported" if preview.kind == "unsupported" else "pending"
+            preview.error_code = ""
+            preview.attempt = uuid4()
+            preview.save()
+            if preview.status == "pending":
+                from plane.bgtasks.asset_preview_task import build_asset_preview
+
+                preview_id, attempt = str(preview.id), str(preview.attempt)
+
+                def enqueue():
+                    """Only enqueue after the preview state has committed."""
+                    try:
+                        build_asset_preview.delay(preview_id, attempt)
+                    except Exception:
+                        LOGGER.exception("preview_enqueue_failed preview_id=%s", preview_id)
+                        AssetPreview.objects.filter(preview_id=preview_id, attempt=attempt).update(
+                            status="failed", error_code="service_unavailable", updated_at=timezone.now()
+                        )
+
+                transaction.on_commit(enqueue)
+        else:
+            LOGGER.info("preview_cache_hit chain_upload_id=%s status=%s", upload.id, preview.status)
     return preview

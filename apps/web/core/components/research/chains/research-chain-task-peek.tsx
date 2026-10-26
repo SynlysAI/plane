@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityOutline,
   ArrowNarrowRightOutline,
@@ -33,6 +33,7 @@ import type {
   TResearchChainNodeTaskAction,
   TResearchChainNodeTaskResourceType,
   TResearchChainNodeTaskUpdatePayload,
+  TResearchTaskInstructionAttachment,
 } from "@plane/types";
 import { cn } from "@plane/utils";
 import { formatResearchDate, formatResearchDateTime } from "@/components/research/common/research-format";
@@ -45,6 +46,8 @@ import {
 } from "@/components/research/chains/research-chain-workbench-peek";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 import { ResearchTaskComments } from "@/components/research/chains/research-task-comments";
+import { ResearchTaskDescription } from "@/components/research/chains/research-task-description";
+import { useTransientMenu } from "@/hooks/use-transient-menu";
 
 type TTaskFormState = {
   taskId: string | null;
@@ -72,6 +75,7 @@ type Props = {
   form: TTaskFormState;
   formBusy: boolean;
   formError: string;
+  isEditMode: boolean;
   candidates: TResearchAssignableUser[];
   candidateState: TCandidateState;
   locale: string;
@@ -81,7 +85,9 @@ type Props = {
   actionBusy: string;
   onModeChange: (mode: TWorkbenchPeekMode) => void;
   onClose: () => void;
+  onToggleEditMode: (value: boolean) => void;
   onFormChange: (patch: Partial<TTaskFormState>) => void;
+  onTaskAttachmentsChange: (taskId: string, attachments: TResearchTaskInstructionAttachment[]) => void;
   onCommit: (payload: TResearchChainNodeTaskUpdatePayload) => void;
   onCreate: () => void;
   onAction: (action: TLifecycleAction) => void;
@@ -293,6 +299,7 @@ export function ResearchChainTaskPeek(props: Props) {
     form,
     formBusy,
     formError,
+    isEditMode,
     candidates,
     candidateState,
     locale,
@@ -302,17 +309,20 @@ export function ResearchChainTaskPeek(props: Props) {
     actionBusy,
     onModeChange,
     onClose,
+    onToggleEditMode,
     onFormChange,
+    onTaskAttachmentsChange,
     onCommit,
     onCreate,
     onAction,
   } = props;
   const { t } = useTranslation();
   const taskService = useMemo(() => new ResearchChainTaskService(), []);
-  const [editingInstruction, setEditingInstruction] = useState(false);
   const [activityOrder, setActivityOrder] = useState<TActivityOrder>("asc");
   const [events, setEvents] = useState<TResearchChainEvent[]>([]);
+  const [instructionBusy, setInstructionBusy] = useState(false);
   const canEdit = kind === "create" || isAllowed(task, "edit");
+  const isContentEditable = kind === "create" || (canEdit && isEditMode);
   const canAssign = kind === "create" || isAllowed(task, "edit") || isAllowed(task, "assign");
   const lifecycle = task ? LIFECYCLE_ACTIONS.filter((action) => isAllowed(task, action)) : [];
   const primaryLifecycle = lifecycle.filter((action) => action !== "cancel");
@@ -354,19 +364,10 @@ export function ResearchChainTaskPeek(props: Props) {
     return sorted;
   }, [activityOrder, candidates, events, t, task]);
 
-  /**
-   * 失焦后保存已有任务的标题或说明。新建任务只留在本地表单。
-   */
-  const commitText = (field: "title" | "instruction", value: string) => {
-    if (kind !== "task" || !task || !canEdit) return;
-    const next = value.trim();
-    if (field === "title" && !next) {
-      onFormChange({ title: task.title });
-      return;
-    }
-    if (next === (field === "title" ? task.title : task.instruction)) return;
-    onCommit(field === "title" ? { title: next } : { instruction: next });
-  };
+  const contentPanelClassName = cn(
+    "rounded-lg border bg-surface-1 px-4 py-3 transition-colors",
+    isContentEditable ? "border-strong" : "border-subtle"
+  );
 
   return (
     <ResearchChainWorkbenchPeek
@@ -388,33 +389,58 @@ export function ResearchChainTaskPeek(props: Props) {
       bodyClassName="min-h-0 flex-1 overflow-y-auto"
     >
       <div className="flex flex-col gap-6 px-8 py-5">
-        <div className="space-y-2">
-          <p className="text-12 text-tertiary">
-            {kind === "create" ? t("research.chain_tasks.panel_title") : t(STATUS_KEYS[status])}
-          </p>
-          {canEdit ? (
-            <input
-              aria-label={t("research.chain_tasks.title")}
-              value={form.title}
-              placeholder={t("research.chain_tasks.title")}
-              onChange={(event) => onFormChange({ title: event.target.value })}
-              onBlur={(event) => commitText("title", event.target.value)}
-              className="w-full border-0 bg-transparent p-0 text-20 font-medium text-primary outline-none placeholder:text-placeholder"
-            />
-          ) : (
-            <h2 className="text-20 font-medium text-primary">{task?.title}</h2>
-          )}
-          <InstructionField
-            value={form.instruction}
-            canEdit={canEdit}
-            editing={editingInstruction}
-            onEdit={() => setEditingInstruction(true)}
-            onChange={(instruction) => onFormChange({ instruction })}
-            onBlur={(value) => {
-              setEditingInstruction(false);
-              commitText("instruction", value);
-            }}
-          />
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-12 text-tertiary">
+              {kind === "create" ? t("research.chain_tasks.panel_title") : t(STATUS_KEYS[status])}
+            </p>
+            {kind === "task" && canEdit && (
+              <button
+                type="button"
+                data-task-edit-toggle=""
+                aria-pressed={isEditMode}
+                disabled={formBusy || instructionBusy || Boolean(actionBusy)}
+                onClick={() => onToggleEditMode(!isEditMode)}
+                className="rounded-md px-2 py-1 text-13 text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary disabled:cursor-default disabled:text-placeholder"
+              >
+                {isEditMode ? t("common.done") : t("common.edit")}
+              </button>
+            )}
+          </div>
+
+          <div className={contentPanelClassName}>
+            {isContentEditable ? (
+              <input
+                aria-label={t("research.chain_tasks.title")}
+                value={form.title}
+                placeholder={t("research.chain_tasks.title")}
+                onChange={(event) => onFormChange({ title: event.target.value })}
+                className="w-full bg-transparent p-0 text-20 font-medium text-primary outline-none placeholder:text-placeholder"
+              />
+            ) : (
+              <h2 className="text-20 font-medium text-primary">{task?.title}</h2>
+            )}
+          </div>
+
+          <div className={cn(contentPanelClassName, "min-h-24")}>
+            {kind === "task" && task ? (
+              <ResearchTaskDescription
+                task={task}
+                workspaceSlug={workspaceSlug}
+                value={form.instruction}
+                editable={isContentEditable}
+                onChange={(instruction) => onFormChange({ instruction })}
+                onAttachmentsChange={(attachments) => onTaskAttachmentsChange(task.id, attachments)}
+                onBusyChange={setInstructionBusy}
+              />
+            ) : (
+              <InstructionField
+                value={form.instruction}
+                editable={isContentEditable}
+                onChange={(instruction) => onFormChange({ instruction })}
+              />
+            )}
+          </div>
         </div>
 
         {primaryLifecycle.length > 0 && (
@@ -613,6 +639,20 @@ function TaskPeekHeader({
   const { t } = useTranslation();
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const layoutMenuRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const closeLayoutMenu = useCallback(() => setLayoutOpen(false), []);
+  const closeMoreMenu = useCallback(() => setMoreOpen(false), []);
+  const { handleKeyDown: handleLayoutMenuKeyDown } = useTransientMenu({
+    ref: layoutMenuRef,
+    isOpen: layoutOpen,
+    onClose: closeLayoutMenu,
+  });
+  const { handleKeyDown: handleMoreMenuKeyDown } = useTransientMenu({
+    ref: moreMenuRef,
+    isOpen: moreOpen,
+    onClose: closeMoreMenu,
+  });
   const current = PEEK_MODES.find((item) => item.key === mode) ?? PEEK_MODES[0];
   const CurrentIcon = current.icon;
 
@@ -627,10 +667,18 @@ function TaskPeekHeader({
         >
           <ArrowNarrowRightOutline className="h-4 w-4" />
         </button>
-        <div className="relative" data-task-menu="">
+        <div
+          role="presentation"
+          className="relative"
+          data-task-menu=""
+          ref={layoutMenuRef}
+          onKeyDown={handleLayoutMenuKeyDown}
+        >
           <button
             type="button"
             aria-label={t("research.chain_tasks.peek_layout")}
+            aria-expanded={layoutOpen}
+            aria-haspopup="menu"
             className="text-tertiary hover:text-secondary"
             onClick={() => setLayoutOpen((open) => !open)}
           >
@@ -649,7 +697,7 @@ function TaskPeekHeader({
                   className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-12 text-secondary hover:bg-surface-2"
                   onClick={() => {
                     onModeChange(item.key);
-                    setLayoutOpen(false);
+                    closeLayoutMenu();
                   }}
                 >
                   <item.icon className="h-4 w-4" />
@@ -663,7 +711,13 @@ function TaskPeekHeader({
       <div className="flex items-center gap-3">
         {formBusy && <span className="text-11 text-tertiary">{t("research.chain_tasks.saving")}</span>}
         {lifecycle.length > 0 && (
-          <div className="relative" data-task-menu="">
+          <div
+            role="presentation"
+            className="relative"
+            data-task-menu=""
+            ref={moreMenuRef}
+            onKeyDown={handleMoreMenuKeyDown}
+          >
             <button
               type="button"
               aria-label={t("research.chain_tasks.more")}
@@ -693,7 +747,7 @@ function TaskPeekHeader({
                         : "text-primary hover:bg-surface-2"
                     )}
                     onClick={() => {
-                      setMoreOpen(false);
+                      closeMoreMenu();
                       onAction(action);
                     }}
                   >
@@ -757,6 +811,9 @@ function StatusControl({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
+  const { handleKeyDown } = useTransientMenu({ ref: menuRef, isOpen: open, onClose: closeMenu });
   if (!actions.length) {
     return (
       <ResearchStatusBadge status={status} size="sm">
@@ -765,9 +822,12 @@ function StatusControl({
     );
   }
   return (
-    <div className="relative" data-task-menu="">
+    <div role="presentation" className="relative" data-task-menu="" ref={menuRef} onKeyDown={handleKeyDown}>
       <button
         type="button"
+        aria-label={t("common.state")}
+        aria-expanded={open}
+        aria-haspopup="menu"
         className="rounded-sm px-1 hover:bg-surface-2"
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
@@ -788,7 +848,7 @@ function StatusControl({
               role="menuitem"
               className="block w-full rounded-sm px-2 py-1.5 text-left text-12 text-primary hover:bg-surface-2"
               onClick={() => {
-                setOpen(false);
+                closeMenu();
                 onAction(action);
               }}
             >
@@ -802,25 +862,19 @@ function StatusControl({
 }
 
 /**
- * 任务说明。空时显示“点击添加描述”，已有内容则就地编辑。
+ * 任务说明。编辑态直接输入；只读态仅展示，空值使用无动作占位文案。
  */
 function InstructionField({
   value,
-  canEdit,
-  editing,
-  onEdit,
+  editable,
   onChange,
-  onBlur,
 }: {
   value: string;
-  canEdit: boolean;
-  editing: boolean;
-  onEdit: () => void;
+  editable: boolean;
   onChange: (value: string) => void;
-  onBlur: (value: string) => void;
 }) {
   const { t } = useTranslation();
-  if (editing && canEdit) {
+  if (editable) {
     return (
       <textarea
         aria-label={t("research.chain_tasks.instruction")}
@@ -828,25 +882,14 @@ function InstructionField({
         rows={4}
         placeholder={t("research.chain_tasks.add_instruction")}
         onChange={(event) => onChange(event.target.value)}
-        onBlur={(event) => onBlur(event.target.value)}
         className="w-full resize-none border-0 bg-transparent p-0 text-13 text-primary outline-none placeholder:text-placeholder"
       />
     );
   }
   if (!value.trim()) {
-    if (!canEdit) return null;
-    return (
-      <button type="button" className="text-left text-13 text-placeholder hover:text-secondary" onClick={onEdit}>
-        {t("research.chain_tasks.add_instruction")}
-      </button>
-    );
+    return <p className="text-13 text-placeholder">{t("research.chain_tasks.instruction_empty")}</p>;
   }
-  if (!canEdit) return <p className="text-13 whitespace-pre-wrap text-primary">{value}</p>;
-  return (
-    <button type="button" className="text-left text-13 whitespace-pre-wrap text-primary" onClick={onEdit}>
-      {value}
-    </button>
-  );
+  return <p className="text-13 whitespace-pre-wrap text-primary">{value}</p>;
 }
 
 /**
@@ -868,13 +911,18 @@ function DueDateControl({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
+  const { handleKeyDown } = useTransientMenu({ ref: menuRef, isOpen: open, onClose: closeMenu });
   const display = formatResearchDate(value, locale);
   if (disabled) return <ReadOnlyValue value={display} />;
   return (
-    <div className="relative" data-task-menu="">
+    <div role="presentation" className="relative" data-task-menu="" ref={menuRef} onKeyDown={handleKeyDown}>
       <button
         type="button"
         aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         className={cn(
           "flex h-7 items-center gap-2 rounded-sm px-2 text-12 hover:bg-surface-2",
           display ? "text-primary" : "text-placeholder"
@@ -885,13 +933,17 @@ function DueDateControl({
         {value && <ResearchTodoUrgency dueAt={value} />}
       </button>
       {open && (
-        <div className="absolute top-8 left-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]">
+        <div
+          role="dialog"
+          aria-label={label}
+          className="absolute top-8 left-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
+        >
           <input
             type="date"
             aria-label={label}
             value={toDateInput(value)}
             onChange={(event) => {
-              setOpen(false);
+              closeMenu();
               onChange(event.target.value);
             }}
             className="rounded-md border border-subtle bg-surface-1 px-2 py-1 text-12 text-primary"

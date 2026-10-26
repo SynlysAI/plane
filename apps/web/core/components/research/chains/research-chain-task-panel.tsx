@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
@@ -9,6 +9,7 @@ import type {
   TResearchChainNodeTaskAction,
   TResearchChainNodeTaskCreatePayload,
   TResearchChainNodeTaskUpdatePayload,
+  TResearchTaskInstructionAttachment,
 } from "@plane/types";
 import { formatResearchDate } from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
@@ -19,12 +20,15 @@ import {
   useResearchChainWorkbenchPeek,
   type TWorkbenchPeekMode,
 } from "@/components/research/chains/research-chain-workbench-peek";
+import { useTransientMenu } from "@/hooks/use-transient-menu";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 
 type Props = {
   workspaceSlug: string;
   chainId: string;
   nodeId: string;
+  /** 首页动态等外部链接指定的一次性任务深链 ID。 */
+  initialTaskId?: string | null;
 };
 
 type TPanelState = "loading" | "ready" | "forbidden" | "error";
@@ -109,7 +113,7 @@ function isTaskActionAllowed(task: TResearchChainNodeTask, action: TResearchChai
 }
 
 /** Load, edit, assign and review tasks attached to one Research Chain node. */
-export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props) {
+export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initialTaskId }: Props) {
   const { t, currentLocale } = useTranslation();
   const taskService = useMemo(() => new ResearchChainTaskService(), []);
   const sharedPeek = useResearchChainWorkbenchPeek();
@@ -128,13 +132,36 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
   const [actionError, setActionError] = useState("");
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
   const [dateMenuId, setDateMenuId] = useState<string | null>(null);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
+  const dateMenuRef = useRef<HTMLDivElement | null>(null);
   const [peekMode, setPeekMode] = useState<TWorkbenchPeekMode>("side");
+  const [isTaskEditMode, setIsTaskEditMode] = useState(false);
+  const handledInitialTaskIdRef = useRef<string | null>(null);
   const peek: TLocalPeek = sharedPeek
     ? sharedPeek.peek?.kind === "task" || sharedPeek.peek?.kind === "create"
       ? sharedPeek.peek
       : null
     : localPeek;
   const activeTask = peek?.kind === "task" ? (tasks.find((task) => task.id === peek.taskId) ?? null) : null;
+  const peekKind = peek?.kind ?? "closed";
+  const peekTaskId = peek?.kind === "task" ? peek.taskId : null;
+  const closeStatusMenu = useCallback(() => setStatusMenuId(null), []);
+  const closeDateMenu = useCallback(() => setDateMenuId(null), []);
+  const { handleKeyDown: handleStatusMenuKeyDown } = useTransientMenu({
+    ref: statusMenuRef,
+    isOpen: statusMenuId !== null,
+    onClose: closeStatusMenu,
+  });
+  const { handleKeyDown: handleDateMenuKeyDown } = useTransientMenu({
+    ref: dateMenuRef,
+    isOpen: dateMenuId !== null,
+    onClose: closeDateMenu,
+  });
+
+  // 共享 Peek 可能从其他入口切换任务或进入创建态，这里统一重置主内容编辑态。
+  useEffect(() => {
+    setIsTaskEditMode(peekKind === "create");
+  }, [peekKind, peekTaskId]);
 
   const load = useCallback(
     async (isActive: () => boolean = () => true) => {
@@ -194,29 +221,58 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
     });
   }, []);
 
+  /**
+   * 同步任务描述附件的即时上传结果，避免重新打开详情时读到旧列表。
+   *
+   * Args:
+   *   taskId: 当前任务 ID。
+   *   attachments: 服务端确认后的最新附件列表。
+   */
+  const updateTaskAttachments = useCallback((taskId: string, attachments: TResearchTaskInstructionAttachment[]) => {
+    setTasks((current) =>
+      current.map((task) => (task.id === taskId ? { ...task, instruction_attachments: attachments } : task))
+    );
+  }, []);
+
   const closePeek = () => {
+    setIsTaskEditMode(false);
     if (sharedPeek) sharedPeek.close();
     else setLocalPeek(null);
   };
 
-  const openTask = (task: TResearchChainNodeTask) => {
-    setForm({
-      taskId: task.id,
-      title: task.title,
-      instruction: task.instruction,
-      assignee: task.assignee ?? "",
-      dueAt: toDateInput(task.due_at),
-    });
-    setFormError("");
-    setStatusMenuId(null);
-    if (sharedPeek) sharedPeek.openTask(task.id);
-    else setLocalPeek({ kind: "task", taskId: task.id });
-  };
+  const openTask = useCallback(
+    (task: TResearchChainNodeTask) => {
+      setForm({
+        taskId: task.id,
+        title: task.title,
+        instruction: task.instruction,
+        assignee: task.assignee ?? "",
+        dueAt: toDateInput(task.due_at),
+      });
+      setFormError("");
+      setStatusMenuId(null);
+      setIsTaskEditMode(false);
+      if (sharedPeek) sharedPeek.openTask(task.id);
+      else setLocalPeek({ kind: "task", taskId: task.id });
+    },
+    [sharedPeek]
+  );
+
+  useEffect(() => {
+    if (!initialTaskId || state !== "ready" || handledInitialTaskIdRef.current === initialTaskId) return;
+
+    const task = tasks.find((item) => item.id === initialTaskId);
+    if (!task) return;
+
+    handledInitialTaskIdRef.current = initialTaskId;
+    openTask(task);
+  }, [initialTaskId, openTask, state, tasks]);
 
   const openCreate = (title = "") => {
     setForm({ ...EMPTY_FORM, title });
     setFormError("");
     setQuickAdd(false);
+    setIsTaskEditMode(true);
     if (sharedPeek) sharedPeek.openCreate();
     else setLocalPeek({ kind: "create" });
   };
@@ -289,10 +345,13 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
    *   task: 当前打开的任务。
    *   payload: 任务更新接口接受的局部字段。
    */
-  const savePeekFields = async (task: TResearchChainNodeTask, payload: TResearchChainNodeTaskUpdatePayload) => {
+  const savePeekFields = async (
+    task: TResearchChainNodeTask,
+    payload: TResearchChainNodeTaskUpdatePayload
+  ): Promise<boolean> => {
     if (task.assignee && payload.assignee === null) {
       setFormError(t("research.chain_tasks.assignee_required"));
-      return;
+      return false;
     }
     setFormBusy(true);
     setFormError("");
@@ -306,11 +365,49 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
         assignee: payload.assignee !== undefined ? (updated.assignee ?? "") : current.assignee,
         dueAt: payload.due_at !== undefined ? toDateInput(updated.due_at) : current.dueAt,
       }));
+      return true;
     } catch (error) {
       setFormError(serverErrorMessage(error, t("research.chain_tasks.server_rejected")));
+      return false;
     } finally {
       setFormBusy(false);
     }
+  };
+
+  /**
+   * 切换主内容编辑态，并在退出编辑时批量保存文本变更。
+   *
+   * Args:
+   *   next: 主内容是否进入编辑态。
+   */
+  const toggleTaskEditMode = (next: boolean) => {
+    if (next) {
+      setIsTaskEditMode(true);
+      return;
+    }
+    if (peek?.kind !== "task" || !activeTask) {
+      setIsTaskEditMode(false);
+      return;
+    }
+    const title = form.title.trim();
+    if (!title) {
+      setFormError(t("research.chain_tasks.title_required"));
+      return;
+    }
+
+    const payload: TResearchChainNodeTaskUpdatePayload = {};
+    if (title !== activeTask.title) payload.title = title;
+    if (form.instruction !== activeTask.instruction) payload.instruction = form.instruction;
+    if (!Object.keys(payload).length) {
+      setFormError("");
+      setIsTaskEditMode(false);
+      return;
+    }
+
+    void (async () => {
+      const saved = await savePeekFields(activeTask, payload);
+      if (saved) setIsTaskEditMode(false);
+    })();
   };
 
   /**
@@ -469,17 +566,33 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                           onChange={(userId) => void updateProperty(task, { assignee: userId || null })}
                         />
                         {canEdit ? (
-                          <div className="relative">
+                          <div
+                            role="presentation"
+                            className="relative"
+                            data-task-menu=""
+                            ref={dateMenuId === task.id ? dateMenuRef : undefined}
+                            onKeyDown={handleDateMenuKeyDown}
+                          >
                             <button
                               type="button"
+                              aria-label={t("research.chain_tasks.due_at")}
+                              aria-expanded={dateMenuId === task.id}
+                              aria-haspopup="dialog"
                               className="h-7 rounded-sm px-1.5 text-12 text-secondary hover:bg-surface-2"
-                              onClick={() => setDateMenuId((current) => (current === task.id ? null : task.id))}
+                              onClick={() => {
+                                setStatusMenuId(null);
+                                setDateMenuId((current) => (current === task.id ? null : task.id));
+                              }}
                             >
                               {formatResearchDate(task.due_at, currentLocale) || "—"}
                               {task.due_at && <ResearchTodoUrgency dueAt={task.due_at} />}
                             </button>
                             {dateMenuId === task.id && (
-                              <div className="absolute top-8 right-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]">
+                              <div
+                                role="dialog"
+                                aria-label={t("research.chain_tasks.due_at")}
+                                className="absolute top-8 right-0 z-20 rounded-md border border-subtle bg-surface-1 p-2 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
+                              >
                                 <input
                                   type="date"
                                   aria-label={t("research.chain_tasks.due_at")}
@@ -500,12 +613,24 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                             {formatResearchDate(task.due_at, currentLocale) || "—"}
                           </span>
                         )}
-                        <div className="relative">
+                        <div
+                          role="presentation"
+                          className="relative"
+                          data-task-menu=""
+                          ref={statusMenuId === task.id ? statusMenuRef : undefined}
+                          onKeyDown={handleStatusMenuKeyDown}
+                        >
                           {lifecycle.length ? (
                             <button
                               type="button"
+                              aria-label={t("common.state")}
+                              aria-expanded={statusMenuId === task.id}
+                              aria-haspopup="menu"
                               className="h-7 rounded-sm px-1"
-                              onClick={() => setStatusMenuId((current) => (current === task.id ? null : task.id))}
+                              onClick={() => {
+                                setDateMenuId(null);
+                                setStatusMenuId((current) => (current === task.id ? null : task.id));
+                              }}
                             >
                               <ResearchStatusBadge status={task.status} size="sm">
                                 {t(TASK_STATUS_KEYS[task.status])}
@@ -531,9 +656,10 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
                                     if (action === "return" || action === "cancel") {
                                       setReasonAction({ taskId: task.id, action, reason: "" });
                                       setActionError("");
-                                      setStatusMenuId(null);
+                                      closeStatusMenu();
                                       return;
                                     }
+                                    closeStatusMenu();
                                     void runAction(task, action);
                                   }}
                                 >
@@ -604,6 +730,8 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
           form={form}
           formBusy={formBusy}
           formError={formError}
+          isEditMode={peek.kind === "create" || (peek.kind === "task" && isTaskEditMode)}
+          onToggleEditMode={toggleTaskEditMode}
           candidates={candidates}
           candidateState={candidateState}
           locale={currentLocale}
@@ -614,6 +742,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
           onModeChange={setPeekMode}
           onClose={closePeek}
           onFormChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+          onTaskAttachmentsChange={updateTaskAttachments}
           onCommit={(payload) => {
             if (activeTask) void savePeekFields(activeTask, payload);
           }}

@@ -87,7 +87,7 @@ export default function PdfReader({ url }: { url: string }) {
   return (
     <>
       <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b border-subtle bg-surface-1 p-2 text-13">
-        <button className={BUTTON} disabled={page <= 1} onClick={() => setPage((v) => v - 1)}>
+        <button type="button" className={BUTTON} disabled={page <= 1} onClick={() => setPage((v) => v - 1)}>
           上一页
         </button>
         <label>
@@ -103,16 +103,21 @@ export default function PdfReader({ url }: { url: string }) {
           />
         </label>
         <span>/ {pdf?.numPages ?? "…"}</span>
-        <button className={BUTTON} disabled={!pdf || page >= pdf.numPages} onClick={() => setPage((v) => v + 1)}>
+        <button
+          type="button"
+          className={BUTTON}
+          disabled={!pdf || page >= pdf.numPages}
+          onClick={() => setPage((v) => v + 1)}
+        >
           下一页
         </button>
-        <button className={BUTTON} onClick={() => setZoom((v) => Math.max(0.25, (v ?? 1) - 0.25))}>
+        <button type="button" className={BUTTON} onClick={() => setZoom((v) => Math.max(0.25, (v ?? 1) - 0.25))}>
           缩小
         </button>
-        <button className={BUTTON} onClick={() => setZoom((v) => Math.min(3, (v ?? 1) + 0.25))}>
+        <button type="button" className={BUTTON} onClick={() => setZoom((v) => Math.min(3, (v ?? 1) + 0.25))}>
           放大
         </button>
-        <button className={BUTTON} onClick={() => setZoom(null)}>
+        <button type="button" className={BUTTON} onClick={() => setZoom(null)}>
           适应宽度
         </button>
       </div>

@@ -62,6 +62,24 @@ def _latest_snapshot(report):
     return report.official_snapshots.order_by("-version_no").first()
 
 
+def _withdrawn_comment_error(report):
+    """Reject new discussion while an author is revising a withdrawn report.
+
+    Args:
+        report: Report whose commenting availability is being checked.
+
+    Returns:
+        A conflict response, or ``None`` when commenting is available.
+    """
+    if report.submitted_at is not None:
+        return None
+    return research_error(
+        ResearchErrorCode.REPORT_STATE_CONFLICT,
+        "Comments can be added only while a submitted version is active.",
+        status.HTTP_409_CONFLICT,
+    )
+
+
 def _existing_comment(report, user, request_id, thread=None):
     """Find an active idempotent comment after a concurrent duplicate insert.
 
@@ -190,13 +208,16 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
                 "results": [_serialize_thread(thread, request, context) for thread in threads],
                 "count": len(threads),
                 "status_filter": status_filter,
-                "can_comment": snapshot is not None,
+                "can_comment": snapshot is not None and report.submitted_at is not None,
                 "snapshot_version": snapshot.version_no if snapshot else None,
             }
         )
 
     def post(self, request, slug, report_id):
         report, context, error = _load_visible_report(self, request, slug, report_id)
+        if error:
+            return error
+        error = _withdrawn_comment_error(report)
         if error:
             return error
         snapshot = _latest_snapshot(report)
@@ -244,7 +265,10 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
                 # Root threads are idempotent per report and actor. Hold the
                 # report lock through insert so a concurrent retry observes the
                 # winner instead of creating a second thread.
-                type(report).objects.select_for_update().get(pk=report.pk)
+                report = type(report).objects.select_for_update().get(pk=report.pk)
+                error = _withdrawn_comment_error(report)
+                if error:
+                    return error
                 existing = _existing_comment(report, request.user, request_id)
                 if existing is not None:
                     return Response(_serialize_thread(existing.thread, request, context), status=status.HTTP_200_OK)
@@ -283,6 +307,9 @@ class ResearchReportCommentThreadCommentEndpoint(ResearchAPIView):
 
     def post(self, request, slug, report_id, thread_id):
         report, context, error = _load_visible_report(self, request, slug, report_id)
+        if error:
+            return error
+        error = _withdrawn_comment_error(report)
         if error:
             return error
         thread = _thread_queryset(report).filter(pk=thread_id).first()
@@ -326,6 +353,10 @@ class ResearchReportCommentThreadCommentEndpoint(ResearchAPIView):
 
         try:
             with transaction.atomic():
+                report = type(report).objects.select_for_update().get(pk=report.pk)
+                error = _withdrawn_comment_error(report)
+                if error:
+                    return error
                 comment = serializer.save(
                     thread=thread,
                     parent=parent,

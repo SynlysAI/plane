@@ -7,6 +7,7 @@ import { TranslationProvider } from "@plane/i18n";
 import { StoreProvider, store } from "@/lib/store-context";
 import { APIService } from "@/services/api.service";
 import { ResearchChainBoard } from "@/components/research/chains/research-chain-board";
+import { ResearchProjectList } from "@/components/research/projects/research-project-list";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 // oxlint-disable-next-line import/no-unassigned-import -- shared fixture styles
 import "./research-home-workbench.fixture.css";
@@ -18,7 +19,53 @@ const people = [
   { id: "person-2", display_name: "李明", email: "liming@example.org" },
 ];
 const units = [{ id: "group-1", name: "金属化", unit_type: "GROUP", is_active: true }];
-const projects = [{ id: "project-1", name: "催化材料界面研究", research: { research_type: "RESEARCH_PROJECT" } }];
+const projects = [
+  {
+    id: "project-1",
+    name: "催化材料界面研究",
+    research: {
+      owner: "person-1",
+      owner_detail: people[0],
+      org_unit: "group-1",
+      research_type: "PHD",
+      chain_kind: "RESEARCH_CHAIN",
+      chain_id: "chain-1",
+      chain_visibility: "PRIVATE",
+      workflow_status: "ACTIVE",
+      started_at: "2026-10-01",
+    },
+  },
+  {
+    id: "project-2",
+    name: "高性能催化材料开发",
+    research: {
+      owner: "person-1",
+      owner_detail: people[0],
+      org_unit: "group-1",
+      research_type: "RESEARCH_PROJECT",
+      chain_kind: "RESEARCH_CHAIN",
+      chain_id: "chain-2",
+      chain_visibility: "ORG",
+      workflow_status: "ARCHIVED",
+      started_at: "2026-09-18",
+    },
+  },
+  {
+    id: "project-3",
+    name: "共享表征方法研究",
+    research: {
+      owner: "person-2",
+      owner_detail: people[1],
+      org_unit: "group-1",
+      research_type: "RESEARCH_PROJECT",
+      chain_kind: "RESEARCH_CHAIN",
+      chain_id: "chain-3",
+      chain_visibility: "WORKSPACE",
+      workflow_status: "ACTIVE",
+      started_at: "2026-10-12",
+    },
+  },
+];
 const chains = [
   {
     id: "chain-1",
@@ -145,11 +192,11 @@ APIService.prototype.get = async (rawUrl, options = {}) => {
       is_active: true,
       created_at: now,
     }));
-  else if (path.endsWith("/me/"))
+  else if (path.endsWith("/context/"))
     data = {
       module_enabled: true,
       workspace_enabled: true,
-      sections: { reports: true, research_chain: true },
+      sections: { reports: true, research_chain: true, projects: true },
       user: { id: "person-1", org_units: [{ org_unit: "group-1", is_primary: true }], mentor_ids: [], mentee_ids: [] },
     };
   else if (path.endsWith("/org-units/")) data = { results: units };
@@ -186,21 +233,25 @@ APIService.prototype.post = async (rawUrl, payload = {}) => {
 function Preview() {
   const navigate = useNavigate();
   const location = useLocation();
-  const isChain = location.pathname.endsWith("/chains");
+  const view = new URLSearchParams(location.search).get("view");
+  const isProjectRecords = view === "projects";
+  const isChain = !isProjectRecords && location.pathname.endsWith("/chains");
+  const tabs = [
+    ["/sample/research/chains", "课题"],
+    ["/sample/research/chains?view=projects", "项目档案"],
+    ["/sample/research/reports", "报告与成果"],
+  ] as const;
   return (
     <main className="flex h-screen min-w-0 flex-col overflow-hidden bg-canvas">
       <header className="shrink-0 border-b border-subtle bg-surface-1 px-5 py-4">
         <h1 className="text-18 font-semibold text-primary">科研项目</h1>
       </header>
       <nav aria-label="科研项目" className="flex shrink-0 gap-1 border-b border-subtle bg-surface-1 px-5 py-2">
-        {[
-          ["/sample/research/chains", "课题"],
-          ["/sample/research/reports", "报告与成果"],
-        ].map(([path, label]) => (
+        {tabs.map(([path, label]) => (
           <button
             key={path}
-            aria-current={isChain === path.endsWith("/chains") ? "page" : undefined}
-            className={`rounded-md px-3 py-2 text-13 ${isChain === path.endsWith("/chains") ? "bg-surface-2 font-medium text-primary" : "text-secondary"}`}
+            aria-current={path === location.pathname + location.search ? "page" : undefined}
+            className={`rounded-md px-3 py-2 text-13 ${path === location.pathname + location.search ? "bg-surface-2 font-medium text-primary" : "text-secondary"}`}
             onClick={() => navigate(path)}
           >
             {label}
@@ -208,7 +259,9 @@ function Preview() {
         ))}
       </nav>
       <div className="min-h-0 min-w-0 flex-1">
-        {isChain ? (
+        {isProjectRecords ? (
+          <ResearchProjectList workspaceSlug={workspaceSlug} currentUserId="person-1" />
+        ) : isChain ? (
           <ResearchChainBoard workspaceSlug={workspaceSlug} />
         ) : (
           <ResearchReportList workspaceSlug={workspaceSlug} />

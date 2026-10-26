@@ -60,7 +60,7 @@ def _payload_with_request_id(request, request_id):
 
 def _serializer_error(serializer):
     """Return the first serializer message without leaking field internals."""
-    field, errors = next(serializer.errors.items())
+    field, errors = next(iter(serializer.errors.items()))
     message = errors[0] if isinstance(errors, list) else str(errors)
     return research_error(
         ResearchErrorCode.CHAIN_INVALID,
@@ -93,6 +93,7 @@ def _task_context(view, request, slug, chain_id, node_id, task_id):
     task = (
         ResearchChainNodeTask.objects.filter(workspace=workspace, chain=chain, node=node, pk=task_id)
         .select_related("workspace", "chain", "node", "assignee", "assigned_by")
+        .prefetch_related("instruction_attachments__asset")
         .first()
     )
     if task is None:

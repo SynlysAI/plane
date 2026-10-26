@@ -76,6 +76,10 @@ export type TResearchChainUpload = {
   knowledge_id: string;
   knowledge_base_id: string;
   file_name: string;
+  file_type: string;
+  file_size: number;
+  preview_url?: string | null;
+  download_url?: string | null;
   error_code: string;
 };
 

@@ -24,6 +24,8 @@ from plane.research.utils.reports import report_resource
 from plane.research.utils.resource_projections import experiment_resource
 from plane.research.utils.stages import material_resource
 from plane.research.views.projects import visible_profile_queryset
+from plane.utils.content_validator import validate_html_content
+from plane.utils.html_processor import strip_tags
 
 CURSOR_SALT = "research-mcp.read.v1"
 MAX_SCAN = 200
@@ -84,6 +86,12 @@ def _json(value):
 
 def _clip(value, size=500):
     return str(value or "")[:size]
+
+
+def _instruction_text(task):
+    """Return a bounded plain-text projection of a task instruction."""
+    _valid, _error, cleaned = validate_html_content(task.instruction or "")
+    return strip_tags(cleaned or "").strip()
 
 
 def normalise_reference(ref):
@@ -321,7 +329,8 @@ class ResearchReadService:
             rows = rows.filter(status=status)
         return self._page(rows, lambda row: {
             "id": str(row.id), "node_id": str(node.id), "title": _clip(row.title),
-            "instruction": _clip(row.instruction, 2000), "instruction_truncated": len(row.instruction) > 2000,
+            "instruction": _clip(_instruction_text(row), 2000),
+            "instruction_truncated": len(_instruction_text(row)) > 2000,
             "content_ref": {"kind": "task", "id": str(row.id), "node_id": str(node.id)},
             "status": row.status, "assignee_id": str(row.assignee_id) if row.assignee_id else None,
             "due_at": row.due_at.isoformat() if row.due_at else None,
@@ -522,7 +531,7 @@ class ResearchReadService:
             if version is not None:
                 raise ResearchReadError("version_invalid", "This resource has no numbered versions; use its content hash.")
             if kind == "task":
-                return {"title": obj.title, "instruction": obj.instruction, "status": obj.status,
+                return {"title": obj.title, "instruction": _instruction_text(obj), "status": obj.status,
                         "record_state": "current"}, None
             if kind == "task_comment":
                 return {"text": obj.comment_stripped, "created_at": obj.created_at.isoformat(),

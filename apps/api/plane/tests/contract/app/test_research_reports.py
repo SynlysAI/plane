@@ -14,14 +14,22 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
+    FileAsset,
     MentorBinding,
+    Notification,
     OrgUnit,
     OrgUnitMember,
     Page,
     PeriodicReport,
+    PeriodicReportReadReceipt,
+    PeriodicReportProjectReference,
     PeriodicReportSnapshot,
+    Project,
+    ProjectPage,
     ReportAccessGrant,
+    ReportAttachment,
     ReportReviewLog,
+    ResearchAuditEvent,
     ReportTemplate,
     WorkspaceResearchSetting,
 )
@@ -478,6 +486,303 @@ class TestReportStateMachine:
         assert response.status_code == 403
 
 
+@pytest.mark.django_db
+class TestReportRestore:
+    @staticmethod
+    def make_deleted_report_with_dependencies(env):
+        """创建带正文、课题引用和附件的已删除报告夹具。
+
+        Args:
+            env: 报告契约测试环境。
+
+        Returns:
+            包含报告、正文、ProjectPage、课题引用、有效附件和历史删除附件的字典。
+        """
+        created = create_report(env)
+        assert created.status_code == 201, created.json()
+        report = PeriodicReport.objects.get(pk=created.json()["id"])
+        report.page.description_html = "<p>Recoverable weekly body</p>"
+        report.page.save(update_fields=["description_html", "updated_at"])
+
+        reference = PeriodicReportProjectReference.objects.create(
+            report=report,
+            project=report.project,
+            created_by=env["student"],
+        )
+        active_asset = FileAsset.objects.create(
+            workspace=env["workspace"],
+            user=env["student"],
+            created_by=env["student"],
+            asset=f"{env['workspace'].slug}/restore-active.pdf",
+            attributes={"name": "restore-active.pdf", "type": "application/pdf", "size": 1},
+            size=1,
+        )
+        stale_asset = FileAsset.objects.create(
+            workspace=env["workspace"],
+            user=env["student"],
+            created_by=env["student"],
+            asset=f"{env['workspace'].slug}/restore-stale.pdf",
+            attributes={"name": "restore-stale.pdf", "type": "application/pdf", "size": 1},
+            size=1,
+        )
+        active_attachment = ReportAttachment.objects.create(
+            report=report,
+            asset=active_asset,
+            file_name="restore-active.pdf",
+            file_size=1,
+            content_type="application/pdf",
+            uploaded_by=env["student"],
+        )
+        stale_attachment = ReportAttachment.objects.create(
+            report=report,
+            asset=stale_asset,
+            file_name="restore-stale.pdf",
+            file_size=1,
+            content_type="application/pdf",
+            uploaded_by=env["student"],
+        )
+        ReportAttachment.all_objects.filter(pk=stale_attachment.pk).update(
+            deleted_at=timezone.now() - timedelta(seconds=1)
+        )
+        project_page = ProjectPage.objects.filter(page_id=report.page_id).first()
+        if project_page is None:
+            page_project = report.project
+            if page_project is None:
+                page_project = Project.objects.create(
+                    workspace=env["workspace"],
+                    name=f"Report restore {report.period_key}",
+                    identifier=f"RR{str(report.id)[:6].upper()}",
+                )
+            project_page = ProjectPage.objects.create(
+                project=page_project,
+                page=report.page,
+                workspace=env["workspace"],
+                created_by=env["student"],
+            )
+
+        response = env["student_client"].delete(f"{env['url']}{report.id}/")
+        assert response.status_code == 204, response.data
+        return {
+            "report": report,
+            "reference": reference,
+            "project_page": project_page,
+            "active_attachment": active_attachment,
+            "stale_attachment": stale_attachment,
+        }
+
+    def test_author_can_restore_deleted_report_with_same_delete_batch(self, env):
+        fixture = self.make_deleted_report_with_dependencies(env)
+        report = fixture["report"]
+
+        active_results = env["student_client"].get(env["url"], {"scope": "all"}).json()["results"]
+        deleted_results = env["student_client"].get(env["url"], {"scope": "deleted"}).json()["results"]
+        assert all(item["id"] != str(report.id) for item in active_results)
+        row = next(item for item in deleted_results if item["id"] == str(report.id))
+        assert row["deleted_at"] is not None
+        assert row["can_restore"] is True
+        assert row["can_edit"] is False
+        assert row["can_delete"] is False
+        assert row["can_review"] is False
+
+        colleague_results = env["colleague_client"].get(env["url"], {"scope": "deleted"}).json()["results"]
+        assert all(item["id"] != str(report.id) for item in colleague_results)
+        assert env["colleague_client"].post(f"{env['url']}{report.id}/restore/", {}, format="json").status_code == 404
+
+        restored = env["student_client"].post(f"{env['url']}{report.id}/restore/", {}, format="json")
+        assert restored.status_code == 200, restored.json()
+        assert restored.json()["draft_content"]["description_html"] == "<p>Recoverable weekly body</p>"
+
+        report.refresh_from_db()
+        report.page.refresh_from_db()
+        fixture["reference"].refresh_from_db()
+        fixture["project_page"].refresh_from_db()
+        fixture["active_attachment"].refresh_from_db()
+        fixture["stale_attachment"].refresh_from_db()
+        assert report.deleted_at is None
+        assert report.page.deleted_at is None
+        assert fixture["reference"].deleted_at is None
+        assert fixture["project_page"].deleted_at is None
+        assert fixture["active_attachment"].deleted_at is None
+        assert fixture["stale_attachment"].deleted_at is not None
+
+        event = ResearchAuditEvent.objects.get(
+            workspace=env["workspace"],
+            action="report.restore",
+            resource_id=report.pk,
+        )
+        assert event.actor_id == env["student"].id
+        assert event.metadata["period_key"] == report.period_key
+        assert env["student_client"].post(f"{env['url']}{report.id}/restore/", {}, format="json").status_code == 404
+
+    def test_research_admin_can_restore_another_users_deleted_report(self, env):
+        report = create_report(env).json()
+        assert env["student_client"].delete(f"{env['url']}{report['id']}/").status_code == 204
+
+        deleted_response = env["admin_client"].get(env["url"], {"scope": "deleted"})
+        assert deleted_response.status_code == 200, deleted_response.json()
+        deleted = deleted_response.json()["results"]
+        row = next(item for item in deleted if item["id"] == report["id"])
+        assert row["can_restore"] is True
+
+        response = env["admin_client"].post(f"{env['url']}{report['id']}/restore/", {}, format="json")
+        assert response.status_code == 200, response.json()
+        assert PeriodicReport.objects.filter(pk=report["id"], deleted_at__isnull=True).exists()
+
+    def test_restore_conflicts_with_replacement_and_does_not_partially_restore(self, env):
+        fixture = self.make_deleted_report_with_dependencies(env)
+        report = fixture["report"]
+        replacement = create_report(env)
+        assert replacement.status_code == 201, replacement.json()
+
+        response = env["student_client"].post(f"{env['url']}{report.id}/restore/", {}, format="json")
+        assert response.status_code == 409
+        assert response.json()["error_code"] == "report_period_conflict"
+
+        report.refresh_from_db()
+        report.page.refresh_from_db()
+        fixture["reference"].refresh_from_db()
+        fixture["active_attachment"].refresh_from_db()
+        assert report.deleted_at is not None
+        assert report.page.deleted_at is not None
+        assert fixture["reference"].deleted_at is not None
+        assert fixture["active_attachment"].deleted_at is not None
+
+
+@pytest.mark.django_db
+class TestReportWithdraw:
+    @staticmethod
+    def submit_report(env, **payload):
+        """Create and submit one report for withdrawal tests.
+
+        Args:
+            env: Report contract test environment.
+            payload: Optional report creation overrides such as period_key.
+
+        Returns:
+            API representation of the newly submitted report.
+        """
+        report = create_report(env, **payload).json()
+        response = env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        assert response.status_code == 200, response.json()
+        return report
+
+    def test_author_can_withdraw_after_read_and_comments_then_resubmit_v2(self, env):
+        report = self.submit_report(env)
+        report_id = report["id"]
+        assert env["student_client"].get(f"{env['url']}{report_id}/").json()["can_withdraw"] is True
+        assert env["advisor_client"].post(f"{env['url']}{report_id}/read/", {}, format="json").status_code == 200
+        comment_response = env["advisor_client"].post(
+            f"{env['url']}{report_id}/comment-threads/",
+            {"comment_html": "<p>Please clarify the result.</p>", "request_id": "withdraw-comment-1"},
+            format="json",
+        )
+        assert comment_response.status_code == 201, comment_response.json()
+        thread_id = comment_response.json()["id"]
+
+        withdrawn = env["student_client"].post(
+            f"{env['url']}{report_id}/withdraw/",
+            {"comment": "Submitted the wrong experiment section."},
+            format="json",
+        )
+        assert withdrawn.status_code == 200, withdrawn.json()
+        assert withdrawn.json()["status"] == "DRAFT"
+        assert withdrawn.json()["submitted_at"] is None
+        assert withdrawn.json()["can_edit"] is True
+        assert withdrawn.json()["can_withdraw"] is False
+        assert withdrawn.json()["draft_content"] is not None
+
+        item = PeriodicReport.objects.get(pk=report_id)
+        assert item.status == "DRAFT"
+        assert item.submitted_at is None
+        assert item.accepted_at is None
+        assert item.reviewer_id is None
+        assert item.official_snapshots.count() == 1
+        assert PeriodicReportReadReceipt.objects.filter(report=item, snapshot_version=1).count() == 1
+        assert item.comment_threads.filter(deleted_at__isnull=True).count() == 1
+
+        log = ReportReviewLog.objects.filter(report=item, action="REOPEN").latest("created_at")
+        assert log.from_status == "SUBMITTED"
+        assert log.to_status == "DRAFT"
+        assert log.actor_id == env["student"].id
+        assert log.snapshot_version == "1"
+        assert log.comment == "Submitted the wrong experiment section."
+        audit = ResearchAuditEvent.objects.get(
+            workspace=env["workspace"],
+            action="report.withdraw",
+            resource_id=item.pk,
+        )
+        assert audit.metadata["snapshot_version"] == 1
+        assert Notification.objects.filter(
+            entity_identifier=item.pk,
+            title=f"{item.period_key} 报告已撤回",
+        ).exists()
+
+        review_results = env["advisor_client"].get(env["url"], {"scope": "review"}).json()["results"]
+        assert all(row["id"] != report_id for row in review_results)
+        withdrawn_detail = env["admin_client"].get(f"{env['url']}{report_id}/")
+        assert withdrawn_detail.status_code == 200
+        assert withdrawn_detail.json()["official_content"] is None
+        blocked_comment = env["student_client"].post(
+            f"{env['url']}{report_id}/comment-threads/",
+            {"comment_html": "<p>Author note</p>", "request_id": "withdraw-comment-2"},
+            format="json",
+        )
+        assert blocked_comment.status_code == 409
+        assert blocked_comment.json()["error_code"] == "report_state_conflict"
+        blocked_reply = env["student_client"].post(
+            f"{env['url']}{report_id}/comment-threads/{thread_id}/comments/",
+            {"comment_html": "<p>Author reply</p>", "request_id": "withdraw-reply-1"},
+            format="json",
+        )
+        assert blocked_reply.status_code == 409
+        assert blocked_reply.json()["error_code"] == "report_state_conflict"
+
+        assert env["student_client"].post(f"{env['url']}{report_id}/submit/", {}, format="json").status_code == 200
+        item.refresh_from_db()
+        assert item.status == "SUBMITTED"
+        assert item.official_snapshots.count() == 2
+        review_again = env["advisor_client"].get(env["url"], {"scope": "review"}).json()["results"]
+        assert any(row["id"] == report_id for row in review_again)
+        restored_reply = env["advisor_client"].post(
+            f"{env['url']}{report_id}/comment-threads/{thread_id}/comments/",
+            {"comment_html": "<p>Thanks, v2 is clear.</p>", "request_id": "withdraw-reply-2"},
+            format="json",
+        )
+        assert restored_reply.status_code == 201, restored_reply.json()
+
+    def test_only_author_can_withdraw_submitted_report(self, env):
+        report = self.submit_report(env)
+        url = f"{env['url']}{report['id']}/withdraw/"
+
+        assert env["advisor_client"].post(url, {}, format="json").status_code == 403
+        assert env["admin_client"].post(url, {}, format="json").status_code == 403
+        assert PeriodicReport.objects.filter(pk=report["id"], status="SUBMITTED").exists()
+
+    def test_withdraw_requires_submitted_state(self, env):
+        draft = create_report(env).json()
+        draft_response = env["student_client"].post(f"{env['url']}{draft['id']}/withdraw/", {}, format="json")
+        assert draft_response.status_code == 409
+
+        submitted = self.submit_report(env, period_key="2026-W39")
+        accepted = env["advisor_client"].post(f"{env['url']}{submitted['id']}/accept/", {}, format="json")
+        assert accepted.status_code == 200, accepted.json()
+        accepted_response = env["student_client"].post(f"{env['url']}{submitted['id']}/withdraw/", {}, format="json")
+        assert accepted_response.status_code == 409
+        assert accepted_response.json()["error_code"] == "report_state_conflict"
+
+        returned = self.submit_report(env, period_key="2026-W40")
+        assert (
+            env["advisor_client"].post(
+                f"{env['url']}{returned['id']}/return/",
+                {"comment": "Needs more detail."},
+                format="json",
+            ).status_code
+            == 200
+        )
+        returned_response = env["student_client"].post(f"{env['url']}{returned['id']}/withdraw/", {}, format="json")
+        assert returned_response.status_code == 409
+
+
 @pytest.mark.django_db(transaction=True)
 class TestReportConcurrentStateFlow:
     @staticmethod
@@ -515,6 +820,24 @@ class TestReportConcurrentStateFlow:
         assert sorted(statuses) == [200, 409]
         assert PeriodicReportSnapshot.objects.filter(report_id=report["id"]).count() == 1
         assert ReportReviewLog.objects.filter(report_id=report["id"], action=ReportReviewLog.Action.SUBMIT).count() == 1
+
+    def test_withdraw_and_accept_compete_on_one_submitted_state(self, env):
+        report = create_report(env).json()
+        report_url = f"{env['url']}{report['id']}/"
+        assert env["student_client"].post(f"{report_url}submit/", {}, format="json").status_code == 200
+
+        statuses = sorted(
+            self._run_together(
+                lambda: client_for(env["student"]).post(f"{report_url}withdraw/", {}, format="json"),
+                lambda: client_for(env["advisor"]).post(f"{report_url}accept/", {}, format="json"),
+            )
+        )
+
+        assert statuses[0] == 200
+        assert statuses[1] in (403, 409)
+        item = PeriodicReport.objects.get(pk=report["id"])
+        assert item.status in ("DRAFT", "ACCEPTED")
+        assert item.status == "ACCEPTED" or (item.submitted_at is None and item.accepted_at is None)
 
     def test_return_and_accept_compete_on_one_submitted_state(self, env):
         from plane.research.views import reports as report_views

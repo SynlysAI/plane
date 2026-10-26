@@ -4,9 +4,13 @@
 
 """Serializers for Phase 1.6 research collaboration objects."""
 
+from uuid import UUID
+
+from bs4 import BeautifulSoup
 from rest_framework import serializers
 
 from plane.db.models import (
+    FileAsset,
     ResearchChainNodeTask,
     ResearchPaperReview,
     ResearchPaperReviewVersion,
@@ -24,6 +28,7 @@ from plane.research.services.paper_review import (
     actor_can_withdraw_paper,
 )
 from plane.research.utils.action_capabilities import capability_map
+from plane.utils.content_validator import validate_html_content
 
 TASK_ACTIONS = ("view", "edit", "assign", "submit", "return", "complete", "cancel")
 PAPER_REVIEW_ACTIONS = ("view", "submit", "return", "accept", "withdraw")
@@ -90,6 +95,7 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
     assignee_is_valid = serializers.SerializerMethodField()
     assigned_by_detail = serializers.SerializerMethodField()
     capabilities = serializers.SerializerMethodField()
+    instruction_attachments = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChainNodeTask
@@ -101,6 +107,7 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
             "node",
             "title",
             "instruction",
+            "instruction_attachments",
             "status",
             "assignee",
             "assignee_detail",
@@ -114,6 +121,7 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
             "resource_id",
             "request_id",
             "capabilities",
+            "instruction_attachments",
             "created_at",
             "updated_at",
         ]
@@ -137,8 +145,61 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             "title": {"required": True, "allow_blank": False, "max_length": 500},
-            "instruction": {"required": False, "allow_blank": True},
+            "instruction": {"required": False, "allow_blank": True, "max_length": 50000},
         }
+
+    def validate_instruction(self, value):
+        """清洗任务说明，并拒绝非本任务范围的内嵌图片。
+
+        Args:
+            value: 前端提交的任务说明 HTML。
+
+        Returns:
+            清洗后的 HTML；创建阶段不允许携带图片。
+        """
+        valid, error, cleaned = validate_html_content(value)
+        if not valid:
+            raise serializers.ValidationError(error)
+        cleaned = cleaned or ""
+        self._validate_inline_images(BeautifulSoup(cleaned, "html.parser"))
+        return cleaned
+
+    def _validate_inline_images(self, document):
+        """只允许引用当前任务已确认的描述图片资产。
+
+        Args:
+            document: 已清洗的任务说明文档。
+        """
+        task = self.instance
+        nodes = document.find_all(["img", "image-component"])
+        if not task:
+            if nodes:
+                raise serializers.ValidationError("Task instructions cannot reference images before the task exists.")
+            return
+        prefix = (
+            f"/api/research/workspaces/{task.workspace.slug}/chains/{task.chain_id}/"
+            f"nodes/{task.node_id}/tasks/{task.id}/instruction-images/"
+        )
+        for node in nodes:
+            source = node.get("src", "")
+            asset_id = str(source[len(prefix) :]).rstrip("/") if source.startswith(prefix) else ""
+            try:
+                valid_asset = bool(UUID(asset_id)) if asset_id else False
+            except ValueError:
+                valid_asset = False
+            if (
+                not valid_asset
+                or not FileAsset.objects.filter(
+                    pk=asset_id,
+                    workspace_id=task.workspace_id,
+                    entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_INSTRUCTION_IMAGE,
+                    entity_identifier=str(task.id),
+                    is_uploaded=True,
+                    is_deleted=False,
+                    deleted_at__isnull=True,
+                ).exists()
+            ):
+                raise serializers.ValidationError("Task instructions do not accept external images.")
 
     def get_schema_version(self, _obj):
         """Return the task API contract version."""
@@ -172,6 +233,32 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
     def get_capabilities(self, obj):
         """Return explicit task action decisions for the current actor."""
         return _capabilities(self, obj)
+
+    def get_instruction_attachments(self, obj):
+        """Return persisted task-description files with authenticated URLs."""
+        attachments = [
+            attachment
+            for attachment in obj.instruction_attachments.all()
+            if attachment.deleted_at is None
+            and attachment.asset is not None
+            and attachment.asset.is_uploaded
+            and not attachment.asset.is_deleted
+            and attachment.asset.deleted_at is None
+        ]
+        return [
+            {
+                "id": str(attachment.asset_id),
+                "name": attachment.file_name,
+                "type": attachment.content_type,
+                "size": attachment.file_size,
+                "download_url": (
+                    f"/api/research/workspaces/{obj.workspace.slug}/chains/{obj.chain_id}/"
+                    f"nodes/{obj.node_id}/tasks/{obj.id}/"
+                    f"instruction-attachments/{attachment.asset_id}/download/"
+                ),
+            }
+            for attachment in attachments
+        ]
 
 
 def _paper_capabilities(serializer, review):

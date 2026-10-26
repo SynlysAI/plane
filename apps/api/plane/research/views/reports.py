@@ -55,6 +55,7 @@ from plane.research.utils.notifications import (
     notify_report_accepted,
     notify_report_returned,
     notify_report_submitted,
+    notify_report_withdrawn,
 )
 from plane.research.utils.periods import InvalidPeriod, current_period, parse_period
 from plane.research.utils.roles import is_research_admin
@@ -69,9 +70,20 @@ from plane.research.utils.templates import (
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
 
 
-def report_queryset(workspace):
+def report_queryset(workspace, include_deleted=False):
+    """Build the report list queryset used by research API views.
+
+    Args:
+        workspace: Workspace owning the reports.
+        include_deleted: Whether to include soft-deleted reports; callers must
+            apply their own deleted-state and permission filters.
+
+    Returns:
+        An unpaginated report queryset with common related objects prefetched.
+    """
+    manager = PeriodicReport.all_objects if include_deleted else PeriodicReport.objects
     return (
-        PeriodicReport.objects.filter(workspace=workspace)
+        manager.filter(workspace=workspace)
         .select_related("owner", "org_unit", "page", "project", "template")
         .prefetch_related(
             "team_projects",
@@ -309,7 +321,13 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
         if error:
             return error
 
-        queryset = report_queryset(workspace)
+        scope = request.GET.get("scope", "all")
+        if scope not in ("all", "mine", "review", "deleted"):
+            return Response({"error_code": "invalid_scope"}, status=400)
+
+        queryset = report_queryset(workspace, include_deleted=scope == "deleted")
+        if scope == "deleted":
+            queryset = queryset.filter(deleted_at__isnull=False)
         if request.GET.get("period_key"):
             queryset = queryset.filter(period_key=request.GET["period_key"])
         if request.GET.get("status"):
@@ -346,7 +364,10 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
 
         context = build_actor_context(request.user, workspace.id)
         confidential_cache = {}
-        visible_queryset = visible_reports_queryset(queryset, context, confidential_cache=confidential_cache)
+        if scope == "deleted":
+            visible_queryset = queryset if context.is_workspace_admin else queryset.filter(owner=request.user)
+        else:
+            visible_queryset = visible_reports_queryset(queryset, context, confidential_cache=confidential_cache)
         keyword = str(request.GET.get("q") or "").strip()[:200]
         if keyword:
             visible_queryset = visible_queryset.filter(
@@ -355,7 +376,6 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
                 | Q(owner__display_name__icontains=keyword)
                 | Q(owner__first_name__icontains=keyword)
             )
-        scope = request.GET.get("scope", "all")
         if scope == "mine":
             visible_queryset = visible_queryset.filter(owner=request.user)
         elif scope == "review":
@@ -373,6 +393,8 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             visible_queryset = visible_queryset.filter(status="SUBMITTED").exclude(owner=request.user)
             if not context.is_main_pi:
                 visible_queryset = visible_queryset.filter(review_scope)
+        elif scope == "deleted":
+            pass
         elif scope != "all":
             return Response({"error_code": "invalid_scope"}, status=400)
         mentor_cache = {}
@@ -728,12 +750,133 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class ResearchReportRestoreEndpoint(ResearchAPIView):
+    """``POST /api/research/workspaces/<slug>/reports/<report_id>/restore/``"""
+
+    nav_capability = NAV_REPORTS
+
+    @staticmethod
+    def _restore_batch(queryset):
+        """Clear soft deletion on every object locked in a restore batch.
+
+        Args:
+            queryset: A select-for-update queryset containing related objects.
+
+        Returns:
+            Number of related objects restored by this call.
+        """
+        restored = 0
+        for item in queryset:
+            item.deleted_at = None
+            item.save(update_fields=["deleted_at", "updated_at"])
+            restored += 1
+        return restored
+
+    def post(self, request, slug, report_id):
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+
+        report = (
+            PeriodicReport.all_objects.select_related("owner", "org_unit", "page", "project", "template")
+            .filter(workspace=workspace, pk=report_id, deleted_at__isnull=False)
+            .first()
+        )
+        if report is None:
+            return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+
+        context = build_actor_context(request.user, workspace.id)
+        if not context.is_workspace_admin and report.owner_id != request.user.id:
+            return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+
+        try:
+            with transaction.atomic():
+                report = PeriodicReport.all_objects.select_for_update().get(pk=report.pk)
+                if report.deleted_at is None:
+                    return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+
+                conflict = (
+                    PeriodicReport.objects.select_for_update()
+                    .filter(
+                        workspace=workspace,
+                        owner_id=report.owner_id,
+                        report_type=report.report_type,
+                        period_key=report.period_key,
+                    )
+                    .exclude(pk=report.pk)
+                    .exists()
+                )
+                if conflict:
+                    return research_conflict(
+                        ResearchErrorCode.REPORT_PERIOD_CONFLICT,
+                        "A report already exists for this period.",
+                    )
+
+                deleted_at = report.deleted_at
+                report.deleted_at = None
+                report.save(update_fields=["deleted_at", "updated_at"])
+
+                page = Page.all_objects.select_for_update().get(pk=report.page_id)
+                if page.deleted_at == deleted_at:
+                    page.deleted_at = None
+                    page.save(update_fields=["deleted_at", "updated_at"])
+
+                self._restore_batch(
+                    ProjectPage.all_objects.select_for_update().filter(
+                        page_id=page.id,
+                        deleted_at=deleted_at,
+                    )
+                )
+                self._restore_batch(
+                    PeriodicReportProjectReference.all_objects.select_for_update().filter(
+                        report_id=report.id,
+                        deleted_at=deleted_at,
+                    )
+                )
+                self._restore_batch(
+                    ReportAttachment.all_objects.select_for_update().filter(
+                        report_id=report.id,
+                        deleted_at=deleted_at,
+                    )
+                )
+        except IntegrityError:
+            return research_conflict(
+                ResearchErrorCode.REPORT_PERIOD_CONFLICT,
+                "A report already exists for this period.",
+            )
+
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.REPORT_RESTORE,
+            resource_type=ResearchResourceType.REPORT,
+            resource_id=report.pk,
+            org_unit=report.org_unit,
+            actor=request.user,
+            metadata={"report_type": report.report_type, "period_key": report.period_key},
+            request=request,
+        )
+        return Response(
+            serialize_report(report, request, include_draft_content=True),
+            status=status.HTTP_200_OK,
+        )
+
+
 class ResearchReportSubmitEndpoint(ResearchAPIView):
     """``POST /api/research/workspaces/<slug>/reports/<report_id>/submit/``"""
 
     nav_capability = NAV_REPORTS
 
     def post(self, request, slug, report_id):
+        """Submit a draft report and freeze its current official snapshot.
+
+        Args:
+            request: Authenticated request carrying optional final page content.
+            slug: Workspace slug owning the report.
+            report_id: Identifier of the report to submit.
+
+        Returns:
+            The submitted report representation with its draft content included.
+        """
         workspace, error = self.get_workspace(section="reports")
         if error:
             return error
@@ -800,6 +943,84 @@ class ResearchReportSubmitEndpoint(ResearchAPIView):
             request=request,
         )
         notify_report_submitted(report, request.user)
+        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
+
+
+class ResearchReportWithdrawEndpoint(ResearchAPIView):
+    """``POST /api/research/workspaces/<slug>/reports/<report_id>/withdraw/``"""
+
+    nav_capability = NAV_REPORTS
+
+    def post(self, request, slug, report_id):
+        """Return a submitted report to its author for another editing round.
+
+        Args:
+            request: Authenticated request carrying an optional comment.
+            slug: Workspace slug owning the report.
+            report_id: Identifier of the submitted report.
+
+        Returns:
+            The draft report representation after a successful withdrawal.
+        """
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+
+        target = PeriodicReport.Status.DRAFT
+        comment = str(request.data.get("comment") or "").strip()
+        with transaction.atomic():
+            report = report_queryset(workspace).select_for_update(of=("self",)).filter(pk=report_id).first()
+            if report is None:
+                return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+
+            context = build_actor_context(request.user, workspace.id)
+            if report.owner_id != request.user.id:
+                if not check_access(request.user, "view", report_resource(report), context=context):
+                    return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+                return research_permission_denied()
+            if report.status != PeriodicReport.Status.SUBMITTED or not can_transition(report.status, target):
+                return research_conflict(
+                    ResearchErrorCode.REPORT_STATE_CONFLICT,
+                    "The report status does not allow this action.",
+                )
+
+            snapshot_version = (
+                report.official_snapshots.order_by("-version_no").values_list("version_no", flat=True).first()
+            )
+            previous = report.status
+            report.status = target
+            report.submitted_at = None
+            report.accepted_at = None
+            report.reviewer = None
+            report.save(
+                update_fields=["status", "submitted_at", "accepted_at", "reviewer", "updated_at"]
+            )
+            ReportReviewLog.objects.create(
+                report=report,
+                actor=request.user,
+                action=ReportReviewLog.Action.REOPEN,
+                from_status=previous,
+                to_status=target,
+                comment=comment,
+                snapshot_version=str(snapshot_version) if snapshot_version is not None else None,
+            )
+
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.REPORT_WITHDRAW,
+            resource_type=ResearchResourceType.REPORT,
+            resource_id=report.id,
+            org_unit=report.org_unit,
+            actor=request.user,
+            metadata={
+                "period_key": report.period_key,
+                "report_type": report.report_type,
+                "snapshot_version": snapshot_version,
+                "comment": comment[:240],
+            },
+            request=request,
+        )
+        notify_report_withdrawn(report, request.user, comment)
         return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 

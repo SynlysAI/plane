@@ -32,6 +32,12 @@ from plane.research.views.task_comment_assets import (
     ResearchTaskCommentAttachmentSlotEndpoint,
     ResearchTaskCommentImageEndpoint,
 )
+from plane.research.views.task_instruction_assets import (
+    ResearchTaskInstructionAttachmentDownloadEndpoint,
+    ResearchTaskInstructionAttachmentPresignEndpoint,
+    ResearchTaskInstructionAttachmentSlotEndpoint,
+    ResearchTaskInstructionImageEndpoint,
+)
 from plane.research.views.research_todos import ResearchTodoListEndpoint
 from plane.research.views.report_images import ResearchReportImageEndpoint
 from plane.research.views.workspace_outcomes import ResearchWorkspaceOutcomeEndpoint
@@ -93,7 +99,10 @@ from plane.research.views import (
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
+    ResearchReportMarkdownExportEndpoint,
     ResearchReportMarkdownImportEndpoint,
+    ResearchReportRestoreEndpoint,
+    ResearchReportWithdrawEndpoint,
     ResearchHealthEndpoint,
     ResearchIdentityMappingDetailEndpoint,
     ResearchIdentityMappingListCreateEndpoint,
@@ -242,6 +251,8 @@ from plane.research.views import (
     ResearchKnowledgeRequestDetailEndpoint,
     ResearchChainUploadEndpoint,
     ResearchChainUploadDetailEndpoint,
+    ResearchChainUploadDownloadEndpoint,
+    ResearchChainUploadPreviewEndpoint,
     ResearchChainReferenceEndpoint,
     ResearchChainAnalysisListCreateEndpoint,
     ResearchChainNodeTaskActionEndpoint,
@@ -506,6 +517,36 @@ urlpatterns = [
         name="research-task-comment-image",
     ),
     path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/instruction-attachments/presign/",
+        ResearchTaskInstructionAttachmentPresignEndpoint.as_view(),
+        name="research-task-instruction-attachment-presign",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/instruction-attachments/<uuid:asset_id>/confirm/",
+        ResearchTaskInstructionAttachmentSlotEndpoint.as_view(),
+        name="research-task-instruction-attachment-confirm",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/instruction-attachments/<uuid:asset_id>/download/",
+        ResearchTaskInstructionAttachmentDownloadEndpoint.as_view(),
+        name="research-task-instruction-attachment-download",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/instruction-attachments/<uuid:asset_id>/",
+        ResearchTaskInstructionAttachmentSlotEndpoint.as_view(),
+        name="research-task-instruction-attachment",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/instruction-images/",
+        ResearchTaskInstructionImageEndpoint.as_view(),
+        name="research-task-instruction-images",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/instruction-images/<uuid:asset_id>/",
+        ResearchTaskInstructionImageEndpoint.as_view(),
+        name="research-task-instruction-image",
+    ),
+    path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/<str:action>/",
         ResearchChainNodeTaskActionEndpoint.as_view(),
         name="research-chain-node-task-action",
@@ -574,6 +615,22 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/",
         ResearchChainUploadDetailEndpoint.as_view(),
         name="research-chain-upload-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/download/",
+        ResearchChainUploadDownloadEndpoint.as_view(),
+        name="research-chain-upload-download",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/preview/",
+        ResearchChainUploadPreviewEndpoint.as_view(),
+        name="research-chain-upload-preview",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/preview/content/",
+        ResearchChainUploadPreviewEndpoint.as_view(),
+        {"content": True},
+        name="research-chain-upload-preview-content",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/references/",
@@ -1206,6 +1263,16 @@ urlpatterns = [
         name="research-report-submit",
     ),
     path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/restore/",
+        ResearchReportRestoreEndpoint.as_view(),
+        name="research-report-restore",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/withdraw/",
+        ResearchReportWithdrawEndpoint.as_view(),
+        name="research-report-withdraw",
+    ),
+    path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/return/",
         ResearchReportReturnEndpoint.as_view(),
         name="research-report-return",
@@ -1284,6 +1351,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/import-markdown/",
         ResearchReportMarkdownImportEndpoint.as_view(),
         name="research-report-import-markdown",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/export-markdown/",
+        ResearchReportMarkdownExportEndpoint.as_view(),
+        name="research-report-export-markdown",
     ),
     path(
         "research/workspaces/<str:slug>/report-templates/",

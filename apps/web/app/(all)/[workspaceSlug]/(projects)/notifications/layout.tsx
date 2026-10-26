@@ -5,13 +5,16 @@
  */
 
 import { Outlet } from "react-router";
+import { useParams } from "next/navigation";
 // components
-import { NotificationsSidebarRoot } from "@/components/workspace-notifications/sidebar";
+import { InboxSidebar } from "@/components/inbox";
 
 export default function ProjectInboxIssuesLayout() {
+  const { workspaceSlug } = useParams();
+
   return (
     <div className="relative flex h-full w-full items-center overflow-hidden">
-      <NotificationsSidebarRoot />
+      {workspaceSlug && <InboxSidebar workspaceSlug={workspaceSlug.toString()} />}
       <div className="h-full w-full overflow-hidden overflow-y-auto">
         <Outlet />
       </div>

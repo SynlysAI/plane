@@ -78,6 +78,45 @@ describe("attachment preview", () => {
     await act(async () => root.unmount());
   });
 
+  it("keeps the dialog open when an outer overlay handles preview mousedown", async () => {
+    post.mockResolvedValueOnce({
+      data: { status: "ready", kind: "table", content_url: "/preview/content/" },
+    });
+    get.mockResolvedValueOnce({
+      data: {
+        rows: Array.from({ length: 101 }, (_, index) => [`项目 ${index + 1}`, `${index + 1}`]),
+      },
+    });
+    const outerOverlayClose = vi.fn();
+    const handleOuterMousedown = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-prevent-outside-click]")) return;
+      outerOverlayClose();
+    };
+    document.addEventListener("mousedown", handleOuterMousedown);
+    const { root } = await mountPreview("/preview/");
+    try {
+      await act(async () => {
+        document.querySelector("button")?.click();
+      });
+      await act(async () => Promise.resolve());
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog?.closest("[data-prevent-outside-click]")).not.toBeNull();
+      const nextPage = [...document.querySelectorAll("button")].find((button) => button.textContent === "下一页");
+      if (!nextPage) throw new Error("下一页按钮未显示");
+      await act(async () => {
+        nextPage.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+        nextPage.click();
+      });
+      expect(outerOverlayClose).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      expect(document.body.textContent).toContain("2 / 2");
+    } finally {
+      document.removeEventListener("mousedown", handleOuterMousedown);
+      await act(async () => root.unmount());
+    }
+  });
+
   it("cancels status polling when the dialog closes", async () => {
     vi.useFakeTimers();
     post.mockResolvedValueOnce({ data: { status: "processing", kind: "pdf" } });

@@ -1,13 +1,17 @@
 """Phase 1 scoped RAGPortal upload and reference contract tests."""
 
+import hashlib
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import HttpResponse
 from rest_framework.test import APIClient
 
 from plane.db.models import (
+    AssetPreview,
     ExternalSystemConnection,
     OrgUnit,
     OrgUnitMember,
@@ -95,6 +99,33 @@ def _mark_ready(env, kb_id="kb-1"):
         external_kb_name=f"Ready {kb_id}",
         created_by=env["owner"],
     )
+
+
+def _stored_upload(env, *, knowledge_id="knowledge-download", file_name="论文.pdf", file_type="pdf"):
+    """Create one successful upload projection for readback tests."""
+    content = b"%PDF-1.4 pdf"
+    return ResearchChainUpload.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=env["node"],
+        request_id=f"stored-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        external_upload_id="7",
+        knowledge_id=knowledge_id,
+        knowledge_base_id="kb-1",
+        task_id="task-1",
+        file_name=file_name,
+        file_type=file_type,
+        file_size=len(content),
+        file_hash=hashlib.sha256(content).hexdigest(),
+        status=ResearchChainUpload.Status.SUCCESS,
+        created_by=env["owner"],
+    )
+
+
+def _upload_action_url(env, upload, action):
+    """Return one secure Plane upload action URL for contract assertions."""
+    return f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/{upload.id}/{action}/"
 
 
 @pytest.fixture
@@ -227,6 +258,121 @@ def test_scoped_upload_is_idempotent_and_creates_reference_event(env):
     assert upload.knowledge_id == "knowledge-1"
     assert ResearchExternalReference.objects.filter(external_id="knowledge-1").exists()
     assert ResearchChainEvent.objects.filter(request_id="req-upload", event_type="DATA_CHANGE").count() == 1
+
+
+def test_upload_list_returns_secure_plane_download_and_preview_urls(env):
+    """课题资料始终返回 Plane BFF 地址，不暴露 RAGPortal source_url。"""
+    upload = _stored_upload(env)
+
+    response = env["owner_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/?node_id={env['node'].id}"
+    )
+
+    assert response.status_code == 200, response.json()
+    item = next(row for row in response.json()["data"] if row["id"] == str(upload.id))
+    assert item["download_url"] == _upload_action_url(env, upload, "download")
+    assert item["preview_url"] == _upload_action_url(env, upload, "preview")
+
+
+def test_download_proxies_original_file_only_to_visible_chain(env):
+    """下载通过 Plane 后端代理原文件，外部用户不能获取链路资料。"""
+    upload = _stored_upload(env)
+    file_result = SimpleNamespace(content=b"%PDF-1.4 pdf", content_type="application/pdf", degraded=False)
+    outsider = make_user(first_name="Knowledge outsider")
+    outsider_client = _client(outsider)
+
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.download_research_file",
+        return_value=file_result,
+    ) as download_mock:
+        allowed = env["owner_client"].get(_upload_action_url(env, upload, "download"))
+        denied = outsider_client.get(_upload_action_url(env, upload, "download"))
+
+    assert allowed.status_code == 200, allowed.content
+    assert allowed.content == b"%PDF-1.4 pdf"
+    assert allowed["Content-Type"].startswith("application/pdf")
+    assert allowed["Cache-Control"] == "private, no-store"
+    assert denied.status_code == 404
+    download_mock.assert_called_once()
+    assert download_mock.call_args.kwargs["knowledge_id"] == upload.knowledge_id
+    assert download_mock.call_args.kwargs["file_hash"] == upload.file_hash
+
+
+def test_download_reports_upstream_degradation_stably(env):
+    """RAGPortal 下载失败时返回稳定错误，不暴露内部地址。"""
+    upload = _stored_upload(env)
+    degraded = SimpleNamespace(content=b"", content_type="", degraded=True, degraded_reason="http_error")
+
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.download_research_file",
+        return_value=degraded,
+    ):
+        response = env["owner_client"].get(_upload_action_url(env, upload, "download"))
+
+    assert response.status_code == 502
+    assert response.json()["error_code"] == "UPSTREAM_DEGRADED"
+
+
+def test_download_rejects_source_hash_mismatch(env):
+    """上游返回内容与登记哈希不一致时不向浏览器转发文件。"""
+    upload = _stored_upload(env)
+    changed = SimpleNamespace(content=b"changed", content_type="application/pdf", degraded=False)
+
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.download_research_file",
+        return_value=changed,
+    ):
+        response = env["owner_client"].get(_upload_action_url(env, upload, "download"))
+
+    assert response.status_code == 502
+    assert response.json()["error_code"] == "UPSTREAM_DEGRADED"
+
+
+def test_preview_endpoint_checks_visibility_and_creates_job(env):
+    """预览入口复用链路 ACL，并返回统一附件预览状态。"""
+    upload = _stored_upload(env)
+    outsider = make_user(first_name="Knowledge preview outsider")
+    outsider_client = _client(outsider)
+    preview = AssetPreview(kind="pdf", status="pending", error_code="")
+
+    with patch("plane.research.views.knowledge.get_chain_upload_preview", return_value=preview) as service:
+        allowed = env["owner_client"].post(_upload_action_url(env, upload, "preview"))
+        denied = outsider_client.post(_upload_action_url(env, upload, "preview"))
+
+    assert allowed.status_code == 200, allowed.json()
+    assert allowed.json() == {
+        "status": "pending",
+        "kind": "pdf",
+        "error_code": "",
+        "retryable": False,
+        "content_url": None,
+    }
+    assert allowed["Cache-Control"] == "private, no-store"
+    assert denied.status_code == 404
+    service.assert_called_once()
+
+
+def test_preview_content_streams_only_ready_private_payload(env):
+    """内容端点只读取 ready 派生物并保留链路 ACL。"""
+    upload = _stored_upload(env)
+    outsider = make_user(first_name="Knowledge content outsider")
+    outsider_client = _client(outsider)
+    preview = AssetPreview(kind="pdf", status="ready", object_key="lab/previews/1/attempt", size=3)
+
+    with (
+        patch("plane.research.views.knowledge.get_chain_upload_preview", return_value=preview),
+        patch(
+            "plane.research.views.knowledge.stream_preview_content",
+            return_value=HttpResponse(b"pdf", content_type="application/pdf"),
+        ) as stream,
+    ):
+        allowed = env["owner_client"].get(_upload_action_url(env, upload, "preview/content"))
+        denied = outsider_client.get(_upload_action_url(env, upload, "preview/content"))
+
+    assert allowed.status_code == 200
+    assert allowed.content == b"pdf"
+    assert denied.status_code == 404
+    stream.assert_called_once()
 
 
 def test_upload_status_refresh_updates_projection_and_appends_fact(env):

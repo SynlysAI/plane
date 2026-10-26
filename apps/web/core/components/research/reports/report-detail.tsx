@@ -18,6 +18,7 @@ import {
 import type { TReportVisibility } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { TEditorCommentAnchor, TEditorSelectionAnchor } from "@plane/editor";
+import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, ModalCore } from "@plane/ui";
@@ -60,12 +61,14 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const { getWorkspaceBySlug } = useWorkspace();
   const [returnReason, setReturnReason] = useState("");
   const [showReturn, setShowReturn] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [showWithdraw, setShowWithdraw] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const bodyRef = useRef<ReportBodyRef>(null);
   const [bodyBusy, setBodyBusy] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"save" | "submit" | "return" | "accept" | "visibility" | null>(
-    null
-  );
+  const [pendingAction, setPendingAction] = useState<
+    "save" | "submit" | "withdraw" | "return" | "accept" | "visibility" | null
+  >(null);
   const [draftAnchor, setDraftAnchor] = useState<TEditorSelectionAnchor | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [commentAnchors, setCommentAnchors] = useState<TEditorCommentAnchor[]>([]);
@@ -134,6 +137,27 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
     }
   }, [pendingAction, reportId, research, t, workspaceSlug]);
 
+  const handleWithdraw = useCallback(async () => {
+    if (pendingAction) return;
+    setPendingAction("withdraw");
+    try {
+      await research.withdrawReport(workspaceSlug, reportId, withdrawReason.trim());
+      await Promise.all([research.fetchReport(workspaceSlug, reportId), research.fetchReports(workspaceSlug)]);
+      setWithdrawReason("");
+      setShowWithdraw(false);
+      setErrorKey(null);
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("research.feedback.report_withdrawn.title"),
+        message: t("research.feedback.report_withdrawn.message"),
+      });
+    } catch (error) {
+      setErrorKey(getResearchErrorKey(error));
+    } finally {
+      setPendingAction(null);
+    }
+  }, [pendingAction, reportId, research, t, withdrawReason, workspaceSlug]);
+
   const handleReturn = useCallback(async () => {
     if (pendingAction || !returnReason.trim()) return;
     setPendingAction("return");
@@ -196,6 +220,25 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
     [pendingAction, report?.visibility, reportId, research, t, workspaceSlug]
   );
 
+  /** 复制当前报告的授权详情页链接。 */
+  const handleCopyLink = useCallback(async () => {
+    const reportLink = new URL(`/${workspaceSlug}/research/reports/${reportId}`, window.location.origin).href;
+    try {
+      await copyTextToClipboard(reportLink);
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("link_copied"),
+        message: t("copied_to_clipboard_description"),
+      });
+    } catch {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("something_went_wrong"),
+        message: t("copied_to_clipboard_description"),
+      });
+    }
+  }, [reportId, t, workspaceSlug]);
+
   if (!report) {
     return <p className="p-5 text-13 text-tertiary">{t("research.common.loading")}</p>;
   }
@@ -228,12 +271,21 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         hint={t(`research.reports.next_step.${report.status.toLowerCase()}`)}
         actions={
           <>
+            <Button variant="secondary" size="sm" onClick={() => void handleCopyLink()}>
+              {t("copy_link")}
+            </Button>
             {report.can_delete && (
               <ResearchDeleteButton
                 name={`${report.period_key} · ${t(REPORT_TYPE_LABELS[report.report_type])}`}
                 disabled={pendingAction !== null || bodyBusy}
+                confirmMessage={t("research.reports.confirm_delete_restorable")}
                 onDelete={async () => {
                   await research.deleteReport(workspaceSlug, reportId);
+                  setToast({
+                    type: TOAST_TYPE.SUCCESS,
+                    title: t("research.feedback.report_deleted.title"),
+                    message: t("research.feedback.report_deleted.message"),
+                  });
                   navigate(`/${workspaceSlug}/research/reports`);
                 }}
               />
@@ -247,6 +299,17 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
                 onClick={() => void handleSubmit()}
               >
                 {t("research.reports.submit")}
+              </Button>
+            )}
+            {report.can_withdraw && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={pendingAction === "withdraw"}
+                disabled={pendingAction !== null}
+                onClick={() => setShowWithdraw(true)}
+              >
+                {t("research.reports.withdraw")}
               </Button>
             )}
             {report.can_review && report.status === "SUBMITTED" && (
@@ -364,12 +427,46 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
             </section>
           </ModalCore>
 
+          <ModalCore isOpen={showWithdraw} handleClose={() => pendingAction === null && setShowWithdraw(false)}>
+            <section className="bg-surface-1 p-5">
+              <h3 className="text-13 font-medium text-primary">{t("research.reports.withdraw_title")}</h3>
+              <p className="mt-1 text-11 text-secondary">{t("research.reports.withdraw_hint")}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Input
+                  aria-label={t("research.reports.withdraw_reason")}
+                  className="min-w-0 flex-1 sm:!w-96 sm:flex-none"
+                  value={withdrawReason}
+                  onChange={(event) => setWithdrawReason(event.target.value)}
+                  placeholder={t("research.reports.withdraw_placeholder")}
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={pendingAction === "withdraw"}
+                  disabled={pendingAction !== null}
+                  onClick={() => void handleWithdraw()}
+                >
+                  {t("research.common.confirm")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={pendingAction !== null}
+                  onClick={() => setShowWithdraw(false)}
+                >
+                  {t("research.common.cancel")}
+                </Button>
+              </div>
+            </section>
+          </ModalCore>
+
           <ResearchDetailSurface title={t("research.reports.history")} collapsible>
             <ol className="mt-3 flex flex-col gap-3">
               {history.map((entry) => (
                 <li key={entry.id} className="flex flex-col gap-0.5 border-l border-subtle pl-3">
                   <span className="text-12 text-secondary">
-                    {entry.action} · {entry.from_status} → {entry.to_status}
+                    {entry.action === "REOPEN" ? t("research.reports.history_withdraw") : entry.action} ·{" "}
+                    {t(REPORT_STATUS_LABELS[entry.from_status])} → {t(REPORT_STATUS_LABELS[entry.to_status])}
                   </span>
                   <span className="text-11 text-tertiary">
                     {entry.actor_detail?.display_name ?? entry.actor_detail?.email ?? entry.actor} ·{" "}

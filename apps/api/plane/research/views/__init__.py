@@ -56,6 +56,7 @@ from .attachments import (
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
+    ResearchReportMarkdownExportEndpoint,
     ResearchReportMarkdownImportEndpoint,
 )
 from .knowledge_requests import (
@@ -122,8 +123,10 @@ from .reports import (
     ResearchReportDetailEndpoint,
     ResearchReportHistoryEndpoint,
     ResearchReportListCreateEndpoint,
+    ResearchReportRestoreEndpoint,
     ResearchReportReturnEndpoint,
     ResearchReportSubmitEndpoint,
+    ResearchReportWithdrawEndpoint,
 )
 from .report_comments import (
     ResearchReportCommentDetailEndpoint,
@@ -241,8 +244,10 @@ from .paper_reviews import (
 from .knowledge import (
     ResearchChainKnowledgeBaseListEndpoint,
     ResearchChainReferenceEndpoint,
+    ResearchChainUploadDownloadEndpoint,
     ResearchChainUploadDetailEndpoint,
     ResearchChainUploadEndpoint,
+    ResearchChainUploadPreviewEndpoint,
 )
 from .analysis import ResearchChainAnalysisListCreateEndpoint
 from .outcomes import (
@@ -335,6 +340,8 @@ __all__ = [
     "ResearchChainKnowledgeBaseListEndpoint",
     "ResearchChainUploadEndpoint",
     "ResearchChainUploadDetailEndpoint",
+    "ResearchChainUploadDownloadEndpoint",
+    "ResearchChainUploadPreviewEndpoint",
     "ResearchChainReferenceEndpoint",
     "ResearchChainAnalysisListCreateEndpoint",
     "ResearchDeviceExecutionSearchEndpoint",
@@ -365,6 +372,7 @@ __all__ = [
     "ResearchReportAttachmentDetailEndpoint",
     "ResearchReportAttachmentListCreateEndpoint",
     "ResearchReportAttachmentPresignEndpoint",
+    "ResearchReportMarkdownExportEndpoint",
     "ResearchReportMarkdownImportEndpoint",
     "ResearchReportTemplateDetailEndpoint",
     "ResearchReportTemplateListCreateEndpoint",
@@ -389,10 +397,12 @@ __all__ = [
     "ResearchReportDetailEndpoint",
     "ResearchReportHistoryEndpoint",
     "ResearchReportListCreateEndpoint",
+    "ResearchReportRestoreEndpoint",
     "ResearchReportReadEndpoint",
     "ResearchReportReadReceiptListEndpoint",
     "ResearchReportReturnEndpoint",
     "ResearchReportSubmitEndpoint",
+    "ResearchReportWithdrawEndpoint",
     "ResearchReportCommentDetailEndpoint",
     "ResearchReportCommentFeedbackEndpoint",
     "ResearchReportCommentThreadCommentEndpoint",

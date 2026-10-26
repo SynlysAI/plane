@@ -4,6 +4,7 @@ import type { JSONContent, TPeriodicReport } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { ModalCore } from "@plane/ui";
 import { DocumentEditor } from "@/components/editor/document/editor";
+import { PageToolbar } from "@/components/pages/editor/toolbar";
 import { templateSectionStats } from "@/components/research/common/template-section-stats";
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -47,16 +48,19 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
   const uploads = useRef(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
   const [saveFailed, setSaveFailed] = useState(false);
   const [error, setError] = useState("");
   const [editorGeneration, setEditorGeneration] = useState(0);
+  const [editorReady, setEditorReady] = useState(false);
   const [selectionAnchor, setSelectionAnchor] = useState<TEditorSelectionAnchor | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ left: number; top: number } | null>(null);
   const [replacement, setReplacement] = useState<File | null>(null);
   const [localImages, setLocalImages] = useState<string[]>([]);
   const editable = Boolean(report.can_edit);
   const content = report.draft_content ?? report.official_content;
+  const readyEditor = editable && editorReady ? editor.current : null;
   const [initialContent, setInitialContent] = useState<string | JSONContent>(
     content && Object.keys(content.description_json ?? {}).length
       ? (content.description_json as JSONContent)
@@ -219,16 +223,24 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
     }
   };
 
-  /** 导出当前编辑器内容为 Markdown 文件。 */
-  const exportMarkdown = () => {
-    const blob = new Blob([editor.current?.getMarkDown() ?? ""], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${report.period_key}.md`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  /** 导出当前编辑器 Markdown，并连同本地正文图片下载 ZIP。 */
+  const exportMarkdown = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const blob = await research.exportReportMarkdown(workspaceSlug, report.id, editor.current?.getMarkDown() ?? "");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${report.report_type.toLowerCase()}-${report.period_key}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("周报导出失败，请稍后重试。");
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, report.id, report.period_key, report.report_type, research, workspaceSlug]);
 
   return (
     <section className="flex flex-col rounded-xl border border-subtle bg-surface-1 px-4 py-3.5">
@@ -271,7 +283,13 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
                   >
                     导入 Markdown
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={exportMarkdown}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={exporting}
+                    disabled={!content || saving || uploadCount > 0 || exporting}
+                    onClick={() => void exportMarkdown()}
+                  >
                     导出 Markdown
                   </Button>
                 </div>
@@ -287,7 +305,13 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
             </>
           )}
           {!editable && (
-            <Button variant="ghost" size="sm" onClick={exportMarkdown}>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={exporting}
+              disabled={!content || exporting}
+              onClick={() => void exportMarkdown()}
+            >
               导出 Markdown
             </Button>
           )}
@@ -392,6 +416,14 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
             if (threadId) onCommentAnchorClick?.(threadId);
           }}
         >
+          {readyEditor && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-subtle pb-2">
+              <div role="toolbar" aria-label="正文格式工具栏" className="min-w-0 flex-1">
+                <PageToolbar editorRef={readyEditor} />
+              </div>
+              <p className="shrink-0 text-11 text-tertiary">输入 “/” 可打开完整格式菜单</p>
+            </div>
+          )}
           {selectionAnchor && selectionPosition && onCreateComment && (
             <button
               type="button"
@@ -443,6 +475,7 @@ export const ReportBody = forwardRef<ReportBodyRef, Props>(function ReportBody(
               },
               validation: { maxFileSize: (research.settings[workspaceSlug]?.image_max_mb ?? 20) * 1024 * 1024 },
             }}
+            handleEditorReady={setEditorReady}
             onTransaction={handleStateChange}
             onChange={(_json, _html, options) => {
               // 编辑器初始化时会补充稳定的块 ID；这类迁移更新不应把刚加载的报告标记为未保存。

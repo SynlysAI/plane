@@ -1334,6 +1334,7 @@
     },
     "chains": {
       "description": "承载科研主线、课题、周期报告与评审；行政项目不在本通道显示。",
+      "project_records_description": "项目基础档案索引：维护责任人、类型、主归属与生命周期；打开后进入对应课题或阶段流程。",
       "tabs": {
         "label": "研究链页面分区",
         "overview": "概览",
@@ -1664,7 +1665,19 @@
       "completed_at": "完成时间",
       "close": "关闭",
       "view_details": "查看详情",
-      "add_instruction": "点击添加描述",
+      "add_instruction": "添加任务说明…",
+      "instruction_empty": "暂无任务说明",
+      "attachments_title": "任务附件",
+      "attachments_empty": "暂无任务附件",
+      "add_attachment": "添加附件",
+      "uploading": "上传中…",
+      "upload_failed": "上传失败",
+      "retry_upload": "重试上传",
+      "attachment_delete_failed": "附件删除失败，请重试。",
+      "attachment_limits_failed": "无法获取当前工作区附件限制。",
+      "attachment_count_exceeded": "任务描述最多附加 {count} 个文件。",
+      "image_upload_failed": "图片上传失败，请重试。",
+      "image_reupload_required": "请重新选择图片上传到此任务说明。",
       "add_assignee": "添加责任人",
       "add_due_at": "添加截止时间",
       "activity": "活动",
@@ -1781,6 +1794,10 @@
       "materials_title": "课题资料",
       "add_material": "新增资料",
       "upload_file": "上传",
+      "select_material": "选择资料",
+      "reselect_file": "重新选择",
+      "start_upload": "开始上传",
+      "download_material": "下载资料",
       "reasons": {
         "not_configured": "服务尚未配置",
         "unauthorized": "认证失败",
@@ -1966,6 +1983,10 @@
         "title": "报告已提交",
         "message": "报告已进入待评审状态，正文和历史记录已刷新。"
       },
+      "report_withdrawn": {
+        "title": "报告已撤回",
+        "message": "报告已回到草稿并退出审核队列，可以继续编辑后重新提交。"
+      },
       "report_returned": {
         "title": "报告已退回",
         "message": "报告已进入需修改状态，作者可以根据退回原因继续修订。"
@@ -1982,9 +2003,21 @@
         "title": "报告已创建",
         "message": "正在打开报告详情，你可以继续填写正文。"
       },
+      "report_deleted": {
+        "title": "报告已移入已删除列表",
+        "message": "报告、正文、关联课题和附件已保留，可在已删除报告中恢复。"
+      },
+      "report_restored": {
+        "title": "报告已恢复",
+        "message": "正在打开报告详情，可以继续编辑或提交。"
+      },
       "project_created": {
         "title": "科研项目已创建",
         "message": "正在打开项目详情。"
+      },
+      "project_updated": {
+        "title": "科研项目已更新",
+        "message": "项目基础信息已保存，列表已刷新。"
       },
       "project_archived": {
         "title": "项目已归档",
@@ -2234,6 +2267,8 @@
       "description": "统一管理个人培养项目与团队科研课题。",
       "create_title": "新建科研项目",
       "create_hint": "培养项目使用阶段流程；团队课题使用任务、周期和模块推进。",
+      "edit_title": "编辑科研项目",
+      "edit_hint": "修正项目基础信息；保存后会同步项目列表。",
       "fields": {
         "name": "项目名称",
         "type": "项目类型",
@@ -2261,6 +2296,8 @@
       "team_org_optional": "团队课题可以暂不设置组织归属；后续补齐后才会进入对应方向的范围统计。",
       "owner_placeholder": "科研责任人邮箱或 ID（留空表示本人）",
       "create": "创建科研项目",
+      "edit": "编辑科研项目",
+      "save": "保存修改",
       "open_team_project": "打开项目",
       "archive": "归档",
       "delete": "删除",
@@ -2303,6 +2340,11 @@
       "create": "创建报告",
       "team_projects": "关联团队课题（{count}）",
       "mine_only": "仅看我的",
+      "deleted_title": "已删除报告",
+      "deleted_scope": "已删除",
+      "deleted_status": "已删除",
+      "restore": "恢复",
+      "confirm_delete_restorable": "报告删除后会移入已删除列表，正文、关联课题和附件会保留，后续可以恢复。",
       "all_statuses": "全部状态",
       "all_types": "全部类型",
       "all_org_units": "全部组织节点",
@@ -2317,6 +2359,12 @@
       },
       "empty": "没有符合条件的报告",
       "submit": "提交",
+      "withdraw": "撤回",
+      "withdraw_title": "撤回报告",
+      "withdraw_hint": "撤回后回到草稿，可修改后重新提交。",
+      "withdraw_reason": "撤回原因（选填）",
+      "withdraw_placeholder": "说明需要修改的内容",
+      "history_withdraw": "撤回",
       "return": "退回",
       "accept": "验收",
       "open_body": "打开正文",
@@ -2583,6 +2631,8 @@
       "report_visibility_exceeds_default": "可见范围不能大于默认策略。",
       "research_project_exists": "该科研责任人已有进行中的科研项目。",
       "project_identifier_conflict": "项目标识符冲突，请更换名称后重试。",
+      "project_name_invalid": "请输入 1-255 个字符的项目名称。",
+      "project_name_conflict": "同工作区已存在同名项目，请更换名称。",
       "research_project_not_found": "科研项目不存在。",
       "file_type_not_allowed": "不支持该文件类型。",
       "file_size_exceeded": "文件超过配置的大小限制。",

@@ -6,6 +6,10 @@ from django.urls import path
 
 
 from plane.app.views import (
+    InboxItemActionEndpoint,
+    InboxListEndpoint,
+    InboxMarkAllReadEndpoint,
+    InboxUnreadEndpoint,
     NotificationViewSet,
     SystemAnnouncementEndpoint,
     UnreadNotificationEndpoint,
@@ -15,6 +19,26 @@ from plane.app.views import (
 
 
 urlpatterns = [
+    path(
+        "workspaces/<str:slug>/users/inbox/",
+        InboxListEndpoint.as_view(),
+        name="unified-inbox",
+    ),
+    path(
+        "workspaces/<str:slug>/users/inbox/unread/",
+        InboxUnreadEndpoint.as_view(),
+        name="unified-inbox-unread",
+    ),
+    path(
+        "workspaces/<str:slug>/users/inbox/items/<str:item_id>/<str:action>/",
+        InboxItemActionEndpoint.as_view(),
+        name="unified-inbox-item-action",
+    ),
+    path(
+        "workspaces/<str:slug>/users/inbox/mark-all-read/",
+        InboxMarkAllReadEndpoint.as_view(),
+        name="unified-inbox-mark-all-read",
+    ),
     path(
         "workspaces/<str:slug>/system-announcements/",
         SystemAnnouncementEndpoint.as_view({"get": "list", "post": "create"}),

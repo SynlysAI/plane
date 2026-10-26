@@ -35,3 +35,13 @@ def delete_unuploaded_file_asset():
         created_at__lt=cutoff,
         entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_COMMENT_IMAGE,
     ).filter(Q(is_uploaded=False) | Q(is_deleted=True)).delete()
+    FileAsset.objects.filter(
+        created_at__lt=cutoff,
+        entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_INSTRUCTION_ATTACHMENT,
+        is_uploaded=False,
+        research_task_instruction_attachments__isnull=True,
+    ).delete()
+    FileAsset.objects.filter(
+        created_at__lt=cutoff,
+        entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_INSTRUCTION_IMAGE,
+    ).filter(Q(is_uploaded=False) | Q(is_deleted=True)).delete()

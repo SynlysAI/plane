@@ -114,7 +114,7 @@ export function AttachmentPreviewDialog({ name, previewUrl, downloadUrl, onClose
     };
   }, [previewUrl, attempt]);
   return (
-    <Dialog open onClose={onClose} className="relative z-[100]">
+    <Dialog open onClose={onClose} className="relative z-[100]" data-prevent-outside-click="true">
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center sm:p-6">
         <DialogPanel className="flex h-full w-full flex-col overflow-hidden bg-surface-1 text-primary sm:h-[90vh] sm:max-w-6xl sm:rounded-lg">
@@ -217,14 +217,14 @@ function PreviewContent({ kind, url, name }: { kind: PreviewState["kind"]; url: 
     return (
       <>
         <div className="flex justify-center gap-2 p-2">
-          <button className={BUTTON} onClick={() => setZoom((v) => Math.max(0.25, v - 0.25))}>
+          <button type="button" className={BUTTON} onClick={() => setZoom((v) => Math.max(0.25, v - 0.25))}>
             缩小
           </button>
           <span className="p-1 text-13">{Math.round(zoom * 100)}%</span>
-          <button className={BUTTON} onClick={() => setZoom((v) => Math.min(4, v + 0.25))}>
+          <button type="button" className={BUTTON} onClick={() => setZoom((v) => Math.min(4, v + 0.25))}>
             放大
           </button>
-          <button className={BUTTON} onClick={() => setZoom(1)}>
+          <button type="button" className={BUTTON} onClick={() => setZoom(1)}>
             适应宽度
           </button>
         </div>
@@ -255,13 +255,13 @@ function PreviewContent({ kind, url, name }: { kind: PreviewState["kind"]; url: 
     return (
       <>
         <div className="flex items-center justify-center gap-3 p-2 text-13">
-          <button className={BUTTON} disabled={!page} onClick={() => setPage((v) => v - 1)}>
+          <button type="button" className={BUTTON} disabled={!page} onClick={() => setPage((v) => v - 1)}>
             上一页
           </button>
           <span>
             {page + 1} / {count} · 共 {rows.length} 行
           </span>
-          <button className={BUTTON} disabled={page + 1 >= count} onClick={() => setPage((v) => v + 1)}>
+          <button type="button" className={BUTTON} disabled={page + 1 >= count} onClick={() => setPage((v) => v + 1)}>
             下一页
           </button>
         </div>

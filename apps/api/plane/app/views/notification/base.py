@@ -18,11 +18,19 @@ from plane.app.serializers import (
     UserNotificationPreferenceSerializer,
 )
 from plane.db.models import (
+    ExperimentAmendment,
+    ExperimentRecord,
     Issue,
     IssueAssignee,
     IssueSubscriber,
+    PeriodicReport,
     Notification,
+    ResearchChainNodeTask,
+    ResearchPaperReview,
+    ResearchStageInstance,
+    StageReviewerAssignment,
     SystemAnnouncement,
+    User,
     UserNotificationPreference,
     Workspace,
     WorkspaceMember,
@@ -53,11 +61,12 @@ def parse_request_flag(value, default=False):
 
 
 def renderable_inbox_notifications(workspace_slug, receiver_id):
-    """Return work item and system notifications that the inbox can render.
+    """Return renderable work item, research, and system notifications.
 
     Work item notifications keep their existing entity validation. System
     announcements are rendered from their canonical announcement record and are
-    safe to include without a project or work item.
+    safe to include without a project or work item. Research notifications come
+    from domain services that resolve recipients and carry stable entities.
 
     Args:
         workspace_slug: Workspace slug from the request.
@@ -79,6 +88,54 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
         workspace__slug=workspace_slug,
         issue_intake__status__in=[0, 2, -2],
     )
+    valid_research_report = PeriodicReport.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        workspace__slug=workspace_slug,
+        deleted_at__isnull=True,
+    )
+    valid_research_approval_issue = Issue.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        workspace__slug=workspace_slug,
+        archived_at__isnull=True,
+        project__archived_at__isnull=True,
+    )
+    valid_chain_task = ResearchChainNodeTask.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        workspace__slug=workspace_slug,
+        deleted_at__isnull=True,
+    )
+    valid_paper_review = ResearchPaperReview.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        workspace__slug=workspace_slug,
+        deleted_at__isnull=True,
+    )
+    valid_stage_review = StageReviewerAssignment.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        stage_instance__workspace__slug=workspace_slug,
+        stage_instance__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+        is_active=True,
+    )
+    valid_stage = ResearchStageInstance.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        workspace__slug=workspace_slug,
+        deleted_at__isnull=True,
+    )
+    valid_experiment = ExperimentRecord.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        workspace__slug=workspace_slug,
+        deleted_at__isnull=True,
+    )
+    valid_experiment_amendment = ExperimentAmendment.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        record__workspace__slug=workspace_slug,
+        record__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+    )
+    valid_mentioned_user = User.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        is_active=True,
+    )
 
     renderable_issue = (
         Q(project__isnull=False)
@@ -90,13 +147,24 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
         & ~Q(data__issue_activity__field="")
     )
     renderable_announcement = Q(announcement__isnull=False) & Q(announcement__deleted_at__isnull=True)
+    renderable_research = (
+        (Q(entity_name="research_report") & Exists(valid_research_report))
+        | (Q(entity_name="research_approval") & Exists(valid_research_approval_issue))
+        | (Q(entity_name="research_chain_task") & Exists(valid_chain_task))
+        | (Q(entity_name="research_paper_review") & Exists(valid_paper_review))
+        | (Q(entity_name="research_stage_review") & Exists(valid_stage_review))
+        | (Q(entity_name="research_stage") & Exists(valid_stage))
+        | (Q(entity_name="research_experiment") & Exists(valid_experiment))
+        | (Q(entity_name="research_experiment_amendment") & Exists(valid_experiment_amendment))
+        | (Q(entity_name="user_mention") & Exists(valid_mentioned_user))
+    )
 
     return (
         Notification.objects.filter(
             workspace__slug=workspace_slug,
             receiver_id=receiver_id,
         )
-        .filter(renderable_issue | renderable_announcement)
+        .filter(renderable_issue | renderable_announcement | renderable_research)
         .annotate(is_inbox_issue=Exists(intake_issue))
         .annotate(is_intake_issue=Exists(intake_issue))
         .annotate(
@@ -107,7 +175,7 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
             )
         )
         .annotate(is_renderable_issue=Exists(linked_issue))
-        .filter(Q(is_renderable_issue=True) | renderable_announcement)
+        .filter(Q(is_renderable_issue=True) | renderable_announcement | renderable_research)
         .select_related("workspace", "project", "triggered_by", "receiver", "announcement", "announcement__workspace")
     )
 

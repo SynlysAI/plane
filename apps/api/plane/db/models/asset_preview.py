@@ -2,6 +2,7 @@
 
 import uuid
 from django.db import models
+from django.db.models import Q
 
 
 class AssetPreview(models.Model):
@@ -9,6 +10,13 @@ class AssetPreview(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     asset = models.ForeignKey("db.FileAsset", on_delete=models.SET_NULL, null=True, related_name="previews")
+    chain_upload = models.ForeignKey(
+        "db.ResearchChainUpload",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="previews",
+    )
     fingerprint = models.CharField(max_length=64)
     converter_version = models.CharField(max_length=80)
     kind = models.CharField(max_length=16)
@@ -26,5 +34,10 @@ class AssetPreview(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["asset", "fingerprint", "converter_version"], name="asset_preview_source_version_uq"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["chain_upload", "fingerprint", "converter_version"],
+                condition=Q(chain_upload__isnull=False),
+                name="chain_upload_preview_source_version_uq",
+            ),
         ]

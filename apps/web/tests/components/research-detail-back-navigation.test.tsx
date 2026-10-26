@@ -14,12 +14,19 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
-vi.mock("lucide-react", () => ({ ChevronLeft: () => <span aria-hidden="true">←</span> }));
-vi.mock("@plane/constants", () => ({
-  RESEARCH_PROJECT_NAVIGATION_ITEMS: [
-    { key: "stages", labelKey: "research.nav.stages", path: "stages", section: "stages" },
-  ],
-}));
+vi.mock("lucide-react", async () => {
+  const actual = await vi.importActual<typeof import("lucide-react")>("lucide-react");
+  return { ...actual, ChevronLeft: () => <span aria-hidden="true">←</span> };
+});
+vi.mock("@plane/constants", async () => {
+  const actual = await vi.importActual<typeof import("@plane/constants")>("@plane/constants");
+  return {
+    ...actual,
+    RESEARCH_PROJECT_NAVIGATION_ITEMS: [
+      { key: "stages", labelKey: "research.nav.stages", path: "stages", section: "stages" },
+    ],
+  };
+});
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/lab/research/projects/project-1/stages" }));
 vi.mock("@/hooks/store/use-research", () => ({

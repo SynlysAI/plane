@@ -4,21 +4,24 @@
  */
 
 import { observer } from "mobx-react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 // components
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchChainWorkbench } from "@/components/research/chains/research-chain-workbench";
-import { useResearch } from "@/hooks/store/use-research";
 
 function WorkspaceResearchChainsPage() {
   const { workspaceSlug } = useParams();
-  const research = useResearch();
+  const [searchParams] = useSearchParams();
   if (!workspaceSlug) return null;
+  const descriptionKey =
+    searchParams.get("view") === "projects"
+      ? "research.chains.project_records_description"
+      : "research.chains.description";
 
   return (
     <ResearchPageShell
       titleKey="research.nav.research_chain_v2"
-      descriptionKey="research.chains.description"
+      descriptionKey={descriptionKey}
       section="research_chain"
     >
       <ResearchChainWorkbench workspaceSlug={workspaceSlug} />

@@ -47,7 +47,13 @@ from .issue import (
     IssueDescriptionVersion,
 )
 from .module import Module, ModuleIssue, ModuleLink, ModuleMember, ModuleUserProperties
-from .notification import EmailNotificationLog, Notification, SystemAnnouncement, UserNotificationPreference
+from .notification import (
+    EmailNotificationLog,
+    InboxTodoState,
+    Notification,
+    SystemAnnouncement,
+    UserNotificationPreference,
+)
 from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion
 from .project import (
     Project,
@@ -116,6 +122,7 @@ from .research import (
     ResearchChainNodeTask,
     ResearchTaskComment,
     ResearchTaskCommentAttachment,
+    ResearchChainNodeTaskAttachment,
     ResearchChainSnapshot,
     ResearchChainUpload,
     ResearchGroupKnowledgeBinding,

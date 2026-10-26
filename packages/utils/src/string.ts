@@ -56,7 +56,7 @@ export const truncateText = (str: string, length: number) => {
 export const createSimilarString = (str: string) => {
   const shuffled = str
     .split("")
-    .sort(() => Math.random() - 0.5)
+    .toSorted(() => Math.random() - 0.5)
     .join("");
 
   return shuffled;
@@ -153,18 +153,25 @@ export const checkEmailValidity = (email: string): boolean => {
   if (!email) return false;
 
   const isEmailValid =
-    /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(
+    /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(
       email
     );
 
   return isEmailValid;
 };
 
+export const DESCRIPTION_CONTENT_TAGS = ["img", "image-component", "table", "iframe", "video"];
+
 export const isEmptyHtmlString = (htmlString: string, allowedHTMLTags: string[] = []) => {
   // Remove HTML tags using sanitize-html
   const cleanText = sanitizeHtml(htmlString, { allowedTags: allowedHTMLTags });
   // Trim the string and check if it's empty
   return cleanText.trim() === "";
+};
+
+/** 判断工作项描述是否存在任一可视内容节点。 */
+export const isDescriptionContentEmpty = (htmlString: string | null | undefined) => {
+  return !htmlString || isEmptyHtmlString(htmlString, DESCRIPTION_CONTENT_TAGS);
 };
 
 /**
@@ -236,7 +243,7 @@ export const isCommentEmpty = (comment: Content | undefined): boolean => {
 
   // Handle JSONContent[] (array)
   if (Array.isArray(comment)) {
-    return comment.length === 0 || comment.every(isJSONContentEmpty);
+    return comment.every(isJSONContentEmpty);
   }
 
   // Handle JSONContent (object)

@@ -611,6 +611,78 @@ class TestResearchProjectLifecycle:
         assert research["org_unit"] == str(env["group"].id)
         assert research["started_at"] == "2026-09-01"
 
+    def test_patch_updates_creation_info_and_syncs_chain_visibility(self, env):
+        """编辑创建信息时同步项目、档案与研究链的权威字段。"""
+        self._enable_chain(env)
+        created = self._create(
+            env,
+            name="旧科研课题",
+            research_type="RESEARCH_PROJECT",
+            chain_visibility="PRIVATE",
+        )
+        self._create(env, name="已占用名称", research_type="RESEARCH_PROJECT")
+
+        invalid = env["admin_client"].patch(
+            f"{env['url']}{created['id']}/",
+            {"name": "   "},
+            format="json",
+        )
+        assert invalid.status_code == 422
+        assert invalid.json()["error_code"] == "project_name_invalid"
+
+        conflict = env["admin_client"].patch(
+            f"{env['url']}{created['id']}/",
+            {"name": "已占用名称"},
+            format="json",
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["error_code"] == "project_name_conflict"
+
+        response = env["admin_client"].patch(
+            f"{env['url']}{created['id']}/",
+            {
+                "name": "  更新后的科研课题  ",
+                "research_type": "MASTER",
+                "org_unit": str(env["group"].id),
+                "chain_visibility": "WORKSPACE",
+            },
+            format="json",
+        )
+        assert response.status_code == 200, response.json()
+        assert response.json()["name"] == "更新后的科研课题"
+
+        project = Project.objects.get(pk=created["id"])
+        profile = ResearchProjectProfile.objects.get(project=project)
+        chain = ResearchChain.objects.get(project=project)
+        assert project.name == "更新后的科研课题"
+        assert project.identifier == created["identifier"]
+        assert profile.research_type == "MASTER"
+        assert profile.org_unit == env["group"]
+        assert profile.chain_visibility == "WORKSPACE"
+        assert chain.visibility == "WORKSPACE"
+        assert ResearchAuditEvent.objects.filter(
+            action="project.update",
+            resource_id=profile.id,
+        ).exists()
+
+    def test_patch_creation_info_keeps_permission_and_deleted_guards(self, env):
+        """编辑入口不能绕过负责人权限，也不能修改已删除项目。"""
+        created = self._create(env, name="不可越权编辑", chain_visibility="WORKSPACE")
+        viewer = make_user(first_name="Viewer")
+        add_workspace_member(env["workspace"], viewer)
+
+        denied = client_for(viewer).patch(
+            f"{env['url']}{created['id']}/",
+            {"name": "越权名称"},
+            format="json",
+        )
+        assert denied.status_code == 403
+
+        detail_url = f"{env['url']}{created['id']}/"
+        assert env["member_client"].delete(detail_url).status_code == 204
+        deleted = env["member_client"].patch(detail_url, {"name": "删除后名称"}, format="json")
+        assert deleted.status_code == 409
+
     def test_converting_team_project_to_cultivation_initializes_stages(self, env):
         team = self._create(env, research_type="RESEARCH_PROJECT", chain_kind="LEGACY_TRAINING")
 

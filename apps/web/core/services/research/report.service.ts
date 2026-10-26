@@ -67,6 +67,15 @@ export class ResearchReportService extends APIService {
       throw error?.response?.data ?? error;
     });
   }
+
+  /** 恢复误删的周期报告及其同批正文、引用和附件。 */
+  async restoreReport(workspaceSlug: string, reportId: string) {
+    return this.post(researchEndpoints.reportRestore(workspaceSlug, reportId), {})
+      .then((res) => res?.data as TPeriodicReport)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
   constructor() {
     super(API_BASE_URL);
   }
@@ -115,6 +124,15 @@ export class ResearchReportService extends APIService {
     payload: { comment?: string; description_json?: object; description_html?: string } = {}
   ) {
     return this.post(researchEndpoints.reportSubmit(workspaceSlug, reportId), payload)
+      .then((res) => res?.data as TPeriodicReport)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** 撤回当前已提交报告，让作者回到草稿继续编辑。 */
+  async withdrawReport(workspaceSlug: string, reportId: string, comment = "") {
+    return this.post(researchEndpoints.reportWithdraw(workspaceSlug, reportId), { comment })
       .then((res) => res?.data as TPeriodicReport)
       .catch((err) => {
         throw err?.response?.data;
@@ -303,6 +321,30 @@ export class ResearchReportService extends APIService {
       .catch((err) => {
         throw err?.response?.data;
       });
+  }
+
+  /** 导出包含正文图片的 Markdown ZIP，并解析 Blob 形式的错误响应。 */
+  async exportMarkdown(workspaceSlug: string, reportId: string, content: string) {
+    try {
+      const response = await this.post(
+        researchEndpoints.reportExportMarkdown(workspaceSlug, reportId),
+        { content },
+        { responseType: "blob" }
+      );
+      return response?.data as Blob;
+    } catch (error) {
+      const data = (error as { response?: { data?: unknown } })?.response?.data;
+      if (data instanceof Blob && data.type.includes("application/json")) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(await data.text());
+        } catch (parseError) {
+          if (parseError instanceof SyntaxError) throw data;
+        }
+        throw parsed;
+      }
+      throw data ?? error;
+    }
   }
 
   async getSummary(

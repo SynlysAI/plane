@@ -514,7 +514,13 @@ export class WorkspaceService extends APIService {
   /** 获取权限范围内的真实业务动态，不包含浏览行为。 */
   async fetchWorkspaceActivities(
     workspaceSlug: string,
-    params?: { days?: "30" | "90" | "all"; offset?: number; per_page?: number }
+    params?: {
+      days?: "30" | "90" | "all";
+      offset?: number;
+      per_page?: number;
+      pagination?: "cursor";
+      cursor?: string;
+    }
   ): Promise<THomeActivityResponse> {
     return this.get(`/api/workspaces/${workspaceSlug}/home-activities/`, { params })
       .then((response) => response?.data)

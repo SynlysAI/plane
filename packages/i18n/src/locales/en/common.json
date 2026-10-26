@@ -1320,6 +1320,7 @@
     },
     "chains": {
       "description": "Research chains, topics, reports, reviews, and trace; administrative projects are not shown in this channel.",
+      "project_records_description": "An index of research project records: maintain owners, types, primary units, and lifecycle; opening a record enters its topic or stage workflow.",
       "tabs": {
         "label": "Research Chain page sections",
         "overview": "Overview",
@@ -1641,7 +1642,19 @@
       "completed_at": "Completed",
       "close": "Close",
       "view_details": "View details",
-      "add_instruction": "Click to add description",
+      "add_instruction": "Add instruction...",
+      "instruction_empty": "No instruction yet",
+      "attachments_title": "Task attachments",
+      "attachments_empty": "No task attachments yet",
+      "add_attachment": "Add attachment",
+      "uploading": "Uploading…",
+      "upload_failed": "Upload failed",
+      "retry_upload": "Retry upload",
+      "attachment_delete_failed": "The attachment could not be deleted. Try again.",
+      "attachment_limits_failed": "Workspace attachment limits are unavailable.",
+      "attachment_count_exceeded": "A task description can have at most {count} files.",
+      "image_upload_failed": "The image could not be uploaded. Try again.",
+      "image_reupload_required": "Select the image again to upload it to this instruction.",
       "add_assignee": "Add assignee",
       "add_due_at": "Add due date",
       "activity": "Activity",
@@ -1757,6 +1770,10 @@
       "materials_title": "Topic materials",
       "add_material": "Add file",
       "upload_file": "Upload",
+      "select_material": "Select material",
+      "reselect_file": "Select another",
+      "start_upload": "Start upload",
+      "download_material": "Download material",
       "panel_title": "RAGPortal knowledge",
       "reasons": {
         "not_configured": "service is not configured",
@@ -1941,6 +1958,10 @@
         "title": "Report submitted",
         "message": "The report is awaiting review. Its status and history have been refreshed."
       },
+      "report_withdrawn": {
+        "title": "Report withdrawn",
+        "message": "The report is a draft again and has left the review queue. Edit and submit it again when ready."
+      },
       "report_returned": {
         "title": "Report returned",
         "message": "The report now needs revision and the author can act on the return reason."
@@ -1957,9 +1978,21 @@
         "title": "Report created",
         "message": "Opening the report so you can continue with its body."
       },
+      "report_deleted": {
+        "title": "Report moved to deleted",
+        "message": "The report, body, project references, and attachments are retained and can be restored."
+      },
+      "report_restored": {
+        "title": "Report restored",
+        "message": "Opening the report so you can continue editing or submit it."
+      },
       "project_created": {
         "title": "Research project created",
         "message": "Opening the project details."
+      },
+      "project_updated": {
+        "title": "Research project updated",
+        "message": "The project details were saved and the list was refreshed."
       },
       "project_archived": {
         "title": "Project archived",
@@ -2209,6 +2242,8 @@
       "description": "Personal cultivation projects and shared team research projects.",
       "create_title": "Create a research project",
       "create_hint": "Cultivation projects use the stage workflow; team projects use work items, cycles and modules.",
+      "edit_title": "Edit research project",
+      "edit_hint": "Correct the project details. Saving also refreshes the project list.",
       "fields": {
         "name": "Project name",
         "type": "Project type",
@@ -2236,6 +2271,8 @@
       "team_org_optional": "A team project may start without an organisation. Assign one later to include it in direction-scoped summaries.",
       "owner_placeholder": "Research owner email or ID (empty = me)",
       "create": "Create research project",
+      "edit": "Edit research project",
+      "save": "Save changes",
       "open_team_project": "Open project",
       "archive": "Archive",
       "delete": "Delete",
@@ -2278,6 +2315,11 @@
       "create": "Create report",
       "team_projects": "Team projects ({count})",
       "mine_only": "Only mine",
+      "deleted_title": "Deleted reports",
+      "deleted_scope": "Deleted",
+      "deleted_status": "Deleted",
+      "restore": "Restore",
+      "confirm_delete_restorable": "The report will move to the deleted list. Its body, project references, and attachments will be retained for restoration.",
       "all_statuses": "All statuses",
       "all_types": "All types",
       "all_org_units": "All organisation nodes",
@@ -2292,6 +2334,12 @@
       },
       "empty": "No report matches the filters",
       "submit": "Submit",
+      "withdraw": "Withdraw and edit",
+      "withdraw_title": "Withdraw this report?",
+      "withdraw_hint": "The report will return to draft and leave the review queue. Its submitted version, read receipts, comments, and review history remain; submitting again creates a new version.",
+      "withdraw_reason": "Withdrawal reason (optional)",
+      "withdraw_placeholder": "Explain what needs to change",
+      "history_withdraw": "Withdrawn",
       "return": "Return",
       "accept": "Accept",
       "open_body": "Open body",
@@ -2558,6 +2606,8 @@
       "report_visibility_exceeds_default": "The visibility cannot be wider than the default policy.",
       "research_project_exists": "This research owner already has an active research project.",
       "project_identifier_conflict": "A project identifier conflict occurred. Please try a different name.",
+      "project_name_invalid": "Enter a project name of 1-255 characters.",
+      "project_name_conflict": "A project with this name already exists in the workspace.",
       "research_project_not_found": "Research project not found.",
       "file_type_not_allowed": "This file type is not allowed.",
       "file_size_exceeded": "The file exceeds the configured limit.",

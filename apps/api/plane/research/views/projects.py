@@ -626,13 +626,52 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
             )
             if profile.workflow_status == ResearchProjectProfile.WorkflowStatus.DELETED:
                 return research_conflict(ResearchErrorCode.CHAIN_INVALID, "Restore the deleted project first.")
+            project = Project.objects.select_for_update().get(pk=profile.project_id, workspace=workspace)
+            profile.project = project
+            before = {
+                "name": project.name,
+                "research_type": profile.research_type,
+                "org_unit": str(profile.org_unit_id) if profile.org_unit_id else None,
+                "chain_visibility": profile.chain_visibility,
+            }
             requested_owner = profile.owner
+            requested_name = project.name
+            requested_visibility = profile.chain_visibility
             was_cultivation_project = (
                 profile.chain_kind == ResearchProjectProfile.ChainKind.LEGACY_TRAINING
                 and is_cultivation_project(profile.research_type)
             )
             requested_type = profile.research_type
             requested_status = profile.workflow_status
+            if "name" in request.data:
+                raw_name = request.data.get("name")
+                if not isinstance(raw_name, str):
+                    return research_error(
+                        ResearchErrorCode.PROJECT_NAME_INVALID,
+                        "Project name must be a non-empty string.",
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    )
+                requested_name = raw_name.strip()
+                if not requested_name or len(requested_name) > 255:
+                    return research_error(
+                        ResearchErrorCode.PROJECT_NAME_INVALID,
+                        "Project name is required and must contain at most 255 characters.",
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    )
+                if (
+                    requested_name != project.name
+                    and Project.objects.filter(
+                        workspace=workspace,
+                        name=requested_name,
+                        deleted_at__isnull=True,
+                    )
+                    .exclude(pk=project.pk)
+                    .exists()
+                ):
+                    return research_conflict(
+                        ResearchErrorCode.PROJECT_NAME_CONFLICT,
+                        "A project with this name already exists in the workspace.",
+                    )
             if "owner" in request.data:
                 if not is_admin:
                     return research_permission_denied()
@@ -649,6 +688,15 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                 requested_type = str(request.data.get("research_type") or "").upper()
                 if requested_type not in ResearchProjectProfile.ResearchType.values:
                     return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "Unknown research type.")
+            if "chain_visibility" in request.data:
+                requested_visibility = str(request.data.get("chain_visibility") or "").upper()
+                if requested_visibility not in ResearchProjectProfile.ChainVisibility.values:
+                    return research_error(ResearchErrorCode.CHAIN_INVALID, "Unknown chain visibility.")
+                if profile.chain_kind != ResearchProjectProfile.ChainKind.RESEARCH_CHAIN:
+                    return research_conflict(
+                        ResearchErrorCode.CHAIN_INVALID,
+                        "Only RESEARCH_CHAIN projects can update chain visibility.",
+                    )
             if "workflow_status" in request.data:
                 requested_status = str(request.data.get("workflow_status") or "").upper()
                 if requested_status not in ResearchProjectProfile.WorkflowStatus.values:
@@ -701,6 +749,13 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
             if "research_type" in request.data:
                 profile.research_type = requested_type
                 fields.append("research_type")
+            if "chain_visibility" in request.data:
+                profile.chain_visibility = requested_visibility
+                fields.append("chain_visibility")
+                chain = ResearchChain.objects.select_for_update().filter(project_id=profile.project_id).first()
+                if chain is not None and chain.visibility != requested_visibility:
+                    chain.visibility = requested_visibility
+                    chain.save(update_fields=["visibility", "updated_at"])
             for field in ("started_at", "expected_end_at", "completed_at"):
                 if field in request.data:
                     value, error = parse_date(request.data.get(field), field)
@@ -726,6 +781,9 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                     request=request,
                 )
 
+            if requested_name != project.name:
+                project.name = requested_name
+                project.save(update_fields=["name", "updated_at"])
             if fields:
                 profile.save(update_fields=[*fields, "updated_at"])
             sync_chain_lifecycle(profile, owner_changed="owner" in request.data)
@@ -735,6 +793,26 @@ class ResearchProjectDetailEndpoint(ResearchAPIView):
                 and not was_cultivation_project
             ):
                 ensure_stage_instances(workspace, profile, request.user)
+            after = {
+                "name": project.name,
+                "research_type": profile.research_type,
+                "org_unit": str(profile.org_unit_id) if profile.org_unit_id else None,
+                "chain_visibility": profile.chain_visibility,
+            }
+            changes = {
+                field: {"from": before[field], "to": after[field]} for field in before if before[field] != after[field]
+            }
+            if changes:
+                record_audit_event(
+                    workspace=workspace,
+                    action=ResearchAuditAction.PROJECT_UPDATE,
+                    resource_type=ResearchResourceType.PROJECT_PROFILE,
+                    resource_id=profile.id,
+                    org_unit=profile.org_unit,
+                    actor=request.user,
+                    metadata={"project": str(project.id), "changes": changes},
+                    request=request,
+                )
         return Response(serialize_profile(profile), status=status.HTTP_200_OK)
 
 

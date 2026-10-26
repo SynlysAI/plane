@@ -31,6 +31,9 @@ const mocks = vi.hoisted(() => ({
   markReportRead: vi.fn(),
   submitReport: vi.fn(),
   updateReportVisibility: vi.fn(),
+  exportReportMarkdown: vi.fn(),
+  copyTextToClipboard: vi.fn(),
+  setToast: vi.fn(),
   commentsProps: {} as Record<string, unknown>,
 }));
 
@@ -62,7 +65,11 @@ vi.mock("@plane/propel/button", () => ({
     </button>
   ),
 }));
-vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: { SUCCESS: "success" }, setToast: vi.fn() }));
+vi.mock("@plane/propel/toast", () => ({
+  TOAST_TYPE: { SUCCESS: "success", ERROR: "error" },
+  setToast: mocks.setToast,
+}));
+vi.mock("@plane/utils", () => ({ copyTextToClipboard: mocks.copyTextToClipboard }));
 vi.mock("@plane/ui", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
   ModalCore: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
@@ -112,6 +119,12 @@ vi.mock("@/components/research/reports/report-comments", () => ({
     return { open, setOpen, openForDiscussion: () => setOpen(true) };
   },
 }));
+vi.mock("@/components/pages/editor/toolbar", () => ({
+  PageToolbar: ({ editorRef }: { editorRef: unknown }) => {
+    if (!editorRef) throw new Error("格式工具栏未收到可用编辑器实例");
+    return <section aria-label="正文格式工具栏">格式工具栏</section>;
+  },
+}));
 vi.mock("@/components/editor/document/editor", () => ({
   /** 用可编辑 DOM 与公开编辑器 API 隔离富文本依赖，保留正文变更行为。 */
   DocumentEditor: React.forwardRef(function Editor(
@@ -121,12 +134,14 @@ vi.mock("@/components/editor/document/editor", () => ({
       onChange,
       onTransaction,
       onCommentAnchorClick,
+      handleEditorReady,
     }: {
       value: string | object;
       editable: boolean;
       onChange: (json: object, html: string, options?: { isMigrationUpdate?: boolean }) => void;
       onTransaction?: () => void;
       onCommentAnchorClick?: (threadId: string) => void;
+      handleEditorReady?: (ready: boolean) => void;
     },
     ref
   ) {
@@ -151,6 +166,10 @@ vi.mock("@/components/editor/document/editor", () => ({
     React.useEffect(() => {
       if (mocks.editorMigrationUpdate) onChange({}, initial, { isMigrationUpdate: true });
     }, [initial, onChange]);
+    React.useEffect(() => {
+      handleEditorReady?.(true);
+      return () => handleEditorReady?.(false);
+    }, [handleEditorReady]);
     return (
       <div
         role="presentation"
@@ -300,6 +319,8 @@ beforeEach(() => {
   mocks.fetchReports.mockResolvedValue(undefined);
   mocks.submitReport.mockResolvedValue(undefined);
   mocks.markReportRead.mockResolvedValue(undefined);
+  mocks.exportReportMarkdown.mockResolvedValue(new Blob(["ZIP"], { type: "application/zip" }));
+  mocks.copyTextToClipboard.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -310,6 +331,39 @@ afterEach(async () => {
 });
 
 describe("报告详情正文保存与替换", () => {
+  it("编辑态显示常驻格式工具栏和 slash 提示", async () => {
+    await renderBody();
+
+    expect(container.querySelector('[aria-label="正文格式工具栏"]')).not.toBeNull();
+    expect(container.textContent).toContain("输入 “/” 可打开完整格式菜单");
+  });
+
+  it("只读正式版本不显示格式工具栏和 slash 提示", async () => {
+    await renderBody({
+      report: {
+        ...report(),
+        can_edit: false,
+        draft_content: null,
+        official_content: {
+          version_no: 1,
+          description_json: {},
+          description_html: "<p>正式正文</p>",
+          description_stripped: "正式正文",
+        },
+      },
+    });
+
+    expect(container.querySelector('[aria-label="正文格式工具栏"]')).toBeNull();
+    expect(container.textContent).not.toContain("输入 “/” 可打开完整格式菜单");
+  });
+
+  it("正文加载中不显示格式工具栏", async () => {
+    await renderBody({ report: { ...report(), draft_content: null, official_content: null } });
+
+    expect(container.querySelector('textarea[aria-label="正文编辑器"]')).toBeNull();
+    expect(container.querySelector('[aria-label="正文格式工具栏"]')).toBeNull();
+  });
+
   it("记忆讨论栏收起状态并在正文发起批注时自动展开", async () => {
     vi.stubGlobal(
       "getSelection",
@@ -553,6 +607,110 @@ describe("报告详情正文保存与替换", () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe("未保存");
     expect(button("保存").disabled).toBe(false);
     expect(button("提交").disabled).toBe(false);
+  });
+});
+
+describe("周报 Markdown 导出与链接复制", () => {
+  it("编辑态导出当前编辑器 Markdown 并下载 ZIP", async () => {
+    const clickedAnchors: HTMLAnchorElement[] = [];
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function mockClick(this: HTMLAnchorElement) {
+        clickedAnchors.push(this);
+      });
+    const createObjectURL = vi.fn(() => "blob:report-zip");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+    try {
+      await renderDetail();
+      await editBody("# 当前编辑内容\n\n![图](/api/research/workspaces/lab/reports/report-1/images/image-1/)");
+
+      await act(async () => button("导出 Markdown").click());
+
+      expect(mocks.exportReportMarkdown).toHaveBeenCalledWith(
+        "lab",
+        "report-1",
+        "# 当前编辑内容\n\n![图](/api/research/workspaces/lab/reports/report-1/images/image-1/)"
+      );
+      expect(clickedAnchors).toHaveLength(1);
+      expect(clickedAnchors[0].download).toBe("weekly-2026-W40.zip");
+      expect(clickedAnchors[0].href).toBe("blob:report-zip");
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:report-zip");
+    } finally {
+      clickSpy.mockRestore();
+    }
+  });
+
+  it("只读正式版本同样可以导出 Markdown ZIP", async () => {
+    const official = report();
+    Object.assign(official, {
+      status: "ACCEPTED",
+      can_edit: false,
+      draft_content: null,
+      official_content: {
+        version_no: 2,
+        description_json: {},
+        description_html: "# 正式版本",
+        description_stripped: "正式版本",
+      },
+    });
+    mocks.reports["report-1"] = official;
+
+    await renderDetail();
+    await act(async () => button("导出 Markdown").click());
+
+    expect(mocks.exportReportMarkdown).toHaveBeenCalledWith("lab", "report-1", "# 正式版本");
+  });
+
+  it("导出失败后保留正文并恢复按钮", async () => {
+    mocks.exportReportMarkdown.mockRejectedValue(new Error("upstream unavailable"));
+    await renderDetail();
+    await editBody("# 需要保留的正文");
+
+    await act(async () => button("导出 Markdown").click());
+
+    expect(editor().value).toBe("# 需要保留的正文");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("周报导出失败");
+    expect(button("导出 Markdown").disabled).toBe(false);
+  });
+
+  it("导出进行中禁用按钮并在完成后恢复", async () => {
+    const pendingExport = deferred<Blob>();
+    mocks.exportReportMarkdown.mockReturnValue(pendingExport.promise);
+    await renderDetail();
+
+    await act(async () => button("导出 Markdown").click());
+
+    expect(button("导出 Markdown").disabled).toBe(true);
+    await act(async () => pendingExport.resolve(new Blob(["ZIP"], { type: "application/zip" })));
+
+    expect(button("导出 Markdown").disabled).toBe(false);
+  });
+
+  it("复制授权详情页完整链接并提示结果", async () => {
+    const locationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
+    Object.defineProperty(window, "location", {
+      value: { origin: "http://pilab.local" },
+      configurable: true,
+    });
+    try {
+      await renderDetail();
+      await act(async () => button("复制链接").click());
+
+      expect(mocks.copyTextToClipboard).toHaveBeenCalledWith("http://pilab.local/lab/research/reports/report-1");
+      expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "success", title: "链接已复制" }));
+    } finally {
+      if (locationDescriptor) Object.defineProperty(window, "location", locationDescriptor);
+    }
+  });
+
+  it("剪贴板失败时显示错误提示", async () => {
+    mocks.copyTextToClipboard.mockRejectedValue(new Error("denied"));
+    await renderDetail();
+
+    await act(async () => button("复制链接").click());
+
+    expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
   });
 });
 

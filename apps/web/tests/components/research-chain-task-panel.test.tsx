@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   updateNodeTask: vi.fn(),
   runNodeTaskAction: vi.fn(),
 }));
+const capturedDescription = vi.hoisted(() => ({ props: null as null | { editable: boolean; value: string } }));
 
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
@@ -37,6 +38,21 @@ vi.mock("@/services/research/chain-task.service", () => ({
 vi.mock("@/components/research/chains/research-task-comments", () => ({
   ResearchTaskComments: () => <section aria-label="评论">评论</section>,
 }));
+vi.mock("@/components/research/chains/research-task-description", () => ({
+  ResearchTaskDescription: (props: { editable: boolean; value: string; onChange: (value: string) => void }) => {
+    capturedDescription.props = props;
+    return props.editable ? (
+      <textarea
+        aria-label="任务说明"
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+        data-testid="research-description-editor"
+      />
+    ) : (
+      <div data-testid="research-description-view">{props.value || "暂无任务说明"}</div>
+    );
+  },
+}));
 
 const capability = (allowed: boolean) => ({ allowed, reason_code: "", reason: "" });
 
@@ -49,6 +65,7 @@ function task(overrides: Partial<TResearchChainNodeTask> = {}): TResearchChainNo
     node: "node-1",
     title: "整理开题文献",
     instruction: "补充近三年实验方法对比。",
+    instruction_attachments: [],
     status: "SUBMITTED",
     assignee: "student-1",
     assignee_is_valid: true,
@@ -119,10 +136,12 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-async function renderPanel() {
+async function renderPanel(initialTaskId?: string) {
   const { ResearchChainTaskPanel } = await import("@/components/research/chains/research-chain-task-panel");
   await act(async () => {
-    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+    root.render(
+      <ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" initialTaskId={initialTaskId} />
+    );
   });
   await act(async () => undefined);
 }
@@ -135,6 +154,27 @@ function button(label: string) {
   throw new Error(`button ${label} not found`);
 }
 
+/** Get the main-content edit toggle inside the opened task peek. */
+function editToggle() {
+  const toggle = container.querySelector<HTMLButtonElement>("[data-task-edit-toggle]");
+  if (!toggle) throw new Error("task edit toggle not found");
+  return toggle;
+}
+
+it("opens a valid deep-linked research task after tasks load", async () => {
+  await renderPanel("task-1");
+
+  const peek = container.querySelector("aside");
+  expect(peek?.querySelector("h2")?.textContent).toBe("整理开题文献");
+  expect(editToggle().getAttribute("aria-pressed")).toBe("false");
+});
+
+it("ignores a deep-linked research task that does not belong to the node", async () => {
+  await renderPanel("missing-task");
+
+  expect(container.querySelector("aside")).toBeNull();
+});
+
 async function setInput(selector: string, value: string) {
   const input = container.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement;
   await act(async () => {
@@ -143,6 +183,130 @@ async function setInput(selector: string, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+
+/** 在面板内部触发一次菜单外部点击，并等待延迟关闭回调。 */
+async function clickOutsideMenu(target: Element) {
+  await act(async () => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+}
+
+it("opens an existing research task read-only until editing is explicitly enabled", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const peek = container.querySelector("aside");
+  expect(peek?.querySelector("h2")?.textContent).toBe("整理开题文献");
+  expect(peek?.querySelector('input[aria-label="标题"]')).toBeNull();
+  expect(peek?.querySelector('[data-testid="research-description-editor"]')).toBeNull();
+  expect(peek?.querySelector('[data-testid="research-description-view"]')?.textContent).toContain(
+    "补充近三年实验方法对比。"
+  );
+  expect(editToggle().textContent).toBe("编辑");
+  expect(editToggle().getAttribute("aria-pressed")).toBe("false");
+});
+
+it("saves changed title and instruction together when leaving task edit mode", async () => {
+  mocks.updateNodeTask.mockResolvedValue(task({ title: "整理开题文献与实验记录", instruction: "请补充实验记录。" }));
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+  await act(async () => editToggle().click());
+
+  expect(editToggle().textContent).toBe("完成");
+  expect(editToggle().getAttribute("aria-pressed")).toBe("true");
+  await setInput('aside input[aria-label="标题"]', "整理开题文献与实验记录");
+  await act(async () => capturedDescription.props?.onChange("请补充实验记录。"));
+  await act(async () => editToggle().click());
+
+  expect(mocks.updateNodeTask).toHaveBeenCalledTimes(1);
+  expect(mocks.updateNodeTask).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", {
+    title: "整理开题文献与实验记录",
+    instruction: "请补充实验记录。",
+  });
+  expect(container.querySelector("aside")?.querySelector('input[aria-label="标题"]')).toBeNull();
+  expect(container.querySelector("aside")?.textContent).toContain("整理开题文献与实验记录");
+});
+
+it("keeps research description attachment and upload state synchronized with the peek", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const descriptionProps = capturedDescription.props as unknown as {
+    onAttachmentsChange: (
+      attachments: { id: string; name: string; type: string; size: number; download_url: string }[]
+    ) => void;
+    onBusyChange: (busy: boolean) => void;
+    task: { instruction_attachments: unknown[] };
+  };
+  await act(async () => {
+    descriptionProps.onAttachmentsChange([
+      { id: "asset-1", name: "过程说明.pdf", type: "application/pdf", size: 128, download_url: "/download/" },
+    ]);
+  });
+  const synchronizedDescriptionProps = capturedDescription.props as unknown as {
+    task: { instruction_attachments: unknown[] };
+  };
+  expect(synchronizedDescriptionProps.task.instruction_attachments).toHaveLength(1);
+
+  await act(async () => editToggle().click());
+  const editableDescriptionProps = capturedDescription.props as unknown as { onBusyChange: (busy: boolean) => void };
+  await act(async () => editableDescriptionProps.onBusyChange(true));
+  expect(editToggle().disabled).toBe(true);
+  await act(async () => editableDescriptionProps.onBusyChange(false));
+  expect(editToggle().disabled).toBe(false);
+});
+
+it("keeps the task editor open when the title is empty or saving fails", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+  await act(async () => editToggle().click());
+  await setInput('aside input[aria-label="标题"]', "");
+  await act(async () => editToggle().click());
+
+  expect(mocks.updateNodeTask).not.toHaveBeenCalled();
+  expect(container.querySelector('aside input[aria-label="标题"]')).not.toBeNull();
+  expect(container.textContent).toContain("请先填写任务标题。");
+
+  await setInput('aside input[aria-label="标题"]', "整理开题文献与实验记录");
+  mocks.updateNodeTask.mockRejectedValueOnce({ error: "title is rejected" });
+  await act(async () => editToggle().click());
+
+  expect(mocks.updateNodeTask).toHaveBeenCalledTimes(1);
+  expect(mocks.updateNodeTask).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", {
+    title: "整理开题文献与实验记录",
+  });
+  expect(container.querySelector('aside input[aria-label="标题"]')).not.toBeNull();
+  expect(container.textContent).toContain("title is rejected");
+});
+
+it("hides the edit toggle but keeps permitted property and workflow actions available", async () => {
+  const readOnlyTask = task();
+  readOnlyTask.capabilities!.actions.edit = capability(false);
+  mocks.getNodeTasks.mockResolvedValue([readOnlyTask]);
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const peek = container.querySelector("aside");
+  expect(peek?.querySelector("[data-task-edit-toggle]")).toBeNull();
+  expect(peek?.querySelector('button[aria-label="责任人"]')).not.toBeNull();
+  expect(peek?.textContent).toContain("退回");
+  expect(peek?.textContent).toContain("完成");
+});
+
+it("resets edit mode when switching from one research task to another", async () => {
+  const second = task({ id: "task-2", title: "补充实验记录", instruction: "请补充实验记录。" });
+  mocks.getNodeTasks.mockResolvedValue([task(), second]);
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+  await act(async () => editToggle().click());
+  expect(container.querySelector('aside input[aria-label="标题"]')).not.toBeNull();
+
+  await act(async () => button("补充实验记录").click());
+  expect(editToggle().textContent).toBe("编辑");
+  expect(container.querySelector("aside")?.querySelector('input[aria-label="标题"]')).toBeNull();
+  expect(container.querySelector("aside")?.textContent).toContain("请补充实验记录。");
+});
 
 it("shows task metadata, status text, scoped candidates, and the return reason", async () => {
   await renderPanel();
@@ -183,7 +347,7 @@ it("uses the administrative peek pattern for an empty research instruction", asy
   await renderPanel();
   await act(async () => button("整理开题文献").click());
   const peek = container.querySelector("aside");
-  expect(peek?.textContent).toContain("点击添加描述");
+  expect(peek?.textContent).toContain("暂无任务说明");
   expect(peek?.textContent).not.toContain("添加责任人");
   expect(peek?.textContent).not.toContain("添加截止时间");
   expect(peek?.textContent).toContain("创建了任务");
@@ -218,6 +382,8 @@ it("creates a task using only a candidate returned by assignable-users", async (
   await renderPanel();
 
   await act(async () => button("+ 创建任务").click());
+  expect(container.querySelector("[data-task-edit-toggle]")).toBeNull();
+  expect(container.querySelector('input[aria-label="标题"]')).not.toBeNull();
   await setInput('input:not([type="date"]):not([type="search"])', "补充实验记录");
   await act(async () => button("更多").click());
   const assigneeButtons = [...container.querySelectorAll('button[aria-label="责任人"]')];
@@ -253,6 +419,77 @@ it("requires and submits a return reason", async () => {
     reason: "请补充样本信息",
   });
   expect(container.textContent).toContain("需修订");
+});
+
+it("cancels row date and status menus after clicking elsewhere without invoking APIs", async () => {
+  await renderPanel();
+  const panelHeading = container.querySelector("h3");
+  if (!panelHeading) throw new Error("任务面板标题未找到");
+
+  const dateButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((item) =>
+    item.textContent?.includes("2026/10/20")
+  );
+  if (!dateButton) throw new Error("截止日期按钮未找到");
+  await act(async () => dateButton.click());
+  expect(container.querySelector('input[type="date"]')).not.toBeNull();
+
+  await clickOutsideMenu(panelHeading);
+  expect(container.querySelector('input[type="date"]')).toBeNull();
+  expect(mocks.updateNodeTask).not.toHaveBeenCalled();
+
+  await act(async () => button("已提交").click());
+  expect([...container.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "退回")).toBe(true);
+
+  await clickOutsideMenu(panelHeading);
+  expect(container.querySelector('[role="menu"]')).toBeNull();
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+});
+
+it("cancels peek layout and more menus without closing the task peek", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+  const peek = container.querySelector("aside");
+  const peekTitle = peek?.querySelector("h2");
+  if (!peek || !peekTitle) throw new Error("任务 Peek 标题未找到");
+
+  const layout = peek.querySelector<HTMLButtonElement>('button[aria-label="切换预览布局"]');
+  if (!layout) throw new Error("预览布局按钮未找到");
+  await act(async () => layout.click());
+  expect(peek.querySelector('[role="menu"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+
+  const more = peek.querySelector<HTMLButtonElement>('button[aria-label="更多"]');
+  if (!more) throw new Error("更多按钮未找到");
+  await act(async () => more.click());
+  expect(peek.querySelector('[role="menu"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+
+  const status = peek.querySelector<HTMLButtonElement>('button[aria-label="状态"]');
+  if (!status) throw new Error("Peek 状态按钮未找到");
+  await act(async () => status.click());
+  expect(peek.querySelector('[role="menu"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+
+  const dueDate = peek.querySelector<HTMLButtonElement>('button[aria-label="截止时间"]');
+  if (!dueDate) throw new Error("Peek 截止时间按钮未找到");
+  await act(async () => dueDate.click());
+  expect(peek.querySelector('input[type="date"]')).not.toBeNull();
+
+  await clickOutsideMenu(peekTitle);
+  expect(peek.querySelector('input[type="date"]')).toBeNull();
+  expect(container.querySelector("aside")).not.toBeNull();
+  expect(mocks.updateNodeTask).not.toHaveBeenCalled();
 });
 
 it("keeps task cancellation in the header menu and requires a reason before cancelling", async () => {
@@ -328,5 +565,7 @@ it("retains an invalid assignee name and explains how to restore membership", as
   const select = peek?.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
   await act(async () => select.click());
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
+  await clickOutsideMenu(peek.querySelector("h2") as Element);
+  expect(container.querySelector('[role="listbox"]')).toBeNull();
   expect(mocks.updateNodeTask).not.toHaveBeenCalled();
 });

@@ -114,6 +114,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") as TRequestedChainTab | null;
   const requestedNodeId = searchParams.get("node");
+  const requestedTaskId = searchParams.get("task");
   const activeTab = resolveChainTab(requestedTab);
   const [chain, setChain] = useState<TResearchChain | null>(null);
   const [nodes, setNodes] = useState<TResearchChainNode[]>([]);
@@ -231,6 +232,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       nextParams.set("tab", "nodes");
       nextParams.set("stage", stage.id);
       nextParams.delete("approval");
+      nextParams.delete("task");
       if (stage.preferredNodeId) nextParams.set("node", stage.preferredNodeId);
       else nextParams.delete("node");
       setSearchParams(nextParams);
@@ -244,6 +246,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       nextParams.set("tab", "nodes");
       if (selectedStage) nextParams.set("stage", selectedStage.id);
       nextParams.set("node", nodeId);
+      nextParams.delete("task");
       setSearchParams(nextParams);
     },
     [searchParams, selectedStage, setSearchParams]
@@ -772,6 +775,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                           workspaceSlug={workspaceSlug}
                           chainId={chainId}
                           nodeId={selected.node.id}
+                          initialTaskId={requestedTaskId}
                         />
                         <ResearchChainKnowledgePanel
                           workspaceSlug={workspaceSlug}

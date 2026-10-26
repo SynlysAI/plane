@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Plus, RefreshCw, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Download, FileText, Plus, RefreshCw, Upload } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { getFileURL } from "@plane/utils";
+import { AttachmentPreviewLink } from "@/components/attachments/preview";
 // services
 import { ResearchChainService, type TResearchChainUpload } from "@/services/research/chain.service";
 
@@ -40,6 +42,14 @@ const DEGRADED_REASON_LABELS: Record<string, string> = {
   transport_error: "research.knowledge.reasons.transport_error",
 };
 
+/** 以克制的文本形式展示上传文件大小。 */
+function formatFileSize(size: number | undefined): string {
+  if (!size || size <= 0) return "0 B";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** Upload, poll and confirm scoped RAGPortal knowledge for one node. */
 export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel({
   workspaceSlug,
@@ -58,6 +68,8 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const [orgUnitName, setOrgUnitName] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const statusId = `${useId().replace(/:/g, "")}-knowledge-upload-status`;
+  const canSelectFile = Boolean(knowledgeBaseId) && knowledgeState === KB_READY_STATE && !uploading;
 
   const load = useCallback(async () => {
     setState("loading");
@@ -160,7 +172,11 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
         </p>
       )}
       {knowledgeState === "UNASSIGNED" && state !== "loading" && state !== "forbidden" && (
-        <p className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary" role="status">
+        <p
+          id={connectionStatus === "not_connected" ? undefined : statusId}
+          className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary"
+          role="status"
+        >
           {t("research.knowledge.unassigned")}
         </p>
       )}
@@ -169,6 +185,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
         state !== "loading" &&
         state !== "forbidden" && (
           <p
+            id={connectionStatus === "not_connected" ? undefined : statusId}
             className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary"
             role="status"
           >
@@ -179,7 +196,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
           </p>
         )}
       {connectionStatus === "not_connected" && state !== "loading" && state !== "forbidden" && (
-        <p className="mt-2 text-11 text-tertiary" role="status">
+        <p id={statusId} className="mt-2 text-11 text-tertiary" role="status">
           {t("research.knowledge.ragportal_not_connected")}
         </p>
       )}
@@ -191,7 +208,11 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       {(state === "ready" || state === "degraded") && (
         <>
           {!knowledgeBaseId && knowledgeState === KB_READY_STATE && (
-            <p className="mt-2 text-11 text-tertiary" role="status">
+            <p
+              id={connectionStatus === "not_connected" ? undefined : statusId}
+              className="mt-2 text-11 text-tertiary"
+              role="status"
+            >
               {t("research.knowledge.no_knowledge_bases")}
             </p>
           )}
@@ -200,8 +221,28 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
               {uploads.map((uploadRecord) => (
                 <li key={uploadRecord.id} className="flex flex-wrap items-center gap-2 border-b border-subtle py-2">
                   <FileText className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
-                  <p className="min-w-0 flex-1 text-12 break-all text-primary">{uploadRecord.file_name}</p>
+                  {uploadRecord.preview_url || uploadRecord.download_url ? (
+                    <AttachmentPreviewLink
+                      name={uploadRecord.file_name}
+                      previewUrl={uploadRecord.preview_url}
+                      downloadUrl={uploadRecord.download_url ?? ""}
+                      className="min-w-0 flex-1 text-left text-12 break-all text-primary hover:text-accent-primary"
+                    />
+                  ) : (
+                    <p className="min-w-0 flex-1 text-12 break-all text-primary">{uploadRecord.file_name}</p>
+                  )}
                   <span className="text-11 text-secondary">{uploadRecord.status}</span>
+                  {uploadRecord.download_url && (
+                    <a
+                      href={getFileURL(uploadRecord.download_url)}
+                      title={t("research.knowledge.download_material")}
+                      aria-label={t("research.knowledge.download_material")}
+                      onClick={(event) => event.stopPropagation()}
+                      className="flex size-7 items-center justify-center rounded-sm text-secondary hover:bg-surface-2 hover:text-primary"
+                    >
+                      <Download className="size-3.5" aria-hidden="true" />
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={() => void refresh(uploadRecord.id)}
@@ -231,48 +272,44 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
             ref={fileInputRef}
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             className="hidden"
-            disabled={!knowledgeBaseId || knowledgeState !== KB_READY_STATE || uploading}
+            disabled={!canSelectFile}
           />
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          {!file ? (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={!knowledgeBaseId || knowledgeState !== KB_READY_STATE || uploading}
-              className="inline-flex items-center gap-1 py-2 text-12 text-secondary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canSelectFile}
+              aria-describedby={statusId}
+              className="inline-flex items-center gap-1.5 rounded bg-accent-primary px-2.5 py-1.5 text-12 text-on-color disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="size-3.5" aria-hidden="true" />
-              {t("research.knowledge.add_material")}
+              {t("research.knowledge.select_material")}
             </button>
-            {file && (
-              <>
-                <span className="max-w-full min-w-0 text-12 break-all text-primary" aria-live="polite">
-                  {file.name}
-                </span>
-                <button
-                  type="button"
-                  disabled={uploading}
-                  title={t("research.chain_tasks.cancel_edit")}
-                  aria-label={t("research.chain_tasks.cancel_edit")}
-                  onClick={() => {
-                    setFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  className="flex size-7 items-center justify-center rounded-sm text-tertiary hover:bg-surface-2 disabled:opacity-50"
-                >
-                  <X className="size-3.5" aria-hidden="true" />
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => void submitUpload()}
-              disabled={!file || !knowledgeBaseId || uploading || knowledgeState !== KB_READY_STATE}
-              className="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-12 text-accent-primary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Upload className="size-3.5" aria-hidden="true" />
-              {uploading ? t("research.knowledge.uploading") : t("research.knowledge.upload_file")}
-            </button>
-          </div>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-subtle pt-2">
+              <span className="max-w-full min-w-0 text-12 break-all text-primary" aria-live="polite">
+                {file.name}
+                <span className="ml-2 whitespace-nowrap text-tertiary">{formatFileSize(file.size)}</span>
+              </span>
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded border border-subtle px-2 py-1 text-12 text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t("research.knowledge.reselect_file")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitUpload()}
+                disabled={uploading}
+                className="inline-flex items-center gap-1.5 rounded bg-accent-primary px-2.5 py-1 text-12 text-on-color disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Upload className="size-3.5" aria-hidden="true" />
+                {uploading ? t("research.knowledge.uploading") : t("research.knowledge.start_upload")}
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>

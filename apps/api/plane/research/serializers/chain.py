@@ -1,6 +1,7 @@
 """Serializers for the Research Chain foundation API."""
 
 from django.db.models import Case, Count, Min, Prefetch, Q, Value, When
+from django.conf import settings
 from rest_framework import serializers
 
 from plane.db.models import (
@@ -14,6 +15,7 @@ from plane.db.models import (
 from plane.research.services.chain_tasks import chain_lifecycle_manager, chain_manager, chain_writer
 from plane.research.utils.action_capabilities import capability_map
 from plane.research.utils.acl import ResearchResource, build_actor_context, check_access
+from plane.preview.service import file_kind
 
 
 CHAIN_ACTIONS = (
@@ -360,6 +362,8 @@ class ResearchChainUploadSerializer(serializers.ModelSerializer):
     """Serialize scoped upload metadata without echoing file content."""
 
     schema_version = serializers.SerializerMethodField()
+    download_url = serializers.SerializerMethodField()
+    preview_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChainUpload
@@ -380,6 +384,8 @@ class ResearchChainUploadSerializer(serializers.ModelSerializer):
             "file_hash",
             "status",
             "error_code",
+            "download_url",
+            "preview_url",
             "metadata",
             "created_at",
             "updated_at",
@@ -388,6 +394,18 @@ class ResearchChainUploadSerializer(serializers.ModelSerializer):
 
     def get_schema_version(self, _obj):
         return "research-chain-upload.v1"
+
+    def get_download_url(self, obj):
+        """Return the Plane-only proxy URL for an externally stored file."""
+        if not obj.knowledge_id:
+            return ""
+        return f"/api/research/workspaces/{obj.workspace.slug}/chains/{obj.chain_id}/uploads/{obj.id}/download/"
+
+    def get_preview_url(self, obj):
+        """Return the secure preview URL when this upload has a previewable source."""
+        if not obj.knowledge_id or not settings.ATTACHMENT_PREVIEW_ENABLED or file_kind(obj.file_name) == "unsupported":
+            return ""
+        return f"/api/research/workspaces/{obj.workspace.slug}/chains/{obj.chain_id}/uploads/{obj.id}/preview/"
 
 
 class ResearchAnalysisResultSerializer(serializers.ModelSerializer):

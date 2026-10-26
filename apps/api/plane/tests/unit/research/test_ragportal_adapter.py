@@ -24,6 +24,7 @@ class FakeResponse:
         self.status_code = status_code
         self._payload = payload if payload is not None else {"items": []}
         self.content = b"{}"
+        self.headers = {"content-type": "application/json"}
 
     def json(self):
         return self._payload
@@ -72,6 +73,7 @@ def test_ragportal_hmac_uses_ai4ms_bearer_token(client):
     assert signature == expected_signature
     assert payload["sub"] == "plane-research-bff"
     assert payload["role"] == "user"
+    assert payload["organization"] == "plane-research-bff"
     assert "X-AI4MS-Signature" not in headers
 
 
@@ -97,6 +99,31 @@ def test_upload_detail_uses_actual_path(client):
     with patch("httpx.get", return_value=FakeResponse(payload={"id": 7, "parse_status": "success"})) as get:
         client.upload_detail(7)
     assert get.call_args.args[0].endswith("/api/uploads/7")
+
+
+def test_download_research_file_carries_all_scope_parameters(client):
+    """原文件代理请求携带完整研究链作用域，便于 RAGPortal 复核。"""
+    response = FakeResponse()
+    response.content = b"pdf"
+    response.headers = {"content-type": "application/pdf"}
+    with patch("httpx.get", return_value=response) as get:
+        result = client.download_research_file(
+            knowledge_id="wk-1",
+            chain_id="chain-1",
+            node_id="node-1",
+            kb_id="kb-1",
+            file_hash="a" * 64,
+        )
+    assert result.degraded is False
+    assert result.content == b"pdf"
+    assert result.content_type == "application/pdf"
+    assert get.call_args.args[0].endswith("/api/integrations/research/files/wk-1")
+    assert get.call_args.kwargs["params"] == {
+        "chain_id": "chain-1",
+        "node_id": "node-1",
+        "kb_id": "kb-1",
+        "file_hash": "a" * 64,
+    }
 
 
 @pytest.mark.parametrize("status_code", [401, 404, 429])
@@ -127,7 +154,10 @@ def test_rate_limited_request_is_retried_before_success(client):
         FakeResponse(status_code=429),
         FakeResponse(payload={"items": [{"id": "kb-1", "name": "Materials"}]}),
     ]
-    with patch("httpx.get", side_effect=responses) as get, patch("plane.research.services.integrations.base.time.sleep"):
+    with (
+        patch("httpx.get", side_effect=responses) as get,
+        patch("plane.research.services.integrations.base.time.sleep"),
+    ):
         result = client.knowledge_bases()
     assert result.degraded is False
     assert get.call_count == 2

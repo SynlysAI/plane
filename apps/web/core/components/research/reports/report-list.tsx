@@ -92,11 +92,14 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const dateTo = query.get("date_to");
   const keyword = query.get("q");
   const scope = query.get("scope", "all");
+  const isDeletedScope = variant === "default" && scope === "deleted";
+  const requestScope = scope === "deleted" && !isDeletedScope ? "all" : scope;
   const cursor = query.get("cursor");
   const setCursor = (value: string) => query.set("cursor", value);
   const [selectedTeamProjects, setSelectedTeamProjects] = useState<string[]>([]);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [restoringReportId, setRestoringReportId] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [templateId, setTemplateId] = useState("");
 
@@ -133,8 +136,21 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         dateFrom && `${t("research.common.date_from")}: ${dateFrom}`,
         dateTo && `${t("research.common.date_to")}: ${dateTo}`,
         mineOnly && t("research.reports.mine_only"),
+        isDeletedScope && t("research.reports.deleted_scope"),
       ]),
-    [dateFrom, dateTo, mineOnly, orgFilter, orgUnits, ownerFilter, periodFilter, statusFilter, t, typeFilter]
+    [
+      dateFrom,
+      dateTo,
+      isDeletedScope,
+      mineOnly,
+      orgFilter,
+      orgUnits,
+      ownerFilter,
+      periodFilter,
+      statusFilter,
+      t,
+      typeFilter,
+    ]
   );
 
   const load = useCallback(async () => {
@@ -145,7 +161,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
         date_from: dateFrom,
         date_to: dateTo,
         q: keyword,
-        scope,
+        scope: requestScope,
         mine: mineFilter,
         cursor,
       },
@@ -174,7 +190,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     workspaceSlug,
     keyword,
     mineFilter,
-    scope,
+    requestScope,
   ]);
 
   useEffect(() => {
@@ -193,7 +209,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     cursor,
     keyword,
     mineFilter,
-    scope,
+    requestScope,
   ]);
 
   useEffect(() => {
@@ -241,6 +257,27 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     }
   }, [isCreating, navigate, periodKey, reportType, research, selectedTeamProjects, t, templateId, workspaceSlug]);
 
+  const handleRestore = useCallback(
+    async (targetReportId: string) => {
+      if (restoringReportId !== null) return;
+      setRestoringReportId(targetReportId);
+      try {
+        await research.restoreReport(workspaceSlug, targetReportId);
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("research.feedback.report_restored.title"),
+          message: t("research.feedback.report_restored.message"),
+        });
+        navigate(`/${workspaceSlug}/research/reports/${targetReportId}`);
+      } catch (error) {
+        setErrorKey(getResearchErrorKey(error));
+      } finally {
+        setRestoringReportId(null);
+      }
+    },
+    [navigate, restoringReportId, research, t, workspaceSlug]
+  );
+
   const clearFilters = () =>
     query.patch({
       status: "",
@@ -267,10 +304,11 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
       )}
 
       <ResearchBrowseHeader
-        title={variant === "review" ? "报告评审" : "报告"}
+        title={isDeletedScope ? t("research.reports.deleted_title") : variant === "review" ? "报告评审" : "报告"}
         actions={
           canCreateReport &&
-          variant === "default" && (
+          variant === "default" &&
+          !isDeletedScope && (
             <Button variant="primary" size="xl" prependIcon={<Plus />} onClick={() => setIsCreateDialogOpen(true)}>
               {t("research.reports.create")}
             </Button>
@@ -328,7 +366,13 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
             ))}
           </ListFilterSelect>
         </ListFilterField>
-        <ResearchBrowseFilters workspaceSlug={workspaceSlug} query={query} kind="reports" appearance="list" />
+        <ResearchBrowseFilters
+          workspaceSlug={workspaceSlug}
+          query={query}
+          kind="reports"
+          appearance="list"
+          includeDeleted={variant === "default"}
+        />
         <ResearchBrowseRefresh onRefresh={() => void load()} disabled={research.reportLoader} />
       </ResearchBrowseToolbar>
 
@@ -371,12 +415,16 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
               {reports.map((report) => (
                 <TableRow key={report.id} className="hover:bg-surface-2">
                   <TableCell>
-                    <Link
-                      href={`/${workspaceSlug}/research/reports/${report.id}`}
-                      className={`font-medium text-primary hover:text-accent-primary ${reportId === report.id ? "text-accent-primary" : ""}`}
-                    >
-                      {report.period_key}
-                    </Link>
+                    {isDeletedScope ? (
+                      <span className="font-medium text-primary">{report.period_key}</span>
+                    ) : (
+                      <Link
+                        href={`/${workspaceSlug}/research/reports/${report.id}`}
+                        className={`font-medium text-primary hover:text-accent-primary ${reportId === report.id ? "text-accent-primary" : ""}`}
+                      >
+                        {report.period_key}
+                      </Link>
+                    )}
                     {report.is_backfill && (
                       <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-10 text-tertiary">
                         {t("research.reports.backfill")}
@@ -389,9 +437,20 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                   </TableCell>
                   <TableCell className="text-tertiary">{report.org_unit_detail?.name ?? "-"}</TableCell>
                   <TableCell>
-                    <ResearchStatusBadge status={report.status} size="sm">
-                      {t(REPORT_STATUS_LABELS[report.status])}
-                    </ResearchStatusBadge>
+                    {isDeletedScope ? (
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-12 text-secondary">{t("research.reports.deleted_status")}</span>
+                        {report.deleted_at && (
+                          <span className="text-11 text-tertiary tabular-nums">
+                            {formatResearchDate(report.deleted_at, currentLocale)}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <ResearchStatusBadge status={report.status} size="sm">
+                        {t(REPORT_STATUS_LABELS[report.status])}
+                      </ResearchStatusBadge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {(() => {
@@ -422,12 +481,28 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                     {formatResearchDate(report.updated_at, currentLocale)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link
-                      href={`/${workspaceSlug}/research/reports/${report.id}`}
-                      className="text-12 text-accent-primary hover:underline"
-                    >
-                      {t("research.common.open")}
-                    </Link>
+                    {isDeletedScope ? (
+                      report.can_restore ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={restoringReportId === report.id}
+                          disabled={restoringReportId !== null}
+                          onClick={() => void handleRestore(report.id)}
+                        >
+                          {t("research.reports.restore")}
+                        </Button>
+                      ) : (
+                        <span className="text-12 text-tertiary">-</span>
+                      )
+                    ) : (
+                      <Link
+                        href={`/${workspaceSlug}/research/reports/${report.id}`}
+                        className="text-12 text-accent-primary hover:underline"
+                      >
+                        {t("research.common.open")}
+                      </Link>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

@@ -12,21 +12,19 @@ import { useTranslation } from "@plane/i18n";
 import type { EditorRefApi } from "@plane/editor";
 import { EFileAssetType } from "@plane/types";
 import type { TNameDescriptionLoader } from "@plane/types";
-import { cn, isEmptyHtmlString } from "@plane/utils";
+import { cn, isDescriptionContentEmpty } from "@plane/utils";
 // components
 import { DescriptionVersionsRoot } from "@/components/core/description-versions";
 import { DescriptionInput } from "@/components/editor/rich-text/description-input";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
-import { useUser } from "@/hooks/store/user";
 import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // services
 import { WorkItemVersionService } from "@/services/issue";
 // local components
 import type { TIssueOperations } from "../issue-detail";
 import { IssueParentDetail } from "../issue-detail/parent";
-import { IssueReaction } from "../issue-detail/reactions";
 import { IssueTitleInput } from "../title-input";
 // services init
 const workItemVersionService = new WorkItemVersionService();
@@ -60,7 +58,6 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
   } = props;
   const { t } = useTranslation();
   // store hooks
-  const { data: currentUser } = useUser();
   const {
     issue: { getIssueById },
   } = useIssueDetail();
@@ -91,9 +88,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
     "rounded-lg border bg-surface-1 px-4 py-3 transition-colors",
     isContentEditable ? "border-strong" : "border-subtle"
   );
-  const showDescriptionPlaceholder =
-    !isContentEditable &&
-    (!issue.description_html || isEmptyHtmlString(issue.description_html, ["img", "table", "iframe", "video"]));
+  const showDescriptionPlaceholder = !isContentEditable && isDescriptionContentEmpty(issue.description_html);
 
   const issueDescription =
     issue.description_html !== undefined || issue.description_html !== null
@@ -156,30 +151,20 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
                   ...(isMigrationUpdate ? { skip_activity: "true" } : {}),
                 });
               }}
-              placeholder={t("common.description_placeholder")}
               setIsSubmitting={(value) => setIsSubmitting(value)}
               projectId={issue.project_id}
               workspaceSlug={workspaceSlug}
             />
             {showDescriptionPlaceholder && (
               <p className="text-15 pointer-events-none absolute top-0 left-4 text-placeholder">
-                {t("common.description_placeholder")}
+                {t("common.description")}
               </p>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        {currentUser && (
-          <IssueReaction
-            workspaceSlug={workspaceSlug}
-            projectId={issue.project_id}
-            issueId={issueId}
-            currentUser={currentUser}
-            disabled={isArchived}
-          />
-        )}
+      <div className="flex items-center justify-end gap-2">
         {!disabled && (
           <DescriptionVersionsRoot
             className="flex-shrink-0"

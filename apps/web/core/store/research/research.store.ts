@@ -119,6 +119,7 @@ export interface IResearchStore {
   reports: Record<string, TPeriodicReport>;
   reportIdsByWorkspace: Record<string, string[]>;
   deleteReport: (workspaceSlug: string, reportId: string) => Promise<void>;
+  restoreReport: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
   reportPaginationByWorkspace: Record<string, TPaginationInfo>;
   reportHistory: Record<string, TReportReviewLog[]>;
   reportAttachments: Record<string, TReportAttachment[]>;
@@ -249,6 +250,7 @@ export interface IResearchStore {
     reportId: string,
     payload?: { description_json?: object; description_html?: string }
   ) => Promise<TPeriodicReport>;
+  withdrawReport: (workspaceSlug: string, reportId: string, comment?: string) => Promise<TPeriodicReport>;
   returnReport: (workspaceSlug: string, reportId: string, comment: string) => Promise<TPeriodicReport>;
   acceptReport: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
   markReportRead: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
@@ -265,6 +267,7 @@ export interface IResearchStore {
     reportId: string,
     payload: { content: string; file_name?: string }
   ) => Promise<string[]>;
+  exportReportMarkdown: (workspaceSlug: string, reportId: string, content: string) => Promise<Blob>;
   updateReportVisibility: (
     workspaceSlug: string,
     reportId: string,
@@ -310,6 +313,11 @@ export interface IResearchStore {
   deleteReportTemplate: (workspaceSlug: string, templateId: string) => Promise<void>;
   fetchResearchProjects: (workspaceSlug: string, params?: Record<string, string>) => Promise<TResearchProject[]>;
   createResearchProject: (workspaceSlug: string, payload: TResearchProjectCreatePayload) => Promise<TResearchProject>;
+  updateResearchProject: (
+    workspaceSlug: string,
+    projectId: string,
+    payload: Partial<TResearchProjectCreatePayload>
+  ) => Promise<TResearchProject>;
   archiveResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   deleteResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   restoreResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
@@ -731,6 +739,7 @@ export class ResearchStore implements IResearchStore {
       fetchReport: action,
       saveReportDraft: action,
       submitReport: action,
+      withdrawReport: action,
       returnReport: action,
       acceptReport: action,
       markReportRead: action,
@@ -739,7 +748,9 @@ export class ResearchStore implements IResearchStore {
       uploadReportAttachment: action,
       deleteReportAttachment: action,
       deleteReport: action,
+      restoreReport: action,
       importReportMarkdown: action,
+      exportReportMarkdown: action,
       updateReportVisibility: action,
       fetchReportSummary: action,
       fetchReportTemplates: action,
@@ -749,6 +760,7 @@ export class ResearchStore implements IResearchStore {
       deleteReportTemplate: action,
       fetchResearchProjects: action,
       createResearchProject: action,
+      updateResearchProject: action,
       archiveResearchProject: action,
       deleteResearchProject: action,
       restoreResearchProject: action,
@@ -1267,6 +1279,16 @@ export class ResearchStore implements IResearchStore {
     return report;
   };
 
+  /** 撤回报告提交并刷新审核历史。 */
+  withdrawReport = async (workspaceSlug: string, reportId: string, comment = "") => {
+    const report = await this.reportService.withdrawReport(workspaceSlug, reportId, comment);
+    runInAction(() => {
+      this.reports[report.id] = report;
+    });
+    await this.fetchReportHistory(workspaceSlug, reportId);
+    return report;
+  };
+
   returnReport = async (workspaceSlug: string, reportId: string, comment: string) => {
     const report = await this.reportService.returnReport(workspaceSlug, reportId, comment);
     runInAction(() => {
@@ -1382,6 +1404,10 @@ export class ResearchStore implements IResearchStore {
     await this.fetchReport(workspaceSlug, reportId);
     return result?.local_images ?? [];
   };
+
+  /** 导出当前报告 Markdown 与本地正文图片 ZIP。 */
+  exportReportMarkdown = async (workspaceSlug: string, reportId: string, content: string) =>
+    this.reportService.exportMarkdown(workspaceSlug, reportId, content);
 
   updateReportVisibility = async (
     workspaceSlug: string,
@@ -1514,6 +1540,18 @@ export class ResearchStore implements IResearchStore {
     return project;
   };
 
+  updateResearchProject = async (
+    workspaceSlug: string,
+    projectId: string,
+    payload: Partial<TResearchProjectCreatePayload>
+  ) => {
+    const project = await this.projectService.updateProject(workspaceSlug, projectId, payload);
+    runInAction(() => {
+      this.researchProjects[project.id] = project;
+    });
+    return project;
+  };
+
   archiveResearchProject = async (workspaceSlug: string, projectId: string) => {
     await this.projectService.archiveProject(workspaceSlug, projectId);
     await this.fetchResearchProjects(workspaceSlug);
@@ -1540,6 +1578,15 @@ export class ResearchStore implements IResearchStore {
         (id) => id !== reportId
       );
     });
+  };
+
+  /** 恢复已删除报告并刷新当前缓存中的工作流能力。 */
+  restoreReport = async (workspaceSlug: string, reportId: string) => {
+    const report = await this.reportService.restoreReport(workspaceSlug, reportId);
+    runInAction(() => {
+      this.reports[report.id] = report;
+    });
+    return report;
   };
 
   // ---------------------------------------------------------------------

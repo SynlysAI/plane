@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import type { THomeActivity, THomeWorkbenchDensity } from "@plane/types";
 import { calculateTimeAgo, cn, getFileURL } from "@plane/utils";
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { WorkspaceService } from "@/services/workspace.service";
 
 const workspaceService = new WorkspaceService();
@@ -60,16 +61,20 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
 }: Props) {
   const { t, currentLocale } = useTranslation();
   const [days, setDays] = useState<"30" | "90" | "all">("30");
-  const [offset, setOffset] = useState(0);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [activities, setActivities] = useState<THomeActivity[]>([]);
+  const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
+  // 保持 ref 为空，让 IntersectionObserver 使用浏览器视口，同时兼容卡片内滚动与页面滚动。
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const { data, isLoading, error, mutate } = useSWR(
-    workspaceSlug ? ["WORKSPACE_HOME_ACTIVITY", workspaceSlug, days, offset, refreshToken] : null,
+    workspaceSlug ? ["WORKSPACE_HOME_ACTIVITY", workspaceSlug, days, cursor, refreshToken] : null,
     workspaceSlug
       ? () =>
           workspaceService.fetchWorkspaceActivities(workspaceSlug, {
             days,
-            offset,
+            pagination: "cursor",
+            cursor: cursor ?? undefined,
             per_page: 12,
           })
       : null,
@@ -77,18 +82,18 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
   );
 
   useEffect(() => {
-    setOffset(0);
+    setCursor(null);
     setActivities([]);
   }, [days, workspaceSlug, refreshToken]);
 
   useEffect(() => {
     if (!data) return;
     setActivities((previous) => {
-      if (data.offset === 0) return data.results;
+      if (cursor === null) return data.results;
       const seen = new Set(previous.map((item) => item.id));
       return [...previous, ...data.results.filter((item) => !seen.has(item.id))];
     });
-  }, [data]);
+  }, [cursor, data]);
 
   const actionLabels = useMemo(
     () => ({
@@ -134,6 +139,15 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
 
   const groupedActivities = useMemo(() => groupActivities(activities), [activities]);
   const visibleChanges = density === "compact" ? 2 : 4;
+  const canLoadMore = Boolean(data?.has_more) && !isLoading && !error;
+
+  /** 当自动分页哨兵进入视口时请求下一页，并避免重复或失败后连续请求。 */
+  const handleLoadMore = () => {
+    if (!data?.has_more || !data.next_cursor || isLoading || error) return;
+    setCursor(data.next_cursor);
+  };
+
+  useIntersectionObserver(viewportRef, canLoadMore ? loadMoreElement : null, handleLoadMore, "120px 0px");
 
   return (
     <div className="flex min-w-0 flex-col">
@@ -275,19 +289,18 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
         </ul>
       )}
 
-      {data?.has_more && (
-        <div className="border-t border-subtle p-3">
-          <button
-            type="button"
-            disabled={isLoading}
-            className="w-full rounded-md border border-subtle px-3 py-2 text-12 text-secondary transition-colors hover:bg-surface-1 disabled:opacity-50"
-            onClick={() => setOffset(data.next_offset ?? offset + 1)}
-          >
-            {isLoading
-              ? t("research.home_workbench.activity_loading")
-              : t("research.home_workbench.activity_load_more")}
-          </button>
-        </div>
+      {canLoadMore && (
+        <div ref={setLoadMoreElement} aria-hidden="true" data-testid="activity-auto-load-sentinel" className="h-0" />
+      )}
+      {isLoading && activities.length > 0 && (
+        <p className="border-t border-subtle px-4 py-3 text-12 text-tertiary" role="status" aria-live="polite">
+          {t("research.home_workbench.activity_loading")}
+        </p>
+      )}
+      {error && activities.length > 0 && (
+        <p className="border-t border-subtle px-4 py-3 text-12 text-secondary" role="alert">
+          {t("research.home_workbench.recent_error")}
+        </p>
       )}
     </div>
   );

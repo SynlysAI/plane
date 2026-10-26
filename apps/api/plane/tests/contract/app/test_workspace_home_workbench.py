@@ -1,8 +1,9 @@
 """首页个性化偏好与真实业务动态契约。"""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from django.apps import apps
@@ -17,11 +18,17 @@ from plane.db.models import (
     Issue,
     IssueActivity,
     IssueComment,
+    Page,
+    PeriodicReport,
     Project,
     ResearchAuditEvent,
+    ResearchChain,
+    ResearchChainNode,
+    ResearchChainNodeTask,
     ResearchProjectProfile,
     State,
     UserRecentVisit,
+    Workspace,
     WorkspaceHomePreference,
     WorkspaceMember,
 )
@@ -256,6 +263,176 @@ def test_home_activity_feed_returns_real_mutations_not_visits(env):
     assert comment_row["changes"][0]["new_value"] == "请补充报价单"
 
 
+def test_home_activity_cursor_pagination_exceeds_legacy_window(env):
+    """cursor 分页必须突破旧 500 条窗口并完整返回历史动态。"""
+    HomeActivityEvent.objects.bulk_create(
+        HomeActivityEvent(
+            workspace=env["workspace"],
+            actor=env["user"],
+            entity_type=HomeActivityEvent.EntityType.PROJECT,
+            entity_id=env["project"].id,
+            entity_name=env["project"].name,
+            project_id=env["project"].id,
+            action="updated",
+            summary="历史项目动态",
+            occurred_at=BASE_TIME - timedelta(minutes=index),
+        )
+        for index in range(501)
+    )
+    url = reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug})
+
+    rows = []
+    cursor = None
+    for _ in range(11):
+        query = {"days": "all", "per_page": 50, "pagination": "cursor"}
+        if cursor:
+            query["cursor"] = cursor
+        response = env["client"].get(url, query)
+        assert response.status_code == status.HTTP_200_OK, response.data
+        rows.extend(response.data["results"])
+        cursor = response.data.get("next_cursor")
+        if not cursor:
+            break
+
+    assert len(rows) == 501
+    assert len({row["id"] for row in rows}) == 501
+    assert cursor is None
+    assert all(rows[index]["occurred_at"] >= rows[index + 1]["occurred_at"] for index in range(500))
+
+    legacy_rows = []
+    offset = 0
+    while True:
+        response = env["client"].get(url, {"days": "all", "per_page": 50, "offset": offset})
+        assert response.status_code == status.HTTP_200_OK, response.data
+        legacy_rows.extend(response.data["results"])
+        if not response.data["has_more"]:
+            break
+        offset = response.data["next_offset"]
+    assert len(legacy_rows) == 500
+
+
+def test_home_activity_cursor_is_scoped_and_permission_safe(env, monkeypatch):
+    """游标不能跨上下文复用，后续页也必须延续项目可见性过滤。"""
+    visible_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Public",
+        identifier="PUB",
+        network=2,
+    )
+    record_project_activity(visible_project, env["user"], "created", occurred_at=BASE_TIME)
+    record_project_activity(
+        visible_project,
+        env["user"],
+        "updated",
+        occurred_at=BASE_TIME - timedelta(minutes=2),
+    )
+    hidden_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Secret",
+        identifier="SEC",
+        network=0,
+    )
+    hidden_issue = Issue.objects.create(
+        workspace=env["workspace"],
+        project=hidden_project,
+        name="保密事项",
+        created_by=env["user"],
+    )
+    hidden_activity = IssueActivity.objects.create(
+        workspace=env["workspace"],
+        project=hidden_project,
+        issue=hidden_issue,
+        actor=env["user"],
+        verb="updated",
+        field="priority",
+    )
+    IssueActivity.objects.filter(pk=hidden_activity.pk).update(created_at=BASE_TIME - timedelta(minutes=1))
+
+    member = make_user(first_name="Member")
+    WorkspaceMember.objects.create(workspace=env["workspace"], member=member, role=15)
+    member_client = APIClient()
+    member_client.force_authenticate(user=member)
+    url = reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug})
+    first = member_client.get(url, {"days": "all", "per_page": 1, "pagination": "cursor"})
+    assert first.status_code == status.HTTP_200_OK, first.data
+    cursor = first.data["next_cursor"]
+    assert cursor
+    assert first.data["results"][0]["entity_name"] == "Public"
+
+    second = member_client.get(url, {"days": "all", "per_page": 1, "pagination": "cursor", "cursor": cursor})
+    assert second.status_code == status.HTTP_200_OK, second.data
+    assert len(second.data["results"]) == 1
+    assert second.data["results"][0]["entity_name"] == "Public"
+    assert second.data["next_cursor"] is None
+
+    invalid = env["client"].get(url, {"days": "all", "pagination": "cursor", "cursor": "not-a-cursor"})
+    assert invalid.status_code == status.HTTP_400_BAD_REQUEST
+
+    from plane.app.views.workspace import home_activity
+
+    with monkeypatch.context() as expiry:
+        expiry.setattr(home_activity, "CURSOR_MAX_AGE_SECONDS", -1)
+        expired = env["client"].get(url, {"days": "all", "pagination": "cursor", "cursor": cursor})
+    assert expired.status_code == status.HTTP_400_BAD_REQUEST
+
+    changed_filter = env["client"].get(url, {"days": "90", "pagination": "cursor", "cursor": cursor})
+    assert changed_filter.status_code == status.HTTP_400_BAD_REQUEST
+
+    reused = env["client"].get(url, {"days": "all", "pagination": "cursor", "cursor": cursor})
+    assert reused.status_code == status.HTTP_400_BAD_REQUEST
+
+    other_workspace = Workspace.objects.create(
+        name="Other workspace",
+        slug="other-home-activity",
+        owner=env["user"],
+    )
+    WorkspaceMember.objects.create(workspace=other_workspace, member=env["user"], role=20)
+    other_url = reverse("workspace-home-activities", kwargs={"slug": other_workspace.slug})
+    cross_workspace = env["client"].get(other_url, {"days": "all", "pagination": "cursor", "cursor": cursor})
+    assert cross_workspace.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_home_activity_cursor_orders_edited_comments_by_edit_time(env):
+    """评论游标分页必须使用有效发生时间，而不是创建时间。"""
+    IssueActivity.objects.filter(issue=env["issue"], verb="created").update(created_at=BASE_TIME - timedelta(days=1))
+    edited = IssueComment.objects.create(
+        workspace=env["workspace"],
+        project=env["project"],
+        issue=env["issue"],
+        actor=env["user"],
+        comment_html="<p>已编辑</p>",
+    )
+    IssueComment.objects.filter(pk=edited.pk).update(
+        created_at=BASE_TIME - timedelta(minutes=10),
+        edited_at=BASE_TIME + timedelta(hours=1),
+    )
+    created = IssueComment.objects.create(
+        workspace=env["workspace"],
+        project=env["project"],
+        issue=env["issue"],
+        actor=env["user"],
+        comment_html="<p>新评论</p>",
+    )
+    IssueComment.objects.filter(pk=created.pk).update(created_at=BASE_TIME)
+
+    url = reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug})
+    first = env["client"].get(url, {"days": "all", "per_page": 1, "pagination": "cursor"})
+    assert first.status_code == status.HTTP_200_OK, first.data
+    assert first.data["results"][0]["action"] == "comment_updated"
+
+    second = env["client"].get(
+        url,
+        {
+            "days": "all",
+            "per_page": 1,
+            "pagination": "cursor",
+            "cursor": first.data["next_cursor"],
+        },
+    )
+    assert second.status_code == status.HTTP_200_OK, second.data
+    assert second.data["results"][0]["action"] == "commented"
+
+
 def test_home_activity_feed_respects_project_visibility_and_time_filter(env):
     """非成员不能读取私密项目事件，时间筛选也不能把浏览记录补进结果。"""
     hidden_project = Project.objects.create(
@@ -362,3 +539,105 @@ def test_home_activity_feed_includes_visible_research_audit_events(env, monkeypa
     )
     assert other_response.status_code == status.HTTP_200_OK, other_response.data
     assert all(item["source"] != "research" for item in other_response.data["results"])
+
+
+def test_home_activity_research_links_use_frontend_routes(env, monkeypatch):
+    """科研动态必须链接到前端真实路由，任务链接直达节点工作台。"""
+    from plane.app.views.workspace import home_activity
+
+    monkeypatch.setattr(home_activity, "research_module_enabled", lambda: True)
+    monkeypatch.setattr(home_activity, "workspace_research_enabled", lambda workspace: True)
+    research_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Research links",
+        identifier="RLK",
+        network=0,
+    )
+    ResearchProjectProfile.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        chain_visibility=ResearchProjectProfile.ChainVisibility.PRIVATE,
+    )
+    suffix = uuid4().hex
+    chain = ResearchChain.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        request_id=f"home-chain-{suffix}",
+        payload_hash=suffix,
+    )
+    node = ResearchChainNode.objects.create(
+        chain=chain,
+        node_type="EXPERIMENT",
+        title="电池工况表征",
+        status=ResearchChainNode.Status.ACTIVE,
+        request_id=f"home-node-{suffix}",
+        payload_hash=suffix,
+    )
+    task = ResearchChainNodeTask.objects.create(
+        workspace=env["workspace"],
+        chain=chain,
+        node=node,
+        title="电池工况过程的荧光多模态表征",
+        status=ResearchChainNodeTask.Status.ASSIGNED,
+        request_id=f"home-task-{suffix}",
+        payload_hash=suffix,
+    )
+    page = Page.objects.create(
+        workspace=env["workspace"],
+        name="2026-W43 weekly report",
+        description_json={"type": "doc", "content": []},
+        description_html="<p>Draft</p>",
+        owned_by=env["user"],
+        access=Page.PRIVATE_ACCESS,
+    )
+    report = PeriodicReport.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        page=page,
+        report_type=PeriodicReport.ReportType.WEEKLY,
+        period_key="2026-W43",
+        period_start=date(2026, 10, 19),
+        period_end=date(2026, 10, 25),
+    )
+
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="task.update",
+        resource_type="research_chain_node_task",
+        resource_id=task.id,
+        metadata={"fields": ["assignee"]},
+    )
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="chain.update",
+        resource_type="research_chain",
+        resource_id=chain.id,
+        metadata={"fields": ["status"]},
+    )
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="report.update",
+        resource_type="report",
+        resource_id=report.id,
+        metadata={"period_key": report.period_key},
+    )
+
+    response = env["client"].get(
+        reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug}),
+        {"per_page": 20},
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.data
+    rows = {row["entity_id"]: row for row in response.data["results"] if row["source"] == "research"}
+    slug = env["workspace"].slug
+    assert rows[str(task.id)]["url"] == (
+        f"/{slug}/research/chains/{chain.id}/?tab=nodes&node={node.id}&task={task.id}"
+    )
+    assert rows[str(chain.id)]["url"] == f"/{slug}/research/chains/{chain.id}/"
+    assert rows[str(report.id)]["url"] == f"/{slug}/research/reports/{report.id}/"

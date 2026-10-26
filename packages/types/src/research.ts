@@ -420,6 +420,16 @@ export type TResearchChainNodeTaskCreatePayload = {
 
 export type TResearchChainNodeTaskUpdatePayload = Partial<TResearchChainNodeTaskCreatePayload>;
 
+/** 科研任务描述附带的持久化文件元数据。 */
+export type TResearchTaskInstructionAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  download_url: string;
+  preview_url?: string | null;
+};
+
 export type TResearchTaskComment = {
   id: string;
   task: string;
@@ -443,6 +453,7 @@ export type TResearchChainNodeTask = {
   node: string;
   title: string;
   instruction: string;
+  instruction_attachments: TResearchTaskInstructionAttachment[];
   status: TResearchChainNodeTaskStatus;
   assignee: string | null;
   assignee_detail?: TResearchTaskAssignee | null;
@@ -812,9 +823,15 @@ export type TPeriodicReport = {
   reviewer: string | null;
   created_at: string;
   updated_at: string;
+  /** Soft-delete timestamp; null for reports available in normal lists. */
+  deleted_at?: string | null;
   can_edit?: boolean;
   can_delete?: boolean;
   can_review?: boolean;
+  /** Whether the current viewer can restore this soft-deleted report. */
+  can_restore?: boolean;
+  /** Whether the report author can withdraw the active submission. */
+  can_withdraw?: boolean;
   attachment_count?: number;
   latest_official_version: number | null;
   /** Whether the current viewer has read the latest official snapshot. */

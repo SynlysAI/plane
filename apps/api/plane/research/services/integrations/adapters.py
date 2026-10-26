@@ -51,10 +51,12 @@ class RagPortalClient(BaseIntegrationClient):
             "sub": "plane-research-bff",
             "username": "plane-research-bff",
             "role": "user",
+            "organization": "plane-research-bff",
             "iat": now,
             "exp": now + 300,
         }
-        payload_b64 = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=").decode()
+        payload_json = json.dumps(payload, separators=(",", ":")).encode()
+        payload_b64 = base64.urlsafe_b64encode(payload_json).rstrip(b"=").decode()
         signature = hmac.new(secret.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
         return {"Authorization": f"Bearer {payload_b64}.{signature}"}
 
@@ -95,7 +97,12 @@ class RagPortalClient(BaseIntegrationClient):
 
     def knowledge_bases(self, *, refresh=False, request=None):
         """List KBs visible to the backend credential."""
-        return self.request(path="/api/kb/list", params={"refresh": str(bool(refresh)).lower()}, operation="list_knowledge_bases", request=request)
+        return self.request(
+            path="/api/kb/list",
+            params={"refresh": str(bool(refresh)).lower()},
+            operation="list_knowledge_bases",
+            request=request,
+        )
 
     def upload(self, *, file_name, file_content, kb_id, metadata=None, request=None):
         """Upload a document with research scope metadata."""
@@ -112,7 +119,46 @@ class RagPortalClient(BaseIntegrationClient):
 
     def upload_detail(self, upload_id, *, request=None):
         """Poll one RAGPortal upload status."""
-        return self.request(path=self.upload_detail_path.format(upload_id=upload_id), operation="get_upload_status", request=request)
+        return self.request(
+            path=self.upload_detail_path.format(upload_id=upload_id),
+            operation="get_upload_status",
+            request=request,
+        )
+
+    def download_research_file(
+        self,
+        *,
+        knowledge_id,
+        chain_id,
+        node_id,
+        kb_id,
+        file_hash,
+        request=None,
+    ):
+        """Download one original file after RAGPortal rechecks research scope.
+
+        Args:
+            knowledge_id: WeKnora document id stored by Plane.
+            chain_id: Research chain id from the authorized Plane upload.
+            node_id: Research chain node id from the authorized Plane upload.
+            kb_id: Bound external knowledge-base id.
+            file_hash: SHA-256 hash recorded when Plane uploaded the file.
+            request: Current Django request for request-id propagation.
+
+        Returns:
+            A binary integration result envelope.
+        """
+        return self.request_file(
+            path=f"/api/integrations/research/files/{knowledge_id}",
+            params={
+                "chain_id": str(chain_id),
+                "node_id": str(node_id),
+                "kb_id": str(kb_id),
+                "file_hash": str(file_hash),
+            },
+            operation="download_research_file",
+            request=request,
+        )
 
 
 class WeKnoraClient(RagPortalClient):
