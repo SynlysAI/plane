@@ -90,6 +90,16 @@ function activity(id: string, occurredAt: string, overrides: Record<string, unkn
   };
 }
 
+/** Construct a cursor-mode activity page response for component tests. */
+function activityResponse(results: ReturnType<typeof activity>[], nextCursor: string | null = null) {
+  return {
+    results,
+    next_cursor: nextCursor,
+    has_more: Boolean(nextCursor),
+    per_page: 12,
+  };
+}
+
 async function renderWidget() {
   await act(async () =>
     root.render(
@@ -128,8 +138,8 @@ afterEach(async () => {
 
 it("renders actor, object, link, timestamp and grouped real mutations", async () => {
   const now = new Date("2026-10-22T10:00:00Z");
-  mocks.fetchWorkspaceActivities.mockResolvedValue({
-    results: [
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([
       activity("event-2", "2026-10-22T09:56:00Z", {
         changes: [{ field: "name", old_value: "旧名称", new_value: "设备采购协作" }],
       }),
@@ -145,17 +155,17 @@ it("renders actor, object, link, timestamp and grouped real mutations", async ()
         entity_name: "WEEKLY 2026-W42",
         url: "/lab/research/reports/report-1",
       }),
-    ],
-    next_offset: null,
-    has_more: false,
-    offset: 0,
-    per_page: 12,
-  });
+    ])
+  );
   vi.setSystemTime(now);
 
   await renderWidget();
 
-  expect(mocks.fetchWorkspaceActivities).toHaveBeenCalledWith("lab", { days: "30", offset: 0, per_page: 12 });
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenCalledWith("lab", {
+    days: "30",
+    pagination: "cursor",
+    per_page: 12,
+  });
   expect(container.textContent).toContain("学生一");
   expect(container.textContent).toContain("更新了设备采购协作");
   expect(container.textContent).toContain("提交了WEEKLY 2026-W42");
@@ -168,33 +178,26 @@ it("renders actor, object, link, timestamp and grouped real mutations", async ()
 });
 
 it("automatically loads the next page when the list sentinel enters the viewport", async () => {
-  mocks.fetchWorkspaceActivities.mockResolvedValueOnce({
-    results: [activity("event-1", "2026-10-22T09:00:00Z")],
-    next_offset: 12,
-    has_more: true,
-    offset: 0,
-    per_page: 12,
-  });
+  mocks.fetchWorkspaceActivities.mockResolvedValueOnce(
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
+  );
   await renderWidget();
   const sentinel = container.querySelector('[data-testid="activity-auto-load-sentinel"]');
   expect(sentinel).not.toBeNull();
-  mocks.fetchWorkspaceActivities.mockResolvedValueOnce({
-    results: [
+  mocks.fetchWorkspaceActivities.mockResolvedValueOnce(
+    activityResponse([
       activity("event-2", "2026-10-22T08:00:00Z", {
         action: "created",
         changes: [{ field: "name", new_value: "设备采购协作" }],
       }),
-    ],
-    next_offset: null,
-    has_more: false,
-    offset: 12,
-    per_page: 12,
-  });
+    ])
+  );
   await dispatchIntersection(sentinel!);
 
   expect(mocks.fetchWorkspaceActivities).toHaveBeenNthCalledWith(2, "lab", {
     days: "30",
-    offset: 12,
+    pagination: "cursor",
+    cursor: "cursor-2",
     per_page: 12,
   });
   expect(container.textContent).toContain("更新了设备采购协作");
@@ -204,13 +207,9 @@ it("automatically loads the next page when the list sentinel enters the viewport
 
 it("does not request the same next page twice while it is loading", async () => {
   const pendingNextPage: { resolve?: (response: unknown) => void } = {};
-  mocks.fetchWorkspaceActivities.mockResolvedValueOnce({
-    results: [activity("event-1", "2026-10-22T09:00:00Z")],
-    next_offset: 12,
-    has_more: true,
-    offset: 0,
-    per_page: 12,
-  });
+  mocks.fetchWorkspaceActivities.mockResolvedValueOnce(
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
+  );
   mocks.fetchWorkspaceActivities.mockImplementation(
     () =>
       new Promise((resolve) => {
@@ -228,11 +227,7 @@ it("does not request the same next page twice while it is loading", async () => 
   expect(resolveNextPage).toBeDefined();
   await act(async () =>
     resolveNextPage?.({
-      results: [activity("event-2", "2026-10-22T08:00:00Z")],
-      next_offset: null,
-      has_more: false,
-      offset: 12,
-      per_page: 12,
+      ...activityResponse([activity("event-2", "2026-10-22T08:00:00Z")]),
     })
   );
 
@@ -241,13 +236,7 @@ it("does not request the same next page twice while it is loading", async () => 
 });
 
 it("does not request another page after the last result", async () => {
-  mocks.fetchWorkspaceActivities.mockResolvedValue({
-    results: [activity("event-1", "2026-10-22T09:00:00Z")],
-    next_offset: null,
-    has_more: false,
-    offset: 0,
-    per_page: 12,
-  });
+  mocks.fetchWorkspaceActivities.mockResolvedValue(activityResponse([activity("event-1", "2026-10-22T09:00:00Z")]));
   await renderWidget();
 
   expect(container.querySelector('[data-testid="activity-auto-load-sentinel"]')).toBeNull();
@@ -255,13 +244,9 @@ it("does not request another page after the last result", async () => {
 });
 
 it("keeps loaded events and reports an error when the next page fails", async () => {
-  mocks.fetchWorkspaceActivities.mockResolvedValueOnce({
-    results: [activity("event-1", "2026-10-22T09:00:00Z")],
-    next_offset: 12,
-    has_more: true,
-    offset: 0,
-    per_page: 12,
-  });
+  mocks.fetchWorkspaceActivities.mockResolvedValueOnce(
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
+  );
   mocks.fetchWorkspaceActivities.mockRejectedValueOnce(new Error("unavailable"));
   await renderWidget();
   const sentinel = container.querySelector('[data-testid="activity-auto-load-sentinel"]');
@@ -274,13 +259,7 @@ it("keeps loaded events and reports an error when the next page fails", async ()
 });
 
 it("resets the stream when the time filter changes", async () => {
-  mocks.fetchWorkspaceActivities.mockResolvedValue({
-    results: [activity("event-1", "2026-10-22T09:00:00Z")],
-    next_offset: null,
-    has_more: false,
-    offset: 0,
-    per_page: 12,
-  });
+  mocks.fetchWorkspaceActivities.mockResolvedValue(activityResponse([activity("event-1", "2026-10-22T09:00:00Z")]));
   await renderWidget();
   const ninetyDays = [...container.querySelectorAll("button")].find((button) => button.textContent === "近 90 天");
   await act(async () => ninetyDays?.click());
@@ -288,19 +267,13 @@ it("resets the stream when the time filter changes", async () => {
 
   expect(mocks.fetchWorkspaceActivities).toHaveBeenLastCalledWith("lab", {
     days: "90",
-    offset: 0,
+    pagination: "cursor",
     per_page: 12,
   });
 });
 
 it("renders natural empty and error states without using visit records", async () => {
-  mocks.fetchWorkspaceActivities.mockResolvedValue({
-    results: [],
-    next_offset: null,
-    has_more: false,
-    offset: 0,
-    per_page: 12,
-  });
+  mocks.fetchWorkspaceActivities.mockResolvedValue(activityResponse([]));
   await renderWidget();
   expect(container.textContent).toContain("暂无业务动态");
 

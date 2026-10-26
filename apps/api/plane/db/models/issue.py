@@ -447,6 +447,9 @@ class IssueActivity(ProjectBaseModel):
         verbose_name_plural = "Issue Activities"
         db_table = "issue_activities"
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["workspace", "created_at"], name="issue_activity_ws_created_idx"),
+        ]
 
     def __str__(self):
         """Return issue of the comment"""
@@ -539,6 +542,9 @@ class IssueComment(ChangeTrackerMixin, ProjectBaseModel):
         verbose_name_plural = "Issue Comments"
         db_table = "issue_comments"
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["workspace", "created_at"], name="issue_comment_ws_created_idx"),
+        ]
 
     def __str__(self):
         """Return issue of the comment"""

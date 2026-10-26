@@ -1,8 +1,10 @@
 """Aggregate real business mutations into the workspace home activity feed."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from django.db.models import Q
+from django.core import signing
+from django.db.models import Case, CharField, DateTimeField, F, Q, Value, When
+from django.db.models.functions import Cast, Concat
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -64,6 +66,9 @@ ISSUE_ACTIVITY_FIELDS = {
     "closed_to",
 }
 MAX_WINDOW = 500
+CURSOR_SALT = "workspace.home-activities.cursor.v1"
+CURSOR_SOURCE_BATCH_SIZE = 100
+CURSOR_MAX_AGE_SECONDS = 24 * 60 * 60
 
 
 def _actor_detail(actor):
@@ -129,7 +134,7 @@ def _issue_link(workspace_slug, activity):
 def _issue_activity_rows(workspace_slug, activities):
     """Convert meaningful work-item mutations into feed rows."""
     rows = []
-    for activity in activities.select_related("actor", "issue", "project"):
+    for activity in activities:
         issue = activity.issue
         if issue is None:
             continue
@@ -163,7 +168,7 @@ def _issue_activity_rows(workspace_slug, activities):
 def _issue_comment_rows(workspace_slug, comments):
     """Convert non-empty comments into feed rows."""
     rows = []
-    for comment in comments.select_related("actor", "issue", "project"):
+    for comment in comments:
         if not (comment.comment_stripped or "").strip():
             continue
         issue = comment.issue
@@ -197,7 +202,7 @@ def _issue_comment_rows(workspace_slug, comments):
 def _project_event_rows(workspace_slug, events, projects):
     """Convert project business events into feed rows."""
     rows = []
-    for event in events.select_related("actor"):
+    for event in events:
         rows.append(
             {
                 "id": f"project-event:{event.id}",
@@ -440,7 +445,7 @@ def _metadata_changes(metadata):
 
 def _research_rows(workspace_slug, audits, visible_project_ids, projects, user):
     """Convert meaningful research audits into project-scoped feed rows."""
-    audits = list(audits.select_related("actor", "org_unit"))
+    audits = list(audits)
     contexts = _research_contexts(audits[0].workspace if audits else None, audits)
     rows = []
     for audit in audits:
@@ -470,6 +475,117 @@ def _research_rows(workspace_slug, audits, visible_project_ids, projects, user):
     return rows
 
 
+def _encode_activity_cursor(workspace, user, days, row):
+    """Encode a signed keyset cursor scoped to one workspace, user and filter.
+
+    Args:
+        workspace: Workspace whose activity stream is being read.
+        user: Authenticated user whose permission scope is embedded in the cursor.
+        days: Active time filter represented by ``30``, ``90`` or ``all``.
+        row: Last feed row returned on the current page.
+
+    Returns:
+        An opaque, URL-safe cursor string.
+    """
+    return signing.dumps(
+        {
+            "workspace": str(workspace.id),
+            "user": str(user.id),
+            "days": days,
+            "occurred_at": row["occurred_at"].isoformat(),
+            "row_id": row["id"],
+        },
+        salt=CURSOR_SALT,
+        compress=True,
+    )
+
+
+def _decode_activity_cursor(cursor, workspace, user, days):
+    """Validate a feed cursor and return its keyset anchor.
+
+    Args:
+        cursor: Opaque cursor supplied by the client.
+        workspace: Workspace in the current request.
+        user: Authenticated user in the current request.
+        days: Active time filter in the current request.
+
+    Returns:
+        A ``(occurred_at, row_id)`` tuple, or ``None`` when the cursor is invalid.
+    """
+    try:
+        payload = signing.loads(cursor, salt=CURSOR_SALT, max_age=CURSOR_MAX_AGE_SECONDS)
+        expected = {"workspace": str(workspace.id), "user": str(user.id), "days": days}
+        if any(payload.get(key) != value for key, value in expected.items()):
+            return None
+        occurred_at = datetime.fromisoformat(payload["occurred_at"])
+        row_id = payload["row_id"]
+        if occurred_at.tzinfo is None or not isinstance(row_id, str):
+            return None
+    except (TypeError, ValueError, KeyError, signing.BadSignature):
+        return None
+    return occurred_at, row_id
+
+
+def _comment_occurred_at_expression():
+    """Build the effective event time used to sort edited comments."""
+    return Case(
+        When(edited_at__gt=F("created_at"), then=F("edited_at")),
+        default=F("created_at"),
+        output_field=DateTimeField(),
+    )
+
+
+def _cursor_feed_queryset(queryset, time_expression, row_prefix, anchor):
+    """Annotate and filter one source using the global feed sort key.
+
+    Args:
+        queryset: Permission- and time-filtered source queryset.
+        time_expression: Model expression yielding the feed event time.
+        row_prefix: Stable prefix used by serialized rows from this source.
+        anchor: Optional ``(occurred_at, row_id)`` tuple from the previous page.
+
+    Returns:
+        Queryset ordered by ``feed_time`` and full feed id descending.
+    """
+    queryset = queryset.annotate(
+        feed_time=time_expression,
+        feed_id=Concat(Value(row_prefix), Cast("id", output_field=CharField()), output_field=CharField()),
+    )
+    if anchor is not None:
+        occurred_at, row_id = anchor
+        queryset = queryset.filter(Q(feed_time__lt=occurred_at) | Q(feed_time__exact=occurred_at, feed_id__lt=row_id))
+    return queryset.order_by("-feed_time", "-feed_id")
+
+
+def _collect_cursor_rows(queryset, converter, target):
+    """Collect enough serialized rows from one source for the next feed page.
+
+    Args:
+        queryset: Keyset-ordered queryset with ``feed_time`` and ``feed_id``.
+        converter: Callable converting a materialized source batch to feed rows.
+        target: Number of candidate rows needed to detect ``has_more``.
+
+    Returns:
+        Serialized rows from this source; may be fewer when the source is exhausted.
+    """
+    rows = []
+    remaining = queryset
+    batch_size = min(target, CURSOR_SOURCE_BATCH_SIZE)
+    while len(rows) < target:
+        batch = list(remaining[:batch_size])
+        if not batch:
+            break
+        rows.extend(converter(batch))
+        if len(batch) < batch_size:
+            break
+        last = batch[-1]
+        remaining = remaining.filter(
+            Q(feed_time__lt=last.feed_time) | Q(feed_time__exact=last.feed_time, feed_id__lt=last.feed_id)
+        )
+        batch_size = min(batch_size * 4, CURSOR_SOURCE_BATCH_SIZE)
+    return rows
+
+
 def _iso(value):
     """Render an event time in ISO-8601 form for stable frontend formatting."""
     return value.isoformat() if value else None
@@ -486,12 +602,26 @@ class WorkspaceHomeActivityEndpoint(BaseAPIView):
         days = request.query_params.get("days", "30")
         if days not in {"30", "90", "all"}:
             return Response({"detail": "days must be 30, 90, or all"}, status=status.HTTP_400_BAD_REQUEST)
+        pagination = request.query_params.get("pagination")
+        if pagination not in {None, "cursor"}:
+            return Response({"detail": "pagination must be cursor"}, status=status.HTTP_400_BAD_REQUEST)
+        cursor_mode = pagination == "cursor"
+        cursor_value = request.query_params.get("cursor")
+        if not cursor_mode and cursor_value is not None:
+            return Response({"detail": "cursor requires pagination=cursor"}, status=status.HTTP_400_BAD_REQUEST)
+        if cursor_mode and "offset" in request.query_params:
+            return Response({"detail": "cursor pagination does not accept offset"}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            offset = max(int(request.query_params.get("offset", 0) or 0), 0)
             per_page = min(max(int(request.query_params.get("per_page", 12) or 12), 1), 50)
+            offset = 0 if cursor_mode else max(int(request.query_params.get("offset", 0) or 0), 0)
         except ValueError:
             return Response({"detail": "offset and per_page must be integers"}, status=status.HTTP_400_BAD_REQUEST)
-        if offset >= MAX_WINDOW:
+        cursor_anchor = None
+        if cursor_mode and cursor_value:
+            cursor_anchor = _decode_activity_cursor(cursor_value, workspace, request.user, days)
+            if cursor_anchor is None:
+                return Response({"detail": "invalid activity cursor"}, status=status.HTTP_400_BAD_REQUEST)
+        if not cursor_mode and offset >= MAX_WINDOW:
             return Response(
                 {
                     "results": [],
@@ -508,7 +638,6 @@ class WorkspaceHomeActivityEndpoint(BaseAPIView):
             for project in Project.objects.filter(id__in=visible_project_ids).only("id", "name", "identifier")
         }
         cutoff = timezone.now() - timedelta(days=int(days)) if days != "all" else None
-        window = min(offset + per_page + 1, MAX_WINDOW)
         rows = []
 
         # 删除后的项目不再属于当前可见集合，但操作者仍应能在动态中追溯自己的删除事件。
@@ -517,13 +646,6 @@ class WorkspaceHomeActivityEndpoint(BaseAPIView):
         )
         if cutoff:
             project_events = project_events.filter(occurred_at__gte=cutoff)
-        rows.extend(
-            _project_event_rows(
-                slug,
-                project_events.order_by("-occurred_at", "-created_at")[:window],
-                projects,
-            )
-        )
 
         visible_issues = _visible_issues(request.user, workspace, visible_project_ids)
         issue_activities = IssueActivity.objects.filter(
@@ -533,23 +655,12 @@ class WorkspaceHomeActivityEndpoint(BaseAPIView):
         issue_activities = issue_activities.exclude(issue_comment__isnull=False)
         if cutoff:
             issue_activities = issue_activities.filter(created_at__gte=cutoff)
-        rows.extend(
-            _issue_activity_rows(
-                slug,
-                issue_activities.order_by("-created_at", "-id")[:window],
-            )
-        )
 
         comments = IssueComment.objects.filter(workspace=workspace, issue_id__in=visible_issues.values("id"))
         if cutoff:
             comments = comments.filter(created_at__gte=cutoff)
-        rows.extend(
-            _issue_comment_rows(
-                slug,
-                comments.order_by("-created_at", "-id")[:window],
-            )
-        )
 
+        audits = None
         if research_module_enabled() and workspace_research_enabled(workspace):
             audits = ResearchAuditEvent.objects.filter(
                 workspace=workspace,
@@ -557,21 +668,107 @@ class WorkspaceHomeActivityEndpoint(BaseAPIView):
             )
             if cutoff:
                 audits = audits.filter(created_at__gte=cutoff)
-            ordered_audits = audits.order_by("-created_at", "-id")[:window]
-            rows.extend(_research_rows(slug, ordered_audits, visible_project_ids, projects, request.user))
+
+        if cursor_mode:
+            target = per_page + 1
+            cursor_project_events = _cursor_feed_queryset(
+                project_events.select_related("actor"), F("occurred_at"), "project-event:", cursor_anchor
+            )
+            rows.extend(
+                _collect_cursor_rows(
+                    cursor_project_events,
+                    lambda batch: _project_event_rows(slug, batch, projects),
+                    target,
+                )
+            )
+
+            cursor_issue_activities = _cursor_feed_queryset(
+                issue_activities.select_related("actor", "issue", "project"),
+                F("created_at"),
+                "issue-activity:",
+                cursor_anchor,
+            )
+            rows.extend(
+                _collect_cursor_rows(
+                    cursor_issue_activities,
+                    lambda batch: _issue_activity_rows(slug, batch),
+                    target,
+                )
+            )
+
+            cursor_comments = _cursor_feed_queryset(
+                comments.select_related("actor", "issue", "project"),
+                _comment_occurred_at_expression(),
+                "issue-comment:",
+                cursor_anchor,
+            )
+            rows.extend(
+                _collect_cursor_rows(
+                    cursor_comments,
+                    lambda batch: _issue_comment_rows(slug, batch),
+                    target,
+                )
+            )
+
+            if audits is not None:
+                cursor_audits = _cursor_feed_queryset(
+                    audits.select_related("actor", "org_unit"),
+                    F("created_at"),
+                    "research-audit:",
+                    cursor_anchor,
+                )
+                rows.extend(
+                    _collect_cursor_rows(
+                        cursor_audits,
+                        lambda batch: _research_rows(slug, batch, visible_project_ids, projects, request.user),
+                        target,
+                    )
+                )
+        else:
+            window = min(offset + per_page + 1, MAX_WINDOW)
+            rows.extend(
+                _project_event_rows(
+                    slug,
+                    project_events.select_related("actor").order_by("-occurred_at", "-created_at")[:window],
+                    projects,
+                )
+            )
+            rows.extend(
+                _issue_activity_rows(
+                    slug,
+                    issue_activities.select_related("actor", "issue", "project").order_by("-created_at", "-id")[
+                        :window
+                    ],
+                )
+            )
+            rows.extend(
+                _issue_comment_rows(
+                    slug,
+                    comments.select_related("actor", "issue", "project").order_by("-created_at", "-id")[:window],
+                )
+            )
+            if audits is not None:
+                ordered_audits = audits.select_related("actor", "org_unit").order_by("-created_at", "-id")[:window]
+                rows.extend(_research_rows(slug, ordered_audits, visible_project_ids, projects, request.user))
 
         rows.sort(key=lambda row: (row["occurred_at"], row["id"]), reverse=True)
-        page = rows[offset : offset + per_page]
-        has_more = len(rows) > offset + per_page
+        page = rows[:per_page] if cursor_mode else rows[offset : offset + per_page]
+        has_more = len(rows) > per_page if cursor_mode else len(rows) > offset + per_page
+        next_cursor = (
+            _encode_activity_cursor(workspace, request.user, days, page[-1])
+            if cursor_mode and has_more and page
+            else None
+        )
         for row in page:
             row["occurred_at"] = _iso(row["occurred_at"])
 
         return Response(
             {
                 "results": page,
-                "next_offset": offset + per_page if has_more else None,
+                "next_cursor": next_cursor,
+                "next_offset": None if cursor_mode else (offset + per_page if has_more else None),
                 "has_more": has_more,
-                "offset": offset,
+                "offset": 0 if cursor_mode else offset,
                 "per_page": per_page,
             }
         )

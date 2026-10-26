@@ -66,9 +66,11 @@ export type THomeActivity = {
 
 export type THomeActivityResponse = {
   results: THomeActivity[];
-  next_offset: number | null;
+  next_cursor?: string | null;
+  /** Legacy offset pagination field retained for existing API clients. */
+  next_offset?: number | null;
   has_more: boolean;
-  offset: number;
+  offset?: number;
   per_page: number;
 };
 
