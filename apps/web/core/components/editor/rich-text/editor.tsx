@@ -27,6 +27,8 @@ type RichTextEditorWrapperProps = MakeOptional<
   workspaceId: string;
   projectId?: string;
   issueSequenceId?: number;
+  /** 科研等受控内容可覆盖资源路由，统一执行所属对象的权限检查。 */
+  fileHandlerOverrides?: Partial<TFileHandler>;
 } & (
     | {
         editable: false;
@@ -50,6 +52,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     workspaceId,
     projectId,
     disabledExtensions: additionalDisabledExtensions = [],
+    fileHandlerOverrides,
     ...rest
   } = props;
   // store hooks
@@ -77,13 +80,16 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
       disabledExtensions={[...richTextEditorExtensions.disabled, ...(additionalDisabledExtensions ?? [])]}
       editable={editable}
       flaggedExtensions={richTextEditorExtensions.flagged}
-      fileHandler={getEditorFileHandlers({
-        projectId,
-        uploadFile: editable ? props.uploadFile : async () => "",
-        duplicateFile: editable ? props.duplicateFile : async () => "",
-        workspaceId,
-        workspaceSlug,
-      })}
+      fileHandler={{
+        ...getEditorFileHandlers({
+          projectId,
+          uploadFile: editable ? props.uploadFile : async () => "",
+          duplicateFile: editable ? props.duplicateFile : async () => "",
+          workspaceId,
+          workspaceSlug,
+        }),
+        ...fileHandlerOverrides,
+      }}
       getEditorMetaData={getEditorMetaData}
       mentionHandler={{
         searchCallback: async (query) => {

@@ -9,6 +9,7 @@ import type {
   TResearchChainNodeTaskAction,
   TResearchChainNodeTaskCreatePayload,
   TResearchChainNodeTaskUpdatePayload,
+  TResearchTaskInstructionAttachment,
 } from "@plane/types";
 import { formatResearchDate } from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
@@ -26,6 +27,8 @@ type Props = {
   workspaceSlug: string;
   chainId: string;
   nodeId: string;
+  /** 首页动态等外部链接指定的一次性任务深链 ID。 */
+  initialTaskId?: string | null;
 };
 
 type TPanelState = "loading" | "ready" | "forbidden" | "error";
@@ -110,7 +113,7 @@ function isTaskActionAllowed(task: TResearchChainNodeTask, action: TResearchChai
 }
 
 /** Load, edit, assign and review tasks attached to one Research Chain node. */
-export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props) {
+export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initialTaskId }: Props) {
   const { t, currentLocale } = useTranslation();
   const taskService = useMemo(() => new ResearchChainTaskService(), []);
   const sharedPeek = useResearchChainWorkbenchPeek();
@@ -133,6 +136,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
   const dateMenuRef = useRef<HTMLDivElement | null>(null);
   const [peekMode, setPeekMode] = useState<TWorkbenchPeekMode>("side");
   const [isTaskEditMode, setIsTaskEditMode] = useState(false);
+  const handledInitialTaskIdRef = useRef<string | null>(null);
   const peek: TLocalPeek = sharedPeek
     ? sharedPeek.peek?.kind === "task" || sharedPeek.peek?.kind === "create"
       ? sharedPeek.peek
@@ -217,26 +221,52 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
     });
   }, []);
 
+  /**
+   * 同步任务描述附件的即时上传结果，避免重新打开详情时读到旧列表。
+   *
+   * Args:
+   *   taskId: 当前任务 ID。
+   *   attachments: 服务端确认后的最新附件列表。
+   */
+  const updateTaskAttachments = useCallback((taskId: string, attachments: TResearchTaskInstructionAttachment[]) => {
+    setTasks((current) =>
+      current.map((task) => (task.id === taskId ? { ...task, instruction_attachments: attachments } : task))
+    );
+  }, []);
+
   const closePeek = () => {
     setIsTaskEditMode(false);
     if (sharedPeek) sharedPeek.close();
     else setLocalPeek(null);
   };
 
-  const openTask = (task: TResearchChainNodeTask) => {
-    setForm({
-      taskId: task.id,
-      title: task.title,
-      instruction: task.instruction,
-      assignee: task.assignee ?? "",
-      dueAt: toDateInput(task.due_at),
-    });
-    setFormError("");
-    setStatusMenuId(null);
-    setIsTaskEditMode(false);
-    if (sharedPeek) sharedPeek.openTask(task.id);
-    else setLocalPeek({ kind: "task", taskId: task.id });
-  };
+  const openTask = useCallback(
+    (task: TResearchChainNodeTask) => {
+      setForm({
+        taskId: task.id,
+        title: task.title,
+        instruction: task.instruction,
+        assignee: task.assignee ?? "",
+        dueAt: toDateInput(task.due_at),
+      });
+      setFormError("");
+      setStatusMenuId(null);
+      setIsTaskEditMode(false);
+      if (sharedPeek) sharedPeek.openTask(task.id);
+      else setLocalPeek({ kind: "task", taskId: task.id });
+    },
+    [sharedPeek]
+  );
+
+  useEffect(() => {
+    if (!initialTaskId || state !== "ready" || handledInitialTaskIdRef.current === initialTaskId) return;
+
+    const task = tasks.find((item) => item.id === initialTaskId);
+    if (!task) return;
+
+    handledInitialTaskIdRef.current = initialTaskId;
+    openTask(task);
+  }, [initialTaskId, openTask, state, tasks]);
 
   const openCreate = (title = "") => {
     setForm({ ...EMPTY_FORM, title });
@@ -712,6 +742,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
           onModeChange={setPeekMode}
           onClose={closePeek}
           onFormChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+          onTaskAttachmentsChange={updateTaskAttachments}
           onCommit={(payload) => {
             if (activeTask) void savePeekFields(activeTask, payload);
           }}

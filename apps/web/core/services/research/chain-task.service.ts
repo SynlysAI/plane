@@ -11,6 +11,7 @@ import type {
   TResearchChainNodeTask,
   TResearchChainNodeTaskCreatePayload,
   TResearchChainNodeTaskUpdatePayload,
+  TResearchTaskInstructionAttachment,
   TResearchTaskComment,
   TCommentAttachment,
   TCommentAttachmentLimits,
@@ -40,6 +41,14 @@ type TResearchTaskUploadSlot = {
 
 /** 任务评论附件确认接口返回的服务端契约。 */
 type TResearchTaskCommentAttachmentConfirm = {
+  asset_id: string;
+  name: string;
+  type: string;
+  size: number;
+};
+
+/** 任务描述附件确认接口返回的服务端契约。 */
+type TResearchTaskInstructionAttachmentConfirm = {
   asset_id: string;
   name: string;
   type: string;
@@ -242,6 +251,128 @@ export class ResearchChainTaskService extends APIService {
     return await this.post(
       `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}comment-images/${assetId}/`,
       { restore: true }
+    )
+      .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 直传、校验并返回任务描述正文图片的认证读取地址。 */
+  async uploadTaskInstructionImage(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    file: File
+  ): Promise<string> {
+    const base = `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}instruction-images/`;
+    const slot = await this.post(base, {
+      file_name: file.name,
+      content_type: file.type,
+      size: file.size,
+    })
+      .then((response) => response.data as TResearchTaskUploadSlot)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+    await uploadToSlot(slot, file);
+    return await this.post(`${base}${slot.asset_id}/`, {})
+      .then(() => `${base}${slot.asset_id}/`)
+      .catch(async (error) => {
+        await this.deleteTaskInstructionImage(workspaceSlug, chainId, nodeId, taskId, slot.asset_id).catch(
+          () => undefined
+        );
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 删除任务描述正文图片。 */
+  async deleteTaskInstructionImage(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    assetId: string
+  ) {
+    return await this.delete(
+      `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}instruction-images/${assetId}/`
+    )
+      .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 恢复刚从任务描述中移除的正文图片。 */
+  async restoreTaskInstructionImage(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    assetId: string
+  ) {
+    return await this.post(
+      `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}instruction-images/${assetId}/`,
+      { restore: true }
+    )
+      .then(() => undefined)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 直传并确认一个任务描述文件附件。 */
+  async uploadTaskInstructionAttachment(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    file: File
+  ): Promise<TResearchTaskInstructionAttachment> {
+    const base = `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}instruction-attachments/`;
+    const slot = await this.post(`${base}presign/`, {
+      file_name: file.name,
+      content_type: file.type || "application/octet-stream",
+      size: file.size,
+    })
+      .then((response) => response.data as TResearchTaskUploadSlot)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+    await uploadToSlot(slot, file);
+    return await this.post(`${base}${slot.asset_id}/confirm/`, {})
+      .then((response) => {
+        const payload = response.data as TResearchTaskInstructionAttachmentConfirm | undefined;
+        if (!payload?.asset_id) {
+          throw { error_code: "research_task_instruction_attachment_confirm_invalid" };
+        }
+        return {
+          id: payload.asset_id,
+          name: payload.name,
+          type: payload.type,
+          size: payload.size,
+          download_url: `${base}${payload.asset_id}/download/`,
+        } satisfies TResearchTaskInstructionAttachment;
+      })
+      .catch(async (error) => {
+        await this.deleteTaskInstructionAttachment(workspaceSlug, chainId, nodeId, taskId, slot.asset_id).catch(
+          () => undefined
+        );
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 删除一个任务描述文件附件。 */
+  async deleteTaskInstructionAttachment(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    assetId: string
+  ) {
+    return await this.delete(
+      `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}instruction-attachments/${assetId}/`
     )
       .then(() => undefined)
       .catch((error) => {

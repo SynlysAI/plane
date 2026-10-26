@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   updateNodeTask: vi.fn(),
   runNodeTaskAction: vi.fn(),
 }));
+const capturedDescription = vi.hoisted(() => ({ props: null as null | { editable: boolean; value: string } }));
 
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
@@ -37,6 +38,21 @@ vi.mock("@/services/research/chain-task.service", () => ({
 vi.mock("@/components/research/chains/research-task-comments", () => ({
   ResearchTaskComments: () => <section aria-label="评论">评论</section>,
 }));
+vi.mock("@/components/research/chains/research-task-description", () => ({
+  ResearchTaskDescription: (props: { editable: boolean; value: string; onChange: (value: string) => void }) => {
+    capturedDescription.props = props;
+    return props.editable ? (
+      <textarea
+        aria-label="任务说明"
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+        data-testid="research-description-editor"
+      />
+    ) : (
+      <div data-testid="research-description-view">{props.value || "暂无任务说明"}</div>
+    );
+  },
+}));
 
 const capability = (allowed: boolean) => ({ allowed, reason_code: "", reason: "" });
 
@@ -49,6 +65,7 @@ function task(overrides: Partial<TResearchChainNodeTask> = {}): TResearchChainNo
     node: "node-1",
     title: "整理开题文献",
     instruction: "补充近三年实验方法对比。",
+    instruction_attachments: [],
     status: "SUBMITTED",
     assignee: "student-1",
     assignee_is_valid: true,
@@ -119,10 +136,12 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-async function renderPanel() {
+async function renderPanel(initialTaskId?: string) {
   const { ResearchChainTaskPanel } = await import("@/components/research/chains/research-chain-task-panel");
   await act(async () => {
-    root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+    root.render(
+      <ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" initialTaskId={initialTaskId} />
+    );
   });
   await act(async () => undefined);
 }
@@ -141,6 +160,20 @@ function editToggle() {
   if (!toggle) throw new Error("task edit toggle not found");
   return toggle;
 }
+
+it("opens a valid deep-linked research task after tasks load", async () => {
+  await renderPanel("task-1");
+
+  const peek = container.querySelector("aside");
+  expect(peek?.querySelector("h2")?.textContent).toBe("整理开题文献");
+  expect(editToggle().getAttribute("aria-pressed")).toBe("false");
+});
+
+it("ignores a deep-linked research task that does not belong to the node", async () => {
+  await renderPanel("missing-task");
+
+  expect(container.querySelector("aside")).toBeNull();
+});
 
 async function setInput(selector: string, value: string) {
   const input = container.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement;
@@ -166,8 +199,10 @@ it("opens an existing research task read-only until editing is explicitly enable
   const peek = container.querySelector("aside");
   expect(peek?.querySelector("h2")?.textContent).toBe("整理开题文献");
   expect(peek?.querySelector('input[aria-label="标题"]')).toBeNull();
-  expect(peek?.querySelector('textarea[aria-label="任务说明"]')).toBeNull();
-  expect(peek?.textContent).toContain("补充近三年实验方法对比。");
+  expect(peek?.querySelector('[data-testid="research-description-editor"]')).toBeNull();
+  expect(peek?.querySelector('[data-testid="research-description-view"]')?.textContent).toContain(
+    "补充近三年实验方法对比。"
+  );
   expect(editToggle().textContent).toBe("编辑");
   expect(editToggle().getAttribute("aria-pressed")).toBe("false");
 });
@@ -181,7 +216,7 @@ it("saves changed title and instruction together when leaving task edit mode", a
   expect(editToggle().textContent).toBe("完成");
   expect(editToggle().getAttribute("aria-pressed")).toBe("true");
   await setInput('aside input[aria-label="标题"]', "整理开题文献与实验记录");
-  await setInput('aside textarea[aria-label="任务说明"]', "请补充实验记录。");
+  await act(async () => capturedDescription.props?.onChange("请补充实验记录。"));
   await act(async () => editToggle().click());
 
   expect(mocks.updateNodeTask).toHaveBeenCalledTimes(1);
@@ -191,6 +226,35 @@ it("saves changed title and instruction together when leaving task edit mode", a
   });
   expect(container.querySelector("aside")?.querySelector('input[aria-label="标题"]')).toBeNull();
   expect(container.querySelector("aside")?.textContent).toContain("整理开题文献与实验记录");
+});
+
+it("keeps research description attachment and upload state synchronized with the peek", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  const descriptionProps = capturedDescription.props as unknown as {
+    onAttachmentsChange: (
+      attachments: { id: string; name: string; type: string; size: number; download_url: string }[]
+    ) => void;
+    onBusyChange: (busy: boolean) => void;
+    task: { instruction_attachments: unknown[] };
+  };
+  await act(async () => {
+    descriptionProps.onAttachmentsChange([
+      { id: "asset-1", name: "过程说明.pdf", type: "application/pdf", size: 128, download_url: "/download/" },
+    ]);
+  });
+  const synchronizedDescriptionProps = capturedDescription.props as unknown as {
+    task: { instruction_attachments: unknown[] };
+  };
+  expect(synchronizedDescriptionProps.task.instruction_attachments).toHaveLength(1);
+
+  await act(async () => editToggle().click());
+  const editableDescriptionProps = capturedDescription.props as unknown as { onBusyChange: (busy: boolean) => void };
+  await act(async () => editableDescriptionProps.onBusyChange(true));
+  expect(editToggle().disabled).toBe(true);
+  await act(async () => editableDescriptionProps.onBusyChange(false));
+  expect(editToggle().disabled).toBe(false);
 });
 
 it("keeps the task editor open when the title is empty or saving fails", async () => {

@@ -420,6 +420,16 @@ export type TResearchChainNodeTaskCreatePayload = {
 
 export type TResearchChainNodeTaskUpdatePayload = Partial<TResearchChainNodeTaskCreatePayload>;
 
+/** 科研任务描述附带的持久化文件元数据。 */
+export type TResearchTaskInstructionAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  download_url: string;
+  preview_url?: string | null;
+};
+
 export type TResearchTaskComment = {
   id: string;
   task: string;
@@ -443,6 +453,7 @@ export type TResearchChainNodeTask = {
   node: string;
   title: string;
   instruction: string;
+  instruction_attachments: TResearchTaskInstructionAttachment[];
   status: TResearchChainNodeTaskStatus;
   assignee: string | null;
   assignee_detail?: TResearchTaskAssignee | null;

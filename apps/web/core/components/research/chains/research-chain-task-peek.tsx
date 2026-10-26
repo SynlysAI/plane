@@ -33,6 +33,7 @@ import type {
   TResearchChainNodeTaskAction,
   TResearchChainNodeTaskResourceType,
   TResearchChainNodeTaskUpdatePayload,
+  TResearchTaskInstructionAttachment,
 } from "@plane/types";
 import { cn } from "@plane/utils";
 import { formatResearchDate, formatResearchDateTime } from "@/components/research/common/research-format";
@@ -45,6 +46,7 @@ import {
 } from "@/components/research/chains/research-chain-workbench-peek";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 import { ResearchTaskComments } from "@/components/research/chains/research-task-comments";
+import { ResearchTaskDescription } from "@/components/research/chains/research-task-description";
 import { useTransientMenu } from "@/hooks/use-transient-menu";
 
 type TTaskFormState = {
@@ -85,6 +87,7 @@ type Props = {
   onClose: () => void;
   onToggleEditMode: (value: boolean) => void;
   onFormChange: (patch: Partial<TTaskFormState>) => void;
+  onTaskAttachmentsChange: (taskId: string, attachments: TResearchTaskInstructionAttachment[]) => void;
   onCommit: (payload: TResearchChainNodeTaskUpdatePayload) => void;
   onCreate: () => void;
   onAction: (action: TLifecycleAction) => void;
@@ -308,6 +311,7 @@ export function ResearchChainTaskPeek(props: Props) {
     onClose,
     onToggleEditMode,
     onFormChange,
+    onTaskAttachmentsChange,
     onCommit,
     onCreate,
     onAction,
@@ -316,6 +320,7 @@ export function ResearchChainTaskPeek(props: Props) {
   const taskService = useMemo(() => new ResearchChainTaskService(), []);
   const [activityOrder, setActivityOrder] = useState<TActivityOrder>("asc");
   const [events, setEvents] = useState<TResearchChainEvent[]>([]);
+  const [instructionBusy, setInstructionBusy] = useState(false);
   const canEdit = kind === "create" || isAllowed(task, "edit");
   const isContentEditable = kind === "create" || (canEdit && isEditMode);
   const canAssign = kind === "create" || isAllowed(task, "edit") || isAllowed(task, "assign");
@@ -394,7 +399,7 @@ export function ResearchChainTaskPeek(props: Props) {
                 type="button"
                 data-task-edit-toggle=""
                 aria-pressed={isEditMode}
-                disabled={formBusy || Boolean(actionBusy)}
+                disabled={formBusy || instructionBusy || Boolean(actionBusy)}
                 onClick={() => onToggleEditMode(!isEditMode)}
                 className="rounded-md px-2 py-1 text-13 text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary disabled:cursor-default disabled:text-placeholder"
               >
@@ -418,11 +423,23 @@ export function ResearchChainTaskPeek(props: Props) {
           </div>
 
           <div className={cn(contentPanelClassName, "min-h-24")}>
-            <InstructionField
-              value={form.instruction}
-              editable={isContentEditable}
-              onChange={(instruction) => onFormChange({ instruction })}
-            />
+            {kind === "task" && task ? (
+              <ResearchTaskDescription
+                task={task}
+                workspaceSlug={workspaceSlug}
+                value={form.instruction}
+                editable={isContentEditable}
+                onChange={(instruction) => onFormChange({ instruction })}
+                onAttachmentsChange={(attachments) => onTaskAttachmentsChange(task.id, attachments)}
+                onBusyChange={setInstructionBusy}
+              />
+            ) : (
+              <InstructionField
+                value={form.instruction}
+                editable={isContentEditable}
+                onChange={(instruction) => onFormChange({ instruction })}
+              />
+            )}
           </div>
         </div>
 
