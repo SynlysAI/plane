@@ -9,6 +9,7 @@ import { useParams } from "react-router";
 // components
 import { ResearchBackLink } from "@/components/research/common/research-back-link";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
+import { ResearchStageRouteGuard } from "@/components/research/stages/stage-route-guard";
 import { StageOverview } from "@/components/research/stages/stage-overview";
 
 function WorkspaceResearchProjectStageDetailPage() {
@@ -26,7 +27,9 @@ function WorkspaceResearchProjectStageDetailPage() {
         </ResearchBackLink>
       }
     >
-      <StageOverview workspaceSlug={workspaceSlug} projectId={projectId} stageCode={stageCode} />
+      <ResearchStageRouteGuard workspaceSlug={workspaceSlug} projectId={projectId}>
+        <StageOverview workspaceSlug={workspaceSlug} projectId={projectId} stageCode={stageCode} />
+      </ResearchStageRouteGuard>
     </ResearchPageShell>
   );
 }

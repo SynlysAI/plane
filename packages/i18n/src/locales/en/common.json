@@ -1320,6 +1320,7 @@
     },
     "chains": {
       "description": "Research chains, topics, reports, reviews, and trace; administrative projects are not shown in this channel.",
+      "project_records_description": "An index of research project records: maintain owners, types, primary units, and lifecycle; opening a record enters its topic or stage workflow.",
       "tabs": {
         "label": "Research Chain page sections",
         "overview": "Overview",

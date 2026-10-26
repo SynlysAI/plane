@@ -26,6 +26,7 @@ vi.mock("react-router", async () => {
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key, currentLocale: "zh-CN" }) }));
 vi.mock("@plane/propel/button", () => ({
   Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
+  getButtonStyling: () => "secondary-button",
 }));
 vi.mock("@plane/propel/table", () => ({
   Table: ({ children }: { children: React.ReactNode }) => <table>{children}</table>,
@@ -152,6 +153,102 @@ it("旧项目列表提供确认删除，并在成功后刷新当前筛选", asyn
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
+it("项目档案行只保留一个删除入口且操作按打开和管理分组排列", async () => {
+  mocks.projects = [
+    {
+      id: "project-1",
+      name: "在研课题",
+      identifier: "ACTIVE",
+      archived_at: null,
+      is_research_project: true,
+      research: {
+        owner: "user-1",
+        workflow_status: "ACTIVE",
+        research_type: "RESEARCH_PROJECT",
+        chain_kind: "RESEARCH_CHAIN",
+        chain_id: "chain-1",
+      },
+    },
+  ] as TResearchProject[];
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ResearchProjectList workspaceSlug="lab" currentUserId="user-1" />
+      </MemoryRouter>
+    )
+  );
+
+  const actionCell = [...container.querySelectorAll("td")].at(-1);
+  if (!actionCell) throw new Error("操作列不存在");
+  const controls = Array.from(actionCell.querySelectorAll("a, button"));
+  const deleteControls = controls.filter((control) => {
+    const label = control.getAttribute("aria-label") ?? control.getAttribute("title") ?? "";
+    return label.toLowerCase().includes("delete");
+  });
+
+  expect(deleteControls).toHaveLength(1);
+  expect(controls.map((control) => control.tagName)).toEqual(["A", "BUTTON", "BUTTON", "BUTTON"]);
+  expect(controls[0]?.getAttribute("href")).toBe("/lab/research/chains/chain-1?tab=overview");
+  expect(controls[0]?.textContent).toContain("research.projects.open_team_project");
+  expect(controls[1]?.getAttribute("aria-label")).toBe("research.projects.edit：在研课题");
+  expect(controls[2]?.getAttribute("aria-label")).toBe("research.projects.archive：在研课题");
+  expect(controls[3]?.getAttribute("aria-label")).toBe("research.projects.delete：在研课题");
+});
+
+it("打开项目按研究链与旧培养项目选择现有主工作区", async () => {
+  mocks.projects = [
+    {
+      id: "project-chain",
+      name: "博士研究链",
+      research: {
+        owner: "user-1",
+        workflow_status: "ACTIVE",
+        research_type: "PHD",
+        chain_kind: "RESEARCH_CHAIN",
+        chain_id: "chain-1",
+      },
+    },
+    {
+      id: "project-legacy",
+      name: "硕士培养项目",
+      research: {
+        owner: "user-1",
+        workflow_status: "ACTIVE",
+        research_type: "MASTER",
+        chain_kind: "LEGACY_TRAINING",
+      },
+    },
+    {
+      id: "project-team",
+      name: "团队项目",
+      research: {
+        owner: "user-1",
+        workflow_status: "ACTIVE",
+        research_type: "RESEARCH_PROJECT",
+        chain_kind: "LEGACY_TRAINING",
+      },
+    },
+  ] as TResearchProject[];
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ResearchProjectList workspaceSlug="lab" currentUserId="user-1" />
+      </MemoryRouter>
+    )
+  );
+
+  const openLinks = [...container.querySelectorAll("a")].filter(
+    (link) => link.textContent === "research.projects.open_team_project"
+  );
+  expect(openLinks.map((link) => link.getAttribute("href"))).toEqual([
+    "/lab/research/chains/chain-1?tab=overview",
+    "/lab/research/projects/project-legacy/stages",
+    "/lab/research/projects/project-team/overview",
+  ]);
+});
+
 it("负责人可从列表齿轮编辑项目信息并刷新当前筛选", async () => {
   const item = {
     id: "project-1",
@@ -227,6 +324,9 @@ it("非负责人且非科研管理员看不到编辑齿轮", async () => {
   );
 
   expect(container.querySelector('[aria-label^="research.projects.edit："]')).toBeNull();
+  const actionCell = [...container.querySelectorAll("td")].at(-1);
+  expect(actionCell?.querySelectorAll("button").length).toBe(0);
+  expect(actionCell?.querySelectorAll("a").length).toBe(1);
 });
 
 it("归档项目保留编辑入口而已删除项目隐藏", async () => {
@@ -257,7 +357,12 @@ it("归档项目保留编辑入口而已删除项目隐藏", async () => {
   );
 
   expect(container.querySelector('[aria-label="research.projects.edit：归档课题"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="research.projects.archive：归档课题"]')).toBeNull();
+  expect(container.querySelector('[aria-label="research.projects.restore：归档课题"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="research.projects.delete：归档课题"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="research.projects.edit：删除课题"]')).toBeNull();
+  expect(container.querySelector('[aria-label="research.projects.delete：删除课题"]')).toBeNull();
+  expect(container.querySelector('[aria-label="research.projects.restore：删除课题"]')).not.toBeNull();
 });
 
 afterEach(async () => {

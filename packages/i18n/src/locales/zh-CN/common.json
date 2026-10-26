@@ -1334,6 +1334,7 @@
     },
     "chains": {
       "description": "承载科研主线、课题、周期报告与评审；行政项目不在本通道显示。",
+      "project_records_description": "项目基础档案索引：维护责任人、类型、主归属与生命周期；打开后进入对应课题或阶段流程。",
       "tabs": {
         "label": "研究链页面分区",
         "overview": "概览",
