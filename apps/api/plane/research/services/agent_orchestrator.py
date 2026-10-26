@@ -173,7 +173,9 @@ def create_science_discovery_session(
         scope_source=scope_source,
     )
     profile = node.chain.project.research_profile
-    research_enabled = bool(getattr(settings, "RESEARCH_MCP_ENABLED", False))
+    research_enabled = bool(getattr(settings, "RESEARCH_MCP_ENABLED", False)) and bool(
+        getattr(settings, "SCIENCE_DISCOVERY_RESEARCH_MCP_ENABLED", True)
+    )
     report_selections = None
     if research_enabled:
         from plane.research.services.chain_context import node_report_selections
