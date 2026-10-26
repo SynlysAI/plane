@@ -2003,6 +2003,10 @@
         "title": "科研项目已创建",
         "message": "正在打开项目详情。"
       },
+      "project_updated": {
+        "title": "科研项目已更新",
+        "message": "项目基础信息已保存，列表已刷新。"
+      },
       "project_archived": {
         "title": "项目已归档",
         "message": "项目已移出进行中列表，可随时恢复。"
@@ -2251,6 +2255,8 @@
       "description": "统一管理个人培养项目与团队科研课题。",
       "create_title": "新建科研项目",
       "create_hint": "培养项目使用阶段流程；团队课题使用任务、周期和模块推进。",
+      "edit_title": "编辑科研项目",
+      "edit_hint": "修正项目基础信息；保存后会同步项目列表。",
       "fields": {
         "name": "项目名称",
         "type": "项目类型",
@@ -2278,6 +2284,8 @@
       "team_org_optional": "团队课题可以暂不设置组织归属；后续补齐后才会进入对应方向的范围统计。",
       "owner_placeholder": "科研责任人邮箱或 ID（留空表示本人）",
       "create": "创建科研项目",
+      "edit": "编辑科研项目",
+      "save": "保存修改",
       "open_team_project": "打开项目",
       "archive": "归档",
       "delete": "删除",
@@ -2339,9 +2347,9 @@
       },
       "empty": "没有符合条件的报告",
       "submit": "提交",
-      "withdraw": "撤回重新编辑",
-      "withdraw_title": "撤回这份报告？",
-      "withdraw_hint": "报告将回到草稿并退出审核队列；已提交版本、已读记录、评论和审核历史会保留，重新提交会生成新版本。",
+      "withdraw": "撤回",
+      "withdraw_title": "撤回报告",
+      "withdraw_hint": "撤回后回到草稿，可修改后重新提交。",
       "withdraw_reason": "撤回原因（选填）",
       "withdraw_placeholder": "说明需要修改的内容",
       "history_withdraw": "撤回",
@@ -2611,6 +2619,8 @@
       "report_visibility_exceeds_default": "可见范围不能大于默认策略。",
       "research_project_exists": "该科研责任人已有进行中的科研项目。",
       "project_identifier_conflict": "项目标识符冲突，请更换名称后重试。",
+      "project_name_invalid": "请输入 1-255 个字符的项目名称。",
+      "project_name_conflict": "同工作区已存在同名项目，请更换名称。",
       "research_project_not_found": "科研项目不存在。",
       "file_type_not_allowed": "不支持该文件类型。",
       "file_size_exceeded": "文件超过配置的大小限制。",

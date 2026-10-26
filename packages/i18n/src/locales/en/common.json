@@ -1978,6 +1978,10 @@
         "title": "Research project created",
         "message": "Opening the project details."
       },
+      "project_updated": {
+        "title": "Research project updated",
+        "message": "The project details were saved and the list was refreshed."
+      },
       "project_archived": {
         "title": "Project archived",
         "message": "The project is no longer active and can be restored later."
@@ -2226,6 +2230,8 @@
       "description": "Personal cultivation projects and shared team research projects.",
       "create_title": "Create a research project",
       "create_hint": "Cultivation projects use the stage workflow; team projects use work items, cycles and modules.",
+      "edit_title": "Edit research project",
+      "edit_hint": "Correct the project details. Saving also refreshes the project list.",
       "fields": {
         "name": "Project name",
         "type": "Project type",
@@ -2253,6 +2259,8 @@
       "team_org_optional": "A team project may start without an organisation. Assign one later to include it in direction-scoped summaries.",
       "owner_placeholder": "Research owner email or ID (empty = me)",
       "create": "Create research project",
+      "edit": "Edit research project",
+      "save": "Save changes",
       "open_team_project": "Open project",
       "archive": "Archive",
       "delete": "Delete",
@@ -2586,6 +2594,8 @@
       "report_visibility_exceeds_default": "The visibility cannot be wider than the default policy.",
       "research_project_exists": "This research owner already has an active research project.",
       "project_identifier_conflict": "A project identifier conflict occurred. Please try a different name.",
+      "project_name_invalid": "Enter a project name of 1-255 characters.",
+      "project_name_conflict": "A project with this name already exists in the workspace.",
       "research_project_not_found": "Research project not found.",
       "file_type_not_allowed": "This file type is not allowed.",
       "file_size_exceeded": "The file exceeds the configured limit.",

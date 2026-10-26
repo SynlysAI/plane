@@ -59,6 +59,7 @@ class ResearchAuditAction:
     FEEDBACK_STATUS_UPDATE = "feedback.status.update"
     FEEDBACK_IMPORT = "feedback.import"
     PROJECT_CREATE = "project.create"
+    PROJECT_UPDATE = "project.update"
     PROJECT_ARCHIVE = "project.archive"
     PROJECT_DELETE = "project.delete"
     PROJECT_RESTORE = "project.restore"

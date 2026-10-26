@@ -16,6 +16,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import type { TResearchProject } from "@/services/research/project.service";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -23,15 +24,19 @@ type Props = {
   workspaceSlug: string;
   currentUserId: string;
   isOpen: boolean;
+  project?: TResearchProject | null;
   onClose: () => void;
+  onUpdated?: (project: TResearchProject) => Promise<void> | void;
 };
 
-/** 打开创建科研项目弹窗，供项目列表和研究链工作台共用。 */
-export const ResearchProjectCreateDialog = observer(function ResearchProjectCreateDialog({
+/** 打开科研项目创建/编辑弹窗，供项目列表和研究链工作台共用。 */
+export const ResearchProjectDialog = observer(function ResearchProjectDialog({
   workspaceSlug,
   currentUserId,
   isOpen,
+  project,
   onClose,
+  onUpdated,
 }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
@@ -43,6 +48,7 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
   const [orgUnit, setOrgUnit] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const isEditing = Boolean(project);
   const researchChainEnabled = Boolean(research.identity?.sections?.research_chain);
   const orgUnits = research.getOrgUnits(workspaceSlug);
   const memberOrgUnitIds = useMemo(
@@ -59,6 +65,7 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
   );
   const isTeamProject = researchType === "RESEARCH_PROJECT";
   const requiresOrgUnit = !isTeamProject || !research.isResearchAdmin;
+  const canEditVisibility = researchChainEnabled && (project?.research?.chain_kind ?? chainKind) === "RESEARCH_CHAIN";
 
   useEffect(() => {
     if (!isOpen || orgUnits.length) return;
@@ -68,45 +75,76 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
   }, [isOpen, orgUnits.length, workspaceSlug]);
 
   useEffect(() => {
-    if (!orgUnit && primaryOrgUnit) setOrgUnit(primaryOrgUnit);
-  }, [orgUnit, primaryOrgUnit]);
+    if (!isOpen) return;
+    setName(project?.name ?? "");
+    setResearchType((project?.research?.research_type as TResearchProjectType | undefined) ?? "RESEARCH_PROJECT");
+    setChainVisibility(project?.research?.chain_visibility ?? "PRIVATE");
+    setOrgUnit(project?.research?.org_unit ?? "");
+    setErrorKey(null);
+  }, [isOpen, project]);
 
-  const handleCreate = useCallback(async () => {
+  useEffect(() => {
+    if (!isEditing && !orgUnit && primaryOrgUnit) setOrgUnit(primaryOrgUnit);
+  }, [isEditing, orgUnit, primaryOrgUnit]);
+
+  const handleSubmit = useCallback(async () => {
     if (!name.trim() || (requiresOrgUnit && !orgUnit)) return;
     setIsCreating(true);
     try {
-      const project = await research.createResearchProject(workspaceSlug, {
-        name: name.trim(),
-        owner: currentUserId,
-        research_type: researchType,
-        org_unit: orgUnit || null,
-        chain_kind: chainKind,
-        ...(chainKind === "RESEARCH_CHAIN" ? { chain_visibility: chainVisibility } : {}),
-      });
-      setName("");
-      onClose();
-      setErrorKey(null);
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("research.feedback.project_created.title"),
-        message: t("research.feedback.project_created.message"),
-      });
-      navigate(project.research?.chain_id
-        ? `/${workspaceSlug}/research/chains/${project.research.chain_id}`
-        : `/${workspaceSlug}/research/projects/${project.id}/overview`);
+      if (project) {
+        const updated = await research.updateResearchProject(workspaceSlug, project.id, {
+          name: name.trim(),
+          research_type: researchType,
+          org_unit: orgUnit || null,
+          ...(canEditVisibility ? { chain_visibility: chainVisibility } : {}),
+        });
+        await onUpdated?.(updated);
+        onClose();
+        setErrorKey(null);
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("research.feedback.project_updated.title"),
+          message: t("research.feedback.project_updated.message"),
+        });
+      } else {
+        const created = await research.createResearchProject(workspaceSlug, {
+          name: name.trim(),
+          owner: currentUserId,
+          research_type: researchType,
+          org_unit: orgUnit || null,
+          chain_kind: chainKind,
+          ...(chainKind === "RESEARCH_CHAIN" ? { chain_visibility: chainVisibility } : {}),
+        });
+        setName("");
+        onClose();
+        setErrorKey(null);
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("research.feedback.project_created.title"),
+          message: t("research.feedback.project_created.message"),
+        });
+        navigate(
+          created.research?.chain_id
+            ? `/${workspaceSlug}/research/chains/${created.research.chain_id}`
+            : `/${workspaceSlug}/research/projects/${created.id}/overview`
+        );
+      }
     } catch (error) {
       setErrorKey(getResearchErrorKey(error));
     } finally {
       setIsCreating(false);
     }
   }, [
+    canEditVisibility,
     chainKind,
     chainVisibility,
     currentUserId,
     navigate,
     name,
     onClose,
+    onUpdated,
     orgUnit,
+    project,
     requiresOrgUnit,
     research,
     researchType,
@@ -125,12 +163,16 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
         className="flex flex-col gap-4 p-5"
         onSubmit={(event) => {
           event.preventDefault();
-          void handleCreate();
+          void handleSubmit();
         }}
       >
         <div>
-          <h2 className="text-16 font-semibold text-primary">{t("research.projects.create_title")}</h2>
-          <p className="mt-1 text-12 text-tertiary">{t("research.projects.create_hint")}</p>
+          <h2 className="text-16 font-semibold text-primary">
+            {t(isEditing ? "research.projects.edit_title" : "research.projects.create_title")}
+          </h2>
+          <p className="mt-1 text-12 text-tertiary">
+            {t(isEditing ? "research.projects.edit_hint" : "research.projects.create_hint")}
+          </p>
         </div>
         {errorKey && (
           <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
@@ -180,7 +222,7 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
               ))}
             </select>
           </label>
-          {researchChainEnabled && chainKind === "RESEARCH_CHAIN" && (
+          {canEditVisibility && (
             <label className="flex flex-col gap-1 text-12 text-secondary">
               <span>{t("research.projects.fields.chain_visibility")}</span>
               <select
@@ -216,10 +258,12 @@ export const ResearchProjectCreateDialog = observer(function ResearchProjectCrea
             loading={isCreating}
             disabled={!name.trim() || (requiresOrgUnit && !orgUnit) || !currentUserId}
           >
-            {t("research.projects.create")}
+            {t(isEditing ? "research.projects.save" : "research.projects.create")}
           </Button>
         </div>
       </form>
     </ModalCore>
   );
 });
+
+export const ResearchProjectCreateDialog = ResearchProjectDialog;

@@ -8,6 +8,7 @@ import type { TResearchProject } from "@/services/research/project.service";
 const mocks = vi.hoisted(() => ({
   fetchResearchProjects: vi.fn(),
   fetchOrgUnits: vi.fn(),
+  updateResearchProject: vi.fn(),
   deleteResearchProject: vi.fn(),
   restoreResearchProject: vi.fn(),
   archiveResearchProject: vi.fn(),
@@ -81,14 +82,19 @@ vi.mock("@/components/research/common/research-status-badge", () => ({
 }));
 vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
-    identity: { user: { org_units: [{ org_unit: "unit-1", is_primary: true }] } },
+    identity: {
+      sections: { research_chain: true },
+      user: { org_units: [{ org_unit: "unit-1", is_primary: true }] },
+    },
     isWorkspaceAdmin: false,
+    isResearchAdmin: false,
     projectLoader: false,
     projectPaginationByWorkspace: {},
     getResearchProjects: () => mocks.projects,
     getOrgUnits: () => [{ id: "unit-1", name: "材料课题组" }],
     fetchResearchProjects: mocks.fetchResearchProjects,
     fetchOrgUnits: mocks.fetchOrgUnits,
+    updateResearchProject: mocks.updateResearchProject,
     deleteResearchProject: mocks.deleteResearchProject,
     restoreResearchProject: mocks.restoreResearchProject,
     archiveResearchProject: mocks.archiveResearchProject,
@@ -108,6 +114,7 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
+  mocks.updateResearchProject.mockResolvedValue(undefined);
   mocks.deleteResearchProject.mockResolvedValue(undefined);
   mocks.restoreResearchProject.mockResolvedValue(undefined);
   mocks.archiveResearchProject.mockResolvedValue(undefined);
@@ -143,6 +150,114 @@ it("旧项目列表提供确认删除，并在成功后刷新当前筛选", asyn
   expect(mocks.deleteResearchProject).toHaveBeenCalledWith("lab", "project-1");
   expect(mocks.fetchResearchProjects).toHaveBeenLastCalledWith("lab", { per_page: "50", workflow_status: "ACTIVE" });
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("负责人可从列表齿轮编辑项目信息并刷新当前筛选", async () => {
+  const item = {
+    id: "project-1",
+    name: "旧科研课题",
+    identifier: "OLD",
+    archived_at: null,
+    is_research_project: true,
+    research: {
+      owner: "user-1",
+      org_unit: "unit-1",
+      research_type: "RESEARCH_PROJECT",
+      chain_kind: "RESEARCH_CHAIN",
+      chain_visibility: "PRIVATE",
+      workflow_status: "ACTIVE",
+    },
+  } as TResearchProject;
+  mocks.projects = [item];
+  mocks.updateResearchProject.mockResolvedValue({ ...item, name: "新科研课题" });
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/chains?view=projects&workflow_status=ACTIVE"]}>
+        <ResearchProjectList workspaceSlug="lab" currentUserId="user-1" />
+      </MemoryRouter>
+    )
+  );
+
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[aria-label="research.projects.edit：旧科研课题"]')?.click()
+  );
+  const dialog = container.querySelector('[role="dialog"]');
+  expect(dialog?.textContent).toContain("research.projects.edit_title");
+  const nameInput = [...container.querySelectorAll("label")]
+    .find((label) => label.textContent?.includes("research.projects.fields.name"))
+    ?.querySelector("input");
+  expect(nameInput?.value).toBe("旧科研课题");
+
+  await act(async () => {
+    if (!nameInput) throw new Error("项目名称输入框不存在");
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(nameInput, "新科研课题");
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((button) => button.textContent === "research.projects.save")
+      ?.click()
+  );
+
+  expect(mocks.updateResearchProject).toHaveBeenCalledWith(
+    "lab",
+    "project-1",
+    expect.objectContaining({ name: "新科研课题" })
+  );
+  expect(mocks.fetchResearchProjects).toHaveBeenLastCalledWith("lab", { per_page: "50", workflow_status: "ACTIVE" });
+});
+
+it("非负责人且非科研管理员看不到编辑齿轮", async () => {
+  mocks.projects = [
+    {
+      id: "project-1",
+      name: "他人课题",
+      identifier: "OTHER",
+      archived_at: null,
+      is_research_project: true,
+      research: { owner: "user-2", workflow_status: "ACTIVE", research_type: "RESEARCH_PROJECT" },
+    },
+  ] as TResearchProject[];
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ResearchProjectList workspaceSlug="lab" currentUserId="user-1" />
+      </MemoryRouter>
+    )
+  );
+
+  expect(container.querySelector('[aria-label^="research.projects.edit："]')).toBeNull();
+});
+
+it("归档项目保留编辑入口而已删除项目隐藏", async () => {
+  mocks.projects = [
+    {
+      id: "project-archived",
+      name: "归档课题",
+      identifier: "ARCH",
+      archived_at: null,
+      is_research_project: true,
+      research: { owner: "user-1", workflow_status: "ARCHIVED", research_type: "RESEARCH_PROJECT" },
+    },
+    {
+      id: "project-deleted",
+      name: "删除课题",
+      identifier: "DEL",
+      archived_at: null,
+      is_research_project: true,
+      research: { owner: "user-1", workflow_status: "DELETED", research_type: "RESEARCH_PROJECT" },
+    },
+  ] as TResearchProject[];
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/chains?view=projects&workflow_status=DELETED"]}>
+        <ResearchProjectList workspaceSlug="lab" currentUserId="user-1" />
+      </MemoryRouter>
+    )
+  );
+
+  expect(container.querySelector('[aria-label="research.projects.edit：归档课题"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="research.projects.edit：删除课题"]')).toBeNull();
 });
 
 afterEach(async () => {

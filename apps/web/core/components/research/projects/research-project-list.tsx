@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { Settings, Trash2 } from "lucide-react";
 // plane imports
 import { RESEARCH_PROJECT_STATUS_LABELS, RESEARCH_PROJECT_TYPE_LABELS, RESEARCH_PROJECT_TYPES } from "@plane/constants";
 import type { TResearchProjectType } from "@plane/constants";
@@ -34,7 +34,7 @@ import {
 import { ResearchListState } from "@/components/research/common/research-list-state";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
-import { ResearchProjectCreateDialog } from "@/components/research/projects/research-project-create-dialog";
+import { ResearchProjectDialog } from "@/components/research/projects/research-project-create-dialog";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -49,6 +49,7 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
   const research = useResearch();
   const query = useResearchBrowseQuery();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<TResearchProject | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const statusFilter = query.get("workflow_status");
   const setStatusFilter = (value: string) => query.set("workflow_status", value);
@@ -214,11 +215,18 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
 
   return (
     <ResearchListSurface>
-      <ResearchProjectCreateDialog
+      <ResearchProjectDialog
         workspaceSlug={workspaceSlug}
         currentUserId={currentUserId}
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
+        isOpen={isCreateDialogOpen || Boolean(editingProject)}
+        project={editingProject}
+        onClose={() => {
+          setIsCreateDialogOpen(false);
+          setEditingProject(null);
+        }}
+        onUpdated={async () => {
+          await load();
+        }}
       />
       {errorKey && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">
@@ -354,6 +362,19 @@ export const ResearchProjectList = observer(function ResearchProjectList({ works
                         {t("research.nav.stages")}
                       </Link>
                     )}
+                    {(project.research?.owner === currentUserId || research.isResearchAdmin) &&
+                      project.research?.workflow_status !== "DELETED" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isUpdatingProject}
+                          title={t("research.projects.edit")}
+                          aria-label={`${t("research.projects.edit")}：${project.name}`}
+                          onClick={() => setEditingProject(project)}
+                        >
+                          <Settings className="size-4" />
+                        </Button>
+                      )}
                     {(project.research?.owner === currentUserId || research.isResearchAdmin) &&
                       (!["ARCHIVED", "DELETED"].includes(project.research?.workflow_status ?? "") ? (
                         <Button

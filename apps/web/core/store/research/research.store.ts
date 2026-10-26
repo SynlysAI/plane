@@ -313,6 +313,11 @@ export interface IResearchStore {
   deleteReportTemplate: (workspaceSlug: string, templateId: string) => Promise<void>;
   fetchResearchProjects: (workspaceSlug: string, params?: Record<string, string>) => Promise<TResearchProject[]>;
   createResearchProject: (workspaceSlug: string, payload: TResearchProjectCreatePayload) => Promise<TResearchProject>;
+  updateResearchProject: (
+    workspaceSlug: string,
+    projectId: string,
+    payload: Partial<TResearchProjectCreatePayload>
+  ) => Promise<TResearchProject>;
   archiveResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   deleteResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
   restoreResearchProject: (workspaceSlug: string, projectId: string) => Promise<void>;
@@ -755,6 +760,7 @@ export class ResearchStore implements IResearchStore {
       deleteReportTemplate: action,
       fetchResearchProjects: action,
       createResearchProject: action,
+      updateResearchProject: action,
       archiveResearchProject: action,
       deleteResearchProject: action,
       restoreResearchProject: action,
@@ -1531,6 +1537,18 @@ export class ResearchStore implements IResearchStore {
   createResearchProject = async (workspaceSlug: string, payload: TResearchProjectCreatePayload) => {
     const project = await this.projectService.createProject(workspaceSlug, payload);
     await this.fetchResearchProjects(workspaceSlug);
+    return project;
+  };
+
+  updateResearchProject = async (
+    workspaceSlug: string,
+    projectId: string,
+    payload: Partial<TResearchProjectCreatePayload>
+  ) => {
+    const project = await this.projectService.updateProject(workspaceSlug, projectId, payload);
+    runInAction(() => {
+      this.researchProjects[project.id] = project;
+    });
     return project;
   };
 
