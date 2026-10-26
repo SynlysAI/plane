@@ -29,11 +29,14 @@ export type TAgentMessageItem =
   | { kind: "decision"; key: string; label: string; seq: number }
   | { kind: "notice"; key: string; label: string; seq: number; tone: "error" | "info" };
 
-const PROCESS_REMOTE_TYPES = new Set([
+/** SD 运行生命周期的纯协议信号：不渲染为消息，只驱动回答块收束（真实方言见 §7 对照表）。 */
+const PROTOCOL_REMOTE_TYPES = new Set([
   "run.queued",
   "run.status",
   "run.started",
+  "run.history.truncated",
   "agent.phase",
+  "agent.record",
   "model.usage",
   "subagent.updated",
   "subagent.step",
@@ -42,6 +45,7 @@ const PROCESS_REMOTE_TYPES = new Set([
   "assistant.response.settled",
 ]);
 const TOOL_OUTPUT_KEYS = ["chunk", "output", "result", "text", "content"];
+const TOOL_RESULT_KEYS = ["stdout", "output", "text", "content"];
 
 /** 读取事件的远端原始类型（SD 事件方言）。 */
 function eventRemoteType(event: TAgentRunEvent) {
@@ -133,18 +137,58 @@ export function researchAgentSessionState(session: TResearchAgentSession): TRese
   return "ready";
 }
 
+/** 提取工具卡可读输出：优先顶层增量字段，回落到 trace.details.result 的标准输出。 */
+function toolTraceOutput(payload: Record<string, unknown>, details: Record<string, unknown>) {
+  const direct = agentPayloadText(payload, TOOL_OUTPUT_KEYS);
+  if (direct) return direct;
+  const result = details.result;
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object") {
+    const record = result as Record<string, unknown>;
+    const stdout = agentPayloadText(record, TOOL_RESULT_KEYS);
+    if (stdout) return stdout;
+    try {
+      return JSON.stringify(record).slice(0, 2000);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 /**
- * 把原始事件流合并为聊天式消息条目（delta 拼接、completed 替换、工具归并）。
+ * 把原始事件流合并为聊天式消息条目（delta 拼接、终态替换、工具归并）。
  *
  * Args:
  *   events: 按 seq 排序的 Agent 运行事件。
+ *   localUserText: 本浏览器会话内「seq → 用户明文」回显表。服务端按保密契约只存
+ *     content_hash，明文仅在前端发送时暂存，刷新后回退为 `#序号`。
  *
  * Returns:
  *   分层消息条目数组（用户气泡 / AI 正文 / 思考 / 过程行 / 工具卡 / 产物卡 / 审批卡）。
  */
-export function mergeAgentMessages(events: TAgentRunEvent[]): TAgentMessageItem[] {
+export function mergeAgentMessages(
+  events: TAgentRunEvent[],
+  localUserText?: Record<number, string>
+): TAgentMessageItem[] {
   const items: TAgentMessageItem[] = [];
   const narrative = (event: TAgentRunEvent, keys: string[]) => agentPayloadText(event.payload, keys);
+  // 同一 toolCallId 的 started/output/completed 归并到同一张卡，即使中间夹了其他事件。
+  const toolIndex = new Map<string, number>();
+  // 本轮（最近一条用户消息之后）最后一个回答块下标；协议事件与思考行不阻断查找。
+  const currentTurnAssistantIndex = () => {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (item.kind === "assistant") return index;
+      if (item.kind === "user") return -1;
+    }
+    return -1;
+  };
+  const settleAssistant = () => {
+    const index = currentTurnAssistantIndex();
+    const target = index >= 0 ? items[index] : undefined;
+    if (target?.kind === "assistant") items[index] = { ...target, streaming: false };
+  };
 
   for (const event of events) {
     const rt = eventRemoteType(event);
@@ -154,18 +198,30 @@ export function mergeAgentMessages(events: TAgentRunEvent[]): TAgentMessageItem[
         items.push({
           kind: "user",
           key: `u-${event.seq}`,
-          text: narrative(event, ["content"]) || `#${event.seq}`,
+          text: narrative(event, ["content"]) || localUserText?.[event.seq] || `#${event.seq}`,
           seq: event.seq,
         });
         break;
       }
       case "OUTPUT": {
-        const text =
-          rt === "run.completed" ? narrative(event, ["content"]) : narrative(event, ["content", "delta", "text"]);
-        if (!text) break;
-        if (rt === "run.completed" && last?.kind === "assistant" && last.streaming) {
+        const terminal = rt === "run.completed";
+        const snapshot = rt === "assistant.snapshot";
+        const text = terminal ? narrative(event, ["content"]) : narrative(event, ["content", "delta", "text"]);
+        if (!text) {
+          // 终态即使无正文也要熄灭流式光标。
+          if (terminal) settleAssistant();
+          break;
+        }
+        const assistantIndex = currentTurnAssistantIndex();
+        const currentAssistant = assistantIndex >= 0 ? items[assistantIndex] : undefined;
+        if (terminal && currentAssistant?.kind === "assistant") {
           // 终态全文替换本轮流式累积，避免同一段回答重复出现。
-          items[items.length - 1] = { ...last, text, streaming: false, seq: event.seq };
+          items[assistantIndex] = { ...currentAssistant, text, streaming: false, seq: event.seq };
+        } else if (terminal) {
+          items.push({ kind: "assistant", key: `a-${event.seq}`, text, seq: event.seq, streaming: false });
+        } else if (snapshot && currentAssistant?.kind === "assistant" && currentAssistant.streaming) {
+          // 快照是当前全量状态，直接覆盖而非追加。
+          items[assistantIndex] = { ...currentAssistant, text };
         } else if (last?.kind === "assistant" && last.streaming) {
           items[items.length - 1] = { ...last, text: last.text + text };
         } else {
@@ -174,7 +230,7 @@ export function mergeAgentMessages(events: TAgentRunEvent[]): TAgentMessageItem[
             key: `a-${event.seq}`,
             text,
             seq: event.seq,
-            streaming: rt !== "run.completed",
+            streaming: true,
           });
         }
         break;
@@ -182,13 +238,14 @@ export function mergeAgentMessages(events: TAgentRunEvent[]): TAgentMessageItem[
       case "AI_ACTION": {
         const thinking = rt.startsWith("assistant.thinking");
         const text = narrative(event, ["reasoning", "delta", "content", "summary", "message", "text"]);
-        if (thinking && text && last?.kind === "thinking") {
+        if (rt === "assistant.response.settled") {
+          // 回答本轮已收束：熄灭光标，不渲染任何标识。
+          settleAssistant();
+        } else if (thinking && text && last?.kind === "thinking") {
           items[items.length - 1] = { ...last, text: last.text + text };
         } else if (thinking && text) {
           items.push({ kind: "thinking", key: `t-${event.seq}`, text, seq: event.seq });
-        } else if (PROCESS_REMOTE_TYPES.has(rt) && !text) {
-          items.push({ kind: "process", key: `p-${event.seq}`, label: rt, seq: event.seq });
-        } else if (text) {
+        } else if (text && !PROTOCOL_REMOTE_TYPES.has(rt)) {
           items.push({ kind: "process", key: `p-${event.seq}`, label: text.slice(0, 120), seq: event.seq });
         }
         break;
@@ -199,26 +256,29 @@ export function mergeAgentMessages(events: TAgentRunEvent[]): TAgentMessageItem[
           break;
         }
         const trace = (event.payload.trace ?? {}) as Record<string, unknown>;
+        const details = (trace.details ?? {}) as Record<string, unknown>;
         const name = narrative(event, ["tool_name", "name"]) || String(trace.name ?? trace.toolName ?? "") || "tool";
-        const output = narrative(event, TOOL_OUTPUT_KEYS);
+        const output = toolTraceOutput(event.payload, details);
+        // SD 方言的状态在 trace.status / trace.details.state，旧方言在顶层 status。
+        const status = agentToolStatus({
+          ...event.payload,
+          status: event.payload.status ?? trace.status ?? details.state,
+        });
         const toolId = String(
           trace.toolCallId ?? trace.id ?? event.payload.tool_call_id ?? event.payload.toolCallId ?? ""
         );
-        if (toolId && last?.kind === "tool" && last.key === `tool-${toolId}`) {
-          items[items.length - 1] = {
-            ...last,
-            output: output ? last.output + output : last.output,
-            status: agentToolStatus(event.payload),
+        const key = `tool-${toolId || event.seq}`;
+        const index = toolIndex.get(key);
+        const target = index === undefined ? undefined : items[index];
+        if (target?.kind === "tool") {
+          items[index] = {
+            ...target,
+            output: output ? `${target.output}${output}` : target.output,
+            status,
           };
         } else {
-          items.push({
-            kind: "tool",
-            key: `tool-${toolId || event.seq}`,
-            name,
-            status: agentToolStatus(event.payload),
-            output,
-            seq: event.seq,
-          });
+          items.push({ kind: "tool", key, name, status, output, seq: event.seq });
+          toolIndex.set(key, items.length - 1);
         }
         break;
       }
