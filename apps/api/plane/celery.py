@@ -30,6 +30,10 @@ app.conf.beat_schedule = {
         "task": "plane.bgtasks.asset_preview_task.cleanup_asset_previews",
         "schedule": crontab(hour=4, minute=15),
     },
+    "generate-unified-inbox-reminders": {
+        "task": "plane.bgtasks.inbox_reminder_task.generate_workspace_inbox_reminders",
+        "schedule": crontab(minute="*/30"),
+    },
     # Intra day recurring jobs
     "check-every-five-minutes-to-send-email-notifications": {
         "task": "plane.bgtasks.email_notification_task.stack_email_notification",

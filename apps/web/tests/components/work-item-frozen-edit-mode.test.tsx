@@ -2,6 +2,7 @@
 import React, { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { EditorRefApi } from "@plane/editor";
 
 const captured = vi.hoisted(() => ({
   attachmentsDisabled: null as boolean | null,
@@ -24,7 +25,9 @@ vi.mock("@/components/editor/rich-text/description-input", () => ({
     return <div data-testid="description" />;
   },
 }));
-vi.mock("@/components/core/description-versions", () => ({ DescriptionVersionsRoot: () => <div /> }));
+vi.mock("@/components/core/description-versions", () => ({
+  DescriptionVersionsRoot: () => <div data-testid="description-versions" />,
+}));
 vi.mock("@/components/issues/issue-type-switcher", () => ({ IssueTypeSwitcher: () => <div /> }));
 vi.mock("@/components/issues/title-input", () => ({
   IssueTitleInput: (props: { disabled: boolean }) => {
@@ -33,7 +36,9 @@ vi.mock("@/components/issues/title-input", () => ({
   },
 }));
 vi.mock("@/components/issues/issue-detail/parent", () => ({ IssueParentDetail: () => <div /> }));
-vi.mock("@/components/issues/issue-detail/reactions", () => ({ IssueReaction: () => <div /> }));
+vi.mock("@/components/issues/issue-detail/reactions", () => ({
+  IssueReaction: () => <div data-testid="issue-reaction" />,
+}));
 vi.mock("@/components/issues/issue-detail/issue-activity", () => ({ IssueActivity: () => <div /> }));
 vi.mock("@/components/issues/issue-detail-widgets", () => ({
   IssueDetailWidgets: (props: { attachmentDisabled?: boolean; disabled: boolean }) => {
@@ -62,12 +67,12 @@ vi.mock("@/hooks/store/use-issue-detail", () => ({
   }),
 }));
 vi.mock("@/hooks/store/use-member", () => ({ useMember: () => ({ getUserDetails: () => null }) }));
-vi.mock("@/hooks/store/user", () => ({ useUser: () => ({ data: { id: "user-1" } }) }));
 vi.mock("@/hooks/use-reload-confirmation", () => ({ default: () => ({ setShowAlert: vi.fn() }) }));
 vi.mock("@/hooks/use-window-size", () => ({ default: () => [500, 900] }));
 vi.mock("@/services/issue", () => ({ WorkItemVersionService: vi.fn() }));
 
 const { IssueMainContent } = await import("@/components/issues/issue-detail/main-content");
+const { PeekOverviewIssueDetails } = await import("@/components/issues/peek-overview/issue-detail");
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -95,6 +100,31 @@ function Harness(props: { isArchived?: boolean; isEditable: boolean }) {
 
 function renderMainContent(isEditable: boolean, isArchived = false) {
   root.render(<Harness isEditable={isEditable} isArchived={isArchived} />);
+}
+
+/** Render the peek work-item detail harness with local edit state. */
+function PeekHarness(props: { disabled?: boolean; isArchived?: boolean }) {
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  return (
+    <PeekOverviewIssueDetails
+      editorRef={{ current: null } as React.RefObject<EditorRefApi | null>}
+      workspaceSlug="ws"
+      issueId="issue-1"
+      issueOperations={issueOperations}
+      disabled={props.disabled ?? false}
+      isArchived={props.isArchived ?? false}
+      isSubmitting="saved"
+      setIsSubmitting={vi.fn()}
+      isEditMode={isEditMode}
+      onToggleEditMode={setIsEditMode}
+    />
+  );
+}
+
+/** Render the peek detail view with the supplied access state. */
+function renderPeekDetails(props: { disabled?: boolean; isArchived?: boolean } = {}) {
+  root.render(<PeekHarness {...props} />);
 }
 
 beforeEach(() => {
@@ -160,4 +190,16 @@ it("keeps mobile properties disabled for archived work items", async () => {
   expect(captured.propertiesDisabled).toBe(true);
   expect(captured.widgetsDisabled).toBe(true);
   expect(captured.attachmentsDisabled).toBe(true);
+});
+
+it("hides issue reactions under the description in detail and peek views", async () => {
+  await act(async () => renderMainContent(true));
+
+  expect(container.querySelector('[data-testid="issue-reaction"]')).toBeNull();
+  expect(container.querySelector('[data-testid="description-versions"]')).not.toBeNull();
+
+  await act(async () => renderPeekDetails());
+
+  expect(container.querySelector('[data-testid="issue-reaction"]')).toBeNull();
+  expect(container.querySelector('[data-testid="description-versions"]')).not.toBeNull();
 });

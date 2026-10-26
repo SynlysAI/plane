@@ -19,7 +19,6 @@ import { DescriptionInput } from "@/components/editor/rich-text/description-inpu
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
-import { useUser } from "@/hooks/store/user";
 import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 import useSize from "@/hooks/use-window-size";
 // services
@@ -31,7 +30,6 @@ import { PeekOverviewProperties } from "../peek-overview/properties";
 import { IssueTitleInput } from "../title-input";
 import { IssueActivity } from "./issue-activity";
 import { IssueParentDetail } from "./parent";
-import { IssueReaction } from "./reactions";
 import type { TIssueOperations } from "./root";
 // services init
 const workItemVersionService = new WorkItemVersionService();
@@ -57,7 +55,6 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
   const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
   // hooks
   const windowSize = useSize();
-  const { data: currentUser } = useUser();
   const { getUserDetails } = useMember();
   const {
     issue: { getIssueById },
@@ -163,17 +160,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          {currentUser && (
-            <IssueReaction
-              className="flex-shrink-0"
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              issueId={issueId}
-              currentUser={currentUser}
-              disabled={isArchived}
-            />
-          )}
+        <div className="flex items-center justify-end gap-2">
           {isEditable && (
             <DescriptionVersionsRoot
               className="flex-shrink-0"

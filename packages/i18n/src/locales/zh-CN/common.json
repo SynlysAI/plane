@@ -1664,7 +1664,8 @@
       "completed_at": "完成时间",
       "close": "关闭",
       "view_details": "查看详情",
-      "add_instruction": "点击添加描述",
+      "add_instruction": "添加任务说明…",
+      "instruction_empty": "暂无任务说明",
       "add_assignee": "添加责任人",
       "add_due_at": "添加截止时间",
       "activity": "活动",
@@ -1781,6 +1782,10 @@
       "materials_title": "课题资料",
       "add_material": "新增资料",
       "upload_file": "上传",
+      "select_material": "选择资料",
+      "reselect_file": "重新选择",
+      "start_upload": "开始上传",
+      "download_material": "下载资料",
       "reasons": {
         "not_configured": "服务尚未配置",
         "unauthorized": "认证失败",
@@ -1966,6 +1971,10 @@
         "title": "报告已提交",
         "message": "报告已进入待评审状态，正文和历史记录已刷新。"
       },
+      "report_withdrawn": {
+        "title": "报告已撤回",
+        "message": "报告已回到草稿并退出审核队列，可以继续编辑后重新提交。"
+      },
       "report_returned": {
         "title": "报告已退回",
         "message": "报告已进入需修改状态，作者可以根据退回原因继续修订。"
@@ -1981,6 +1990,14 @@
       "report_created": {
         "title": "报告已创建",
         "message": "正在打开报告详情，你可以继续填写正文。"
+      },
+      "report_deleted": {
+        "title": "报告已移入已删除列表",
+        "message": "报告、正文、关联课题和附件已保留，可在已删除报告中恢复。"
+      },
+      "report_restored": {
+        "title": "报告已恢复",
+        "message": "正在打开报告详情，可以继续编辑或提交。"
       },
       "project_created": {
         "title": "科研项目已创建",
@@ -2303,6 +2320,11 @@
       "create": "创建报告",
       "team_projects": "关联团队课题（{count}）",
       "mine_only": "仅看我的",
+      "deleted_title": "已删除报告",
+      "deleted_scope": "已删除",
+      "deleted_status": "已删除",
+      "restore": "恢复",
+      "confirm_delete_restorable": "报告删除后会移入已删除列表，正文、关联课题和附件会保留，后续可以恢复。",
       "all_statuses": "全部状态",
       "all_types": "全部类型",
       "all_org_units": "全部组织节点",
@@ -2317,6 +2339,12 @@
       },
       "empty": "没有符合条件的报告",
       "submit": "提交",
+      "withdraw": "撤回重新编辑",
+      "withdraw_title": "撤回这份报告？",
+      "withdraw_hint": "报告将回到草稿并退出审核队列；已提交版本、已读记录、评论和审核历史会保留，重新提交会生成新版本。",
+      "withdraw_reason": "撤回原因（选填）",
+      "withdraw_placeholder": "说明需要修改的内容",
+      "history_withdraw": "撤回",
       "return": "退回",
       "accept": "验收",
       "open_body": "打开正文",

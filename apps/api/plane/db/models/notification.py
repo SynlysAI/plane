@@ -111,6 +111,57 @@ class Notification(BaseModel):
         return f"{self.receiver.email} <{self.workspace.name}>"
 
 
+class InboxTodoState(BaseModel):
+    """Store per-user presentation state for dynamically projected todos."""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        related_name="inbox_todo_states",
+        on_delete=models.CASCADE,
+    )
+    receiver = models.ForeignKey(
+        "db.User",
+        related_name="inbox_todo_states",
+        on_delete=models.CASCADE,
+    )
+    source = models.CharField(max_length=64)
+    object_id = models.CharField(max_length=255)
+    dedupe_key = models.CharField(max_length=512)
+    payload_hash = models.CharField(max_length=128)
+    read_at = models.DateTimeField(null=True)
+    archived_at = models.DateTimeField(null=True)
+    snoozed_till = models.DateTimeField(null=True)
+    last_seen_at = models.DateTimeField(null=True)
+    last_reminder_key = models.CharField(max_length=255, blank=True, default="")
+    last_reminder_at = models.DateTimeField(null=True)
+
+    class Meta:
+        verbose_name = "Inbox Todo State"
+        verbose_name_plural = "Inbox Todo States"
+        db_table = "inbox_todo_states"
+        ordering = ("-updated_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "receiver", "source", "object_id"],
+                name="inbox_todo_state_unique_item",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["workspace", "receiver", "read_at"],
+                name="inbox_todo_state_read_idx",
+            ),
+            models.Index(
+                fields=["workspace", "receiver", "archived_at", "snoozed_till"],
+                name="inbox_todo_state_state_idx",
+            ),
+        ]
+
+    def __str__(self):
+        """Return the receiver and stable todo identifier."""
+        return f"{self.receiver.email} <{self.dedupe_key}>"
+
+
 def get_default_preference():
     return {
         "property_change": {"email": True},

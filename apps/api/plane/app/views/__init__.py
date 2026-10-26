@@ -236,6 +236,13 @@ from .notification.base import (
     UserNotificationPreferenceEndpoint,
 )
 
+from .notification.inbox import (
+    InboxItemActionEndpoint,
+    InboxListEndpoint,
+    InboxMarkAllReadEndpoint,
+    InboxUnreadEndpoint,
+)
+
 from .exporter.base import ExportIssuesEndpoint
 
 

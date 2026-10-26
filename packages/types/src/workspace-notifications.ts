@@ -124,3 +124,82 @@ export type TNotificationLite = {
   issue_id: string | undefined;
   is_inbox_issue: boolean | undefined;
 };
+
+// unified inbox
+export type TInboxActor = {
+  id: string;
+  display_name: string;
+  avatar_url: string | null | undefined;
+};
+
+export type TInboxItemKind = "notification" | "todo" | "reminder" | "system";
+
+export type TInboxItemCategory = "mention" | "todo" | "approval" | "review" | "work_item" | "system";
+
+export type TInboxUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
+
+export type TInboxItem = {
+  id: string;
+  schema_version: "inbox.v1";
+  kind: TInboxItemKind;
+  category: TInboxItemCategory;
+  source: string;
+  object_id: string;
+  entity_name: string;
+  entity_identifier: string | undefined;
+  dedupe_key: string;
+  title: string;
+  summary: string | undefined;
+  actor: TInboxActor | undefined;
+  action: string | undefined;
+  route: string | undefined;
+  due_at: string | undefined;
+  urgency: TInboxUrgency | undefined;
+  status: string | undefined;
+  business_status: string | undefined;
+  handling_status: string | undefined;
+  next_action: string | undefined;
+  created_at: string;
+  updated_at: string;
+  read_at: string | undefined;
+  archived_at: string | undefined;
+  snoozed_till: string | undefined;
+};
+
+export type TInboxTab = "all" | "mentions" | "todos" | "approvals" | "reviews" | "system";
+
+export type TInboxListParams = {
+  tab?: TInboxTab;
+  read?: "all" | "true" | "false";
+  archived?: boolean;
+  snoozed?: boolean;
+  per_page?: number;
+  cursor?: string;
+};
+
+export type TInboxUnreadCounts = {
+  total_unread_count: number;
+  mention_unread_count: number;
+  todo_unread_count: number;
+  approval_unread_count: number;
+  review_unread_count: number;
+  work_item_unread_count: number;
+  system_unread_count: number;
+};
+
+export type TInboxActionResponse = {
+  schema_version: "inbox.v1";
+  results: TInboxItem[];
+  unread_counts: TInboxUnreadCounts;
+  degraded_sources: string[];
+};
+
+export type TInboxPaginatedInfo = {
+  schema_version: "inbox.v1";
+  results: TInboxItem[];
+  count: number;
+  total_count: number;
+  next_cursor: string | undefined;
+  unread_counts: TInboxUnreadCounts;
+  degraded_sources: string[];
+};

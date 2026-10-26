@@ -4,17 +4,16 @@
  * See the LICENSE file for details.
  */
 
-import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // components
 import { PageHead } from "@/components/core/page-title";
-import { NotificationsRoot } from "@/components/workspace-notifications";
+import { InboxDetail } from "@/components/inbox";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import type { Route } from "./+types/page";
 
-function WorkspaceDashboardPage({ params }: Route.ComponentProps) {
+function WorkspaceInboxPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
   // plane hooks
   const { t } = useTranslation();
@@ -28,9 +27,9 @@ function WorkspaceDashboardPage({ params }: Route.ComponentProps) {
   return (
     <>
       <PageHead title={pageTitle} />
-      <NotificationsRoot workspaceSlug={workspaceSlug} />
+      <InboxDetail workspaceSlug={workspaceSlug} />
     </>
   );
 }
 
-export default observer(WorkspaceDashboardPage);
+export default WorkspaceInboxPage;
