@@ -82,6 +82,19 @@ class IntegrationResult:
         return payload
 
 
+@dataclass(frozen=True)
+class IntegrationFileResult:
+    """Binary integration response without exposing transport credentials."""
+
+    content: bytes = b""
+    content_type: str = ""
+    degraded: bool = False
+    degraded_reason: str = ""
+    status_code: int | None = None
+    latency_ms: int | None = None
+    request_id: str = ""
+
+
 def resolve_secret(connection):
     """Read the shared credential stored on the connection, never from the client."""
     if connection is None:
@@ -268,7 +281,8 @@ class BaseIntegrationClient:
             request_kwargs = {
                 "params": params or {},
                 "headers": self.request_headers(path=path, query=query, request=request),
-                "timeout": self.timeout_seconds,
+                # 原文件可能达到上传上限，避免沿用元数据接口的短超时。
+                "timeout": max(self.timeout_seconds, 60.0),
                 "follow_redirects": True,
             }
             if data is not None:
@@ -365,6 +379,133 @@ class BaseIntegrationClient:
                 degraded=True,
                 reason=error_code,
                 latency_ms=latency_ms,
+            )
+
+    def request_file(self, *, path, params=None, operation=None, request=None):
+        """Perform one bounded binary GET and return a file result envelope.
+
+        Args:
+            path: External system path beginning with a slash.
+            params: Query parameters required by the external authorization scope.
+            operation: Stable operation name used by integration logs.
+            request: Current Django request for request-id propagation.
+
+        Returns:
+            A binary result; callers must still validate size and content.
+        """
+        operation = operation or self.operation
+        request_id = uuid.uuid4().hex
+        incoming_id = getattr(request, "headers", None) and (
+            request.headers.get("X-Research-Request-Id")
+            or request.headers.get("X-Request-Id")
+            or request.headers.get("Idempotency-Key")
+        )
+        if incoming_id:
+            request_id = incoming_id
+
+        if self.connection is None:
+            self._log(
+                operation=operation,
+                outcome="DEGRADED",
+                request_id=request_id,
+                error_code=IntegrationErrorCode.NOT_CONFIGURED,
+            )
+            return IntegrationFileResult(
+                degraded=True,
+                degraded_reason=IntegrationErrorCode.NOT_CONFIGURED,
+                request_id=request_id,
+            )
+        if not self.connection.is_enabled:
+            self._log(
+                operation=operation,
+                outcome="DEGRADED",
+                request_id=request_id,
+                error_code=IntegrationErrorCode.DISABLED,
+            )
+            return IntegrationFileResult(
+                degraded=True,
+                degraded_reason=IntegrationErrorCode.DISABLED,
+                request_id=request_id,
+            )
+
+        url = f"{self.connection.base_url.rstrip('/')}{path}"
+        query = "&".join(f"{key}={value}" for key, value in sorted((params or {}).items()))
+        started = time.monotonic()
+        try:
+            import httpx
+
+            response = None
+            max_attempts = int(getattr(settings, "RESEARCH_INTEGRATION_MAX_RETRIES", 2)) + 1
+            request_kwargs = {
+                "params": params or {},
+                "headers": self.request_headers(path=path, query=query, request=request),
+                "timeout": self.timeout_seconds,
+                "follow_redirects": True,
+            }
+            for attempt in range(max_attempts):
+                response = httpx.get(url, **request_kwargs)
+                if response.status_code not in (429, 500, 502, 503, 504) or attempt == max_attempts - 1:
+                    break
+                time.sleep(min(0.05 * (attempt + 1), 0.2))
+            latency_ms = int((time.monotonic() - started) * 1000)
+            if response.status_code >= 400:
+                error_code = {
+                    401: IntegrationErrorCode.UNAUTHORIZED,
+                    403: IntegrationErrorCode.UNAUTHORIZED,
+                    404: IntegrationErrorCode.NOT_FOUND,
+                    429: IntegrationErrorCode.RATE_LIMITED,
+                }.get(response.status_code, IntegrationErrorCode.HTTP_ERROR)
+                self._log(
+                    operation=operation,
+                    outcome="FAILED",
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    latency_ms=latency_ms,
+                    error_code=error_code,
+                )
+                self._mark_health(ok=False, error=IntegrationErrorCode.HTTP_ERROR)
+                return IntegrationFileResult(
+                    degraded=True,
+                    degraded_reason=error_code,
+                    status_code=response.status_code,
+                    latency_ms=latency_ms,
+                    request_id=request_id,
+                )
+            self._log(
+                operation=operation,
+                outcome="SUCCESS",
+                request_id=request_id,
+                status_code=response.status_code,
+                latency_ms=latency_ms,
+            )
+            self._mark_health(ok=True)
+            return IntegrationFileResult(
+                content=response.content,
+                content_type=response.headers.get("content-type", "application/octet-stream"),
+                status_code=response.status_code,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        except Exception as exc:
+            latency_ms = int((time.monotonic() - started) * 1000)
+            error_code = (
+                IntegrationErrorCode.TIMEOUT
+                if "Timeout" in exc.__class__.__name__ or "timeout" in str(exc).lower()
+                else IntegrationErrorCode.TRANSPORT_ERROR
+            )
+            self._log(
+                operation=operation,
+                outcome="DEGRADED",
+                request_id=request_id,
+                latency_ms=latency_ms,
+                error_code=error_code,
+            )
+            self._mark_health(ok=False, error=error_code)
+            return IntegrationFileResult(
+                degraded=True,
+                degraded_reason=error_code,
+                latency_ms=latency_ms,
+                request_id=request_id,
             )
 
     def _mark_health(self, *, ok, error=""):

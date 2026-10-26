@@ -9,9 +9,10 @@ type Props = {
   name: string;
   onDelete: () => Promise<void>;
   disabled?: boolean;
+  confirmMessage?: string;
 };
 
-export function ResearchDeleteButton({ name, onDelete, disabled = false }: Props) {
+export function ResearchDeleteButton({ name, onDelete, disabled = false, confirmMessage }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -39,7 +40,9 @@ export function ResearchDeleteButton({ name, onDelete, disabled = false }: Props
       <ModalCore isOpen={open} handleClose={close}>
         <div className="mx-auto w-full max-w-md rounded-md bg-surface-1 p-5">
           <h3 className="text-16 font-semibold text-primary">{label}</h3>
-          <p className="mt-3 text-13 break-words text-secondary">{t("research.deletion.confirm", { name })}</p>
+          <p className="mt-3 text-13 break-words text-secondary">
+            {confirmMessage ?? t("research.deletion.confirm", { name })}
+          </p>
           {error && (
             <p role="alert" className="mt-3 text-13 text-danger-primary">
               {error}

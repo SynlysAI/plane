@@ -3,8 +3,11 @@
 import hashlib
 import os
 from uuid import UUID
+from urllib.parse import quote
 
+from django.conf import settings
 from django.utils import timezone
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -36,6 +39,8 @@ from plane.research.views.chain_foundation import (
     _node_operator,
     _visible_chain,
 )
+from plane.preview.service import PERMANENT_ERRORS, PreviewError, file_kind, get_chain_upload_preview
+from plane.preview.content import stream_preview_content
 
 ALLOWED_UPLOAD_EXTENSIONS = frozenset({"pdf", "md", "markdown", "txt", "doc", "docx"})
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -145,6 +150,25 @@ def _knowledge_base_payload(chain, scope, workspace):
     return payload
 
 
+def _visible_upload(workspace, user, chain_id, upload_id):
+    """Resolve one upload only through the caller's visible research chain.
+
+    Args:
+        workspace: Workspace resolved from the URL.
+        user: Authenticated caller.
+        chain_id: Research chain id from the URL.
+        upload_id: Upload projection id from the URL.
+
+    Returns:
+        A ``(chain, upload)`` tuple; either side may be ``None`` on denial.
+    """
+    chain = _visible_chain(workspace, user, chain_id)
+    if chain is None:
+        return None, None
+    upload = chain.uploads.select_related("workspace", "chain", "node").filter(pk=upload_id).first()
+    return chain, upload
+
+
 def _event_id(request_id, kind):
     """Build a bounded deterministic event id for a BFF write."""
     return payload_hash({"request_id": request_id, "kind": kind})
@@ -202,7 +226,7 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
         chain = _visible_chain(workspace, request.user, chain_id)
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
-        uploads = chain.uploads.order_by("-created_at")
+        uploads = chain.uploads.select_related("workspace").order_by("-created_at")
         node_id = str(request.query_params.get("node_id") or "").strip()
         if node_id:
             uploads = uploads.filter(node_id=node_id)
@@ -480,7 +504,7 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
         if chain is None:
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research chain not found.")
         try:
-            upload = chain.uploads.get(pk=UUID(str(upload_id)))
+            upload = chain.uploads.select_related("workspace").get(pk=UUID(str(upload_id)))
         except (ResearchChainUpload.DoesNotExist, TypeError, ValueError):
             return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research upload not found.")
         if _chain_readonly_error(chain) is not None or not _chain_writer(workspace, request.user, chain):
@@ -524,6 +548,111 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
                 **({"degraded_reason": result.degraded_reason} if degraded else {}),
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class ResearchChainUploadDownloadEndpoint(ResearchAPIView):
+    """Proxy one externally stored research upload after Plane ACL checks."""
+
+    nav_capability = NAV_RESEARCH_CHAIN
+
+    def get(self, request, slug, chain_id, upload_id):
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        chain, upload = _visible_upload(workspace, request.user, chain_id, upload_id)
+        if chain is None or upload is None or not upload.knowledge_id:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research upload not found.")
+
+        client, _connection = _rag_client(workspace)
+        result = client.download_research_file(
+            knowledge_id=upload.knowledge_id,
+            chain_id=chain.id,
+            node_id=upload.node_id,
+            kb_id=upload.knowledge_base_id,
+            file_hash=upload.file_hash,
+            request=request,
+        )
+        if result.degraded:
+            return research_error(
+                ResearchErrorCode.UPSTREAM_DEGRADED,
+                "The research file source is temporarily unavailable.",
+                status.HTTP_502_BAD_GATEWAY,
+            )
+        if len(result.content) != upload.file_size or hashlib.sha256(result.content).hexdigest() != upload.file_hash:
+            return research_error(
+                ResearchErrorCode.UPSTREAM_DEGRADED,
+                "The research file source changed unexpectedly.",
+                status.HTTP_502_BAD_GATEWAY,
+            )
+        response = HttpResponse(
+            result.content,
+            content_type=result.content_type or "application/octet-stream",
+        )
+        response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(upload.file_name, safe='')}"
+        response["Cache-Control"] = "private, no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
+
+
+class ResearchChainUploadPreviewEndpoint(ResearchAPIView):
+    """Create, query, and stream previews for external research uploads."""
+
+    nav_capability = NAV_RESEARCH_CHAIN
+
+    def get(self, request, slug, chain_id, upload_id, content=False):
+        """Return preview status or the ready private payload."""
+        return self._respond(request, slug, chain_id, upload_id, content=content)
+
+    def post(self, request, slug, chain_id, upload_id, content=False):
+        """Create or retry a preview without mutating the external source."""
+        if content:
+            return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return self._respond(request, slug, chain_id, upload_id, content=False, create=True)
+
+    def _respond(self, request, slug, chain_id, upload_id, *, content=False, create=False):
+        """Apply the research-chain ACL and reuse the shared preview contract."""
+        if not settings.ATTACHMENT_PREVIEW_ENABLED:
+            return Response(
+                {"status": "unsupported", "error_code": "preview_disabled"}, status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        workspace, error = self.get_workspace(section="research_chain")
+        if error:
+            return error
+        chain, upload = _visible_upload(workspace, request.user, chain_id, upload_id)
+        if chain is None or upload is None or not upload.knowledge_id:
+            return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research upload not found.")
+        kind = file_kind(upload.file_name)
+        if kind == "unsupported":
+            return Response(
+                {"status": "unsupported", "kind": kind, "error_code": "", "retryable": False, "content_url": None}
+            )
+        try:
+            preview = get_chain_upload_preview(
+                upload,
+                create=create,
+                retry=bool(request.data.get("retry")) if create else False,
+            )
+        except PreviewError as error:
+            return Response(
+                {"status": "failed", "kind": kind, "error_code": str(error), "retryable": True},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if content:
+            if preview is None or preview.status != "ready":
+                return research_not_found(ResearchErrorCode.CHAIN_NOT_FOUND, "Research preview not found.")
+            return stream_preview_content(request, preview)
+        state = preview.status if preview else "pending"
+        return Response(
+            {
+                "status": state,
+                "kind": preview.kind if preview else kind,
+                "error_code": preview.error_code if preview else "",
+                "retryable": bool(preview and state == "failed" and preview.error_code not in PERMANENT_ERRORS),
+                "content_url": request.path.rstrip("/") + "/content/" if state == "ready" else None,
+            },
+            headers={"Cache-Control": "private, no-store"},
         )
 
 

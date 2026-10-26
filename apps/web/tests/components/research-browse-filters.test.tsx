@@ -23,23 +23,29 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 /** Render one real browse-filter control against the browser URL. */
-function Probe({ kind }: { kind: "reports" | "projects" | "outcomes" }) {
+function Probe({
+  kind,
+  includeDeleted = false,
+}: {
+  kind: "reports" | "projects" | "outcomes";
+  includeDeleted?: boolean;
+}) {
   const query = useResearchBrowseQuery();
   const location = useLocation();
   return (
     <>
-      <ResearchBrowseFilters workspaceSlug="lab" query={query} kind={kind} />
+      <ResearchBrowseFilters workspaceSlug="lab" query={query} kind={kind} includeDeleted={includeDeleted} />
       <output aria-label="URL">{location.search}</output>
     </>
   );
 }
 
 /** Render a probe with an explicit initial URL. */
-async function renderFilters(kind: "reports" | "projects" | "outcomes", initialEntry: string) {
+async function renderFilters(kind: "reports" | "projects" | "outcomes", initialEntry: string, includeDeleted = false) {
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={[initialEntry]}>
-        <Probe kind={kind} />
+        <Probe kind={kind} includeDeleted={includeDeleted} />
       </MemoryRouter>
     )
   );
@@ -88,4 +94,19 @@ it("项目范围切换写入新 scope 并清除游标", async () => {
   await select("owned");
   expect(url().get("scope")).toBe("owned");
   expect(url().has("cursor")).toBe(false);
+});
+
+it("普通报告范围可选择已删除，默认不暴露该范围", async () => {
+  await renderFilters("reports", "/lab/research/reports", false);
+  const hiddenScope = container.querySelector<HTMLSelectElement>('select[aria-label="范围"]');
+  expect(Array.from(hiddenScope?.options ?? []).some((option) => option.value === "deleted")).toBe(false);
+
+  await act(async () => root.render(null));
+  await renderFilters("reports", "/lab/research/reports?scope=deleted", true);
+  const scope = container.querySelector<HTMLSelectElement>('select[aria-label="范围"]');
+  expect(scope?.value).toBe("deleted");
+  expect(Array.from(scope?.options ?? []).some((option) => option.value === "deleted")).toBe(true);
+
+  await select("all");
+  expect(url().has("scope")).toBe(false);
 });

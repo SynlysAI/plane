@@ -82,6 +82,8 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     can_edit = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
     can_review = serializers.SerializerMethodField()
+    can_restore = serializers.SerializerMethodField()
+    can_withdraw = serializers.SerializerMethodField()
     effective_visibility = serializers.SerializerMethodField()
     weekly_confidential = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
@@ -125,9 +127,12 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             "reviewer",
             "created_at",
             "updated_at",
+            "deleted_at",
             "can_edit",
             "can_delete",
             "can_review",
+            "can_restore",
+            "can_withdraw",
             "attachment_count",
             "latest_official_version",
             "has_read",
@@ -153,7 +158,11 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request is None:
             return False
-        return bool(obj.owner_id == request.user.id and obj.status in ("DRAFT", "NEEDS_REVISION"))
+        return bool(
+            obj.deleted_at is None
+            and obj.owner_id == request.user.id
+            and obj.status in ("DRAFT", "NEEDS_REVISION")
+        )
 
     def get_can_review(self, obj):
         context = self.context.get("actor_context")
@@ -164,6 +173,8 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request is None:
             return False
+        if obj.deleted_at is not None:
+            return False
         return check_access(
             request.user,
             "review",
@@ -173,7 +184,28 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
 
     def get_can_delete(self, obj):
         request = self.context.get("request")
-        return bool(request and obj.owner_id == request.user.id and obj.status == "DRAFT" and not obj.submitted_at)
+        return bool(
+            request
+            and obj.deleted_at is None
+            and obj.owner_id == request.user.id
+            and obj.status == "DRAFT"
+            and not obj.submitted_at
+        )
+
+    def get_can_restore(self, obj):
+        context = self.context.get("actor_context")
+        if context is None or obj.deleted_at is None:
+            return False
+        return bool(context.is_workspace_admin or obj.owner_id == context.user_id)
+
+    def get_can_withdraw(self, obj):
+        request = self.context.get("request")
+        return bool(
+            request
+            and obj.deleted_at is None
+            and obj.owner_id == request.user.id
+            and obj.status == "SUBMITTED"
+        )
 
     def get_attachment_count(self, obj):
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("attachments")
@@ -238,6 +270,8 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
 
     def get_official_content(self, obj):
         request = self.context.get("request")
+        if obj.submitted_at is None:
+            return None
         if request is None or obj.owner_id == request.user.id:
             return None
         snapshot = self._official_snapshot(obj)

@@ -89,7 +89,11 @@ export function ResearchChainWorkbenchPeek({
     const onPointer = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node) || panelRef.current?.contains(target)) return;
-      if (target instanceof Element && target.closest("[data-peek-trigger], [data-reason-dialog]")) return;
+      if (
+        target instanceof Element &&
+        target.closest("[data-peek-trigger], [data-reason-dialog], [data-prevent-outside-click]")
+      )
+        return;
       onClose();
     };
     document.addEventListener("keydown", onKey);

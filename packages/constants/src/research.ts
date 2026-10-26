@@ -788,8 +788,10 @@ export const researchEndpoints = {
   reportSubmit: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/submit/`,
   reportReturn: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/return/`,
   reportAccept: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/accept/`,
+  reportWithdraw: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/withdraw/`,
   reportHistory: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/history/`,
   reportRead: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/read/`,
+  reportRestore: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/restore/`,
   reportReadReceipts: (slug: string, reportId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/read-receipts/`,
   reportAccess: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/access/`,
@@ -809,6 +811,8 @@ export const researchEndpoints = {
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/attachments/${attachmentId}/`,
   reportImportMarkdown: (slug: string, reportId: string) =>
     `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/import-markdown/`,
+  reportExportMarkdown: (slug: string, reportId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/export-markdown/`,
   reportSummary: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/reports/summary/`,
   reportTemplates: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/report-templates/`,
   reportTemplateOptions: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/reports/template-options/`,

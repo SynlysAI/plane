@@ -1,6 +1,7 @@
 """附件预览状态、缓存与文件范围读取契约。"""
 
 import io
+import hashlib
 import json
 import zipfile
 from unittest.mock import patch
@@ -9,9 +10,22 @@ import pytest
 from django.test import TestCase, override_settings
 from pypdf import PdfWriter
 
-from plane.db.models import AssetPreview, FileAsset, Issue, Project, ProjectMember, State, User, WorkspaceMember
+from plane.db.models import (
+    AssetPreview,
+    FileAsset,
+    Issue,
+    Project,
+    ProjectMember,
+    ResearchChain,
+    ResearchChainNode,
+    ResearchChainUpload,
+    ResearchProjectProfile,
+    State,
+    User,
+    WorkspaceMember,
+)
 from plane.preview.access import preview_url, report_preview_url
-from plane.preview.service import get_preview, source_metadata
+from plane.preview.service import chain_upload_fingerprint, get_chain_upload_preview, get_preview, source_metadata
 from plane.preview.views import byte_range
 
 
@@ -115,6 +129,50 @@ def make_storage(metadata, content):
     storage.aws_storage_bucket_name = "uploads"
     storage.server_s3_client.get_object.return_value = {"Body": FakeBody(content)}
     return storage
+
+
+@pytest.fixture
+def research_upload(workspace, create_user):
+    """Create one externally stored research upload for preview tests."""
+    project = Project.objects.create(workspace=workspace, name="链路资料", identifier="CHAINPRE", network=0)
+    ResearchProjectProfile.objects.create(
+        project=project,
+        workspace=workspace,
+        owner=create_user,
+        created_by=create_user,
+    )
+    chain = ResearchChain.objects.create(
+        project=project,
+        workspace=workspace,
+        owner=create_user,
+        request_id="preview-chain",
+        payload_hash="preview-chain",
+        created_by=create_user,
+    )
+    node = ResearchChainNode.objects.create(
+        chain=chain,
+        node_type="LITERATURE_REVIEW",
+        title="文献调研",
+        request_id="preview-node",
+        payload_hash="preview-node",
+        created_by=create_user,
+    )
+    content = b"# paper\n"
+    return ResearchChainUpload.objects.create(
+        workspace=workspace,
+        chain=chain,
+        node=node,
+        request_id="preview-upload",
+        payload_hash="preview-upload",
+        knowledge_id="knowledge-preview",
+        knowledge_base_id="kb-preview",
+        file_name="paper.md",
+        file_type="md",
+        file_size=len(content),
+        file_hash=hashlib.sha256(content).hexdigest(),
+        status=ResearchChainUpload.Status.SUCCESS,
+        created_by=create_user,
+    )
 
 
 def test_preview_url_omits_unsupported_active_content(preview_asset):
@@ -227,3 +285,160 @@ def test_preview_task_converts_office_document_to_pdf(preview_asset):
     assert request_args[0].endswith("/forms/libreoffice/convert")
     assert request_kwargs["files"]["files"][0] == "document.docx"
     assert storage_class.return_value.server_s3_client.put_object.call_args.kwargs["Body"] == converted_bytes
+
+
+@pytest.mark.django_db
+def test_chain_upload_preview_reuses_one_record_and_enqueues_once(research_upload):
+    """同一研究链资料版本共享一个异步预览记录。"""
+    with (
+        patch("plane.bgtasks.asset_preview_task.build_asset_preview.delay") as delay,
+        TestCase.captureOnCommitCallbacks(execute=True),
+    ):
+        first = get_chain_upload_preview(research_upload, create=True)
+        second = get_chain_upload_preview(research_upload, create=True)
+    assert first.id == second.id
+    assert AssetPreview.objects.filter(chain_upload=research_upload).count() == 1
+    delay.assert_called_once()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("file_name", "expected_kind", "expected_content_type"),
+    [
+        ("paper.md", "markdown", "application/json"),
+        ("notes.markdown", "markdown", "application/json"),
+        ("notes.txt", "text", "application/json"),
+    ],
+)
+def test_chain_upload_preview_builds_read_only_text(research_upload, file_name, expected_kind, expected_content_type):
+    """Markdown 与文本课题资料直接生成前端只读 JSON。"""
+    content = "# paper\n".encode()
+    research_upload.file_name = file_name
+    research_upload.file_type = file_name.rsplit(".", 1)[-1]
+    research_upload.save(update_fields=["file_name", "file_type"])
+    preview = AssetPreview.objects.create(
+        chain_upload=research_upload,
+        fingerprint=chain_upload_fingerprint(research_upload),
+        converter_version="test",
+        kind=expected_kind,
+        status="pending",
+    )
+    with (
+        patch("plane.bgtasks.asset_preview_task.S3Storage") as storage_class,
+        patch("plane.bgtasks.asset_preview_task.read_chain_upload_source", return_value=content),
+    ):
+        from plane.bgtasks.asset_preview_task import build_asset_preview
+
+        build_asset_preview(str(preview.id), str(preview.attempt))
+        payload = storage_class.return_value.server_s3_client.put_object.call_args.kwargs["Body"]
+
+    preview.refresh_from_db()
+    assert preview.status == "ready"
+    assert preview.content_type == expected_content_type
+    assert json.loads(payload) == {"text": "# paper\n"}
+
+
+@pytest.mark.django_db
+def test_chain_upload_preview_rejects_changed_source_hash(research_upload):
+    """上游内容与 Plane 登记哈希不一致时预览失败且不写缓存。"""
+    preview = AssetPreview.objects.create(
+        chain_upload=research_upload,
+        fingerprint=chain_upload_fingerprint(research_upload),
+        converter_version="test",
+        kind="markdown",
+        status="pending",
+    )
+    with (
+        patch("plane.bgtasks.asset_preview_task.S3Storage") as storage_class,
+        patch("plane.bgtasks.asset_preview_task.read_chain_upload_source", return_value=b"changed\n"),
+    ):
+        from plane.bgtasks.asset_preview_task import build_asset_preview
+
+        build_asset_preview(str(preview.id), str(preview.attempt))
+
+    preview.refresh_from_db()
+    assert preview.status == "failed"
+    assert preview.error_code == "source_changed"
+    storage_class.return_value.server_s3_client.put_object.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_chain_upload_preview_caches_pdf(research_upload):
+    """PDF 课题资料校验后直接缓存原 PDF 供 PDF.js 读取。"""
+    writer = PdfWriter()
+    writer.add_blank_page(width=420, height=180)
+    output = io.BytesIO()
+    writer.write(output)
+    content = output.getvalue()
+    research_upload.file_name = "课题资料.pdf"
+    research_upload.file_type = "pdf"
+    research_upload.file_size = len(content)
+    research_upload.file_hash = hashlib.sha256(content).hexdigest()
+    research_upload.save(update_fields=["file_name", "file_type", "file_size", "file_hash"])
+    preview = AssetPreview.objects.create(
+        chain_upload=research_upload,
+        fingerprint=chain_upload_fingerprint(research_upload),
+        converter_version="test",
+        kind="pdf",
+        status="pending",
+    )
+    with (
+        patch("plane.bgtasks.asset_preview_task.S3Storage") as storage_class,
+        patch("plane.bgtasks.asset_preview_task.read_chain_upload_source", return_value=content),
+    ):
+        from plane.bgtasks.asset_preview_task import build_asset_preview
+
+        build_asset_preview(str(preview.id), str(preview.attempt))
+        payload = storage_class.return_value.server_s3_client.put_object.call_args.kwargs["Body"]
+
+    preview.refresh_from_db()
+    assert preview.status == "ready"
+    assert preview.content_type == "application/pdf"
+    assert payload == content
+
+
+@pytest.mark.django_db
+def test_chain_upload_preview_converts_office_document_to_pdf(research_upload):
+    """DOCX 课题资料复用现有转换服务并缓存私有 PDF。"""
+    office = io.BytesIO()
+    with zipfile.ZipFile(office, "w") as container:
+        container.writestr("[Content_Types].xml", "wordprocessingml.document.main+xml")
+        container.writestr("word/document.xml", "<w:document />")
+    content = office.getvalue()
+    research_upload.file_name = "课题资料.docx"
+    research_upload.file_type = "docx"
+    research_upload.file_size = len(content)
+    research_upload.file_hash = hashlib.sha256(content).hexdigest()
+    research_upload.save(update_fields=["file_name", "file_type", "file_size", "file_hash"])
+    research_upload.refresh_from_db()
+    assert research_upload.file_name == "课题资料.docx"
+    writer = PdfWriter()
+    writer.add_blank_page(width=420, height=180)
+    converted = io.BytesIO()
+    writer.write(converted)
+    converted_bytes = converted.getvalue()
+    preview = AssetPreview.objects.create(
+        chain_upload=research_upload,
+        fingerprint=chain_upload_fingerprint(research_upload),
+        converter_version="test",
+        kind="pdf",
+        status="pending",
+    )
+    with (
+        patch("plane.bgtasks.asset_preview_task.S3Storage") as storage_class,
+        patch("plane.bgtasks.asset_preview_task.read_chain_upload_source", return_value=content),
+        patch("plane.bgtasks.asset_preview_task.requests.post") as convert,
+    ):
+        from plane.bgtasks.asset_preview_task import build_asset_preview
+
+        convert.return_value = FakeConverterResponse(converted_bytes)
+        build_asset_preview(str(preview.id), str(preview.attempt))
+        request_args, request_kwargs = convert.call_args
+        payload = storage_class.return_value.server_s3_client.put_object.call_args.kwargs["Body"]
+
+    preview.refresh_from_db()
+    assert preview.status == "ready"
+    assert preview.content_type == "application/pdf"
+    assert request_args[0].endswith("/forms/libreoffice/convert")
+    assert request_kwargs["files"]["files"][0] == "document.docx"
+    assert payload == converted_bytes

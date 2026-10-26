@@ -47,11 +47,13 @@ export const ResearchBrowseFilters = observer(function ResearchBrowseFilters({
   query,
   kind,
   appearance = "list",
+  includeDeleted = false,
 }: {
   workspaceSlug: string;
   query: Query;
   kind: "reports" | "projects" | "outcomes";
   appearance?: "default" | "list";
+  includeDeleted?: boolean;
 }) {
   const members = useMember();
   useEffect(() => {
@@ -74,6 +76,7 @@ export const ResearchBrowseFilters = observer(function ResearchBrowseFilters({
             ["all", "全部可见"],
             ["mine", "仅我创建"],
             ["review", "我需审核"],
+            ...(includeDeleted ? [["deleted", "已删除"] as [string, string]] : []),
           ]
         : [
             ["all", "全部可见"],

@@ -21,11 +21,26 @@ RESEARCH_REPORT_ENTITY = "research_report"
 RESEARCH_APPROVAL_ENTITY = "research_approval"
 
 
-def _notify(report, receivers, *, actor, title, message):
+def _notify(report, receivers, *, actor, title, message, mentioned_ids=None):
+    """Create report notifications while preserving mention classification.
+
+    Args:
+        report: Report owning the notification.
+        receivers: ACL-filtered users allowed to see the update.
+        actor: User who triggered the report event.
+        title: Short notification title.
+        message: JSON payload used by in-app and email rendering.
+        mentioned_ids: String user IDs explicitly mentioned by a comment.
+
+    Returns:
+        The created notification rows.
+    """
     created = []
+    mentions = mentioned_ids or set()
     for receiver in receivers:
         if receiver is None or receiver == actor:
             continue
+        sender = "research:mentioned" if str(receiver.id) in mentions else "research"
         created.append(
             Notification(
                 workspace_id=report.workspace_id,
@@ -42,7 +57,7 @@ def _notify(report, receivers, *, actor, title, message):
                 message=message,
                 message_html=f"<p>{title}</p>",
                 message_stripped=title,
-                sender="research",
+                sender=sender,
                 triggered_by=actor,
                 receiver=receiver,
             )
@@ -82,6 +97,32 @@ def notify_report_submitted(report, actor):
             "period_key": report.period_key,
             "owner": str(report.owner_id),
             "submitted_at": timezone.now().isoformat(),
+        },
+    )
+
+
+def notify_report_withdrawn(report, actor, comment=""):
+    """Notify reviewers that an author withdrew the current submission.
+
+    Args:
+        report: Report returned to draft for another editing round.
+        actor: Report owner who withdrew the submission.
+        comment: Optional reason supplied by the author.
+
+    Returns:
+        Created notification rows for the report's reviewer audience.
+    """
+    return _notify(
+        report,
+        report_reviewer_ids(report),
+        actor=actor,
+        title=f"{report.period_key} 报告已撤回",
+        message={
+            "action": "withdrawn",
+            "period_key": report.period_key,
+            "owner": str(report.owner_id),
+            "comment": comment[:500],
+            "withdrawn_at": timezone.now().isoformat(),
         },
     )
 
@@ -174,6 +215,7 @@ def notify_report_comment(report, thread, comment, actor, *, action="created"):
         "resolved": "批注已解决",
         "reopened": "批注重新开放",
     }
+    mentioned_ids = mentioned_user_ids(comment.comment_html) if action in {"created", "updated"} else set()
     return _notify(
         report,
         receivers,
@@ -187,4 +229,5 @@ def notify_report_comment(report, thread, comment, actor, *, action="created"):
             "snapshot_version": thread.snapshot_version,
             "quoted_text": thread.quoted_text[:500],
         },
+        mentioned_ids=mentioned_ids,
     )

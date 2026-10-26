@@ -53,6 +53,10 @@ beforeEach(() => {
       knowledge_id: "knowledge-1",
       knowledge_base_id: "kb-1",
       file_name: "paper.md",
+      file_type: "md",
+      file_size: 7,
+      preview_url: "/preview/upload-1/",
+      download_url: "/download/upload-1/",
       error_code: "",
     },
   });
@@ -75,10 +79,11 @@ it("uploads a selected file to the bound group library without a library selecto
   expect(input).not.toBeNull();
   expect(container.querySelector("h3")?.textContent).toContain("课题资料");
   expect(container.querySelector("select")).toBeNull();
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "新增资料")).toBe(true);
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "选择资料")).toBe(true);
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "上传")).toBe(false);
   const picker = vi.spyOn(input as HTMLInputElement, "click");
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "新增资料")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "选择资料")?.click();
   });
   expect(picker).toHaveBeenCalledOnce();
   const file = new File(["# paper"], "paper.md", { type: "text/markdown" });
@@ -87,8 +92,10 @@ it("uploads a selected file to the bound group library without a library selecto
     input?.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(container.textContent).toContain("paper.md");
+  expect(container.textContent).toContain("7 B");
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "开始上传")).toBe(true);
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "开始上传")?.click();
   });
   expect(mocks.uploadKnowledgeFile).toHaveBeenCalledWith(
     "lab",
@@ -128,6 +135,10 @@ it("restores pending uploads for the selected node after a page reload", async (
         knowledge_id: "knowledge-restored",
         knowledge_base_id: "kb-1",
         file_name: "restored.md",
+        file_type: "md",
+        file_size: 11,
+        preview_url: "/preview/upload-restored/",
+        download_url: "/download/upload-restored/",
         error_code: "",
       },
     ],
@@ -141,6 +152,11 @@ it("restores pending uploads for the selected node after a page reload", async (
   expect(container.textContent).toContain("restored.md");
   expect(container.textContent).toContain("PENDING");
   expect(container.textContent).toContain("确认引用");
+  const previewTrigger = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "restored.md"
+  );
+  expect(previewTrigger?.getAttribute("title")).toBe("restored.md");
+  expect(container.querySelector('a[aria-label="下载资料"]')?.getAttribute("href")).toBe("/download/upload-restored/");
 });
 
 it("keeps the upload record available when reference confirmation fails", async () => {
@@ -157,7 +173,7 @@ it("keeps the upload record available when reference confirmation fails", async 
     input?.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "开始上传")?.click();
   });
 
   await act(async () => {
@@ -167,7 +183,8 @@ it("keeps the upload record available when reference confirmation fails", async 
   expect(mocks.confirmKnowledgeReference).toHaveBeenCalled();
   expect(container.textContent).toContain("paper.md");
   expect(container.textContent).toContain("操作未完成，当前记录已保留。");
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent?.includes("上传"))).toBe(true);
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "选择资料")).toBe(true);
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "开始上传")).toBe(false);
 });
 
 it("keeps validation failures actionable instead of presenting them as upstream degradation", async () => {
@@ -185,7 +202,7 @@ it("keeps validation failures actionable instead of presenting them as upstream 
     input?.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.click();
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "开始上传")?.click();
   });
 
   expect(container.textContent).toContain("操作未完成，当前记录已保留。");
@@ -208,9 +225,10 @@ it("blocks uploads while the chain knowledge request awaits administrator bindin
   expect(container.textContent).toContain("等待管理员从候选库确认");
   expect(container.textContent).not.toContain("请检查 RAGPortal 配置");
   expect(container.textContent).not.toContain("手工建库");
-  expect(container.querySelector('input[type="file"]')?.hasAttribute("disabled")).toBe(true);
-  expect(
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "上传")?.hasAttribute("disabled")
-  ).toBe(true);
+  const input = container.querySelector('input[type="file"]');
+  const selectButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "选择资料");
+  expect(input?.hasAttribute("disabled")).toBe(true);
+  expect(selectButton?.hasAttribute("disabled")).toBe(true);
+  expect(selectButton?.getAttribute("aria-describedby")).toContain("knowledge-upload-status");
   expect(mocks.uploadKnowledgeFile).not.toHaveBeenCalled();
 });

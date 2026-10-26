@@ -72,6 +72,7 @@ type Props = {
   form: TTaskFormState;
   formBusy: boolean;
   formError: string;
+  isEditMode: boolean;
   candidates: TResearchAssignableUser[];
   candidateState: TCandidateState;
   locale: string;
@@ -81,6 +82,7 @@ type Props = {
   actionBusy: string;
   onModeChange: (mode: TWorkbenchPeekMode) => void;
   onClose: () => void;
+  onToggleEditMode: (value: boolean) => void;
   onFormChange: (patch: Partial<TTaskFormState>) => void;
   onCommit: (payload: TResearchChainNodeTaskUpdatePayload) => void;
   onCreate: () => void;
@@ -293,6 +295,7 @@ export function ResearchChainTaskPeek(props: Props) {
     form,
     formBusy,
     formError,
+    isEditMode,
     candidates,
     candidateState,
     locale,
@@ -302,6 +305,7 @@ export function ResearchChainTaskPeek(props: Props) {
     actionBusy,
     onModeChange,
     onClose,
+    onToggleEditMode,
     onFormChange,
     onCommit,
     onCreate,
@@ -309,10 +313,10 @@ export function ResearchChainTaskPeek(props: Props) {
   } = props;
   const { t } = useTranslation();
   const taskService = useMemo(() => new ResearchChainTaskService(), []);
-  const [editingInstruction, setEditingInstruction] = useState(false);
   const [activityOrder, setActivityOrder] = useState<TActivityOrder>("asc");
   const [events, setEvents] = useState<TResearchChainEvent[]>([]);
   const canEdit = kind === "create" || isAllowed(task, "edit");
+  const isContentEditable = kind === "create" || (canEdit && isEditMode);
   const canAssign = kind === "create" || isAllowed(task, "edit") || isAllowed(task, "assign");
   const lifecycle = task ? LIFECYCLE_ACTIONS.filter((action) => isAllowed(task, action)) : [];
   const primaryLifecycle = lifecycle.filter((action) => action !== "cancel");
@@ -354,19 +358,10 @@ export function ResearchChainTaskPeek(props: Props) {
     return sorted;
   }, [activityOrder, candidates, events, t, task]);
 
-  /**
-   * 失焦后保存已有任务的标题或说明。新建任务只留在本地表单。
-   */
-  const commitText = (field: "title" | "instruction", value: string) => {
-    if (kind !== "task" || !task || !canEdit) return;
-    const next = value.trim();
-    if (field === "title" && !next) {
-      onFormChange({ title: task.title });
-      return;
-    }
-    if (next === (field === "title" ? task.title : task.instruction)) return;
-    onCommit(field === "title" ? { title: next } : { instruction: next });
-  };
+  const contentPanelClassName = cn(
+    "rounded-lg border bg-surface-1 px-4 py-3 transition-colors",
+    isContentEditable ? "border-strong" : "border-subtle"
+  );
 
   return (
     <ResearchChainWorkbenchPeek
@@ -388,33 +383,46 @@ export function ResearchChainTaskPeek(props: Props) {
       bodyClassName="min-h-0 flex-1 overflow-y-auto"
     >
       <div className="flex flex-col gap-6 px-8 py-5">
-        <div className="space-y-2">
-          <p className="text-12 text-tertiary">
-            {kind === "create" ? t("research.chain_tasks.panel_title") : t(STATUS_KEYS[status])}
-          </p>
-          {canEdit ? (
-            <input
-              aria-label={t("research.chain_tasks.title")}
-              value={form.title}
-              placeholder={t("research.chain_tasks.title")}
-              onChange={(event) => onFormChange({ title: event.target.value })}
-              onBlur={(event) => commitText("title", event.target.value)}
-              className="w-full border-0 bg-transparent p-0 text-20 font-medium text-primary outline-none placeholder:text-placeholder"
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-12 text-tertiary">
+              {kind === "create" ? t("research.chain_tasks.panel_title") : t(STATUS_KEYS[status])}
+            </p>
+            {kind === "task" && canEdit && (
+              <button
+                type="button"
+                data-task-edit-toggle=""
+                aria-pressed={isEditMode}
+                disabled={formBusy || Boolean(actionBusy)}
+                onClick={() => onToggleEditMode(!isEditMode)}
+                className="rounded-md px-2 py-1 text-13 text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary disabled:cursor-default disabled:text-placeholder"
+              >
+                {isEditMode ? t("common.done") : t("common.edit")}
+              </button>
+            )}
+          </div>
+
+          <div className={contentPanelClassName}>
+            {isContentEditable ? (
+              <input
+                aria-label={t("research.chain_tasks.title")}
+                value={form.title}
+                placeholder={t("research.chain_tasks.title")}
+                onChange={(event) => onFormChange({ title: event.target.value })}
+                className="w-full bg-transparent p-0 text-20 font-medium text-primary outline-none placeholder:text-placeholder"
+              />
+            ) : (
+              <h2 className="text-20 font-medium text-primary">{task?.title}</h2>
+            )}
+          </div>
+
+          <div className={cn(contentPanelClassName, "min-h-24")}>
+            <InstructionField
+              value={form.instruction}
+              editable={isContentEditable}
+              onChange={(instruction) => onFormChange({ instruction })}
             />
-          ) : (
-            <h2 className="text-20 font-medium text-primary">{task?.title}</h2>
-          )}
-          <InstructionField
-            value={form.instruction}
-            canEdit={canEdit}
-            editing={editingInstruction}
-            onEdit={() => setEditingInstruction(true)}
-            onChange={(instruction) => onFormChange({ instruction })}
-            onBlur={(value) => {
-              setEditingInstruction(false);
-              commitText("instruction", value);
-            }}
-          />
+          </div>
         </div>
 
         {primaryLifecycle.length > 0 && (
@@ -802,25 +810,19 @@ function StatusControl({
 }
 
 /**
- * 任务说明。空时显示“点击添加描述”，已有内容则就地编辑。
+ * 任务说明。编辑态直接输入；只读态仅展示，空值使用无动作占位文案。
  */
 function InstructionField({
   value,
-  canEdit,
-  editing,
-  onEdit,
+  editable,
   onChange,
-  onBlur,
 }: {
   value: string;
-  canEdit: boolean;
-  editing: boolean;
-  onEdit: () => void;
+  editable: boolean;
   onChange: (value: string) => void;
-  onBlur: (value: string) => void;
 }) {
   const { t } = useTranslation();
-  if (editing && canEdit) {
+  if (editable) {
     return (
       <textarea
         aria-label={t("research.chain_tasks.instruction")}
@@ -828,25 +830,14 @@ function InstructionField({
         rows={4}
         placeholder={t("research.chain_tasks.add_instruction")}
         onChange={(event) => onChange(event.target.value)}
-        onBlur={(event) => onBlur(event.target.value)}
         className="w-full resize-none border-0 bg-transparent p-0 text-13 text-primary outline-none placeholder:text-placeholder"
       />
     );
   }
   if (!value.trim()) {
-    if (!canEdit) return null;
-    return (
-      <button type="button" className="text-left text-13 text-placeholder hover:text-secondary" onClick={onEdit}>
-        {t("research.chain_tasks.add_instruction")}
-      </button>
-    );
+    return <p className="text-13 text-placeholder">{t("research.chain_tasks.instruction_empty")}</p>;
   }
-  if (!canEdit) return <p className="text-13 whitespace-pre-wrap text-primary">{value}</p>;
-  return (
-    <button type="button" className="text-left text-13 whitespace-pre-wrap text-primary" onClick={onEdit}>
-      {value}
-    </button>
-  );
+  return <p className="text-13 whitespace-pre-wrap text-primary">{value}</p>;
 }
 
 /**

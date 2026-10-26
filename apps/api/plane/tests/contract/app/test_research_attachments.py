@@ -2,12 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import base64
 import io
 import json
+import uuid
 from unittest import mock
 from zipfile import ZIP_STORED, ZipFile
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -29,6 +32,9 @@ pytestmark = pytest.mark.contract
 
 MB = 1024 * 1024
 S3_STORAGE_PATH = "plane.app.views.asset.v2.S3Storage"
+PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
+)
 
 
 @pytest.fixture(autouse=True)
@@ -745,4 +751,143 @@ class TestMarkdownImport:
 
     def test_unrelated_member_cannot_import(self, env):
         response = env["outsider_client"].post(self._import_url(env), {"content": "# hack"}, format="json")
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestMarkdownExport:
+    def _export_url(self, env):
+        return f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/export-markdown/"
+
+    def _make_report_image(self, env, *, entity_identifier=None, content_type="image/png", content=PNG_BYTES):
+        asset = FileAsset.objects.create(
+            workspace=env["workspace"],
+            user=env["student"],
+            created_by=env["student"],
+            asset=f"{env['workspace'].id}/research/{env['report']['id']}/images/{uuid.uuid4().hex}-report.png",
+            size=len(content),
+            attributes={"name": "report.png", "type": content_type, "size": len(content)},
+            entity_type=FileAsset.EntityTypeContext.REPORT_IMAGE,
+            entity_identifier=entity_identifier or env["report"]["id"],
+            is_uploaded=True,
+        )
+        store_object(asset, content, content_type)
+        return asset
+
+    def test_export_bundles_local_images_and_keeps_remote_links(self, env):
+        asset = self._make_report_image(env)
+        image_url = f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/images/{asset.id}/"
+        markdown = (
+            "# 周报\n\n"
+            f"![first]({image_url})\n\n"
+            f"![repeat]({image_url})\n\n"
+            "![remote](https://example.com/remote.png)\n"
+        )
+
+        response = env["student_client"].post(
+            self._export_url(env), {"content": markdown}, format="json"
+        )
+
+        assert response.status_code == 200, getattr(response, "data", response.content)
+        assert response["Content-Type"] == "application/zip"
+        assert response["Content-Disposition"] == 'attachment; filename="weekly-2026-W38.zip"'
+        with ZipFile(io.BytesIO(response.content)) as archive:
+            expected_markdown = "weekly-2026-W38.md"
+            expected_image = f"assets/{asset.id}.png"
+            assert archive.namelist() == [expected_markdown, expected_image]
+            exported_markdown = archive.read(expected_markdown).decode("utf-8")
+            assert exported_markdown.count(f"assets/{asset.id}.png") == 2
+            assert image_url not in exported_markdown
+            assert "https://example.com/remote.png" in exported_markdown
+            assert archive.read(expected_image) == PNG_BYTES
+
+        event = ResearchAuditEvent.objects.filter(action="report.export.markdown").latest("created_at")
+        assert event.metadata["file_name"] == "weekly-2026-W38.zip"
+        assert event.metadata["image_count"] == 1
+        assert event.metadata["markdown_size_bytes"] == len(markdown.encode("utf-8"))
+        assert "content" not in event.metadata
+
+    def test_export_rejects_cross_report_images_without_partial_archive(self, env):
+        asset = self._make_report_image(env, entity_identifier=str(uuid.uuid4()))
+        markdown = (
+            f"![foreign](/api/research/workspaces/{env['workspace'].slug}"
+            f"/reports/{env['report']['id']}/images/{asset.id}/)"
+        )
+
+        response = env["student_client"].post(self._export_url(env), {"content": markdown}, format="json")
+
+        assert response.status_code == 422
+        assert response.json()["error_code"] == "report_attachment_not_found"
+        assert not ResearchAuditEvent.objects.filter(action="report.export.markdown").exists()
+
+    def test_export_ignores_image_syntax_inside_code_blocks(self, env):
+        markdown = "# 周报\n\n```md\n![example](./images/local.png)\n```\n\n![remote](https://example.com/remote.png)\n"
+
+        response = env["student_client"].post(self._export_url(env), {"content": markdown}, format="json")
+
+        assert response.status_code == 200, getattr(response, "data", response.content)
+        with ZipFile(io.BytesIO(response.content)) as archive:
+            assert archive.namelist() == ["weekly-2026-W38.md"]
+            assert "./images/local.png" in archive.read("weekly-2026-W38.md").decode("utf-8")
+
+    def test_export_allows_advisor_to_bundle_official_snapshot_image(self, env):
+        asset = self._make_report_image(env)
+        report = PeriodicReport.objects.get(pk=env["report"]["id"])
+        report.status = PeriodicReport.Status.SUBMITTED
+        report.visibility = "DIRECT_ADVISOR"
+        report.submitted_at = timezone.now()
+        report.save(update_fields=["status", "visibility", "submitted_at", "updated_at"])
+        PeriodicReportSnapshot.objects.create(
+            report=report,
+            version_no=1,
+            snapshot_status=PeriodicReport.Status.SUBMITTED,
+            description_json={},
+            description_html="<p>正式正文</p>",
+            image_manifest=[{"asset_id": str(asset.id), "file_name": "report.png"}],
+            submitted_by=env["student"],
+        )
+        asset.is_deleted = True
+        asset.save(update_fields=["is_deleted", "updated_at"])
+        image_url = f"/api/research/workspaces/{env['workspace'].slug}/reports/{report.id}/images/{asset.id}/"
+
+        response = env["advisor_client"].post(
+            self._export_url(env),
+            {"content": f"![official]({image_url})"},
+            format="json",
+        )
+
+        assert response.status_code == 200, getattr(response, "data", response.content)
+        with ZipFile(io.BytesIO(response.content)) as archive:
+            assert f"assets/{asset.id}.png" in archive.namelist()
+
+    @pytest.mark.parametrize("source", ["./images/local.png", "data:image/png;base64,AAA"])
+    def test_export_rejects_unsupported_local_image_sources(self, env, source):
+        response = env["student_client"].post(self._export_url(env), {"content": f"![bad]({source})"}, format="json")
+
+        assert response.status_code == 422
+        assert response.json()["error_code"] == "file_type_not_allowed"
+
+    def test_export_rejects_mismatched_object_metadata(self, env):
+        asset = self._make_report_image(env, content_type="text/plain", content=b"not-an-image\n")
+        image_url = f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/images/{asset.id}/"
+
+        response = env["student_client"].post(self._export_url(env), {"content": f"![bad]({image_url})"}, format="json")
+
+        assert response.status_code == 422
+        assert response.json()["error_code"] == "file_type_not_allowed"
+
+    def test_export_rejects_oversized_markdown(self, env):
+        limits = {"image_max_mb": 20, "pdf_max_mb": 100, "markdown_max_mb": 1, "office_max_mb": 50}
+        with mock.patch(
+            "plane.research.views.attachments.get_workspace_research_settings",
+            return_value=limits,
+        ):
+            response = env["student_client"].post(self._export_url(env), {"content": "x" * (MB + 1)}, format="json")
+
+        assert response.status_code == 422
+        assert response.json()["error_code"] == "file_size_exceeded"
+
+    def test_unrelated_member_cannot_export(self, env):
+        response = env["outsider_client"].post(self._export_url(env), {"content": "# hack"}, format="json")
+
         assert response.status_code == 404

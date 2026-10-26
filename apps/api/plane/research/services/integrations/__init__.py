@@ -14,11 +14,12 @@ from .adapters import (
     WeKnoraClient,
     client_for,
 )
-from .base import BaseIntegrationClient, IntegrationResult
+from .base import BaseIntegrationClient, IntegrationFileResult, IntegrationResult
 
 __all__ = [
     "ADAPTERS",
     "BaseIntegrationClient",
+    "IntegrationFileResult",
     "IntegrationResult",
     "PolyAgentClient",
     "RagPortalClient",

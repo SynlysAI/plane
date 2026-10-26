@@ -93,7 +93,10 @@ from plane.research.views import (
     ResearchReportAttachmentDetailEndpoint,
     ResearchReportAttachmentListCreateEndpoint,
     ResearchReportAttachmentPresignEndpoint,
+    ResearchReportMarkdownExportEndpoint,
     ResearchReportMarkdownImportEndpoint,
+    ResearchReportRestoreEndpoint,
+    ResearchReportWithdrawEndpoint,
     ResearchHealthEndpoint,
     ResearchIdentityMappingDetailEndpoint,
     ResearchIdentityMappingListCreateEndpoint,
@@ -242,6 +245,8 @@ from plane.research.views import (
     ResearchKnowledgeRequestDetailEndpoint,
     ResearchChainUploadEndpoint,
     ResearchChainUploadDetailEndpoint,
+    ResearchChainUploadDownloadEndpoint,
+    ResearchChainUploadPreviewEndpoint,
     ResearchChainReferenceEndpoint,
     ResearchChainAnalysisListCreateEndpoint,
     ResearchChainNodeTaskActionEndpoint,
@@ -574,6 +579,22 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/",
         ResearchChainUploadDetailEndpoint.as_view(),
         name="research-chain-upload-detail",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/download/",
+        ResearchChainUploadDownloadEndpoint.as_view(),
+        name="research-chain-upload-download",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/preview/",
+        ResearchChainUploadPreviewEndpoint.as_view(),
+        name="research-chain-upload-preview",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/uploads/<uuid:upload_id>/preview/content/",
+        ResearchChainUploadPreviewEndpoint.as_view(),
+        {"content": True},
+        name="research-chain-upload-preview-content",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/references/",
@@ -1206,6 +1227,16 @@ urlpatterns = [
         name="research-report-submit",
     ),
     path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/restore/",
+        ResearchReportRestoreEndpoint.as_view(),
+        name="research-report-restore",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/withdraw/",
+        ResearchReportWithdrawEndpoint.as_view(),
+        name="research-report-withdraw",
+    ),
+    path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/return/",
         ResearchReportReturnEndpoint.as_view(),
         name="research-report-return",
@@ -1284,6 +1315,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/import-markdown/",
         ResearchReportMarkdownImportEndpoint.as_view(),
         name="research-report-import-markdown",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/export-markdown/",
+        ResearchReportMarkdownExportEndpoint.as_view(),
+        name="research-report-export-markdown",
     ),
     path(
         "research/workspaces/<str:slug>/report-templates/",

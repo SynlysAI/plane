@@ -129,12 +129,20 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
   const [dateMenuId, setDateMenuId] = useState<string | null>(null);
   const [peekMode, setPeekMode] = useState<TWorkbenchPeekMode>("side");
+  const [isTaskEditMode, setIsTaskEditMode] = useState(false);
   const peek: TLocalPeek = sharedPeek
     ? sharedPeek.peek?.kind === "task" || sharedPeek.peek?.kind === "create"
       ? sharedPeek.peek
       : null
     : localPeek;
   const activeTask = peek?.kind === "task" ? (tasks.find((task) => task.id === peek.taskId) ?? null) : null;
+  const peekKind = peek?.kind ?? "closed";
+  const peekTaskId = peek?.kind === "task" ? peek.taskId : null;
+
+  // 共享 Peek 可能从其他入口切换任务或进入创建态，这里统一重置主内容编辑态。
+  useEffect(() => {
+    setIsTaskEditMode(peekKind === "create");
+  }, [peekKind, peekTaskId]);
 
   const load = useCallback(
     async (isActive: () => boolean = () => true) => {
@@ -195,6 +203,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
   }, []);
 
   const closePeek = () => {
+    setIsTaskEditMode(false);
     if (sharedPeek) sharedPeek.close();
     else setLocalPeek(null);
   };
@@ -209,6 +218,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
     });
     setFormError("");
     setStatusMenuId(null);
+    setIsTaskEditMode(false);
     if (sharedPeek) sharedPeek.openTask(task.id);
     else setLocalPeek({ kind: "task", taskId: task.id });
   };
@@ -217,6 +227,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
     setForm({ ...EMPTY_FORM, title });
     setFormError("");
     setQuickAdd(false);
+    setIsTaskEditMode(true);
     if (sharedPeek) sharedPeek.openCreate();
     else setLocalPeek({ kind: "create" });
   };
@@ -289,10 +300,13 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
    *   task: 当前打开的任务。
    *   payload: 任务更新接口接受的局部字段。
    */
-  const savePeekFields = async (task: TResearchChainNodeTask, payload: TResearchChainNodeTaskUpdatePayload) => {
+  const savePeekFields = async (
+    task: TResearchChainNodeTask,
+    payload: TResearchChainNodeTaskUpdatePayload
+  ): Promise<boolean> => {
     if (task.assignee && payload.assignee === null) {
       setFormError(t("research.chain_tasks.assignee_required"));
-      return;
+      return false;
     }
     setFormBusy(true);
     setFormError("");
@@ -306,11 +320,49 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
         assignee: payload.assignee !== undefined ? (updated.assignee ?? "") : current.assignee,
         dueAt: payload.due_at !== undefined ? toDateInput(updated.due_at) : current.dueAt,
       }));
+      return true;
     } catch (error) {
       setFormError(serverErrorMessage(error, t("research.chain_tasks.server_rejected")));
+      return false;
     } finally {
       setFormBusy(false);
     }
+  };
+
+  /**
+   * 切换主内容编辑态，并在退出编辑时批量保存文本变更。
+   *
+   * Args:
+   *   next: 主内容是否进入编辑态。
+   */
+  const toggleTaskEditMode = (next: boolean) => {
+    if (next) {
+      setIsTaskEditMode(true);
+      return;
+    }
+    if (peek?.kind !== "task" || !activeTask) {
+      setIsTaskEditMode(false);
+      return;
+    }
+    const title = form.title.trim();
+    if (!title) {
+      setFormError(t("research.chain_tasks.title_required"));
+      return;
+    }
+
+    const payload: TResearchChainNodeTaskUpdatePayload = {};
+    if (title !== activeTask.title) payload.title = title;
+    if (form.instruction !== activeTask.instruction) payload.instruction = form.instruction;
+    if (!Object.keys(payload).length) {
+      setFormError("");
+      setIsTaskEditMode(false);
+      return;
+    }
+
+    void (async () => {
+      const saved = await savePeekFields(activeTask, payload);
+      if (saved) setIsTaskEditMode(false);
+    })();
   };
 
   /**
@@ -604,6 +656,8 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId }: Props
           form={form}
           formBusy={formBusy}
           formError={formError}
+          isEditMode={peek.kind === "create" || (peek.kind === "task" && isTaskEditMode)}
+          onToggleEditMode={toggleTaskEditMode}
           candidates={candidates}
           candidateState={candidateState}
           locale={currentLocale}

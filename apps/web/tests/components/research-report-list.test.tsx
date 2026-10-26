@@ -7,10 +7,13 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createReport: vi.fn(),
   getReports: vi.fn(),
+  restoreReport: vi.fn(),
   fetchReportTemplateOptions: vi.fn(),
   fetchReports: vi.fn(),
   fetchResearchProjects: vi.fn(),
   fetchOrgUnits: vi.fn(),
+  browseFilters: vi.fn(),
+  setToast: vi.fn(),
 }));
 
 const template = {
@@ -34,9 +37,14 @@ vi.mock("@plane/i18n", () => ({
     t: (key: string) =>
       ({
         "research.reports.create": "创建报告",
+        "research.reports.deleted_title": "已删除报告",
+        "research.reports.deleted_status": "已删除",
+        "research.reports.restore": "恢复",
         "research.reports.template": "模板",
         "research.feedback.report_created.title": "报告已创建",
         "research.feedback.report_created.message": "请继续编辑正文。",
+        "research.feedback.report_restored.title": "报告已恢复",
+        "research.feedback.report_restored.message": "正在打开报告详情。",
         "research.reports.columns.read_state": "已读状态",
         "research.reports.read.waiting": "待阅读",
         "research.reports.read.read_pending_review": "已读 · 待审阅",
@@ -46,7 +54,9 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@plane/propel/button", () => ({
-  Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
+  Button: ({ loading, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) => (
+    <button {...props} />
+  ),
 }));
 vi.mock("@plane/propel/table", () => ({
   Table: ({ children }: { children: React.ReactNode }) => <table>{children}</table>,
@@ -56,7 +66,10 @@ vi.mock("@plane/propel/table", () => ({
   TableHeader: ({ children }: { children: React.ReactNode }) => <thead>{children}</thead>,
   TableRow: ({ children }: { children: React.ReactNode }) => <tr>{children}</tr>,
 }));
-vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: { SUCCESS: "SUCCESS" }, setToast: vi.fn() }));
+vi.mock("@plane/propel/toast", () => ({
+  TOAST_TYPE: { SUCCESS: "SUCCESS" },
+  setToast: mocks.setToast,
+}));
 vi.mock("@plane/ui", async () => ({
   ...(await vi.importActual("@plane/ui")),
   EModalPosition: { CENTER: "center" },
@@ -65,8 +78,15 @@ vi.mock("@plane/ui", async () => ({
   ModalCore: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
     isOpen ? <div role="dialog">{children}</div> : null,
 }));
-vi.mock("@/components/research/common/browse-filters", () => ({ ResearchBrowseFilters: () => null }));
-vi.mock("@/components/research/common/error-messages", () => ({ getResearchErrorKey: () => "error" }));
+vi.mock("@/components/research/common/browse-filters", () => ({
+  ResearchBrowseFilters: mocks.browseFilters,
+}));
+vi.mock("@/components/research/common/error-messages", () => ({
+  getResearchErrorKey: (error: unknown) =>
+    (error as { error_code?: string }).error_code === "report_period_conflict"
+      ? "research.errors.report_period_conflict"
+      : "error",
+}));
 vi.mock("@/components/research/common/research-data-surface", () => ({
   ResearchFilterChips: () => null,
   ResearchFilterToolbar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -92,6 +112,7 @@ vi.mock("@/hooks/store/use-research", () => ({
     fetchOrgUnits: mocks.fetchOrgUnits,
     fetchReportTemplateOptions: mocks.fetchReportTemplateOptions,
     createReport: mocks.createReport,
+    restoreReport: mocks.restoreReport,
   }),
 }));
 
@@ -127,6 +148,8 @@ beforeEach(() => {
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
   mocks.createReport.mockResolvedValue({ id: "report-1" });
+  mocks.restoreReport.mockResolvedValue({ id: "report-deleted" });
+  mocks.browseFilters.mockImplementation(() => null);
   mocks.getReports.mockReturnValue([]);
 });
 
@@ -259,6 +282,118 @@ it("报告列表 scope=mine 新链接不再输出 mine 请求参数", async () =
   expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("mine");
 });
 
+it("已删除报告使用独立范围且不提供详情链接", async () => {
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-deleted",
+      period_key: "2026-W40",
+      report_type: "WEEKLY",
+      status: "DRAFT",
+      owner: "student",
+      owner_detail: { display_name: "Student" },
+      org_unit_detail: { name: "Group" },
+      visibility: "PRIVATE",
+      effective_visibility: "PRIVATE",
+      has_read: false,
+      read_count: 0,
+      latest_read_at: null,
+      deleted_at: "2026-10-26T02:00:00Z",
+      can_restore: true,
+    },
+  ]);
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports?scope=deleted"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
+
+  expect(mocks.fetchReports).toHaveBeenCalledWith("lab", { per_page: "50", scope: "deleted" });
+  expect(mocks.browseFilters.mock.calls.at(-1)?.[0]).toEqual(
+    expect.objectContaining({ workspaceSlug: "lab", kind: "reports", includeDeleted: true })
+  );
+  expect(container.textContent).toContain("已删除报告");
+  expect(container.textContent).toContain("已删除");
+  expect(container.textContent).toContain("2026");
+  expect(container.querySelector('a[href="/lab/research/reports/report-deleted"]')).toBeNull();
+  expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "创建报告")).toBe(false);
+});
+
+it("恢复已删除报告后提示成功并打开详情", async () => {
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-deleted",
+      period_key: "2026-W40",
+      report_type: "WEEKLY",
+      status: "DRAFT",
+      owner: "student",
+      owner_detail: { display_name: "Student" },
+      org_unit_detail: { name: "Group" },
+      visibility: "PRIVATE",
+      effective_visibility: "PRIVATE",
+      deleted_at: "2026-10-26T02:00:00Z",
+      can_restore: true,
+    },
+  ]);
+  function Probe() {
+    const location = useLocation();
+    return (
+      <>
+        <ResearchReportList workspaceSlug="lab" />
+        <output aria-label="URL">{`${location.pathname}${location.search}`}</output>
+      </>
+    );
+  }
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports?scope=deleted"]}>
+        <Probe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => button("恢复").click());
+
+  expect(mocks.restoreReport).toHaveBeenCalledWith("lab", "report-deleted");
+  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS", title: "报告已恢复" }));
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/reports/report-deleted");
+});
+
+it("恢复周期冲突时保留已删除列表并显示错误", async () => {
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-deleted",
+      period_key: "2026-W40",
+      report_type: "WEEKLY",
+      status: "DRAFT",
+      owner: "student",
+      owner_detail: { display_name: "Student" },
+      org_unit_detail: { name: "Group" },
+      visibility: "PRIVATE",
+      effective_visibility: "PRIVATE",
+      deleted_at: "2026-10-26T02:00:00Z",
+      can_restore: true,
+    },
+  ]);
+  mocks.restoreReport.mockRejectedValue({ error_code: "report_period_conflict" });
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports?scope=deleted"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => button("恢复").click());
+
+  expect(container.textContent).toContain("research.errors.report_period_conflict");
+  expect(container.textContent).toContain("2026-W40");
+  expect(button("恢复")).toBeInstanceOf(HTMLButtonElement);
+});
+
 it("报告审核列表区分待阅读和已读待审阅", async () => {
   mocks.getReports.mockReturnValue([
     {
@@ -283,7 +418,7 @@ it("报告审核列表区分待阅读和已读待审阅", async () => {
 
   await act(async () =>
     root.render(
-      <MemoryRouter initialEntries={["/lab/research/approvals?tab=report_review"]}>
+      <MemoryRouter initialEntries={["/lab/research/approvals?tab=report_review&scope=deleted"]}>
         <ResearchReportList workspaceSlug="lab" variant="review" />
       </MemoryRouter>
     )
@@ -292,6 +427,11 @@ it("报告审核列表区分待阅读和已读待审阅", async () => {
   const rows = [...container.querySelectorAll("tr")];
   expect(rows[1]?.textContent).toContain("待阅读");
   expect(rows[2]?.textContent).toContain("已读 · 待审阅");
+  expect(mocks.browseFilters.mock.calls.at(-1)?.[0]).toEqual(
+    expect.objectContaining({ kind: "reports", includeDeleted: false })
+  );
+  expect(mocks.fetchReports.mock.calls.at(-1)?.[1]).toEqual({ per_page: "50", status: "SUBMITTED" });
+  expect(mocks.fetchReports.mock.calls.at(-1)?.[1]).not.toHaveProperty("scope");
 });
 
 it("保密周报按有效可见范围展示为本组保密", async () => {

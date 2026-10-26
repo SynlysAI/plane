@@ -17,7 +17,7 @@ from plane.research.utils.settings import (
 # Only the transitions drawn in the PRD state diagram are allowed (P0-RPT-06).
 STATE_TRANSITIONS = {
     "DRAFT": {"SUBMITTED"},
-    "SUBMITTED": {"ACCEPTED", "NEEDS_REVISION"},
+    "SUBMITTED": {"DRAFT", "ACCEPTED", "NEEDS_REVISION"},
     "NEEDS_REVISION": {"DRAFT", "SUBMITTED"},
     "ACCEPTED": set(),
 }

@@ -6,7 +6,7 @@ import logging
 import uuid
 
 from django.db import IntegrityError
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -26,6 +26,10 @@ from plane.research.utils.errors import (
     research_permission_denied,
 )
 from plane.research.utils.files import detect_kind, inspect_uploaded_asset, markdown_to_html, validate_attachment
+from plane.research.utils.report_export import (
+    ReportMarkdownExportError,
+    build_report_markdown_export,
+)
 from plane.utils.path_validator import sanitize_filename
 from plane.research.utils.reports import is_editable, report_resource
 from plane.research.utils.settings import get_workspace_research_settings
@@ -471,3 +475,93 @@ class ResearchReportMarkdownImportEndpoint(ResearchAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class ResearchReportMarkdownExportEndpoint(ResearchAPIView):
+    """``POST /api/research/workspaces/<slug>/reports/<report_id>/export-markdown/``
+
+    Bundles the editor-provided Markdown with readable local body images so the
+    downloaded archive remains complete outside the authenticated web app.
+    """
+
+    research_membership_required = False
+
+    def post(self, request, slug, report_id):
+        """导出当前编辑器 Markdown，并把可读本地图片打包进 ZIP。
+
+        Args:
+            request: 当前请求。
+            slug: 工作区标识。
+            report_id: 报告 ID。
+
+        Returns:
+            ZIP 附件响应，或带错误码的 JSON 响应。
+        """
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+        report = report_queryset(workspace).filter(pk=report_id).first()
+        if report is None:
+            return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+
+        context = build_actor_context(request.user, workspace.id)
+        if not check_access(request.user, "view", report_resource(report), context=context):
+            return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+
+        content = request.data.get("content")
+        if not isinstance(content, str):
+            return research_error(
+                ResearchErrorCode.FILE_TYPE_NOT_ALLOWED,
+                "content must be a Markdown string.",
+            )
+        limits = get_workspace_research_settings(workspace)
+        error_code = validate_attachment(
+            file_name=f"{report.period_key}.md",
+            content_type="text/markdown",
+            size_bytes=len(content.encode("utf-8")),
+            limits=limits,
+        )
+        if error_code:
+            return research_error(
+                error_code,
+                "This Markdown content is not allowed.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        try:
+            archive, file_name, image_count, markdown_size = build_report_markdown_export(
+                report,
+                content,
+                request.user,
+                S3Storage(request=request),
+                limits,
+            )
+        except ReportMarkdownExportError as error:
+            http_status = (
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if error.error_code == "research_upload_storage_failed"
+                else status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
+            return research_error(
+                error.error_code,
+                error.message,
+                http_status,
+            )
+
+        response = HttpResponse(archive, content_type="application/zip")
+        response["Content-Disposition"] = f'attachment; filename="{file_name}"'
+        record_audit_event(
+            workspace=workspace,
+            action=ResearchAuditAction.REPORT_EXPORT_MARKDOWN,
+            resource_type=ResearchResourceType.REPORT,
+            resource_id=report.id,
+            org_unit=report.org_unit,
+            actor=request.user,
+            metadata={
+                "file_name": file_name,
+                "image_count": image_count,
+                "markdown_size_bytes": markdown_size,
+            },
+            request=request,
+        )
+        return response

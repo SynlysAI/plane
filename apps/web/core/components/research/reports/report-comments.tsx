@@ -295,6 +295,7 @@ export function ResearchReportComments({
               workspaceId={workspaceId}
               locale={locale}
               active={thread.id === activeThreadId}
+              canReply={canComment}
               replyOpen={replyThreadId === thread.id}
               onReplyToggle={() => setReplyThreadId((current) => (current === thread.id ? null : thread.id))}
               onFocus={() => focusThread(thread.id)}
@@ -318,6 +319,7 @@ function ThreadCard({
   workspaceId,
   locale,
   active,
+  canReply,
   replyOpen,
   onReplyToggle,
   onFocus,
@@ -330,6 +332,7 @@ function ThreadCard({
   workspaceId: string;
   locale: string;
   active: boolean;
+  canReply: boolean;
   replyOpen: boolean;
   onReplyToggle: () => void;
   onFocus: () => void;
@@ -405,7 +408,7 @@ function ThreadCard({
         ))}
       </div>
 
-      {replyOpen && (
+      {replyOpen && canReply && (
         <div className="mt-3 border-t border-subtle pt-3">
           <CommentComposer
             workspaceSlug={workspaceSlug}
@@ -425,7 +428,7 @@ function ThreadCard({
           />
         </div>
       )}
-      {!replyOpen && (
+      {!replyOpen && canReply && (
         <Button variant="ghost" size="sm" className="mt-2" onClick={onReplyToggle}>
           回复
         </Button>
