@@ -135,6 +135,10 @@ packages/i18n/src/locales/loaders.generated.ts
 # Local verified rebuild backups and one-time credentials
 .runtime/
 
+# Local API operation backups and collectstatic outputs.
+/apps/api/plane/backups/
+/apps/api/plane/static-assets/
+
 # Local MCP verification responses, reports and build logs; publish summaries in docs/operations.
 /output/
 
