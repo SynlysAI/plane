@@ -12,11 +12,12 @@ const captured = vi.hoisted(() => ({
   widgetsDisabled: null as boolean | null,
   titleDisabled: null as boolean | null,
 }));
+const issueState = vi.hoisted(() => ({ descriptionHtml: "<p></p>" }));
 
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@plane/utils", () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" "),
-  isEmptyHtmlString: () => true,
+  isDescriptionContentEmpty: (html: string | null | undefined) => !html || html === "<p></p>" || html === "<p>   </p>",
 }));
 vi.mock("@/components/editor/rich-text/description-input", () => ({
   DescriptionInput: (props: { disabled: boolean; placeholder?: string }) => {
@@ -58,7 +59,13 @@ vi.mock("@/hooks/store/use-issue-detail", () => ({
     issue: {
       getIssueById: (id: string) =>
         id === "issue-1"
-          ? { id: "issue-1", project_id: "project-1", name: "标题", sequence_id: 1, description_html: "<p></p>" }
+          ? {
+              id: "issue-1",
+              project_id: "project-1",
+              name: "标题",
+              sequence_id: 1,
+              description_html: issueState.descriptionHtml,
+            }
           : undefined,
     },
     peekIssue: undefined,
@@ -131,6 +138,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  issueState.descriptionHtml = "<p></p>";
   captured.attachmentsDisabled = null;
   captured.descriptionDisabled = null;
   captured.descriptionPlaceholder = null;
@@ -151,8 +159,8 @@ it("renders frozen by default and toggles editing through the edit button", asyn
   expect(editButton?.textContent).toContain("common.edit");
   expect(captured.titleDisabled).toBe(true);
   expect(captured.descriptionDisabled).toBe(true);
-  expect(captured.descriptionPlaceholder).toBe("common.description_placeholder");
-  expect(container.textContent).toContain("common.description_placeholder");
+  expect(captured.descriptionPlaceholder).toBeNull();
+  expect(container.textContent?.match(/common\.description/g)).toHaveLength(1);
   expect(captured.propertiesDisabled).toBe(false);
   expect(captured.widgetsDisabled).toBe(true);
   expect(captured.attachmentsDisabled).toBe(false);
@@ -178,7 +186,7 @@ it("hides the edit entry and stays read-only when the user cannot edit", async (
   expect(container.querySelector("button")).toBeNull();
   expect(captured.titleDisabled).toBe(true);
   expect(captured.descriptionDisabled).toBe(true);
-  expect(captured.descriptionPlaceholder).toBe("common.description_placeholder");
+  expect(captured.descriptionPlaceholder).toBeNull();
   expect(captured.propertiesDisabled).toBe(true);
   expect(captured.widgetsDisabled).toBe(true);
   expect(captured.attachmentsDisabled).toBe(true);
@@ -190,6 +198,16 @@ it("keeps mobile properties disabled for archived work items", async () => {
   expect(captured.propertiesDisabled).toBe(true);
   expect(captured.widgetsDisabled).toBe(true);
   expect(captured.attachmentsDisabled).toBe(true);
+});
+
+it("hides the read-only placeholder when a description only contains an image", async () => {
+  issueState.descriptionHtml = '<image-component src="/assets/receipt.png"></image-component>';
+  await act(async () => renderMainContent(true));
+
+  expect(container.textContent).not.toContain("common.description");
+
+  await act(async () => renderPeekDetails());
+  expect(container.textContent).not.toContain("common.description_placeholder");
 });
 
 it("hides issue reactions under the description in detail and peek views", async () => {

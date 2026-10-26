@@ -12,7 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import type { EditorRefApi } from "@plane/editor";
 import type { TNameDescriptionLoader } from "@plane/types";
 import { EFileAssetType, EIssueServiceType } from "@plane/types";
-import { cn, isEmptyHtmlString } from "@plane/utils";
+import { cn, isDescriptionContentEmpty } from "@plane/utils";
 // components
 import { DescriptionVersionsRoot } from "@/components/core/description-versions";
 import { DescriptionInput } from "@/components/editor/rich-text/description-input";
@@ -82,9 +82,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
     "rounded-lg border bg-surface-1 px-4 py-3 transition-colors",
     isContentEditable ? "border-strong" : "border-subtle"
   );
-  const showDescriptionPlaceholder =
-    !isContentEditable &&
-    (!issue.description_html || isEmptyHtmlString(issue.description_html, ["img", "table", "iframe", "video"]));
+  const showDescriptionPlaceholder = !isContentEditable && isDescriptionContentEmpty(issue.description_html);
 
   return (
     <>
@@ -146,14 +144,13 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
                     ...(isMigrationUpdate ? { skip_activity: "true" } : {}),
                   });
                 }}
-                placeholder={t("common.description_placeholder")}
                 projectId={issue.project_id}
                 setIsSubmitting={(value) => setIsSubmitting(value)}
                 workspaceSlug={workspaceSlug}
               />
               {showDescriptionPlaceholder && (
                 <p className="text-15 pointer-events-none absolute top-0 left-7 text-placeholder">
-                  {t("common.description_placeholder")}
+                  {t("common.description")}
                 </p>
               )}
             </div>

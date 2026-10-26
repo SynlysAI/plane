@@ -12,7 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import type { EditorRefApi } from "@plane/editor";
 import { EFileAssetType } from "@plane/types";
 import type { TNameDescriptionLoader } from "@plane/types";
-import { cn, isEmptyHtmlString } from "@plane/utils";
+import { cn, isDescriptionContentEmpty } from "@plane/utils";
 // components
 import { DescriptionVersionsRoot } from "@/components/core/description-versions";
 import { DescriptionInput } from "@/components/editor/rich-text/description-input";
@@ -88,9 +88,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
     "rounded-lg border bg-surface-1 px-4 py-3 transition-colors",
     isContentEditable ? "border-strong" : "border-subtle"
   );
-  const showDescriptionPlaceholder =
-    !isContentEditable &&
-    (!issue.description_html || isEmptyHtmlString(issue.description_html, ["img", "table", "iframe", "video"]));
+  const showDescriptionPlaceholder = !isContentEditable && isDescriptionContentEmpty(issue.description_html);
 
   const issueDescription =
     issue.description_html !== undefined || issue.description_html !== null
@@ -153,14 +151,13 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
                   ...(isMigrationUpdate ? { skip_activity: "true" } : {}),
                 });
               }}
-              placeholder={t("common.description_placeholder")}
               setIsSubmitting={(value) => setIsSubmitting(value)}
               projectId={issue.project_id}
               workspaceSlug={workspaceSlug}
             />
             {showDescriptionPlaceholder && (
               <p className="text-15 pointer-events-none absolute top-0 left-4 text-placeholder">
-                {t("common.description_placeholder")}
+                {t("common.description")}
               </p>
             )}
           </div>
