@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   updateItem: vi.fn(),
   markAllRead: vi.fn(),
   push: vi.fn(),
+  setToast: vi.fn(),
 }));
 
 vi.mock("@/services/inbox.service", () => ({
@@ -35,6 +36,11 @@ vi.mock("@makeplane/propel/components/tooltip", () => ({
 
 vi.mock("@makeplane/propel/icons", () => ({
   InboxOutline: () => null,
+}));
+
+vi.mock("@plane/propel/toast", () => ({
+  TOAST_TYPE: { ERROR: "ERROR" },
+  setToast: mocks.setToast,
 }));
 
 vi.mock("@plane/utils", () => ({
@@ -135,7 +141,7 @@ it("opens a server-backed preview and shows the unified badge", async () => {
 
   await act(async () => trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
-  expect(mocks.fetchInbox).toHaveBeenCalledWith("lab", { per_page: 8 });
+  expect(mocks.fetchInbox).toHaveBeenCalledWith("lab", { read: "false", per_page: 8 });
   expect(mocks.fetchUnreadCounts).toHaveBeenCalledWith("lab");
   expect(container.textContent).toContain("2 条未读");
   expect(container.textContent).toContain("提交技术路线说明");
@@ -169,6 +175,73 @@ it("marks one item read and navigates without marking sibling items read", async
 
   expect(mocks.updateItem).toHaveBeenCalledWith("lab", "todo:CHAIN_TASK:1", "read");
   expect(mocks.push).toHaveBeenCalledWith("/lab/research/todos");
+  expect(container.textContent).not.toContain("提交技术路线说明");
+  expect(container.querySelector('button[aria-label="通知，1 条未读"]')).not.toBeNull();
+});
+
+it("keeps a row and does not navigate when marking it read fails", async () => {
+  mocks.updateItem.mockRejectedValueOnce(new Error("network error"));
+  await renderPopover();
+  await act(async () =>
+    container
+      .querySelector('button[aria-label="通知，2 条未读"]')
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  );
+
+  const row = [...container.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("提交技术路线说明")
+  );
+  await act(async () => row?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+  expect(mocks.setToast).toHaveBeenCalled();
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("提交技术路线说明");
+});
+
+it("clears all unread items and hides the action when no unread remains", async () => {
+  mocks.markAllRead.mockResolvedValueOnce({
+    schema_version: "inbox.v1",
+    results: [],
+    unread_counts: counts(0),
+    degraded_sources: [],
+  });
+  await renderPopover();
+  await act(async () =>
+    container
+      .querySelector('button[aria-label="通知，2 条未读"]')
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  );
+  const markAll = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("全部已读"));
+  await act(async () => markAll?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+  expect(mocks.markAllRead).toHaveBeenCalledWith("lab");
+  expect(container.textContent).not.toContain("提交技术路线说明");
+  expect(container.textContent).toContain("暂无未读");
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent?.includes("全部已读"))).toBe(
+    false
+  );
+});
+
+it("does not render mark-all-read when the server reports zero unread", async () => {
+  mocks.fetchInbox.mockResolvedValue({
+    schema_version: "inbox.v1",
+    results: [],
+    count: 0,
+    total_count: 0,
+    next_cursor: undefined,
+    unread_counts: counts(0),
+    degraded_sources: [],
+  } satisfies TInboxPaginatedInfo);
+  mocks.fetchUnreadCounts.mockResolvedValue(counts(0));
+  await renderPopover();
+  await act(async () =>
+    container.querySelector('button[aria-label="通知"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  );
+
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent?.includes("全部已读"))).toBe(
+    false
+  );
+  expect(container.textContent).toContain("暂无通知");
 });
 
 it("closes the preview with Escape", async () => {

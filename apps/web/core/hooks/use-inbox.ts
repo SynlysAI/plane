@@ -4,7 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import useSWR from "swr";
+import { useCallback } from "react";
+import useSWR, { useSWRConfig } from "swr";
 // plane imports
 import type { TInboxListParams } from "@plane/types";
 // services
@@ -12,7 +13,7 @@ import inboxService from "@/services/inbox.service";
 
 export const INBOX_REFRESH_INTERVAL = 45_000;
 
-/** Build a stable list key so the popover and full page share one cache. */
+/** Build a stable list key for one inbox filter and page size. */
 export function inboxListKey(workspaceSlug: string | undefined, params: TInboxListParams) {
   return workspaceSlug ? `UNIFIED_INBOX_${workspaceSlug}_${JSON.stringify(params)}` : null;
 }
@@ -20,6 +21,38 @@ export function inboxListKey(workspaceSlug: string | undefined, params: TInboxLi
 /** Build the stable badge-count key used by the top navigation. */
 export function inboxUnreadCountKey(workspaceSlug: string | undefined) {
   return workspaceSlug ? `UNIFIED_INBOX_UNREAD_${workspaceSlug}` : null;
+}
+
+/**
+ * Determine whether an SWR key belongs to an inbox list cache.
+ *
+ * @param workspaceSlug Currently active workspace slug.
+ * @param key SWR cache key being inspected.
+ * @param excludeKey Optional list key whose optimistic update should be preserved.
+ * @returns True when the key should be invalidated.
+ */
+export function matchesInboxListKey(workspaceSlug: string | undefined, key: unknown, excludeKey?: string | null) {
+  if (!workspaceSlug || typeof key !== "string") return false;
+  return (
+    key.startsWith(`UNIFIED_INBOX_${workspaceSlug}_`) &&
+    key !== inboxUnreadCountKey(workspaceSlug) &&
+    key !== excludeKey
+  );
+}
+
+/**
+ * Invalidate list caches rendered with other filters without undoing the current update.
+ *
+ * @param workspaceSlug Currently active workspace slug.
+ * @param excludeKey List key whose local mutation has already been applied.
+ * @returns Async invalidation callback.
+ */
+export function useInvalidateOtherInboxLists(workspaceSlug: string | undefined, excludeKey?: string | null) {
+  const { mutate } = useSWRConfig();
+
+  return useCallback(async () => {
+    await mutate((key) => matchesInboxListKey(workspaceSlug, key, excludeKey), undefined, { revalidate: true });
+  }, [excludeKey, mutate, workspaceSlug]);
 }
 
 /** Fetch one unified inbox page with shared polling behavior. */

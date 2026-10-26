@@ -59,11 +59,21 @@ afterEach(async () => {
 it("renders source, action, urgency and unread presentation", async () => {
   await act(async () => root.render(<InboxItemRow item={inboxItem()} compact={false} selected={false} />));
 
+  expect(container.querySelector('[data-testid="inbox-unread-indicator"]')).not.toBeNull();
   expect(container.textContent).toContain("科研任务 · 待办");
   expect(container.textContent).toContain("提交技术路线说明");
   expect(container.textContent).toContain("下一步：提交");
   expect(container.textContent).toContain("今天截止");
   expect(container.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-26T02:00:00Z");
+});
+
+it("does not show an unread indicator for read items", async () => {
+  await act(async () =>
+    root.render(<InboxItemRow item={inboxItem({ read_at: "2026-10-26T02:30:00Z" })} compact={false} />)
+  );
+
+  expect(container.querySelector('[data-testid="inbox-unread-indicator"]')).toBeNull();
+  expect(container.textContent).toContain("提交技术路线说明");
 });
 
 it("invokes selection without changing the item object", async () => {

@@ -6,6 +6,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "react-router";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import {
   INBOX_ACTION_LABELS,
   INBOX_CATEGORY_LABELS,
@@ -16,7 +17,7 @@ import {
   inboxLabel,
 } from "./inbox-labels";
 // hooks
-import { useInboxList, useInboxUnreadCounts } from "@/hooks/use-inbox";
+import { inboxListKey, useInboxList, useInboxUnreadCounts, useInvalidateOtherInboxLists } from "@/hooks/use-inbox";
 // services
 import inboxService from "@/services/inbox.service";
 
@@ -33,8 +34,11 @@ export function InboxDetail({ workspaceSlug }: Props) {
   const [searchParams] = useSearchParams();
   const selectedItemId = searchParams.get("inbox_item") ?? undefined;
   const currentTab = searchParams.get("inbox_tab") ?? "all";
-  const { data, mutate: mutateList } = useInboxList(workspaceSlug, { tab: currentTab as never, per_page: 50 });
+  const listParams = { tab: currentTab as never, per_page: 50 };
+  const currentListKey = inboxListKey(workspaceSlug, listParams);
+  const { data, mutate: mutateList } = useInboxList(workspaceSlug, listParams);
   const { mutate: mutateCounts } = useInboxUnreadCounts(workspaceSlug);
+  const invalidateOtherInboxLists = useInvalidateOtherInboxLists(workspaceSlug, currentListKey);
   const item = data?.results.find((candidate) => candidate.id === selectedItemId);
 
   if (!item) {
@@ -49,19 +53,29 @@ export function InboxDetail({ workspaceSlug }: Props) {
   }
 
   const handleMarkUnread = async () => {
-    const response = await inboxService.updateItem(workspaceSlug, item.id, "unread");
-    if (!response) return;
-    await Promise.all([
-      mutateList(
-        (current) =>
-          current && {
-            ...current,
-            results: current.results.map((row) => (row.id === item.id ? { ...row, read_at: undefined } : row)),
-          },
-        { revalidate: false }
-      ),
-      mutateCounts(response.unread_counts, { revalidate: false }),
-    ]);
+    try {
+      const response = await inboxService.updateItem(workspaceSlug, item.id, "unread");
+      if (!response) return;
+      await Promise.all([
+        mutateList(
+          (current) =>
+            current && {
+              ...current,
+              results: current.results.map((row) => (row.id === item.id ? { ...row, read_at: undefined } : row)),
+            },
+          { revalidate: false }
+        ),
+        mutateCounts(response.unread_counts, { revalidate: false }),
+      ]);
+      await invalidateOtherInboxLists();
+    } catch (error) {
+      console.error(error);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "标记未读失败",
+        message: "请稍后重试，该通知仍保持已读。",
+      });
+    }
   };
 
   const metadata = [

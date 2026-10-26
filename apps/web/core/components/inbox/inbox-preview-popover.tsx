@@ -10,9 +10,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { InboxOutline } from "@makeplane/propel/icons";
 import type { TInboxUnreadCounts } from "@plane/types";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn, getNumberCount } from "@plane/utils";
 // hooks
-import { useInboxList, useInboxUnreadCounts } from "@/hooks/use-inbox";
+import { inboxListKey, useInboxList, useInboxUnreadCounts, useInvalidateOtherInboxLists } from "@/hooks/use-inbox";
 // services
 import inboxService from "@/services/inbox.service";
 // components
@@ -28,10 +29,17 @@ export function InboxPreviewPopover({ workspaceSlug }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
-  const { data, mutate: mutateList } = useInboxList(workspaceSlug, { per_page: 8 });
+  const listParams = { read: "false" as const, per_page: 8 };
+  const currentListKey = inboxListKey(workspaceSlug, listParams);
+  const { data, mutate: mutateList } = useInboxList(workspaceSlug, listParams);
   const { data: counts, mutate: mutateCounts } = useInboxUnreadCounts(workspaceSlug);
+  const invalidateOtherInboxLists = useInvalidateOtherInboxLists(workspaceSlug, currentListKey);
   const items = data?.results ?? [];
   const unreadCount = counts?.total_unread_count ?? 0;
+
+  useEffect(() => {
+    void mutateCounts();
+  }, [mutateCounts, pathname]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -58,16 +66,18 @@ export function InboxPreviewPopover({ workspaceSlug }: Props) {
           (current) =>
             current && {
               ...current,
-              results: current.results.map((item) =>
-                !itemId || item.id === itemId ? { ...item, read_at: new Date().toISOString() } : item
-              ),
+              results: itemId ? current.results.filter((item) => item.id !== itemId) : [],
+              count: itemId ? Math.max(0, current.count - 1) : 0,
+              total_count: itemId ? Math.max(0, current.total_count - 1) : 0,
+              next_cursor: itemId ? current.next_cursor : undefined,
             },
           { revalidate: false }
         ),
         mutateCounts(unreadCounts, { revalidate: false }),
       ]);
+      await invalidateOtherInboxLists();
     },
-    [mutateCounts, mutateList]
+    [invalidateOtherInboxLists, mutateCounts, mutateList]
   );
 
   const handleItemSelect = async (item: (typeof items)[number]) => {
@@ -76,6 +86,14 @@ export function InboxPreviewPopover({ workspaceSlug }: Props) {
       try {
         const response = await inboxService.updateItem(workspaceSlug, item.id, "read");
         await applyResponse(response?.unread_counts, item.id);
+      } catch (error) {
+        console.error(error);
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "标记已读失败",
+          message: "请稍后重试，该通知仍保持未读。",
+        });
+        return;
       } finally {
         setIsMutating(false);
       }
@@ -89,6 +107,13 @@ export function InboxPreviewPopover({ workspaceSlug }: Props) {
     try {
       const response = await inboxService.markAllRead(workspaceSlug);
       await applyResponse(response?.unread_counts);
+    } catch (error) {
+      console.error(error);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "全部已读失败",
+        message: "请稍后重试，未读状态已保留。",
+      });
     } finally {
       setIsMutating(false);
     }
@@ -96,7 +121,7 @@ export function InboxPreviewPopover({ workspaceSlug }: Props) {
 
   return (
     <div ref={containerRef} className="relative">
-      <Tooltip label="Inbox" side="bottom">
+      <Tooltip label="通知" side="bottom">
         <button
           type="button"
           aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : "通知"}
@@ -128,14 +153,16 @@ export function InboxPreviewPopover({ workspaceSlug }: Props) {
               <p className="text-13 font-semibold text-primary">通知</p>
               <p className="text-11 text-tertiary">{unreadCount > 0 ? `${unreadCount} 条未读` : "暂无未读"}</p>
             </div>
-            <button
-              type="button"
-              onClick={handleMarkAllRead}
-              disabled={isMutating || unreadCount === 0}
-              className="rounded-md px-2 py-1 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              全部已读
-            </button>
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                disabled={isMutating}
+                className="rounded-md px-2 py-1 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                全部已读
+              </button>
+            )}
           </div>
 
           <div className="max-h-[360px] overflow-y-auto">

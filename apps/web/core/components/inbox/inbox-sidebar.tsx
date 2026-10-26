@@ -6,12 +6,13 @@
 
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn } from "@plane/utils";
 import type { TInboxTab } from "@plane/types";
 // components
 import { InboxItemRow } from "./inbox-item-row";
 // hooks
-import { useInboxList, useInboxUnreadCounts } from "@/hooks/use-inbox";
+import { inboxListKey, useInboxList, useInboxUnreadCounts, useInvalidateOtherInboxLists } from "@/hooks/use-inbox";
 // services
 import inboxService from "@/services/inbox.service";
 
@@ -32,9 +33,13 @@ export function InboxSidebar({ workspaceSlug }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentTab = TABS.find((tab) => tab.value === searchParams.get("inbox_tab"))?.value ?? "all";
   const selectedItemId = searchParams.get("inbox_item") ?? undefined;
-  const { data, isLoading, mutate: mutateList } = useInboxList(workspaceSlug, { tab: currentTab, per_page: 50 });
+  const listParams = { tab: currentTab, per_page: 50 };
+  const currentListKey = inboxListKey(workspaceSlug, listParams);
+  const { data, isLoading, mutate: mutateList } = useInboxList(workspaceSlug, listParams);
   const { data: counts, mutate: mutateCounts } = useInboxUnreadCounts(workspaceSlug);
+  const invalidateOtherInboxLists = useInvalidateOtherInboxLists(workspaceSlug, currentListKey);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
   const items = data?.results ?? [];
 
   const updateQuery = useCallback(
@@ -51,39 +56,62 @@ export function InboxSidebar({ workspaceSlug }: Props) {
     async (item: (typeof items)[number]) => {
       updateQuery("inbox_item", item.id);
       if (item.read_at !== null && item.read_at !== undefined) return;
-      const response = await inboxService.updateItem(workspaceSlug, item.id, "read");
+      try {
+        const response = await inboxService.updateItem(workspaceSlug, item.id, "read");
+        if (!response) return;
+        await Promise.all([
+          mutateList(
+            (current) =>
+              current && {
+                ...current,
+                results: current.results.map((row) =>
+                  row.id === item.id ? { ...row, read_at: new Date().toISOString() } : row
+                ),
+              },
+            { revalidate: false }
+          ),
+          mutateCounts(response.unread_counts, { revalidate: false }),
+        ]);
+        await invalidateOtherInboxLists();
+      } catch (error) {
+        console.error(error);
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "标记已读失败",
+          message: "请稍后重试，该通知仍保持未读。",
+        });
+      }
+    },
+    [invalidateOtherInboxLists, mutateCounts, mutateList, updateQuery, workspaceSlug]
+  );
+
+  const handleMarkAllRead = async () => {
+    setIsMutating(true);
+    try {
+      const response = await inboxService.markAllRead(workspaceSlug);
       if (!response) return;
       await Promise.all([
         mutateList(
           (current) =>
             current && {
               ...current,
-              results: current.results.map((row) =>
-                row.id === item.id ? { ...row, read_at: new Date().toISOString() } : row
-              ),
+              results: current.results.map((item) => ({ ...item, read_at: new Date().toISOString() })),
             },
           { revalidate: false }
         ),
         mutateCounts(response.unread_counts, { revalidate: false }),
       ]);
-    },
-    [mutateCounts, mutateList, updateQuery, workspaceSlug]
-  );
-
-  const handleMarkAllRead = async () => {
-    const response = await inboxService.markAllRead(workspaceSlug);
-    if (!response) return;
-    await Promise.all([
-      mutateList(
-        (current) =>
-          current && {
-            ...current,
-            results: current.results.map((item) => ({ ...item, read_at: new Date().toISOString() })),
-          },
-        { revalidate: false }
-      ),
-      mutateCounts(response.unread_counts, { revalidate: false }),
-    ]);
+      await invalidateOtherInboxLists();
+    } catch (error) {
+      console.error(error);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "全部已读失败",
+        message: "请稍后重试，未读状态已保留。",
+      });
+    } finally {
+      setIsMutating(false);
+    }
   };
 
   const handleLoadMore = async () => {
@@ -101,6 +129,13 @@ export function InboxSidebar({ workspaceSlug }: Props) {
           current && nextPage ? { ...nextPage, results: [...current.results, ...nextPage.results] } : current,
         { revalidate: false }
       );
+    } catch (error) {
+      console.error(error);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "加载通知失败",
+        message: "请稍后重试。",
+      });
     } finally {
       setIsFetchingMore(false);
     }
@@ -119,7 +154,7 @@ export function InboxSidebar({ workspaceSlug }: Props) {
           <button
             type="button"
             onClick={handleMarkAllRead}
-            disabled={!counts?.total_unread_count}
+            disabled={isMutating || !counts?.total_unread_count}
             className="rounded-md px-2 py-1 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             全部已读

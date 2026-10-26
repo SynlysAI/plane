@@ -52,7 +52,11 @@ export function InboxItemRow({ item, compact = false, selected = false, onSelect
         "hover:bg-layer-1/60"
       )}
     >
-      <span className="mt-2 size-1.5 flex-shrink-0 rounded-full bg-accent-primary" aria-hidden={!unread} />
+      <span
+        data-testid={unread ? "inbox-unread-indicator" : undefined}
+        className={cn("mt-2 size-1.5 flex-shrink-0 rounded-full", unread ? "bg-accent-primary" : "bg-transparent")}
+        aria-hidden
+      />
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-3">
           <span className="truncate text-11 font-medium text-tertiary">
@@ -62,7 +66,13 @@ export function InboxItemRow({ item, compact = false, selected = false, onSelect
             {formatRelativeTime(item.updated_at)}
           </time>
         </span>
-        <span className={cn("mt-1 block truncate text-primary", compact ? "text-12" : "text-13 font-medium")}>
+        <span
+          className={cn(
+            "mt-1 block truncate",
+            compact ? "text-12" : "text-13",
+            unread ? "font-medium text-primary" : "font-normal text-secondary"
+          )}
+        >
           {item.title}
         </span>
         {item.summary && !compact && (
