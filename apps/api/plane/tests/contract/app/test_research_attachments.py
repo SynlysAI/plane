@@ -336,17 +336,21 @@ class TestReportAttachments:
         # a private report is invisible to an unrelated member
         assert env["outsider_client"].get(env["attachments_url"]).status_code == 404
 
-    def test_download_rechecks_the_acl(self, env, monkeypatch):
+    def test_download_rechecks_the_acl(self, env):
         asset = make_asset(env["workspace"], env["student"], "paper.pdf", "application/pdf", MB)
         attachment = (
             env["student_client"].post(env["attachments_url"], {"asset_id": str(asset.id)}, format="json").json()
         )
-        download_url = f"{env['attachments_url']}{attachment['id']}/"
+        download_url = attachment["asset_url"]
+        assert download_url.endswith(f"{attachment['id']}/download/")
 
         allowed = env["student_client"].get(download_url)
         assert allowed.status_code == 302
 
-        denied = env["outsider_client"].get(download_url)
+        legacy_url = f"{env['attachments_url']}{attachment['id']}/"
+        assert env["student_client"].get(legacy_url).status_code == 302
+
+        denied = env["colleague_client"].get(download_url)
         assert denied.status_code in (403, 404)
         assert ResearchAuditEvent.objects.filter(action="report.attachment.denied").exists()
 
