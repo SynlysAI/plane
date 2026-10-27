@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   createNodeTask: vi.fn(),
   updateNodeTask: vi.fn(),
   runNodeTaskAction: vi.fn(),
+  getNotificationRecipients: vi.fn(),
+  updateNotificationRecipients: vi.fn(),
+  updateNotificationSelfSubscription: vi.fn(),
 }));
 const capturedDescription = vi.hoisted(() => ({ props: null as null | { editable: boolean; value: string } }));
 
@@ -32,6 +35,9 @@ vi.mock("@/services/research/chain-task.service", () => ({
     createNodeTask = mocks.createNodeTask;
     updateNodeTask = mocks.updateNodeTask;
     runNodeTaskAction = mocks.runNodeTaskAction;
+    getNotificationRecipients = mocks.getNotificationRecipients;
+    updateNotificationRecipients = mocks.updateNotificationRecipients;
+    updateNotificationSelfSubscription = mocks.updateNotificationSelfSubscription;
   },
 }));
 
@@ -118,6 +124,34 @@ const candidates = [
   },
 ];
 
+const notificationRecipients = {
+  schema_version: "task-notification-recipients.v1" as const,
+  groups: [{ id: "unit-1", name: "智能材料组" }],
+  candidates: [
+    {
+      id: "student-1",
+      display_name: "李同学",
+      email: "student@example.com",
+      avatar_url: null,
+      group_ids: ["unit-1"],
+    },
+    {
+      id: "advisor-1",
+      display_name: "王导师",
+      email: "advisor@example.com",
+      avatar_url: null,
+      group_ids: ["unit-1"],
+    },
+  ],
+  selected_user_ids: ["student-1"],
+  cc_user_ids: [],
+  fixed_user_ids: ["student-1"],
+  recipient_user_ids: ["student-1"],
+  current_user_subscribed: false,
+  current_user_self_subscribed: false,
+  can_manage: true,
+};
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -128,6 +162,9 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.getNodeTasks.mockResolvedValue([task()]);
   mocks.getAssignableUsers.mockResolvedValue(candidates);
+  mocks.getNotificationRecipients.mockResolvedValue(notificationRecipients);
+  mocks.updateNotificationRecipients.mockResolvedValue(notificationRecipients);
+  mocks.updateNotificationSelfSubscription.mockResolvedValue(notificationRecipients);
 });
 
 afterEach(async () => {
@@ -205,6 +242,27 @@ it("opens an existing research task read-only until editing is explicitly enable
   );
   expect(editToggle().textContent).toBe("编辑");
   expect(editToggle().getAttribute("aria-pressed")).toBe("false");
+});
+
+it("shows and saves notification members inside the research task peek", async () => {
+  await renderPanel();
+  await act(async () => button("整理开题文献").click());
+
+  expect(mocks.getNotificationRecipients).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1");
+  expect(container.querySelector("[data-task-notification-recipients]")?.textContent).toContain("这些人会收到通知");
+
+  await act(async () => button("编辑通知列表").click());
+  const selectable = document.querySelector<HTMLInputElement>('input[type="checkbox"]:not(:disabled)');
+  if (!selectable) throw new Error("selectable notification member not found");
+  await act(async () => selectable.click());
+  const save = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent === "保存");
+  if (!save) throw new Error("notification member save button not found");
+  await act(async () => save.click());
+
+  expect(mocks.updateNotificationRecipients).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", [
+    "student-1",
+    "advisor-1",
+  ]);
 });
 
 it("saves changed title and instruction together when leaving task edit mode", async () => {

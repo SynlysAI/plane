@@ -45,6 +45,7 @@ import {
   type TWorkbenchPeekMode,
 } from "@/components/research/chains/research-chain-workbench-peek";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
+import { TaskNotificationRecipients } from "@/components/common/task-notification-recipients";
 import { ResearchTaskComments } from "@/components/research/chains/research-task-comments";
 import { ResearchTaskDescription } from "@/components/research/chains/research-task-description";
 import { useTransientMenu } from "@/hooks/use-transient-menu";
@@ -364,6 +365,27 @@ export function ResearchChainTaskPeek(props: Props) {
     return sorted;
   }, [activityOrder, candidates, events, t, task]);
 
+  const loadNotificationRecipients = useCallback(() => {
+    if (!task) return Promise.reject(new Error("Task is required."));
+    return taskService.getNotificationRecipients(workspaceSlug, task.chain, task.node, task.id);
+  }, [task, taskService, workspaceSlug]);
+
+  const saveNotificationRecipients = useCallback(
+    (userIds: string[]) => {
+      if (!task) return Promise.reject(new Error("Task is required."));
+      return taskService.updateNotificationRecipients(workspaceSlug, task.chain, task.node, task.id, userIds);
+    },
+    [task, taskService, workspaceSlug]
+  );
+
+  const setNotificationSelfSubscribed = useCallback(
+    (subscribed: boolean) => {
+      if (!task) return Promise.reject(new Error("Task is required."));
+      return taskService.updateNotificationSelfSubscription(workspaceSlug, task.chain, task.node, task.id, subscribed);
+    },
+    [task, taskService, workspaceSlug]
+  );
+
   const contentPanelClassName = cn(
     "rounded-lg border bg-surface-1 px-4 py-3 transition-colors",
     isContentEditable ? "border-strong" : "border-subtle"
@@ -581,6 +603,11 @@ export function ResearchChainTaskPeek(props: Props) {
               workspaceSlug={workspaceSlug}
               locale={locale}
               order={activityOrder}
+            />
+            <TaskNotificationRecipients
+              load={loadNotificationRecipients}
+              save={saveNotificationRecipients}
+              setSelfSubscribed={setNotificationSelfSubscribed}
             />
           </section>
         )}

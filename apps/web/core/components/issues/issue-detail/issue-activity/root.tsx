@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import uniq from "lodash-es/uniq";
 import { observer } from "mobx-react";
 // plane package imports
@@ -17,8 +17,10 @@ import { useTranslation } from "@plane/i18n";
 import type { TFileSignedURLResponse, TIssueComment } from "@plane/types";
 // components
 import { CommentCreate } from "@/components/comments/comment-create";
+import { TaskNotificationRecipients } from "@/components/common/task-notification-recipients";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
+import { IssueService } from "@/services/issue/issue.service";
 // local imports
 import { IssueActivityCommentRoot } from "./activity-comment-root";
 import { useWorkItemCommentOperations } from "./helper";
@@ -50,6 +52,7 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
     defaultActivityFilters
   );
   const { setValue: setSortOrder, storedValue: sortOrder } = useLocalStorage("activity_sort_order", E_SORT_ORDER.ASC);
+  const issueService = useMemo(() => new IssueService(), []);
 
   const { getProjectById } = useProject();
 
@@ -75,6 +78,24 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
   const activityOperations = useWorkItemCommentOperations(workspaceSlug, projectId, issueId);
 
   const project = getProjectById(projectId);
+  const loadNotificationRecipients = useCallback(() => {
+    return issueService.getIssueNotificationRecipients(workspaceSlug, projectId, issueId);
+  }, [issueService, workspaceSlug, projectId, issueId]);
+
+  const saveNotificationRecipients = useCallback(
+    (userIds: string[]) => {
+      return issueService.updateIssueNotificationRecipients(workspaceSlug, projectId, issueId, userIds);
+    },
+    [issueService, workspaceSlug, projectId, issueId]
+  );
+
+  const setNotificationSelfSubscribed = useCallback(
+    (subscribed: boolean) => {
+      return issueService.updateIssueNotificationSelfSubscription(workspaceSlug, projectId, issueId, subscribed);
+    },
+    [issueService, workspaceSlug, projectId, issueId]
+  );
+
   const renderCommentCreationBox = useMemo(
     () => (
       <CommentCreate
@@ -126,6 +147,13 @@ export const IssueActivity = observer(function IssueActivity(props: TIssueActivi
           </div>
         </div>
       </div>
+      {!disabled && project.is_research_project !== true && (
+        <TaskNotificationRecipients
+          load={loadNotificationRecipients}
+          save={saveNotificationRecipients}
+          setSelfSubscribed={setNotificationSelfSubscribed}
+        />
+      )}
     </div>
   );
 });

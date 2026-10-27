@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const calls = vi.hoisted(() => ({ post: vi.fn(), delete: vi.fn(), fetch: vi.fn() }));
+const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), fetch: vi.fn() }));
 
 vi.mock("@plane/constants", () => ({
   API_BASE_URL: "https://plane.test",
@@ -11,7 +11,9 @@ vi.mock("@plane/constants", () => ({
 }));
 vi.mock("@/services/api.service", () => ({
   APIService: class {
+    get = calls.get;
     post = calls.post;
+    put = calls.put;
     delete = calls.delete;
   },
 }));
@@ -24,7 +26,34 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("fetch", calls.fetch);
   calls.fetch.mockResolvedValue({ ok: true });
+  calls.get.mockResolvedValue(undefined);
+  calls.put.mockResolvedValue(undefined);
   calls.delete.mockResolvedValue(undefined);
+});
+
+it("uses the task-scoped notification recipients contract", async () => {
+  const envelope = {
+    success: true,
+    data: { schema_version: "task-notification-recipients.v1" },
+    error: null,
+    request_id: null,
+    schema_version: "task-notification-recipients.v1",
+  };
+  calls.get.mockResolvedValueOnce({ data: envelope });
+  calls.put.mockResolvedValueOnce({ data: envelope });
+  calls.post.mockResolvedValueOnce({ data: envelope });
+  calls.delete.mockResolvedValueOnce({ data: envelope });
+  const service = new ResearchChainTaskService();
+
+  await service.getNotificationRecipients("lab", "chain-1", "node-1", "task-1");
+  await service.updateNotificationRecipients("lab", "chain-1", "node-1", "task-1", ["user-1"]);
+  await service.updateNotificationSelfSubscription("lab", "chain-1", "node-1", "task-1", true);
+  await service.updateNotificationSelfSubscription("lab", "chain-1", "node-1", "task-1", false);
+
+  expect(calls.get).toHaveBeenCalledWith(`${BASE_URL}notification-recipients/`);
+  expect(calls.put).toHaveBeenCalledWith(`${BASE_URL}notification-recipients/`, { user_ids: ["user-1"] });
+  expect(calls.post).toHaveBeenCalledWith(`${BASE_URL}notification-recipients/me/`, {});
+  expect(calls.delete).toHaveBeenCalledWith(`${BASE_URL}notification-recipients/me/`);
 });
 
 afterEach(() => {

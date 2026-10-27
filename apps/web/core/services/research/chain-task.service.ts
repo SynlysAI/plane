@@ -15,6 +15,7 @@ import type {
   TResearchTaskComment,
   TCommentAttachment,
   TCommentAttachmentLimits,
+  TTaskNotificationRecipients,
 } from "@plane/types";
 import { APIService } from "@/services/api.service";
 import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
@@ -426,6 +427,54 @@ export class ResearchChainTaskService extends APIService {
         const payload = response?.data as TResearchEnvelope<TResearchAssignableUser[]> | undefined;
         return payload?.data ?? [];
       })
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 读取科研任务的抄送与自我订阅成员。 */
+  async getNotificationRecipients(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string
+  ): Promise<TTaskNotificationRecipients> {
+    const base = `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}notification-recipients/`;
+    return this.get(base)
+      .then((response) => unwrap<TTaskNotificationRecipients>(response?.data))
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 全量保存科研任务的抄送成员。 */
+  async updateNotificationRecipients(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    userIds: string[]
+  ): Promise<TTaskNotificationRecipients> {
+    const base = `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}notification-recipients/`;
+    return this.put(base, { user_ids: userIds })
+      .then((response) => unwrap<TTaskNotificationRecipients>(response?.data))
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /** 切换当前用户对科研任务的新动态通知。 */
+  async updateNotificationSelfSubscription(
+    workspaceSlug: string,
+    chainId: string,
+    nodeId: string,
+    taskId: string,
+    subscribed: boolean
+  ): Promise<TTaskNotificationRecipients> {
+    const base = `${researchEndpoints.chainNodeTask(workspaceSlug, chainId, nodeId, taskId)}notification-recipients/me/`;
+    const request = subscribed ? this.post(base, {}) : this.delete(base);
+    return request
+      .then((response) => unwrap<TTaskNotificationRecipients>(response?.data))
       .catch((error) => {
         throw error?.response?.data ?? error;
       });
