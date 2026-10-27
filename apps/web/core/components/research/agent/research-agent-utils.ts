@@ -270,7 +270,7 @@ export function mergeAgentMessages(
         const key = `tool-${toolId || event.seq}`;
         const index = toolIndex.get(key);
         const target = index === undefined ? undefined : items[index];
-        if (target?.kind === "tool") {
+        if (index !== undefined && target?.kind === "tool") {
           items[index] = {
             ...target,
             output: output ? `${target.output}${output}` : target.output,
