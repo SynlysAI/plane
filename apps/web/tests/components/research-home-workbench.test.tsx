@@ -165,7 +165,7 @@ vi.mock("@/services/project-domains.service", () => ({
 }));
 
 const { WorkspaceHomeWorkbench } = await import("@/components/home/workbench");
-const { reportPeriodEnd, reportPeriodKey } = await import("@/components/home/report-period-selector");
+const { reportPeriodEnd, reportPeriodKey } = await import("@/components/research/reports/report-period-selector");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
 let container: HTMLDivElement;
@@ -389,7 +389,7 @@ it("supports a focused one-widget home without fetching hidden modules", async (
   expect(mocks.fetchWorkspaceActivities).not.toHaveBeenCalled();
 });
 
-it("persists order and width for a focused two-widget home", async () => {
+it("persists order for a focused two-widget home and fills the row equally", async () => {
   mocks.fetchWorkspaceWidgets.mockResolvedValue([
     { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
     { key: "research_projects", is_enabled: false, config: { size: "large" }, sort_order: 1000 },
@@ -401,11 +401,10 @@ it("persists order and width for a focused two-widget home", async () => {
   await renderHome();
   await act(async () => undefined);
   const initialGrid = container.querySelector('[data-testid="workspace-home-columns"]')!;
-  expect(initialGrid.className).not.toContain("xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]");
-  expect([...initialGrid.querySelectorAll("section")].every((card) => !card.className.includes("xl:h-full"))).toBe(
-    true
-  );
-  expect(initialGrid.querySelectorAll("section div.overflow-y-auto")).toHaveLength(0);
+  expect([...initialGrid.children].map((card) => card.className.match(/xl:col-span-\d+/)?.[0])).toEqual([
+    "xl:col-span-6",
+    "xl:col-span-6",
+  ]);
   const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
   await act(async () => customize?.click());
 
@@ -421,22 +420,10 @@ it("persists order and width for a focused two-widget home", async () => {
   const currentActivityRow = [...container.querySelectorAll('[role="listitem"]')].find((row) =>
     row.textContent?.includes("最近动态")
   );
-  const fullButton = [...(currentActivityRow?.querySelectorAll("button") ?? [])].find(
-    (button) => button.textContent === "整行"
-  );
-  await act(async () => fullButton?.click());
-  await act(async () => undefined);
-
-  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
-    "lab",
-    "recent_activity",
-    expect.objectContaining({ config: expect.objectContaining({ size: "medium" }) })
-  );
-  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
-    "lab",
-    "recent_activity",
-    expect.objectContaining({ config: expect.objectContaining({ size: "full" }) })
-  );
+  expect(currentActivityRow?.textContent).not.toContain("1/3");
+  expect(currentActivityRow?.textContent).not.toContain("1/2");
+  expect(currentActivityRow?.textContent).not.toContain("2/3");
+  expect(currentActivityRow?.textContent).not.toContain("整行");
   const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
   const visualOrder = [...grid.children]
     .map((section) => ({
@@ -458,14 +445,14 @@ it("restores the compact two-row grid and persists density changes", async () =>
   const grid = container.querySelector("[data-testid='workspace-home-columns']");
   const workbench = grid?.parentElement;
   expect([...cards].map((card) => card.className.match(/xl:col-span-\d+/)?.[0])).toEqual([
-    "xl:col-span-5",
-    "xl:col-span-7",
+    "xl:col-span-6",
+    "xl:col-span-6",
     "xl:col-span-4",
     "xl:col-span-4",
     "xl:col-span-4",
   ]);
-  expect(workbench?.className).toContain("xl:h-full");
-  expect(grid?.className).toContain("xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]");
+  expect(workbench?.className).toContain("xl:min-h-full");
+  expect(grid?.className).toContain("xl:grid-rows-[repeat(2,minmax(360px,1fr))]");
   expect(cards.length).toBeGreaterThanOrEqual(5);
   for (const card of cards) {
     expect(card.className).toMatch(/max-xl:h-\[(400|320)px\]/);
@@ -473,25 +460,149 @@ it("restores the compact two-row grid and persists density changes", async () =>
     expect(card.className).toContain("xl:min-h-0");
     const body = card.querySelector("div.border-t");
     expect(body?.className).toContain("overflow-y-auto");
+    expect(body?.getAttribute("data-home-card-scroll")).toBe("true");
   }
 
   const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
   await act(async () => customize?.click());
   const detailedButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "详细");
   await act(async () => detailedButton?.click());
-  expect(workbench?.className).not.toContain("xl:h-full");
-  expect(grid?.className).not.toContain("xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]");
+  expect(workbench?.className).not.toContain("xl:min-h-full");
+  expect(grid?.className).not.toContain("xl:grid-rows-[repeat(2,minmax(360px,1fr))]");
   for (const card of cards) {
     expect(card.className).not.toMatch(/max-xl:h-\[(400|320)px\]/);
     expect(card.className).not.toContain("xl:h-full");
     const body = card.querySelector("div.border-t");
     expect(body?.className).not.toContain("overflow-y-auto");
+    expect(body?.getAttribute("data-home-card-scroll")).toBeNull();
   }
   expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
     "lab",
     "workbench_layout",
     expect.objectContaining({ config: expect.objectContaining({ density: "detailed" }) })
   );
+});
+
+it("renders and switches one full-row module per waterfall tab", async () => {
+  mocks.fetchWorkspaceWidgets.mockResolvedValue([
+    { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
+    { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1000 },
+    { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+    { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+    { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 700 },
+    { key: "workbench_layout", is_enabled: true, config: { density: "compact", mode: "waterfall" }, sort_order: 100 },
+  ]);
+  await renderHome();
+  await act(async () => undefined);
+
+  const tabs = container.querySelector('[data-testid="workspace-home-waterfall-tabs"]');
+  expect([...(tabs?.querySelectorAll('[role="tab"]') ?? [])].map((tab) => tab.textContent)).toEqual([
+    "我的待办",
+    "科研项目概览",
+    "行政项目概览",
+    "最近动态",
+    "报告提交摘要",
+  ]);
+  const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  expect(grid.getAttribute("role")).toBe("tabpanel");
+  expect(grid.className).toContain("xl:min-h-[70vh]");
+  expect(grid.className).not.toContain("xl:grid-cols-12");
+  expect(grid.querySelector("section")?.classList.contains("xl:col-span-12")).toBe(true);
+  expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["我的待办"]);
+  expect(mocks.getChains).not.toHaveBeenCalled();
+  expect(mocks.fetchProjects).not.toHaveBeenCalled();
+  expect(mocks.fetchWorkspaceActivities).not.toHaveBeenCalled();
+  expect(mocks.getReportSummary).not.toHaveBeenCalled();
+
+  const researchTab = [...(tabs?.querySelectorAll('[role="tab"]') ?? [])].find((tab) =>
+    tab.textContent?.includes("科研项目概览")
+  );
+  await act(async () => researchTab?.click());
+  await act(async () => undefined);
+  expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["科研项目概览"]);
+  expect(mocks.getChains).toHaveBeenCalled();
+});
+
+it("falls back to the first available waterfall module after hiding the active one", async () => {
+  mocks.fetchWorkspaceWidgets.mockResolvedValue([
+    { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
+    { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1000 },
+    { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+    { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+    { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 700 },
+    { key: "workbench_layout", is_enabled: true, config: { density: "compact", mode: "waterfall" }, sort_order: 100 },
+  ]);
+  await renderHome();
+  await act(async () => undefined);
+  const tabs = container.querySelector('[data-testid="workspace-home-waterfall-tabs"]');
+  const activityTab = [...(tabs?.querySelectorAll('[role="tab"]') ?? [])].find((tab) =>
+    tab.textContent?.includes("最近动态")
+  );
+  await act(async () => activityTab?.click());
+  await act(async () => undefined);
+
+  const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
+  await act(async () => customize?.click());
+  const activityRow = [...container.querySelectorAll('[role="listitem"]')].find((row) =>
+    row.textContent?.includes("最近动态")
+  );
+  await act(async () => activityRow?.querySelector('input[type="checkbox"]')?.click());
+  await act(async () => undefined);
+
+  const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["我的待办"]);
+});
+
+it("persists the aggregate and waterfall mode selection", async () => {
+  await renderHome();
+  await act(async () => undefined);
+  const waterfallButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "瀑布");
+  await act(async () => waterfallButton?.click());
+  await act(async () => undefined);
+
+  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
+    "lab",
+    "workbench_layout",
+    expect.objectContaining({
+      config: expect.objectContaining({ density: "compact", mode: "waterfall" }),
+    })
+  );
+  expect(container.querySelector('[data-testid="workspace-home-waterfall-tabs"]')).not.toBeNull();
+});
+
+it("restores widget defaults, aggregate mode, and compact density together", async () => {
+  mocks.fetchWorkspaceWidgets.mockResolvedValue([
+    { key: "my_todos", is_enabled: false, config: { size: "medium" }, sort_order: 700 },
+    { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1100 },
+    { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+    { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+    { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 1000 },
+    { key: "workbench_layout", is_enabled: true, config: { density: "detailed", mode: "waterfall" }, sort_order: 100 },
+  ]);
+  await renderHome();
+  await act(async () => undefined);
+  const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
+  await act(async () => customize?.click());
+  const reset = [...container.querySelectorAll("button")].find((button) => button.textContent === "恢复默认布局");
+  await act(async () => reset?.click());
+  await act(async () => undefined);
+
+  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
+    "lab",
+    "my_todos",
+    expect.objectContaining({ is_enabled: true, sort_order: 500 })
+  );
+  expect(mocks.updateWorkspaceWidget).toHaveBeenCalledWith(
+    "lab",
+    "workbench_layout",
+    expect.objectContaining({
+      config: expect.objectContaining({ density: "compact", mode: "aggregate" }),
+    })
+  );
+  const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  expect(grid.children).toHaveLength(5);
+  expect(grid.className).toContain("xl:grid-cols-12");
+  expect(container.querySelector('[data-testid="workspace-home-waterfall-tabs"]')).toBeNull();
 });
 
 it("serializes rapid density changes so the latest selection wins", async () => {
@@ -549,11 +660,11 @@ it.each([
     expect(grid.children).toHaveLength(count);
     expect(Boolean(section("科研项目概览"))).toBe(research);
     expect(Boolean(section("报告提交摘要"))).toBe(summary);
-    expect(section("我的待办")?.classList.contains("xl:col-span-5")).toBe(true);
-    if (research) expect(section("科研项目概览")?.classList.contains("xl:col-span-7")).toBe(true);
-    for (const title of ["行政项目概览", "最近动态", ...(summary ? ["报告提交摘要"] : [])]) {
-      expect(section(title)?.classList.contains("xl:col-span-4")).toBe(true);
-    }
+    const expectedSpans =
+      count === 5
+        ? ["xl:col-span-6", "xl:col-span-6", "xl:col-span-4", "xl:col-span-4", "xl:col-span-4"]
+        : Array.from({ length: count }, () => (count === 3 ? "xl:col-span-4" : "xl:col-span-6"));
+    expect([...grid.children].map((card) => card.className.match(/xl:col-span-\d+/)?.[0])).toEqual(expectedSpans);
     if (!research) expect(mocks.getChains).not.toHaveBeenCalled();
     if (!summary) expect(mocks.getReportSummary).not.toHaveBeenCalled();
   }
@@ -802,9 +913,11 @@ it("loads a calendar month summary and passes the report timezone to the picker"
     (button) => button.getAttribute("aria-label") === "选择报告周期"
   );
   await act(async () => customPeriod?.click());
+  const requestCountBeforeTypeChange = mocks.getReportSummary.mock.calls.length;
   const monthMode = [...container.querySelectorAll("button")].find((button) => button.textContent === "按月");
   await act(async () => monthMode?.click());
   expect(container.querySelector('[data-testid="report-period-calendar"]')?.getAttribute("data-disabled")).toBe("true");
+  expect(mocks.getReportSummary).toHaveBeenCalledTimes(requestCountBeforeTypeChange);
 
   const date = [...container.querySelectorAll("button")].find((button) => button.textContent === "选择 2026-09-15");
   await act(async () => date?.click());
@@ -883,7 +996,12 @@ it("places business activity before reports and revalidates on refresh", async (
     "最近动态",
     "报告提交摘要",
   ]);
-  expect(mocks.fetchWorkspaceActivities).toHaveBeenCalledWith("lab", { days: "30", offset: 0, per_page: 12 });
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenCalledWith("lab", {
+    days: "30",
+    pagination: "cursor",
+    cursor: undefined,
+    per_page: 12,
+  });
   const refresh = [...container.querySelectorAll("button")].find((button) => button.textContent === "刷新");
   await act(async () => refresh?.click());
   expect(mocks.fetchWorkspaceActivities).toHaveBeenCalledTimes(2);

@@ -26,6 +26,14 @@ export type THomeWidgetKeys =
   | "quick_tutorial"
   | "new_at_plane";
 
+/**
+ * 首页工作台布局模式：aggregate 为自动填满的聚合网格，waterfall 为整行单模块页签。
+ */
+export type TWorkbenchLayoutMode = "aggregate" | "waterfall";
+
+/**
+ * @deprecated 旧首页偏好中的卡片宽度档位。新布局由模式与模块数量自动计算，仅用于兼容已保存配置。
+ */
 export type THomeWidgetSize = "small" | "medium" | "large" | "full";
 
 export type THomeWorkbenchDensity = "compact" | "detailed";

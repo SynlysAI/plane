@@ -5,8 +5,8 @@ import useSWR from "swr";
 // plane imports
 import type {
   THomeWidgetKeys,
-  THomeWidgetSize,
   THomeWorkbenchDensity,
+  TWorkbenchLayoutMode,
   TWidgetEntityData,
   TWorkbenchWidgetKey,
 } from "@plane/types";
@@ -16,44 +16,38 @@ import { WorkspaceService } from "@/services/workspace.service";
 const workspaceService = new WorkspaceService();
 const LEGACY_DENSITY_KEY = "plane.home.workbench.density";
 const DENSITY_VALUES = new Set<THomeWorkbenchDensity>(["compact", "detailed"]);
-const SIZE_VALUES = new Set<THomeWidgetSize>(["small", "medium", "large", "full"]);
+const MODE_VALUES = new Set<TWorkbenchLayoutMode>(["aggregate", "waterfall"]);
 const LAYOUT_KEY: THomeWidgetKeys = "workbench_layout";
 
 export const WORKBENCH_WIDGET_CATALOG: {
   key: TWorkbenchWidgetKey;
   titleKey: string;
   hintKey: string;
-  defaultSize: THomeWidgetSize;
 }[] = [
   {
     key: "my_todos",
     titleKey: "research.home_workbench.widget_my_todos",
     hintKey: "research.home_workbench.widget_my_todos_hint",
-    defaultSize: "medium",
   },
   {
     key: "research_projects",
     titleKey: "research.home_workbench.widget_research_projects",
     hintKey: "research.home_workbench.widget_research_projects_hint",
-    defaultSize: "large",
   },
   {
     key: "administrative_projects",
     titleKey: "research.home_workbench.widget_administrative_projects",
     hintKey: "research.home_workbench.widget_administrative_projects_hint",
-    defaultSize: "small",
   },
   {
     key: "recent_activity",
     titleKey: "research.home_workbench.widget_recent_activity",
     hintKey: "research.home_workbench.widget_recent_activity_hint",
-    defaultSize: "small",
   },
   {
     key: "report_summary",
     titleKey: "research.home_workbench.widget_report_summary",
     hintKey: "research.home_workbench.widget_report_summary_hint",
-    defaultSize: "small",
   },
 ];
 
@@ -63,13 +57,13 @@ const DEFAULT_WIDGET_MAP = new Map(
     {
       key: widget.key,
       is_enabled: true,
-      config: { size: widget.defaultSize },
+      config: {},
       sort_order: WORKBENCH_WIDGET_CATALOG.length * 100 - index * 100,
     },
   ])
 );
 
-/** 读取并按用户维度持久化首页控件显隐、顺序、宽度和密度。 */
+/** 读取并按用户维度持久化首页控件显隐、顺序、布局模式和密度。 */
 export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys: TWorkbenchWidgetKey[]) {
   const availableKeySet = useMemo(() => new Set(availableKeys), [availableKeys]);
   const {
@@ -83,10 +77,15 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
     { revalidateIfStale: false, revalidateOnFocus: false, revalidateOnReconnect: false }
   );
   const [density, setDensityState] = useState<THomeWorkbenchDensity>("compact");
+  const [modeOverride, setModeOverride] = useState<TWorkbenchLayoutMode | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [savingCount, setSavingCount] = useState(0);
   const densityHydrated = useRef(false);
   const saveQueue = useRef(Promise.resolve());
+  const storedMode = preferenceRows?.find((item) => item.key === LAYOUT_KEY)?.config?.mode;
+  const mode =
+    modeOverride ??
+    (MODE_VALUES.has(storedMode as TWorkbenchLayoutMode) ? (storedMode as TWorkbenchLayoutMode) : "aggregate");
 
   const widgets = useMemo(() => {
     const rows = new Map(preferenceRows?.map((row) => [row.key as string, row]) ?? []);
@@ -94,13 +93,11 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
       WORKBENCH_WIDGET_CATALOG.map((catalog) => {
         const row = rows.get(catalog.key);
         const fallback = DEFAULT_WIDGET_MAP.get(catalog.key);
-        const configSize = row?.config?.size;
         return {
           key: catalog.key,
           titleKey: catalog.titleKey,
           hintKey: catalog.hintKey,
           is_enabled: row?.is_enabled ?? fallback?.is_enabled ?? true,
-          size: SIZE_VALUES.has(configSize as THomeWidgetSize) ? (configSize as THomeWidgetSize) : catalog.defaultSize,
           sort_order: row?.sort_order ?? fallback?.sort_order ?? 0,
         };
       })
@@ -154,7 +151,7 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
       return {
         key,
         is_enabled: row?.is_enabled ?? widget?.is_enabled ?? true,
-        config: row?.config ?? { size: widget?.size ?? "medium" },
+        config: row?.config ?? {},
         sort_order: row?.sort_order ?? widget?.sort_order ?? 0,
       } satisfies TWidgetEntityData;
     },
@@ -165,14 +162,6 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
     async (key: TWorkbenchWidgetKey, isEnabled: boolean) => {
       const row = currentRow(key);
       await saveChangedRows([{ ...row, is_enabled: isEnabled }]);
-    },
-    [currentRow, saveChangedRows]
-  );
-
-  const setWidgetSize = useCallback(
-    async (key: TWorkbenchWidgetKey, size: THomeWidgetSize) => {
-      const row = currentRow(key);
-      await saveChangedRows([{ ...row, config: { ...row.config, size } }]);
     },
     [currentRow, saveChangedRows]
   );
@@ -201,17 +190,27 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
 
   const resetWidgets = useCallback(async () => {
     const changed = availableKeys.map((key, index) => {
-      const catalog = WORKBENCH_WIDGET_CATALOG.find((item) => item.key === key);
       const row = currentRow(key);
       return {
         key,
         is_enabled: true,
-        config: { ...row.config, size: catalog?.defaultSize ?? "medium" },
+        config: row.config,
         sort_order: availableKeys.length * 100 - index * 100,
       } satisfies TWidgetEntityData;
     });
-    await saveChangedRows(changed);
-  }, [availableKeys, currentRow, saveChangedRows]);
+    const layoutRow = preferenceRows?.find((item) => item.key === LAYOUT_KEY);
+    setDensityState("compact");
+    setModeOverride("aggregate");
+    await saveChangedRows([
+      ...changed,
+      {
+        key: LAYOUT_KEY,
+        is_enabled: layoutRow?.is_enabled ?? true,
+        config: { ...layoutRow?.config, density: "compact", mode: "aggregate" },
+        sort_order: layoutRow?.sort_order ?? 100,
+      } satisfies TWidgetEntityData,
+    ]);
+  }, [availableKeys, currentRow, preferenceRows, saveChangedRows]);
 
   const setDensity = useCallback(
     async (nextDensity: THomeWorkbenchDensity) => {
@@ -221,12 +220,28 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
         {
           key: LAYOUT_KEY,
           is_enabled: row?.is_enabled ?? true,
-          config: { ...row?.config, density: nextDensity },
+          config: { ...row?.config, mode, density: nextDensity },
           sort_order: row?.sort_order ?? 100,
         },
       ]);
     },
-    [preferenceRows, saveChangedRows]
+    [mode, preferenceRows, saveChangedRows]
+  );
+
+  const setWorkbenchMode = useCallback(
+    async (nextMode: TWorkbenchLayoutMode) => {
+      setModeOverride(nextMode);
+      const row = preferenceRows?.find((item) => item.key === LAYOUT_KEY);
+      await saveChangedRows([
+        {
+          key: LAYOUT_KEY,
+          is_enabled: row?.is_enabled ?? true,
+          config: { ...row?.config, mode: nextMode, density },
+          sort_order: row?.sort_order ?? 100,
+        },
+      ]);
+    },
+    [density, preferenceRows, saveChangedRows]
   );
 
   useEffect(() => {
@@ -257,10 +272,11 @@ export function useHomeWorkbenchPreferences(workspaceSlug: string, availableKeys
     // 偏好未返回前不触发隐藏控件的数据请求，避免默认布局闪现和多余 API 调用。
     enabledWidgets: isLoading ? [] : widgets.filter((widget) => widget.is_enabled),
     density,
+    mode,
     toggleWidget,
-    setWidgetSize,
     moveWidget,
     resetWidgets,
     setDensity,
+    setWorkbenchMode,
   };
 }

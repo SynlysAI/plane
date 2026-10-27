@@ -1,15 +1,8 @@
 "use client";
 
 import { useTranslation } from "@plane/i18n";
-import type { THomeWidgetSize, THomeWorkbenchDensity, TWorkbenchWidgetKey } from "@plane/types";
+import type { THomeWorkbenchDensity, TWorkbenchWidgetKey } from "@plane/types";
 import { cn } from "@plane/utils";
-
-const SIZE_OPTIONS: { value: THomeWidgetSize; labelKey: string }[] = [
-  { value: "small", labelKey: "research.home_workbench.size_small" },
-  { value: "medium", labelKey: "research.home_workbench.size_medium" },
-  { value: "large", labelKey: "research.home_workbench.size_large" },
-  { value: "full", labelKey: "research.home_workbench.size_full" },
-];
 
 const DENSITY_OPTIONS: { value: THomeWorkbenchDensity; labelKey: string }[] = [
   { value: "compact", labelKey: "research.home_workbench.density_compact" },
@@ -21,7 +14,6 @@ type TWidgetState = {
   titleKey: string;
   hintKey: string;
   is_enabled: boolean;
-  size: THomeWidgetSize;
 };
 
 type Props = {
@@ -31,12 +23,11 @@ type Props = {
   syncError: string | null;
   onToggle: (key: TWorkbenchWidgetKey, enabled: boolean) => void;
   onMove: (key: TWorkbenchWidgetKey, direction: -1 | 1) => void;
-  onSizeChange: (key: TWorkbenchWidgetKey, size: THomeWidgetSize) => void;
   onDensityChange: (density: THomeWorkbenchDensity) => void;
   onReset: () => void;
 };
 
-/** 首页控件编辑面板：显隐、顺序、宽度与密度即时保存。 */
+/** 首页控件编辑面板：显隐、顺序与密度即时保存。 */
 export function WorkbenchPreferencesPanel({
   widgets,
   density,
@@ -44,7 +35,6 @@ export function WorkbenchPreferencesPanel({
   syncError,
   onToggle,
   onMove,
-  onSizeChange,
   onDensityChange,
   onReset,
 }: Props) {
@@ -106,24 +96,6 @@ export function WorkbenchPreferencesPanel({
                   <span className="truncate">{t(widget.titleKey)}</span>
                 </label>
                 <span className="text-11 text-tertiary">{t(widget.hintKey)}</span>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1">
-                {SIZE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={widget.size === option.value}
-                    className={cn(
-                      "rounded-sm border border-transparent px-2 py-1 text-11 transition-colors",
-                      widget.size === option.value
-                        ? "border-subtle bg-surface-1 text-primary"
-                        : "text-secondary hover:bg-surface-1"
-                    )}
-                    onClick={() => onSizeChange(widget.key, option.value)}
-                  >
-                    {t(option.labelKey)}
-                  </button>
-                ))}
               </div>
             </div>
             <div className="flex items-start gap-1">
