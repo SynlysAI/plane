@@ -7,6 +7,7 @@
 import { Button } from "@plane/propel/button";
 import { copyTextToClipboard } from "@plane/utils";
 import { configurationFiles, type MCPConfig } from "./connection-config";
+import { downloadMCPConfiguration as download } from "./connection-download";
 import type { MCPTarget } from "./types";
 
 export type ConnectionResult = {
@@ -17,14 +18,6 @@ export type ConnectionResult = {
   config?: MCPConfig;
   expires?: string;
 };
-function download(text: string, extension: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `plane-mcp-connections.${extension}`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
 
 export function GeneratedConnections({
   results,

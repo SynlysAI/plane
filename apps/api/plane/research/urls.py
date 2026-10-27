@@ -10,6 +10,10 @@ upstream route (P0-COMPAT-02).
 """
 
 from django.urls import path
+from plane.research.views.weekly_report_agent import (
+    WeeklyReportToolsEndpoint, WeeklyReportToolEndpoint, WeeklyReportMCPHTTPEndpoint,
+    WeeklyReportOptionsEndpoint, WeeklyReportConnectionsEndpoint, WeeklyReportRevokeEndpoint,
+)
 from plane.research.views.mcp_management import (
     ResearchMCPCandidatesEndpoint, ResearchMCPConnectionsEndpoint, ResearchMCPRevokeEndpoint,
 )
@@ -271,6 +275,42 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path(
+        "research/mcp/weekly-report/options/",
+        WeeklyReportOptionsEndpoint.as_view(),
+        name="weekly-report-mcp-workspaces",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/weekly-report/options/",
+        WeeklyReportOptionsEndpoint.as_view(),
+        name="weekly-report-mcp-options",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/weekly-report/connections/",
+        WeeklyReportConnectionsEndpoint.as_view(),
+        name="weekly-report-mcp-connections",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/weekly-report/connections/<uuid:grant_id>/revoke/",
+        WeeklyReportRevokeEndpoint.as_view(),
+        name="weekly-report-mcp-revoke",
+    ),
+    path(
+        "research/workspaces/<str:slug>/weekly-report-agent/tools/",
+        WeeklyReportToolsEndpoint.as_view(),
+        name="weekly-report-tools",
+    ),
+    path(
+        "research/workspaces/<str:slug>/weekly-report-agent/tools/<str:tool_name>/",
+        WeeklyReportToolEndpoint.as_view(),
+        name="weekly-report-tool",
+    ),
+    path(
+        "research/workspaces/<str:slug>/weekly-report-agent/mcp/",
+        WeeklyReportMCPHTTPEndpoint.as_view(),
+        name="weekly-report-mcp",
+    ),
+
     path(
         "research/workspaces/<str:slug>/mcp/candidates/",
         ResearchMCPCandidatesEndpoint.as_view(),

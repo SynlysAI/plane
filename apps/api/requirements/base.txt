@@ -74,3 +74,6 @@ nh3==0.2.18
 # 私有附件预览的 PDF 与位图验证
 pypdf==6.21.2
 Pillow==12.2.0
+
+# Restricted Markdown AST for the personal weekly-report MCP workflow.
+markdown-it-py==4.2.0

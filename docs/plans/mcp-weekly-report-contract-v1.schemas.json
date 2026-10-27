@@ -1,0 +1,189 @@
+{
+  "contract_version": "plane.weekly-report.v1",
+  "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
+  "implementation_phase": 2,
+  "tools": {
+    "get_weekly_report_context": {
+      "readOnlyHint": true,
+      "inputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "period_offset": {
+                "type": "integer",
+                "enum": [-1, 0]
+              }
+            },
+            "required": ["period_offset"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "period_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8,
+                "pattern": "^\\d{4}-W\\d{2}$"
+              }
+            },
+            "required": ["period_key"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "period_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8,
+                "pattern": "^\\d{4}-W\\d{2}$"
+              },
+              "cursor": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": ["period_key", "cursor"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "prepare_weekly_report_operation": {
+      "readOnlyHint": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "action": {
+            "enum": ["save_draft", "submit"]
+          },
+          "period_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8,
+            "pattern": "^\\d{4}-W\\d{2}$"
+          },
+          "expected_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "body_markdown": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50000
+          },
+          "source_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "analysis",
+                    "snapshot",
+                    "paper_review",
+                    "report",
+                    "experiment",
+                    "stage_material",
+                    "topic_material",
+                    "external_reference"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36,
+                  "format": "uuid"
+                },
+                "node_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36,
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "content_hash": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "note": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "required": ["kind", "id", "node_id", "version", "content_hash"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
+        "additionalProperties": false
+      }
+    },
+    "execute_weekly_report_operation": {
+      "readOnlyHint": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": ["operation_id"],
+        "additionalProperties": false
+      }
+    },
+    "get_weekly_report_operation": {
+      "readOnlyHint": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": ["operation_id"],
+        "additionalProperties": false
+      }
+    },
+    "cancel_weekly_report_operation": {
+      "readOnlyHint": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36,
+            "format": "uuid"
+          }
+        },
+        "required": ["operation_id"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
