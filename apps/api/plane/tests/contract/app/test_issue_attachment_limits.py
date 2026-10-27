@@ -1,9 +1,12 @@
 """工作项附件复用工作区分类上传额度的契约。"""
 
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -16,9 +19,13 @@ from plane.db.models import (
     WorkspaceResearchSetting,
     WorkspaceMember,
 )
+from plane.utils.comment_attachments import MAX_FILE_ATTACHMENTS
 
 MEGABYTE = 1024 * 1024
 PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+# 锁定附件数量上限的业务语义，防止常量被无意调整而契约测试仍全部通过。
+assert MAX_FILE_ATTACHMENTS == 50
 
 
 @pytest.fixture
@@ -37,6 +44,12 @@ def attachments_url(context):
     return f"/api/assets/v2/workspaces/{workspace.slug}/projects/{project.id}/issues/{issue.id}/attachments/"
 
 
+def legacy_attachments_url(context):
+    """Return the legacy multipart work-item attachment URL."""
+    workspace, project, issue, _ = context
+    return f"/api/workspaces/{workspace.slug}/projects/{project.id}/issues/{issue.id}/issue-attachments/"
+
+
 def configure_limits(workspace, image=20, pdf=100, markdown=5, office=50):
     """写入与评论附件一致的四级工作区额度。"""
     return WorkspaceResearchSetting.objects.update_or_create(
@@ -48,6 +61,26 @@ def configure_limits(workspace, image=20, pdf=100, markdown=5, office=50):
             "office_max_mb": office,
         },
     )[0]
+
+
+def make_issue_attachment(context, *, uploaded=True, **overrides):
+    """Create one active work-item attachment without routing through storage."""
+    workspace, project, issue, user = context
+    data = dict(
+        workspace=workspace,
+        project=project,
+        issue=issue,
+        created_by=user,
+        entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+        is_uploaded=uploaded,
+        size=128,
+        asset=f"{workspace.id}/{uuid4()}.pptx",
+        attributes={"name": "行政材料.pptx", "type": PPTX_TYPE, "size": 128},
+    )
+    data.update(overrides)
+    asset = FileAsset(**data)
+    asset.save(disable_auto_set_user=True)
+    return asset
 
 
 @pytest.mark.django_db
@@ -108,6 +141,75 @@ def test_issue_attachment_rejects_invalid_size_without_asset(session_client, att
     assert response.status_code == 400, response.data
     assert response.data["error"] == "Invalid file size."
     assert FileAsset.objects.filter(entity_type="ISSUE_ATTACHMENT").count() == 0
+
+
+@pytest.mark.django_db
+def test_issue_attachment_presign_rejects_the_fifty_first_file(session_client, attachment_context):
+    """工作项描述附件预签名阶段即执行 50 个数量上限。"""
+    configure_limits(attachment_context[0])
+    for _ in range(MAX_FILE_ATTACHMENTS):
+        make_issue_attachment(attachment_context)
+
+    response = session_client.post(
+        attachments_url(attachment_context),
+        {"name": "第五十一份.pptx", "type": PPTX_TYPE, "size": 128},
+        format="json",
+    )
+
+    assert response.status_code == 400, response.data
+    assert response.data["error_code"] == "issue_attachment_count_exceeded"
+    assert response.data["limit"] == MAX_FILE_ATTACHMENTS
+    assert FileAsset.objects.filter(entity_type="ISSUE_ATTACHMENT", is_deleted=False).count() == 50
+
+
+@pytest.mark.django_db
+def test_legacy_issue_attachment_endpoint_rejects_the_fifty_first_file(session_client, attachment_context):
+    """旧版 multipart 工作项附件接口同样执行数量上限。"""
+    configure_limits(attachment_context[0])
+    for _ in range(MAX_FILE_ATTACHMENTS):
+        make_issue_attachment(attachment_context)
+
+    response = session_client.post(
+        legacy_attachments_url(attachment_context),
+        {"asset": SimpleUploadedFile("第五十一份.pptx", b"attachment", content_type=PPTX_TYPE)},
+        format="multipart",
+    )
+
+    assert response.status_code == 400, response.data
+    assert response.data["error_code"] == "issue_attachment_count_exceeded"
+    assert response.data["limit"] == MAX_FILE_ATTACHMENTS
+
+
+@pytest.mark.django_db
+def test_issue_attachment_confirm_enforces_limit_and_delete_restores_quota(session_client, attachment_context):
+    """确认阶段并发复核数量，软删除后额度立即可复用。"""
+    workspace, project, issue, user = attachment_context
+    configure_limits(workspace)
+    attachments = [make_issue_attachment(attachment_context) for _ in range(MAX_FILE_ATTACHMENTS - 1)]
+    boundary = make_issue_attachment(attachment_context, uploaded=False)
+    base = attachments_url(attachment_context)
+
+    def confirm(asset):
+        with (
+            patch("plane.app.views.issue.attachment.get_asset_object_metadata.delay"),
+            patch("plane.app.views.issue.attachment.issue_activity.delay"),
+        ):
+            return session_client.patch(f"{base}{asset.id}/", {}, format="json")
+
+    boundary_response = confirm(boundary)
+    assert boundary_response.status_code == 204, boundary_response.data
+
+    overflow = make_issue_attachment(attachment_context, uploaded=False)
+    overflow_response = confirm(overflow)
+    assert overflow_response.status_code == 400, overflow_response.data
+    assert overflow_response.data["error_code"] == "issue_attachment_count_exceeded"
+    assert overflow_response.data["limit"] == MAX_FILE_ATTACHMENTS
+
+    attachments[0].is_deleted = True
+    attachments[0].deleted_at = timezone.now()
+    attachments[0].save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+    retry_response = confirm(overflow)
+    assert retry_response.status_code == 204, retry_response.data
 
 
 @pytest.mark.django_db

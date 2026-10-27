@@ -1,38 +1,55 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useTranslation } from "@plane/i18n";
+import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { ProjectDomainsService, domainError, type TWorkspaceTodoPage } from "@/services/project-domains.service";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
+import { formatShareText } from "@/components/research/common/share-link";
+import {
+  ResearchChainStageApprovalQueue,
+  type TChainStageApprovalQueueItem,
+} from "@/components/research/approvals/research-chain-stage-approval-queue";
+import { subscribeWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 
 const service = new ProjectDomainsService();
+const CHAIN_STAGE_SOURCE = "CHAIN_STAGE_APPROVAL";
 const domains = [
-  { value: "all", label: "全部" },
-  { value: "research", label: "科研" },
-  { value: "administrative", label: "行政" },
+  { value: "all", labelKey: "research.todo.domain_all" },
+  { value: "research", labelKey: "research.todo.domain_research" },
+  { value: "administrative", labelKey: "research.todo.domain_administrative" },
 ];
 
 /** Build the compact source-person, context, and handling line for one todo. */
-function todoMetadata(todo: TWorkspaceTodoPage["results"][number]) {
-  const requesterLabel = todo.source === "REPORT" ? "提交人" : "发起人";
-  return [
-    todo.requester ? `${requesterLabel}：${todo.requester.display_name}` : null,
-    todo.context,
-    todo.source === "APPROVAL" ? "待我审批" : todo.source === "WORK_ITEM" ? "指派给我" : "待我处理",
-  ]
+function todoMetadata(todo: TWorkspaceTodoPage["results"][number], t: (key: string) => string) {
+  const requesterLabel = todo.source === "REPORT" ? t("research.todo.requester_report") : t("research.todo.requester");
+  const handlingLabel =
+    todo.source === "APPROVAL"
+      ? t("research.todo.handling_approve")
+      : todo.source === "WORK_ITEM"
+        ? t("research.todo.handling_assign")
+        : t("research.todo.handling_process");
+  return [todo.requester ? `${requesterLabel}：${todo.requester.display_name}` : null, todo.context, handlingLabel]
     .filter(Boolean)
     .join(" · ");
 }
 
 export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceSlug: string; embedded?: boolean }) {
+  const { t } = useTranslation();
   const [domain, setDomain] = useState("all");
   const [page, setPage] = useState<TWorkspaceTodoPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [handledIds, setHandledIds] = useState<Set<string>>(() => new Set());
+  const [activeQueueId, setActiveQueueId] = useState<string | null>(null);
+  const [queueItems, setQueueItems] = useState<TChainStageApprovalQueueItem[]>([]);
+  const [queueCompleted, setQueueCompleted] = useState(false);
   const version = useRef(0);
   const load = useCallback(
-    async (cursor?: string) => {
+    async (cursor?: string, options?: { silent?: boolean }) => {
       const request = ++version.current;
-      setLoading(true);
+      if (!options?.silent) setLoading(true);
       setError(null);
       try {
         const result = await service.todos(workspaceSlug, domain, cursor);
@@ -57,71 +74,188 @@ export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceS
     };
   }, [load]);
   useEffect(() => {
-    const refresh = () => void load();
-    window.addEventListener("workspace-todos-updated", refresh);
-    return () => window.removeEventListener("workspace-todos-updated", refresh);
+    return subscribeWorkspaceTodosUpdated(() => void load(undefined, { silent: true }));
   }, [load]);
+  useEffect(() => {
+    setActiveQueueId(null);
+    setQueueItems([]);
+    setQueueCompleted(false);
+  }, [domain]);
+
+  const visibleResults = page?.results.filter((todo) => !handledIds.has(todo.id)) ?? [];
+  const stageQueueItems = visibleResults.filter((todo) => todo.source === CHAIN_STAGE_SOURCE);
+  const hiddenInPageCount = page?.results.filter((todo) => handledIds.has(todo.id)).length ?? 0;
+  const visibleTotalCount = page ? Math.max(page.total_count - hiddenInPageCount, 0) : 0;
+
+  /** 打开阶段审批侧栏，并保留原深链给辅助技术和新窗口打开。 */
+  const openStageQueue = (event: React.MouseEvent<HTMLAnchorElement>, todo: TWorkspaceTodoPage["results"][number]) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    setQueueCompleted(false);
+    setQueueItems(stageQueueItems);
+    setActiveQueueId(todo.id);
+  };
+
+  /** 标记已处理事项并按当前列表顺序打开下一条阶段审批。 */
+  const handleStageQueueHandled = (id: string) => {
+    const currentIndex = queueItems.findIndex((todo) => todo.id === id);
+    const next = currentIndex >= 0 ? queueItems[currentIndex + 1] : undefined;
+    setHandledIds((previous) => new Set(previous).add(id));
+    setActiveQueueId(next?.id ?? null);
+    setQueueCompleted(!next);
+  };
+
+  /**
+   * 复制带科研 / 行政领域上下文的待办分享文本。
+   *
+   * Args:
+   *   todo: 服务端投影出的待办事项。
+   */
+  const handleCopyLink = async (todo: TWorkspaceTodoPage["results"][number]) => {
+    const title = todo.title.trim() || t("research.common.untitled");
+    const typeLabel =
+      todo.domain === "RESEARCH"
+        ? t("research.todo.share_type_research")
+        : t("research.todo.share_type_administrative");
+    try {
+      await copyTextToClipboard(formatShareText(typeLabel, title, todo.href));
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("research.common.share_copied_title"),
+        message: t("research.common.share_copied_message"),
+      });
+    } catch {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("research.common.share_copy_failed_title"),
+        message: t("research.common.share_copy_failed_message"),
+      });
+    }
+  };
+
   return (
-    <section className="flex min-h-0 flex-col" aria-label="我的待办">
-      <div className="sticky top-0 flex shrink-0 items-center gap-2 border-b border-subtle bg-surface-1 px-4 py-2">
-        {domains.map((item) => (
-          <button
-            type="button"
-            key={item.value}
-            aria-pressed={domain === item.value}
-            className={`rounded px-2 py-1 text-13 ${domain === item.value ? "bg-surface-2 text-primary" : "text-secondary"}`}
-            onClick={() => setDomain(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
-        <Button className="ml-auto" variant="ghost" size="sm" disabled={loading} onClick={() => void load()}>
-          刷新
-        </Button>
-      </div>
-      {error && (
-        <p role="alert" className="p-4 text-13">
-          {error}
-          <button type="button" onClick={() => void load()} className="ml-2 text-accent-primary">
-            重试
-          </button>
-        </p>
+    <>
+      {activeQueueId && (
+        <ResearchChainStageApprovalQueue
+          workspaceSlug={workspaceSlug}
+          items={queueItems}
+          activeId={activeQueueId}
+          onHandled={handleStageQueueHandled}
+          onClose={() => {
+            setActiveQueueId(null);
+            setQueueItems([]);
+          }}
+        />
       )}
-      {page?.degraded_sources.length ? (
-        <p role="status" className="px-4 py-2 text-12 text-secondary">
-          部分待办暂未加载，请稍后刷新；其他待办仍可处理。
-        </p>
-      ) : null}
-      {loading && !page && (
-        <p role="status" aria-busy="true" className="p-4 text-13 text-secondary">
-          正在加载待办…
-        </p>
-      )}
-      {!loading && !error && page?.results.length === 0 && (
-        <p className="p-4 text-13 text-secondary">当前没有待处理事项。</p>
-      )}
-      <ul className="divide-y divide-subtle">
-        {page?.results.map((todo) => (
-          <li key={todo.id} className="px-4 py-3 hover:bg-surface-2">
-            <Link href={todo.href} className="flex items-start gap-2 text-13">
-              <span className="shrink-0 rounded bg-surface-2 px-1.5 text-11 text-secondary">
-                {todo.domain === "RESEARCH" ? "科研" : "行政"}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="font-medium text-primary">{todo.title}</span>
-                <span className="mt-1 block text-12 text-secondary">{todoMetadata(todo)}</span>
-              </span>
-              {todo.due_at && <ResearchTodoUrgency dueAt={todo.due_at} />}
-            </Link>
-          </li>
-        ))}
-      </ul>
-      {page?.next_cursor && (
-        <Button variant="ghost" size="sm" disabled={loading} onClick={() => void load(page.next_cursor ?? undefined)}>
-          加载更多
-        </Button>
-      )}
-      {!embedded && page && <p className="px-4 py-2 text-12 text-tertiary">共 {page.total_count} 项待办</p>}
-    </section>
+      <section className="flex min-h-0 flex-col" aria-label={t("research.todo.home_title")}>
+        <div className="sticky top-0 flex shrink-0 items-center gap-2 border-b border-subtle bg-surface-1 px-4 py-2">
+          {domains.map((item) => (
+            <button
+              type="button"
+              key={item.value}
+              aria-pressed={domain === item.value}
+              className={`rounded px-2 py-1 text-13 ${domain === item.value ? "bg-surface-2 text-primary" : "text-secondary"}`}
+              onClick={() => setDomain(item.value)}
+            >
+              {t(item.labelKey)}
+            </button>
+          ))}
+          <Button className="ml-auto" variant="ghost" size="sm" disabled={loading} onClick={() => void load()}>
+            {t("research.todo.refresh")}
+          </Button>
+        </div>
+        {queueCompleted && !activeQueueId && (
+          <p role="status" className="border-b border-subtle px-4 py-2 text-12 text-secondary">
+            {t("research.todo.queue_completed")}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="p-4 text-13">
+            {error}
+            <button type="button" onClick={() => void load()} className="ml-2 text-accent-primary">
+              {t("common.retry")}
+            </button>
+          </p>
+        )}
+        {page?.degraded_sources.length ? (
+          <p role="status" className="px-4 py-2 text-12 text-secondary">
+            {t("research.todo.degraded")}
+          </p>
+        ) : null}
+        {loading && !page && (
+          <p role="status" aria-busy="true" className="p-4 text-13 text-secondary">
+            {t("research.todo.loading")}
+          </p>
+        )}
+        {!loading && !error && visibleResults.length === 0 && !queueCompleted && (
+          <p className="p-4 text-13 text-secondary">{t("research.todo.empty_to_me")}</p>
+        )}
+        <ul className="divide-y divide-subtle">
+          {visibleResults.map((todo) => {
+            const isStageApproval = todo.source === CHAIN_STAGE_SOURCE;
+            const isActive = todo.id === activeQueueId;
+            const shareTitle = todo.title.trim() || t("research.common.untitled");
+            return (
+              <li
+                key={todo.id}
+                className={`px-4 py-3 hover:bg-surface-2 ${
+                  isActive ? "border-accent-primary border-l-2 bg-surface-2" : "border-l-2 border-transparent"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <Link
+                    href={todo.href}
+                    data-peek-trigger={isStageApproval ? "" : undefined}
+                    aria-current={isActive ? "true" : undefined}
+                    className="flex min-w-0 flex-1 items-start gap-2 text-13"
+                    onClick={(event) => {
+                      if (isStageApproval) openStageQueue(event, todo);
+                    }}
+                  >
+                    <span className="shrink-0 rounded bg-surface-2 px-1.5 text-11 text-secondary">
+                      {todo.domain === "RESEARCH"
+                        ? t("research.todo.domain_research")
+                        : t("research.todo.domain_administrative")}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-primary">{todo.title}</span>
+                      <span className="mt-1 block text-12 text-secondary">{todoMetadata(todo, t)}</span>
+                    </span>
+                    {todo.due_at && <ResearchTodoUrgency dueAt={todo.due_at} />}
+                  </Link>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0"
+                    aria-label={t("research.common.copy_share_aria", { title: shareTitle })}
+                    onClick={() => void handleCopyLink(todo)}
+                  >
+                    {t("research.common.copy_share")}
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {page?.next_cursor && (
+          <Button variant="ghost" size="sm" disabled={loading} onClick={() => void load(page.next_cursor ?? undefined)}>
+            {t("common.load_more")}
+          </Button>
+        )}
+        {!embedded && page && (
+          <p className="px-4 py-2 text-12 text-tertiary">
+            {t("research.todo.total_count", { count: visibleTotalCount })}
+          </p>
+        )}
+      </section>
+    </>
   );
 }

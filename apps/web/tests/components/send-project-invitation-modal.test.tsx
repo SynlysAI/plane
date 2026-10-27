@@ -5,8 +5,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   addMembers: vi.fn(),
+  fetchTagGroups: vi.fn(),
   onClose: vi.fn(),
   onSuccess: vi.fn(),
+  tagGroups: [],
   workspaceMembers: new Map(),
 }));
 
@@ -28,7 +30,7 @@ vi.mock("@plane/propel/button", async () => {
 });
 
 vi.mock("@plane/propel/toast", () => ({
-  TOAST_TYPE: { SUCCESS: "success" },
+  TOAST_TYPE: { SUCCESS: "success", ERROR: "error" },
   setToast: vi.fn(),
 }));
 
@@ -42,7 +44,7 @@ vi.mock("@makeplane/propel/components/avatar", async () => {
 vi.mock("@makeplane/propel/icons", async () => {
   const React = await import("react");
   const Icon = () => React.createElement("span", { "aria-hidden": "true" });
-  return { ChevronDownOutline: Icon, CloseOutline: Icon };
+  return { ChevronDownOutline: Icon, CloseOutline: Icon, TickOutline: Icon };
 });
 
 vi.mock("@plane/ui", async () => {
@@ -110,6 +112,8 @@ vi.mock("@/hooks/store/use-member", () => ({
       bulkAddMembersToProject: mocks.addMembers,
     },
     workspace: {
+      fetchWorkspaceMemberTagGroups: mocks.fetchTagGroups,
+      workspaceMemberTagGroups: { workspace: mocks.tagGroups },
       workspaceMemberIds: [...mocks.workspaceMembers.keys()],
       getWorkspaceMemberDetails: (memberId: string) => mocks.workspaceMembers.get(memberId),
     },
@@ -127,6 +131,7 @@ vi.mock("@plane/utils", () => ({
 }));
 
 import { SendProjectInvitationModal } from "@/components/project/send-project-invitation-modal";
+import { setToast } from "@plane/propel/toast";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -135,16 +140,27 @@ let root: Root;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.tagGroups.length = 0;
+  const teacherTag = { id: "tag-teacher", group_id: "group-role", name: "教师", color: "sage", sort_order: 0 };
+  const studentTag = { id: "tag-student", group_id: "group-role", name: "学生", color: "sand", sort_order: 1 };
+  const adminTag = { id: "tag-admin", group_id: "group-duty", name: "管理员", color: "mist", sort_order: 0 };
+  mocks.tagGroups.push(
+    { id: "group-role", name: "身份", sort_order: 0, tags: [teacherTag, studentTag] },
+    { id: "group-duty", name: "职责", sort_order: 1, tags: [adminTag] }
+  );
+  mocks.fetchTagGroups.mockResolvedValue(mocks.tagGroups);
+
   mocks.workspaceMembers.clear();
   mocks.workspaceMembers.set("alice-account", {
     email: "alice@example.com",
     role: 15,
+    tags: [teacherTag, adminTag],
     member: {
       id: "alice-account",
-      username: "alice.chen",
-      first_name: "Alice",
-      last_name: "Chen",
-      display_name: "Alice Chen",
+      username: "jinshuai0821",
+      first_name: "金",
+      last_name: "帅",
+      display_name: "jinshuai0821",
       email: "alice@example.com",
       avatar_url: "",
     },
@@ -152,6 +168,7 @@ beforeEach(() => {
   mocks.workspaceMembers.set("bob-account", {
     email: "bob@example.com",
     role: 15,
+    tags: [teacherTag],
     member: {
       id: "bob-account",
       username: "bob.wang",
@@ -165,6 +182,7 @@ beforeEach(() => {
   mocks.workspaceMembers.set("carol-account", {
     email: "carol@example.com",
     role: 15,
+    tags: [studentTag],
     member: {
       id: "carol-account",
       username: "carol.li",
@@ -201,10 +219,15 @@ it("支持按账号和邮箱搜索成员，并一次提交多人及其独立角�
 
   expect(container.querySelector("[data-testid='member-select-multiple']")?.textContent).toBe("true");
   expect(container.querySelector("[data-testid='select-alice-account']")?.getAttribute("data-query")).toContain(
-    "alice.chen"
+    "jinshuai0821"
   );
   expect(container.querySelector("[data-testid='select-alice-account']")?.getAttribute("data-query")).toContain(
     "alice@example.com"
+  );
+  expect(container.querySelector("[data-testid='select-alice-account']")?.textContent).toContain("金帅 · jinshuai0821");
+  expect(container.querySelector("[data-testid='select-alice-account']")?.textContent).toContain("alice@example.com");
+  expect(container.querySelector("[data-testid='select-bob-account']")?.textContent?.match(/Bob Wang/g)).toHaveLength(
+    1
   );
 
   await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-alice-account']")?.click());
@@ -231,4 +254,194 @@ it("支持按账号和邮箱搜索成员，并一次提交多人及其独立角�
   });
   expect(mocks.onSuccess).toHaveBeenCalledOnce();
   expect(mocks.onClose).toHaveBeenCalledOnce();
+});
+
+it("标签筛选按全部匹配批量选择并保留手动成员与角色", async () => {
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal
+        isOpen
+        onClose={mocks.onClose}
+        onSuccess={mocks.onSuccess}
+        workspaceSlug="workspace"
+        projectId="project"
+      />
+    )
+  );
+
+  // 先手动选择 Bob；随后教师 + 管理员的 AND 筛选只应保留 Alice。
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-bob-account']")?.click());
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-teacher']")?.click());
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-admin']")?.click());
+
+  expect(container.querySelector("[data-testid='select-alice-account']")).not.toBeNull();
+  expect(container.querySelector("[data-testid='select-bob-account']")).toBeNull();
+  expect(container.querySelector("[data-testid='select-carol-account']")).toBeNull();
+  expect(container.querySelector("[data-testid='filtered-member-count']")?.textContent).toContain("1");
+
+  const selectFiltered = container.querySelector<HTMLButtonElement>("[data-testid='select-filtered-members']")!;
+  expect(selectFiltered.disabled).toBe(false);
+  await act(async () => selectFiltered.click());
+
+  let roleSelects = container.querySelectorAll<HTMLSelectElement>("select[aria-label='project member role']");
+  expect(roleSelects).toHaveLength(2);
+  expect(Array.from(roleSelects).map((select) => select.value)).toEqual(["15", "15"]);
+
+  // 调整 Bob 的角色后重复批量选择，不得重复成员或覆盖已调整角色。
+  await act(async () => {
+    roleSelects[0].value = "20";
+    roleSelects[0].dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-filtered-members']")!.click());
+
+  roleSelects = container.querySelectorAll<HTMLSelectElement>("select[aria-label='project member role']");
+  expect(roleSelects).toHaveLength(2);
+  expect(roleSelects[0].value).toBe("20");
+
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+  expect(mocks.addMembers).toHaveBeenCalledExactlyOnceWith("workspace", "project", {
+    members: [
+      { member_id: "bob-account", role: 20 },
+      { member_id: "alice-account", role: 15 },
+    ],
+  });
+});
+
+it("标签筛选为空时禁用批量选择", async () => {
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal isOpen onClose={mocks.onClose} workspaceSlug="workspace" projectId="project" />
+    )
+  );
+
+  const selectFiltered = container.querySelector<HTMLButtonElement>("[data-testid='select-filtered-members']")!;
+  expect(selectFiltered.disabled).toBe(true);
+
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-teacher']")?.click());
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-student']")?.click());
+  expect(container.querySelector("[data-testid='filtered-member-count']")?.textContent).toContain("0");
+  expect(container.querySelector<HTMLButtonElement>("[data-testid='select-filtered-members']")!.disabled).toBe(true);
+});
+
+it("标签加载失败和无可选标签时保留手动添加能力", async () => {
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  mocks.fetchTagGroups.mockRejectedValueOnce(new Error("tag groups unavailable"));
+
+  try {
+    await act(async () =>
+      root.render(
+        <SendProjectInvitationModal isOpen onClose={mocks.onClose} workspaceSlug="workspace" projectId="project" />
+      )
+    );
+    await act(async () => undefined);
+
+    expect(container.querySelector("[data-testid='tag-filter-error']")?.textContent).toContain(
+      "project_settings.members.tags_load_failed"
+    );
+    expect(container.querySelector("[data-testid='select-alice-account']")).not.toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("[data-testid='select-filtered-members']")!.disabled).toBe(true);
+
+    await act(async () => root.render(null));
+    mocks.fetchTagGroups.mockResolvedValueOnce([]);
+    mocks.workspaceMembers.forEach((membership) => {
+      membership.tags = [];
+    });
+    await act(async () =>
+      root.render(
+        <SendProjectInvitationModal isOpen onClose={mocks.onClose} workspaceSlug="workspace" projectId="project" />
+      )
+    );
+    await act(async () => undefined);
+
+    expect(container.querySelector("[data-testid='no-available-tags']")?.textContent).toContain(
+      "project_settings.members.no_available_tags"
+    );
+    expect(container.querySelector("[data-testid='select-alice-account']")).not.toBeNull();
+  } finally {
+    consoleError.mockRestore();
+  }
+});
+
+it("批量添加失败时提示原因并保留已选成员与角色", async () => {
+  mocks.addMembers.mockRejectedValueOnce({ error: "You cannot add a user with role lower than the workspace role" });
+
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal
+        isOpen
+        onClose={mocks.onClose}
+        onSuccess={mocks.onSuccess}
+        workspaceSlug="workspace"
+        projectId="project"
+      />
+    )
+  );
+
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-alice-account']")?.click());
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-bob-account']")?.click());
+
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+
+  expect(mocks.addMembers).toHaveBeenCalledOnce();
+  expect(setToast).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "project_settings.members.role_lower_than_workspace",
+    })
+  );
+  expect(mocks.onSuccess).not.toHaveBeenCalled();
+  expect(mocks.onClose).not.toHaveBeenCalled();
+
+  const selectedButtons = container.querySelectorAll("[data-testid^='select-']");
+  const roleSelects = container.querySelectorAll<HTMLSelectElement>("select[aria-label='project member role']");
+  expect(roleSelects).toHaveLength(2);
+  expect(Array.from(roleSelects).map((select) => select.value)).toEqual(["15", "15"]);
+  expect(selectedButtons.length).toBeGreaterThan(0);
+});
+
+it("优先按结构化错误码提示角色越界，兼容旧版纯文案错误", async () => {
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal
+        isOpen
+        onClose={mocks.onClose}
+        onSuccess={mocks.onSuccess}
+        workspaceSlug="workspace"
+        projectId="project"
+      />
+    )
+  );
+
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-alice-account']")?.click());
+
+  // 新版后端返回结构化错误码，即使文案调整也应命中同一条提示。
+  mocks.addMembers.mockRejectedValueOnce({
+    error_code: "role_higher_than_workspace",
+    error: "unrelated message",
+  });
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+  expect(setToast).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "project_settings.members.role_higher_than_workspace",
+    })
+  );
+
+  // 旧版纯文案错误仍通过子串匹配兜底。
+  mocks.addMembers.mockRejectedValueOnce({ error: "You cannot add a user with role lower than the workspace role" });
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+  expect(setToast).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "project_settings.members.role_lower_than_workspace",
+    })
+  );
 });

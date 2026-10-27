@@ -506,6 +506,35 @@ def test_legacy_comment_and_empty_comment_validation(session_client, comment_con
 
 
 @pytest.mark.django_db
+def test_comment_attachment_accepts_fifty_and_rejects_fifty_one(session_client, comment_context):
+    """每条工作项评论的文件附件上限为 50 个。"""
+    assets = [make_asset(comment_context, asset=f"{comment_context[0].id}/{uuid4()}.pptx") for _ in range(50)]
+
+    accepted = session_client.post(
+        comments_url(comment_context),
+        {
+            "comment_html": "<p>五十份材料</p>",
+            "attachment_ids": [str(asset.id) for asset in assets],
+        },
+        format="json",
+    )
+    assert accepted.status_code == 201, accepted.data
+    assert len(accepted.data["file_attachments"]) == 50
+
+    rejected = session_client.post(
+        comments_url(comment_context),
+        {
+            "comment_html": "<p>超限材料</p>",
+            "attachment_ids": [str(asset.id) for asset in assets] + [str(uuid4())],
+        },
+        format="json",
+    )
+    assert rejected.status_code == 400, rejected.data
+    # 序列化层即拒绝第 51 个文件，返回字段级错误，无需进入服务层锁校验。
+    assert "attachment_ids" in rejected.data
+
+
+@pytest.mark.django_db
 def test_upload_rejects_wrong_work_item_scope(session_client, comment_context):
     """上传目标必须属于当前项目和工作区。"""
     workspace, _, _, _ = comment_context

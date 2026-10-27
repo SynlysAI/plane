@@ -37,6 +37,7 @@ from plane.research.utils.collaboration_notifications import (
     notify_task_completed,
     notify_task_returned,
     notify_task_submitted,
+    notify_task_updated,
 )
 from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q
 from plane.research.utils.roles import is_research_admin
@@ -896,6 +897,7 @@ def update_task(*, task, actor, payload, request=None):
                     ),
                 )
                 notify_task_assigned(locked_task, actor)
+            notify_task_updated(locked_task, actor, changed_fields)
             return locked_task
     except IntegrityError as error:
         raise ChainTaskConflictError("The task could not be updated consistently.") from error

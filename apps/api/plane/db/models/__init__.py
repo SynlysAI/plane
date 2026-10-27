@@ -121,6 +121,7 @@ from .research import (
     ResearchChainNode,
     ResearchChainNodeTask,
     ResearchTaskComment,
+    ResearchTaskSubscriber,
     ResearchTaskCommentAttachment,
     ResearchChainNodeTaskAttachment,
     ResearchChainSnapshot,

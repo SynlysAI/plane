@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from plane.db.models import FileAsset, ResearchTaskComment
 from plane.research.services.task_comment_attachments import attachment_ids_for_comment
+from plane.utils.comment_attachments import MAX_FILE_ATTACHMENTS
 from plane.utils.content_validator import validate_html_content
 from plane.utils.html_processor import strip_tags
 from plane.preview.access import preview_url
@@ -19,7 +20,7 @@ class ResearchTaskCommentSerializer(serializers.ModelSerializer):
         child=serializers.UUIDField(),
         required=False,
         write_only=True,
-        max_length=10,
+        max_length=MAX_FILE_ATTACHMENTS,
     )
     file_attachments = serializers.SerializerMethodField()
 

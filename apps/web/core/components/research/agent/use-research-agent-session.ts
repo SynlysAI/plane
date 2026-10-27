@@ -49,6 +49,8 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   const { t } = useTranslation();
   const [session, setSession] = useState<TResearchAgentSession | null>(null);
   const [events, setEvents] = useState<TAgentRunEvent[]>([]);
+  // 本浏览器会话的「seq → 用户明文」回显表：服务端只落 content_hash（保密契约），明文仅在此暂存。
+  const [userEcho, setUserEcho] = useState<Record<number, string>>({});
   const [state, setState] = useState<TResearchAgentPluginState>("loading_context");
   const [message, setMessage] = useState("");
   const [reports, setReports] = useState<{ report_id: string; version_no: number }[]>([]);
@@ -80,6 +82,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     let active = true;
     setState("loading_context");
     setEvents([]);
+    setUserEcho({});
     setMessage("");
     setArtifactDraft("");
     setArtifactConfirmed(false);
@@ -241,15 +244,18 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
 
   const send = useCallback(async () => {
     const current = sessionRef.current;
-    if (!current || !message.trim() || sending) return;
+    const text = message.trim();
+    if (!current || !text || sending) return;
     setSending(true);
     setState("streaming");
     try {
-      const response = await agentService.sendMessage(workspaceSlug, current.session_id, message.trim(), reports);
+      const response = await agentService.sendMessage(workspaceSlug, current.session_id, text, reports);
       setReportError("");
       sessionRef.current = response.session;
       setSession(response.session);
       setEvents((previous) => mergeAgentEvents(previous, response.events));
+      const communication = response.events.find((event) => event.event_type === "COMMUNICATION");
+      if (communication) setUserEcho((previous) => ({ ...previous, [communication.seq]: text }));
       setState(researchAgentSessionState(response.session));
       setMessage("");
     } catch (failure) {
@@ -412,6 +418,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     chainNodeId,
     session,
     events,
+    userEcho,
     state,
     statusKey,
     latestSeq,

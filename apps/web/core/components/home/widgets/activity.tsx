@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { observer } from "mobx-react";
 import useSWR from "swr";
@@ -21,6 +21,7 @@ const GROUP_WINDOW_MS = 30 * 60 * 1000;
 type Props = {
   workspaceSlug: string;
   density: THomeWorkbenchDensity;
+  fixedLayout: boolean;
   refreshToken: number;
 };
 
@@ -57,6 +58,7 @@ function groupActivities(activities: THomeActivity[]): TGroupedActivity[] {
 export const HomeActivityWidget = observer(function HomeActivityWidget({
   workspaceSlug,
   density,
+  fixedLayout,
   refreshToken,
 }: Props) {
   const { t, currentLocale } = useTranslation();
@@ -64,8 +66,23 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
   const [cursor, setCursor] = useState<string | null>(null);
   const [activities, setActivities] = useState<THomeActivity[]>([]);
   const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
-  // 保持 ref 为空，让 IntersectionObserver 使用浏览器视口，同时兼容卡片内滚动与页面滚动。
-  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [isLoadMoreVisible, setIsLoadMoreVisible] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const shouldUseCardScroll = density === "compact" && fixedLayout;
+
+  /** 绑定分页哨兵，并优先使用所在工作台卡片的内部滚动容器作为观察根。
+   * 滚动容器依赖 HomeSectionCard 的 data-home-card-scroll DOM 契约反查；
+   * 卡片结构调整会导致回退到浏览器视口观察，分页可能失效，详见 home-section-card.tsx 注释。 */
+  const handleLoadMoreElementRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      setLoadMoreElement(element);
+      scrollContainerRef.current = shouldUseCardScroll
+        ? (element?.closest("[data-home-card-scroll='true']") ?? null)
+        : null;
+      setIsLoadMoreVisible(false);
+    },
+    [shouldUseCardScroll]
+  );
 
   const { data, isLoading, error, mutate } = useSWR(
     workspaceSlug ? ["WORKSPACE_HOME_ACTIVITY", workspaceSlug, days, cursor, refreshToken] : null,
@@ -84,6 +101,7 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
   useEffect(() => {
     setCursor(null);
     setActivities([]);
+    setIsLoadMoreVisible(false);
   }, [days, workspaceSlug, refreshToken]);
 
   useEffect(() => {
@@ -139,15 +157,29 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
 
   const groupedActivities = useMemo(() => groupActivities(activities), [activities]);
   const visibleChanges = density === "compact" ? 2 : 4;
-  const canLoadMore = Boolean(data?.has_more) && !isLoading && !error;
+  const nextCursor = data?.next_cursor ?? null;
+  const isFetchingNextPage = isLoading && cursor !== null;
+  const hasMorePages = Boolean(data?.has_more && nextCursor) || isFetchingNextPage;
+  const canLoadMore = hasMorePages && !isLoading && !error;
 
   /** 当自动分页哨兵进入视口时请求下一页，并避免重复或失败后连续请求。 */
-  const handleLoadMore = () => {
-    if (!data?.has_more || !data.next_cursor || isLoading || error) return;
-    setCursor(data.next_cursor);
-  };
+  const handleLoadMore = useCallback(() => {
+    if (!canLoadMore || !nextCursor) return;
+    setCursor(nextCursor);
+  }, [canLoadMore, nextCursor]);
 
-  useIntersectionObserver(viewportRef, canLoadMore ? loadMoreElement : null, handleLoadMore, "120px 0px");
+  useIntersectionObserver(
+    scrollContainerRef,
+    hasMorePages ? loadMoreElement : null,
+    handleLoadMore,
+    "120px 0px",
+    setIsLoadMoreVisible
+  );
+
+  useEffect(() => {
+    if (!isLoadMoreVisible) return;
+    handleLoadMore();
+  }, [handleLoadMore, isLoadMoreVisible]);
 
   return (
     <div className="flex min-w-0 flex-col">
@@ -289,8 +321,13 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
         </ul>
       )}
 
-      {canLoadMore && (
-        <div ref={setLoadMoreElement} aria-hidden="true" data-testid="activity-auto-load-sentinel" className="h-0" />
+      {hasMorePages && (
+        <div
+          ref={handleLoadMoreElementRef}
+          aria-hidden="true"
+          data-testid="activity-auto-load-sentinel"
+          className="h-0"
+        />
       )}
       {isLoading && activities.length > 0 && (
         <p className="border-t border-subtle px-4 py-3 text-12 text-tertiary" role="status" aria-live="polite">

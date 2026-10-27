@@ -84,12 +84,41 @@ let root: ReturnType<typeof createRoot>;
 let attachments: { id: string; name: string; type: string; size: number; download_url: string }[];
 let busy: boolean;
 
-async function renderDescription(overrides: { value?: string; editable?: boolean } = {}) {
+/**
+ * 创建一个可手动完成或失败的 Promise，用于精确控制上传时机。
+ */
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
+/**
+ * 向任务说明附件输入框写入文件并触发上传。
+ */
+async function selectAttachmentFiles(input: HTMLInputElement, files: File[]) {
+  await act(async () => {
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function renderDescription(
+  overrides: { value?: string; editable?: boolean; task?: Partial<TResearchChainNodeTask> } = {}
+) {
   const { ResearchTaskDescription } = await import("@/components/research/chains/research-task-description");
   await act(async () => {
     root.render(
       <ResearchTaskDescription
-        task={{ ...task, instruction: overrides.value ?? task.instruction }}
+        task={{
+          ...task,
+          instruction: overrides.value ?? task.instruction,
+          ...overrides.task,
+        }}
         workspaceSlug="lab"
         value={overrides.value ?? task.instruction}
         editable={overrides.editable ?? false}
@@ -104,6 +133,16 @@ async function renderDescription(overrides: { value?: string; editable?: boolean
     );
   });
   await act(async () => undefined);
+}
+
+/** 通过原生文件事件一次选择多个任务描述附件。 */
+async function selectFiles(files: File[]) {
+  await act(async () => {
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { configurable: true, value: files });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => await Promise.resolve());
 }
 
 beforeEach(() => {
@@ -189,4 +228,163 @@ it("uploads, presents, and deletes persisted task attachments", async () => {
   );
   expect(attachments).toHaveLength(0);
   expect(busy).toBe(false);
+});
+
+it("keeps an uploading attachment when the parent echoes an empty attachment list", async () => {
+  const upload = createDeferred<{
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    download_url: string;
+  }>();
+  const attachment = {
+    id: "asset-attachment-1",
+    name: "过程说明.pdf",
+    type: "application/pdf",
+    size: 128,
+    download_url: "/api/research/workspaces/lab/instruction-attachments/asset-attachment-1/download/",
+  };
+  mocks.uploadTaskInstructionAttachment.mockReturnValueOnce(upload.promise);
+  await renderDescription({ editable: true });
+
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  await selectAttachmentFiles(input, [new File(["pdf"], "过程说明.pdf", { type: "application/pdf" })]);
+  await renderDescription({ editable: true, task: { instruction_attachments: [] } });
+
+  expect(container.textContent).toContain("过程说明.pdf");
+  expect(container.textContent).toContain("上传中");
+  expect(mocks.deleteTaskInstructionAttachment).not.toHaveBeenCalled();
+
+  await act(async () => upload.resolve(attachment));
+  expect(
+    container.querySelector(
+      'a[href="/api/research/workspaces/lab/instruction-attachments/asset-attachment-1/download/"]'
+    )
+  ).not.toBeNull();
+  expect(mocks.deleteTaskInstructionAttachment).not.toHaveBeenCalled();
+});
+
+it("keeps later uploads when an earlier concurrent attachment is confirmed", async () => {
+  const firstUpload = createDeferred<{
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    download_url: string;
+  }>();
+  const secondUpload = createDeferred<{
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    download_url: string;
+  }>();
+  mocks.uploadTaskInstructionAttachment
+    .mockReturnValueOnce(firstUpload.promise)
+    .mockReturnValueOnce(secondUpload.promise);
+  await renderDescription({ editable: true });
+
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  await selectAttachmentFiles(input, [
+    new File(["first"], "第一份.pdf", { type: "application/pdf" }),
+    new File(["second"], "第二份.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+  ]);
+
+  await act(async () =>
+    firstUpload.resolve({
+      id: "asset-attachment-1",
+      name: "第一份.pdf",
+      type: "application/pdf",
+      size: 128,
+      download_url: "/api/research/workspaces/lab/instruction-attachments/asset-attachment-1/download/",
+    })
+  );
+  expect(container.textContent).toContain("第一份.pdf");
+  expect(container.textContent).toContain("第二份.xlsx");
+  expect(container.textContent).toContain("上传中");
+  expect(mocks.deleteTaskInstructionAttachment).not.toHaveBeenCalled();
+
+  await act(async () =>
+    secondUpload.resolve({
+      id: "asset-attachment-2",
+      name: "第二份.xlsx",
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      size: 256,
+      download_url: "/api/research/workspaces/lab/instruction-attachments/asset-attachment-2/download/",
+    })
+  );
+  expect(container.textContent).toContain("第一份.pdf");
+  expect(container.textContent).toContain("第二份.xlsx");
+  expect(mocks.deleteTaskInstructionAttachment).not.toHaveBeenCalled();
+});
+
+it("keeps a failed attachment and retry action after parent list sync", async () => {
+  mocks.uploadTaskInstructionAttachment.mockRejectedValueOnce(new Error("upload failed"));
+  await renderDescription({ editable: true });
+
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  await selectAttachmentFiles(input, [new File(["docx"], "材料.docx", { type: "application/msword" })]);
+  await renderDescription({ editable: true, task: { instruction_attachments: [] } });
+
+  expect(container.textContent).toContain("材料.docx");
+  expect(container.textContent).toContain("上传失败");
+  expect(container.querySelector('button[aria-label="重试上传"]')).not.toBeNull();
+  expect(mocks.deleteTaskInstructionAttachment).not.toHaveBeenCalled();
+});
+
+it("rebuilds attachment entries when the task changes", async () => {
+  await renderDescription({
+    editable: true,
+    task: {
+      instruction_attachments: [
+        {
+          id: "old-asset",
+          name: "旧任务.pdf",
+          type: "application/pdf",
+          size: 128,
+          download_url: "/api/research/workspaces/lab/instruction-attachments/old-asset/download/",
+        },
+      ],
+    },
+  });
+  expect(container.textContent).toContain("旧任务.pdf");
+
+  await renderDescription({
+    editable: true,
+    task: {
+      id: "task-2",
+      instruction_attachments: [
+        {
+          id: "new-asset",
+          name: "新任务.pdf",
+          type: "application/pdf",
+          size: 128,
+          download_url: "/api/research/workspaces/lab/instruction-attachments/new-asset/download/",
+        },
+      ],
+    },
+  });
+  expect(container.textContent).not.toContain("旧任务.pdf");
+  expect(container.textContent).toContain("新任务.pdf");
+});
+
+it("allows fifty task-description attachments and blocks the fifty-first", async () => {
+  mocks.uploadTaskInstructionAttachment.mockImplementation(
+    async (_workspaceSlug: string, _chain: string, _node: string, _task: string, file: File) => ({
+      id: `asset-${file.name}`,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      download_url: `/download/${file.name}`,
+    })
+  );
+  await renderDescription({ editable: true });
+
+  await selectFiles(Array.from({ length: 50 }, (_, index) => new File(["pdf"], `过程-${index}.pdf`)));
+  expect(mocks.uploadTaskInstructionAttachment).toHaveBeenCalledTimes(50);
+
+  await selectFiles([new File(["pdf"], "第五十一份.pdf")]);
+  expect(mocks.uploadTaskInstructionAttachment).toHaveBeenCalledTimes(50);
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("任务描述最多附加 50 个文件。");
 });

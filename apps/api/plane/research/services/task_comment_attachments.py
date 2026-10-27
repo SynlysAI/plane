@@ -5,6 +5,7 @@ from rest_framework.exceptions import ValidationError
 
 from plane.db.models import FileAsset, ResearchTaskCommentAttachment
 from plane.research.utils.audit import ResearchAuditAction, record_audit_event
+from plane.utils.comment_attachments import MAX_FILE_ATTACHMENTS
 
 
 def attachment_ids_for_comment(comment):
@@ -27,8 +28,8 @@ def lock_task_comment_attachments(attachment_ids, *, task, user, comment=None):
         Locked assets in stable ID order.
     """
     ids = list(attachment_ids)
-    if len(ids) > 10 or len(set(ids)) != len(ids):
-        raise ValidationError({"attachment_ids": "每条评论最多附加 10 个不同文件。"})
+    if len(ids) > MAX_FILE_ATTACHMENTS or len(set(ids)) != len(ids):
+        raise ValidationError({"attachment_ids": f"每条评论最多附加 {MAX_FILE_ATTACHMENTS} 个不同文件。"})
     if not ids:
         return []
     existing_ids = set(attachment_ids_for_comment(comment)) if comment else set()

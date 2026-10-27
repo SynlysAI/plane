@@ -13,11 +13,12 @@ import type {
   TReportSummary,
   TResearchChain,
   TResearchIdentity,
+  TWorkbenchLayoutMode,
   TWorkbenchWidgetKey,
 } from "@plane/types";
 // components
 import { HomeSectionCard } from "@/components/home/home-section-card";
-import { ReportPeriodSelector, type TCustomReportPeriod } from "@/components/home/report-period-selector";
+import { ReportPeriodSelector, type TCustomReportPeriod } from "@/components/research/reports/report-period-selector";
 import { HomeActivityWidget } from "@/components/home/widgets/activity";
 import {
   formatResearchDate,
@@ -98,15 +99,32 @@ const PERIOD_OPTIONS = [
   { value: "90" as const, labelKey: "research.overview.period_90" },
   { value: "all" as const, labelKey: "research.overview.period_all" },
 ];
-const DEFAULT_WORKBENCH_LAYOUT = [
-  { key: "my_todos", size: "medium" },
-  { key: "research_projects", size: "large" },
-  { key: "administrative_projects", size: "small" },
-  { key: "recent_activity", size: "small" },
-  { key: "report_summary", size: "small" },
-] as const;
+const WORKBENCH_MODE_OPTIONS: { value: TWorkbenchLayoutMode; labelKey: string }[] = [
+  { value: "aggregate", labelKey: "research.home_workbench.mode_aggregate" },
+  { value: "waterfall", labelKey: "research.home_workbench.mode_waterfall" },
+];
+const AGGREGATE_SPAN_CLASSES = {
+  4: "xl:col-span-4",
+  6: "xl:col-span-6",
+  12: "xl:col-span-12",
+} as const;
 
-/** 渲染行动优先的 Bento 工作台首页：待办与科研在首行，辅助模块在次行。 */
+/** 返回聚合模式下指定序号模块的 12 列跨度。 */
+function getAggregateSpan(widgetCount: number, widgetIndex: number): 4 | 6 | 12 {
+  if (widgetCount === 1) return 12;
+  if (widgetCount === 5) return widgetIndex < 2 ? 6 : 4;
+  if (widgetCount === 2 || widgetCount === 4 || widgetCount >= 6) return 6;
+  return 4;
+}
+
+/** 返回聚合模式的等高网格行规则；一行保证最小可读高度，两行高度对等。 */
+function getAggregateRowClass(widgetCount: number): string {
+  if (widgetCount <= 3) return "xl:grid-rows-[minmax(420px,1fr)]";
+  if (widgetCount <= 5) return "xl:grid-rows-[repeat(2,minmax(360px,1fr))]";
+  return "xl:auto-rows-[minmax(340px,1fr)]";
+}
+
+/** 渲染行动优先的工作台首页：默认聚合总览，可切换为整行单模块瀑布页签。 */
 export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({ workspaceSlug }: Props) {
   const { t, currentLocale } = useTranslation();
   const research = useResearch();
@@ -114,6 +132,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const { fetchProjects, fetchProjectAnalyticsCount } = useProject();
   const [period, setPeriod] = useState<TPeriod>("30");
   const [isEditingLayout, setIsEditingLayout] = useState(false);
+  const [activeWaterfallWidgetKey, setActiveWaterfallWidgetKey] = useState<TWorkbenchWidgetKey | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
   const [chains, setChains] = useState<TResearchChain[]>([]);
@@ -163,38 +182,39 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     widgets,
     enabledWidgets,
     density,
+    mode,
     toggleWidget,
-    setWidgetSize,
     moveWidget,
     resetWidgets,
     setDensity,
+    setWorkbenchMode,
   } = useHomeWorkbenchPreferences(workspaceSlug, availableWidgetKeys);
   const widgetByKey = new Map(enabledWidgets.map((widget) => [widget.key, widget]));
+  const activeWaterfallWidget =
+    enabledWidgets.find((widget) => widget.key === activeWaterfallWidgetKey) ?? enabledWidgets[0] ?? null;
+  const shouldRenderWidget = (key: TWorkbenchWidgetKey) => mode === "aggregate" || activeWaterfallWidget?.key === key;
   const isWidgetVisible = (key: TWorkbenchWidgetKey) => Boolean(widgetByKey.get(key)?.is_enabled);
-  const showResearchWidget = canSeeResearch && isWidgetVisible("research_projects");
-  const showAdministrativeWidget = isWidgetVisible("administrative_projects");
-  const showActivityWidget = isWidgetVisible("recent_activity");
-  const showReportWidget = canSeeSummary && isWidgetVisible("report_summary");
+  const showResearchWidget =
+    canSeeResearch && isWidgetVisible("research_projects") && shouldRenderWidget("research_projects");
+  const showAdministrativeWidget =
+    isWidgetVisible("administrative_projects") && shouldRenderWidget("administrative_projects");
+  const showActivityWidget = isWidgetVisible("recent_activity") && shouldRenderWidget("recent_activity");
+  const showReportWidget = canSeeSummary && isWidgetVisible("report_summary") && shouldRenderWidget("report_summary");
   const widgetClassName = (key: TWorkbenchWidgetKey) => {
     const orderIndex = enabledWidgets.findIndex((widget) => widget.key === key);
     const orderClass = ["order-1", "order-2", "order-3", "order-4", "order-5"][orderIndex] ?? "order-last";
-    if (enabledWidgets.length === 1) return `${orderClass} xl:col-span-12 xl:min-h-[60vh]`;
-    const size = widgetByKey.get(key)?.size ?? "medium";
-    const spanClass = {
-      small: "xl:col-span-4",
-      medium: "xl:col-span-5",
-      large: "xl:col-span-7",
-      full: "xl:col-span-12",
-    }[size];
-    return `${orderClass} ${spanClass}`;
+    if (mode === "waterfall" || enabledWidgets.length === 1) {
+      return `${orderClass} ${AGGREGATE_SPAN_CLASSES[12]}`;
+    }
+    return `${orderClass} ${AGGREGATE_SPAN_CLASSES[getAggregateSpan(enabledWidgets.length, orderIndex)]}`;
   };
-  const isDefaultTwoRowLayout =
-    density === "compact" &&
-    enabledWidgets.length === DEFAULT_WORKBENCH_LAYOUT.length &&
-    enabledWidgets.every(
-      (widget, index) =>
-        widget.key === DEFAULT_WORKBENCH_LAYOUT[index].key && widget.size === DEFAULT_WORKBENCH_LAYOUT[index].size
-    );
+  const isFixedLayout = density === "compact" && enabledWidgets.length > 0;
+  const workbenchGridClassName =
+    mode === "waterfall"
+      ? "grid min-w-0 grid-cols-1 gap-5 xl:min-h-[70vh]"
+      : `grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12 ${
+          isFixedLayout ? `xl:min-h-0 xl:flex-1 ${getAggregateRowClass(enabledWidgets.length)}` : ""
+        }`;
 
   useEffect(() => {
     if (research.identityWorkspaceSlug !== workspaceSlug || !research.identity) {
@@ -376,11 +396,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
   return (
-    <div
-      className={`flex min-h-full min-w-0 flex-col gap-5 ${
-        isDefaultTwoRowLayout ? "xl:h-full xl:min-h-0 xl:flex-1 xl:overflow-hidden" : ""
-      }`}
-    >
+    <div className={`flex min-h-full min-w-0 flex-col gap-5 ${isFixedLayout ? "xl:min-h-full xl:flex-1" : ""}`}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-22 font-semibold text-primary">{t("research.home_workbench.title")}</h1>
@@ -391,6 +407,28 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex overflow-hidden rounded-md border border-subtle"
+            role="group"
+            aria-label={t("research.home_workbench.mode_label")}
+          >
+            {WORKBENCH_MODE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={mode === option.value}
+                disabled={preferencesLoading}
+                className={`px-2.5 py-1.5 text-12 transition-colors ${
+                  mode === option.value ? "bg-surface-1 text-primary" : "text-secondary hover:bg-surface-1"
+                }`}
+                onClick={() => {
+                  if (mode !== option.value) void setWorkbenchMode(option.value);
+                }}
+              >
+                {t(option.labelKey)}
+              </button>
+            ))}
+          </div>
           {showResearchWidget && (
             <div
               className="flex overflow-hidden rounded-md border border-subtle"
@@ -436,7 +474,6 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
           syncError={syncError}
           onToggle={(key, enabled) => void toggleWidget(key, enabled)}
           onMove={(key, direction) => void moveWidget(key, direction)}
-          onSizeChange={(key, size) => void setWidgetSize(key, size)}
           onDensityChange={(nextDensity) => void setDensity(nextDensity)}
           onReset={() => void resetWidgets()}
         />
@@ -445,6 +482,34 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
         <p className="rounded-xl border border-subtle bg-surface-2 px-4 py-3 text-12 text-secondary" role="alert">
           {t("research.home_workbench.preferences_load_fallback")}
         </p>
+      )}
+      {!preferencesLoading && mode === "waterfall" && enabledWidgets.length > 0 && (
+        <div
+          className="flex max-w-full gap-1 overflow-x-auto border-b border-subtle pb-2"
+          role="tablist"
+          aria-label={t("research.home_workbench.mode_waterfall")}
+          data-testid="workspace-home-waterfall-tabs"
+        >
+          {enabledWidgets.map((widget) => {
+            const isSelected = widget.key === activeWaterfallWidget?.key;
+            return (
+              <button
+                key={widget.key}
+                id={`workbench-tab-${widget.key}`}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls="workspace-home-waterfall-panel"
+                className={`min-w-0 rounded-md px-3 py-1.5 text-12 whitespace-nowrap transition-colors ${
+                  isSelected ? "bg-surface-1 font-medium text-primary" : "text-secondary hover:bg-surface-1"
+                }`}
+                onClick={() => setActiveWaterfallWidgetKey(widget.key)}
+              >
+                {t(widget.titleKey)}
+              </button>
+            );
+          })}
+        </div>
       )}
       {preferencesLoading ? (
         <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12" data-testid="workspace-home-columns">
@@ -457,16 +522,19 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
         </div>
       ) : (
         <div
-          className={`grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12 ${
-            isDefaultTwoRowLayout ? "xl:min-h-0 xl:flex-1 xl:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]" : ""
-          }`}
+          className={workbenchGridClassName}
           data-testid="workspace-home-columns"
+          role={mode === "waterfall" ? "tabpanel" : undefined}
+          id={mode === "waterfall" ? "workspace-home-waterfall-panel" : undefined}
+          aria-labelledby={
+            mode === "waterfall" && activeWaterfallWidget ? `workbench-tab-${activeWaterfallWidget.key}` : undefined
+          }
         >
-          {isWidgetVisible("my_todos") && (
+          {isWidgetVisible("my_todos") && shouldRenderWidget("my_todos") && (
             <HomeSectionCard
               className={widgetClassName("my_todos")}
               density={density}
-              fixedLayout={isDefaultTwoRowLayout}
+              fixedLayout={isFixedLayout}
               size="primary"
               title={t("research.home_workbench.widget_my_todos")}
               hint={t("research.home_workbench.widget_my_todos_hint")}
@@ -484,7 +552,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("research_projects")}
               density={density}
-              fixedLayout={isDefaultTwoRowLayout}
+              fixedLayout={isFixedLayout}
               size="primary"
               title={t("research.home_workbench.research_overview")}
               hint={t("research.home_workbench.research_hint")}
@@ -574,7 +642,8 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("administrative_projects")}
               density={density}
-              fixedLayout={isDefaultTwoRowLayout}
+              fixedLayout={isFixedLayout}
+              size={mode === "waterfall" ? "primary" : "secondary"}
               title={t("research.home_workbench.administrative_overview")}
               hint={t("research.home_workbench.administrative_hint")}
               action={
@@ -657,11 +726,17 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("recent_activity")}
               density={density}
-              fixedLayout={isDefaultTwoRowLayout}
+              fixedLayout={isFixedLayout}
+              size={mode === "waterfall" ? "primary" : "secondary"}
               title={t("research.home_workbench.recent_activity")}
               hint={t("research.home_workbench.widget_recent_activity_hint")}
             >
-              <HomeActivityWidget workspaceSlug={workspaceSlug} density={density} refreshToken={refreshToken} />
+              <HomeActivityWidget
+                workspaceSlug={workspaceSlug}
+                density={density}
+                fixedLayout={isFixedLayout}
+                refreshToken={refreshToken}
+              />
             </HomeSectionCard>
           )}
 
@@ -669,7 +744,8 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("report_summary")}
               density={density}
-              fixedLayout={isDefaultTwoRowLayout}
+              fixedLayout={isFixedLayout}
+              size={mode === "waterfall" ? "primary" : "secondary"}
               title={t("research.home_workbench.report_summary")}
               action={
                 canSeeSummary ? (

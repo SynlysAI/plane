@@ -131,6 +131,7 @@ from .reports import (
 from .report_comments import (
     ResearchReportCommentDetailEndpoint,
     ResearchReportCommentFeedbackEndpoint,
+    ResearchReportCommentMentionEndpoint,
     ResearchReportCommentThreadCommentEndpoint,
     ResearchReportCommentThreadListCreateEndpoint,
     ResearchReportCommentThreadStatusEndpoint,
@@ -231,6 +232,8 @@ from .chain_tasks import (
     ResearchChainNodeTaskActionEndpoint,
     ResearchChainNodeTaskDetailEndpoint,
     ResearchChainNodeTaskListCreateEndpoint,
+    ResearchTaskNotificationRecipientSelfEndpoint,
+    ResearchTaskNotificationRecipientsEndpoint,
 )
 from .paper_reviews import (
     ResearchPaperReviewDetailEndpoint,
@@ -405,6 +408,7 @@ __all__ = [
     "ResearchReportWithdrawEndpoint",
     "ResearchReportCommentDetailEndpoint",
     "ResearchReportCommentFeedbackEndpoint",
+    "ResearchReportCommentMentionEndpoint",
     "ResearchReportCommentThreadCommentEndpoint",
     "ResearchReportCommentThreadListCreateEndpoint",
     "ResearchReportCommentThreadStatusEndpoint",

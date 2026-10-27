@@ -17,6 +17,7 @@ import type {
   TIssueServiceType,
   TIssuesResponse,
   TIssueSubIssues,
+  TTaskNotificationRecipients,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -379,6 +380,51 @@ export class IssueService extends APIService {
   }
 
   // issue subscriptions
+  async getIssueNotificationRecipients(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string
+  ): Promise<TTaskNotificationRecipients> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/issue-subscribers/notification-recipients/`
+    )
+      .then((response) => response?.data as TTaskNotificationRecipients)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateIssueNotificationRecipients(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    userIds: string[]
+  ): Promise<TTaskNotificationRecipients> {
+    return this.put(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/issue-subscribers/notification-recipients/`,
+      { user_ids: userIds }
+    )
+      .then((response) => response?.data as TTaskNotificationRecipients)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async updateIssueNotificationSelfSubscription(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    subscribed: boolean
+  ): Promise<TTaskNotificationRecipients> {
+    const url = `/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/issue-subscribers/notification-recipients/me/`;
+    const request = subscribed ? this.post(url, {}) : this.delete(url);
+    return request
+      .then((response) => response?.data as TTaskNotificationRecipients)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async getIssueNotificationSubscriptionStatus(
     workspaceSlug: string,
     projectId: string,

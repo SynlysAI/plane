@@ -232,6 +232,29 @@ def test_administrator_can_configure_members(env):
     assert env["client"].get(base).status_code == 200
 
 
+def test_administrator_can_configure_mixed_workspace_roles_in_one_batch(env):
+    """一次批量添加不同工作区角色的成员时保持整单成功。"""
+    owner_client = APIClient()
+    owner_client.force_authenticate(user=env["owner"])
+    targets = []
+    for index, role in enumerate((20, 15, 5), start=1):
+        user = make_user(first_name="Batch", last_name=str(index))
+        WorkspaceMember.objects.create(workspace=env["workspace"], member=user, role=role)
+        targets.append((user, role))
+
+    response = owner_client.post(
+        f"/api/workspaces/{env['workspace'].slug}/projects/{env['administrative'].id}/members/",
+        {"members": [{"member_id": str(user.id), "role": role} for user, role in targets]},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    persisted = ProjectMember.objects.filter(project=env["administrative"], member__in=[user for user, _ in targets])
+    assert {str(row.member_id): row.role for row in persisted} == {
+        str(user.id): role for user, role in targets
+    }
+
+
 def test_authorized_invitation_can_add_administrative_member(env):
     """管理员发出的有效邀请仍可建立行政项目成员关系。"""
     invitation = ProjectMemberInvite.objects.create(

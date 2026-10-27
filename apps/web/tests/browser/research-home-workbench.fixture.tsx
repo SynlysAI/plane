@@ -224,42 +224,38 @@ WorkspaceService.prototype.fetchWorkspaceWidgets = async () => [
   { key: "workbench_layout", is_enabled: true, config: { density: "compact" }, sort_order: 100 },
 ];
 WorkspaceService.prototype.updateWorkspaceWidget = async (_workspaceSlug, key, data) => ({ key, ...data });
-WorkspaceService.prototype.fetchWorkspaceActivities = async () => ({
-  results: [
-    {
-      id: "activity-1",
-      source: "project",
-      actor: { id: "student-1", display_name: "隔离学生" },
-      action: "updated",
-      entity_type: "project",
-      entity_id: "admin-project-1",
-      entity_name: "设备采购协作",
-      project: { id: "admin-project-1", name: "设备采购协作", identifier: "PROC" },
-      url: "#activity-project",
-      occurred_at: now,
-      changes: [{ field: "name", old_value: "旧项目名", new_value: "设备采购协作" }],
-      summary: "",
-    },
-    {
-      id: "activity-2",
-      source: "research",
-      actor: { id: "student-1", display_name: "隔离学生" },
-      action: "report.submit",
-      entity_type: "report",
-      entity_id: "report-1",
-      entity_name: "WEEKLY 2026-W42",
-      project: { id: "project-1", name: "催化剂界面失活机理研究", identifier: "RES" },
-      url: "#activity-report",
-      occurred_at: now,
-      changes: [{ field: "period", new_value: "2026-W42" }],
-      summary: "",
-    },
-  ],
-  next_offset: null,
-  has_more: false,
-  offset: 0,
-  per_page: 12,
-});
+const fixtureActivities = Array.from({ length: 40 }, (_unused, index) => ({
+  id: `activity-${index + 1}`,
+  source: "project",
+  actor: { id: "student-1", display_name: "隔离学生" },
+  action: "updated",
+  entity_type: "project",
+  entity_id: `activity-project-${index + 1}`,
+  entity_name: `动态记录 ${index + 1}`,
+  project: { id: "admin-project-1", name: "设备采购协作", identifier: "PROC" },
+  url: `#activity-${index + 1}`,
+  occurred_at: new Date(Date.now() - index * 60 * 60 * 1000).toISOString(),
+  changes: [{ field: "name", new_value: `动态记录 ${index + 1}` }],
+  summary: "",
+}));
+
+/** 按游标返回 40 条 fixture 动态，用于验证卡片内部滚动会连续加载。 */
+WorkspaceService.prototype.fetchWorkspaceActivities = async (_workspaceSlug, params = {}) => {
+  const cursor = typeof params.cursor === "string" ? params.cursor : null;
+  const cursorOffset = cursor ? Number(cursor.split("-")[1]) : 0;
+  const start = Number.isFinite(cursorOffset) ? Math.max(cursorOffset, 0) : 0;
+  const results = fixtureActivities.slice(start, start + (params.per_page ?? 12));
+  const nextOffset = start + results.length;
+  const hasMore = nextOffset < fixtureActivities.length;
+  return {
+    results,
+    next_cursor: hasMore ? `cursor-${nextOffset}` : null,
+    next_offset: null,
+    has_more: hasMore,
+    offset: 0,
+    per_page: params.per_page ?? 12,
+  };
+};
 WorkspaceService.prototype.fetchWorkspaceRecents = async () => [
   {
     id: "recent-project",

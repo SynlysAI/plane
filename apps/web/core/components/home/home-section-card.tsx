@@ -54,6 +54,8 @@ export function HomeSectionCard({
   bodyClassName,
   children,
 }: Props) {
+  const isScrollable = density === "compact" && fixedLayout;
+
   return (
     <section
       aria-label={title}
@@ -77,10 +79,14 @@ export function HomeSectionCard({
         </div>
         {action}
       </header>
+      {/* data-home-card-scroll 是与 HomeActivityWidget 分页哨兵之间的 DOM 契约：
+          activity.tsx 通过 closest("[data-home-card-scroll='true']") 反查该滚动容器，
+          并将其作为 IntersectionObserver 的 root。调整卡片结构时必须保留该属性与滚动行为。 */}
       <div
+        data-home-card-scroll={isScrollable ? "true" : undefined}
         className={cn(
           "min-h-0 flex-1 border-t border-subtle",
-          density === "compact" && fixedLayout && "overflow-y-auto overscroll-contain",
+          isScrollable && "overflow-y-auto overscroll-contain",
           bodyClassName
         )}
       >

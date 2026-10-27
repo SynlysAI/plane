@@ -21,6 +21,7 @@ import type {
   TReportTemplate,
   TReportTemplateOption,
   TReportTemplateSections,
+  TSearchResponse,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
@@ -158,6 +159,15 @@ export class ResearchReportService extends APIService {
   async getReportHistory(workspaceSlug: string, reportId: string) {
     return this.get(researchEndpoints.reportHistory(workspaceSlug, reportId))
       .then((res) => res?.data as { results: TReportReviewLog[]; count: number })
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** Search report-visible members for report discussion mentions. */
+  async getReportCommentMentions(workspaceSlug: string, reportId: string, query: string, count = 5) {
+    return this.get(researchEndpoints.reportCommentMentions(workspaceSlug, reportId), { params: { query, count } })
+      .then((res) => res?.data as TSearchResponse)
       .catch((err) => {
         throw err?.response?.data;
       });

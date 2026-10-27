@@ -14,6 +14,11 @@ from plane.utils.workspace_access import user_can_access_workspace
 from plane.utils.project_domains import project_domain_allows
 
 
+# 评论附件、工作项附件与科研任务说明附件当前共享同一数量上限。
+# 前端镜像常量位于 packages/constants/src/file.ts 的 MAX_FILE_ATTACHMENTS，调整时需两处同步。
+MAX_FILE_ATTACHMENTS = 50
+
+
 @dataclass(frozen=True)
 class CommentAttachmentSizeLimit:
     """评论附件某一分类的有效上传额度。"""
@@ -126,8 +131,8 @@ def lock_comment_attachments(attachment_ids, *, issue, user, comment=None):
     Returns:
         已按固定顺序加锁、可用于本次保存的文件列表。
     """
-    if len(attachment_ids) > 10 or len(set(attachment_ids)) != len(attachment_ids):
-        raise ValidationError({"attachment_ids": "每条评论最多附加 10 个不同文件。"})
+    if len(attachment_ids) > MAX_FILE_ATTACHMENTS or len(set(attachment_ids)) != len(attachment_ids):
+        raise ValidationError({"attachment_ids": f"每条评论最多附加 {MAX_FILE_ATTACHMENTS} 个不同文件。"})
     allowed = Q(comment__isnull=True, created_by=user)
     if comment is not None:
         allowed |= Q(comment=comment)

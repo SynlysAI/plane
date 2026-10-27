@@ -322,14 +322,15 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
             original_role: member.role,
           });
         });
+        update(this.projectRoot.projectMap, [projectId, "members"], (memberIds) =>
+          uniq([...(memberIds ?? []), ...data.members.map((member) => member.member_id)])
+        );
       });
-      update(this.projectRoot.projectMap, [projectId, "members"], (memberIds) =>
-        uniq([...memberIds, ...data.members.map((m) => m.member_id)])
-      );
-      this.projectRoot.projectMap[projectId].members = this.projectRoot.projectMap?.[projectId]?.members?.concat(
-        data.members.map((m) => m.member_id)
-      );
-      await this.fetchProjectMembers(workspaceSlug, projectId);
+      try {
+        await this.fetchProjectMembers(workspaceSlug, projectId);
+      } catch (error) {
+        console.error("Failed to refresh project members after adding members", error);
+      }
       return response;
     });
 

@@ -3,8 +3,25 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TCommentsOperations, TIssueComment } from "@plane/types";
+import zhTranslations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({ bulk: vi.fn(), uploadImage: vi.fn(), limits: vi.fn() }));
+vi.mock("@plane/i18n", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) => {
+      const literal = key
+        .split(".")
+        .reduce<unknown>((entry, part) => (entry as Record<string, unknown>)?.[part], zhTranslations);
+      const text = typeof literal === "string" ? literal : key;
+      if (!values) return text;
+      return Object.entries(values).reduce(
+        (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
+        text
+      );
+    },
+    currentLocale: "zh-CN",
+  }),
+}));
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => ({ getWorkspaceBySlug: () => ({ id: "ws" }) }) }));
 vi.mock("@/hooks/use-file-size", () => ({ useFileSize: () => ({ maxFileSize: 1024 }) }));
 vi.mock("@/services/file.service", () => ({
@@ -141,6 +158,16 @@ async function attachFile(inputFile: File) {
   });
 }
 
+/** 通过原生文件事件一次添加多个过程文件。 */
+async function attachFiles(inputFiles: File[]) {
+  await act(async () => {
+    const input = container.querySelector('input[type="file"]')!;
+    Object.defineProperty(input, "files", { configurable: true, value: inputFiles });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => await Promise.resolve());
+}
+
 /** 点击指定表单操作。 */
 async function click(label: string) {
   await act(async () => {
@@ -193,6 +220,17 @@ it("blocks create-form attachments when limits cannot be loaded", async () => {
   Object.defineProperty(large, "size", { value: 2 * 1024 * 1024 + 1 });
   await attachFile(large);
   expect(ops.uploadCommentAttachment).not.toHaveBeenCalled();
+});
+
+it("allows fifty comment attachments and blocks the fifty-first", async () => {
+  const ops = operations();
+  await mount(<CommentCreate workspaceSlug="lab" projectId="project" entityId="issue" activityOperations={ops} />);
+  await attachFiles(Array.from({ length: 50 }, (_, index) => new File(["pptx"], `过程-${index}.pptx`)));
+  expect(ops.uploadCommentAttachment).toHaveBeenCalledTimes(50);
+
+  await attachFile(new File(["pptx"], "第五十一份.pptx"));
+  expect(ops.uploadCommentAttachment).toHaveBeenCalledTimes(50);
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("每条评论最多附加 50 个文件。");
 });
 
 it("keeps an attachment-only failed comment and clears only after successful retry", async () => {

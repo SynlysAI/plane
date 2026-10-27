@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useNavigate, useParams } from "react-router";
@@ -13,18 +13,11 @@ import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/c
 import type { TReportStatus, TReportType } from "@plane/constants";
 import type { TPeriodicReport, TReportTemplateOption } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
+import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import {
-  EModalPosition,
-  EModalWidth,
-  Input,
-  ModalCore,
-  ListFilterField,
-  ListFilterInput,
-  ListFilterSelect,
-} from "@plane/ui";
+import { EModalPosition, EModalWidth, ModalCore, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 import { Plus } from "lucide-react";
 import {
   ResearchBrowseHeader,
@@ -46,8 +39,17 @@ import {
   ResearchTableSurface,
 } from "@/components/research/common/research-data-surface";
 import { ResearchListState } from "@/components/research/common/research-list-state";
+import { formatShareText } from "@/components/research/common/share-link";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
+import {
+  ReportPeriodCalendar,
+  formatReportPeriodDate,
+  reportPeriodDates,
+  reportPeriodKey,
+  reportTodayInTimezone,
+  type TCustomReportPeriod,
+} from "@/components/research/reports/report-period-selector";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { formatResearchDate, formatResearchReadAt } from "@/components/research/common/research-format";
@@ -68,6 +70,33 @@ function reportReadState(report: TPeriodicReport): ReportReadState | null {
   return (report.read_count ?? 0) > 0 ? "read_pending_review" : "waiting";
 }
 
+/**
+ * 返回报告分享标题中的作者显示名。
+ *
+ * Args:
+ *   report: 周期报告投影。
+ *
+ * Returns:
+ *   作者显示名、邮箱或作者 ID；均缺失时返回空字符串。
+ */
+function reportOwnerName(report: TPeriodicReport): string {
+  return report.owner_detail?.display_name || report.owner_detail?.email || report.owner || "";
+}
+
+/**
+ * 构造报告分享标题。
+ *
+ * Args:
+ *   report: 周期报告投影。
+ *   untitledLabel: 已本地化的未命名标题。
+ *
+ * Returns:
+ *   “周期 · 作者”格式的分享标题。
+ */
+function reportShareTitle(report: TPeriodicReport, untitledLabel: string): string {
+  return [report.period_key, reportOwnerName(report)].filter(Boolean).join(" · ") || untitledLabel;
+}
+
 /** Report list with period / status / type / owner filters (P0-UI-02). */
 const ReportListContent = observer(function ReportListContent({ workspaceSlug, variant = "default" }: Props) {
   const { t, currentLocale } = useTranslation();
@@ -75,8 +104,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const query = useResearchBrowseQuery();
   const { reportId } = useParams();
   const navigate = useNavigate();
-  const [reportType, setReportType] = useState<TReportType>("WEEKLY");
-  const [periodKey, setPeriodKey] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState<TCustomReportPeriod | null>(null);
   const statusFilter = query.get("status", variant === "review" ? "SUBMITTED" : "");
   const setStatusFilter = (value: string) => query.set("status", value);
   const typeFilter = query.get("report_type");
@@ -102,9 +130,16 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
   const [restoringReportId, setRestoringReportId] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [templateId, setTemplateId] = useState("");
+  const [isCheckingPeriod, setIsCheckingPeriod] = useState(false);
+  const [existingReport, setExistingReport] = useState<TPeriodicReport | null>(null);
+  const [createErrorKey, setCreateErrorKey] = useState<string | null>(null);
+  const periodCheckVersion = useRef(0);
+  const reportType: TReportType = selectedPeriod?.reportType ?? "WEEKLY";
 
   const reports = research.getReports(workspaceSlug);
+  const checkReportPeriod = research.checkReportPeriod;
   const orgUnits = research.getOrgUnits(workspaceSlug);
+  const reportTimezone = research.identity?.workspace?.report_timezone;
   const pagination = research.reportPaginationByWorkspace[workspaceSlug];
   const canCreateReport = Boolean(research.identity?.user.org_units.length);
   const teamProjects = research
@@ -230,20 +265,72 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCreateDialogOpen, reportType, workspaceSlug]);
 
+  const openCreateDialog = useCallback(() => {
+    const currentPeriod: TCustomReportPeriod = {
+      reportType: "WEEKLY",
+      periodKey: reportPeriodKey("WEEKLY", reportTodayInTimezone(reportTimezone)),
+    };
+    setSelectedPeriod(currentPeriod);
+    setSelectedTeamProjects([]);
+    setTemplateId("");
+    setExistingReport(null);
+    setCreateErrorKey(null);
+    setIsCreateDialogOpen(true);
+  }, [reportTimezone]);
+
+  const handlePeriodSelect = useCallback((period: TCustomReportPeriod) => {
+    setSelectedPeriod(period);
+    setExistingReport(null);
+    setCreateErrorKey(null);
+  }, []);
+
+  const handleReportTypeChange = useCallback(
+    (period: TCustomReportPeriod) => {
+      setTemplateId("");
+      handlePeriodSelect(period);
+    },
+    [handlePeriodSelect]
+  );
+
+  const runPeriodCheck = useCallback(
+    async (period: TCustomReportPeriod) => {
+      const requestVersion = ++periodCheckVersion.current;
+      setIsCheckingPeriod(true);
+      setExistingReport(null);
+      try {
+        const existing = await checkReportPeriod(workspaceSlug, period.reportType, period.periodKey);
+        if (periodCheckVersion.current !== requestVersion) return;
+        setExistingReport(existing);
+      } catch {
+        if (periodCheckVersion.current !== requestVersion) return;
+        setExistingReport(null);
+      } finally {
+        if (periodCheckVersion.current === requestVersion) setIsCheckingPeriod(false);
+      }
+    },
+    [checkReportPeriod, workspaceSlug]
+  );
+
+  useEffect(() => {
+    if (!isCreateDialogOpen || !selectedPeriod) return;
+    void runPeriodCheck(selectedPeriod);
+  }, [isCreateDialogOpen, runPeriodCheck, selectedPeriod]);
+
   const handleCreate = useCallback(async () => {
-    if (isCreating) return;
+    if (isCreating || !selectedPeriod || isCheckingPeriod || existingReport) return;
     setIsCreating(true);
     try {
       const report = await research.createReport(workspaceSlug, {
-        report_type: reportType,
-        period_key: periodKey.trim() || undefined,
+        report_type: selectedPeriod.reportType,
+        period_key: selectedPeriod.periodKey,
         team_projects: selectedTeamProjects,
         template: templateId || null,
       });
-      setPeriodKey("");
       setSelectedTeamProjects([]);
       setIsCreateDialogOpen(false);
       setErrorKey(null);
+      setCreateErrorKey(null);
+      setExistingReport(null);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("research.feedback.report_created.title"),
@@ -251,11 +338,27 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
       });
       navigate(`/${workspaceSlug}/research/reports/${report.id}`);
     } catch (error) {
-      setErrorKey(getResearchErrorKey(error));
+      const nextErrorKey = getResearchErrorKey(error);
+      setCreateErrorKey(nextErrorKey);
+      if ((error as { error_code?: string }).error_code === "report_period_conflict") {
+        void runPeriodCheck(selectedPeriod);
+      }
     } finally {
       setIsCreating(false);
     }
-  }, [isCreating, navigate, periodKey, reportType, research, selectedTeamProjects, t, templateId, workspaceSlug]);
+  }, [
+    existingReport,
+    isCheckingPeriod,
+    isCreating,
+    navigate,
+    research,
+    runPeriodCheck,
+    selectedPeriod,
+    selectedTeamProjects,
+    t,
+    templateId,
+    workspaceSlug,
+  ]);
 
   const handleRestore = useCallback(
     async (targetReportId: string) => {
@@ -278,6 +381,34 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     [navigate, restoringReportId, research, t, workspaceSlug]
   );
 
+  /**
+   * 复制带报告类型、周期与作者的分享文本。
+   *
+   * Args:
+   *   report: 当前列表中的周期报告。
+   */
+  const handleCopyLink = useCallback(
+    async (report: TPeriodicReport) => {
+      const title = reportShareTitle(report, t("research.common.untitled"));
+      const href = `/${workspaceSlug}/research/reports/${report.id}`;
+      try {
+        await copyTextToClipboard(formatShareText(t(REPORT_TYPE_LABELS[report.report_type]), title, href));
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("research.common.share_copied_title"),
+          message: t("research.common.share_copied_message"),
+        });
+      } catch {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("research.common.share_copy_failed_title"),
+          message: t("research.common.share_copy_failed_message"),
+        });
+      }
+    },
+    [t, workspaceSlug]
+  );
+
   const clearFilters = () =>
     query.patch({
       status: "",
@@ -295,6 +426,12 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
       mine: "",
     });
 
+  const selectedPeriodRange = selectedPeriod ? reportPeriodDates(selectedPeriod) : null;
+  const isBackfillPeriod = Boolean(
+    selectedPeriod &&
+    selectedPeriod.periodKey !== reportPeriodKey(selectedPeriod.reportType, reportTodayInTimezone(reportTimezone))
+  );
+
   return (
     <ResearchListSurface>
       {errorKey && (
@@ -309,7 +446,7 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
           canCreateReport &&
           variant === "default" &&
           !isDeletedScope && (
-            <Button variant="primary" size="xl" prependIcon={<Plus />} onClick={() => setIsCreateDialogOpen(true)}>
+            <Button variant="primary" size="xl" prependIcon={<Plus />} onClick={openCreateDialog}>
               {t("research.reports.create")}
             </Button>
           )
@@ -496,12 +633,24 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                         <span className="text-12 text-tertiary">-</span>
                       )
                     ) : (
-                      <Link
-                        href={`/${workspaceSlug}/research/reports/${report.id}`}
-                        className="text-12 text-accent-primary hover:underline"
-                      >
-                        {t("research.common.open")}
-                      </Link>
+                      <span className="inline-flex items-center justify-end gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          aria-label={t("research.common.copy_share_aria", {
+                            title: reportShareTitle(report, t("research.common.untitled")),
+                          })}
+                          onClick={() => void handleCopyLink(report)}
+                        >
+                          {t("research.common.copy_share")}
+                        </Button>
+                        <Link
+                          href={`/${workspaceSlug}/research/reports/${report.id}`}
+                          className="text-12 text-accent-primary hover:underline"
+                        >
+                          {t("research.common.open")}
+                        </Link>
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -549,23 +698,66 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
             <h2 className="text-16 font-semibold text-primary">{t("research.reports.create_title")}</h2>
             <p className="mt-1 text-12 text-tertiary">{t("research.reports.create_hint")}</p>
           </div>
-          <label className="flex flex-col gap-1 text-12 text-secondary">
-            <span>{t("research.reports.columns.type")}</span>
-            <select
-              className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-13 text-primary"
-              value={reportType}
-              onChange={(event) => {
-                setReportType(event.target.value as TReportType);
-                setTemplateId("");
-              }}
-            >
-              {REPORT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {t(REPORT_TYPE_LABELS[type])}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-col gap-2 text-12 text-secondary">
+            <div className="flex items-baseline justify-between gap-3">
+              <span>{t("research.reports.columns.period")}</span>
+              {selectedPeriod && (
+                <span className="font-medium text-primary tabular-nums">{selectedPeriod.periodKey}</span>
+              )}
+            </div>
+            <div className="rounded-md border border-subtle bg-surface-1 p-3">
+              <ReportPeriodCalendar
+                value={selectedPeriod}
+                reportTimezone={reportTimezone}
+                onSelect={handlePeriodSelect}
+                onTypeChange={handleReportTypeChange}
+              />
+            </div>
+            {selectedPeriod && selectedPeriodRange && (
+              <div className="flex flex-wrap items-center gap-2 text-11 text-tertiary">
+                <span className="tabular-nums">
+                  {formatReportPeriodDate(selectedPeriodRange.start)} ~{" "}
+                  {formatReportPeriodDate(selectedPeriodRange.end)}
+                </span>
+                {isBackfillPeriod && (
+                  <span className="rounded bg-surface-2 px-1.5 py-0.5 text-10">{t("research.reports.backfill")}</span>
+                )}
+              </div>
+            )}
+            {isCheckingPeriod && (
+              <p className="text-11 text-tertiary" role="status">
+                {t("common.loading")}
+              </p>
+            )}
+            {existingReport ? (
+              <div
+                className="flex items-center justify-between gap-2 rounded-md border border-danger-strong/40 bg-danger-subtle px-2 py-1.5 text-11 text-danger-primary"
+                role="alert"
+              >
+                <span>{t("research.errors.report_period_conflict")}</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setIsCreateDialogOpen(false);
+                    navigate(`/${workspaceSlug}/research/reports/${existingReport.id}`);
+                  }}
+                >
+                  {t("research.common.open")}
+                </Button>
+              </div>
+            ) : (
+              createErrorKey && (
+                <p
+                  className="rounded-md border border-danger-strong/40 bg-danger-subtle px-2 py-1.5 text-11 text-danger-primary"
+                  role="alert"
+                >
+                  {t(createErrorKey)}
+                </p>
+              )
+            )}
+          </div>
           <label className="flex flex-col gap-1 text-12 text-secondary">
             <span>{t("research.reports.template")}</span>
             <select
@@ -589,14 +781,6 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                 </option>
               )}
             </select>
-          </label>
-          <label className="flex flex-col gap-1 text-12 text-secondary">
-            <span>{t("research.reports.columns.period")}</span>
-            <Input
-              placeholder={t("research.reports.period_placeholder")}
-              value={periodKey}
-              onChange={(event) => setPeriodKey(event.target.value)}
-            />
           </label>
           {teamProjects.length > 0 && (
             <fieldset className="flex flex-col gap-2 text-12 text-secondary">
@@ -631,7 +815,13 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
             >
               {t("research.common.cancel")}
             </Button>
-            <Button type="submit" variant="primary" size="sm" loading={isCreating} disabled={isCreating}>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={isCreating}
+              disabled={isCreating || isCheckingPeriod || existingReport !== null || !selectedPeriod}
+            >
               {t("research.reports.create")}
             </Button>
           </div>

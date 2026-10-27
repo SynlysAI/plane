@@ -134,3 +134,48 @@ class ResearchTaskComment(BaseModel):
         constraints = [
             models.UniqueConstraint(fields=["task", "actor", "request_id"], name="rsch_task_comment_request_uq")
         ]
+
+
+class ResearchTaskSubscriber(BaseModel):
+    """Persistent notification subscription attached to a research task."""
+
+    class Source(models.TextChoices):
+        CC = "CC", "Carbon copy"
+        SELF = "SELF", "Self subscription"
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.PROTECT,
+        related_name="research_task_subscribers",
+    )
+    task = models.ForeignKey(
+        ResearchChainNodeTask,
+        on_delete=models.CASCADE,
+        related_name="notification_subscribers",
+    )
+    subscriber = models.ForeignKey(
+        "db.User",
+        on_delete=models.CASCADE,
+        related_name="research_task_subscriptions",
+    )
+    source = models.CharField(max_length=8, choices=Source.choices, default=Source.CC)
+
+    class Meta:
+        verbose_name = "Research Task Subscriber"
+        verbose_name_plural = "Research Task Subscribers"
+        db_table = "research_task_subscribers"
+        ordering = ("created_at", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["task", "subscriber"],
+                condition=Q(deleted_at__isnull=True),
+                name="rsch_task_subscriber_uq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["workspace", "task"], name="rsch_task_sub_task_idx"),
+            models.Index(fields=["subscriber", "source"], name="rsch_task_sub_user_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.task_id} <{self.subscriber_id}:{self.source}>"

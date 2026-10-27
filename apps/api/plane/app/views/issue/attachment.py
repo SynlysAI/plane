@@ -10,6 +10,7 @@ import uuid
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 
@@ -21,14 +22,53 @@ from rest_framework.parsers import MultiPartParser, FormParser
 # Module imports
 from .. import BaseAPIView
 from plane.app.serializers import IssueAttachmentSerializer
-from plane.db.models import FileAsset, Workspace
+from plane.db.models import FileAsset, Issue, Workspace
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.app.permissions import allow_permission, ROLE
 from plane.settings.storage import S3Storage
-from plane.utils.comment_attachments import comment_attachment_limits, resolve_comment_attachment_limit
+from plane.utils.comment_attachments import (
+    MAX_FILE_ATTACHMENTS,
+    comment_attachment_limits,
+    resolve_comment_attachment_limit,
+)
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
+
+
+def _active_issue_attachment_count(issue_id):
+    """Return the number of active file attachments owned by one work item."""
+    return FileAsset.objects.filter(
+        issue_id=issue_id,
+        entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+        is_deleted=False,
+        deleted_at__isnull=True,
+    ).count()
+
+
+def _issue_attachment_limit_response():
+    """Build the shared response for exceeding the work-item attachment count."""
+    return Response(
+        {
+            "error_code": "issue_attachment_count_exceeded",
+            "limit": MAX_FILE_ATTACHMENTS,
+            "status": False,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _locked_issue(issue_id, workspace_id, project_id):
+    """Lock one work item inside the caller's transaction for attachment counting."""
+    return (
+        Issue.objects.select_for_update()
+        .filter(
+            pk=issue_id,
+            workspace_id=workspace_id,
+            project_id=project_id,
+        )
+        .first()
+    )
 
 
 class IssueAttachmentEndpoint(BaseAPIView):
@@ -41,12 +81,18 @@ class IssueAttachmentEndpoint(BaseAPIView):
         serializer = IssueAttachmentSerializer(data=request.data)
         workspace = Workspace.objects.get(slug=slug)
         if serializer.is_valid():
-            serializer.save(
-                project_id=project_id,
-                issue_id=issue_id,
-                workspace_id=workspace.id,
-                entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
-            )
+            with transaction.atomic():
+                issue = _locked_issue(issue_id, workspace.id, project_id)
+                if issue is None:
+                    return Response({"error": "Issue attachment not found."}, status=status.HTTP_404_NOT_FOUND)
+                if _active_issue_attachment_count(issue_id) >= MAX_FILE_ATTACHMENTS:
+                    return _issue_attachment_limit_response()
+                serializer.save(
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    workspace_id=workspace.id,
+                    entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+                )
             issue_activity.delay(
                 type="attachment.activity.created",
                 requested_data=None,
@@ -147,17 +193,22 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
             )
         size_limit = size
 
-        # Create a File Asset
-        asset = FileAsset.objects.create(
-            attributes={"name": name, "type": type, "size": size_limit},
-            asset=asset_key,
-            size=size_limit,
-            workspace_id=workspace.id,
-            created_by=request.user,
-            issue_id=issue_id,
-            project_id=project_id,
-            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
-        )
+        with transaction.atomic():
+            issue = _locked_issue(issue_id, workspace.id, project_id)
+            if issue is None:
+                return Response({"error": "Issue attachment not found."}, status=status.HTTP_404_NOT_FOUND)
+            if _active_issue_attachment_count(issue_id) >= MAX_FILE_ATTACHMENTS:
+                return _issue_attachment_limit_response()
+            asset = FileAsset.objects.create(
+                attributes={"name": name, "type": type, "size": size_limit},
+                asset=asset_key,
+                size=size_limit,
+                workspace_id=workspace.id,
+                created_by=request.user,
+                issue_id=issue_id,
+                project_id=project_id,
+                entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+            )
 
         # Get the presigned URL
         storage = S3Storage(request=request)
@@ -259,6 +310,13 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
             entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
         )
         serializer = IssueAttachmentSerializer(issue_attachment)
+
+        with transaction.atomic():
+            issue = _locked_issue(issue_id, issue_attachment.workspace_id, issue_attachment.project_id)
+            if issue is None:
+                return Response({"error": "Issue attachment not found."}, status=status.HTTP_404_NOT_FOUND)
+            if _active_issue_attachment_count(issue_id) > MAX_FILE_ATTACHMENTS:
+                return _issue_attachment_limit_response()
 
         # Send this activity only if the attachment is not uploaded before
         if not issue_attachment.is_uploaded:

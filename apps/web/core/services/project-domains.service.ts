@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@plane/constants";
-import type { TResearchIdentity } from "@plane/types";
+import type { TResearchActionCapabilities, TResearchIdentity, TResearchTodoTraceRef } from "@plane/types";
 import { APIService } from "@/services/api.service";
 
 export type TWorkspaceTodo = {
@@ -17,6 +17,9 @@ export type TWorkspaceTodo = {
   urgency: string;
   updated_at: string;
   href: string;
+  next_action: string;
+  capabilities?: TResearchActionCapabilities;
+  trace_ref?: TResearchTodoTraceRef | null;
 };
 export type TWorkspaceTodoPage = {
   results: TWorkspaceTodo[];

@@ -81,13 +81,19 @@ class ProjectMemberViewSet(BaseViewSet):
             ).role
             if workspace_member_role in [20] and member_roles.get(member) in [5, 15]:
                 return Response(
-                    {"error": "You cannot add a user with role lower than the workspace role"},
+                    {
+                        "error": "You cannot add a user with role lower than the workspace role",
+                        "error_code": "role_lower_than_workspace",
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             if workspace_member_role in [5] and member_roles.get(member) in [15, 20]:
                 return Response(
-                    {"error": "You cannot add a user with role higher than the workspace role"},
+                    {
+                        "error": "You cannot add a user with role higher than the workspace role",
+                        "error_code": "role_higher_than_workspace",
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -250,7 +256,10 @@ class ProjectMemberViewSet(BaseViewSet):
             # Cannot assign a role higher than the target's workspace role
             if target_workspace_role in [5] and new_role in [15, 20]:
                 return Response(
-                    {"error": "You cannot add a user with role higher than the workspace role"},
+                    {
+                        "error": "You cannot add a user with role higher than the workspace role",
+                        "error_code": "role_higher_than_workspace",
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

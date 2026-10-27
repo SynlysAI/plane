@@ -19,7 +19,7 @@ type Props = {
 /** 聊天式对话流：用户气泡 / AI 正文 / 折叠思考与过程 / 工具与产物卡，底部固定输入区。 */
 export function ResearchAgentConversation({ api }: Props) {
   const { t } = useTranslation();
-  const messages = mergeAgentMessages(api.events);
+  const messages = mergeAgentMessages(api.events, api.userEcho);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pinnedRef = useRef(true);
 

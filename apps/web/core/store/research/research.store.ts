@@ -19,6 +19,7 @@ import type {
   TReportSummary,
   TReportTemplate,
   TReportTemplateOption,
+  TReportType,
   TResearchAuditEvent,
   TResearchIdentity,
   TStageGate,
@@ -238,6 +239,11 @@ export interface IResearchStore {
   ) => Promise<void>;
   deleteMentorBinding: (workspaceSlug: string, bindingId: string) => Promise<void>;
   fetchReports: (workspaceSlug: string, params?: TReportListParams) => Promise<TPeriodicReport[]>;
+  checkReportPeriod: (
+    workspaceSlug: string,
+    reportType: TReportType,
+    periodKey: string
+  ) => Promise<TPeriodicReport | null>;
   createReport: (workspaceSlug: string, payload: TReportCreatePayload) => Promise<TPeriodicReport>;
   fetchReport: (workspaceSlug: string, reportId: string) => Promise<TPeriodicReport>;
   saveReportDraft: (
@@ -1235,6 +1241,19 @@ export class ResearchStore implements IResearchStore {
           this.reportLoader = false;
         });
     }
+  };
+
+  /** 预检当前用户在指定周 / 月是否已有报告，不改变列表状态。 */
+  checkReportPeriod = async (workspaceSlug: string, reportType: TReportType, periodKey: string) => {
+    const response = await this.reportService.getReports(workspaceSlug, {
+      report_type: reportType,
+      period_key: periodKey,
+      mine: "true",
+      per_page: "1",
+    });
+    return (
+      response.results.find((report) => report.report_type === reportType && report.period_key === periodKey) ?? null
+    );
   };
 
   createReport = async (workspaceSlug: string, payload: TReportCreatePayload) => {

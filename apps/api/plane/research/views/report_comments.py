@@ -1,6 +1,7 @@
 """Report comment threads with snapshot-scoped anchors and explicit HITL feedback."""
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -10,6 +11,7 @@ from plane.db.models import (
     PeriodicReportCommentFeedback,
     PeriodicReportCommentThread,
     ResearchAgentSession,
+    WorkspaceMember,
 )
 from plane.research.serializers import (
     PeriodicReportCommentFeedbackSerializer,
@@ -192,6 +194,7 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
     nav_capability = NAV_REPORTS
 
     def get(self, request, slug, report_id):
+        """Return only workspace members who can view this report and be notified."""
         report, context, error = _load_visible_report(self, request, slug, report_id)
         if error:
             return error
@@ -298,6 +301,63 @@ class ResearchReportCommentThreadListCreateEndpoint(ResearchAPIView):
         notify_report_comment(report, thread, comment, request.user, action="created")
         thread = _thread_queryset(report).get(pk=thread.pk)
         return Response(_serialize_thread(thread, request, context), status=status.HTTP_201_CREATED)
+
+
+class ResearchReportCommentMentionEndpoint(ResearchAPIView):
+    """``GET /api/research/workspaces/<slug>/reports/<report_id>/comment-mentions/``"""
+
+    nav_capability = NAV_REPORTS
+
+    def get(self, request, slug, report_id):
+        report, context, error = _load_visible_report(self, request, slug, report_id)
+        if error:
+            return error
+        error = _withdrawn_comment_error(report)
+        if error:
+            return error
+
+        try:
+            count = min(max(int(request.GET.get("count") or 5), 1), 20)
+        except (TypeError, ValueError):
+            return research_error(
+                ResearchErrorCode.REPORT_COMMENT_INVALID,
+                "count must be an integer.",
+            )
+
+        query = str(request.GET.get("query") or "").strip()
+        condition = Q()
+        if query:
+            for field in ("member__first_name", "member__last_name", "member__display_name"):
+                condition |= Q(**{f"{field}__icontains": query})
+
+        memberships = (
+            WorkspaceMember.objects.filter(
+                condition,
+                workspace_id=report.workspace_id,
+                is_active=True,
+                member__is_active=True,
+                member__is_bot=False,
+            )
+            .exclude(member_id=request.user.id)
+            .select_related("member")
+            .order_by("-created_at")
+        )
+        candidates = []
+        for membership in memberships:
+            user = membership.member
+            user_context = build_actor_context(user, report.workspace_id)
+            if not check_access(user, "view", report_resource(report), context=user_context):
+                continue
+            candidates.append(
+                {
+                    "member__id": str(user.id),
+                    "member__display_name": user.display_name or user.username,
+                    "member__avatar_url": user.avatar_url,
+                }
+            )
+            if len(candidates) >= count:
+                break
+        return Response({"user_mention": candidates})
 
 
 class ResearchReportCommentThreadCommentEndpoint(ResearchAPIView):

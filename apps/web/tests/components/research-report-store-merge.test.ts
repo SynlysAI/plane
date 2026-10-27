@@ -59,3 +59,36 @@ it("fetchReports refreshes official_content from the list response", async () =>
     vi.restoreAllMocks();
   }
 });
+
+/** 周期预检只读取当前用户目标周期，不覆盖报告列表状态。 */
+it("checkReportPeriod returns the existing report without replacing list state", async () => {
+  const store = new ResearchStore({} as CoreRootStore);
+  const getReports = vi.spyOn(ResearchReportService.prototype, "getReports").mockResolvedValue({
+    results: [
+      {
+        id: "existing-report",
+        report_type: "WEEKLY",
+        period_key: "2026-W44",
+        status: "DRAFT",
+      },
+    ],
+  } as never);
+  store.reports["list-report"] = { id: "list-report" } as never;
+  store.reportIdsByWorkspace.lab = ["list-report"];
+
+  try {
+    const existing = await store.checkReportPeriod("lab", "WEEKLY", "2026-W44");
+
+    expect(getReports).toHaveBeenCalledWith("lab", {
+      report_type: "WEEKLY",
+      period_key: "2026-W44",
+      mine: "true",
+      per_page: "1",
+    });
+    expect(existing?.id).toBe("existing-report");
+    expect(store.reportIdsByWorkspace.lab).toEqual(["list-report"]);
+    expect(store.reportLoader).toBe(false);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});

@@ -13,6 +13,7 @@ from plane.research.services.task_comment_attachments import (
 )
 from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.audit import record_audit_event
+from plane.research.utils.collaboration_notifications import notify_task_comment
 from plane.utils.html_processor import strip_tags
 
 
@@ -54,6 +55,7 @@ def append_task_comment(*, task, actor, request_id, html, attachment_ids=None, r
     record_audit_event(workspace=task.workspace, actor=actor, action="task.comment.create",
                        resource_type="research_chain_node_task", resource_id=task.pk,
                        metadata={"comment": str(comment.pk)}, request=request)
+    notify_task_comment(locked, actor, "created", comment.pk)
     return comment, True
 
 

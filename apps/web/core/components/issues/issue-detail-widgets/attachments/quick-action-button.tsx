@@ -9,6 +9,8 @@ import { observer } from "mobx-react";
 import type { FileRejection } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
 import { AddOutline } from "@makeplane/propel/icons";
+import { useTranslation } from "@plane/i18n";
+import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
 // plane imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
@@ -30,10 +32,16 @@ type Props = {
 
 export const IssueAttachmentActionButton = observer(function IssueAttachmentActionButton(props: Props) {
   const { workspaceSlug, projectId, issueId, customButton, disabled = false, issueServiceType } = props;
+  const { t } = useTranslation();
   // state
   const [isLoading, setIsLoading] = useState(false);
   // store hooks
-  const { setLastWidgetAction, fetchActivities } = useIssueDetail(issueServiceType);
+  const {
+    setLastWidgetAction,
+    fetchActivities,
+    attachment: { getAttachmentsByIssueId },
+  } = useIssueDetail(issueServiceType);
+  const attachmentCount = getAttachmentsByIssueId(issueId)?.length ?? 0;
   // file size categories
   const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
   // operations
@@ -55,6 +63,15 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
       if (rejectedFiles.length === 0) {
         const currentFile: File = acceptedFiles[0];
         if (!currentFile || !workspaceSlug) return;
+
+        if (attachmentCount >= MAX_FILE_ATTACHMENTS) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("toast.error"),
+            message: t("attachment.count_limit", { count: MAX_FILE_ATTACHMENTS }),
+          });
+          return;
+        }
 
         const limitError = getLimitError(currentFile);
         if (limitError) {
@@ -96,7 +113,9 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
       return;
     },
     [
+      attachmentCount,
       attachmentOperations,
+      t,
       getLimitError,
       maxFileSize,
       workspaceSlug,

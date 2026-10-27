@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useForm, Controller, useWatch } from "react-hook-form";
 // plane imports
@@ -12,15 +12,16 @@ import { Avatar } from "@makeplane/propel/components/avatar";
 import { ROLE, ROLE_DETAILS, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { ChevronDownOutline, CloseOutline } from "@makeplane/propel/icons";
+import { ChevronDownOutline, CloseOutline, TickOutline } from "@makeplane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomSelect, CustomSearchSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import type { IUser, IUserLite } from "@plane/types";
+import type { IUser, IUserLite, IWorkspaceMemberTagGroup } from "@plane/types";
 // helpers
 import { getFileURL } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
+import { getMemberTagClassNames } from "@/components/workspace/settings/member-tag-pill";
 
 type Props = {
   isOpen: boolean;
@@ -40,9 +41,34 @@ const defaultValues: FormValues = {
   roles: {},
 };
 
-/** 获取成员在界面中的优先展示名称。 */
-const getMemberDisplayName = (member: IUserLite) =>
-  member.display_name || `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.email || member.id;
+/** 获取成员全名；中文姓名字段直接拼接，西文字段保留空格。 */
+const getMemberFullName = (member: IUserLite) => {
+  const names = [member.first_name ?? "", member.last_name ?? ""].map((name) => name.trim()).filter(Boolean);
+  if (names.length === 2 && names.every((name) => /[\u4e00-\u9fff]/.test(name))) return names.join("");
+  return names.join(" ");
+};
+
+/** 并列展示成员全名与显示名称，两者相同时只保留一个。 */
+const getMemberDisplayName = (member: IUserLite) => {
+  const fullName = getMemberFullName(member);
+  const displayName = member.display_name?.trim() ?? "";
+  if (fullName && displayName && fullName !== displayName) return `${fullName} · ${displayName}`;
+  return fullName || displayName || member.email || member.id;
+};
+
+/** 将项目成员添加失败转换为用户可理解的提示。 */
+const getAddMemberErrorMessage = (error: unknown, translate: (key: string) => string) => {
+  const payload = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
+  const errorCode = "error_code" in payload ? String(payload.error_code) : "";
+  const message = "error" in payload ? String(payload.error) : "";
+  if (errorCode === "role_lower_than_workspace" || message.includes("role lower than the workspace role")) {
+    return translate("project_settings.members.role_lower_than_workspace");
+  }
+  if (errorCode === "role_higher_than_workspace" || message.includes("role higher than the workspace role")) {
+    return translate("project_settings.members.role_higher_than_workspace");
+  }
+  return translate("project_settings.members.add_failed");
+};
 
 export const SendProjectInvitationModal = observer(function SendProjectInvitationModal(props: Props) {
   const { isOpen, onClose, onSuccess, projectId, workspaceSlug } = props;
@@ -52,8 +78,19 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const {
     project: { getProjectMemberDetails, bulkAddMembersToProject },
-    workspace: { workspaceMemberIds, getWorkspaceMemberDetails },
+    workspace: {
+      workspaceMemberIds,
+      getWorkspaceMemberDetails,
+      fetchWorkspaceMemberTagGroups,
+      workspaceMemberTagGroups,
+    },
   } = useMember();
+  const [tagGroups, setTagGroups] = useState<IWorkspaceMemberTagGroup[]>(
+    () => workspaceMemberTagGroups[workspaceSlug] ?? []
+  );
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [tagFilterLoading, setTagFilterLoading] = useState(false);
+  const [tagFilterError, setTagFilterError] = useState(false);
   // form info
   const {
     formState: { errors, isSubmitting },
@@ -71,6 +108,43 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     const isInvited = projectMemberDetails?.member.id && projectMemberDetails?.original_role;
     return !isInvited;
   });
+  const candidateTagIds = new Set(
+    (uninvitedPeople ?? []).flatMap((userId) => getWorkspaceMemberDetails(userId)?.tags?.map((tag) => tag.id) ?? [])
+  );
+  const availableTagGroups: IWorkspaceMemberTagGroup[] = [];
+  for (const group of tagGroups) {
+    const tags = group.tags.filter((tag) => candidateTagIds.has(tag.id));
+    if (tags.length > 0) availableTagGroups.push({ ...group, tags });
+  }
+  const tagFilteredMemberIds = (uninvitedPeople ?? []).filter((userId) => {
+    if (selectedTagIds.length === 0) return true;
+    const memberTagIds = new Set(getWorkspaceMemberDetails(userId)?.tags?.map((tag) => tag.id) ?? []);
+    return selectedTagIds.every((tagId) => memberTagIds.has(tagId));
+  });
+
+  useEffect(() => {
+    if (!isOpen || !workspaceSlug) return;
+    let ignored = false;
+
+    setTagFilterError(false);
+    setTagFilterLoading(true);
+    fetchWorkspaceMemberTagGroups(workspaceSlug.toString())
+      .then((groups) => {
+        if (!ignored) setTagGroups(groups);
+        return groups;
+      })
+      .catch((error) => {
+        console.error("Failed to load workspace member tag groups", error);
+        if (!ignored) setTagFilterError(true);
+      })
+      .finally(() => {
+        if (!ignored) setTagFilterLoading(false);
+      });
+
+    return () => {
+      ignored = true;
+    };
+  }, [fetchWorkspaceMemberTagGroups, isOpen, workspaceSlug]);
 
   const onSubmit = async (formData: FormValues) => {
     if (!workspaceSlug || !projectId || isSubmitting) return;
@@ -91,15 +165,21 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
         type: TOAST_TYPE.SUCCESS,
         message: t("project_settings.members.added_successfully"),
       });
+      reset(defaultValues);
+      setSelectedTagIds([]);
     } catch (error) {
       console.error(error);
-    } finally {
-      reset(defaultValues);
+      setToast({
+        title: t("toast.error"),
+        type: TOAST_TYPE.ERROR,
+        message: getAddMemberErrorMessage(error, t),
+      });
     }
   };
 
   const handleClose = () => {
     onClose();
+    setSelectedTagIds([]);
 
     const timeout = setTimeout(() => {
       reset(defaultValues);
@@ -107,13 +187,13 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     }, 500);
   };
 
-  const options = uninvitedPeople
+  const options = tagFilteredMemberIds
     ?.map((userId) => {
       const memberDetails = getWorkspaceMemberDetails(userId);
       const member = memberDetails?.member;
 
       if (!member) return;
-      const fullName = `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim();
+      const fullName = getMemberFullName(member);
       // IUserLite 不包含账号名，但运行时的工作区成员数据可能来自更完整的用户对象。
       const accountName = (member as IUser).username ?? "";
       const searchableFields = [
@@ -139,7 +219,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
               />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-13 text-primary">{member.display_name || fullName || member.email}</div>
+              <div className="truncate text-13 text-primary">{getMemberDisplayName(member)}</div>
               <div className="truncate text-11 text-tertiary">{member.email ?? memberDetails?.email ?? member.id}</div>
             </div>
           </div>
@@ -170,6 +250,17 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     setValue("roles", nextRoles, { shouldValidate: true });
   };
 
+  const toggleTagFilter = (tagId: string) => {
+    setSelectedTagIds((current) =>
+      current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId]
+    );
+  };
+
+  const selectFilteredMembers = () => {
+    if (selectedTagIds.length === 0 || tagFilteredMemberIds.length === 0) return;
+    handleMembersChange(Array.from(new Set([...selectedMemberIds, ...tagFilteredMemberIds])));
+  };
+
   const checkCurrentOptionWorkspaceRole = (value: string) => {
     const currentMemberWorkspaceRole = getWorkspaceMemberDetails(value)?.role;
     if (!value || !currentMemberWorkspaceRole) return ROLE;
@@ -195,6 +286,67 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
           </div>
 
           <div className="space-y-4">
+            <section className="space-y-3 rounded-md border border-subtle bg-surface-1 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div>
+                  <h4 className="text-13 font-medium text-primary">{t("project_settings.members.filter_by_tags")}</h4>
+                  <p className="mt-0.5 text-11 text-tertiary">{t("project_settings.members.tag_filter_hint")}</p>
+                </div>
+                <p data-testid="filtered-member-count" className="text-11 text-tertiary" aria-live="polite">
+                  {t("project_settings.members.filtered_member_count")}: {tagFilteredMemberIds.length}
+                </p>
+              </div>
+
+              {tagFilterError ? (
+                <p data-testid="tag-filter-error" className="text-12 text-secondary">
+                  {t("project_settings.members.tags_load_failed")}
+                </p>
+              ) : tagFilterLoading ? (
+                <p className="text-12 text-tertiary">{t("project_settings.members.loading_tags")}</p>
+              ) : availableTagGroups.length === 0 ? (
+                <p data-testid="no-available-tags" className="text-12 text-tertiary">
+                  {t("project_settings.members.no_available_tags")}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {availableTagGroups.map((group) => (
+                    <div key={group.id} className="space-y-1.5">
+                      <p className="text-11 font-medium text-tertiary">{group.name}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {group.tags.map((tag) => {
+                          const selected = selectedTagIds.includes(tag.id);
+                          return (
+                            <button
+                              key={tag.id}
+                              type="button"
+                              data-testid={`member-tag-${tag.id}`}
+                              aria-pressed={selected}
+                              onClick={() => toggleTagFilter(tag.id)}
+                              className={getMemberTagClassNames(tag, selected, "control")}
+                            >
+                              {selected && <TickOutline className="size-3 shrink-0" aria-hidden="true" />}
+                              <span>{tag.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                data-testid="select-filtered-members"
+                disabled={selectedTagIds.length === 0 || tagFilteredMemberIds.length === 0 || isSubmitting}
+                onClick={selectFilteredMembers}
+              >
+                {t("project_settings.members.select_filtered_members")}（{tagFilteredMemberIds.length}）
+              </Button>
+            </section>
+
             <div>
               <Controller
                 control={control}
