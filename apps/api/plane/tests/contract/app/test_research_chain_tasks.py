@@ -17,6 +17,7 @@ from plane.db.models import (
     ResearchChainEvent,
     ResearchChainNode,
     ResearchChainNodeTask,
+    ResearchTaskSubscriber,
 )
 from plane.research.services.chain_tasks import actor_can_review_task
 from plane.tests.research_fixtures import make_research_boundary_fixture
@@ -57,6 +58,10 @@ def _url(env, task_id=""):
 
 def _action_url(env, task_id, action):
     return f"{_url(env, task_id)}{action}/"
+
+
+def _notification_url(env, task_id, suffix=""):
+    return f"{_url(env, task_id)}notification-recipients/{suffix}"
 
 
 def _create(env, client=None, **overrides):
@@ -182,6 +187,83 @@ class TestResearchChainNodeTaskApi:
         data = response.json()["data"]
         assert [item["id"] for item in data] == [first["id"]]
         assert data[0]["title"] == "First"
+
+    def test_notification_members_can_be_managed_and_notified(self, env):
+        ProjectMember.objects.create(project=env["project"], member=env["descendant"], role=15)
+        descendant_client = _client(env["descendant"])
+        task = _create(env, assignee=str(env["group_member"].id))
+
+        response = env["student_client"].get(_notification_url(env, task["id"]))
+        assert response.status_code == 200, response.json()
+        payload = response.json()["data"]
+        candidate_ids = {item["id"] for item in payload["candidates"]}
+        assert {str(env["cross_org"].id), str(env["descendant"].id)} <= candidate_ids
+        assert payload["schema_version"] == "task-notification-recipients.v1"
+        assert payload["can_manage"] is True
+
+        response = env["student_client"].put(
+            _notification_url(env, task["id"]),
+            {"user_ids": [str(env["cross_org"].id)]},
+            format="json",
+        )
+        assert response.status_code == 200, response.json()
+        assert response.json()["data"]["cc_user_ids"] == [str(env["cross_org"].id)]
+        assert ResearchTaskSubscriber.objects.filter(
+            task_id=task["id"], subscriber=env["cross_org"], source="CC"
+        ).exists()
+        assert ResearchAuditEvent.objects.filter(
+            resource_id=task["id"], action="task.notification_members.update"
+        ).exists()
+        assert Notification.objects.filter(
+            entity_name="research_chain_task", receiver=env["cross_org"], data__action="cc_added"
+        ).exists()
+
+        response = descendant_client.post(_notification_url(env, task["id"], "me/"), {}, format="json")
+        assert response.status_code == 200, response.json()
+        assert response.json()["data"]["current_user_self_subscribed"] is True
+
+        response = env["student_client"].put(
+            _notification_url(env, task["id"]),
+            {"user_ids": []},
+            format="json",
+        )
+        assert response.status_code == 200, response.json()
+        assert not ResearchTaskSubscriber.objects.filter(
+            task_id=task["id"], subscriber=env["cross_org"], source="CC", deleted_at__isnull=True
+        ).exists()
+        assert ResearchTaskSubscriber.objects.filter(
+            task_id=task["id"], subscriber=env["descendant"], source="SELF", deleted_at__isnull=True
+        ).exists()
+
+        renamed = env["student_client"].patch(
+            _url(env, task["id"]), {"title": "整理论文图表与样本量"}, format="json"
+        )
+        assert renamed.status_code == 200, renamed.json()
+        assert Notification.objects.filter(
+            entity_name="research_chain_task", receiver=env["descendant"], data__action="updated"
+        ).exists()
+
+        submitted = env["member_client"].post(
+            _action_url(env, task["id"], "submit"),
+            {"request_id": f"notify-submit-{uuid4()}"},
+            format="json",
+        )
+        assert submitted.status_code == 200, submitted.json()
+        assert Notification.objects.filter(
+            entity_name="research_chain_task", receiver=env["descendant"], data__action="submitted"
+        ).exists()
+
+    def test_notification_member_outside_boundary_is_rejected(self, env):
+        task = _create(env)
+        response = env["student_client"].put(
+            _notification_url(env, task["id"]),
+            {"user_ids": [str(env["guest"].id)]},
+            format="json",
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error_code"] == "research_chain_invalid"
+        assert not ResearchTaskSubscriber.objects.filter(task_id=task["id"], subscriber=env["guest"]).exists()
 
     def test_assignee_outside_server_candidate_scope_is_rejected(self, env):
         response = env["student_client"].post(

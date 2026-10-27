@@ -8,7 +8,7 @@ from html import escape
 
 from django.utils import timezone
 
-from plane.db.models import Notification, OrgUnitMember, User
+from plane.db.models import Notification, OrgUnitMember, ResearchTaskSubscriber, User
 from plane.research.utils.acl import direct_advisor_ids, org_unit_ancestry
 from plane.research.utils.org import active_membership_q
 
@@ -16,7 +16,7 @@ RESEARCH_CHAIN_TASK_ENTITY = "research_chain_task"
 RESEARCH_PAPER_REVIEW_ENTITY = "research_paper_review"
 
 
-def _notify(task, receivers, *, actor, action, title, extra=None):
+def _notify(task, receivers, *, actor, action, title, extra=None, include_subscribers=True):
     """Create task notifications without introducing a new delivery channel.
 
     Args:
@@ -30,8 +30,12 @@ def _notify(task, receivers, *, actor, action, title, extra=None):
     Returns:
         The notification rows created for this action.
     """
+    receiver_users = {receiver.id: receiver for receiver in receivers if receiver is not None}
+    if include_subscribers:
+        receiver_users.update({receiver.id: receiver for receiver in task_subscriber_users(task)})
+
     created = []
-    for receiver in receivers:
+    for receiver_id, receiver in receiver_users.items():
         if receiver is None or receiver.id == actor.id:
             continue
         created.append(
@@ -58,6 +62,28 @@ def _notify(task, receivers, *, actor, action, title, extra=None):
     if created:
         Notification.objects.bulk_create(created, batch_size=100)
     return created
+
+
+def task_subscriber_users(task):
+    """Return active users persistently subscribed to a research task.
+
+    Args:
+        task: Research Chain node task whose subscribers are resolved.
+
+    Returns:
+        A list of active users receiving every subsequent task update.
+    """
+    from plane.research.services.chain_tasks import chain_assignable_user_ids
+
+    candidate_ids = chain_assignable_user_ids(task.workspace, task.chain)
+    return list(
+        User.objects.filter(
+            research_task_subscriptions__task_id=task.id,
+            research_task_subscriptions__deleted_at__isnull=True,
+            is_active=True,
+            id__in=candidate_ids,
+        ).distinct()
+    )
 
 
 def task_reviewer_users(task):
@@ -150,6 +176,52 @@ def notify_task_cancelled(task, actor, reason=""):
         action="cancelled",
         title=f"科研节点任务已取消：{task.title}",
         extra={"reason": (reason or "")[:500]},
+    )
+
+
+def notify_task_updated(task, actor, changed_fields):
+    """Notify subscribers that editable task fields changed."""
+    fields = sorted(set(changed_fields) - {"assignee"})
+    if not fields:
+        return []
+    return _notify(
+        task,
+        [],
+        actor=actor,
+        action="updated",
+        title=f"科研节点任务已更新：{task.title}",
+        extra={"fields": fields},
+    )
+
+
+def notify_task_comment(task, actor, operation, comment_id=None):
+    """Notify subscribers that a task comment was created, edited, or removed."""
+    operation_labels = {
+        "created": "有新评论",
+        "updated": "评论已更新",
+        "deleted": "评论已删除",
+    }
+    label = operation_labels.get(operation, "评论已更新")
+    return _notify(
+        task,
+        [],
+        actor=actor,
+        action="commented",
+        title=f"科研节点任务{label}：{task.title}",
+        extra={"operation": operation, "comment_id": str(comment_id) if comment_id else None},
+    )
+
+
+def notify_task_cc_added(task, actor, receivers):
+    """Tell newly carbon-copied members that they will receive task updates."""
+    return _notify(
+        task,
+        receivers,
+        actor=actor,
+        action="cc_added",
+        title=f"你已被加入科研节点任务通知：{task.title}",
+        extra={"source": ResearchTaskSubscriber.Source.CC},
+        include_subscribers=False,
     )
 
 

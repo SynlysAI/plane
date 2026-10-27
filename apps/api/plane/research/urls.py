@@ -258,6 +258,8 @@ from plane.research.views import (
     ResearchChainNodeTaskActionEndpoint,
     ResearchChainNodeTaskDetailEndpoint,
     ResearchChainNodeTaskListCreateEndpoint,
+    ResearchTaskNotificationRecipientSelfEndpoint,
+    ResearchTaskNotificationRecipientsEndpoint,
     ResearchPaperReviewDetailEndpoint,
     ResearchPaperReviewListCreateEndpoint,
     ResearchPaperReviewPresignEndpoint,
@@ -470,6 +472,16 @@ urlpatterns = [
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/",
         ResearchChainNodeTaskDetailEndpoint.as_view(),
         name="research-chain-node-task",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/notification-recipients/",
+        ResearchTaskNotificationRecipientsEndpoint.as_view(),
+        name="research-task-notification-recipients",
+    ),
+    path(
+        "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/notification-recipients/me/",
+        ResearchTaskNotificationRecipientSelfEndpoint.as_view(),
+        name="research-task-notification-recipient-self",
     ),
     path(
         "research/workspaces/<str:slug>/chains/<uuid:chain_id>/nodes/<uuid:node_id>/tasks/<uuid:task_id>/comments/",

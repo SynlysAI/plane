@@ -178,6 +178,16 @@ urlpatterns = [
         name="project-issue-subscribers",
     ),
     path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/issue-subscribers/notification-recipients/",
+        IssueSubscriberViewSet.as_view({"get": "notification_recipients", "put": "notification_recipients"}),
+        name="project-issue-notification-recipients",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/issue-subscribers/notification-recipients/me/",
+        IssueSubscriberViewSet.as_view({"post": "notification_recipient_self", "delete": "notification_recipient_self"}),
+        name="project-issue-notification-recipient-self",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/issues/<uuid:issue_id>/issue-subscribers/<uuid:subscriber_id>/",
         IssueSubscriberViewSet.as_view({"delete": "destroy"}),
         name="project-issue-subscribers",

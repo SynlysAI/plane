@@ -24,11 +24,11 @@ from plane.db.models import (
     UserNotificationPreference,
     ProjectMember,
 )
-from django.db.models import Subquery
 
 # Third Party imports
 from celery import shared_task
 from bs4 import BeautifulSoup
+from plane.utils.administrative_projects import project_member_roster
 
 
 # =========== Issue Description Html Parsing and notification Functions ======================
@@ -227,10 +227,10 @@ def notifications(
             2. From the latest set of mentions, extract the users which are not a subscribers & make them subscribers
             """
 
-            # get the list of active project members
-            project_members = ProjectMember.objects.filter(project_id=project_id, is_active=True).values_list(
-                "member_id", flat=True
-            )
+            # Direct project members and inherited administrative organization members
+            # share the same notification boundary.
+            project = Project.objects.get(pk=project_id)
+            project_members = {UUID(row["member"]) for row in project_member_roster(project)}
 
             # Get new mentions from the newer instance
             new_mentions = get_new_mentions(requested_instance=requested_data, current_instance=current_instance)
@@ -281,7 +281,7 @@ def notifications(
                 IssueSubscriber.objects.filter(
                     project_id=project_id,
                     issue_id=issue_id,
-                    subscriber__in=Subquery(project_members),
+                    subscriber_id__in=project_members,
                 )
                 .exclude(subscriber_id__in=list(new_mentions + comment_mentions + [actor_id]))
                 .values_list("subscriber", flat=True)
@@ -299,17 +299,18 @@ def notifications(
                 # add the user to issue subscriber
                 try:
                     _ = IssueSubscriber.objects.get_or_create(
-                        project_id=project_id, issue_id=issue_id, subscriber_id=actor_id
+                        project_id=project_id,
+                        issue_id=issue_id,
+                        subscriber_id=actor_id,
+                        source=IssueSubscriber.Source.SELF,
                     )
                 except Exception:
                     pass
 
-            project = Project.objects.get(pk=project_id)
-
             issue_assignees = IssueAssignee.objects.filter(
                 issue_id=issue_id,
                 project_id=project_id,
-                assignee__in=Subquery(project_members),
+                assignee_id__in=project_members,
             ).values_list("assignee", flat=True)
 
             issue_subscribers = list(

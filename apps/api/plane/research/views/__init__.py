@@ -231,6 +231,8 @@ from .chain_tasks import (
     ResearchChainNodeTaskActionEndpoint,
     ResearchChainNodeTaskDetailEndpoint,
     ResearchChainNodeTaskListCreateEndpoint,
+    ResearchTaskNotificationRecipientSelfEndpoint,
+    ResearchTaskNotificationRecipientsEndpoint,
 )
 from .paper_reviews import (
     ResearchPaperReviewDetailEndpoint,

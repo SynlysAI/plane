@@ -23,6 +23,12 @@ from plane.research.services.chain_tasks import (
     update_task,
 )
 from plane.research.services.idempotency import payload_hash, request_id_from
+from plane.research.services.task_notification_recipients import (
+    NOTIFICATION_RECIPIENTS_SCHEMA_VERSION,
+    replace_research_task_cc,
+    research_task_notification_recipients,
+    set_research_task_self_subscription,
+)
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
 from plane.research.views.base import ResearchAPIView
@@ -281,3 +287,88 @@ class ResearchChainNodeTaskActionEndpoint(ResearchAPIView):
                 schema_version=TASK_SCHEMA_VERSION,
             )
         )
+
+
+class ResearchTaskNotificationRecipientsEndpoint(ResearchAPIView):
+    """Read and replace notification members for one research task."""
+
+    nav_capability = NAV_RESEARCH_CHAIN
+
+    def get(self, request, slug, chain_id, node_id, task_id):
+        workspace, chain, _node, task_or_error = _task_context(
+            self, request, slug, chain_id, node_id, task_id
+        )
+        if isinstance(task_or_error, Response):
+            return task_or_error
+        return Response(
+            _envelope(
+                data=research_task_notification_recipients(workspace, chain, task_or_error, request.user),
+                request_id=request_id_from(request),
+                schema_version=NOTIFICATION_RECIPIENTS_SCHEMA_VERSION,
+            )
+        )
+
+    def put(self, request, slug, chain_id, node_id, task_id):
+        workspace, chain, _node, task_or_error = _task_context(
+            self, request, slug, chain_id, node_id, task_id
+        )
+        if isinstance(task_or_error, Response):
+            return task_or_error
+        readonly_error = _chain_readonly_error(chain)
+        if readonly_error:
+            return readonly_error
+        try:
+            data = replace_research_task_cc(
+                workspace=workspace,
+                chain=chain,
+                task=task_or_error,
+                actor=request.user,
+                user_ids=request.data.get("user_ids"),
+                request=request,
+            )
+        except (ChainTaskPermissionError, ChainTaskValidationError) as exception:
+            return _error_response(exception)
+        return Response(
+            _envelope(
+                data=data,
+                request_id=request_id_from(request),
+                schema_version=NOTIFICATION_RECIPIENTS_SCHEMA_VERSION,
+            )
+        )
+
+
+class ResearchTaskNotificationRecipientSelfEndpoint(ResearchAPIView):
+    """Toggle the current user's subscription for one research task."""
+
+    nav_capability = NAV_RESEARCH_CHAIN
+
+    def _response(self, request, workspace, chain, task, subscribed):
+        return Response(
+            _envelope(
+                data=set_research_task_self_subscription(
+                    workspace=workspace,
+                    chain=chain,
+                    task=task,
+                    actor=request.user,
+                    subscribed=subscribed,
+                ),
+                request_id=request_id_from(request),
+                schema_version=NOTIFICATION_RECIPIENTS_SCHEMA_VERSION,
+            )
+        )
+
+    def post(self, request, slug, chain_id, node_id, task_id):
+        workspace, chain, _node, task_or_error = _task_context(
+            self, request, slug, chain_id, node_id, task_id
+        )
+        if isinstance(task_or_error, Response):
+            return task_or_error
+        return self._response(request, workspace, chain, task_or_error, True)
+
+    def delete(self, request, slug, chain_id, node_id, task_id):
+        workspace, chain, _node, task_or_error = _task_context(
+            self, request, slug, chain_id, node_id, task_id
+        )
+        if isinstance(task_or_error, Response):
+            return task_or_error
+        return self._response(request, workspace, chain, task_or_error, False)

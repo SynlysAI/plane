@@ -18,6 +18,7 @@ from plane.research.services.task_comment_attachments import (
 )
 from plane.research.utils.audit import record_audit_event, ResearchResourceType
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
+from plane.research.utils.collaboration_notifications import notify_task_comment
 from plane.research.utils.errors import research_error, research_not_found, research_permission_denied
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.chain_foundation import _chain_readonly_error
@@ -149,6 +150,7 @@ class ResearchTaskCommentDetailEndpoint(ResearchAPIView):
             if assets is not None:
                 sync_task_comment_attachments(comment, assets, task=comment.task, user=request.user, request=request)
             comment_audit(comment.task, comment, request, "update")
+            notify_task_comment(comment.task, request.user, "updated", comment.pk)
         return Response(serialize(comment, request))
 
     def delete(self, request, slug, chain_id, node_id, task_id, comment_id):
@@ -168,4 +170,5 @@ class ResearchTaskCommentDetailEndpoint(ResearchAPIView):
             comment.deleted_at = timezone.now()
             comment.save(update_fields=["deleted_at", "updated_at"])
             comment_audit(comment.task, comment, request, "delete")
+            notify_task_comment(comment.task, request.user, "deleted", comment.pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
