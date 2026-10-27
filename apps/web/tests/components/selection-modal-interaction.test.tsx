@@ -7,11 +7,27 @@ const mocks = vi.hoisted(() => ({
   submit: vi.fn(),
   addMember: vi.fn(),
   projectAddMembers: vi.fn(),
+  fetchTagGroups: vi.fn(),
   close: vi.fn(),
+  tagGroups: [
+    {
+      id: "member-tags",
+      name: "成员标签",
+      sort_order: 0,
+      tags: [
+        { id: "tag-core", group_id: "member-tags", name: "核心", color: "sage", sort_order: 0 },
+        { id: "tag-lead", group_id: "member-tags", name: "负责人", color: "mist", sort_order: 1 },
+      ],
+    },
+  ],
   projectMembers: {
     "admin-user": {
       id: "admin-user",
       role: 20,
+      tags: [
+        { id: "tag-core", group_id: "member-tags", name: "核心", color: "sage", sort_order: 0 },
+        { id: "tag-lead", group_id: "member-tags", name: "负责人", color: "mist", sort_order: 1 },
+      ],
       member: {
         id: "admin-user",
         first_name: "金",
@@ -24,6 +40,7 @@ const mocks = vi.hoisted(() => ({
     "member-user": {
       id: "member-user",
       role: 15,
+      tags: [{ id: "tag-core", group_id: "member-tags", name: "核心", color: "sage", sort_order: 0 }],
       member: {
         id: "member-user",
         first_name: "李",
@@ -36,6 +53,7 @@ const mocks = vi.hoisted(() => ({
     "guest-user": {
       id: "guest-user",
       role: 5,
+      tags: [{ id: "tag-lead", group_id: "member-tags", name: "负责人", color: "mist", sort_order: 1 }],
       member: {
         id: "guest-user",
         first_name: "洪",
@@ -63,6 +81,8 @@ vi.mock("@/hooks/store/use-member", () => ({
       bulkAddMembersToProject: mocks.projectAddMembers,
     },
     workspace: {
+      fetchWorkspaceMemberTagGroups: mocks.fetchTagGroups,
+      workspaceMemberTagGroups: { lab: mocks.tagGroups },
       workspaceMemberIds: Object.keys(mocks.projectMembers),
       getWorkspaceMemberDetails: (memberId: string) => mocks.projectMembers[memberId],
     },
@@ -140,6 +160,7 @@ beforeEach(() => {
   root = createRoot(container);
   mocks.submit.mockResolvedValue(undefined);
   mocks.addMember.mockResolvedValue(undefined);
+  mocks.fetchTagGroups.mockResolvedValue(mocks.tagGroups);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -263,6 +284,70 @@ it("supports adding mixed-role project members through the real multi-select com
         { member_id: "admin-user", role: 20 },
         { member_id: "member-user", role: 15 },
         { member_id: "guest-user", role: 5 },
+      ],
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+  } finally {
+    consoleError.mockRestore();
+  }
+});
+
+it("filters project members by all selected tags and keeps manual selections", async () => {
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  mocks.projectAddMembers.mockResolvedValue([
+    { id: "membership-guest", member: "guest-user", role: 5 },
+    { id: "membership-admin", member: "admin-user", role: 20 },
+  ]);
+
+  try {
+    await act(async () =>
+      root.render(<SendProjectInvitationModal isOpen onClose={mocks.close} workspaceSlug="lab" projectId="project" />)
+    );
+    await act(async () => undefined);
+
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="project_settings.members.invite_members.select_co_worker"]'
+    )!;
+    await act(async () => trigger.click());
+    const guestOption = [...document.querySelectorAll<HTMLElement>("[role='option']")].find((option) =>
+      option.textContent?.includes("洪贵春")
+    )!;
+    await clickOption(guestOption);
+    await act(async () =>
+      document
+        .querySelector<HTMLInputElement>('input[role="combobox"]')!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    );
+
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-core']")?.click());
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-lead']")?.click());
+    expect(container.querySelector("[data-testid='filtered-member-count']")?.textContent).toContain("1");
+
+    await act(async () => trigger.click());
+    const searchInput = document.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    await act(async () => {
+      searchInput.value = "jinshuai0821";
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const visibleOptions = [...document.querySelectorAll<HTMLElement>("[role='option']")];
+    expect(visibleOptions).toHaveLength(1);
+    expect(visibleOptions[0]?.textContent).toContain("金帅 · jinshuai0821");
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>("[data-testid='select-filtered-members']")!.click()
+    );
+    const roleSelects = container.querySelectorAll<HTMLSelectElement>("select[aria-label='project member role']");
+    expect(roleSelects).toHaveLength(2);
+
+    const submit = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "add_members"
+    )!;
+    await act(async () => submit.click());
+
+    expect(mocks.projectAddMembers).toHaveBeenCalledExactlyOnceWith("lab", "project", {
+      members: [
+        { member_id: "guest-user", role: 5 },
+        { member_id: "admin-user", role: 20 },
       ],
     });
     expect(consoleError).not.toHaveBeenCalled();
