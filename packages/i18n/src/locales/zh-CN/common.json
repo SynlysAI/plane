@@ -1291,7 +1291,9 @@
       "requester_report": "提交人",
       "handling_approve": "待我审批",
       "handling_assign": "指派给我",
-      "handling_process": "待我处理"
+      "handling_process": "待我处理",
+      "share_type_research": "科研行动项",
+      "share_type_administrative": "行政行动项"
     },
     "overview": {
       "description": "本工作区的科研管理：组织架构、科研项目、周期报告与办公审批。",
@@ -2146,7 +2148,14 @@
       "date_from": "开始日期",
       "date_to": "结束日期",
       "apply_filters": "应用筛选",
-      "total_results": "共 {count} 条"
+      "total_results": "共 {count} 条",
+      "untitled": "未命名",
+      "copy_share": "复制",
+      "copy_share_aria": "复制分享链接：{title}",
+      "share_copied_title": "分享内容已复制",
+      "share_copied_message": "标题和链接已复制到剪贴板。",
+      "share_copy_failed_title": "复制失败",
+      "share_copy_failed_message": "请稍后重试。"
     },
     "roles": {
       "owner": "节点负责人",

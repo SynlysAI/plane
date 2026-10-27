@@ -231,6 +231,7 @@ function report(projectBound = true): TPeriodicReport {
       },
     },
     owner: "student-1",
+    owner_detail: { display_name: "学生一" },
     report_type: "WEEKLY",
     period_key: "2026-W40",
     status: "DRAFT",
@@ -697,8 +698,12 @@ describe("周报 Markdown 导出与链接复制", () => {
       await renderDetail();
       await act(async () => button("复制链接").click());
 
-      expect(mocks.copyTextToClipboard).toHaveBeenCalledWith("http://pilab.local/lab/research/reports/report-1");
-      expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "success", title: "链接已复制" }));
+      expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
+        "Plane 周报: 2026-W40 · 学生一 ( http://pilab.local/lab/research/reports/report-1 )"
+      );
+      expect(mocks.setToast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "success", title: "分享内容已复制" })
+      );
     } finally {
       if (locationDescriptor) Object.defineProperty(window, "location", locationDescriptor);
     }

@@ -27,6 +27,7 @@ import { ReportBody, type ReportBodyRef } from "@/components/research/reports/re
 import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
+import { formatShareText } from "@/components/research/common/share-link";
 import { ResearchReportAttachments } from "@/components/research/reports/report-attachments";
 import { ResearchReportComments, useResearchReportCommentsPanel } from "@/components/research/reports/report-comments";
 // hooks
@@ -220,24 +221,31 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
     [pendingAction, report?.visibility, reportId, research, t, workspaceSlug]
   );
 
-  /** 复制当前报告的授权详情页链接。 */
+  /** 复制带类型、周期与作者的当前报告分享文本。 */
   const handleCopyLink = useCallback(async () => {
-    const reportLink = new URL(`/${workspaceSlug}/research/reports/${reportId}`, window.location.origin).href;
+    const title = [report?.period_key, authorName].filter(Boolean).join(" · ") || t("research.common.untitled");
     try {
-      await copyTextToClipboard(reportLink);
+      if (!report) return;
+      await copyTextToClipboard(
+        formatShareText(
+          t(REPORT_TYPE_LABELS[report.report_type]),
+          title,
+          `/${workspaceSlug}/research/reports/${reportId}`
+        )
+      );
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: t("link_copied"),
-        message: t("copied_to_clipboard_description"),
+        title: t("research.common.share_copied_title"),
+        message: t("research.common.share_copied_message"),
       });
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: t("something_went_wrong"),
-        message: t("copied_to_clipboard_description"),
+        title: t("research.common.share_copy_failed_title"),
+        message: t("research.common.share_copy_failed_message"),
       });
     }
-  }, [reportId, t, workspaceSlug]);
+  }, [authorName, report, reportId, t, workspaceSlug]);
 
   if (!report) {
     return <p className="p-5 text-13 text-tertiary">{t("research.common.loading")}</p>;

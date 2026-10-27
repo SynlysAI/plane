@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "@plane/i18n";
+import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { ProjectDomainsService, domainError, type TWorkspaceTodoPage } from "@/services/project-domains.service";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
+import { formatShareText } from "@/components/research/common/share-link";
 import {
   ResearchChainStageApprovalQueue,
   type TChainStageApprovalQueueItem,
@@ -110,6 +113,34 @@ export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceS
     setQueueCompleted(!next);
   };
 
+  /**
+   * 复制带科研 / 行政领域上下文的待办分享文本。
+   *
+   * Args:
+   *   todo: 服务端投影出的待办事项。
+   */
+  const handleCopyLink = async (todo: TWorkspaceTodoPage["results"][number]) => {
+    const title = todo.title.trim() || t("research.common.untitled");
+    const typeLabel =
+      todo.domain === "RESEARCH"
+        ? t("research.todo.share_type_research")
+        : t("research.todo.share_type_administrative");
+    try {
+      await copyTextToClipboard(formatShareText(typeLabel, title, todo.href));
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: t("research.common.share_copied_title"),
+        message: t("research.common.share_copied_message"),
+      });
+    } catch {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("research.common.share_copy_failed_title"),
+        message: t("research.common.share_copy_failed_message"),
+      });
+    }
+  };
+
   return (
     <>
       {activeQueueId && (
@@ -171,6 +202,7 @@ export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceS
           {visibleResults.map((todo) => {
             const isStageApproval = todo.source === CHAIN_STAGE_SOURCE;
             const isActive = todo.id === activeQueueId;
+            const shareTitle = todo.title.trim() || t("research.common.untitled");
             return (
               <li
                 key={todo.id}
@@ -178,26 +210,37 @@ export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceS
                   isActive ? "border-accent-primary border-l-2 bg-surface-2" : "border-l-2 border-transparent"
                 }`}
               >
-                <Link
-                  href={todo.href}
-                  data-peek-trigger={isStageApproval ? "" : undefined}
-                  aria-current={isActive ? "true" : undefined}
-                  className="flex items-start gap-2 text-13"
-                  onClick={(event) => {
-                    if (isStageApproval) openStageQueue(event, todo);
-                  }}
-                >
-                  <span className="shrink-0 rounded bg-surface-2 px-1.5 text-11 text-secondary">
-                    {todo.domain === "RESEARCH"
-                      ? t("research.todo.domain_research")
-                      : t("research.todo.domain_administrative")}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="font-medium text-primary">{todo.title}</span>
-                    <span className="mt-1 block text-12 text-secondary">{todoMetadata(todo, t)}</span>
-                  </span>
-                  {todo.due_at && <ResearchTodoUrgency dueAt={todo.due_at} />}
-                </Link>
+                <div className="flex items-start justify-between gap-2">
+                  <Link
+                    href={todo.href}
+                    data-peek-trigger={isStageApproval ? "" : undefined}
+                    aria-current={isActive ? "true" : undefined}
+                    className="flex min-w-0 flex-1 items-start gap-2 text-13"
+                    onClick={(event) => {
+                      if (isStageApproval) openStageQueue(event, todo);
+                    }}
+                  >
+                    <span className="shrink-0 rounded bg-surface-2 px-1.5 text-11 text-secondary">
+                      {todo.domain === "RESEARCH"
+                        ? t("research.todo.domain_research")
+                        : t("research.todo.domain_administrative")}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-primary">{todo.title}</span>
+                      <span className="mt-1 block text-12 text-secondary">{todoMetadata(todo, t)}</span>
+                    </span>
+                    {todo.due_at && <ResearchTodoUrgency dueAt={todo.due_at} />}
+                  </Link>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0"
+                    aria-label={t("research.common.copy_share_aria", { title: shareTitle })}
+                    onClick={() => void handleCopyLink(todo)}
+                  >
+                    {t("research.common.copy_share")}
+                  </Button>
+                </div>
               </li>
             );
           })}

@@ -5,7 +5,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import enTranslations from "../../../../packages/i18n/src/locales/en/common.json";
 import zhTranslations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
-const mocks = vi.hoisted(() => ({ todos: vi.fn(), locale: "zh-CN" }));
+const mocks = vi.hoisted(() => ({
+  todos: vi.fn(),
+  locale: "zh-CN",
+  copyTextToClipboard: vi.fn(),
+  setToast: vi.fn(),
+}));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) => {
@@ -39,6 +44,14 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@plane/propel/button", () => ({
   Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
+}));
+vi.mock("@plane/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@plane/utils")>()),
+  copyTextToClipboard: mocks.copyTextToClipboard,
+}));
+vi.mock("@plane/propel/toast", () => ({
+  TOAST_TYPE: { SUCCESS: "SUCCESS", ERROR: "ERROR" },
+  setToast: mocks.setToast,
 }));
 vi.mock("@/components/research/common/research-todo-urgency", () => ({ ResearchTodoUrgency: () => <span>逾期</span> }));
 vi.mock("@/components/research/approvals/research-chain-stage-approval-queue", () => ({
@@ -77,10 +90,27 @@ const page = (items: Record<string, unknown>[], next: string | null = null) => (
   total_count: items.length,
   degraded_sources: [],
 });
+/**
+ * 按可访问名称查找按钮，避免同屏多个“复制”按钮误点。
+ *
+ * Args:
+ *   label: 目标按钮的可访问名称。
+ *
+ * Returns:
+ *   匹配的按钮元素。
+ */
+function buttonByName(label: string) {
+  const target = container.querySelector(`button[aria-label="${label}"]`);
+  expect(target).toBeInstanceOf(HTMLButtonElement);
+  return target as HTMLButtonElement;
+}
 beforeEach(() => {
   container = document.createElement("div");
   root = createRoot(container);
   mocks.todos.mockReset();
+  mocks.copyTextToClipboard.mockReset();
+  mocks.copyTextToClipboard.mockResolvedValue(undefined);
+  mocks.setToast.mockReset();
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -283,6 +313,53 @@ it("labels report submitters and other todo requesters", async () => {
   expect(container.textContent).toContain("提交人：周报提交人");
   expect(container.textContent).toContain("发起人：科研负责人");
   expect(container.textContent).toContain("发起人：行政发起人");
+});
+
+it("copies research and administrative todo links with share context", async () => {
+  const locationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
+  Object.defineProperty(window, "location", {
+    value: { origin: "http://pilab.local" },
+    configurable: true,
+  });
+  mocks.todos.mockResolvedValue(
+    page([
+      todo("科研采购审批", {
+        domain: "RESEARCH",
+        href: "/lab/research/chains/chain-1?node=node-1&task=task-1",
+      }),
+      todo("行政采购审批", { href: "/lab/projects/admin/task-1" }),
+    ])
+  );
+
+  try {
+    await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
+    await act(async () => buttonByName("复制分享链接：科研采购审批").click());
+    await act(async () => buttonByName("复制分享链接：行政采购审批").click());
+
+    expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
+      1,
+      "Plane 科研行动项: 科研采购审批 ( http://pilab.local/lab/research/chains/chain-1?node=node-1&task=task-1 )"
+    );
+    expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
+      2,
+      "Plane 行政行动项: 行政采购审批 ( http://pilab.local/lab/projects/admin/task-1 )"
+    );
+    expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
+  } finally {
+    if (locationDescriptor) Object.defineProperty(window, "location", locationDescriptor);
+  }
+});
+
+it("shows a safe error toast when copying a todo link fails", async () => {
+  mocks.todos.mockResolvedValue(page([todo("采购")]));
+  mocks.copyTextToClipboard.mockRejectedValue(new Error("denied"));
+
+  await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
+  await act(async () => buttonByName("复制分享链接：采购").click());
+
+  expect(mocks.setToast).toHaveBeenCalledWith(
+    expect.objectContaining({ type: "ERROR", title: "复制失败", message: "请稍后重试。" })
+  );
 });
 
 it("omits requester metadata when the projection has no requester", async () => {

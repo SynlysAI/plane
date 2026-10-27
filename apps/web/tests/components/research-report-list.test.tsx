@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   fetchOrgUnits: vi.fn(),
   browseFilters: vi.fn(),
   setToast: vi.fn(),
+  copyTextToClipboard: vi.fn(),
 }));
 
 const template = {
@@ -35,28 +36,38 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
-    t: (key: string) =>
-      ({
-        "research.reports.create": "创建报告",
-        "research.reports.deleted_title": "已删除报告",
-        "research.reports.deleted_status": "已删除",
-        "research.reports.restore": "恢复",
-        "research.reports.backfill": "补交",
-        "research.reports.template": "模板",
-        "research.home_workbench.by_week": "按周",
-        "research.home_workbench.by_month": "按月",
-        "research.common.open": "打开",
-        "common.loading": "检查周期中…",
-        "research.errors.report_period_conflict": "该周期已有报告。",
-        "research.feedback.report_created.title": "报告已创建",
-        "research.feedback.report_created.message": "请继续编辑正文。",
-        "research.feedback.report_restored.title": "报告已恢复",
-        "research.feedback.report_restored.message": "正在打开报告详情。",
-        "research.reports.columns.read_state": "已读状态",
-        "research.reports.read.waiting": "待阅读",
-        "research.reports.read.read_pending_review": "已读 · 待审阅",
-        "research.report_visibility.unit_confidential": "本组（保密）",
-      })[key] ?? key,
+    t: (key: string, values: Record<string, string | number> = {}) => {
+      const translation =
+        {
+          "research.reports.create": "创建报告",
+          "research.reports.deleted_title": "已删除报告",
+          "research.reports.deleted_status": "已删除",
+          "research.reports.restore": "恢复",
+          "research.reports.backfill": "补交",
+          "research.reports.template": "模板",
+          "research.home_workbench.by_week": "按周",
+          "research.home_workbench.by_month": "按月",
+          "research.common.open": "打开",
+          "research.common.copy_share": "复制",
+          "research.common.copy_share_aria": "复制分享链接：{title}",
+          "research.report_types.weekly": "周报",
+          "research.report_types.monthly": "月报",
+          "common.loading": "检查周期中…",
+          "research.errors.report_period_conflict": "该周期已有报告。",
+          "research.feedback.report_created.title": "报告已创建",
+          "research.feedback.report_created.message": "请继续编辑正文。",
+          "research.feedback.report_restored.title": "报告已恢复",
+          "research.feedback.report_restored.message": "正在打开报告详情。",
+          "research.reports.columns.read_state": "已读状态",
+          "research.reports.read.waiting": "待阅读",
+          "research.reports.read.read_pending_review": "已读 · 待审阅",
+          "research.report_visibility.unit_confidential": "本组（保密）",
+        }[key] ?? key;
+      return Object.entries(values).reduce(
+        (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
+        translation
+      );
+    },
     currentLocale: "zh-CN",
   }),
 }));
@@ -74,8 +85,12 @@ vi.mock("@plane/propel/table", () => ({
   TableRow: ({ children }: { children: React.ReactNode }) => <tr>{children}</tr>,
 }));
 vi.mock("@plane/propel/toast", () => ({
-  TOAST_TYPE: { SUCCESS: "SUCCESS" },
+  TOAST_TYPE: { SUCCESS: "SUCCESS", ERROR: "ERROR" },
   setToast: mocks.setToast,
+}));
+vi.mock("@plane/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@plane/utils")>()),
+  copyTextToClipboard: mocks.copyTextToClipboard,
 }));
 vi.mock("@plane/propel/calendar", () => ({
   Calendar: ({ onSelect }: { onSelect: (date: Date | undefined) => void }) => (
@@ -155,6 +170,21 @@ function button(label: string) {
   return target;
 }
 
+/**
+ * 按可访问名称查找按钮，避免同屏多个复制按钮误点。
+ *
+ * Args:
+ *   label: 目标按钮的可访问名称。
+ *
+ * Returns:
+ *   匹配的按钮元素。
+ */
+function buttonByName(label: string) {
+  const target = container.querySelector(`button[aria-label="${label}"]`);
+  expect(target).toBeInstanceOf(HTMLButtonElement);
+  return target as HTMLButtonElement;
+}
+
 beforeEach(() => {
   activeTemplate = { ...template };
   vi.useFakeTimers();
@@ -174,6 +204,8 @@ beforeEach(() => {
   mocks.restoreReport.mockResolvedValue({ id: "report-deleted" });
   mocks.browseFilters.mockImplementation(() => null);
   mocks.getReports.mockReturnValue([]);
+  mocks.copyTextToClipboard.mockReset();
+  mocks.copyTextToClipboard.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -402,6 +434,57 @@ it("报告列表 scope=mine 新链接不再输出 mine 请求参数", async () =
     scope: "mine",
   });
   expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("mine");
+});
+
+it("报告列表复制周报和月报分享内容", async () => {
+  const locationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
+  Object.defineProperty(window, "location", {
+    value: { origin: "http://pilab.local" },
+    configurable: true,
+  });
+  mocks.getReports.mockReturnValue([
+    {
+      id: "report-weekly",
+      period_key: "2026-W40",
+      report_type: "WEEKLY",
+      status: "DRAFT",
+      visibility: "PRIVATE",
+      owner_detail: { display_name: "学生一" },
+    },
+    {
+      id: "report-monthly",
+      period_key: "2026-10",
+      report_type: "MONTHLY",
+      status: "DRAFT",
+      visibility: "PRIVATE",
+      owner_detail: { email: "student@lab.local" },
+    },
+  ]);
+
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/lab/research/reports"]}>
+          <ReportScopeProbe />
+        </MemoryRouter>
+      )
+    );
+    await act(async () => undefined);
+    await act(async () => buttonByName("复制分享链接：2026-W40 · 学生一").click());
+    await act(async () => buttonByName("复制分享链接：2026-10 · student@lab.local").click());
+
+    expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
+      1,
+      "Plane 周报: 2026-W40 · 学生一 ( http://pilab.local/lab/research/reports/report-weekly )"
+    );
+    expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
+      2,
+      "Plane 月报: 2026-10 · student@lab.local ( http://pilab.local/lab/research/reports/report-monthly )"
+    );
+    expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
+  } finally {
+    if (locationDescriptor) Object.defineProperty(window, "location", locationDescriptor);
+  }
 });
 
 it("已删除报告使用独立范围且不提供详情链接", async () => {
