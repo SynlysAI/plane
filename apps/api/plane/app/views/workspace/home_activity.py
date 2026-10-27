@@ -392,7 +392,7 @@ def _research_context(audit, contexts):
 
     if audit.resource_type == "research_chain_stage":
         stage = contexts["stage"].get(audit.resource_id)
-        return (stage.chain.project, stage.get_stage_display(), "chain", stage.chain_id) if stage else None
+        return (stage.chain.project, stage.get_stage_code_display(), "chain", stage.chain_id) if stage else None
 
     if audit.resource_type == "stage_material":
         material = contexts["material"].get(audit.resource_id)

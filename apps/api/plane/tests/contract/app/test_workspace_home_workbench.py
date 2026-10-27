@@ -25,6 +25,7 @@ from plane.db.models import (
     ResearchChain,
     ResearchChainNode,
     ResearchChainNodeTask,
+    ResearchChainStage,
     ResearchProjectProfile,
     State,
     UserRecentVisit,
@@ -641,3 +642,56 @@ def test_home_activity_research_links_use_frontend_routes(env, monkeypatch):
     )
     assert rows[str(chain.id)]["url"] == f"/{slug}/research/chains/{chain.id}/"
     assert rows[str(report.id)]["url"] == f"/{slug}/research/reports/{report.id}/"
+
+
+def test_home_activity_renders_research_chain_stage_audit_events(env, monkeypatch):
+    """科研阶段审计事件必须解析为阶段名称而不是让首页动态整体失败。"""
+    from plane.app.views.workspace import home_activity
+
+    monkeypatch.setattr(home_activity, "research_module_enabled", lambda: True)
+    monkeypatch.setattr(home_activity, "workspace_research_enabled", lambda workspace: True)
+    research_project = Project.objects.create(
+        workspace=env["workspace"],
+        name="Research stage",
+        identifier="RST",
+        network=0,
+    )
+    ResearchProjectProfile.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        chain_visibility=ResearchProjectProfile.ChainVisibility.PRIVATE,
+    )
+    suffix = uuid4().hex
+    chain = ResearchChain.objects.create(
+        workspace=env["workspace"],
+        project=research_project,
+        owner=env["user"],
+        request_id=f"home-stage-chain-{suffix}",
+        payload_hash=suffix,
+    )
+    stage = ResearchChainStage.objects.create(
+        workspace=env["workspace"],
+        chain=chain,
+        stage_code=ResearchChainStage.StageCode.TOPIC_EVALUATION,
+        sort_order=3,
+    )
+    ResearchAuditEvent.objects.create(
+        workspace=env["workspace"],
+        actor=env["user"],
+        action="chain.stage.submitted",
+        resource_type="research_chain_stage",
+        resource_id=stage.id,
+        metadata={"chain": str(chain.id), "stage": stage.stage_code},
+    )
+
+    response = env["client"].get(
+        reverse("workspace-home-activities", kwargs={"slug": env["workspace"].slug}),
+        {"per_page": 20},
+    )
+
+    assert response.status_code == status.HTTP_200_OK, getattr(response, "data", response.content)
+    row = next(item for item in response.data["results"] if item["entity_id"] == str(stage.id))
+    assert row["source"] == "research"
+    assert row["entity_name"] == "Topic evaluation"
+    assert row["url"] == f"/{env['workspace'].slug}/research/chains/{chain.id}/"
