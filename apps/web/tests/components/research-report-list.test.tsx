@@ -6,6 +6,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createReport: vi.fn(),
+  checkReportPeriod: vi.fn(),
   getReports: vi.fn(),
   restoreReport: vi.fn(),
   fetchReportTemplateOptions: vi.fn(),
@@ -40,7 +41,13 @@ vi.mock("@plane/i18n", () => ({
         "research.reports.deleted_title": "已删除报告",
         "research.reports.deleted_status": "已删除",
         "research.reports.restore": "恢复",
+        "research.reports.backfill": "补交",
         "research.reports.template": "模板",
+        "research.home_workbench.by_week": "按周",
+        "research.home_workbench.by_month": "按月",
+        "research.common.open": "打开",
+        "common.loading": "检查周期中…",
+        "research.errors.report_period_conflict": "该周期已有报告。",
         "research.feedback.report_created.title": "报告已创建",
         "research.feedback.report_created.message": "请继续编辑正文。",
         "research.feedback.report_restored.title": "报告已恢复",
@@ -69,6 +76,15 @@ vi.mock("@plane/propel/table", () => ({
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { SUCCESS: "SUCCESS" },
   setToast: mocks.setToast,
+}));
+vi.mock("@plane/propel/calendar", () => ({
+  Calendar: ({ onSelect }: { onSelect: (date: Date | undefined) => void }) => (
+    <div data-testid="period-calendar">
+      <button type="button" onClick={() => onSelect(new Date(2026, 8, 15))}>
+        选择 2026-09-15
+      </button>
+    </div>
+  ),
 }));
 vi.mock("@plane/ui", async () => ({
   ...(await vi.importActual("@plane/ui")),
@@ -99,7 +115,10 @@ vi.mock("@/components/research/common/research-status-badge", () => ({
 }));
 vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
-    identity: { user: { org_units: [{ org_unit: "unit-1", is_primary: true }] } },
+    identity: {
+      user: { org_units: [{ org_unit: "unit-1", is_primary: true }] },
+      workspace: { report_timezone: "Asia/Shanghai" },
+    },
     reportLoader: false,
     reportPaginationByWorkspace: {},
     getReports: () => mocks.getReports(),
@@ -111,6 +130,7 @@ vi.mock("@/hooks/store/use-research", () => ({
     fetchResearchProjects: mocks.fetchResearchProjects,
     fetchOrgUnits: mocks.fetchOrgUnits,
     fetchReportTemplateOptions: mocks.fetchReportTemplateOptions,
+    checkReportPeriod: mocks.checkReportPeriod,
     createReport: mocks.createReport,
     restoreReport: mocks.restoreReport,
   }),
@@ -137,6 +157,8 @@ function button(label: string) {
 
 beforeEach(() => {
   activeTemplate = { ...template };
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 9, 27, 15, 0, 0));
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -148,6 +170,7 @@ beforeEach(() => {
   mocks.fetchResearchProjects.mockResolvedValue([]);
   mocks.fetchOrgUnits.mockResolvedValue([]);
   mocks.createReport.mockResolvedValue({ id: "report-1" });
+  mocks.checkReportPeriod.mockResolvedValue(null);
   mocks.restoreReport.mockResolvedValue({ id: "report-deleted" });
   mocks.browseFilters.mockImplementation(() => null);
   mocks.getReports.mockReturnValue([]);
@@ -157,6 +180,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.resetAllMocks();
+  vi.useRealTimers();
 });
 
 it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () => {
@@ -190,16 +214,41 @@ it("报告创建弹窗按类型读取模板并携带模板 ID 导航", async () 
   });
   await act(async () => button("创建报告").click());
 
+  expect(mocks.checkReportPeriod).toHaveBeenCalledWith("lab", "WEEKLY", "2026-W44");
   expect(mocks.createReport).toHaveBeenCalledWith("lab", {
     report_type: "WEEKLY",
-    period_key: undefined,
+    period_key: "2026-W44",
     team_projects: [],
     template: "template-1",
   });
   expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe("/lab/research/reports/report-1");
 });
 
-it("切换周报和月报时自动选择对应默认模板", async () => {
+it("创建弹窗默认当前周、禁止手填并支持历史补交周期", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => button("创建报告").click());
+  await act(async () => undefined);
+
+  expect(container.querySelector("input[placeholder='周期，例如 2026-W38 / 2026-09']")).toBeNull();
+  expect(container.textContent).toContain("2026-W44");
+  expect(container.textContent).toContain("2026-10-26 ~ 2026-11-01");
+  expect(container.textContent).not.toContain("补交");
+
+  await act(async () => button("选择 2026-09-15").click());
+  await act(async () => undefined);
+  expect(container.textContent).toContain("2026-W38");
+  expect(container.textContent).toContain("2026-09-14 ~ 2026-09-20");
+  expect(container.textContent).toContain("补交");
+  expect(mocks.checkReportPeriod).toHaveBeenLastCalledWith("lab", "WEEKLY", "2026-W38");
+});
+
+it("切换周报和月报时重算当前周期并选择对应默认模板", async () => {
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/lab/research/reports"]}>
@@ -209,20 +258,93 @@ it("切换周报和月报时自动选择对应默认模板", async () => {
   );
   await act(async () => button("创建报告").click());
 
-  const typeSelect = [...container.querySelectorAll<HTMLSelectElement>("select")].find((select) => {
-    const values = Array.from(select.options).map((option) => option.value);
-    return values.length === 2 && values[0] === "WEEKLY" && values[1] === "MONTHLY";
-  });
-  if (!typeSelect) throw new Error("报告类型选择未显示");
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(typeSelect, "MONTHLY");
-    typeSelect.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  const monthMode = [...container.querySelectorAll("button")].find((item) => item.textContent === "按月");
+  if (!monthMode) throw new Error("按月切换未显示");
+  await act(async () => monthMode.click());
   await act(async () => undefined);
 
   expect(mocks.fetchReportTemplateOptions).toHaveBeenLastCalledWith("lab", { report_type: "MONTHLY" });
+  expect(container.textContent).toContain("2026-10");
+  expect(mocks.checkReportPeriod).toHaveBeenLastCalledWith("lab", "MONTHLY", "2026-10");
   const templateSelect = container.querySelector<HTMLSelectElement>('select[aria-label="模板"]');
   expect(templateSelect?.value).toBe("template-1");
+});
+
+it("重复周期预检后禁用创建并引导打开已有报告", async () => {
+  mocks.checkReportPeriod.mockResolvedValue({ id: "existing-report", period_key: "2026-W44" });
+  function Probe() {
+    const location = useLocation();
+    return (
+      <>
+        <ResearchReportList workspaceSlug="lab" />
+        <output aria-label="URL">{location.pathname}</output>
+      </>
+    );
+  }
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports"]}>
+        <Probe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => button("创建报告").click());
+  await act(async () => undefined);
+
+  const submit = [...container.querySelectorAll("button")].toReversed().find((item) => item.textContent === "创建报告");
+  expect(submit?.disabled).toBe(true);
+  await act(async () => button("打开").click());
+  expect(container.querySelector('output[aria-label="URL"]')?.textContent).toBe(
+    "/lab/research/reports/existing-report"
+  );
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(mocks.createReport).not.toHaveBeenCalled();
+});
+
+it("创建接口周期冲突时保留弹窗并显示内联错误", async () => {
+  mocks.createReport.mockRejectedValue({ error_code: "report_period_conflict" });
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => button("创建报告").click());
+  await act(async () => undefined);
+  const submit = [...container.querySelectorAll("button")].toReversed().find((item) => item.textContent === "创建报告");
+  if (!submit) throw new Error("创建按钮未显示");
+  await act(async () => submit.click());
+  await act(async () => undefined);
+
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("该周期已有报告。");
+  expect(container.textContent).toContain("2026-W44");
+});
+
+it("周期预检失败时不阻断创建提交", async () => {
+  mocks.checkReportPeriod.mockRejectedValue(new Error("network unavailable"));
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => button("创建报告").click());
+  await act(async () => undefined);
+  const submit = [...container.querySelectorAll("button")].toReversed().find((item) => item.textContent === "创建报告");
+  if (!submit) throw new Error("创建按钮未显示");
+  expect(submit.disabled).toBe(false);
+
+  await act(async () => submit.click());
+
+  expect(mocks.createReport).toHaveBeenCalledWith("lab", {
+    report_type: "WEEKLY",
+    period_key: "2026-W44",
+    team_projects: [],
+    template: "template-1",
+  });
 });
 
 it("报告列表回放 mine 旧链接并只携带报告领域参数", async () => {
@@ -389,7 +511,7 @@ it("恢复周期冲突时保留已删除列表并显示错误", async () => {
   );
   await act(async () => button("恢复").click());
 
-  expect(container.textContent).toContain("research.errors.report_period_conflict");
+  expect(container.textContent).toContain("该周期已有报告。");
   expect(container.textContent).toContain("2026-W40");
   expect(button("恢复")).toBeInstanceOf(HTMLButtonElement);
 });
