@@ -50,6 +50,7 @@ from plane.utils.content_validator import (
 )
 from plane.utils.administrative_projects import assignable_project_member_ids
 from plane.utils.work_item_assignment import replace_issue_assignee, validate_single_assignee
+from plane.utils.comment_attachments import MAX_FILE_ATTACHMENTS
 
 
 class IssueFlatSerializer(BaseSerializer):
@@ -683,7 +684,7 @@ class IssueCommentSerializer(BaseSerializer):
         child=serializers.UUIDField(),
         required=False,
         write_only=True,
-        max_length=10,
+        max_length=MAX_FILE_ATTACHMENTS,
     )
     file_attachments = serializers.SerializerMethodField()
     actor_detail = UserLiteSerializer(read_only=True, source="actor")

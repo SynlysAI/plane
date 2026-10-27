@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { useTranslation } from "@plane/i18n";
+import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
 import type { TCommentAttachment, TCommentAttachmentLimits } from "@plane/types";
 import { getCommentAttachmentLimitError } from "./comment-attachment-limits";
 
@@ -29,6 +31,7 @@ export function useCommentAttachments(
   limits: TCommentAttachmentLimits | null,
   initial: TCommentAttachment[] = []
 ) {
+  const { t } = useTranslation();
   const original = useRef<TCommentAttachmentDraft[]>(
     initial.map((attachment) => ({
       key: attachment.id,
@@ -80,11 +83,11 @@ export function useCommentAttachments(
   /** 批次校验数量和大小，通过后并行上传且分别保留结果。 */
   function addFiles(files: File[]) {
     if (!limits) {
-      setError("无法获取当前工作区附件限制");
+      setError(t("comment.attachment_limits_failed"));
       return;
     }
-    if (entriesRef.current.length + files.length > 10) {
-      setError("每条评论最多附加 10 个文件。");
+    if (entriesRef.current.length + files.length > MAX_FILE_ATTACHMENTS) {
+      setError(t("comment.attachment_count_limit", { count: MAX_FILE_ATTACHMENTS }));
       return;
     }
     const sizeError = files.map((file) => getCommentAttachmentLimitError(limits, file)).find(Boolean);

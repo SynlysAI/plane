@@ -10,6 +10,7 @@ import type { FileRejection } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
 import { UploadOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
+import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
@@ -60,6 +61,7 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
   const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
   // derived values
   const issueAttachments = getAttachmentsByIssueId(issueId);
+  const attachmentCount = issueAttachments?.length ?? 0;
 
   // handlers
   const handleFetchPropertyActivities = useCallback(() => {
@@ -73,6 +75,15 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
       if (rejectedFiles.length === 0) {
         const currentFile: File = acceptedFiles[0];
         if (!currentFile || !workspaceSlug) return;
+
+        if (attachmentCount >= MAX_FILE_ATTACHMENTS) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("toast.error"),
+            message: t("attachment.count_limit", { count: MAX_FILE_ATTACHMENTS }),
+          });
+          return;
+        }
 
         const limitError = getLimitError(currentFile);
         if (limitError) {
@@ -111,7 +122,7 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
       });
       return;
     },
-    [createAttachment, getLimitError, maxFileSize, workspaceSlug, handleFetchPropertyActivities, t]
+    [attachmentCount, createAttachment, getLimitError, maxFileSize, workspaceSlug, handleFetchPropertyActivities, t]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

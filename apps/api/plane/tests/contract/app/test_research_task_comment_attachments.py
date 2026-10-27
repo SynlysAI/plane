@@ -182,6 +182,45 @@ def test_attachment_comment_roundtrip_edit_and_security(env):
         assert env["student_client"].post(base, payload, format="json").status_code == 400
 
 
+def test_attachment_comment_accepts_fifty_and_rejects_fifty_one(env):
+    """每条科研任务评论的文件附件上限为 50 个。"""
+    task = _create(env)
+    assets = [
+        make_task_asset(
+            env,
+            task["id"],
+            entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_COMMENT_ATTACHMENT,
+            asset=f"{env['workspace'].id}/{uuid4()}.bin",
+        )
+        for _ in range(50)
+    ]
+    base = f"{task_base(env, task['id'])}comments/"
+
+    accepted = env["student_client"].post(
+        base,
+        {
+            "comment_html": "<p>五十份材料</p>",
+            "request_id": uuid4().hex,
+            "attachment_ids": [str(asset.id) for asset in assets],
+        },
+        format="json",
+    )
+    assert accepted.status_code == 201, accepted.data
+    assert len(accepted.data["file_attachments"]) == 50
+
+    rejected = env["student_client"].post(
+        base,
+        {
+            "comment_html": "<p>超限材料</p>",
+            "request_id": uuid4().hex,
+            "attachment_ids": [str(asset.id) for asset in assets] + [str(uuid4())],
+        },
+        format="json",
+    )
+    assert rejected.status_code == 400, rejected.data
+    assert rejected.data["error_code"] == "research_comment_invalid"
+
+
 def test_attachment_idempotency_compares_html_and_assets(env):
     task = _create(env)
     asset = make_task_asset(

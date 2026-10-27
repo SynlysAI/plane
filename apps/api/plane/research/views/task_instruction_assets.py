@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.db.models import FileAsset, ResearchChainNodeTaskAttachment
+from plane.db.models import FileAsset, ResearchChainNodeTask, ResearchChainNodeTaskAttachment
 from plane.research.services.chain_tasks import actor_can_manage_chain_tasks
 from plane.research.utils.audit import ResearchAuditAction, record_audit_event
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
@@ -19,7 +19,11 @@ from plane.research.views.chain_foundation import _chain_readonly_error
 from plane.research.views.chain_tasks import _task_context
 from plane.research.views.base import ResearchAPIView
 from plane.settings.storage import S3Storage
-from plane.utils.comment_attachments import comment_attachment_limits, resolve_comment_attachment_limit
+from plane.utils.comment_attachments import (
+    MAX_FILE_ATTACHMENTS,
+    comment_attachment_limits,
+    resolve_comment_attachment_limit,
+)
 from plane.utils.path_validator import sanitize_filename
 
 FILE_ASSET_TYPE = FileAsset.EntityTypeContext.RESEARCH_TASK_INSTRUCTION_ATTACHMENT
@@ -30,6 +34,24 @@ EDITABLE_TASK_STATUSES = {
     "ASSIGNED",
     "NEEDS_REVISION",
 }
+
+
+def _active_instruction_asset_count(task_id):
+    """Return the number of active file slots owned by one task description."""
+    return FileAsset.objects.filter(
+        entity_type=FILE_ASSET_TYPE,
+        entity_identifier=str(task_id),
+        is_deleted=False,
+        deleted_at__isnull=True,
+    ).count()
+
+
+def _task_attachment_limit_response():
+    """Build the shared response for exceeding a task-description attachment count."""
+    return Response(
+        {"error_code": "attachment_count_exceeded", "limit": MAX_FILE_ATTACHMENTS},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 def _task_for_write(view, request, slug, chain_id, node_id, task_id):
@@ -141,6 +163,10 @@ class ResearchTaskInstructionAttachmentPresignEndpoint(ResearchAPIView):
             _deny_upload(task, request, validation_error)
             return Response({"error_code": validation_error}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
+        if _active_instruction_asset_count(task.id) >= MAX_FILE_ATTACHMENTS:
+            _deny_upload(task, request, "attachment_count_exceeded", limit=MAX_FILE_ATTACHMENTS)
+            return _task_attachment_limit_response()
+
         key = f"{task.workspace.id}/research/tasks/{task.id}/instruction-attachments/{uuid.uuid4().hex}-{file_name}"
         upload = S3Storage(request=request).generate_presigned_post(
             object_name=key,
@@ -151,16 +177,21 @@ class ResearchTaskInstructionAttachmentPresignEndpoint(ResearchAPIView):
             return Response(
                 {"error_code": "research_upload_storage_failed"}, status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
-        asset = FileAsset.objects.create(
-            workspace=task.workspace,
-            user=request.user,
-            created_by=request.user,
-            attributes={"name": file_name, "type": content_type, "size": size},
-            size=size,
-            asset=key,
-            entity_type=FILE_ASSET_TYPE,
-            entity_identifier=str(task.id),
-        )
+        with transaction.atomic():
+            ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+            if _active_instruction_asset_count(task.id) >= MAX_FILE_ATTACHMENTS:
+                _deny_upload(task, request, "attachment_count_exceeded", limit=MAX_FILE_ATTACHMENTS)
+                return _task_attachment_limit_response()
+            asset = FileAsset.objects.create(
+                workspace=task.workspace,
+                user=request.user,
+                created_by=request.user,
+                attributes={"name": file_name, "type": content_type, "size": size},
+                size=size,
+                asset=key,
+                entity_type=FILE_ASSET_TYPE,
+                entity_identifier=str(task.id),
+            )
         return Response({"asset_id": str(asset.id), "upload_data": upload})
 
 
@@ -199,11 +230,19 @@ class ResearchTaskInstructionAttachmentSlotEndpoint(ResearchAPIView):
         actual_size = int(metadata.get("ContentLength") or 0)
         file_name = str(asset.attributes.get("name") or asset.asset.name)
         content_type = str(metadata.get("ContentType") or asset.attributes.get("type") or "")
-        asset.size = actual_size
-        asset.storage_metadata = metadata
-        asset.is_uploaded = True
-        asset.attributes = {**asset.attributes, "type": content_type.split(";", 1)[0].lower(), "size": actual_size}
         with transaction.atomic():
+            ResearchChainNodeTask.objects.select_for_update().get(pk=task.pk)
+            if _active_instruction_asset_count(task.id) > MAX_FILE_ATTACHMENTS:
+                _deny_upload(task, request, "attachment_count_exceeded", limit=MAX_FILE_ATTACHMENTS)
+                return _task_attachment_limit_response()
+            asset.size = actual_size
+            asset.storage_metadata = metadata
+            asset.is_uploaded = True
+            asset.attributes = {
+                **asset.attributes,
+                "type": content_type.split(";", 1)[0].lower(),
+                "size": actual_size,
+            }
             asset.save(update_fields=["size", "storage_metadata", "is_uploaded", "attributes", "updated_at"])
             attachment = ResearchChainNodeTaskAttachment.objects.create(
                 task=task,

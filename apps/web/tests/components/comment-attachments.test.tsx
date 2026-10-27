@@ -3,11 +3,29 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { TCommentAttachment } from "@plane/types";
+import zhTranslations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 import {
   getCommentAttachmentCategory,
   getCommentAttachmentLimitError,
 } from "@/components/comments/comment-attachment-limits";
 import { useCommentAttachments } from "@/components/comments/use-comment-attachments";
+
+vi.mock("@plane/i18n", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) => {
+      const literal = key
+        .split(".")
+        .reduce<unknown>((entry, part) => (entry as Record<string, unknown>)?.[part], zhTranslations);
+      const text = typeof literal === "string" ? literal : key;
+      if (!values) return text;
+      return Object.entries(values).reduce(
+        (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
+        text
+      );
+    },
+    currentLocale: "zh-CN",
+  }),
+}));
 
 Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
 let state: ReturnType<typeof useCommentAttachments>;
@@ -91,7 +109,7 @@ it("classifies comment attachments consistently", () => {
 });
 
 it("enforces category size and count before upload", async () => {
-  await mount(Array.from({ length: 9 }, (_, i) => ({ ...existing, id: String(i) })));
+  await mount(Array.from({ length: 49 }, (_, i) => ({ ...existing, id: String(i) })));
   const largePdf = new File(["pdf"], "large.pdf", { type: "application/pdf" });
   Object.defineProperty(largePdf, "size", { value: 2 * MEGABYTE + 1 });
   await act(async () => state.addFiles([largePdf]));
@@ -99,7 +117,10 @@ it("enforces category size and count before upload", async () => {
   expect(state.error).toBe("PDF 文件不能超过 2 MB。");
   await act(async () => state.addFiles([new File(["a"], "a.pdf"), new File(["b"], "b.pdf")]));
   expect(upload).not.toHaveBeenCalled();
-  expect(state.entries).toHaveLength(9);
+  expect(state.entries).toHaveLength(49);
+  await act(async () => state.addFiles([new File(["a"], "ok.pdf")]));
+  expect(upload).toHaveBeenCalledExactlyOnceWith(expect.any(File));
+  expect(state.entries).toHaveLength(50);
 });
 
 it("uses each category limit and rejects the whole mixed batch when one file exceeds it", async () => {

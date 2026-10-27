@@ -139,6 +139,10 @@
   "state_change_description": "当工作项移动到不同状态时通知我",
   "issue_completed": "工作项完成",
   "issue_completed_description": "仅当工作项完成时通知我",
+  "comment": {
+    "attachment_limits_failed": "无法获取当前工作区附件限制",
+    "attachment_count_limit": "每条评论最多附加 {count} 个文件。"
+  },
   "comments": "评论",
   "comments_description": "当有人在工作项上发表评论时通知我",
   "mentions": "提及",
@@ -783,6 +787,7 @@
   "attachment": {
     "error": "无法附加文件。请重新上传。",
     "only_one_file_allowed": "一次只能上传一个文件。",
+    "count_limit": "每个工作项最多附加 {count} 个文件。",
     "file_size_limit": "文件大小必须小于或等于 {size}MB。",
     "drag_and_drop": "拖放到任意位置以上传",
     "delete": "删除附件"

@@ -139,6 +139,10 @@
   "state_change_description": "Notify me when the work items moves to a different state",
   "issue_completed": "Work item completed",
   "issue_completed_description": "Notify me only when a work item is completed",
+  "comment": {
+    "attachment_limits_failed": "Unable to load the current workspace attachment limits.",
+    "attachment_count_limit": "Each comment can have at most {count} files."
+  },
   "comments": "Comments",
   "comments_description": "Notify me when someone leaves a comment on the work item",
   "mentions": "Mentions",
@@ -783,6 +787,7 @@
   "attachment": {
     "error": "File could not be attached. Try uploading again.",
     "only_one_file_allowed": "Only one file can be uploaded at a time.",
+    "count_limit": "A work item can have at most {count} attachments.",
     "file_size_limit": "File must be of {size}MB or less in size.",
     "drag_and_drop": "Drag and drop anywhere to upload",
     "delete": "Delete attachment"

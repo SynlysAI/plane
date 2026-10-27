@@ -2,9 +2,10 @@
 
 from io import BytesIO
 from unittest.mock import patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
+from django.utils import timezone
 
 from plane.db.models import (
     FileAsset,
@@ -66,6 +67,32 @@ def prepare_image(env, task, file_name="figure.png"):
         confirmed = env["student_client"].post(f"{base}{asset_id}/", {}, format="json")
     assert confirmed.status_code == 201, confirmed.data
     return base, asset_id
+
+
+def make_instruction_attachment(env, task_id, *, confirmed=True):
+    """Create one task-description asset and optionally its persisted relation."""
+    asset = FileAsset(
+        workspace=env["workspace"],
+        created_by=env["student"],
+        entity_type=FileAsset.EntityTypeContext.RESEARCH_TASK_INSTRUCTION_ATTACHMENT,
+        entity_identifier=str(task_id),
+        is_uploaded=confirmed,
+        size=128,
+        asset=f"{env['workspace'].id}/{uuid4()}.pdf",
+        attributes={"name": "过程说明.pdf", "type": "application/pdf", "size": 128},
+    )
+    asset.save(disable_auto_set_user=True)
+    if confirmed:
+        ResearchChainNodeTaskAttachment.objects.create(
+            task=ResearchChainNodeTask.objects.get(pk=task_id),
+            asset=asset,
+            file_name="过程说明.pdf",
+            file_size=128,
+            content_type="application/pdf",
+            uploaded_by=env["student"],
+            created_by=env["student"],
+        )
+    return asset
 
 
 def test_instruction_is_sanitized_and_only_accepts_task_scoped_images(env):
@@ -188,6 +215,63 @@ def test_instruction_attachment_roundtrip_and_delete(env):
     assert env["student_client"].get(f"{base}{asset_id}/download/").status_code == 404
     assert ResearchAuditEvent.objects.filter(action="task.instruction.attachment.add").exists()
     assert ResearchAuditEvent.objects.filter(action="task.instruction.attachment.delete").exists()
+
+
+def test_instruction_attachment_presign_rejects_the_fifty_first_file(env):
+    """任务描述附件预签名阶段即执行 50 个数量上限。"""
+    task = _create(env)
+    configure_limits(env["workspace"])
+    for _ in range(50):
+        make_instruction_attachment(env, task["id"])
+
+    response = env["student_client"].post(
+        f"{_url(env, task['id'])}instruction-attachments/presign/",
+        {"file_name": "第五十一份.pdf", "content_type": "application/pdf", "size": 128},
+        format="json",
+    )
+
+    assert response.status_code == 400, response.data
+    assert response.data["error_code"] == "attachment_count_exceeded"
+    assert response.data["limit"] == 50
+
+
+def test_instruction_attachment_confirm_enforces_limit_and_delete_restores_quota(env):
+    """确认阶段并发复核数量，删除后额度立即可复用。"""
+    task = _create(env)
+    configure_limits(env["workspace"])
+    attachments = [make_instruction_attachment(env, task["id"]) for _ in range(49)]
+    boundary = make_instruction_attachment(env, task["id"], confirmed=False)
+    base = f"{_url(env, task['id'])}instruction-attachments/"
+
+    def confirm(asset):
+        with patch("plane.research.views.task_instruction_assets.S3Storage") as storage:
+            body = b"%PDF-1.4\n" + b"0" * 120
+            storage.return_value.get_object_metadata.return_value = {
+                "ContentType": "application/pdf",
+                "ContentLength": len(body),
+            }
+            storage.return_value.server_s3_client.get_object.return_value = {"Body": BytesIO(body)}
+            return env["student_client"].post(f"{base}{asset.id}/confirm/", {}, format="json")
+
+    boundary_response = confirm(boundary)
+    assert boundary_response.status_code == 201, boundary_response.data
+
+    overflow = make_instruction_attachment(env, task["id"], confirmed=False)
+    overflow_response = confirm(overflow)
+    assert overflow_response.status_code == 400, overflow_response.data
+    assert overflow_response.data["error_code"] == "attachment_count_exceeded"
+    assert overflow_response.data["limit"] == 50
+
+    now = timezone.now()
+    first_relation = ResearchChainNodeTaskAttachment.objects.get(task_id=task["id"], asset=attachments[0])
+    first_relation.deleted_at = now
+    first_relation.save(update_fields=["deleted_at", "updated_at"])
+    attachments[0].is_deleted = True
+    attachments[0].deleted_at = now
+    attachments[0].save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+
+    retry_response = confirm(overflow)
+    assert retry_response.status_code == 201, retry_response.data
 
 
 def test_instruction_assets_reject_wrong_task_writer_and_readonly_task(env):

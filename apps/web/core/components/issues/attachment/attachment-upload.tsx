@@ -8,8 +8,11 @@ import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
 import type { FileRejection } from "react-dropzone";
 import { useDropzone } from "react-dropzone";
+import { useTranslation } from "@plane/i18n";
+import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
 // plane web hooks
 import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
+import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // types
 import type { TAttachmentOperations } from "../issue-detail-widgets/attachments/helper";
 
@@ -18,15 +21,20 @@ type TAttachmentOperationsModal = Pick<TAttachmentOperations, "create">;
 type Props = {
   workspaceSlug: string;
   projectId: string;
+  issueId: string;
   disabled?: boolean;
   attachmentOperations: TAttachmentOperationsModal;
 };
 
 export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(props: Props) {
-  const { workspaceSlug, projectId, disabled = false, attachmentOperations } = props;
+  const { workspaceSlug, projectId, issueId, disabled = false, attachmentOperations } = props;
+  const { t } = useTranslation();
   // states
   const [isLoading, setIsLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const {
+    attachment: { getAttachmentsByIssueId },
+  } = useIssueDetail();
   // file size categories
   const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
 
@@ -39,6 +47,12 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
       const currentFile: File = acceptedFiles[0];
       if (!currentFile || !workspaceSlug) return;
 
+      const attachmentCount = getAttachmentsByIssueId(issueId)?.length ?? 0;
+      if (attachmentCount >= MAX_FILE_ATTACHMENTS) {
+        setValidationError(t("attachment.count_limit", { count: MAX_FILE_ATTACHMENTS }));
+        return;
+      }
+
       const limitError = getLimitError(currentFile);
       if (limitError) {
         setValidationError(limitError);
@@ -48,7 +62,7 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
       setIsLoading(true);
       attachmentOperations.create(currentFile).finally(() => setIsLoading(false));
     },
-    [attachmentOperations, getLimitError, workspaceSlug]
+    [attachmentOperations, getAttachmentsByIssueId, getLimitError, issueId, t, workspaceSlug]
   );
 
   const { getRootProps, getInputProps, isDragActive, isDragReject, fileRejections } = useDropzone({

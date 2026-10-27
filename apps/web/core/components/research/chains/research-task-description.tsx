@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileOutline, RefreshOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
+import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import type { EditorRefApi } from "@plane/editor";
 import type {
@@ -34,7 +35,6 @@ type TAttachmentDraft = {
   status: "uploading" | "ready" | "failed";
 };
 
-const MAX_ATTACHMENTS = 10;
 const DEFAULT_IMAGE_LIMIT = 20 * 1024 * 1024;
 
 /** Convert legacy plain-text instructions to editor-compatible HTML. */
@@ -64,6 +64,7 @@ export function ResearchTaskDescription({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const entriesRef = useRef<TAttachmentDraft[]>([]);
+  const loadedTaskIdRef = useRef<string | null>(null);
   const [entries, setEntries] = useState<TAttachmentDraft[]>([]);
   const [limits, setLimits] = useState<TCommentAttachmentLimits | null>(null);
   const [attachmentError, setAttachmentError] = useState("");
@@ -85,6 +86,12 @@ export function ResearchTaskDescription({
 
   useEffect(() => {
     mountedRef.current = true;
+    const isTaskSwitch = loadedTaskIdRef.current !== task.id;
+    loadedTaskIdRef.current = task.id;
+    // 父组件会回写已确认附件列表；同一任务仍有上传中或失败草稿时不能重建，
+    // 否则确认结果会因为本地 key 被清空而被误删。
+    if (!isTaskSwitch && entriesRef.current.some((entry) => entry.status !== "ready")) return;
+
     const initial = (task.instruction_attachments ?? []).map((attachment) => ({
       key: attachment.id,
       name: attachment.name,
@@ -94,8 +101,10 @@ export function ResearchTaskDescription({
     }));
     entriesRef.current = initial;
     setEntries(initial);
-    setImageError("");
-    setAttachmentError("");
+    if (isTaskSwitch) {
+      setImageError("");
+      setAttachmentError("");
+    }
     return () => {
       mountedRef.current = false;
     };
@@ -179,8 +188,8 @@ export function ResearchTaskDescription({
         setAttachmentError(t("research.chain_tasks.attachment_limits_failed"));
         return;
       }
-      if (entriesRef.current.length + files.length > MAX_ATTACHMENTS) {
-        setAttachmentError(t("research.chain_tasks.attachment_count_exceeded", { count: MAX_ATTACHMENTS }));
+      if (entriesRef.current.length + files.length > MAX_FILE_ATTACHMENTS) {
+        setAttachmentError(t("research.chain_tasks.attachment_count_exceeded", { count: MAX_FILE_ATTACHMENTS }));
         return;
       }
       const sizeError = files.map((file) => getCommentAttachmentLimitError(limits, file)).find(Boolean);
