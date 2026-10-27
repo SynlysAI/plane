@@ -18,15 +18,18 @@ export const useIntersectionObserver = (
   containerRef: RefObject<HTMLDivElement | null>,
   elementRef: HTMLElement | null,
   callback: (() => void) | undefined,
-  rootMargin?: string
+  rootMargin?: string,
+  onIntersectionChange?: (isIntersecting: boolean) => void
 ) => {
   useEffect(() => {
     if (elementRef) {
       const observer = new IntersectionObserver(
         (entries) => {
-          if (entries[entries.length - 1].isIntersecting) {
-            callback && callback();
+          const isIntersecting = entries[entries.length - 1]?.isIntersecting ?? false;
+          if (isIntersecting) {
+            callback?.();
           }
+          onIntersectionChange?.(isIntersecting);
         },
         {
           root: containerRef?.current,
@@ -43,5 +46,5 @@ export const useIntersectionObserver = (
     // When i am passing callback as a dependency, it is causing infinite loop,
     // Please make sure you fix this eslint lint disable error with caution
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootMargin, callback, elementRef, containerRef.current]);
+  }, [rootMargin, callback, elementRef, containerRef.current, onIntersectionChange]);
 };

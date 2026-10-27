@@ -44,12 +44,17 @@ let intersectionObservers: MockIntersectionObserver[] = [];
 class MockIntersectionObserver {
   private readonly targets = new Set<Element>();
 
-  constructor(private readonly callback: IntersectionObserverCallback) {
+  readonly root: Document | Element | null;
+  readonly rootMargin: string;
+
+  constructor(
+    private readonly callback: IntersectionObserverCallback,
+    options?: IntersectionObserverInit
+  ) {
+    this.root = options?.root ?? null;
+    this.rootMargin = options?.rootMargin ?? "0px";
     intersectionObservers.push(this);
   }
-
-  readonly root: Document | Element | null = null;
-  readonly rootMargin: string = "0px";
   readonly thresholds: readonly number[] = [];
 
   observe = (target: Element) => {
@@ -100,12 +105,14 @@ function activityResponse(results: ReturnType<typeof activity>[], nextCursor: st
   };
 }
 
-async function renderWidget() {
+async function renderWidget({ cardScroll = true }: { cardScroll?: boolean } = {}) {
   await act(async () =>
     root.render(
       <SWRConfig value={{ provider: () => cache, dedupingInterval: 0, shouldRetryOnError: false }}>
         <MemoryRouter initialEntries={["/lab"]}>
-          <HomeActivityWidget workspaceSlug="lab" density="compact" refreshToken={0} />
+          <div data-home-card-scroll={cardScroll ? "true" : undefined}>
+            <HomeActivityWidget workspaceSlug="lab" density="compact" fixedLayout={cardScroll} refreshToken={0} />
+          </div>
         </MemoryRouter>
       </SWRConfig>
     )
@@ -203,6 +210,66 @@ it("automatically loads the next page when the list sentinel enters the viewport
   expect(container.textContent).toContain("更新了设备采购协作");
   expect(container.textContent).toContain("创建了设备采购协作");
   expect([...container.querySelectorAll("button")].some((button) => button.textContent === "加载更多动态")).toBe(false);
+});
+
+it("uses the card scroller and keeps loading while the sentinel stays visible", async () => {
+  const pages = [
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2"),
+    activityResponse(
+      [activity("event-2", "2026-10-22T08:00:00Z"), activity("event-1", "2026-10-22T09:00:00Z")],
+      "cursor-3"
+    ),
+    activityResponse([activity("event-3", "2026-10-22T07:00:00Z")], "cursor-4"),
+    activityResponse([activity("event-4", "2026-10-22T06:00:00Z")]),
+  ];
+  for (const page of pages) mocks.fetchWorkspaceActivities.mockResolvedValueOnce(page);
+  await renderWidget();
+
+  const scroller = container.querySelector<HTMLElement>("[data-home-card-scroll='true']");
+  expect(scroller).not.toBeNull();
+  expect(intersectionObservers[0]?.root).toBe(scroller);
+  expect(intersectionObservers[0]?.rootMargin).toBe("120px 0px");
+
+  await dispatchIntersection(container.querySelector('[data-testid="activity-auto-load-sentinel"]')!);
+  await act(async () => undefined);
+  await act(async () => undefined);
+
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenCalledTimes(4);
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenNthCalledWith(1, "lab", {
+    days: "30",
+    pagination: "cursor",
+    per_page: 12,
+  });
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenNthCalledWith(2, "lab", {
+    days: "30",
+    pagination: "cursor",
+    cursor: "cursor-2",
+    per_page: 12,
+  });
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenNthCalledWith(3, "lab", {
+    days: "30",
+    pagination: "cursor",
+    cursor: "cursor-3",
+    per_page: 12,
+  });
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenNthCalledWith(4, "lab", {
+    days: "30",
+    pagination: "cursor",
+    cursor: "cursor-4",
+    per_page: 12,
+  });
+  expect(container.querySelectorAll("li")).toHaveLength(4);
+  expect(container.textContent).toContain("更新了设备采购协作");
+  expect(container.querySelector('[data-testid="activity-auto-load-sentinel"]')).toBeNull();
+});
+
+it("uses the browser viewport outside the fixed compact card layout", async () => {
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
+  );
+  await renderWidget({ cardScroll: false });
+
+  expect(intersectionObservers[0]?.root).toBeNull();
 });
 
 it("does not request the same next page twice while it is loading", async () => {
