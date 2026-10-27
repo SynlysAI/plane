@@ -1,6 +1,11 @@
 import { API_BASE_URL } from "@plane/constants";
-import type { WeeklyReportIssued } from "@/services/weekly-report-mcp.service";
+import type { WeeklyReportAction, WeeklyReportIssued } from "@/services/weekly-report-mcp.service";
 import type { MCPConfig } from "./connection-config";
+
+export const weeklyReportActionLabels: Record<WeeklyReportAction, string> = {
+  save_draft: "保存草稿",
+  submit: "正式提交",
+};
 
 const invalid = () => new Error("连接配置无效，请核对已有连接后重新创建。");
 export function weeklyReportConfig(value: WeeklyReportIssued, workspace: string): MCPConfig {

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React, { act, StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { observable } from "mobx";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -51,6 +52,7 @@ vi.mock("@/hooks/store/use-command-palette", () => ({
   useCommandPalette: () => modalStore,
 }));
 import { WeeklyReportMCPSettings } from "@/components/mcp/weekly-report-settings";
+import { WeeklyReportConnectionsList } from "@/components/mcp/weekly-report-connections";
 import { MCPProfileSettings } from "@/components/settings/profile/content/pages/mcp";
 
 Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
@@ -125,6 +127,8 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 async function render(element: React.ReactNode = <WeeklyReportMCPSettings workspaceSlug="public" />) {
@@ -453,4 +457,96 @@ it("survives StrictMode read effect replay and reports clipboard/export failures
   await click("导出 JSON");
   expect(container.textContent).toContain("导出失败");
   expect(container.querySelector('[role="status"]')?.textContent).not.toContain(secret);
+});
+
+it("hydrates existing connections with stable dates and no server-dependent expiry status", async () => {
+  const format = vi.spyOn(Date.prototype, "toLocaleString");
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-27T00:00:00Z"));
+  const element = (
+    <WeeklyReportConnectionsList
+      list={{
+        rows: [connection(undefined, { expires_at: "2026-10-27T00:00:01Z" })],
+        cursor: null,
+        busy: false,
+        ready: true,
+        error: "",
+        load: vi.fn(),
+        failedCursor: { current: undefined },
+      }}
+      busy={false}
+      onRevoke={vi.fn()}
+    />
+  );
+  const host = document.createElement("div");
+  host.innerHTML = renderToString(element);
+  expect(host.textContent).toContain("正在核对有效期");
+  expect(host.textContent).toContain("UTC+8");
+  expect(format).toHaveBeenCalledWith("zh-CN", { timeZone: "Asia/Shanghai", hour12: false });
+  // Expiry crosses between the server render and hydration; the first client render must still match.
+  clock.mockReturnValue(Date.parse("2026-10-27T00:00:02Z"));
+  document.body.appendChild(host);
+  const recoverable = vi.fn();
+  let hydrated!: ReturnType<typeof hydrateRoot>;
+  try {
+    await act(async () => {
+      hydrated = hydrateRoot(host, element, { onRecoverableError: recoverable });
+    });
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("正在核对有效期");
+    expect(host.textContent).toContain("已到期");
+  } finally {
+    if (hydrated) await act(async () => hydrated.unmount());
+    host.remove();
+  }
+});
+
+it("updates expiry while the page stays open and stops its timer when leaving", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-27T00:00:00Z"));
+  mocks.connections.mockResolvedValue(page([connection("expiring", { expires_at: "2026-10-27T00:00:01Z" })]));
+  await render();
+  const row = () => container.querySelector("article")!.textContent;
+  expect(row()).toContain("· 有效");
+  await act(async () => {
+    vi.advanceTimersByTime(30_000);
+  });
+  expect(row()).toContain("已到期");
+  await render(<p>已离开设置</p>);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("uses the new workspace's expiry choices after a custom expiry was selected", async () => {
+  mocks.options.mockResolvedValue(options([workspace(), workspace("second", { ttl_days: [30] })]));
+  await render();
+  await select("周报连接有效期", "7");
+  await select("周报工作区", "second");
+  expect(container.querySelector<HTMLSelectElement>('[aria-label="周报连接有效期"]')!.value).toBe("30");
+  await generate();
+  expect(mocks.issue).toHaveBeenCalledWith(
+    "second",
+    { label: "个人周报助手", actions: ["save_draft"], ttl_days: 30 },
+    "list-csrf"
+  );
+});
+
+it.each(["issue", "revoke"])("releases %s busy state when its follow-up list refresh fails", async (operation) => {
+  mocks.connections.mockResolvedValue(page([connection()]));
+  await render();
+  mocks.connections.mockRejectedValueOnce({ message: "刷新暂不可用" });
+  if (operation === "issue") {
+    await generate();
+    expect(json()).not.toBeNull();
+    expect(container.textContent).not.toContain("签发结果尚未确认");
+  } else {
+    await click("撤销周报连接：已存周报连接");
+    await click("确认撤销");
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.textContent).toContain("周报连接已撤销");
+    await check("保存草稿");
+  }
+  expect(container.textContent).toContain("刷新暂不可用");
+  expect(button("重试周报连接列表").disabled).toBe(false);
+  await click("重试周报连接列表");
+  if (operation === "issue") await click("清除周报配置和密钥");
+  expect(button("生成周报连接").disabled).toBe(false);
 });

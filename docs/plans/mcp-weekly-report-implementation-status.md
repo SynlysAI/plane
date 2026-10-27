@@ -394,3 +394,15 @@ python -m pytest -c apps/api/pytest.ini --ds=<isolated_settings> apps/api/plane/
 - 当前尚未在 8.5.0 重跑完整数据库集成、三种实际迁移场景、完整构建或浏览器验收；0206 本次验证为迁移图与模型检查，本地业务库未因此执行迁移。
 
 审核重点：此演示按用户要求默认启用，可显式设 `RESEARCH_WEEKLY_REPORT_MCP_ENABLED=0` 关闭；仍有全表锁、无工作区灰度、无图片/附件及局部正文修改能力。下一入口为针对 develop 的分支审核；生产发布前仍需评估锁争用和灰度策略，补齐上述最新基线验证。审核通过后的合并与部署由维护者另行执行。
+
+## 2026-10-27 PR #32 React Doctor 警告修复
+
+用户反馈的邮件对应 React Doctor 0.9.18 的 9 条 warning，原检查实际为 success（0 errors、9 warnings），不是构建或接口失败。本次保持检查规则与 CI 配置，修复设置子页实现：
+
+- 日期显式使用 zh-CN 与 Asia/Shanghai，标注 UTC+8；连接有效期只在挂载后的 effect 读取时钟，每 30 秒刷新，卸载清理定时器，首屏不依赖服务器/浏览器各自的当前时间。
+- 拆分列表读取、签发/撤销 hooks、创建表单和连接列表组件；请求状态统一通过 finally 发布，保留同步双击保护、StrictMode 请求序号、跨工作区隔离、一次性密钥和不确定签发只查列表的行为。原有 finally 内条件清理也被工具提示，本次明确状态流程并补充失败恢复验证。
+- 有效期只记录用户选择，默认值由当前工作区能力计算；循环权限查找使用 Set。未改报告产品界面、后端契约或原连接流程。
+
+实际验证：与 CI 相同的 React Doctor **0.9.18** 对比 develop 扫描，开启本地 `--blocking warning`，**0 errors、0 warnings**；6 份 MCP 前端测试 **84 passed**，新增 5 项覆盖跨到期时刻 hydration、页面停留到期刷新与定时器清理、工作区有效期切换、签发/撤销后列表刷新失败恢复。完整 Web typegen 与 tsc --noEmit 退出 0，修改文件 oxlint 无警告错误；提交时继续执行仓库格式/lint 钩子。
+
+证据位于忽略目录 `.runtime/weekly-react-doctor-fix-20261027/`。本次未执行完整 Web 构建、浏览器人工验收、后端集成或部署；推送同一分支后由 PR #32 的新 CI 再确认。全表锁和后端范围限制保持上文说明。
