@@ -1277,7 +1277,21 @@
       "pagination": "待办分页",
       "previous_page": "上一页待办",
       "next_page": "下一页待办",
-      "source_chain_stage": "科研链阶段审批"
+      "source_chain_stage": "科研链阶段审批",
+      "queue_title": "阶段审批连续处理",
+      "queue_position": "第 {index} 项 / 共 {count} 项",
+      "queue_original_detail": "打开原详情",
+      "queue_load_failed": "阶段审批上下文暂时不可用。",
+      "queue_completed": "阶段审批已全部处理。",
+      "home_title": "我的待办",
+      "domain_all": "全部",
+      "domain_research": "科研",
+      "domain_administrative": "行政",
+      "loading": "正在加载待办…",
+      "requester_report": "提交人",
+      "handling_approve": "待我审批",
+      "handling_assign": "指派给我",
+      "handling_process": "待我处理"
     },
     "overview": {
       "description": "本工作区的科研管理：组织架构、科研项目、周期报告与办公审批。",

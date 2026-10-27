@@ -6,6 +6,8 @@ const calls = vi.hoisted(() => ({ patch: vi.fn(), post: vi.fn() }));
 vi.mock("@plane/constants", () => ({
   API_BASE_URL: "https://plane.test",
   researchEndpoints: {
+    chainStageReview: (workspaceSlug: string, chainId: string, stageCode: string) =>
+      `/api/research/workspaces/${workspaceSlug}/chains/${chainId}/stages/${stageCode}/review/`,
     agentApproval: (workspaceSlug: string, runId: string) =>
       `/api/research/workspaces/${workspaceSlug}/agent/runs/${runId}/approvals/`,
     chainNodeTasks: (workspaceSlug: string, chainId: string, nodeId: string) =>
@@ -26,6 +28,7 @@ const { WorkspaceDraftService } = await import("@/services/issue/workspace_draft
 const { InboxIssueService } = await import("@/services/inbox/inbox-issue.service");
 const { ResearchChainTaskService } = await import("@/services/research/chain-task.service");
 const { ResearchAgentService } = await import("@/services/research/agent.service");
+const { ResearchChainService } = await import("@/services/research/chain.service");
 
 async function expectTodoEvent(action: () => Promise<unknown>, request: ReturnType<typeof vi.fn>) {
   const event = vi.fn();
@@ -76,4 +79,41 @@ it("dispatches one refresh event after an Agent approval decision", async () => 
       }),
     calls.post
   );
+});
+
+it("dispatches one refresh event after a chain-stage review decision", async () => {
+  const event = vi.fn();
+  window.addEventListener("workspace-todos-updated", event, { once: true });
+  calls.post.mockResolvedValueOnce({
+    data: {
+      success: true,
+      data: { id: "stage-1", status: "APPROVED" },
+      error: null,
+      request_id: null,
+      schema_version: "test",
+    },
+  });
+
+  await new ResearchChainService().reviewChainStage("lab", "chain-1", "TOPIC_EVALUATION", {
+    action: "APPROVE",
+    comment: "同意进入下一阶段",
+  });
+
+  expect(event).toHaveBeenCalledTimes(1);
+});
+
+it("does not dispatch a refresh event when a chain-stage decision has no data", async () => {
+  const event = vi.fn();
+  window.addEventListener("workspace-todos-updated", event);
+  calls.post.mockResolvedValueOnce({
+    data: { success: false, data: null, error: null, request_id: null, schema_version: "test" },
+  });
+
+  await expect(
+    new ResearchChainService().reviewChainStage("lab", "chain-1", "TOPIC_EVALUATION", {
+      action: "RETURN",
+      comment: "需要补充材料",
+    })
+  ).rejects.toBeTruthy();
+  expect(event).not.toHaveBeenCalled();
 });

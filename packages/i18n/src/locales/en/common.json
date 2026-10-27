@@ -1267,7 +1267,21 @@
       "report_pending_review": "Weekly report awaiting review",
       "manual_backfill": "External system degraded; keep manual records",
       "external_degraded": "RAGPortal is unavailable; sync after it recovers.",
-      "source_chain_stage": "Research chain stage approval"
+      "source_chain_stage": "Research chain stage approval",
+      "queue_title": "Continuous stage approvals",
+      "queue_position": "Item {index} of {count}",
+      "queue_original_detail": "Open original detail",
+      "queue_load_failed": "Stage approval context is unavailable.",
+      "queue_completed": "All stage approvals have been handled.",
+      "home_title": "My to-dos",
+      "domain_all": "All",
+      "domain_research": "Research",
+      "domain_administrative": "Administrative",
+      "loading": "Loading to-dos…",
+      "requester_report": "Submitter",
+      "handling_approve": "Awaiting my approval",
+      "handling_assign": "Assigned to me",
+      "handling_process": "Awaiting my action"
     },
     "overview": {
       "description": "Research management for this workspace: organisation, projects, periodic reports and office approvals.",

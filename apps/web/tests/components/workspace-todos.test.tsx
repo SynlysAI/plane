@@ -2,15 +2,54 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import enTranslations from "../../../../packages/i18n/src/locales/en/common.json";
+import zhTranslations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
-const mocks = vi.hoisted(() => ({ todos: vi.fn() }));
+const mocks = vi.hoisted(() => ({ todos: vi.fn(), locale: "zh-CN" }));
+vi.mock("@plane/i18n", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) => {
+      const source = mocks.locale === "en" ? enTranslations : zhTranslations;
+      const literal = key
+        .split(".")
+        .reduce<unknown>((entry, part) => (entry as Record<string, unknown>)?.[part], source);
+      const text = typeof literal === "string" ? literal : key;
+      if (!values) return text;
+      return Object.entries(values).reduce(
+        (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
+        text
+      );
+    },
+    currentLocale: mocks.locale,
+  }),
+}));
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string;
+    children: React.ReactNode;
+  } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("@plane/propel/button", () => ({
   Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
 }));
 vi.mock("@/components/research/common/research-todo-urgency", () => ({ ResearchTodoUrgency: () => <span>逾期</span> }));
+vi.mock("@/components/research/approvals/research-chain-stage-approval-queue", () => ({
+  ResearchChainStageApprovalQueue: ({ activeId, onHandled }: { activeId: string; onHandled: (id: string) => void }) => (
+    <aside data-testid="stage-approval-queue">
+      <button type="button" onClick={() => onHandled(activeId)}>
+        handle queue item
+      </button>
+    </aside>
+  ),
+}));
 vi.mock("@/services/project-domains.service", () => ({
   ProjectDomainsService: class {
     todos = mocks.todos;
@@ -54,7 +93,7 @@ it("shows both domains without filtering old unfinished tasks", async () => {
   await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
   expect(container.querySelector('a[href="/采购"]')).not.toBeNull();
   expect(container.querySelector('a[href="/科研评审"]')).not.toBeNull();
-  expect(container.textContent).toContain("部分待办暂未加载");
+  expect(container.textContent).toContain("部分来源暂时不可用");
 });
 it("paginates within one selected domain", async () => {
   mocks.todos.mockResolvedValueOnce(page([todo("first")], "next"));
@@ -88,13 +127,138 @@ it("re-requests the server projection after a todo update event", async () => {
   await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
   expect(container.textContent).toContain("重指派前");
 
+  vi.useFakeTimers();
   await act(async () => {
     window.dispatchEvent(new CustomEvent("workspace-todos-updated"));
   });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
+  });
+  vi.useRealTimers();
 
   expect(mocks.todos).toHaveBeenCalledTimes(2);
   expect(container.textContent).toContain("重指派后");
   expect(container.textContent).not.toContain("重指派前");
+});
+
+it("opens chain-stage approvals in the continuous queue and hides handled items", async () => {
+  mocks.todos.mockResolvedValue(
+    page([
+      todo("阶段一", {
+        id: "research:CHAIN_STAGE_APPROVAL:stage-1",
+        domain: "RESEARCH",
+        source: "CHAIN_STAGE_APPROVAL",
+        object_id: "stage-1",
+        href: "/lab/research/chains/chain-1?stage=topic_evaluation&approval=1",
+      }),
+      todo("阶段二", {
+        id: "research:CHAIN_STAGE_APPROVAL:stage-2",
+        domain: "RESEARCH",
+        source: "CHAIN_STAGE_APPROVAL",
+        object_id: "stage-2",
+        href: "/lab/research/chains/chain-1?stage=experiment&approval=1",
+      }),
+      todo("采购"),
+    ])
+  );
+  await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
+
+  await act(async () => container.querySelector('a[href*="stage=topic_evaluation"]')?.click());
+
+  expect(container.querySelector('[data-testid="stage-approval-queue"]')).not.toBeNull();
+  expect(container.querySelectorAll("li")).toHaveLength(3);
+
+  await act(async () =>
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "handle queue item")?.click()
+  );
+
+  expect(container.textContent).not.toContain("阶段一");
+  expect(container.textContent).toContain("阶段二");
+  expect(container.querySelector('a[href="/采购"]')).not.toBeNull();
+});
+
+it("closes the queue after the last stage approval is handled", async () => {
+  mocks.todos.mockResolvedValue(
+    page([
+      todo("最后阶段", {
+        id: "research:CHAIN_STAGE_APPROVAL:stage-1",
+        domain: "RESEARCH",
+        source: "CHAIN_STAGE_APPROVAL",
+        object_id: "stage-1",
+        href: "/lab/research/chains/chain-1?stage=topic_evaluation&approval=1",
+      }),
+    ])
+  );
+  await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
+  await act(async () => container.querySelector('a[href*="stage=topic_evaluation"]')?.click());
+  await act(async () =>
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "handle queue item")?.click()
+  );
+
+  expect(container.querySelector('[data-testid="stage-approval-queue"]')).toBeNull();
+  expect(container.textContent).toContain("阶段审批已全部处理。");
+});
+
+it("renders the completed queue hint in the English locale", async () => {
+  mocks.locale = "en";
+  mocks.todos.mockResolvedValue(
+    page([
+      todo("last stage", {
+        id: "research:CHAIN_STAGE_APPROVAL:stage-1",
+        domain: "RESEARCH",
+        source: "CHAIN_STAGE_APPROVAL",
+        object_id: "stage-1",
+        href: "/lab/research/chains/chain-1?stage=topic_evaluation&approval=1",
+      }),
+    ])
+  );
+  try {
+    await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
+    await act(async () => container.querySelector('a[href*="stage=topic_evaluation"]')?.click());
+    await act(async () =>
+      [...container.querySelectorAll("button")].find((button) => button.textContent === "handle queue item")?.click()
+    );
+
+    expect(container.textContent).toContain("All stage approvals have been handled.");
+  } finally {
+    mocks.locale = "zh-CN";
+  }
+});
+
+it("filters handled items from a late server response and coalesces refresh events", async () => {
+  const latePage = page([
+    todo("旧阶段", {
+      id: "research:CHAIN_STAGE_APPROVAL:stage-1",
+      domain: "RESEARCH",
+      source: "CHAIN_STAGE_APPROVAL",
+      object_id: "stage-1",
+      href: "/lab/research/chains/chain-1?stage=topic_evaluation&approval=1",
+    }),
+    todo("采购"),
+  ]);
+  mocks.todos
+    .mockResolvedValueOnce(latePage)
+    .mockResolvedValueOnce(latePage)
+    .mockResolvedValueOnce(page([todo("采购")]));
+  await act(async () => root.render(<WorkspaceTodos workspaceSlug="lab" />));
+  await act(async () => container.querySelector('a[href*="stage=topic_evaluation"]')?.click());
+  await act(async () =>
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "handle queue item")?.click()
+  );
+
+  vi.useFakeTimers();
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent("workspace-todos-updated"));
+    window.dispatchEvent(new CustomEvent("workspace-todos-updated"));
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
+  });
+  vi.useRealTimers();
+
+  expect(mocks.todos).toHaveBeenCalledTimes(2);
+  expect(container.textContent).not.toContain("旧阶段");
+  expect(container.textContent).toContain("采购");
 });
 
 it("labels report submitters and other todo requesters", async () => {

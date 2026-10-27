@@ -18,6 +18,11 @@ import type {
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { formatResearchDate } from "@/components/research/common/research-format";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
+import {
+  ResearchChainStageApprovalQueue,
+  type TChainStageApprovalQueueItem,
+} from "@/components/research/approvals/research-chain-stage-approval-queue";
+import { subscribeWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 // services
 import { ResearchTodoService } from "@/services/research/research-todo.service";
 
@@ -157,41 +162,50 @@ export function ResearchTodoEnvelopeList({
   const [state, setState] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [errorKind, setErrorKind] = useState<TodoErrorKind | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [handledIds, setHandledIds] = useState<Set<string>>(() => new Set());
+  const [activeQueueId, setActiveQueueId] = useState<string | null>(null);
+  const [queueItems, setQueueItems] = useState<TChainStageApprovalQueueItem[]>([]);
+  const [queueCompleted, setQueueCompleted] = useState(false);
   const requestVersion = useRef(0);
 
-  const load = useCallback(async () => {
-    const request = ++requestVersion.current;
-    setState("loading");
-    try {
-      const payload = await todoService.getResearchTodos(workspaceSlug, {
-        scope: activeScope,
-        limit: TODO_REQUEST_LIMIT,
-      });
-      const normalized = payload.results.filter((todo) => withinPeriod(todo, periodDays, Date.now()));
-      if (request !== requestVersion.current) return;
-      setTodos(normalized);
-      setDegradedSources(payload.degraded_sources);
-      setTotalCount(payload.total_count ?? normalized.length);
-      setErrorKind(null);
-      setState(normalized.length ? "ready" : "empty");
-    } catch (error) {
-      if (request !== requestVersion.current) return;
-      setTodos([]);
-      setDegradedSources([]);
-      setTotalCount(0);
-      setErrorKind(todoErrorKind(error as TodoRequestError));
-      setState("error");
-    }
-  }, [activeScope, periodDays, workspaceSlug]);
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const request = ++requestVersion.current;
+      if (!options?.silent) setState("loading");
+      try {
+        const payload = await todoService.getResearchTodos(workspaceSlug, {
+          scope: activeScope,
+          limit: TODO_REQUEST_LIMIT,
+        });
+        const normalized = payload.results.filter((todo) => withinPeriod(todo, periodDays, Date.now()));
+        if (request !== requestVersion.current) return;
+        setTodos(normalized);
+        setDegradedSources(payload.degraded_sources);
+        setTotalCount(payload.total_count ?? normalized.length);
+        setErrorKind(null);
+        setState(normalized.length ? "ready" : "empty");
+      } catch (error) {
+        if (request !== requestVersion.current) return;
+        if (options?.silent) {
+          setErrorKind(todoErrorKind(error as TodoRequestError));
+          return;
+        }
+        setTodos([]);
+        setDegradedSources([]);
+        setTotalCount(0);
+        setErrorKind(todoErrorKind(error as TodoRequestError));
+        setState("error");
+      }
+    },
+    [activeScope, periodDays, workspaceSlug]
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    const refresh = () => void load();
-    window.addEventListener("workspace-todos-updated", refresh);
-    return () => window.removeEventListener("workspace-todos-updated", refresh);
+    return subscribeWorkspaceTodosUpdated(() => void load({ silent: true }));
   }, [load]);
 
   const changeScope = useCallback(
@@ -200,11 +214,41 @@ export function ResearchTodoEnvelopeList({
       const params = new URLSearchParams(searchParams);
       params.set(TODO_SCOPE_PARAM, nextScope);
       setSearchParams(params);
+      setActiveQueueId(null);
+      setQueueItems([]);
+      setQueueCompleted(false);
     },
     [activeScope, searchParams, setSearchParams]
   );
 
   /** 工具行：范围切换、总数与刷新，紧凑排布避免喧宾夺主。 */
+  const visibleTodos = todos.filter((todo) => !handledIds.has(todo.id));
+  const stageQueueItems = visibleTodos.filter((todo) => todo.source === "CHAIN_STAGE_APPROVAL");
+  const hiddenTodoCount = todos.filter((todo) => handledIds.has(todo.id)).length;
+  const visibleTotalCount = Math.max(totalCount - hiddenTodoCount, 0);
+
+  /** 标记已处理事项并按当前列表顺序打开下一条阶段审批。 */
+  const handleStageQueueHandled = (id: string) => {
+    const currentIndex = queueItems.findIndex((todo) => todo.id === id);
+    const next = currentIndex >= 0 ? queueItems[currentIndex + 1] : undefined;
+    setHandledIds((previous) => new Set(previous).add(id));
+    setActiveQueueId(next?.id ?? null);
+    setQueueCompleted(!next);
+  };
+
+  const queue = activeQueueId ? (
+    <ResearchChainStageApprovalQueue
+      workspaceSlug={workspaceSlug}
+      items={queueItems}
+      activeId={activeQueueId}
+      onHandled={handleStageQueueHandled}
+      onClose={() => {
+        setActiveQueueId(null);
+        setQueueItems([]);
+      }}
+    />
+  ) : null;
+
   const toolbar = (
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
       <div
@@ -227,7 +271,7 @@ export function ResearchTodoEnvelopeList({
       <div className="flex min-w-0 items-center gap-2">
         {state !== "loading" && state !== "error" && (
           <span className="text-11 text-tertiary tabular-nums">
-            {t("research.todo.total_count", { count: totalCount })}
+            {t("research.todo.total_count", { count: visibleTotalCount })}
           </span>
         )}
         <Button variant="secondary" size="sm" onClick={() => void load()}>
@@ -273,6 +317,11 @@ export function ResearchTodoEnvelopeList({
           )}
         </>
       )}
+      {queueCompleted && !activeQueueId && state !== "loading" && state !== "error" && (
+        <p className="border-b border-subtle px-4 py-2 text-11 text-secondary" role="status">
+          {t("research.todo.queue_completed")}
+        </p>
+      )}
       {state === "ready" && (
         <>
           {degradedSources.length > 0 && (
@@ -281,37 +330,67 @@ export function ResearchTodoEnvelopeList({
             </p>
           )}
           <ul className="divide-y divide-subtle" role="list">
-            {(limit ? todos.slice(0, limit) : todos).map((todo) => (
-              <li key={todo.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ResearchStatusBadge status={todo.source} size="sm">
-                      {t(SOURCE_LABEL_KEYS[todo.source])}
-                    </ResearchStatusBadge>
-                    <ResearchStatusBadge status={todo.handling_status} size="sm">
-                      {t(HANDLING_LABEL_KEYS[todo.handling_status])}
-                    </ResearchStatusBadge>
-                    <p className="truncate text-12 font-medium text-primary" title={todo.title}>
-                      {todo.title}
+            {(limit ? visibleTodos.slice(0, limit) : visibleTodos).map((todo) => {
+              const isStageApproval = todo.source === "CHAIN_STAGE_APPROVAL";
+              const isActive = todo.id === activeQueueId;
+              return (
+                <li
+                  key={todo.id}
+                  className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${
+                    isActive ? "border-accent-primary border-l-2 bg-surface-2" : "border-l-2 border-transparent"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ResearchStatusBadge status={todo.source} size="sm">
+                        {t(SOURCE_LABEL_KEYS[todo.source])}
+                      </ResearchStatusBadge>
+                      <ResearchStatusBadge status={todo.handling_status} size="sm">
+                        {t(HANDLING_LABEL_KEYS[todo.handling_status])}
+                      </ResearchStatusBadge>
+                      <p className="truncate text-12 font-medium text-primary" title={todo.title}>
+                        {todo.title}
+                      </p>
+                    </div>
+                    <p className="mt-1 truncate text-11 text-tertiary" title={todoMetadata(todo, t)}>
+                      {todoMetadata(todo, t)}
                     </p>
+                    {todo.due_at && (
+                      <p className="mt-1 flex flex-wrap items-center gap-2 text-11 text-tertiary">
+                        <span>
+                          {t("research.todo.due_at")}：{formatResearchDate(todo.due_at, currentLocale)}
+                        </span>
+                        <ResearchTodoUrgency dueAt={todo.due_at} urgency={todo.urgency} />
+                      </p>
+                    )}
                   </div>
-                  <p className="mt-1 truncate text-11 text-tertiary" title={todoMetadata(todo, t)}>
-                    {todoMetadata(todo, t)}
-                  </p>
-                  {todo.due_at && (
-                    <p className="mt-1 flex flex-wrap items-center gap-2 text-11 text-tertiary">
-                      <span>
-                        {t("research.todo.due_at")}：{formatResearchDate(todo.due_at, currentLocale)}
-                      </span>
-                      <ResearchTodoUrgency dueAt={todo.due_at} urgency={todo.urgency} />
-                    </p>
-                  )}
-                </div>
-                <Link href={todo.href} className="text-12 text-accent-primary transition-colors hover:underline">
-                  {t(NEXT_ACTION_LABEL_KEYS[todo.next_action])}
-                </Link>
-              </li>
-            ))}
+                  <Link
+                    href={todo.href}
+                    data-peek-trigger={isStageApproval ? "" : undefined}
+                    aria-current={isActive ? "true" : undefined}
+                    className="text-12 text-accent-primary transition-colors hover:underline"
+                    onClick={(event) => {
+                      if (!isStageApproval) return;
+                      if (
+                        event.defaultPrevented ||
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      setQueueCompleted(false);
+                      setQueueItems(stageQueueItems);
+                      setActiveQueueId(todo.id);
+                    }}
+                  >
+                    {t(NEXT_ACTION_LABEL_KEYS[todo.next_action])}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
@@ -320,23 +399,29 @@ export function ResearchTodoEnvelopeList({
 
   if (embedded) {
     return (
-      <div className="flex min-h-0 flex-col">
-        <div className="sticky top-0 z-10 border-b border-subtle bg-surface-2 px-4 py-2">{toolbar}</div>
-        {body}
-      </div>
+      <>
+        {queue}
+        <div className="flex min-h-0 flex-col">
+          <div className="sticky top-0 z-10 border-b border-subtle bg-surface-2 px-4 py-2">{toolbar}</div>
+          {body}
+        </div>
+      </>
     );
   }
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
-      <header className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-14 font-semibold text-primary">{t("research.todo.title")}</h2>
-          <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description_v2")}</p>
-        </div>
-      </header>
-      <div className="border-t border-subtle px-4 py-2">{toolbar}</div>
-      {body}
-    </section>
+    <>
+      {queue}
+      <section className="min-w-0 overflow-hidden rounded-xl bg-surface-2" aria-label={t("research.todo.title")}>
+        <header className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <h2 className="text-14 font-semibold text-primary">{t("research.todo.title")}</h2>
+            <p className="mt-0.5 text-11 text-tertiary">{t("research.todo.description_v2")}</p>
+          </div>
+        </header>
+        <div className="border-t border-subtle px-4 py-2">{toolbar}</div>
+        {body}
+      </section>
+    </>
   );
 }

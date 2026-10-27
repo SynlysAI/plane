@@ -15,6 +15,7 @@ import type {
   TResearchChainStageMaterialItem,
   TResearchChainSnapshot,
 } from "@plane/types";
+import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 import { APIService } from "@/services/api.service";
 
 type TResearchEnvelope<T> = {
@@ -275,6 +276,7 @@ export class ResearchChainService extends APIService {
       .then((res) => {
         const response = res?.data as TResearchEnvelope<TResearchChainStageApproval> | undefined;
         if (!response?.data) throw response ?? {};
+        notifyWorkspaceTodosUpdated();
         return response.data;
       })
       .catch((err) => {

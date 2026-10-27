@@ -24,6 +24,8 @@ type Props = {
   defaultExpanded?: boolean;
   onCreateNode?: () => void;
   onChanged: () => Promise<void> | void;
+  /** 审批或退回成功后通知队列层，仅由动作结果触发。 */
+  onDecision?: (stage: TResearchChainStageApproval) => Promise<void> | void;
 };
 
 type TReviewIntent = "APPROVE" | "RETURN";
@@ -126,6 +128,7 @@ export function ResearchChainStageApprovalPanel({
   defaultExpanded = false,
   onCreateNode,
   onChanged,
+  onDecision,
 }: Props) {
   const { t, currentLocale } = useTranslation();
   const candidateNodes = useMemo(
@@ -265,12 +268,13 @@ export function ResearchChainStageApprovalPanel({
     setBusy(true);
     setError("");
     try {
-      await chainService.reviewChainStage(workspaceSlug, chainId, stage.stage_code, {
+      const updatedStage = await chainService.reviewChainStage(workspaceSlug, chainId, stage.stage_code, {
         action: intent,
         comment: comment.trim() || undefined,
         ...(escalateToPi === undefined ? {} : { escalate_to_pi: escalateToPi }),
       });
       setComment("");
+      await onDecision?.(updatedStage);
       await onChanged();
     } catch (actionError) {
       setError(describeActionError(actionError));
