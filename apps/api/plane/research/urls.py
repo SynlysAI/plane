@@ -134,6 +134,7 @@ from plane.research.views import (
     ResearchReportSummaryEndpoint,
     ResearchReportCommentDetailEndpoint,
     ResearchReportCommentFeedbackEndpoint,
+    ResearchReportCommentMentionEndpoint,
     ResearchReportCommentThreadCommentEndpoint,
     ResearchReportCommentThreadListCreateEndpoint,
     ResearchReportCommentThreadStatusEndpoint,
@@ -1318,6 +1319,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/",
         ResearchReportCommentThreadListCreateEndpoint.as_view(),
         name="research-report-comment-threads",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-mentions/",
+        ResearchReportCommentMentionEndpoint.as_view(),
+        name="research-report-comment-mentions",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/comment-threads/<uuid:thread_id>/comments/",

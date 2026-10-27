@@ -205,6 +205,43 @@ def test_visible_reader_can_anchor_comment_reply_and_reload(env):
     assert "report.comment.create" in actions
 
 
+def test_visible_mention_from_comment_api_creates_mention_notification(env):
+    report = make_report(env)
+    PeriodicReport.objects.filter(pk=report["id"]).update(visibility="DIRECT_ADVISOR")
+    outsider = make_user(first_name="Outsider", email="report-outsider@example.com")
+    add_workspace_member(env["workspace"], outsider)
+    visible = env["advisor_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/reports/{report['id']}/comment-mentions/",
+        {"query": "Admin", "count": 5},
+    )
+    candidates = env["advisor_client"].get(
+        f"/api/research/workspaces/{env['workspace'].slug}/reports/{report['id']}/comment-mentions/",
+        {"query": "Outsider", "count": 5},
+    )
+    assert visible.status_code == 200, visible.data
+    assert str(env["workspace"].owner_id) in {item["member__id"] for item in visible.json()["user_mention"]}
+    assert candidates.status_code == 200, candidates.data
+    assert candidates.json()["user_mention"] == []
+
+    mention_html = (
+        f'<p><mention-component entity_name="user_mention" '
+        f'entity_identifier="{env["workspace"].owner_id}">Admin User</mention-component>'
+        " 请查看该周报。</p>"
+    )
+
+    created = create_thread(env, report, comment_html=mention_html)
+
+    assert created.status_code == 201, created.data
+    notification = Notification.objects.filter(
+        receiver_id=env["workspace"].owner_id,
+        entity_name="research_report",
+        entity_identifier=report["id"],
+    ).first()
+    assert notification is not None
+    assert notification.sender == "research:mentioned"
+    assert notification.message["comment_id"] == created.json()["comments"][0]["id"]
+
+
 def test_comment_request_id_is_idempotent(env):
     report = make_report(env)
     request_id = uuid4().hex

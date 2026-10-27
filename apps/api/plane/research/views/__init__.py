@@ -131,6 +131,7 @@ from .reports import (
 from .report_comments import (
     ResearchReportCommentDetailEndpoint,
     ResearchReportCommentFeedbackEndpoint,
+    ResearchReportCommentMentionEndpoint,
     ResearchReportCommentThreadCommentEndpoint,
     ResearchReportCommentThreadListCreateEndpoint,
     ResearchReportCommentThreadStatusEndpoint,
@@ -407,6 +408,7 @@ __all__ = [
     "ResearchReportWithdrawEndpoint",
     "ResearchReportCommentDetailEndpoint",
     "ResearchReportCommentFeedbackEndpoint",
+    "ResearchReportCommentMentionEndpoint",
     "ResearchReportCommentThreadCommentEndpoint",
     "ResearchReportCommentThreadListCreateEndpoint",
     "ResearchReportCommentThreadStatusEndpoint",

@@ -263,6 +263,7 @@ export function ResearchReportComments({
             <CommentComposer
               workspaceSlug={workspaceSlug}
               workspaceId={workspaceId}
+              reportId={report.id}
               title="发起讨论"
               onCancel={() => {
                 setGeneralComposerOpen(false);
@@ -413,6 +414,7 @@ function ThreadCard({
           <CommentComposer
             workspaceSlug={workspaceSlug}
             workspaceId={workspaceId}
+            reportId={thread.report}
             title="回复讨论"
             onCancel={onReplyToggle}
             onSave={async (html, requestId) => {
@@ -525,6 +527,7 @@ function CommentCard({
             <CommentComposer
               workspaceSlug={workspaceSlug}
               workspaceId={workspaceId}
+              reportId={thread.report}
               title="保存修改"
               initialHtml={comment.comment_html}
               onCancel={() => setEditing(false)}
@@ -605,6 +608,7 @@ function CommentCard({
 function CommentComposer({
   workspaceSlug,
   workspaceId,
+  reportId,
   title,
   initialHtml = "<p></p>",
   onCancel,
@@ -612,17 +616,26 @@ function CommentComposer({
 }: {
   workspaceSlug: string;
   workspaceId: string;
+  reportId: string;
   title: string;
   initialHtml?: string;
   onCancel?: () => void;
   onSave: (html: string, requestId: string) => Promise<void>;
 }) {
   const editor = useRef<EditorRefApi>(null);
+  const mentionService = useMemo(() => new ResearchReportService(), []);
   const requestId = useRef(uuid());
   const [html, setHtml] = useState(initialHtml);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const empty = isCommentEmpty(html);
+
+  /** Resolve mention candidates from the current report visibility boundary. */
+  const searchMentions = useCallback(
+    async (payload: { query: string; count: number }) =>
+      await mentionService.getReportCommentMentions(workspaceSlug, reportId, payload.query, payload.count),
+    [mentionService, reportId, workspaceSlug]
+  );
 
   const save = async () => {
     if (busy || empty) return;
@@ -647,6 +660,7 @@ function CommentComposer({
         id={`${title}-${workspaceSlug}`}
         editable={!busy}
         workspaceId={workspaceId}
+        mentionSearch={searchMentions}
         workspaceSlug={workspaceSlug}
         initialValue={html}
         value={null}

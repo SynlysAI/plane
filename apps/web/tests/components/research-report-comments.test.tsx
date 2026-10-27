@@ -6,6 +6,7 @@ import type { TPeriodicReport, TReportCommentThread } from "@plane/types";
 
 const mocks = vi.hoisted(() => ({
   getReportCommentThreads: vi.fn(),
+  getReportCommentMentions: vi.fn(),
   createReportCommentThread: vi.fn(),
   createReportCommentReply: vi.fn(),
   updateReportComment: vi.fn(),
@@ -32,9 +33,11 @@ vi.mock("@/components/editor/lite-text", () => ({
     {
       initialValue,
       onChange,
+      mentionSearch,
     }: {
       initialValue: string;
       onChange: (json: object, html: string) => void;
+      mentionSearch?: (payload: { query: string; count: number; query_type: string[] }) => Promise<unknown>;
     },
     ref
   ) {
@@ -49,6 +52,12 @@ vi.mock("@/components/editor/lite-text", () => ({
         <button type="button" ref={undefined} onClick={() => undefined}>
           editor
         </button>
+        <button
+          type="button"
+          onClick={() => void mentionSearch?.({ query: "老师", count: 5, query_type: ["user_mention"] })}
+        >
+          搜索成员
+        </button>
         <span ref={ref as React.Ref<HTMLSpanElement>} />
       </div>
     );
@@ -57,6 +66,7 @@ vi.mock("@/components/editor/lite-text", () => ({
 vi.mock("@/services/research/report.service", () => ({
   ResearchReportService: class {
     getReportCommentThreads = mocks.getReportCommentThreads;
+    getReportCommentMentions = mocks.getReportCommentMentions;
     createReportCommentThread = mocks.createReportCommentThread;
     createReportCommentReply = mocks.createReportCommentReply;
     updateReportComment = mocks.updateReportComment;
@@ -205,6 +215,17 @@ describe("ResearchReportComments", () => {
       request_id: expect.any(String),
     });
     expect(onDraftConsumed).toHaveBeenCalled();
+  });
+
+  it("searches report comment mentions from the report-scoped service", async () => {
+    mocks.getReportCommentMentions.mockResolvedValue({ user_mention: [] });
+    const { container } = await renderComments();
+
+    await act(async () => {
+      button(container, "搜索成员")?.click();
+    });
+
+    expect(mocks.getReportCommentMentions).toHaveBeenCalledWith("lab", "report-1", "老师", 5);
   });
 
   it("sends replies and edits without a feedback type", async () => {

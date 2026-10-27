@@ -11,7 +11,7 @@ import type { EIssueCommentAccessSpecifier } from "@plane/constants";
 import { LiteTextEditorWithRef } from "@plane/editor";
 import type { EditorRefApi, ILiteTextEditorProps, TFileHandler, TEditorCommands } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
-import type { MakeOptional } from "@plane/types";
+import type { MakeOptional, TSearchEntityRequestPayload, TSearchResponse } from "@plane/types";
 import { cn, isCommentEmpty } from "@plane/utils";
 // components
 import { EditorMentionsRoot } from "@/components/editor/embeds/mentions";
@@ -38,6 +38,7 @@ type LiteTextEditorWrapperProps = MakeOptional<
   workspaceSlug: string;
   workspaceId: string;
   projectId?: string;
+  mentionSearch?: (payload: TSearchEntityRequestPayload) => Promise<TSearchResponse>;
   accessSpecifier?: EIssueCommentAccessSpecifier;
   handleAccessChange?: (accessKey: EIssueCommentAccessSpecifier) => void;
   showAccessSpecifier?: boolean;
@@ -77,6 +78,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
     workspaceSlug,
     workspaceId,
     projectId,
+    mentionSearch,
     issue_id,
     accessSpecifier,
     handleAccessChange,
@@ -123,12 +125,14 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   });
   // use editor mention
   const { fetchMentions } = useEditorMention({
-    searchEntity: async (payload) =>
-      await workspaceService.searchEntity(workspaceSlug, {
-        ...payload,
-        project_id: projectId,
-        issue_id,
-      }),
+    searchEntity:
+      mentionSearch ??
+      (async (payload) =>
+        await workspaceService.searchEntity(workspaceSlug, {
+          ...payload,
+          project_id: projectId,
+          issue_id,
+        })),
   });
   // editor config
   const { getEditorFileHandlers } = useEditorConfig();
