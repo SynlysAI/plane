@@ -22,15 +22,16 @@ def _candidate_payload(project):
         user = users.get(UUID(row["member"]))
         if user is None:
             continue
+        group_ids = ["project-members"]
+        if row["inherits_organization"]:
+            group_ids.append("organization-members")
         candidates.append(
             {
                 "id": str(user.id),
                 "display_name": user.display_name or user.username or user.email,
                 "email": user.email,
                 "avatar_url": user.avatar_url,
-                "group_ids": (
-                    ["organization-members"] if row["inherits_organization"] else ["project-members"]
-                ),
+                "group_ids": group_ids,
             }
         )
     candidates.sort(key=lambda item: item["display_name"].lower())
