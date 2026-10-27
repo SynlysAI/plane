@@ -131,6 +131,7 @@ class ResearchAuditAction:
     CHAIN_COMPLETE = "chain.complete"
     TASK_CREATE = "task.create"
     TASK_UPDATE = "task.update"
+    TASK_NOTIFICATION_MEMBERS_UPDATE = "task.notification_members.update"
     TASK_SUBMIT = "task.submit"
     TASK_RETURN = "task.return"
     TASK_COMPLETE = "task.complete"

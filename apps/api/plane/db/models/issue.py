@@ -583,12 +583,18 @@ class IssueSequence(ProjectBaseModel):
 
 
 class IssueSubscriber(ProjectBaseModel):
+    class Source(models.TextChoices):
+        SYSTEM = "SYSTEM", "System generated"
+        SELF = "SELF", "Self subscription"
+        CC = "CC", "Carbon copy"
+
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="issue_subscribers")
     subscriber = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="issue_subscribers",
     )
+    source = models.CharField(max_length=8, choices=Source.choices, default=Source.SYSTEM)
 
     class Meta:
         unique_together = ["issue", "subscriber", "deleted_at"]
