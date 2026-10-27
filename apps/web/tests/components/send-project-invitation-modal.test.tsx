@@ -28,7 +28,7 @@ vi.mock("@plane/propel/button", async () => {
 });
 
 vi.mock("@plane/propel/toast", () => ({
-  TOAST_TYPE: { SUCCESS: "success" },
+  TOAST_TYPE: { SUCCESS: "success", ERROR: "error" },
   setToast: vi.fn(),
 }));
 
@@ -127,6 +127,7 @@ vi.mock("@plane/utils", () => ({
 }));
 
 import { SendProjectInvitationModal } from "@/components/project/send-project-invitation-modal";
+import { setToast } from "@plane/propel/toast";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -141,10 +142,10 @@ beforeEach(() => {
     role: 15,
     member: {
       id: "alice-account",
-      username: "alice.chen",
-      first_name: "Alice",
-      last_name: "Chen",
-      display_name: "Alice Chen",
+      username: "jinshuai0821",
+      first_name: "金",
+      last_name: "帅",
+      display_name: "jinshuai0821",
       email: "alice@example.com",
       avatar_url: "",
     },
@@ -201,10 +202,15 @@ it("支持按账号和邮箱搜索成员，并一次提交多人及其独立角�
 
   expect(container.querySelector("[data-testid='member-select-multiple']")?.textContent).toBe("true");
   expect(container.querySelector("[data-testid='select-alice-account']")?.getAttribute("data-query")).toContain(
-    "alice.chen"
+    "jinshuai0821"
   );
   expect(container.querySelector("[data-testid='select-alice-account']")?.getAttribute("data-query")).toContain(
     "alice@example.com"
+  );
+  expect(container.querySelector("[data-testid='select-alice-account']")?.textContent).toContain("金帅 · jinshuai0821");
+  expect(container.querySelector("[data-testid='select-alice-account']")?.textContent).toContain("alice@example.com");
+  expect(container.querySelector("[data-testid='select-bob-account']")?.textContent?.match(/Bob Wang/g)).toHaveLength(
+    1
   );
 
   await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-alice-account']")?.click());
@@ -231,4 +237,86 @@ it("支持按账号和邮箱搜索成员，并一次提交多人及其独立角�
   });
   expect(mocks.onSuccess).toHaveBeenCalledOnce();
   expect(mocks.onClose).toHaveBeenCalledOnce();
+});
+
+it("批量添加失败时提示原因并保留已选成员与角色", async () => {
+  mocks.addMembers.mockRejectedValueOnce({ error: "You cannot add a user with role lower than the workspace role" });
+
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal
+        isOpen
+        onClose={mocks.onClose}
+        onSuccess={mocks.onSuccess}
+        workspaceSlug="workspace"
+        projectId="project"
+      />
+    )
+  );
+
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-alice-account']")?.click());
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-bob-account']")?.click());
+
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+
+  expect(mocks.addMembers).toHaveBeenCalledOnce();
+  expect(setToast).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "project_settings.members.role_lower_than_workspace",
+    })
+  );
+  expect(mocks.onSuccess).not.toHaveBeenCalled();
+  expect(mocks.onClose).not.toHaveBeenCalled();
+
+  const selectedButtons = container.querySelectorAll("[data-testid^='select-']");
+  const roleSelects = container.querySelectorAll<HTMLSelectElement>("select[aria-label='project member role']");
+  expect(roleSelects).toHaveLength(2);
+  expect(Array.from(roleSelects).map((select) => select.value)).toEqual(["15", "15"]);
+  expect(selectedButtons.length).toBeGreaterThan(0);
+});
+
+it("优先按结构化错误码提示角色越界，兼容旧版纯文案错误", async () => {
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal
+        isOpen
+        onClose={mocks.onClose}
+        onSuccess={mocks.onSuccess}
+        workspaceSlug="workspace"
+        projectId="project"
+      />
+    )
+  );
+
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='select-alice-account']")?.click());
+
+  // 新版后端返回结构化错误码，即使文案调整也应命中同一条提示。
+  mocks.addMembers.mockRejectedValueOnce({
+    error_code: "role_higher_than_workspace",
+    error: "unrelated message",
+  });
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+  expect(setToast).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "project_settings.members.role_higher_than_workspace",
+    })
+  );
+
+  // 旧版纯文案错误仍通过子串匹配兜底。
+  mocks.addMembers.mockRejectedValueOnce({ error: "You cannot add a user with role lower than the workspace role" });
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+  expect(setToast).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "project_settings.members.role_lower_than_workspace",
+    })
+  );
 });

@@ -3,8 +3,105 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ submit: vi.fn(), addMember: vi.fn(), close: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  submit: vi.fn(),
+  addMember: vi.fn(),
+  projectAddMembers: vi.fn(),
+  close: vi.fn(),
+  projectMembers: {
+    "admin-user": {
+      id: "admin-user",
+      role: 20,
+      member: {
+        id: "admin-user",
+        first_name: "金",
+        last_name: "帅",
+        display_name: "jinshuai0821",
+        email: "jinshuai0821@example.com",
+        avatar_url: "",
+      },
+    },
+    "member-user": {
+      id: "member-user",
+      role: 15,
+      member: {
+        id: "member-user",
+        first_name: "李",
+        last_name: "建智",
+        display_name: "lijianzhi",
+        email: "lijianzhi@example.com",
+        avatar_url: "",
+      },
+    },
+    "guest-user": {
+      id: "guest-user",
+      role: 5,
+      member: {
+        id: "guest-user",
+        first_name: "洪",
+        last_name: "贵春",
+        display_name: "hongguichun",
+        email: "hongguichun@example.com",
+        avatar_url: "",
+      },
+    },
+  },
+}));
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@plane/propel/toast", () => ({
+  TOAST_TYPE: { SUCCESS: "success", ERROR: "error" },
+  setToast: vi.fn(),
+}));
+vi.mock("@plane/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@plane/utils")>()),
+  getFileURL: (url: string) => url,
+}));
+vi.mock("@/hooks/store/use-member", () => ({
+  useMember: () => ({
+    project: {
+      getProjectMemberDetails: () => null,
+      bulkAddMembersToProject: mocks.projectAddMembers,
+    },
+    workspace: {
+      workspaceMemberIds: Object.keys(mocks.projectMembers),
+      getWorkspaceMemberDetails: (memberId: string) => mocks.projectMembers[memberId],
+    },
+  }),
+}));
+vi.mock("@/hooks/store/user", () => ({
+  useUserPermissions: () => ({
+    getProjectRoleByWorkspaceSlugAndProjectId: () => 20,
+  }),
+}));
+vi.mock("@plane/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@plane/ui")>();
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
+  const CustomSelectComponent = ({
+    children,
+    onChange,
+    value,
+  }: {
+    children: React.ReactNode;
+    onChange: (value: string) => void;
+    value?: string | number;
+  }) => (
+    <select
+      aria-label="project member role"
+      value={String(value ?? "")}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {children}
+    </select>
+  );
+  CustomSelectComponent.Option = ({ value, children }: { value: string; children: React.ReactNode }) => (
+    <option value={value}>{children}</option>
+  );
+  return {
+    ...actual,
+    ModalCore: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    CustomSelect: CustomSelectComponent,
+  };
+});
 vi.mock("@/hooks/use-platform-os", () => ({ usePlatformOS: () => ({ isMobile: false }) }));
 vi.mock("@/hooks/store/use-project", () => ({
   useProject: () => ({ getProjectById: (id: string) => ({ id, name: "Equipment", identifier: "EQ", logo_props: {} }) }),
@@ -23,6 +120,7 @@ vi.mock("@/components/issues/issue-detail/issue-identifier", () => ({ IssueIdent
 import { ProjectMultiSelectModal } from "@/components/project/multi-select-modal";
 import { AdministrativeOrganizationManager } from "@/components/research/navigation/administrative-organization-manager";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
+import { SendProjectInvitationModal } from "@/components/project/send-project-invitation-modal";
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -65,6 +163,15 @@ async function openAndSelect() {
   await act(async () =>
     option.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true }))
   );
+}
+
+/** 用完整指针事件选择一个真实 Combobox 选项。 */
+async function clickOption(option: HTMLElement) {
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    option.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+  });
 }
 
 function interactive(node: HTMLElement) {
@@ -119,6 +226,49 @@ it("can choose a role and add organization members while the member list stays o
   interactive(add);
   await act(async () => add.click());
   expect(mocks.addMember).toHaveBeenCalledWith("lab", "org", "user-1", "MEMBER");
+});
+
+it("supports adding mixed-role project members through the real multi-select combobox", async () => {
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  mocks.projectAddMembers.mockResolvedValue([
+    { id: "membership-1", member: "admin-user", role: 20 },
+    { id: "membership-2", member: "member-user", role: 15 },
+    { id: "membership-3", member: "guest-user", role: 5 },
+  ]);
+
+  try {
+    await act(async () =>
+      root.render(<SendProjectInvitationModal isOpen onClose={mocks.close} workspaceSlug="lab" projectId="project" />)
+    );
+
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="project_settings.members.invite_members.select_co_worker"]'
+    )!;
+    await act(async () => trigger.click());
+    const options = [...document.querySelectorAll<HTMLElement>("[role='option']")];
+    expect(options).toHaveLength(3);
+    for (const option of options) {
+      // oxlint-disable-next-line no-await-in-loop
+      await clickOption(option);
+    }
+
+    const submit = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "add_members"
+    )!;
+    expect(submit).toBeTruthy();
+    await act(async () => submit.click());
+
+    expect(mocks.projectAddMembers).toHaveBeenCalledExactlyOnceWith("lab", "project", {
+      members: [
+        { member_id: "admin-user", role: 20 },
+        { member_id: "member-user", role: 15 },
+        { member_id: "guest-user", role: 5 },
+      ],
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+  } finally {
+    consoleError.mockRestore();
+  }
 });
 
 it("keeps workspace search controls accessible while selecting related work items", async () => {

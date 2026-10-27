@@ -40,9 +40,34 @@ const defaultValues: FormValues = {
   roles: {},
 };
 
-/** 获取成员在界面中的优先展示名称。 */
-const getMemberDisplayName = (member: IUserLite) =>
-  member.display_name || `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.email || member.id;
+/** 获取成员全名；中文姓名字段直接拼接，西文字段保留空格。 */
+const getMemberFullName = (member: IUserLite) => {
+  const names = [member.first_name ?? "", member.last_name ?? ""].map((name) => name.trim()).filter(Boolean);
+  if (names.length === 2 && names.every((name) => /[\u4e00-\u9fff]/.test(name))) return names.join("");
+  return names.join(" ");
+};
+
+/** 并列展示成员全名与显示名称，两者相同时只保留一个。 */
+const getMemberDisplayName = (member: IUserLite) => {
+  const fullName = getMemberFullName(member);
+  const displayName = member.display_name?.trim() ?? "";
+  if (fullName && displayName && fullName !== displayName) return `${fullName} · ${displayName}`;
+  return fullName || displayName || member.email || member.id;
+};
+
+/** 将项目成员添加失败转换为用户可理解的提示。 */
+const getAddMemberErrorMessage = (error: unknown, translate: (key: string) => string) => {
+  const payload = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
+  const errorCode = "error_code" in payload ? String(payload.error_code) : "";
+  const message = "error" in payload ? String(payload.error) : "";
+  if (errorCode === "role_lower_than_workspace" || message.includes("role lower than the workspace role")) {
+    return translate("project_settings.members.role_lower_than_workspace");
+  }
+  if (errorCode === "role_higher_than_workspace" || message.includes("role higher than the workspace role")) {
+    return translate("project_settings.members.role_higher_than_workspace");
+  }
+  return translate("project_settings.members.add_failed");
+};
 
 export const SendProjectInvitationModal = observer(function SendProjectInvitationModal(props: Props) {
   const { isOpen, onClose, onSuccess, projectId, workspaceSlug } = props;
@@ -91,10 +116,14 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
         type: TOAST_TYPE.SUCCESS,
         message: t("project_settings.members.added_successfully"),
       });
+      reset(defaultValues);
     } catch (error) {
       console.error(error);
-    } finally {
-      reset(defaultValues);
+      setToast({
+        title: t("toast.error"),
+        type: TOAST_TYPE.ERROR,
+        message: getAddMemberErrorMessage(error, t),
+      });
     }
   };
 
@@ -113,7 +142,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
       const member = memberDetails?.member;
 
       if (!member) return;
-      const fullName = `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim();
+      const fullName = getMemberFullName(member);
       // IUserLite 不包含账号名，但运行时的工作区成员数据可能来自更完整的用户对象。
       const accountName = (member as IUser).username ?? "";
       const searchableFields = [
@@ -139,7 +168,7 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
               />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-13 text-primary">{member.display_name || fullName || member.email}</div>
+              <div className="truncate text-13 text-primary">{getMemberDisplayName(member)}</div>
               <div className="truncate text-11 text-tertiary">{member.email ?? memberDetails?.email ?? member.id}</div>
             </div>
           </div>
