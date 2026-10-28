@@ -152,15 +152,31 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   } = methods;
 
   const projectId = watch("project_id");
+  const currentProjectDetails = projectId ? getProjectById(projectId) : undefined;
   const assignableProjectMemberIds = projectId ? getProjectMemberIds(projectId, false) : null;
   const hasNoAssignableProjectMembers = assignableProjectMemberIds?.length === 0;
+  const administrativeRequiredFieldErrors =
+    currentProjectDetails?.is_research_project === false
+      ? [
+          ...(currentProjectDetails.is_module_required && (watch("module_ids")?.length ?? 0) === 0
+            ? ["请选择模块（财务报销科目）"]
+            : []),
+          ...(currentProjectDetails.is_label_required && (watch("label_ids")?.length ?? 0) === 0
+            ? ["请选择标签（小组）"]
+            : []),
+        ]
+      : [];
+  const requiredFieldErrors = isDraft ? [] : administrativeRequiredFieldErrors;
+  const draftPromotionErrors = isDraft && moveToIssue ? administrativeRequiredFieldErrors : [];
+  const hasRequiredFieldErrors = requiredFieldErrors.length > 0;
+  const hasDraftPromotionErrors = draftPromotionErrors.length > 0;
   const activeAdditionalPropertiesLength = getActiveAdditionalPropertiesLength({
     projectId: projectId,
     workspaceSlug: workspaceSlug?.toString(),
     watch: watch,
   });
 
-  const isDisabled = isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers;
+  const isDisabled = isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers || hasRequiredFieldErrors;
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -217,6 +233,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
   const handleFormSubmit = async (formData: Partial<TIssue>, is_draft_issue = false) => {
     if (hasNoAssignableProjectMembers) return;
+    if (!isDraft && !is_draft_issue && hasRequiredFieldErrors) return;
 
     // Check if the editor is ready to discard
     if (!editorRef.current?.isEditorReadyToDiscard()) {
@@ -278,6 +295,14 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
   const handleMoveToProjects = async () => {
     if (!data?.id || !data?.project_id || !data) return;
+    if (hasDraftPromotionErrors) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: draftPromotionErrors.join("；"),
+      });
+      return;
+    }
     setIsMoving(true);
     try {
       await handleCreateUpdatePropertyValues({
@@ -454,6 +479,11 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   {t("research.assignment.empty_administrative")}
                 </p>
               )}
+              {requiredFieldErrors.map((error) => (
+                <p key={error} role="alert" className="px-5 pb-3 text-caption-sm-regular text-tertiary">
+                  {error}
+                </p>
+              ))}
               {showActionButtons && (
                 <div className="flex items-center justify-end gap-4 border-t-[0.5px] border-subtle pt-6 pb-3">
                   {!data?.id && (
@@ -502,7 +532,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                         type="button"
                         loading={isMoving}
                         onClick={handleMoveToProjects}
-                        disabled={isMoving}
+                        disabled={isMoving || hasDraftPromotionErrors}
                         size="lg"
                       >
                         {t("add_to_project")}

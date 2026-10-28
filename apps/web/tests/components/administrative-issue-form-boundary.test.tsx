@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { useFormContext } from "react-hook-form";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getProjectMemberIds: vi.fn(),
   getProjectMemberDetails: vi.fn(),
   getUserDetails: vi.fn(),
+  getProjectById: vi.fn(),
   onSubmit: vi.fn(),
 }));
 
@@ -47,7 +49,24 @@ vi.mock("@plane/utils", () => ({
   getUpdateFormDataForReset: vi.fn((_projectId: string, values: unknown) => values),
 }));
 vi.mock("@/components/issues/issue-modal/components", () => ({
-  IssueDefaultProperties: () => <div>issue-properties</div>,
+  IssueDefaultProperties: () => {
+    const { setValue } = useFormContext();
+    return (
+      <div>
+        issue-properties
+        <button
+          type="button"
+          data-testid="fill-required-fields"
+          onClick={() => {
+            setValue("module_ids", ["module-1"]);
+            setValue("label_ids", ["label-1"]);
+          }}
+        >
+          补齐字段
+        </button>
+      </div>
+    );
+  },
   IssueDescriptionEditor: ({ editorRef }: { editorRef: { current: unknown } }) => {
     editorRef.current = { isEditorReadyToDiscard: () => true };
     return <div>issue-editor</div>;
@@ -75,7 +94,9 @@ vi.mock("@/hooks/context/use-issue-modal", () => ({
 vi.mock("@/hooks/store/use-issue-detail", () => ({
   useIssueDetail: () => ({ issue: { getIssueById: vi.fn() } }),
 }));
-vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ getProjectById: vi.fn() }) }));
+vi.mock("@/hooks/store/use-project", () => ({
+  useProject: () => ({ getProjectById: mocks.getProjectById }),
+}));
 vi.mock("@/hooks/store/use-project-state", () => ({ useProjectState: () => ({ getStateById: vi.fn() }) }));
 vi.mock("@/hooks/store/workspace-draft", () => ({ useWorkspaceDraftIssues: () => ({ moveIssue: vi.fn() }) }));
 vi.mock("@/hooks/store/use-member", () => ({
@@ -109,6 +130,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mocks.getProjectMemberIds.mockReturnValue([]);
+  mocks.onSubmit.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -117,7 +139,7 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-async function renderForm() {
+async function renderForm({ isDraft = false, moveToIssue = false }: { isDraft?: boolean; moveToIssue?: boolean } = {}) {
   await act(async () => {
     root.render(
       <IssueFormRoot
@@ -127,7 +149,8 @@ async function renderForm() {
         onCreateMoreToggleChange={vi.fn()}
         onSubmit={mocks.onSubmit}
         onClose={vi.fn()}
-        isDraft={false}
+        isDraft={isDraft}
+        moveToIssue={moveToIssue}
         isDuplicateModalOpen={false}
         handleDuplicateIssueModal={vi.fn()}
         issueTitleRef={{ current: null }}
@@ -150,6 +173,78 @@ it("blocks submission when the administrative project has no assignable members"
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
   expect(mocks.onSubmit).not.toHaveBeenCalled();
+});
+
+it("blocks draft promotion until required module and label are selected", async () => {
+  mocks.getProjectMemberIds.mockReturnValue(["member-1"]);
+  mocks.getProjectById.mockReturnValue({
+    id: "project-1",
+    is_research_project: false,
+    is_module_required: true,
+    is_label_required: true,
+  });
+  await renderForm({ isDraft: true, moveToIssue: true });
+
+  const promoteButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "add_to_project"
+  );
+  assertNotNull(promoteButton, "draft promotion button");
+  expect(promoteButton.disabled).toBe(true);
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('[data-testid="fill-required-fields"]')?.click();
+  });
+  await act(async () => undefined);
+  expect(promoteButton.disabled).toBe(false);
+});
+
+it("blocks formal administrative work items until required module and label are selected", async () => {
+  mocks.getProjectMemberIds.mockReturnValue(["member-1"]);
+  mocks.getProjectById.mockReturnValue({
+    id: "project-1",
+    is_research_project: false,
+    is_module_required: true,
+    is_label_required: true,
+  });
+  await renderForm();
+
+  expect(container.textContent).toContain("请选择模块（财务报销科目）");
+  expect(container.textContent).toContain("请选择标签（小组）");
+  expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('[data-testid="fill-required-fields"]')?.click();
+  });
+  await act(async () => undefined);
+  expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+
+  const form = container.querySelector("form");
+  assertNotNull(form, "issue form");
+  await act(async () => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(mocks.onSubmit).toHaveBeenCalled();
+});
+
+it("allows a draft to remain incomplete while required fields are enabled", async () => {
+  mocks.getProjectMemberIds.mockReturnValue(["member-1"]);
+  mocks.getProjectById.mockReturnValue({
+    id: "project-1",
+    is_research_project: false,
+    is_module_required: true,
+    is_label_required: true,
+  });
+  await renderForm({ isDraft: true });
+
+  expect(container.textContent).not.toContain("请选择模块（财务报销科目）");
+  expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+
+  const form = container.querySelector("form");
+  assertNotNull(form, "issue form");
+  await act(async () => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(mocks.onSubmit).toHaveBeenCalled();
 });
 
 function assertNotNull<T>(value: T | null, label: string): asserts value is T {
