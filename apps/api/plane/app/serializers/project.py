@@ -21,6 +21,8 @@ from plane.db.models import (
     ProjectMemberInvite,
     ProjectIdentifier,
     DeployBoard,
+    Label,
+    Module,
     ProjectPublicMember,
     IssueSequence,
     WorkspaceMember,
@@ -37,6 +39,7 @@ from plane.utils.administrative_projects import (
 )
 from plane.utils.home_activity import record_project_activity, resolve_project_change_values
 from plane.utils.project_identifier import random_identifier, unique_identifier
+from plane.utils.work_item_required_fields import MODULE_REQUIRED_ERROR
 
 
 def resolve_is_research_project(obj):
@@ -142,6 +145,47 @@ class ProjectSerializer(BaseSerializer):
                 raise serializers.ValidationError({field: "The provided user is not an active member of this project"})
 
         organization = data.get("administrative_organization")
+        module_required = data.get("is_module_required", getattr(self.instance, "is_module_required", False))
+        label_required = data.get("is_label_required", getattr(self.instance, "is_label_required", False))
+        if module_required or label_required:
+            effective_organization = organization
+            if effective_organization is None and self.instance is not None:
+                effective_organization = self.instance.administrative_organization
+            is_research = self.instance is not None and resolve_is_research_project(self.instance)
+            if effective_organization is None or is_research:
+                errors = {}
+                if module_required:
+                    errors["is_module_required"] = ["Required fields can only be enabled for administrative projects."]
+                if label_required:
+                    errors["is_label_required"] = ["Required fields can only be enabled for administrative projects."]
+                raise serializers.ValidationError(errors)
+
+            required_project_id = self.instance.id if self.instance else None
+            module_view = data.get("module_view", getattr(self.instance, "module_view", False))
+            if module_required:
+                if not module_view:
+                    raise serializers.ValidationError(
+                        {"is_module_required": ["Enable the modules feature before requiring a module."]}
+                    )
+                if not Module.objects.filter(project_id=required_project_id).exists():
+                    raise serializers.ValidationError(
+                        {"is_module_required": ["Create at least one module before requiring a module."]}
+                    )
+            if label_required and not Label.objects.filter(project_id=required_project_id).exists():
+                raise serializers.ValidationError(
+                    {"is_label_required": ["Create at least one label before requiring a label."]}
+                )
+
+        if (
+            self.instance is not None
+            and self.instance.is_module_required
+            and "module_view" in data
+            and not data["module_view"]
+        ):
+            raise serializers.ValidationError(
+                {"module_view": [MODULE_REQUIRED_ERROR, "Disable module requirement before turning off modules."]}
+            )
+
         new_organization_name = str(data.pop("new_administrative_organization", "") or "").strip()
         if new_organization_name:
             if organization is not None:
