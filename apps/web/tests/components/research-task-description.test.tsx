@@ -186,6 +186,13 @@ it("wires inline image uploads and delete/restore to task-scoped services", asyn
   expect(mocks.uploadTaskInstructionImage).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", expect.any(File));
 
   const source = "/api/research/workspaces/lab/chains/chain-1/nodes/node-1/tasks/task-1/instruction-images/asset-1/";
+  await expect(capturedEditor.props?.fileHandlerOverrides.getAssetSrc(source)).resolves.toBe(source);
+  await expect(capturedEditor.props?.fileHandlerOverrides.getAssetDownloadSrc(source)).resolves.toBe(
+    `${source}?download=1`
+  );
+  await expect(capturedEditor.props?.fileHandlerOverrides.getAssetDownloadSrc("/external/image.png")).resolves.toBe(
+    "/external/image.png"
+  );
   await act(async () => capturedEditor.props?.fileHandlerOverrides.delete(source));
   expect(mocks.deleteTaskInstructionImage).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "asset-1");
   await act(async () => capturedEditor.props?.fileHandlerOverrides.restore(source));

@@ -59,6 +59,7 @@ export function CustomImageBlock(props: CustomImageBlockProps) {
   });
   const [isResizing, setIsResizing] = useState(false);
   const [initialResizeComplete, setInitialResizeComplete] = useState(false);
+  const [isFullScreenEnabled, setIsFullScreenEnabled] = useState(false);
   // refs
   const containerRef = useRef<HTMLDivElement>(null);
   const containerRect = useRef<DOMRect | null>(null);
@@ -217,11 +218,21 @@ export function CustomImageBlock(props: CustomImageBlockProps) {
     (!resolvedImageSrc && !isDuplicating) || !initialResizeComplete || hasErroredOnFirstLoad || isDuplicating; // show the image upload status only when the resolvedImageSrc is not ready
   const showUploadStatus = !resolvedImageSrc && !isDuplicating;
   // show the image utils only if the remote image's (post upload) src is set and the initial resize is complete (but not while we're showing the preview imageFromFileSystem)
-  const showImageToolbar = resolvedImageSrc && resolvedDownloadSrc && initialResizeComplete && !isDuplicating;
+  const showImageToolbar = resolvedImageSrc && initialResizeComplete && !isDuplicating;
   // show the image resizer only if the editor is editable, the remote image's (post upload) src is set and the initial resize is complete (but not while we're showing the preview imageFromFileSystem)
   const showImageResizer = editor.isEditable && resolvedImageSrc && initialResizeComplete && !isDuplicating;
   // show the preview image from the file system if the remote image's src is not set
   const displayedImageSrc = resolvedImageSrc || imageFromFileSystem;
+  const displayedDownloadSrc = resolvedDownloadSrc || resolvedImageSrc || "";
+  const handleImageDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!showImageToolbar || isResizing) return;
+      setIsFullScreenEnabled(true);
+    },
+    [isResizing, showImageToolbar]
+  );
 
   return (
     <div
@@ -237,6 +248,7 @@ export function CustomImageBlock(props: CustomImageBlockProps) {
     >
       <div
         ref={containerRef}
+        role="presentation"
         className="group/image-component relative inline-block max-w-full"
         onMouseDown={handleImageMouseDown}
         style={{
@@ -289,6 +301,7 @@ export function CustomImageBlock(props: CustomImageBlockProps) {
               }
             })()
           }
+          onDoubleClick={handleImageDoubleClick}
           width={size.width}
           className={cn("image-component block rounded-md", {
             // hide the image while the background calculations of the image loader are in progress (to avoid flickering) and show the loader until then
@@ -309,12 +322,14 @@ export function CustomImageBlock(props: CustomImageBlockProps) {
             alignment={nodeAlignment ?? "left"}
             editor={editor}
             aspectRatio={size.aspectRatio === null ? 1 : size.aspectRatio}
-            downloadSrc={resolvedDownloadSrc}
+            downloadSrc={displayedDownloadSrc}
             handleAlignmentChange={(alignment) =>
               updateAttributesSafely({ alignment }, "Failed to update attributes while changing alignment:")
             }
             height={size.height}
+            isFullScreenEnabled={isFullScreenEnabled}
             isTouchDevice={isTouchDevice}
+            toggleFullScreenMode={setIsFullScreenEnabled}
             width={size.width}
             src={resolvedImageSrc}
           />
@@ -325,6 +340,7 @@ export function CustomImageBlock(props: CustomImageBlockProps) {
         {showImageResizer && (
           <>
             <div
+              role="presentation"
               className={cn(
                 "pointer-events-none absolute inset-0 rounded-md border-2 border-accent-strong transition-opacity duration-100 ease-in-out",
                 {
@@ -334,6 +350,7 @@ export function CustomImageBlock(props: CustomImageBlockProps) {
               )}
             />
             <div
+              role="presentation"
               className={cn(
                 "absolute bottom-0 size-4 translate-y-1/2 rounded-full border-2 border-white bg-accent-primary transition-opacity duration-100 ease-in-out",
                 {

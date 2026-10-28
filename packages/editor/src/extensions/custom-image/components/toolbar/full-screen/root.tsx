@@ -5,7 +5,7 @@
  */
 
 import { FullScreenOutline } from "@makeplane/propel/icons";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 // plane imports
 import { Tooltip } from "@plane/propel/tooltip";
 // local imports
@@ -20,13 +20,13 @@ type Props = {
     width: string;
   };
   isTouchDevice: boolean;
+  isFullScreenEnabled: boolean;
+  toggleFullScreenMode: (value: boolean) => void;
   toggleToolbarViewStatus: (val: boolean) => void;
 };
 
 export function ImageFullScreenActionRoot(props: Props) {
-  const { image, isTouchDevice, toggleToolbarViewStatus } = props;
-  // states
-  const [isFullScreenEnabled, setIsFullScreenEnabled] = useState(false);
+  const { image, isTouchDevice, isFullScreenEnabled, toggleFullScreenMode, toggleToolbarViewStatus } = props;
   // derived values
   const { downloadSrc, src, width, aspectRatio } = image;
 
@@ -43,7 +43,7 @@ export function ImageFullScreenActionRoot(props: Props) {
         isTouchDevice={isTouchDevice}
         src={src}
         width={width}
-        toggleFullScreenMode={setIsFullScreenEnabled}
+        toggleFullScreenMode={toggleFullScreenMode}
       />
       <Tooltip tooltipContent="View in full screen" disabled={isTouchDevice}>
         <button
@@ -51,7 +51,7 @@ export function ImageFullScreenActionRoot(props: Props) {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setIsFullScreenEnabled(true);
+            toggleFullScreenMode(true);
           }}
           className="grid h-full flex-shrink-0 place-items-center text-on-color/60 transition-colors hover:text-on-color"
           aria-label="View image in full screen"

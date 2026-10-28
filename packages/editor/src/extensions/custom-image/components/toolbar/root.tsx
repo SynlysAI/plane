@@ -21,8 +21,10 @@ type Props = {
   downloadSrc: string;
   handleAlignmentChange: (alignment: TCustomImageAlignment) => void;
   height: string;
+  isFullScreenEnabled: boolean;
   isTouchDevice: boolean;
   src: string;
+  toggleFullScreenMode: (value: boolean) => void;
   width: string;
 };
 
@@ -55,6 +57,8 @@ export function ImageToolbarRoot(props: Props) {
         <ImageFullScreenActionRoot
           image={props}
           isTouchDevice={isTouchDevice}
+          isFullScreenEnabled={props.isFullScreenEnabled}
+          toggleFullScreenMode={props.toggleFullScreenMode}
           toggleToolbarViewStatus={setShouldShowToolbar}
         />
       </div>

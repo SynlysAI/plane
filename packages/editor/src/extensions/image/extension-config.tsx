@@ -10,7 +10,7 @@ import type { CustomImageExtensionOptions } from "../custom-image/types";
 import type { ImageExtensionStorage } from "./extension";
 
 export const ImageExtensionConfig = BaseImageExtension.extend<
-  Pick<CustomImageExtensionOptions, "getImageSource">,
+  Pick<CustomImageExtensionOptions, "getImageSource" | "getImageDownloadSource">,
   ImageExtensionStorage
 >({
   addAttributes() {
