@@ -30,16 +30,16 @@ type Props = {
   fileHandler: TFileHandler;
 };
 
-export function ImageExtension(props: Props) {
-  const { fileHandler } = props;
+export function ImageExtension({ fileHandler }: Props) {
   // derived values
-  const { getAssetSrc } = fileHandler;
+  const { getAssetSrc, getAssetDownloadSrc } = fileHandler;
 
   return ImageExtensionConfig.extend({
     addOptions() {
       return {
         ...this.parent?.(),
         getImageSource: getAssetSrc,
+        getImageDownloadSource: getAssetDownloadSrc,
       };
     },
 

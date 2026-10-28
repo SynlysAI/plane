@@ -291,6 +291,21 @@ def test_inline_image_uses_task_scoped_asset_and_rejects_external_source(env):
         response = env["student_client"].get(image_url)
     assert response.status_code == 302
     assert response.url == "https://signed.test/image.png"
+    storage.return_value.generate_presigned_url.assert_called_once_with(
+        object_name=FileAsset.objects.get(pk=asset_id).asset.name
+    )
+
+    asset = FileAsset.objects.get(pk=asset_id)
+    with patch("plane.research.views.task_comment_assets.S3Storage") as storage:
+        storage.return_value.generate_presigned_url.return_value = "https://signed.test/download.png"
+        response = env["student_client"].get(f"{image_url}?download=1")
+    assert response.status_code == 302
+    assert response.url == "https://signed.test/download.png"
+    storage.return_value.generate_presigned_url.assert_called_once_with(
+        object_name=asset.asset.name,
+        disposition="attachment",
+        filename="figure.png",
+    )
 
 
 def test_inactive_chain_is_read_only_and_comment_delete_soft_deletes_assets(env):

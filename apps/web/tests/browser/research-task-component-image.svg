@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <rect width="640" height="360" fill="#f7f7f5"/>
+  <rect x="24" y="24" width="592" height="312" fill="#ffffff" stroke="#e5e5df"/>
+  <text x="48" y="188" fill="#252522" font-family="Inter, sans-serif" font-size="24">image-component 节点</text>
+</svg>

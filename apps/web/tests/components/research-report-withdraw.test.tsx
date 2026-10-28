@@ -176,8 +176,8 @@ it("作者确认撤回后回到草稿并刷新详情、列表和历史", async (
   await renderDetail();
   expect(container.textContent).toContain("撤回 · 已提交 → 草稿");
 
-  await act(async () => button("撤回重新编辑").click());
-  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("报告将回到草稿并退出审核队列");
+  await act(async () => button("撤回").click());
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("撤回后回到草稿，可修改后重新提交。");
   const reason = container.querySelector<HTMLInputElement>("input[aria-label='撤回原因（选填）']");
   if (!reason) throw new Error("撤回原因输入未显示");
   await act(async () => {
@@ -198,10 +198,10 @@ it("撤回冲突时保留确认弹窗并显示状态错误", async () => {
   mocks.withdrawReport.mockRejectedValueOnce({ error_code: "report_state_conflict" });
   await renderDetail();
 
-  await act(async () => button("撤回重新编辑").click());
+  await act(async () => button("撤回").click());
   await act(async () => button("确认").click());
 
   expect(container.querySelector('[role="dialog"]')).not.toBeNull();
   expect(container.textContent).toContain("当前报告状态不允许该操作。");
-  expect(button("撤回重新编辑")).toBeInstanceOf(HTMLButtonElement);
+  expect(button("撤回")).toBeInstanceOf(HTMLButtonElement);
 });

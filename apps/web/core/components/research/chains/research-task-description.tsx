@@ -14,6 +14,7 @@ import type {
 import { convertBytesToSize, getFileURL, isDescriptionContentEmpty } from "@plane/utils";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { getCommentAttachmentLimitError } from "@/components/comments/comment-attachment-limits";
+import { taskImageDownloadSource } from "@/components/research/common/research-image";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 
 type Props = {
@@ -254,7 +255,7 @@ export function ResearchTaskDescription({
           }}
           fileHandlerOverrides={{
             getAssetSrc: async (source) => source,
-            getAssetDownloadSrc: async (source) => source,
+            getAssetDownloadSrc: async (source) => taskImageDownloadSource(source, imageBase),
             delete: async (source) => {
               const assetId = assetIdFromSource(source, imageBase);
               if (!assetId) return;
