@@ -281,6 +281,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                         for module in request.data.get("module_ids", [])
                     ],
                     batch_size=10,
+                    ignore_conflicts=True,
                 )
                 # Update the activity
                 _ = [

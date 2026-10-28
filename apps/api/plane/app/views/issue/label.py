@@ -19,6 +19,7 @@ from plane.app.permissions import allow_permission, ProjectBasePermission, ROLE
 from plane.db.models import Project, Label
 from plane.research.utils.project_review import project_member_filters
 from plane.utils.cache import invalidate_cache
+from plane.utils.work_item_required_fields import required_label_delete_error
 
 
 class LabelViewSet(BaseViewSet):
@@ -91,6 +92,10 @@ class LabelViewSet(BaseViewSet):
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False)
     @allow_permission([ROLE.ADMIN])
     def destroy(self, request, *args, **kwargs):
+        label = self.get_object()
+        required_error = required_label_delete_error(label.project, label)
+        if required_error is not None:
+            return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
         return super().destroy(request, *args, **kwargs)
 
 

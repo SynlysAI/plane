@@ -51,6 +51,7 @@ from plane.utils.content_validator import (
 from plane.utils.administrative_projects import assignable_project_member_ids
 from plane.utils.work_item_assignment import replace_issue_assignee, validate_single_assignee
 from plane.utils.comment_attachments import MAX_FILE_ATTACHMENTS
+from plane.utils.work_item_required_fields import validate_required_issue_relations
 
 
 class IssueFlatSerializer(BaseSerializer):
@@ -101,6 +102,11 @@ class IssueCreateSerializer(BaseSerializer):
         write_only=True,
         required=False,
     )
+    module_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=Module.objects.all()),
+        write_only=True,
+        required=False,
+    )
     project_id = serializers.UUIDField(source="project.id", read_only=True)
     workspace_id = serializers.UUIDField(source="workspace.id", read_only=True)
 
@@ -123,6 +129,8 @@ class IssueCreateSerializer(BaseSerializer):
         data["assignee_ids"] = assignee_ids if assignee_ids else []
         label_ids = self.initial_data.get("label_ids")
         data["label_ids"] = label_ids if label_ids else []
+        module_ids = self.initial_data.get("module_ids")
+        data["module_ids"] = module_ids if module_ids else []
         return data
 
     def validate(self, attrs):
@@ -181,15 +189,42 @@ class IssueCreateSerializer(BaseSerializer):
                 assignee.id for assignee in requested_assignees if assignee.id in valid_assignee_ids
             ]
 
-        # Validate labels are from project
-        if attrs.get("label_ids"):
-            label_ids = [label.id for label in attrs["label_ids"]]
+        # Validate labels and modules are from the same project.
+        label_ids_supplied = "label_ids" in attrs
+        label_ids = [label.id for label in (attrs.get("label_ids") or [])]
+        if label_ids:
             attrs["label_ids"] = list(
                 Label.objects.filter(
                     project_id=self.context.get("project_id"),
                     id__in=label_ids,
                 ).values_list("id", flat=True)
             )
+        elif label_ids_supplied:
+            attrs["label_ids"] = []
+
+        module_ids_supplied = "module_ids" in attrs
+        module_ids = [module.id for module in (attrs.get("module_ids") or [])]
+        if module_ids:
+            attrs["module_ids"] = list(
+                Module.objects.filter(
+                    project_id=self.context.get("project_id"),
+                    id__in=module_ids,
+                ).values_list("id", flat=True)
+            )
+        elif module_ids_supplied:
+            attrs["module_ids"] = []
+
+        required_errors = validate_required_issue_relations(
+            assignment_project,
+            module_ids=attrs.get("module_ids", []),
+            module_ids_supplied=module_ids_supplied,
+            label_ids=attrs.get("label_ids", []),
+            label_ids_supplied=label_ids_supplied,
+            instance=self.instance,
+            is_draft=attrs.get("is_draft", getattr(self.instance, "is_draft", False)),
+        )
+        if required_errors:
+            raise serializers.ValidationError(required_errors)
 
         # Check state is from the project only else raise validation error
         if (
@@ -226,6 +261,7 @@ class IssueCreateSerializer(BaseSerializer):
     def create(self, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
+        modules = validated_data.pop("module_ids", None)
 
         project_id = self.context["project_id"]
         workspace_id = self.context["workspace_id"]
@@ -265,12 +301,30 @@ class IssueCreateSerializer(BaseSerializer):
             except IntegrityError:
                 pass
 
+        if modules is not None and len(modules):
+            ModuleIssue.objects.bulk_create(
+                [
+                    ModuleIssue(
+                        module_id=module_id,
+                        issue=issue,
+                        project_id=project_id,
+                        workspace_id=workspace_id,
+                        created_by_id=created_by_id,
+                        updated_by_id=updated_by_id,
+                    )
+                    for module_id in modules
+                ],
+                batch_size=10,
+                ignore_conflicts=True,
+            )
+
         return issue
 
     @transaction.atomic
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
+        modules = validated_data.pop("module_ids", None)
 
         # Related models
         project_id = instance.project_id
@@ -301,6 +355,26 @@ class IssueCreateSerializer(BaseSerializer):
                 )
             except IntegrityError:
                 pass
+
+        if modules is not None:
+            ModuleIssue.objects.filter(issue=instance).delete()
+            if len(modules):
+                actor = self.context.get("actor")
+                ModuleIssue.objects.bulk_create(
+                    [
+                        ModuleIssue(
+                            module_id=module_id,
+                            issue=instance,
+                            project_id=project_id,
+                            workspace_id=workspace_id,
+                            created_by_id=created_by_id,
+                            updated_by_id=actor.id if actor else updated_by_id,
+                        )
+                        for module_id in modules
+                    ],
+                    batch_size=10,
+                    ignore_conflicts=True,
+                )
 
         # Time updation occues even when other related models are updated
         instance.updated_at = timezone.now()

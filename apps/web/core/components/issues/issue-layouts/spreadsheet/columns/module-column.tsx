@@ -10,10 +10,13 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // types
 import type { TIssue } from "@plane/types";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // components
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
+import { REQUIRED_FIELD_MESSAGES, isRequiredSelectionMissing } from "@/components/issues/required-fields";
 // hooks
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
+import { useProject } from "@/hooks/store/use-project";
 
 type Props = {
   issue: TIssue;
@@ -29,10 +32,20 @@ export const SpreadsheetModuleColumn = observer(function SpreadsheetModuleColumn
   const {
     issues: { changeModulesInIssue },
   } = useIssuesStore();
+  const { getProjectById } = useProject();
+  const projectDetails = getProjectById(issue.project_id);
 
   const handleModule = useCallback(
     async (moduleIds: string[] | null) => {
       if (!workspaceSlug || !issue || !issue.project_id || !issue.module_ids || !moduleIds) return;
+      if (isRequiredSelectionMissing(projectDetails, "module_ids", moduleIds)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: REQUIRED_FIELD_MESSAGES.module_ids,
+        });
+        return;
+      }
 
       const updatedModuleIds = xor(issue.module_ids, moduleIds);
       const modulesToAdd: string[] = [];
@@ -43,7 +56,7 @@ export const SpreadsheetModuleColumn = observer(function SpreadsheetModuleColumn
       }
       changeModulesInIssue(workspaceSlug.toString(), issue.project_id, issue.id, modulesToAdd, modulesToRemove);
     },
-    [workspaceSlug, issue, changeModulesInIssue]
+    [workspaceSlug, issue, projectDetails, changeModulesInIssue]
   );
 
   return (
