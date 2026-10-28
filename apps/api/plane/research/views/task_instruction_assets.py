@@ -134,6 +134,30 @@ def _image_asset(task, asset_id, *, uploaded=None, include_deleted=False):
     return FileAsset.objects.filter(**query).first()
 
 
+def _image_response(request, asset):
+    """Redirect one task-description image to an inline or attachment URL.
+
+    Args:
+        request: Image read request; ``download=1`` selects attachment mode.
+        asset: Uploaded task-description image asset.
+
+    Returns:
+        Redirect response to the generated object-storage URL.
+    """
+    storage = S3Storage(request=request)
+    if request.GET.get("download") != "1":
+        return HttpResponseRedirect(storage.generate_presigned_url(object_name=asset.asset.name))
+
+    file_name = str(asset.attributes.get("name") or asset.asset.name.rsplit("/", 1)[-1])
+    return HttpResponseRedirect(
+        storage.generate_presigned_url(
+            object_name=asset.asset.name,
+            disposition="attachment",
+            filename=file_name,
+        )
+    )
+
+
 class ResearchTaskInstructionAttachmentPresignEndpoint(ResearchAPIView):
     """Create a direct-to-storage upload slot for a task-description file."""
 
@@ -415,7 +439,7 @@ class ResearchTaskInstructionImageEndpoint(ResearchAPIView):
         asset = _image_asset(task, asset_id, uploaded=True)
         if asset is None:
             return Response({"error_code": "attachment_not_found"}, status=status.HTTP_404_NOT_FOUND)
-        return HttpResponseRedirect(S3Storage(request=request).generate_presigned_url(object_name=asset.asset.name))
+        return _image_response(request, asset)
 
     def delete(self, request, slug, chain_id, node_id, task_id, asset_id):
         task, error, early = _task_for_write(self, request, slug, chain_id, node_id, task_id)

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   uploadTaskCommentImage: vi.fn(),
   deleteTaskCommentImage: vi.fn(),
 }));
+const capturedEditor = vi.hoisted(() => ({ props: null as null | Record<string, any> }));
 vi.mock("@/services/research/chain-task.service", () => ({
   ResearchChainTaskService: class {
     getTaskComments = mocks.getTaskComments;
@@ -61,6 +62,7 @@ vi.mock("@/components/editor/lite-text", () => ({
       onAttachFiles,
       attachmentContent,
       uploadFile,
+      fileHandlerOverrides,
     }: {
       initialValue: string;
       editable: boolean;
@@ -69,9 +71,11 @@ vi.mock("@/components/editor/lite-text", () => ({
       onAttachFiles?: (files: File[]) => void;
       attachmentContent?: React.ReactNode;
       uploadFile?: (blockId: string, file: File) => Promise<string>;
+      fileHandlerOverrides?: Record<string, any>;
     },
     ref
   ) {
+    capturedEditor.props = { fileHandlerOverrides };
     const [body, setBody] = React.useState(initialValue);
     React.useImperativeHandle(ref, () => ({ clearEditor: () => setBody("<p></p>") }));
     return editable ? (
@@ -133,6 +137,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mocks.getTaskComments.mockResolvedValue({ results: [], can_comment: true });
+  capturedEditor.props = null;
   mocks.createTaskComment.mockResolvedValue(comment);
   mocks.getTaskCommentAttachmentLimits.mockResolvedValue({
     image: { max_mb: 20, max_bytes: 20 * 1024 * 1024 },
@@ -271,6 +276,24 @@ it("uploads inline images through the task-scoped endpoint", async () => {
     button?.click();
   });
   expect(mocks.uploadTaskCommentImage).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", expect.any(File));
+});
+
+it("maps task-scoped inline comment images to attachment downloads", async () => {
+  const source = "/api/research/workspaces/lab/chains/chain-1/nodes/node-1/tasks/task-1/comment-images/asset-image/";
+  await renderTask();
+  await expect(capturedEditor.props?.fileHandlerOverrides.getAssetSrc(source)).resolves.toBe(source);
+  await expect(capturedEditor.props?.fileHandlerOverrides.getAssetDownloadSrc(source)).resolves.toBe(
+    `${source}?download=1`
+  );
+  await expect(capturedEditor.props?.fileHandlerOverrides.getAssetDownloadSrc("/external/image.png")).resolves.toBe(
+    "/external/image.png"
+  );
+
+  mocks.getTaskComments.mockResolvedValue({ results: [comment], can_comment: false });
+  await renderTask();
+  await expect(capturedEditor.props?.fileHandlerOverrides.getAssetDownloadSrc(source)).resolves.toBe(
+    `${source}?download=1`
+  );
 });
 
 it("shows readonly comments without author controls or a composer", async () => {

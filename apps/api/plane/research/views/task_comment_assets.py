@@ -44,6 +44,30 @@ def _limits_payload(workspace):
     }
 
 
+def _image_response(request, asset):
+    """Redirect one task-comment image to an inline or attachment URL.
+
+    Args:
+        request: Image read request; ``download=1`` selects attachment mode.
+        asset: Uploaded task-comment image asset.
+
+    Returns:
+        Redirect response to the generated object-storage URL.
+    """
+    storage = S3Storage(request=request)
+    if request.GET.get("download") != "1":
+        return HttpResponseRedirect(storage.generate_presigned_url(object_name=asset.asset.name))
+
+    file_name = str(asset.attributes.get("name") or asset.asset.name.rsplit("/", 1)[-1])
+    return HttpResponseRedirect(
+        storage.generate_presigned_url(
+            object_name=asset.asset.name,
+            disposition="attachment",
+            filename=file_name,
+        )
+    )
+
+
 class ResearchTaskCommentAttachmentLimitsEndpoint(ResearchAPIView):
     """Return comment attachment quotas for one visible task."""
 
@@ -313,8 +337,7 @@ class ResearchTaskCommentImageEndpoint(ResearchAPIView):
         asset = self._asset(task, asset_id, uploaded=True)
         if asset is None:
             return Response({"error_code": "attachment_not_found"}, status=status.HTTP_404_NOT_FOUND)
-        url = S3Storage(request=request).generate_presigned_url(object_name=asset.asset.name)
-        return HttpResponseRedirect(url)
+        return _image_response(request, asset)
 
     def delete(self, request, slug, chain_id, node_id, task_id, asset_id):
         task, error, early = _task_for_write(self, request, slug, chain_id, node_id, task_id)

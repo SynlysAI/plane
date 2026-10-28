@@ -131,6 +131,21 @@ def test_instruction_is_sanitized_and_only_accepts_task_scoped_images(env):
         readable = env["advisor_client"].get(source)
     assert readable.status_code == 302
     assert readable.url == "https://signed.test/image.png"
+    storage.return_value.generate_presigned_url.assert_called_once_with(
+        object_name=FileAsset.objects.get(pk=asset_id).asset.name
+    )
+
+    asset = FileAsset.objects.get(pk=asset_id)
+    with patch("plane.research.views.task_instruction_assets.S3Storage") as storage:
+        storage.return_value.generate_presigned_url.return_value = "https://signed.test/download.png"
+        downloaded = env["advisor_client"].get(f"{source}?download=1")
+    assert downloaded.status_code == 302
+    assert downloaded.url == "https://signed.test/download.png"
+    storage.return_value.generate_presigned_url.assert_called_once_with(
+        object_name=asset.asset.name,
+        disposition="attachment",
+        filename="figure.png",
+    )
 
 
 def test_instruction_image_delete_and_restore(env):
