@@ -18,7 +18,11 @@ const task = {
   chain: "chain-1",
   node: "node-1",
   title: "整理实验记录",
-  instruction: "<p>补充样本量与误差棒说明。</p>",
+  instruction: [
+    "<p>下方第一张为历史兼容图片，第二张为图片组件。</p>",
+    '<p><img src="/research-task-legacy-image.svg" alt="历史兼容图片"></p>',
+    '<p><image-component src="/research-task-component-image.svg"></image-component></p>',
+  ].join(""),
   instruction_attachments: [],
   status: "DRAFT",
   assignee: null,
@@ -59,12 +63,12 @@ ResearchChainTaskService.prototype.deleteTaskInstructionAttachment = async () =>
 /** Render the real task-description editor with an in-memory service boundary. */
 function Fixture() {
   const [instruction, setInstruction] = useState(task.instruction);
-  const [editable, setEditable] = useState(true);
+  const [editable, setEditable] = useState(false);
 
   return (
     <main className="bg-background mx-auto min-h-screen max-w-4xl p-5 sm:p-8">
       <header className="mb-6 border-b border-subtle pb-4">
-        <p className="text-12 text-tertiary">科研链 / 实验记录节点</p>
+        <p className="text-12 text-tertiary">科研链 / 实验记录节点 · 悬停或双击图片可放大</p>
         <h1 className="text-22 mt-1 font-semibold text-primary">整理实验记录</h1>
         <button
           type="button"

@@ -12,6 +12,7 @@ import { getFileURL, isCommentEmpty } from "@plane/utils";
 import { CommentAttachmentList } from "@/components/comments/attachment-list";
 import { useCommentAttachments } from "@/components/comments/use-comment-attachments";
 import { LiteTextEditor } from "@/components/editor/lite-text";
+import { taskImageDownloadSource } from "@/components/research/common/research-image";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
 
@@ -221,7 +222,7 @@ function TaskComment({
             displayConfig={{ fontSize: "small-font" }}
             fileHandlerOverrides={{
               getAssetSrc: async (source) => source,
-              getAssetDownloadSrc: async (source) => source,
+              getAssetDownloadSrc: async (source) => taskImageDownloadSource(source, imageBase),
               delete: async (source) => {
                 if (!source.startsWith(imageBase)) return;
                 await service.deleteTaskCommentImage(
@@ -406,7 +407,7 @@ function CommentEditor({
         }}
         fileHandlerOverrides={{
           getAssetSrc: async (source) => source,
-          getAssetDownloadSrc: async (source) => source,
+          getAssetDownloadSrc: async (source) => taskImageDownloadSource(source, imageBase),
           validation: { maxFileSize: limits?.image.max_bytes ?? 20 * 1024 * 1024 },
           delete: async (source) => {
             if (!source.startsWith(imageBase)) return;
