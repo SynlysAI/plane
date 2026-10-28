@@ -8,17 +8,22 @@ const mocks = vi.hoisted(() => ({
   getIssueById: vi.fn(),
   updateIssue: vi.fn(),
   changeModulesInIssue: vi.fn(),
+  getLabelById: vi.fn(),
   setToast: vi.fn(),
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@plane/propel/button", () => ({
+  Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
+}));
 vi.mock("@plane/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { ERROR: "error" },
   setToast: mocks.setToast,
 }));
 vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ getProjectById: mocks.getProjectById }) }));
+vi.mock("@/hooks/store/use-label", () => ({ useLabel: () => ({ getLabelById: mocks.getLabelById }) }));
 vi.mock("@/hooks/store/use-issue-detail", () => ({
   useIssueDetail: () => ({ issue: { getIssueById: mocks.getIssueById } }),
 }));
@@ -49,6 +54,7 @@ vi.mock("@/components/dropdowns/module/dropdown", () => ({
 
 const { IssueLabelSelectRoot } = await import("@/components/issues/issue-detail/label/select/root");
 const { IssueModuleSelect } = await import("@/components/issues/issue-detail/module-select");
+const { LabelListItem } = await import("@/components/issues/issue-detail/label/label-list-item");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
@@ -71,6 +77,7 @@ beforeEach(() => {
     label_ids: ["label-1"],
     module_ids: ["module-1"],
   });
+  mocks.getLabelById.mockReturnValue({ id: "label-1", name: "试剂组", color: "#266" });
 });
 
 afterEach(async () => {
@@ -126,4 +133,26 @@ it("prevents clearing the last required module from issue detail", async () => {
     container.querySelector<HTMLButtonElement>('[data-testid="set-module"]')?.click();
   });
   expect(mocks.changeModulesInIssue).toHaveBeenCalledWith("lab", "project-1", "issue-1", ["module-2"], []);
+});
+
+it("prevents removing the last required label pill from issue detail", async () => {
+  await act(async () => {
+    root.render(
+      <LabelListItem
+        workspaceSlug="lab"
+        projectId="project-1"
+        issueId="issue-1"
+        labelId="label-1"
+        values={["label-1"]}
+        labelOperations={{ updateIssue: mocks.updateIssue, createLabel: vi.fn() } as never}
+        disabled={false}
+      />
+    );
+  });
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>("button")?.click();
+  });
+  expect(mocks.updateIssue).not.toHaveBeenCalled();
+  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "标签（小组）为必选项。" }));
 });
