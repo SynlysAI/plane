@@ -44,6 +44,12 @@ from .base import BaseAPIView
 from plane.bgtasks.webhook_task import model_activity
 from plane.utils.host import base_host
 from plane.utils.order_queryset import ISSUE_ORDER_BY_ALLOWLIST, MODULE_ORDER_BY_ALLOWLIST, sanitize_order_by
+from plane.utils.work_item_required_fields import (
+    MODULE_REQUIRED_ERROR,
+    active_issue_module_ids,
+    module_removal_would_violate_requirement,
+    required_module_operation_error,
+)
 from plane.utils.openapi import (
     module_docs,
     module_issue_docs,
@@ -544,6 +550,9 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
         Only admins or the module creator can perform this action.
         """
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
+        required_error = required_module_operation_error(module.project, module)
+        if required_error is not None:
+            return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
         if module.created_by_id != request.user.id and (
             not ProjectMember.objects.filter(
                 workspace__slug=slug,
@@ -923,6 +932,13 @@ class ModuleIssueDetailAPIEndpoint(BaseAPIView):
             module_id=module_id,
             issue_id=issue_id,
         )
+        module_removal_error = module_removal_would_violate_requirement(
+            module_issue.project,
+            active_issue_module_ids(module_issue.issue),
+            [module_id],
+        )
+        if module_removal_error:
+            return Response({"module_ids": [MODULE_REQUIRED_ERROR]}, status=status.HTTP_400_BAD_REQUEST)
 
         module_name = module_issue.module.name if module_issue.module is not None else ""
         module_issue.delete()
@@ -1088,6 +1104,9 @@ class ModuleArchiveUnarchiveAPIEndpoint(BaseAPIView):
         Only modules with completed status can be archived.
         """
         module = Module.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
+        required_error = required_module_operation_error(module.project, module)
+        if required_error is not None:
+            return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
         if module.status not in ["completed", "cancelled"]:
             return Response(
                 {"error": "Only completed or cancelled modules can be archived"},

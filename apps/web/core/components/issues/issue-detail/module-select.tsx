@@ -8,13 +8,16 @@ import React, { useState } from "react";
 import { xor } from "lodash-es";
 import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // hooks
 // components
 import { cn } from "@plane/utils";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
+import { REQUIRED_FIELD_MESSAGES, isRequiredSelectionMissing } from "@/components/issues/required-fields";
 // ui
 // helpers
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useProject } from "@/hooks/store/use-project";
 // types
 import type { TIssueOperations } from "./root";
 
@@ -36,12 +39,22 @@ export const IssueModuleSelect = observer(function IssueModuleSelect(props: TIss
   const {
     issue: { getIssueById },
   } = useIssueDetail();
+  const { getProjectById } = useProject();
+  const project = getProjectById(projectId);
   // derived values
   const issue = getIssueById(issueId);
   const disableSelect = disabled || isUpdating;
 
   const handleIssueModuleChange = async (moduleIds: string[]) => {
     if (!issue || !issue.module_ids) return;
+    if (isRequiredSelectionMissing(project, "module_ids", moduleIds)) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "Error!",
+        message: REQUIRED_FIELD_MESSAGES.module_ids,
+      });
+      return;
+    }
 
     setIsUpdating(true);
     const updatedModuleIds = xor(issue.module_ids, moduleIds);

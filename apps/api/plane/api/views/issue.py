@@ -80,6 +80,7 @@ from plane.db.models import (
 )
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
+from plane.utils.work_item_required_fields import required_label_delete_error
 from plane.utils.order_queryset import (
     ACTIVITY_ORDER_BY_ALLOWLIST,
     ISSUE_ORDER_BY_ALLOWLIST,
@@ -1116,6 +1117,9 @@ class LabelDetailAPIEndpoint(LabelListCreateAPIEndpoint):
         This action cannot be undone.
         """
         label = self.get_queryset().get(pk=pk)
+        required_error = required_label_delete_error(label.project, label)
+        if required_error is not None:
+            return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
         label.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
