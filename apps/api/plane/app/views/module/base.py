@@ -67,6 +67,7 @@ from plane.bgtasks.webhook_task import model_activity
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
+from plane.utils.work_item_required_fields import required_module_operation_error
 
 
 class ModuleViewSet(BaseViewSet):
@@ -724,6 +725,9 @@ class ModuleViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN], creator=True, model=Module)
     def destroy(self, request, slug, project_id, pk):
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
+        required_error = required_module_operation_error(module.project, module)
+        if required_error is not None:
+            return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
 
         module_issues = list(ModuleIssue.objects.filter(module_id=pk).values_list("issue", flat=True))
         _ = [

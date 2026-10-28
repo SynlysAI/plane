@@ -47,6 +47,12 @@ class TestAdministrativeRequiredWorkItemFields:
         """Return the endpoint that removes one module from a work item."""
         return f"/api/workspaces/{workspace_slug}/projects/{project_id}/modules/{module_id}/issues/{issue_id}/"
 
+    @staticmethod
+    def external_issue_url(workspace_slug, project_id, issue_id=None):
+        """Return the external API work item endpoint."""
+        base_url = f"/api/v1/workspaces/{workspace_slug}/projects/{project_id}/issues/"
+        return f"{base_url}{issue_id}/" if issue_id else base_url
+
     @pytest.fixture(autouse=True)
     def eager_celery(self):
         """Run background activity tasks synchronously during contract tests."""
@@ -248,7 +254,7 @@ class TestAdministrativeRequiredWorkItemFields:
 
     @pytest.mark.django_db
     def test_module_relation_api_cannot_remove_last_required_module(
-        self, session_client, workspace, administrative_project
+        self, session_client, api_key_client, workspace, administrative_project
     ):
         project, module, _ = administrative_project
         project.is_module_required = True
@@ -276,6 +282,124 @@ class TestAdministrativeRequiredWorkItemFields:
 
         response = session_client.delete(self.module_issue_url(workspace.slug, project.id, module.id, issue.id))
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ModuleIssue.objects.filter(issue=issue, module=module).exists()
+
+        external_response = api_key_client.delete(
+            f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/modules/{module.id}/module-issues/{issue.id}/"
+        )
+        assert external_response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ModuleIssue.objects.filter(issue=issue, module=module).exists()
+
+    @pytest.mark.django_db
+    def test_required_options_cannot_be_removed_from_configuration(
+        self,
+        session_client,
+        api_key_client,
+        workspace,
+        administrative_project,
+    ):
+        """Required modules and labels cannot become unavailable while the rule is active."""
+        project, module, label = administrative_project
+        project.is_module_required = True
+        project.is_label_required = True
+        project.save(update_fields=["is_module_required", "is_label_required"])
+        issue = Issue.objects.create(
+            name="选项保护",
+            workspace=workspace,
+            project=project,
+            created_by=session_client.handler._force_user,
+        )
+        IssueLabel.objects.create(
+            workspace=workspace,
+            project=project,
+            issue=issue,
+            label=label,
+            created_by=session_client.handler._force_user,
+        )
+        ModuleIssue.objects.create(
+            workspace=workspace,
+            project=project,
+            issue=issue,
+            module=module,
+            created_by=session_client.handler._force_user,
+        )
+        module.status = "completed"
+        module.save(update_fields=["status"])
+
+        responses = {
+            "app_module_delete": session_client.delete(
+                f"/api/workspaces/{workspace.slug}/projects/{project.id}/modules/{module.id}/"
+            ),
+            "app_module_archive": session_client.post(
+                f"/api/workspaces/{workspace.slug}/projects/{project.id}/modules/{module.id}/archive/"
+            ),
+            "app_label_delete": session_client.delete(
+                f"/api/workspaces/{workspace.slug}/projects/{project.id}/issue-labels/{label.id}/"
+            ),
+            "external_module_delete": api_key_client.delete(
+                f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/modules/{module.id}/"
+            ),
+            "external_module_archive": api_key_client.post(
+                f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/modules/{module.id}/archive/"
+            ),
+            "external_label_delete": api_key_client.delete(
+                f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/labels/{label.id}/"
+            ),
+        }
+
+        assert {name: response.status_code for name, response in responses.items()} == {
+            name: status.HTTP_400_BAD_REQUEST for name in responses
+        }
+        module.refresh_from_db()
+        label.refresh_from_db()
+        assert module.deleted_at is None
+        assert module.archived_at is None
+        assert label.deleted_at is None
+        assert ModuleIssue.objects.filter(issue=issue, module=module).exists()
+        assert IssueLabel.objects.filter(issue=issue, label=label).exists()
+
+    @pytest.mark.django_db
+    def test_external_api_enforces_required_fields(
+        self,
+        api_key_client,
+        workspace,
+        administrative_project,
+    ):
+        """The external API follows the same administrative required-field contract."""
+        project, module, label = administrative_project
+        project.is_module_required = True
+        project.is_label_required = True
+        project.save(update_fields=["is_module_required", "is_label_required"])
+
+        missing = api_key_client.post(
+            self.external_issue_url(workspace.slug, project.id),
+            {"name": "外部报销"},
+            format="json",
+        )
+        assert missing.status_code == status.HTTP_400_BAD_REQUEST
+        assert not Issue.objects.filter(name="外部报销").exists()
+
+        created = api_key_client.post(
+            self.external_issue_url(workspace.slug, project.id),
+            {
+                "name": "外部报销",
+                "labels": [str(label.id)],
+                "module_ids": [str(module.id)],
+            },
+            format="json",
+        )
+        assert created.status_code == status.HTTP_201_CREATED
+        issue = Issue.objects.get(name="外部报销")
+        assert list(issue.labels.values_list("id", flat=True)) == [label.id]
+        assert list(issue.issue_module.values_list("module_id", flat=True)) == [module.id]
+
+        cleared = api_key_client.patch(
+            self.external_issue_url(workspace.slug, project.id, issue.id),
+            {"labels": [], "module_ids": []},
+            format="json",
+        )
+        assert cleared.status_code == status.HTTP_400_BAD_REQUEST
+        assert issue.labels.filter(id=label.id).exists()
         assert ModuleIssue.objects.filter(issue=issue, module=module).exists()
 
     @pytest.mark.django_db

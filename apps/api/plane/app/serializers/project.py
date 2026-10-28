@@ -167,7 +167,7 @@ class ProjectSerializer(BaseSerializer):
                     raise serializers.ValidationError(
                         {"is_module_required": ["Enable the modules feature before requiring a module."]}
                     )
-                if not Module.objects.filter(project_id=required_project_id).exists():
+                if not Module.objects.filter(project_id=required_project_id, archived_at__isnull=True).exists():
                     raise serializers.ValidationError(
                         {"is_module_required": ["Create at least one module before requiring a module."]}
                     )

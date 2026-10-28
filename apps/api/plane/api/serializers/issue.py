@@ -22,6 +22,8 @@ from plane.db.models import (
     IssueLink,
     IssueRelation,
     Label,
+    Module,
+    ModuleIssue,
     Project,
     State,
     User,
@@ -33,6 +35,7 @@ from plane.utils.content_validator import (
 )
 from plane.utils.administrative_projects import assignable_project_member_ids
 from plane.utils.work_item_assignment import replace_issue_assignee, validate_single_assignee
+from plane.utils.work_item_required_fields import validate_required_issue_relations
 
 from .base import BaseSerializer
 from .cycle import CycleLiteSerializer, CycleSerializer
@@ -62,6 +65,11 @@ class IssueSerializer(BaseSerializer):
 
     labels = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=Label.objects.values_list("id", flat=True)),
+        write_only=True,
+        required=False,
+    )
+    module_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=Module.objects.values_list("id", flat=True)),
         write_only=True,
         required=False,
     )
@@ -109,10 +117,10 @@ class IssueSerializer(BaseSerializer):
         validate_single_assignee(data.get("assignees"), "assignees")
 
         # Validate assignees against direct and inherited project participation.
+        project = Project.objects.select_related("workspace", "administrative_organization").get(
+            pk=self.context["project_id"],
+        )
         if data.get("assignees", []):
-            project = Project.objects.select_related("workspace", "administrative_organization").get(
-                pk=self.context["project_id"],
-            )
             valid_assignee_ids = set(
                 assignable_project_member_ids(project).filter(id__in=data["assignees"]).values_list("id", flat=True)
             )
@@ -123,7 +131,8 @@ class IssueSerializer(BaseSerializer):
                 )
             data["assignees"] = list(valid_assignee_ids)
 
-        # Validate labels are from project
+        # Validate labels and modules are from the same project.
+        labels_supplied = "labels" in data
         if data.get("labels", []):
             valid_label_ids = set(
                 Label.objects.filter(project_id=self.context.get("project_id"), id__in=data["labels"]).values_list(
@@ -134,6 +143,33 @@ class IssueSerializer(BaseSerializer):
             if invalid_label_ids:
                 raise serializers.ValidationError(f"Labels {list(invalid_label_ids)} do not belong to this project")
             data["labels"] = list(valid_label_ids)
+        elif labels_supplied:
+            data["labels"] = []
+
+        modules_supplied = "module_ids" in data
+        if data.get("module_ids", []):
+            valid_module_ids = set(
+                Module.objects.filter(project_id=self.context.get("project_id"), id__in=data["module_ids"]).values_list(
+                    "id", flat=True
+                )
+            )
+            data["module_ids"] = list(valid_module_ids)
+        elif modules_supplied:
+            data["module_ids"] = []
+
+        required_errors = validate_required_issue_relations(
+            project,
+            module_ids=data.get("module_ids", []),
+            module_ids_supplied=modules_supplied,
+            label_ids=data.get("labels", []),
+            label_ids_supplied=labels_supplied,
+            instance=self.instance,
+            is_draft=data.get("is_draft", getattr(self.instance, "is_draft", False)),
+        )
+        if "label_ids" in required_errors:
+            required_errors["labels"] = required_errors.pop("label_ids")
+        if required_errors:
+            raise serializers.ValidationError(required_errors)
 
         # Check state is from the project only else raise validation error
         if (
@@ -169,6 +205,7 @@ class IssueSerializer(BaseSerializer):
     def create(self, validated_data):
         assignees = validated_data.pop("assignees", None)
         labels = validated_data.pop("labels", None)
+        modules = validated_data.pop("module_ids", None)
 
         project_id = self.context["project_id"]
         workspace_id = self.context["workspace_id"]
@@ -218,12 +255,30 @@ class IssueSerializer(BaseSerializer):
             except IntegrityError:
                 pass
 
+        if modules is not None and len(modules):
+            ModuleIssue.objects.bulk_create(
+                [
+                    ModuleIssue(
+                        module_id=module_id,
+                        issue=issue,
+                        project_id=project_id,
+                        workspace_id=workspace_id,
+                        created_by_id=created_by_id,
+                        updated_by_id=updated_by_id,
+                    )
+                    for module_id in modules
+                ],
+                batch_size=10,
+                ignore_conflicts=True,
+            )
+
         return issue
 
     @transaction.atomic
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignees", None)
         labels = validated_data.pop("labels", None)
+        modules = validated_data.pop("module_ids", None)
 
         # Related models
         project_id = instance.project_id
@@ -254,6 +309,26 @@ class IssueSerializer(BaseSerializer):
                 )
             except IntegrityError:
                 pass
+
+        if modules is not None:
+            ModuleIssue.objects.filter(issue=instance).delete()
+            if len(modules):
+                actor = self.context.get("actor")
+                ModuleIssue.objects.bulk_create(
+                    [
+                        ModuleIssue(
+                            module_id=module_id,
+                            issue=instance,
+                            project_id=project_id,
+                            workspace_id=workspace_id,
+                            created_by_id=created_by_id,
+                            updated_by_id=actor.id if actor else updated_by_id,
+                        )
+                        for module_id in modules
+                    ],
+                    batch_size=10,
+                    ignore_conflicts=True,
+                )
 
         # Time updation occues even when other related models are updated
         instance.updated_at = timezone.now()
@@ -288,6 +363,13 @@ class IssueSerializer(BaseSerializer):
                 data["labels"] = [
                     str(label) for label in IssueLabel.objects.filter(issue=instance).values_list("label_id", flat=True)
                 ]
+        if "module_ids" in self.fields:
+            data["module_ids"] = [
+                str(module_id)
+                for module_id in ModuleIssue.objects.filter(issue=instance, deleted_at__isnull=True).values_list(
+                    "module_id", flat=True
+                )
+            ]
 
         return data
 

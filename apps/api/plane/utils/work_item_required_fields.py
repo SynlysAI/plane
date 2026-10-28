@@ -4,7 +4,7 @@
 
 """Required module and label rules shared by work item APIs."""
 
-from plane.db.models import IssueLabel, ModuleIssue
+from plane.db.models import Issue, IssueLabel, Label, Module, ModuleIssue
 
 MODULE_REQUIRED_ERROR = "模块（财务报销科目）为必选项。"
 LABEL_REQUIRED_ERROR = "标签（小组）为必选项。"
@@ -105,3 +105,49 @@ def module_removal_would_violate_requirement(project, current_module_ids, remove
         str(module_id) for module_id in removed_module_ids
     }
     return not remaining
+
+
+def required_module_operation_error(project, module) -> str | None:
+    """Return the reason a module operation would break a required-field rule.
+
+    Args:
+        project: The project carrying the required-field configuration.
+        module: The module being deleted or archived.
+
+    Returns:
+        An error message, or None when the operation is allowed.
+    """
+    if not project.is_module_required:
+        return None
+    if Issue.objects.filter(
+        issue_module__module=module,
+        issue_module__deleted_at__isnull=True,
+        is_draft=False,
+    ).exists():
+        return "模块仍被正式工作项使用，不能删除或归档。"
+    if not Module.objects.filter(project=project, archived_at__isnull=True).exclude(pk=module.pk).exists():
+        return "必填模块至少需要保留一个可选项。"
+    return None
+
+
+def required_label_delete_error(project, label) -> str | None:
+    """Return the reason deleting a label would break a required-field rule.
+
+    Args:
+        project: The project carrying the required-field configuration.
+        label: The label being deleted.
+
+    Returns:
+        An error message, or None when deletion is allowed.
+    """
+    if not project.is_label_required:
+        return None
+    if Issue.objects.filter(
+        labels=label,
+        label_issue__deleted_at__isnull=True,
+        is_draft=False,
+    ).exists():
+        return "标签仍被正式工作项使用，不能删除。"
+    if not Label.objects.filter(project=project).exclude(pk=label.pk).exists():
+        return "必填标签至少需要保留一个可选项。"
+    return None
