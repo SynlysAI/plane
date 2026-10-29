@@ -23,8 +23,8 @@ export const AdministrativeRequiredFieldSettings = observer(function Administrat
   const { projectId } = props;
   const { workspaceSlug } = useParams();
   const { getProjectById } = useProject();
-  const { fetchModules, getProjectModuleIds } = useModule();
-  const { fetchProjectLabels, getProjectLabelIds } = useLabel();
+  const { fetchModules, getProjectModuleDetails } = useModule();
+  const { fetchProjectLabels, getProjectLabels } = useLabel();
   const project = getProjectById(projectId);
 
   useEffect(() => {
@@ -36,10 +36,26 @@ export const AdministrativeRequiredFieldSettings = observer(function Administrat
 
   if (!workspaceSlug || project?.is_research_project !== false) return null;
 
-  const moduleIds = getProjectModuleIds(projectId) ?? [];
-  const labelIds = getProjectLabelIds(projectId) ?? [];
-  const moduleUnavailable = !project.module_view || moduleIds.length === 0;
-  const labelUnavailable = labelIds.length === 0;
+  const modules = getProjectModuleDetails(projectId);
+  const labels = getProjectLabels(projectId);
+  const moduleNames = (modules ?? []).map((module) => module.name?.trim() || "未命名模块");
+  const labelNames = (labels ?? []).map((label) => label.name?.trim() || "未命名标签");
+  const moduleLoading = modules === null;
+  const labelLoading = labels === undefined;
+  const moduleUnavailable = !project.module_view || moduleNames.length === 0;
+  const labelUnavailable = labelNames.length === 0;
+  const moduleOptionDescription = moduleLoading
+    ? "正在读取模块..."
+    : !project.module_view
+      ? "请先启用模块功能。"
+      : moduleNames.length > 0
+        ? `当前可选模块：${moduleNames.join("、")}`
+        : "请先创建至少一个模块。";
+  const labelOptionDescription = labelLoading
+    ? "正在读取标签..."
+    : labelNames.length > 0
+      ? `当前可选标签：${labelNames.join("、")}`
+      : "请先创建至少一个标签。";
 
   return (
     <div className="mt-10">
@@ -50,21 +66,29 @@ export const AdministrativeRequiredFieldSettings = observer(function Administrat
       <div className="mt-6 flex flex-col gap-y-4">
         <ProjectSettingsFeatureControlItem
           description={
-            moduleUnavailable ? "请先启用模块并创建至少一个模块。" : "创建与编辑正式行政工作项时必须选择模块。"
+            <span className="block break-words">
+              <span className="block">创建与编辑正式行政工作项时必须选择模块；草稿转正前需补齐。</span>
+              <span className="block">{moduleOptionDescription}</span>
+            </span>
           }
-          disabled={!project.is_module_required && moduleUnavailable}
+          disabled={moduleLoading || (!project.is_module_required && moduleUnavailable)}
           featureProperty="is_module_required"
           projectId={projectId}
-          title="模块（财务报销科目）必选"
+          title="模块必选"
           value={Boolean(project.is_module_required)}
           workspaceSlug={workspaceSlug}
         />
         <ProjectSettingsFeatureControlItem
-          description={labelUnavailable ? "请先创建至少一个标签。" : "创建与编辑正式行政工作项时必须选择标签。"}
-          disabled={!project.is_label_required && labelUnavailable}
+          description={
+            <span className="block break-words">
+              <span className="block">创建与编辑正式行政工作项时必须选择标签；草稿转正前需补齐。</span>
+              <span className="block">{labelOptionDescription}</span>
+            </span>
+          }
+          disabled={labelLoading || (!project.is_label_required && labelUnavailable)}
           featureProperty="is_label_required"
           projectId={projectId}
-          title="标签（小组）必选"
+          title="标签必选"
           value={Boolean(project.is_label_required)}
           workspaceSlug={workspaceSlug}
         />
