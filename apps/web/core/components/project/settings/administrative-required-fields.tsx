@@ -44,18 +44,21 @@ export const AdministrativeRequiredFieldSettings = observer(function Administrat
   const labelLoading = labels === undefined;
   const moduleUnavailable = !project.module_view || moduleNames.length === 0;
   const labelUnavailable = labelNames.length === 0;
-  const moduleOptionDescription = moduleLoading
-    ? "正在读取模块..."
-    : !project.module_view
-      ? "请先启用模块功能。"
-      : moduleNames.length > 0
-        ? `当前可选模块：${moduleNames.join("、")}`
-        : "请先创建至少一个模块。";
-  const labelOptionDescription = labelLoading
-    ? "正在读取标签..."
-    : labelNames.length > 0
-      ? `当前可选标签：${labelNames.join("、")}`
-      : "请先创建至少一个标签。";
+  let moduleOptionDescription = `当前可选模块：${moduleNames.join("、")}`;
+  if (moduleLoading) {
+    moduleOptionDescription = "正在读取模块...";
+  } else if (!project.module_view) {
+    moduleOptionDescription = "请先启用模块功能。";
+  } else if (moduleNames.length === 0) {
+    moduleOptionDescription = "请先创建至少一个模块。";
+  }
+
+  let labelOptionDescription = `当前可选标签：${labelNames.join("、")}`;
+  if (labelLoading) {
+    labelOptionDescription = "正在读取标签...";
+  } else if (labelNames.length === 0) {
+    labelOptionDescription = "请先创建至少一个标签。";
+  }
 
   return (
     <div className="mt-10">
