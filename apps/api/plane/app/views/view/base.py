@@ -22,6 +22,8 @@ from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 from plane.utils.administrative_projects import (
+    ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE,
+    administrative_settings_write_blocked,
     administrative_projects_for_user,
     visible_administrative_projects,
     user_can_manage_administrative_project,
@@ -63,6 +65,13 @@ class WorkspaceViewViewSet(BaseViewSet):
         workspace = Workspace.objects.get(slug=self.kwargs.get("slug"))
         serializer.save(workspace_id=workspace.id, owned_by=self.request.user)
 
+    def create(self, request, *args, **kwargs):
+        """Create a shared view after checking the administrative settings lock."""
+        workspace = Workspace.objects.get(slug=kwargs["slug"])
+        if administrative_settings_write_blocked(request.user, workspace):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
     def get_queryset(self):
         return self.filter_queryset(
             super()
@@ -93,6 +102,8 @@ class WorkspaceViewViewSet(BaseViewSet):
     def partial_update(self, request, slug, pk):
         with transaction.atomic():
             workspace_view = IssueView.objects.select_for_update().get(pk=pk, workspace__slug=slug)
+            if administrative_settings_write_blocked(request.user, workspace_view.workspace):
+                return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
             if workspace_view.is_locked:
                 return Response({"error": "view is locked"}, status=status.HTTP_400_BAD_REQUEST)
@@ -126,6 +137,8 @@ class WorkspaceViewViewSet(BaseViewSet):
     @allow_permission(allowed_roles=[ROLE.ADMIN], level="WORKSPACE", creator=True, model=IssueView)
     def destroy(self, request, slug, pk):
         workspace_view = IssueView.objects.get(pk=pk, workspace__slug=slug)
+        if administrative_settings_write_blocked(request.user, workspace_view.workspace):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
         workspace_member = WorkspaceMember.objects.filter(
             workspace__slug=slug, member=request.user, role=20, is_active=True
@@ -156,7 +169,9 @@ class WorkspaceViewIssuesViewSet(BaseViewSet):
         Get common project permission filters for guest users and role-based access control.
         Returns Q object for filtering issues based on user role and project settings.
         """
-        return Q(project_id__in=administrative_projects_for_user(self.request.user, self.kwargs.get("slug")).values("id")) | Q(
+        return Q(
+            project_id__in=administrative_projects_for_user(self.request.user, self.kwargs.get("slug")).values("id")
+        ) | Q(
             Q(
                 project__project_projectmember__role=5,
                 project__guest_view_all_features=True,
@@ -224,9 +239,9 @@ class WorkspaceViewIssuesViewSet(BaseViewSet):
     def get_queryset(self):
         return Issue.issue_objects.filter(
             workspace__slug=self.kwargs.get("slug"),
-            project_id__in=visible_administrative_projects(self.request.user, self.kwargs.get("slug")).filter(
-                archived_at__isnull=True
-            ).values("id"),
+            project_id__in=visible_administrative_projects(self.request.user, self.kwargs.get("slug"))
+            .filter(archived_at__isnull=True)
+            .values("id"),
         )
 
     @method_decorator(gzip_page)
@@ -276,6 +291,13 @@ class IssueViewViewSet(BaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(project_id=self.kwargs.get("project_id"), owned_by=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """Create a project view after checking the administrative settings lock."""
+        project = Project.objects.get(pk=kwargs["project_id"], workspace__slug=kwargs["slug"])
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
 
     def get_queryset(self):
         subquery = UserFavorite.objects.filter(
@@ -366,6 +388,8 @@ class IssueViewViewSet(BaseViewSet):
     def partial_update(self, request, slug, project_id, pk):
         with transaction.atomic():
             issue_view = IssueView.objects.select_for_update().get(pk=pk, workspace__slug=slug, project_id=project_id)
+            if administrative_settings_write_blocked(request.user, issue_view.project.workspace, issue_view.project):
+                return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
             if issue_view.is_locked:
                 return Response({"error": "view is locked"}, status=status.HTTP_400_BAD_REQUEST)
@@ -387,6 +411,8 @@ class IssueViewViewSet(BaseViewSet):
     @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=IssueView)
     def destroy(self, request, slug, project_id, pk):
         project_view = IssueView.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
+        if administrative_settings_write_blocked(request.user, project_view.project.workspace, project_view.project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         if (
             user_can_manage_administrative_project(request.user, slug, project_id)
             or ProjectMember.objects.filter(

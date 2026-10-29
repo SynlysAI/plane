@@ -1,6 +1,6 @@
 {
   "name": "@plane/logger",
-  "version": "8.8.2",
+  "version": "8.9.0",
   "private": true,
   "description": "Logger shared across multiple apps internally",
   "license": "AGPL-3.0",

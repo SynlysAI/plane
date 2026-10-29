@@ -73,36 +73,63 @@ export default observer(function WorkspaceManagementPage() {
       </nav>
       {active === "workspace" && (
         <div className="flex-1 overflow-auto p-5">
-          <div className="space-y-4">
-            <h2 className="text-16 font-medium">科研模块</h2>
-            <p className="text-13 text-secondary">
-              启用后，有科研权限的成员可使用科研项目。停用保留已有数据，行政项目继续可用。
-            </p>
+          <div className="space-y-8">
+            <section className="space-y-4">
+              <h2 className="text-16 font-medium">科研模块</h2>
+              <p className="text-13 text-secondary">
+                启用后，有科研权限的成员可使用科研项目。停用保留已有数据，行政项目继续可用。
+              </p>
+              <label className="flex items-center gap-2 text-13">
+                <input
+                  type="checkbox"
+                  checked={Boolean(context.workspace?.research_enabled)}
+                  disabled={saving || context.workspace?.purpose === "PI_PRIVATE"}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setSaving(true);
+                    setSaveError(null);
+                    void service
+                      .setResearchEnabled(workspaceSlug, enabled)
+                      .then(() => research.fetchIdentity(workspaceSlug))
+                      .catch((cause) => setSaveError(domainError(cause)))
+                      .finally(() => setSaving(false));
+                  }}
+                />
+                启用科研模块
+              </label>
+              {context.workspace?.purpose === "PI_PRIVATE" && (
+                <p className="text-12 text-secondary">主 PI 私有工作区用于行政协作。</p>
+              )}
+            </section>
+            <section className="space-y-4 border-t border-subtle pt-7">
+              <h2 className="text-16 font-medium">行政项目配置权限</h2>
+              <p className="text-13 text-secondary">
+                开启后，模块开启及设置、视图锁定、标签开启及设定仅工作区管理员可修改；成员可继续选择已建模块、已选标签和已有视图。
+              </p>
+              <label className="flex items-center gap-2 text-13">
+                <input
+                  name="administrative-settings-admin-only"
+                  type="checkbox"
+                  checked={Boolean(context.workspace?.administrative_settings_admin_only)}
+                  disabled={saving}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setSaving(true);
+                    setSaveError(null);
+                    void service
+                      .setAdministrativeSettingsAdminOnly(workspaceSlug, enabled)
+                      .then(() => research.fetchIdentity(workspaceSlug))
+                      .catch((cause) => setSaveError(domainError(cause)))
+                      .finally(() => setSaving(false));
+                  }}
+                />
+                行政项目配置仅管理员可设置
+              </label>
+            </section>
             {saveError && (
               <p role="alert" className="text-13 text-danger-primary">
                 {saveError}
               </p>
-            )}
-            <label className="flex items-center gap-2 text-13">
-              <input
-                type="checkbox"
-                checked={Boolean(context.workspace?.research_enabled)}
-                disabled={saving || context.workspace?.purpose === "PI_PRIVATE"}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  setSaving(true);
-                  setSaveError(null);
-                  void service
-                    .setResearchEnabled(workspaceSlug, enabled)
-                    .then(() => research.fetchIdentity(workspaceSlug))
-                    .catch((cause) => setSaveError(domainError(cause)))
-                    .finally(() => setSaving(false));
-                }}
-              />
-              启用科研模块
-            </label>
-            {context.workspace?.purpose === "PI_PRIVATE" && (
-              <p className="text-12 text-secondary">主 PI 私有工作区用于行政协作。</p>
             )}
             <Link to={`/${workspaceSlug}/settings/`} className="text-13 text-accent-primary">
               工作区成员与常规设置

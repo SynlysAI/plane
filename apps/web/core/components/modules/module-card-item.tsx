@@ -25,6 +25,7 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { ModuleQuickActions } from "@/components/modules";
 import { ModuleStatusDropdown } from "@/components/modules/module-status-dropdown";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -34,6 +35,12 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 type Props = {
   moduleId: string;
 };
+
+/** 阻止模块控件点击冒泡到外层卡片链接。 */
+function handleEventPropagation(event: SyntheticEvent<HTMLDivElement>) {
+  event.stopPropagation();
+  event.preventDefault();
+}
 
 export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const { moduleId } = props;
@@ -46,16 +53,16 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const pathname = usePathname();
   // store hooks
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId?.toString());
   const { getModuleById, addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
   const { getUserDetails } = useMember();
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
   // derived values
   const moduleDetails = getModuleById(moduleId);
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isEditingAllowed =
+    !isAdministrativeSettingsLocked &&
+    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
   const isDisabled = !isEditingAllowed || !!moduleDetails?.archived_at;
   const renderIcon = Boolean(moduleDetails?.start_date) || Boolean(moduleDetails?.target_date);
 
@@ -68,6 +75,7 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
     const addToFavoritePromise = addModuleToFavorites(workspaceSlug.toString(), projectId.toString(), moduleId).then(
       () => {
         if (!storedValue) toggleFavoriteMenu(true);
+        return null;
       }
     );
 
@@ -108,11 +116,6 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
     });
   };
 
-  const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-
   const handleModuleDetailsChange = async (payload: Partial<IModule>) => {
     if (!workspaceSlug || !projectId) return;
 
@@ -123,6 +126,7 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
           title: "Success!",
           message: "Module updated successfully.",
         });
+        return null;
       })
       .catch((err) => {
         setToast({
@@ -180,6 +184,7 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
               <Tooltip label={moduleDetails.name} layout="stacked" disabled={isMobile}>
                 <span className="truncate text-14 font-medium">{moduleDetails.name}</span>
               </Tooltip>
+              {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events jsx-a11y/no-static-element-interactions -- Container only stops card-link propagation. */}
               <div className="flex items-center gap-2" onClick={handleEventPropagation}>
                 {moduleStatus && (
                   <ModuleStatusDropdown
@@ -217,6 +222,7 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
               showValue={false}
               aria-label="Module progress"
             />
+            {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events jsx-a11y/no-static-element-interactions -- Container only stops card-link propagation. */}
             <div className="flex items-center justify-between py-0.5" onClick={handleEventPropagation}>
               <DateRangeDropdown
                 buttonContainerClassName={`h-6 w-full flex ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} items-center gap-1.5 text-tertiary border-[0.5px] border-strong rounded-sm text-11`}

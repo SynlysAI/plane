@@ -22,6 +22,7 @@ import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ModuleQuickActions } from "@/components/modules";
 import { ModuleStatusDropdown } from "@/components/modules/module-status-dropdown";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -39,6 +40,7 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   const { workspaceSlug, projectId } = useParams();
   //   store hooks
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId?.toString());
   const { addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
   const { getUserDetails } = useMember();
 
@@ -49,10 +51,9 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   // derived values
 
   const moduleStatus = MODULE_STATUS.find((status) => status.value === moduleDetails.status);
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isEditingAllowed =
+    !isAdministrativeSettingsLocked &&
+    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
   const isDisabled = !isEditingAllowed || !!moduleDetails?.archived_at;
   const renderIcon = Boolean(moduleDetails.start_date) || Boolean(moduleDetails.target_date);
 
@@ -66,6 +67,7 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
       () => {
         // open favorites menu if closed
         if (!storedValue) toggleFavoriteMenu(true);
+        return null;
       }
     );
 
@@ -116,6 +118,7 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
           title: "Success!",
           message: "Module updated successfully.",
         });
+        return null;
       })
       .catch((err) => {
         setToast({

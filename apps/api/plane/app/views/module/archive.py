@@ -32,6 +32,10 @@ from plane.app.permissions import ProjectEntityPermission
 from plane.app.serializers import ModuleDetailSerializer
 from plane.db.models import Issue, Module, ModuleLink, UserFavorite, Project
 from plane.utils.analytics_plot import burndown_plot
+from plane.utils.administrative_projects import (
+    ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE,
+    administrative_settings_write_blocked,
+)
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.work_item_required_fields import required_module_operation_error
 
@@ -544,6 +548,8 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
 
     def post(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
+        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_module_operation_error(module.project, module)
         if required_error is not None:
             return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
@@ -564,6 +570,8 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
 
     def delete(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
+        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         module.archived_at = None
         module.save()
         return Response(status=status.HTTP_204_NO_CONTENT)

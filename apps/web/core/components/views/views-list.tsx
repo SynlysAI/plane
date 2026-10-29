@@ -15,6 +15,7 @@ import { EUserProjectRoles } from "@plane/types";
 import { ListLayout } from "@/components/core/list";
 import { ViewListLoader } from "@/components/ui/loader/view-list-loader";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -29,13 +30,16 @@ export const ProjectViewsList = observer(function ProjectViewsList() {
   const { toggleCreateViewModal } = useCommandPalette();
   const { getProjectViews, getFilteredProjectViews, loader } = useProjectView();
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId?.toString());
   // derived values
   const projectViews = getProjectViews(projectId?.toString());
   const filteredProjectViews = getFilteredProjectViews(projectId?.toString());
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
-    EUserPermissionsLevel.PROJECT
-  );
+  const canPerformEmptyStateActions =
+    !isAdministrativeSettingsLocked &&
+    allowPermissions(
+      [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER, EUserProjectRoles.GUEST],
+      EUserPermissionsLevel.PROJECT
+    );
 
   if (loader || !projectViews || !filteredProjectViews) return <ViewListLoader />;
 

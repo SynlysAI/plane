@@ -45,6 +45,14 @@ export class ProjectDomainsService extends APIService {
   async setResearchEnabled(slug: string, enabled: boolean): Promise<TResearchIdentity> {
     return this.patch(`/api/workspaces/${slug}/context/`, { research_enabled: enabled }).then((res) => res.data);
   }
+
+  /** 更新行政项目配置是否仅工作区管理员可设置。 */
+  async setAdministrativeSettingsAdminOnly(slug: string, enabled: boolean): Promise<TResearchIdentity> {
+    return this.patch(`/api/workspaces/${slug}/context/`, { administrative_settings_admin_only: enabled }).then(
+      (res) => res.data
+    );
+  }
+
   async todos(slug: string, domain = "all", cursor?: string): Promise<TWorkspaceTodoPage> {
     return this.get(`/api/workspaces/${slug}/todos/`, { params: { domain, cursor, limit: 50 } }).then(
       (res) => res.data

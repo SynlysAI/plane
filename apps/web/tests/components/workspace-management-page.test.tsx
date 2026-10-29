@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     },
   },
   fetchIdentity: vi.fn(),
+  setAdministrativeSettingsAdminOnly: vi.fn(),
 }));
 
 vi.mock("@plane/propel/button", () => ({
@@ -55,6 +56,7 @@ vi.mock("@/components/research/feedback/feedback-dialog", () => ({
 vi.mock("@/services/project-domains.service", () => ({
   ProjectDomainsService: class {
     setResearchEnabled = vi.fn();
+    setAdministrativeSettingsAdminOnly = mocks.setAdministrativeSettingsAdminOnly;
   },
   domainError: () => "保存失败",
 }));
@@ -85,7 +87,11 @@ beforeEach(() => {
     },
     workspace_enabled: true,
     capabilities: { nav: ["org"] },
-    workspace: { research_enabled: true, purpose: "PUBLIC_RESEARCH" },
+    workspace: {
+      research_enabled: true,
+      administrative_settings_admin_only: false,
+      purpose: "PUBLIC_RESEARCH",
+    },
     user: {
       is_main_pi: false,
       is_research_admin: false,
@@ -96,6 +102,22 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+});
+
+it("shows and saves the administrative settings administrator lock", async () => {
+  mocks.setAdministrativeSettingsAdminOnly.mockResolvedValue(mocks.context);
+
+  await render();
+  const checkbox = container.querySelector<HTMLInputElement>('input[name="administrative-settings-admin-only"]');
+  expect(checkbox).not.toBeNull();
+  expect(checkbox?.checked).toBe(false);
+  expect(container.textContent).toContain("行政项目配置仅管理员可设置");
+
+  await act(async () => {
+    checkbox?.click();
+  });
+
+  expect(mocks.setAdministrativeSettingsAdminOnly).toHaveBeenCalledWith("public", true);
 });
 
 afterEach(async () => {

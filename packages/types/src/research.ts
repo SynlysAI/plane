@@ -1145,6 +1145,7 @@ export type TResearchIdentity = {
     slug: string;
     purpose: "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
     research_enabled?: boolean;
+    administrative_settings_admin_only?: boolean;
     /** Timezone used to resolve report weeks, months, and submission boundaries. */
     report_timezone?: string;
   };

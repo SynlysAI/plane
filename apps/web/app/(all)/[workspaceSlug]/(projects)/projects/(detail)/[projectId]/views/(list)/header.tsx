@@ -14,6 +14,7 @@ import { Breadcrumbs, Header } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { ViewListHeader } from "@/components/views/view-list-header";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 // plane web imports
@@ -24,6 +25,7 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
   // store hooks
   const { toggleCreateViewModal } = useCommandPalette();
   const { loader } = useProject();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId?.toString());
 
   return (
     <>
@@ -46,11 +48,13 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
         </Header.LeftItem>
         <Header.RightItem>
           <ViewListHeader />
-          <div>
-            <Button variant="primary" size="lg" onClick={() => toggleCreateViewModal(true)}>
-              Add view
-            </Button>
-          </div>
+          {!isAdministrativeSettingsLocked && (
+            <div>
+              <Button variant="primary" size="lg" onClick={() => toggleCreateViewModal(true)}>
+                Add view
+              </Button>
+            </div>
+          )}
         </Header.RightItem>
       </Header>
     </>
