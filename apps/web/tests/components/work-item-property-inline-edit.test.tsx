@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({
+  setToast: vi.fn(),
   mainContentEditMode: null as boolean | null,
   permissionAllowed: true,
   peekDetailsEditMode: null as boolean | null,
@@ -11,6 +12,7 @@ const captured = vi.hoisted(() => ({
   peekPropertiesDisabled: null as boolean | null,
   peekWidgetsDisabled: null as boolean | null,
   sidebarEditable: null as boolean | null,
+  sidebarIssueOperations: null as { update: (...args: unknown[]) => Promise<void> } | null,
 }));
 
 const issueDetailStore = vi.hoisted(() => ({
@@ -34,14 +36,26 @@ const issueDetailStore = vi.hoisted(() => ({
   removeIssueFromModule: vi.fn(),
 }));
 
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@plane/i18n", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) => {
+      if (key === "issue.label") {
+        return options?.count === 1 ? "工作项" : "{count, plural, one {工作项} other {工作项}}";
+      }
+      if (key === "entity.update.failed") {
+        return `${options?.entity}更新失败`;
+      }
+      return key;
+    },
+  }),
+}));
 vi.mock("@plane/utils", () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" "),
 }));
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { ERROR: "error", SUCCESS: "success" },
   setPromiseToast: vi.fn(),
-  setToast: vi.fn(),
+  setToast: captured.setToast,
 }));
 vi.mock("@/app/assets/empty-state/issue.svg?url", () => ({ default: "issue.svg" }));
 vi.mock("@/components/common/empty-state", () => ({ EmptyState: () => <div /> }));
@@ -56,8 +70,12 @@ vi.mock("@/components/issues/issue-detail/main-content", () => ({
   },
 }));
 vi.mock("@/components/issues/issue-detail/sidebar", () => ({
-  IssueDetailsSidebar: (props: { isEditable: boolean }) => {
+  IssueDetailsSidebar: (props: {
+    isEditable: boolean;
+    issueOperations: { update: (...args: unknown[]) => Promise<void> };
+  }) => {
     captured.sidebarEditable = props.isEditable;
+    captured.sidebarIssueOperations = props.issueOperations;
     return <div data-testid="detail-properties" />;
   },
 }));
@@ -165,6 +183,9 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  captured.setToast.mockReset();
+  issueDetailStore.updateIssue.mockReset();
+  captured.sidebarIssueOperations = null;
   captured.mainContentEditMode = null;
   captured.permissionAllowed = true;
   captured.peekDetailsEditMode = null;
@@ -236,4 +257,26 @@ it("keeps peek properties disabled without permission or after archiving", async
 
   await act(async () => renderPeekView(false, true));
   expect(captured.peekPropertiesDisabled).toBe(true);
+});
+
+it("shows the backend field error when a work item update fails", async () => {
+  issueDetailStore.updateIssue.mockRejectedValueOnce({ module_ids: ["模块为必选项。"] });
+  await act(async () => renderDetailRoot("issue-1"));
+
+  await act(async () => {
+    await captured.sidebarIssueOperations?.update("ws", "project-1", "issue-1", { assignee_ids: ["member-1"] });
+  });
+
+  expect(captured.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "error", message: "模块为必选项。" }));
+});
+
+it("uses a readable work item fallback message without raw ICU syntax", async () => {
+  issueDetailStore.updateIssue.mockRejectedValueOnce(new Error("network unavailable"));
+  await act(async () => renderDetailRoot("issue-1"));
+
+  await act(async () => {
+    await captured.sidebarIssueOperations?.update("ws", "project-1", "issue-1", { assignee_ids: ["member-1"] });
+  });
+
+  expect(captured.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "error", message: "工作项更新失败" }));
 });
