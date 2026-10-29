@@ -6,8 +6,8 @@
 
 from plane.db.models import Issue, IssueLabel, Label, Module, ModuleIssue
 
-MODULE_REQUIRED_ERROR = "模块（财务报销科目）为必选项。"
-LABEL_REQUIRED_ERROR = "标签（小组）为必选项。"
+MODULE_REQUIRED_ERROR = "模块为必选项。"
+LABEL_REQUIRED_ERROR = "标签为必选项。"
 
 
 def active_issue_module_ids(issue) -> list:

@@ -103,7 +103,7 @@ it("prevents clearing the last required label from issue detail", async () => {
     container.querySelector<HTMLButtonElement>('[data-testid="clear-label"]')?.click();
   });
   expect(mocks.updateIssue).not.toHaveBeenCalled();
-  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "标签（小组）为必选项。" }));
+  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "标签为必选项。" }));
 
   await act(async () => {
     container.querySelector<HTMLButtonElement>('[data-testid="set-label"]')?.click();
@@ -127,7 +127,7 @@ it("prevents clearing the last required module from issue detail", async () => {
     container.querySelector<HTMLButtonElement>('[data-testid="clear-module"]')?.click();
   });
   expect(mocks.changeModulesInIssue).not.toHaveBeenCalled();
-  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "模块（财务报销科目）为必选项。" }));
+  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "模块为必选项。" }));
 
   await act(async () => {
     container.querySelector<HTMLButtonElement>('[data-testid="set-module"]')?.click();
@@ -154,5 +154,5 @@ it("prevents removing the last required label pill from issue detail", async () 
     container.querySelector<HTMLButtonElement>("button")?.click();
   });
   expect(mocks.updateIssue).not.toHaveBeenCalled();
-  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "标签（小组）为必选项。" }));
+  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "标签为必选项。" }));
 });

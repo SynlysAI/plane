@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   updateProject: vi.fn(),
   fetchModules: vi.fn(),
   fetchProjectLabels: vi.fn(),
-  getProjectModuleIds: vi.fn(),
-  getProjectLabelIds: vi.fn(),
+  getProjectModuleDetails: vi.fn(),
+  getProjectLabels: vi.fn(),
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -46,13 +46,13 @@ vi.mock("@/hooks/store/use-project", () => ({
 vi.mock("@/hooks/store/use-module", () => ({
   useModule: () => ({
     fetchModules: mocks.fetchModules,
-    getProjectModuleIds: mocks.getProjectModuleIds,
+    getProjectModuleDetails: mocks.getProjectModuleDetails,
   }),
 }));
 vi.mock("@/hooks/store/use-label", () => ({
   useLabel: () => ({
     fetchProjectLabels: mocks.fetchProjectLabels,
-    getProjectLabelIds: mocks.getProjectLabelIds,
+    getProjectLabels: mocks.getProjectLabels,
   }),
 }));
 
@@ -75,8 +75,14 @@ beforeEach(() => {
     is_module_required: false,
     is_label_required: false,
   });
-  mocks.getProjectModuleIds.mockReturnValue(["module-1"]);
-  mocks.getProjectLabelIds.mockReturnValue(["label-1"]);
+  mocks.getProjectModuleDetails.mockReturnValue([
+    { id: "module-1", name: "设备采购" },
+    { id: "module-2", name: "  " },
+  ]);
+  mocks.getProjectLabels.mockReturnValue([
+    { id: "label-1", name: "01器件" },
+    { id: "label-2", name: "" },
+  ]);
   mocks.updateProject.mockResolvedValue({});
 });
 
@@ -98,14 +104,16 @@ it("shows administrative required-field controls and updates project settings", 
   expect(container.textContent).toContain("行政工作项必填项");
   expect(mocks.fetchModules).toHaveBeenCalledWith("lab", "project-1");
   expect(mocks.fetchProjectLabels).toHaveBeenCalledWith("lab", "project-1");
+  expect(container.textContent).toContain("设备采购、未命名模块");
+  expect(container.textContent).toContain("01器件、未命名标签");
 
   await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[aria-label="模块（财务报销科目）必选"]')?.click();
+    container.querySelector<HTMLButtonElement>('button[aria-label="模块必选"]')?.click();
   });
   expect(mocks.updateProject).toHaveBeenCalledWith("lab", "project-1", { is_module_required: true });
 
   await act(async () => {
-    container.querySelector<HTMLButtonElement>('button[aria-label="标签（小组）必选"]')?.click();
+    container.querySelector<HTMLButtonElement>('button[aria-label="标签必选"]')?.click();
   });
   expect(mocks.updateProject).toHaveBeenCalledWith("lab", "project-1", { is_label_required: true });
 });
@@ -125,12 +133,21 @@ it("disables unavailable required-field switches", async () => {
     is_module_required: false,
     is_label_required: false,
   });
-  mocks.getProjectModuleIds.mockReturnValue([]);
-  mocks.getProjectLabelIds.mockReturnValue([]);
+  mocks.getProjectModuleDetails.mockReturnValue([]);
+  mocks.getProjectLabels.mockReturnValue([]);
   await renderSettings();
 
-  expect(container.querySelector<HTMLButtonElement>('button[aria-label="模块（财务报销科目）必选"]')?.disabled).toBe(
-    true
-  );
-  expect(container.querySelector<HTMLButtonElement>('button[aria-label="标签（小组）必选"]')?.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="模块必选"]')?.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="标签必选"]')?.disabled).toBe(true);
+});
+
+it("disables switches while project options are loading", async () => {
+  mocks.getProjectModuleDetails.mockReturnValue(null);
+  mocks.getProjectLabels.mockReturnValue(undefined);
+  await renderSettings();
+
+  expect(container.textContent).toContain("正在读取模块");
+  expect(container.textContent).toContain("正在读取标签");
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="模块必选"]')?.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="标签必选"]')?.disabled).toBe(true);
 });
