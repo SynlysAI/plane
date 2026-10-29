@@ -70,6 +70,12 @@ function stageIndexLabel(index: number): string {
   return String(index + 1).padStart(2, "0");
 }
 
+/** 复制数组后排序，兼容当前运行目标且不修改输入数据。 */
+function sortCopy<T>(items: T[], compare: (left: T, right: T) => number): T[] {
+  // oxlint-disable-next-line eslint-plugin-unicorn/no-array-sort -- 已先复制数组，避免修改输入数据。
+  return items.slice().sort(compare);
+}
+
 /**
  * 科研链详情概览指挥台：聚合当前阶段、审批、材料、任务与动态，并把高频操作前移。
  */
@@ -123,13 +129,13 @@ export function ResearchChainOverviewCommand({
   const topTasks = openTasks.slice(0, 3);
   // 复制后再排序，兼容当前 ES2022 运行目标。
   const recentEvents = useMemo(
-    () => [...events].toSorted((left, right) => right.occurred_at.localeCompare(left.occurred_at)).slice(0, 5),
+    () => sortCopy(events, (left, right) => right.occurred_at.localeCompare(left.occurred_at)).slice(0, 5),
     [events]
   );
   const latestReview = stageApproval?.review_actions?.[stageApproval.review_actions.length - 1] ?? null;
   // Owner 置前并截断展示，其余成员以计数折叠。
   const summaryMembers = useMemo(
-    () => [...members].toSorted((left, right) => Number(right.is_owner) - Number(left.is_owner)).slice(0, 5),
+    () => sortCopy(members, (left, right) => Number(right.is_owner) - Number(left.is_owner)).slice(0, 5),
     [members]
   );
   const hiddenMemberCount = Math.max(members.length - summaryMembers.length, 0);
