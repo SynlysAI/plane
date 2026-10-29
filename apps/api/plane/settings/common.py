@@ -375,7 +375,8 @@ OIDC_PROVIDER_NAME = os.environ.get("OIDC_PROVIDER_NAME", "ai4ms-oidc")
 RESEARCH_IMAGE_MAX_MB = int(os.environ.get("RESEARCH_IMAGE_MAX_MB", 20))
 RESEARCH_PDF_MAX_MB = int(os.environ.get("RESEARCH_PDF_MAX_MB", 100))
 RESEARCH_MARKDOWN_MAX_MB = int(os.environ.get("RESEARCH_MARKDOWN_MAX_MB", 5))
-RESEARCH_CHAIN_UPLOAD_MAX_BYTES = int(os.environ.get("RESEARCH_CHAIN_UPLOAD_MAX_BYTES", 50 * 1024 * 1024))
+RESEARCH_OFFICE_MAX_MB = int(os.environ.get("RESEARCH_OFFICE_MAX_MB", 50))
+RESEARCH_CHAIN_UPLOAD_MAX_BYTES = int(os.environ.get("RESEARCH_CHAIN_UPLOAD_MAX_BYTES", 500 * 1024 * 1024))
 
 # P1 sub module switches (workspace settings may override them)
 RESEARCH_STAGE_ENABLED = os.environ.get("RESEARCH_STAGE_ENABLED", "1") == "1"
@@ -652,3 +653,7 @@ ATTACHMENT_PREVIEW_CONVERTER_URL = os.environ.get("ATTACHMENT_PREVIEW_CONVERTER_
 ATTACHMENT_PREVIEW_VERSION = "gotenberg-8.38.1-v1"
 ATTACHMENT_PREVIEW_MAX_BYTES = 100 * 1024 * 1024
 ATTACHMENT_PREVIEW_TIMEOUT = 120
+
+# Personal report credentials never enable the node MCP write surface.
+# Enabled by default; deployments can explicitly opt out with 0.
+RESEARCH_WEEKLY_REPORT_MCP_ENABLED = os.environ.get("RESEARCH_WEEKLY_REPORT_MCP_ENABLED", "1") == "1"

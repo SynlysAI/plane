@@ -5,6 +5,7 @@
  */
 
 import { forwardRef } from "react";
+import { useTranslation } from "@plane/i18n";
 // plane imports
 import { RichTextEditorWithRef } from "@plane/editor";
 import type { EditorRefApi, IRichTextEditorProps, TFileHandler } from "@plane/editor";
@@ -18,6 +19,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
 // plane web hooks
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
+import { useEditorAttachmentDrop } from "@/components/editor/use-editor-attachment-drop";
 
 type RichTextEditorWrapperProps = MakeOptional<
   Omit<IRichTextEditorProps, "fileHandler" | "mentionHandler" | "extendedEditorProps">,
@@ -27,6 +29,7 @@ type RichTextEditorWrapperProps = MakeOptional<
   workspaceId: string;
   projectId?: string;
   issueSequenceId?: number;
+  onAttachFiles?: (files: File[]) => void | Promise<void>;
   /** 科研等受控内容可覆盖资源路由，统一执行所属对象的权限检查。 */
   fileHandlerOverrides?: Partial<TFileHandler>;
 } & (
@@ -45,12 +48,14 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
   props: RichTextEditorWrapperProps,
   ref: React.ForwardedRef<EditorRefApi>
 ) {
+  const { t } = useTranslation();
   const {
     containerClassName,
     editable,
     workspaceSlug,
     workspaceId,
     projectId,
+    onAttachFiles,
     disabledExtensions: additionalDisabledExtensions = [],
     fileHandlerOverrides,
     ...rest
@@ -73,39 +78,54 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     projectId,
     workspaceSlug,
   });
+  const { isAttachmentDragActive, attachmentDragHandlers } = useEditorAttachmentDrop({ onAttachFiles });
 
   return (
-    <RichTextEditorWithRef
-      ref={ref}
-      disabledExtensions={[...richTextEditorExtensions.disabled, ...(additionalDisabledExtensions ?? [])]}
-      editable={editable}
-      flaggedExtensions={richTextEditorExtensions.flagged}
-      fileHandler={{
-        ...getEditorFileHandlers({
-          projectId,
-          uploadFile: editable ? props.uploadFile : async () => "",
-          duplicateFile: editable ? props.duplicateFile : async () => "",
-          workspaceId,
-          workspaceSlug,
-        }),
-        ...fileHandlerOverrides,
-      }}
-      getEditorMetaData={getEditorMetaData}
-      mentionHandler={{
-        searchCallback: async (query) => {
-          const res = await fetchMentions(query);
-          if (!res) throw new Error("Failed in fetching mentions");
-          return res;
-        },
-        renderComponent: EditorMentionsRoot,
-        getMentionedEntityDetails: (id) => ({
-          display_name: getUserDetails(id)?.display_name ?? "",
-        }),
-      }}
-      extendedEditorProps={{}}
-      {...rest}
-      containerClassName={cn("relative pb-3 pl-3", containerClassName)}
-    />
+    <div
+      className={cn(
+        "relative rounded-sm transition-colors",
+        isAttachmentDragActive && "bg-surface-hover ring-border-strong ring-1"
+      )}
+      {...attachmentDragHandlers}
+    >
+      <RichTextEditorWithRef
+        ref={ref}
+        disabledExtensions={[...richTextEditorExtensions.disabled, ...(additionalDisabledExtensions ?? [])]}
+        editable={editable}
+        flaggedExtensions={richTextEditorExtensions.flagged}
+        fileHandler={{
+          ...getEditorFileHandlers({
+            projectId,
+            uploadFile: editable ? props.uploadFile : async () => "",
+            duplicateFile: editable ? props.duplicateFile : async () => "",
+            workspaceId,
+            workspaceSlug,
+          }),
+          ...(editable && onAttachFiles ? { attachFiles: onAttachFiles } : {}),
+          ...fileHandlerOverrides,
+        }}
+        getEditorMetaData={getEditorMetaData}
+        mentionHandler={{
+          searchCallback: async (query) => {
+            const res = await fetchMentions(query);
+            if (!res) throw new Error("Failed in fetching mentions");
+            return res;
+          },
+          renderComponent: EditorMentionsRoot,
+          getMentionedEntityDetails: (id) => ({
+            display_name: getUserDetails(id)?.display_name ?? "",
+          }),
+        }}
+        extendedEditorProps={{}}
+        {...rest}
+        containerClassName={cn("relative pb-3 pl-3", containerClassName)}
+      />
+      {onAttachFiles && (
+        <span role="status" className="sr-only">
+          {isAttachmentDragActive ? t("attachment.upload_zone.active") : ""}
+        </span>
+      )}
+    </div>
   );
 });
 

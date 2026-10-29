@@ -838,7 +838,10 @@
       "invalid": "Hanya gambar JPEG, JPG, PNG, WebP, atau GIF yang didukung.",
       "upload": "Unggah gambar"
     },
-    "delete": "Hapus lampiran"
+    "delete": "Hapus lampiran",
+    "editor_file": {
+      "upload": "Tambahkan lampiran"
+    }
   },
   "label": {
     "select": "Pilih label",

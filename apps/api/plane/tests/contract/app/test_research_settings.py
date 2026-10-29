@@ -146,6 +146,18 @@ class TestResearchSettingsEndpoint:
         env["admin_client"].patch(env["url"], {"module_enabled": True, "pdf_max_mb": 200}, format="json")
         assert settings.FILE_SIZE_LIMIT == default_limit
 
+    def test_admin_cannot_save_research_limit_above_deployment_ceiling(self, env, settings):
+        settings.RESEARCH_CHAIN_UPLOAD_MAX_BYTES = 500 * 1024 * 1024
+        response = env["admin_client"].patch(
+            env["url"],
+            {"pdf_max_mb": 501},
+            format="json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error_code"] == "file_size_exceeded"
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).pdf_max_mb == 100
+
     def test_invalid_visibility_is_rejected(self, env):
         response = env["admin_client"].patch(env["url"], {"default_report_visibility": "EVERYONE"}, format="json")
         assert response.status_code == 400

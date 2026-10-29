@@ -8,20 +8,22 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.app.serializers import PageBinaryUpdateSerializer
 from plane.db.models import (
-    Page,
     OrgUnit,
+    Page,
     PeriodicReport,
     PeriodicReportProjectReference,
-    PeriodicReportSnapshot,
-    Project,
     ProjectPage,
     ReportAccessGrant,
     ReportAttachment,
     ReportReviewLog,
-    ReportTemplate,
-    ResearchProjectProfile,
+)
+from plane.research.services.report_workflow import (
+    ReportWorkflowError,
+    create_report_draft,
+    report_queryset,
+    save_report_body,
+    submit_report,
 )
 from plane.research.serializers import (
     PeriodicReportSerializer,
@@ -29,12 +31,10 @@ from plane.research.serializers import (
     ReportReviewLogSerializer,
 )
 from plane.research.services.approval_routes import (
-    ApprovalRouteError,
     actor_can_review_route,
     active_approval_route_map,
     approval_route_payload,
     close_active_route,
-    create_approval_route,
     routed_resource_ids,
 )
 from plane.research.utils.acl import (
@@ -52,6 +52,7 @@ from plane.research.utils.audit import (
     record_audit_event,
 )
 from plane.research.utils.capabilities import NAV_REPORTS
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.errors import (
     ResearchErrorCode,
     research_conflict,
@@ -62,47 +63,12 @@ from plane.research.utils.errors import (
 from plane.research.utils.notifications import (
     notify_report_accepted,
     notify_report_returned,
-    notify_report_submitted,
     notify_report_withdrawn,
 )
-from plane.research.utils.periods import InvalidPeriod, current_period, parse_period
 from plane.research.utils.roles import is_research_admin
-from plane.research.utils.reports import can_transition, is_editable, report_resource, visible_reports_queryset
-from plane.research.utils.settings import default_visibility_for, report_timezone_for
-from plane.research.utils.templates import (
-    find_report_template,
-    resolve_variables,
-    template_target_key,
-    template_values,
-)
+from plane.research.utils.reports import can_transition, report_resource, visible_reports_queryset
+from plane.research.utils.settings import default_visibility_for
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
-
-
-def report_queryset(workspace, include_deleted=False):
-    """Build the report list queryset used by research API views.
-
-    Args:
-        workspace: Workspace owning the reports.
-        include_deleted: Whether to include soft-deleted reports; callers must
-            apply their own deleted-state and permission filters.
-
-    Returns:
-        An unpaginated report queryset with common related objects prefetched.
-    """
-    manager = PeriodicReport.all_objects if include_deleted else PeriodicReport.objects
-    return (
-        manager.filter(workspace=workspace)
-        .select_related("owner", "org_unit", "page", "project", "template")
-        .prefetch_related(
-            "team_projects",
-            "attachments",
-            "page__project_pages",
-            "official_snapshots",
-            "read_receipts",
-            "access_grants",
-        )
-        .order_by("-period_start", "-created_at")
-    )
 
 
 def serialize_report(
@@ -129,46 +95,6 @@ def serialize_report(
             "_research_report_approval_routes": approval_route_cache,
         },
     ).data
-
-
-def create_report_snapshot(report, actor):
-    """Append the current draft body as the next immutable official version."""
-    latest_version = (
-        PeriodicReportSnapshot.objects.filter(report=report)
-        .order_by("-version_no")
-        .values_list("version_no", flat=True)
-        .first()
-        or 0
-    )
-    page = report.page
-    attachment_manifest = [
-        {
-            "attachment_id": str(attachment.id),
-            "asset_id": str(attachment.asset_id),
-            "file_name": attachment.file_name,
-            "file_size": attachment.file_size,
-            "content_type": attachment.content_type,
-            "kind": attachment.kind,
-        }
-        for attachment in ReportAttachment.objects.filter(
-            report=report,
-            deleted_at__isnull=True,
-        ).order_by("created_at", "id")
-    ]
-    from plane.research.utils.report_images import image_manifest
-
-    return PeriodicReportSnapshot.objects.create(
-        report=report,
-        version_no=latest_version + 1,
-        snapshot_status=PeriodicReport.Status.SUBMITTED,
-        description_json=page.description_json,
-        description_html=page.description_html,
-        description_stripped=page.description_stripped,
-        description_binary=page.description_binary,
-        attachment_manifest=attachment_manifest,
-        image_manifest=image_manifest(report),
-        submitted_by=actor,
-    )
 
 
 def grant_is_within_visibility(report, default_visibility, grantee_user, grantee_unit_id):
@@ -433,195 +359,10 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
         if error:
             return error
 
-        report_type = str(request.data.get("report_type") or "WEEKLY").strip().upper()
-        if report_type not in PeriodicReport.ReportType.values:
-            return research_error(ResearchErrorCode.REPORT_PERIOD_CONFLICT, "Unknown report type.")
-
-        report_timezone = report_timezone_for(workspace)
         try:
-            period_key, period_start, period_end = parse_period(
-                report_type, request.data.get("period_key"), report_timezone
-            )
-        except InvalidPeriod as error:
-            return research_error(ResearchErrorCode.REPORT_PERIOD_CONFLICT, str(error))
-
-        profile = (
-            ResearchProjectProfile.objects.filter(
-                workspace=workspace,
-                owner=request.user,
-                research_type__in=(
-                    ResearchProjectProfile.ResearchType.PHD,
-                    ResearchProjectProfile.ResearchType.MASTER,
-                    ResearchProjectProfile.ResearchType.POSTDOC,
-                ),
-                is_active=True,
-                workflow_status=ResearchProjectProfile.WorkflowStatus.ACTIVE,
-            )
-            .select_related("project", "org_unit")
-            .first()
-        )
-        primary_membership = (
-            request.user.research_org_memberships.filter(
-                workspace=workspace,
-                is_primary=True,
-                deleted_at__isnull=True,
-                effective_from__lte=timezone.localdate(),
-            )
-            .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=timezone.localdate()))
-            .select_related("org_unit")
-            .first()
-        )
-        if profile is None and primary_membership is None:
-            return research_error(
-                ResearchErrorCode.PROJECT_NOT_FOUND,
-                "A primary organisation assignment is required before creating reports.",
-            )
-        report_org_unit = (
-            profile.org_unit
-            if profile is not None and profile.org_unit_id
-            else (primary_membership.org_unit if primary_membership is not None else None)
-        )
-
-        raw_team_projects = request.data.get("team_projects") or []
-        if not isinstance(raw_team_projects, list):
-            return research_error(ResearchErrorCode.PROJECT_NOT_FOUND, "team_projects must be a list.")
-        eligible_team_projects = Project.objects.filter(
-            workspace=workspace,
-            research_profile__research_type=ResearchProjectProfile.ResearchType.RESEARCH_PROJECT,
-            project_projectmember__member=request.user,
-            project_projectmember__is_active=True,
-            deleted_at__isnull=True,
-        ).distinct()
-        team_projects = list(eligible_team_projects.filter(id__in=raw_team_projects))
-        if len(team_projects) != len({str(item) for item in raw_team_projects}):
-            return research_permission_denied()
-
-        current_key, _, _ = current_period(report_type, timezone_name=report_timezone)
-        default_visibility = default_visibility_for(report_type, workspace, report_org_unit)
-        requested_visibility = str(request.data.get("visibility") or default_visibility).strip().upper()
-        if not can_narrow(default_visibility, requested_visibility):
-            return research_error(
-                ResearchErrorCode.REPORT_VISIBILITY_EXCEEDS_DEFAULT,
-                "The visibility cannot be wider than the workspace default.",
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-            )
-
-        template = None
-        if request.data.get("template"):
-            template = ReportTemplate.objects.filter(
-                workspace=workspace,
-                pk=request.data["template"],
-                scope=ReportTemplate.Scope.REPORT,
-                report_type=report_type,
-                target_key=template_target_key(ReportTemplate.Scope.REPORT, report_type=report_type),
-                is_active=True,
-                deleted_at__isnull=True,
-            ).first()
-            if template is None:
-                return research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Template not found.")
-        else:
-            template = find_report_template(workspace, report_type)
-
-        template_content = template.content_json if template is not None else {"type": "doc", "content": []}
-        if template is not None:
-            resolved, unresolved = resolve_variables(
-                template_content,
-                template_values(
-                    user=request.user,
-                    project=profile.project if profile else None,
-                    stage="",
-                    org_unit=str(report_org_unit.id) if report_org_unit else "",
-                    period=period_key,
-                ),
-            )
-            if unresolved:
-                return research_error(
-                    ResearchErrorCode.TEMPLATE_VARIABLES_UNRESOLVED,
-                    f"Unresolved template variables: {', '.join(unresolved)}.",
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-            template_content = resolved
-
-        if PeriodicReport.objects.filter(
-            workspace=workspace,
-            owner=request.user,
-            report_type=report_type,
-            period_key=period_key,
-        ).exists():
-            return research_conflict(
-                ResearchErrorCode.REPORT_PERIOD_CONFLICT,
-                "A report already exists for this period.",
-            )
-
-        try:
-            with transaction.atomic():
-                page = Page.objects.create(
-                    workspace=workspace,
-                    name=f"{period_key} {report_type}",
-                    description_json=template_content,
-                    description_html="<p></p>",
-                    owned_by=request.user,
-                    access=Page.PRIVATE_ACCESS,
-                    created_by=request.user,
-                )
-                # Plane ``Page`` does not require a ``ProjectPage``. Reports
-                # without a cultivation project keep their private draft Page
-                # inside the research flow so no arbitrary team project becomes
-                # its owner and no synthetic project leaks into project lists.
-                if profile is not None:
-                    ProjectPage.objects.create(
-                        project=profile.project,
-                        page=page,
-                        workspace=workspace,
-                        created_by=request.user,
-                    )
-                report = PeriodicReport.objects.create(
-                    workspace=workspace,
-                    project=profile.project if profile else None,
-                    owner=request.user,
-                    org_unit=report_org_unit,
-                    page=page,
-                    template=template,
-                    report_type=report_type,
-                    period_key=period_key,
-                    period_start=period_start,
-                    period_end=period_end,
-                    timezone=report_timezone,
-                    visibility=requested_visibility,
-                    is_backfill=period_key != current_key,
-                    created_by=request.user,
-                )
-                PeriodicReportProjectReference.objects.bulk_create(
-                    [
-                        PeriodicReportProjectReference(
-                            report=report,
-                            project=team_project,
-                            created_by=request.user,
-                        )
-                        for team_project in team_projects
-                    ]
-                )
-        except IntegrityError:
-            return research_conflict(
-                ResearchErrorCode.REPORT_PERIOD_CONFLICT,
-                "A report already exists for this period.",
-            )
-
-        record_audit_event(
-            workspace=workspace,
-            action=ResearchAuditAction.REPORT_CREATE,
-            resource_type=ResearchResourceType.REPORT,
-            resource_id=report.id,
-            org_unit=report.org_unit,
-            actor=request.user,
-            metadata={
-                "report_type": report_type,
-                "period_key": period_key,
-                "is_backfill": report.is_backfill,
-                "template": str(template.id) if template else None,
-            },
-            request=request,
-        )
+            report = create_report_draft(workspace=workspace, actor=request.user, payload=request.data, request=request)
+        except ReportWorkflowError as error:
+            return Response(error.data, status=error.status_code)
         return Response(
             serialize_report(report, request, include_draft_content=True),
             status=status.HTTP_201_CREATED,
@@ -659,72 +400,12 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section="reports", nav=None, research_member=False)
         if error:
             return error
-        report, error = self._visible_report(request, workspace, report_id, action="edit")
-        if error:
-            return error
-        if not is_editable(report):
-            return research_conflict(
-                ResearchErrorCode.REPORT_READ_ONLY,
-                "A submitted report is read only. Return it before editing.",
+        try:
+            report = save_report_body(
+                workspace=workspace, actor=request.user, payload=request.data, report_id=report_id
             )
-
-        # The body lives in the linked Page. A report without a cultivation
-        # project has no ProjectPage route, so its author edits the same Page
-        # through this research endpoint.
-        if request.data.get("template"):
-            template = ReportTemplate.objects.filter(
-                workspace=workspace,
-                pk=request.data["template"],
-                scope=ReportTemplate.Scope.REPORT,
-                report_type=report.report_type,
-                target_key=template_target_key(ReportTemplate.Scope.REPORT, report_type=report.report_type),
-                is_active=True,
-                deleted_at__isnull=True,
-            ).first()
-            if template is None:
-                return research_error(ResearchErrorCode.TEMPLATE_NOT_FOUND, "Template not found.")
-            resolved, unresolved = resolve_variables(
-                template.content_json,
-                template_values(
-                    user=request.user,
-                    project=report.project,
-                    stage="",
-                    org_unit=str(report.org_unit_id or ""),
-                    period=report.period_key,
-                ),
-            )
-            if unresolved:
-                return research_error(
-                    ResearchErrorCode.TEMPLATE_VARIABLES_UNRESOLVED,
-                    f"Unresolved template variables: {', '.join(unresolved)}.",
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-            report.page.description_json = resolved
-            report.page.save(update_fields=["description_json", "updated_at"])
-            if report.template_id != template.id:
-                report.template = template
-                report.save(update_fields=["template", "updated_at"])
-
-        body_fields = ("description_json", "description_html", "description_binary")
-        body_payload = {field: request.data[field] for field in body_fields if field in request.data}
-        if body_payload:
-            from plane.research.utils.report_images import body_image_ids
-
-            try:
-                body_image_ids(report, body_payload)
-            except ValueError as error:
-                return Response({"error_code": "file_type_not_allowed", "message": str(error)}, status=422)
-            if "description_binary" not in body_payload:
-                body_payload["description_binary"] = ""
-            page_serializer = PageBinaryUpdateSerializer(report.page, data=body_payload, partial=True)
-            if not page_serializer.is_valid():
-                return Response(page_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            page_serializer.save()
-
-        if "is_backfill" in request.data:
-            report.is_backfill = truthy(request.data.get("is_backfill"))
-            report.save(update_fields=["is_backfill", "updated_at"])
-
+        except ReportWorkflowError as error:
+            return Response(error.data, status=error.status_code)
         return Response(
             serialize_report(report, request, include_draft_content=True),
             status=status.HTTP_200_OK,
@@ -894,92 +575,16 @@ class ResearchReportSubmitEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section="reports")
         if error:
             return error
-        target = PeriodicReport.Status.SUBMITTED
-        with transaction.atomic():
-            report = report_queryset(workspace).select_for_update(of=("self",)).filter(pk=report_id).first()
-            if report is None or (
-                report.owner_id != request.user.id and not is_research_admin(request.user, workspace.id)
-            ):
-                return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
-            if report.org_unit_id is None:
-                return research_error(
-                    ResearchErrorCode.ORG_UNIT_NOT_FOUND,
-                    "A report must have an organisation assignment before submission.",
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-            if not can_transition(report.status, target):
-                return research_conflict(
-                    ResearchErrorCode.REPORT_STATE_CONFLICT,
-                    "The report status does not allow this action.",
-                )
-
-            report.page = Page.objects.select_for_update().get(pk=report.page_id)
-            body_fields = ("description_json", "description_html", "description_binary")
-            final_body = {field: request.data[field] for field in body_fields if field in request.data}
-            if final_body:
-                page_serializer = PageBinaryUpdateSerializer(report.page, data=final_body, partial=True)
-                if not page_serializer.is_valid():
-                    return Response(page_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                page_serializer.save()
-
-            previous = report.status
-            try:
-                snapshot = create_report_snapshot(report, request.user)
-            except ValueError as error:
-                return Response({"error_code": "file_type_not_allowed", "message": str(error)}, status=422)
-            ReportAttachment.objects.filter(
-                report=report,
-                deleted_at__isnull=True,
-            ).update(official_version_no=snapshot.version_no)
-            route = None
-            try:
-                route = create_approval_route(
-                    workspace=workspace,
-                    resource_type="PERIODIC_REPORT",
-                    resource=report,
-                    submitted_by=request.user,
-                    reviewer_id=request.data.get("reviewer_id"),
-                    cc_user_ids=request.data.get("cc_user_ids", []),
-                    request_id=f"report-{report.id}-v{snapshot.version_no}",
-                )
-            except ApprovalRouteError as error:
-                return research_error(
-                    error.error_code,
-                    error.message,
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-            report.status = target
-            report.submitted_at = timezone.now()
-            report.save(update_fields=["status", "submitted_at", "updated_at"])
-            ReportReviewLog.objects.create(
-                report=report,
-                actor=request.user,
-                action=ReportReviewLog.Action.SUBMIT,
-                from_status=previous,
-                to_status=target,
-                comment=str(request.data.get("comment") or ""),
-                snapshot_version=str(snapshot.version_no),
+        try:
+            report = submit_report(
+                workspace=workspace, actor=request.user, payload=request.data, report_id=report_id, request=request
             )
-            report._prefetched_objects_cache.pop("official_snapshots", None)
-            report._prefetched_objects_cache.pop("attachments", None)
-
-        record_audit_event(
-            workspace=workspace,
-            action=ResearchAuditAction.REPORT_SUBMIT,
-            resource_type=ResearchResourceType.REPORT,
-            resource_id=report.id,
-            org_unit=report.org_unit,
-            actor=request.user,
-            metadata={
-                "period_key": report.period_key,
-                "report_type": report.report_type,
-                "approval_route": str(route.id),
-                "reviewer": str(route.reviewer_id),
-            },
-            request=request,
+        except ReportWorkflowError as error:
+            return Response(error.data, status=error.status_code)
+        return Response(
+            serialize_report(report, request, include_draft_content=True),
+            status=status.HTTP_200_OK,
         )
-        notify_report_submitted(report, request.user, route=route)
-        return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
 class ResearchReportWithdrawEndpoint(ResearchAPIView):

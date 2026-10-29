@@ -14,6 +14,7 @@ import { CyclesOutline, IntakeOutline, ModuleOutline, PagesOutline, ViewsOutline
 import { SettingsBoxedControlItem } from "@/components/settings/boxed-control-item";
 import { SettingsHeading } from "@/components/settings/heading";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useProject } from "@/hooks/store/use-project";
 // local imports
 import { ProjectFeatureToggle } from "./helper";
@@ -72,6 +73,7 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
   // store hooks
   const { t } = useTranslation();
   const { getProjectById, updateProject } = useProject();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId);
   // derived values
   const currentProjectDetails = getProjectById(projectId);
 
@@ -119,6 +121,8 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
                     handleSubmit={handleSubmit}
                     disabled={
                       !isAdmin ||
+                      (isAdministrativeSettingsLocked &&
+                        ["module_view", "issue_views_view"].includes(featureItem.property)) ||
                       (featureItem.property === "module_view" && Boolean(currentProjectDetails?.is_module_required))
                     }
                   />

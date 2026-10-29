@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import type { Control } from "react-hook-form";
 import { Controller } from "react-hook-form";
@@ -19,7 +19,8 @@ import { EFileAssetType } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { getDescriptionPlaceholderI18n, getTabIndex } from "@plane/utils";
 // components
-import { DescriptionImageUploadButton } from "@/components/editor/description-image-upload-button";
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
+import { EditorFileUploadButton } from "@/components/editor/editor-file-upload-button";
 import { GptAssistantPopover } from "@/components/core/modals/gpt-assistant-popover";
 import { RichTextEditor } from "@/components/editor/rich-text";
 // helpers
@@ -52,6 +53,8 @@ type TIssueDescriptionEditorProps = {
   setGptAssistantModal: React.Dispatch<React.SetStateAction<boolean>>;
   handleGptAssistantClose: () => void;
   onAssetUpload: (assetId: string) => void;
+  onAttachFiles?: (files: File[]) => void;
+  attachmentContent?: React.ReactNode;
   onClose: () => void;
 };
 
@@ -72,12 +75,15 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
     setGptAssistantModal,
     handleGptAssistantClose,
     onAssetUpload,
+    onAttachFiles,
+    attachmentContent,
     onClose,
   } = props;
   // i18n
   const { t } = useTranslation();
   // states
   const [iAmFeelingLucky, setIAmFeelingLucky] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   // store hooks
   const { getWorkspaceBySlug } = useWorkspace();
   const workspaceId = getWorkspaceBySlug(workspaceSlug?.toString())?.id ?? "";
@@ -94,7 +100,7 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
   }, [descriptionHtmlData]);
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (editorRef.current?.isEditorReadyToDiscard()) {
+    if (!projectId || editorRef.current?.isEditorReadyToDiscard()) {
       onClose();
     } else {
       setToast({
@@ -107,6 +113,28 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
   };
 
   useKeypress("Escape", handleKeyDown);
+
+  /** Route editor attachments through the pending queue and reject empty folder drops. */
+  const handleAttachFiles = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) {
+        setAttachmentError(t("attachment.upload_zone.empty"));
+        return;
+      }
+      if (!projectId) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: t("project_required_to_save"),
+        });
+        return;
+      }
+      if (!onAttachFiles) return;
+      setAttachmentError(null);
+      onAttachFiles(files);
+    },
+    [onAttachFiles, projectId, t]
+  );
 
   // handlers
   const handleAiAssistance = async (response: string) => {
@@ -153,28 +181,50 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
     }
   };
 
+  const editorLoader = (
+    <Loader className="max-h-64 min-h-[120px] space-y-2 overflow-hidden rounded-md border border-subtle p-3 py-2 pt-3">
+      <Loader.Item width="100%" height="26px" />
+      <div className="flex items-center gap-2">
+        <Loader.Item width="26px" height="26px" />
+        <Loader.Item width="400px" height="26px" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Loader.Item width="26px" height="26px" />
+        <Loader.Item width="400px" height="26px" />
+      </div>
+      <Loader.Item width="80%" height="26px" />
+      <div className="flex items-center gap-2">
+        <Loader.Item width="50%" height="26px" />
+      </div>
+      <div className="border-0.5 absolute right-3.5 bottom-2 z-10 flex items-center gap-2">
+        {onAttachFiles && !projectId ? (
+          <EditorFileUploadButton editorRef={editorRef} onFilesSelected={handleAttachFiles} />
+        ) : (
+          <Loader.Item width="100px" height="26px" />
+        )}
+        <Loader.Item width="50px" height="26px" />
+      </div>
+    </Loader>
+  );
+  const canReceiveAttachmentsWithoutEditor = !projectId && Boolean(onAttachFiles);
+
   return (
     <div className="relative rounded-lg border-[0.5px] border-subtle-1 bg-layer-2">
       {descriptionHtmlData === undefined || !projectId ? (
-        <Loader className="max-h-64 min-h-[120px] space-y-2 overflow-hidden rounded-md border border-subtle p-3 py-2 pt-3">
-          <Loader.Item width="100%" height="26px" />
-          <div className="flex items-center gap-2">
-            <Loader.Item width="26px" height="26px" />
-            <Loader.Item width="400px" height="26px" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Loader.Item width="26px" height="26px" />
-            <Loader.Item width="400px" height="26px" />
-          </div>
-          <Loader.Item width="80%" height="26px" />
-          <div className="flex items-center gap-2">
-            <Loader.Item width="50%" height="26px" />
-          </div>
-          <div className="border-0.5 absolute right-3.5 bottom-2 z-10 flex items-center gap-2">
-            <Loader.Item width="100px" height="26px" />
-            <Loader.Item width="50px" height="26px" />
-          </div>
-        </Loader>
+        canReceiveAttachmentsWithoutEditor ? (
+          <AttachmentUploadZone
+            onFiles={handleAttachFiles}
+            multiple
+            clickToSelect={false}
+            showPrompt={false}
+            variant="block"
+            className="min-h-0 rounded-lg border-transparent bg-transparent p-0 hover:bg-transparent"
+          >
+            {editorLoader}
+          </AttachmentUploadZone>
+        ) : (
+          editorLoader
+        )
       ) : (
         <>
           <Controller
@@ -240,11 +290,21 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
                     throw new Error("Asset duplication failed. Please try again later.");
                   }
                 }}
+                onAttachFiles={handleAttachFiles}
               />
             )}
           />
+          {attachmentContent}
+          {attachmentError && (
+            <p role="alert" className="px-4 text-caption-sm-regular text-danger-primary">
+              {attachmentError}
+            </p>
+          )}
           <div className="border-0.5 z-10 flex items-center justify-between gap-2 p-3">
-            <DescriptionImageUploadButton editorRef={editorRef} />
+            <EditorFileUploadButton
+              editorRef={editorRef}
+              onAttachFiles={onAttachFiles ? handleAttachFiles : undefined}
+            />
             <div className="flex items-center gap-2">
               {issueName && issueName.trim() !== "" && config?.has_llm_configured && (
                 <button

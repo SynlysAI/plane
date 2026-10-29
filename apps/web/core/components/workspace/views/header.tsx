@@ -14,6 +14,7 @@ import { AddOutline } from "@makeplane/propel/icons";
 import type { TStaticViewTypes } from "@plane/types";
 import { Header, EHeaderVariant } from "@plane/ui";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useGlobalView } from "@/hooks/store/use-global-view";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
@@ -70,6 +71,7 @@ export const GlobalViewsHeader = observer(function GlobalViewsHeader() {
   // store hooks
   const { currentWorkspaceViews } = useGlobalView();
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock();
 
   // bring the active view to the centre of the header
   useEffect(() => {
@@ -84,10 +86,9 @@ export const GlobalViewsHeader = observer(function GlobalViewsHeader() {
     }
   }, [globalViewId, currentWorkspaceViews, containerRef]);
 
-  const isAuthorizedUser = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const isAuthorizedUser =
+    !isAdministrativeSettingsLocked &&
+    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.WORKSPACE);
 
   return (
     <Header variant={EHeaderVariant.SECONDARY} className="z-[12] min-h-[44px] bg-surface-1">
@@ -96,8 +97,8 @@ export const GlobalViewsHeader = observer(function GlobalViewsHeader() {
         ref={containerRef}
         className="horizontal-scrollbar scrollbar-sm flex h-full w-full items-center overflow-x-auto overflow-y-hidden"
       >
-        {DEFAULT_GLOBAL_VIEWS_LIST.map((tab, index) => (
-          <DefaultViewTab key={`${tab.key}-${index}`} tab={tab} />
+        {DEFAULT_GLOBAL_VIEWS_LIST.map((tab) => (
+          <DefaultViewTab key={tab.key} tab={tab} />
         ))}
 
         {currentWorkspaceViews?.map((viewId) => (

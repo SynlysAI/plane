@@ -55,8 +55,8 @@ def inherited(workspace, create_user):
     owner_client.force_authenticate(user=create_user)
     with (
         patch("plane.app.views.issue.base.issue_activity.delay"),
-        patch("plane.app.views.issue.base.model_activity.delay"),
-        patch("plane.app.views.issue.base.issue_description_version_task.delay"),
+        patch("plane.utils.issue_mutations.model_activity.delay"),
+        patch("plane.utils.issue_mutations.issue_description_version_task.delay"),
         patch("plane.app.views.issue.base.recent_visited_task.delay"),
         patch("plane.app.views.project.base.recent_visited_task.delay"),
     ):
@@ -94,6 +94,88 @@ def test_inherited_member_is_listed_once_and_can_participate(inherited, workspac
     assert next(row for row in projects.data if str(row["id"]) == str(env["project"].id))["member_role"] == 15
     me = env["client"].get(env["base"] + "project-members/me/")
     assert me.status_code == 200 and me.data["role"] == 15
+    assert not ProjectMember.objects.filter(project=env["project"], member=env["user"]).exists()
+
+
+def test_administrative_role_endpoint_promotes_and_downgrades_inherited_member(inherited, workspace):
+    """组织继承成员提升后建立直接授权，降级后保留直接成员关系。"""
+    env = inherited
+    endpoint = env["base"] + f"members/by-user/{env['user'].id}/role/"
+
+    promoted = env["owner_client"].patch(endpoint, {"role": 20}, format="json")
+    assert promoted.status_code == 200, promoted.data
+    direct = ProjectMember.objects.get(project=env["project"], member=env["user"])
+    assert direct.is_active and direct.role == 20
+    assert promoted.data["id"] == str(direct.id)
+    assert promoted.data["membership_source"] == "DIRECT"
+    assert promoted.data["inherits_organization"] is True
+
+    downgraded = env["owner_client"].patch(endpoint, {"role": 15}, format="json")
+    assert downgraded.status_code == 200, downgraded.data
+    direct.refresh_from_db()
+    assert direct.is_active and direct.role == 15
+    assert downgraded.data["id"] == str(direct.id)
+    assert downgraded.data["membership_source"] == "DIRECT"
+    assert downgraded.data["inherits_organization"] is True
+
+
+def test_administrative_role_endpoint_does_not_create_member_grant_for_inherited_member_role(inherited):
+    """纯组织继承成员选择成员时不产生冗余直接关系。"""
+    env = inherited
+    response = env["owner_client"].patch(
+        env["base"] + f"members/by-user/{env['user'].id}/role/",
+        {"role": 15},
+        format="json",
+    )
+    assert response.status_code == 200, response.data
+    assert response.data["id"] is None
+    assert response.data["membership_source"] == "ORGANIZATION"
+    assert not ProjectMember.objects.filter(project=env["project"], member=env["user"]).exists()
+
+
+def test_project_admin_can_promote_inherited_member_only_in_administrative_project(inherited, workspace):
+    """行政项目管理员可将低权限继承成员提升为管理员。"""
+    env = inherited
+    project_admin = make_user(first_name="Project", last_name="Admin")
+    WorkspaceMember.objects.create(workspace=workspace, member=project_admin, role=15)
+    ProjectMember.objects.create(project=env["project"], member=project_admin, role=20)
+    client = APIClient()
+    client.force_authenticate(user=project_admin)
+
+    response = client.patch(
+        env["base"] + f"members/by-user/{env['user'].id}/role/",
+        {"role": 20},
+        format="json",
+    )
+    assert response.status_code == 200, response.data
+    assert ProjectMember.objects.filter(project=env["project"], member=env["user"], role=20, is_active=True).exists()
+
+
+def test_administrative_role_endpoint_rejects_research_projects(inherited, workspace, create_user):
+    """科研项目继续使用原有角色接口，不接受行政项目按用户角色入口。"""
+    from plane.db.models import ResearchProjectProfile
+
+    env = inherited
+    ResearchProjectProfile.objects.create(workspace=workspace, project=env["project"], owner=create_user)
+    response = env["owner_client"].patch(
+        env["base"] + f"members/by-user/{env['user'].id}/role/",
+        {"role": 20},
+        format="json",
+    )
+    assert response.status_code == 403, response.data
+    assert not ProjectMember.objects.filter(project=env["project"], member=env["user"]).exists()
+
+
+def test_administrative_role_endpoint_rejects_workspace_guest_admin_promotion(inherited, workspace):
+    """工作区访客不能被提升为行政项目管理员。"""
+    env = inherited
+    WorkspaceMember.objects.filter(workspace=workspace, member=env["user"]).update(role=5)
+    response = env["owner_client"].patch(
+        env["base"] + f"members/by-user/{env['user'].id}/role/",
+        {"role": 20},
+        format="json",
+    )
+    assert response.status_code == 400, response.data
     assert not ProjectMember.objects.filter(project=env["project"], member=env["user"]).exists()
 
 

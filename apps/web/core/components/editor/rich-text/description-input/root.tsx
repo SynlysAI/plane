@@ -14,11 +14,12 @@ import { useTranslation } from "@plane/i18n";
 import type { EFileAssetType, TNameDescriptionLoader } from "@plane/types";
 import { getDescriptionPlaceholderI18n } from "@plane/utils";
 // components
-import { DescriptionImageUploadButton } from "@/components/editor/description-image-upload-button";
+import { EditorFileUploadButton } from "@/components/editor/editor-file-upload-button";
 import { RichTextEditor } from "@/components/editor/rich-text";
 // hooks
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useAttachmentOperations } from "@/components/issues/issue-detail-widgets/attachments/helper";
 // plane web services
 import { WorkspaceService } from "@/services/workspace.service";
 // local imports
@@ -137,6 +138,7 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
   // store hooks
   const { getWorkspaceBySlug } = useWorkspace();
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
+  const { operations: attachmentOperations } = useAttachmentOperations(workspaceSlug, projectId ?? "", entityId);
   // derived values
   const workspaceDetails = getWorkspaceBySlug(workspaceSlug);
   // translation
@@ -226,6 +228,14 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
 
   if (!localDescription.description_html) return <DescriptionInputLoader />;
   const resolvedEditorRef = editorRef ?? localEditorRef;
+  /** Send non-image description drops to the existing work-item attachment area. */
+  const handleAttachFiles = useCallback(
+    (files: File[]) => {
+      if (disabled || !projectId) return;
+      void attachmentOperations.createMany(files);
+    },
+    [attachmentOperations, disabled, projectId]
+  );
 
   return (
     <Controller
@@ -294,8 +304,15 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
                 throw new Error("Asset duplication failed. Please try again later.");
               }
             }}
+            onAttachFiles={!disabled && projectId ? handleAttachFiles : undefined}
           />
-          {!disabled && <DescriptionImageUploadButton className="pt-1" editorRef={resolvedEditorRef} />}
+          {!disabled && (
+            <EditorFileUploadButton
+              className="pl-3"
+              editorRef={resolvedEditorRef}
+              onAttachFiles={projectId ? handleAttachFiles : undefined}
+            />
+          )}
         </>
       )}
     />

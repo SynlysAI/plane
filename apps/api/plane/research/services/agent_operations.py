@@ -25,6 +25,7 @@ from plane.research.services.context_tokens import issue_context_token
 from plane.research.services.token_lifetimes import node_mcp_token_ttl_seconds
 from plane.research.services.mcp_catalog import ResearchReadError, TOOL_NAMES
 from plane.research.services.operation_catalog import ACTIONS, OPERATION_TOOL_NAMES, RESOURCE_TYPES, validate_operation
+from plane.research.services.operation_authorization import NodeOperationAuthorization
 from plane.research.utils.audit import record_audit_event
 from plane.research.utils.capabilities import has_active_research_org_relation
 from plane.research.utils.org import READABLE_WORKSPACE_ROLES
@@ -90,8 +91,11 @@ def issue_write_grant(*, workspace, user, node_id, actions, agent_label, reports
         raise ResearchReadError("state_conflict", "This node is not open for Agent changes.", 409)
     if not actions or not set(actions) <= ACTIONS & allowed_actions(workspace, user, node):
         raise ResearchReadError("scope_denied", "Some requested actions are not permitted.", 403)
-    if ResearchContextGrant.objects.filter(workspace=workspace, user=user, chain_node=node,
-            revoked_at__isnull=True, expires_at__gt=timezone.now(), write_grant__isnull=False).count() >= 5:
+    from plane.mcp.authorization import active_unified_write_count
+
+    if (ResearchContextGrant.objects.filter(workspace=workspace, user=user, chain_node=node,
+            revoked_at__isnull=True, expires_at__gt=timezone.now(), write_grant__isnull=False).count()
+            + active_unified_write_count(user, workspace, node.pk) >= 5):
         raise ResearchReadError("grant_limit", "Revoke an existing node write grant before issuing another.", 409)
     # Report grants pin only explicitly selected, already linked and readable formal versions.
     report_selections = []
@@ -113,28 +117,19 @@ def issue_write_grant(*, workspace, user, node_id, actions, agent_label, reports
 
 
 class ResearchOperationService:
-    def __init__(self, *, workspace, user, grant=None):
+    def __init__(self, *, workspace, user, grant=None, authorization=None):
+        if authorization is not None and grant is not None:
+            raise ValueError("Choose one real operation credential source.")
         self.workspace, self.user, self.grant = workspace, user, grant
-        self.reader = ResearchReadService(workspace=workspace, user=user, grant=grant)
+        self.authorization = authorization if authorization is not None else NodeOperationAuthorization(grant)
+        self.reader = self.authorization.reader(workspace, user)
 
     def authenticate(self, name, *, lock=False):
-        workspace_policy(self.workspace, lock=lock)
-        check_membership(self.workspace, self.user, lock=lock)
-        if self.grant is None:
-            raise ResearchReadError("write_grant_required", "A separately issued node write grant is required.", 403)
-        grants = ResearchContextGrant.objects
-        if lock:
-            grants = grants.select_for_update()
-        grant = grants.filter(pk=self.grant.pk, workspace=self.workspace, user=self.user,
-            revoked_at__isnull=True, expires_at__gt=timezone.now()).first()
-        if not grant or not grant.chain_node_id or name not in grant.allowed_tools:
-            raise ResearchReadError("scope_denied", "Write grant is expired, revoked or outside tool scope.", 403)
-        write = ResearchAgentWriteGrant.objects.filter(context=grant).first()
-        if not write:
-            raise ResearchReadError("write_grant_required", "Read grants do not permit Agent operations.", 403)
-        self.grant, self.write = grant, write
-        self.reader = ResearchReadService(workspace=self.workspace, user=self.user, grant=grant)
-        return write
+        self.authorization.authenticate(self.workspace, self.user, name, lock=lock)
+        self.reader = self.authorization.reader(self.workspace, self.user)
+        if isinstance(self.authorization, NodeOperationAuthorization):
+            self.grant, self.write = self.authorization.grant, self.authorization.write
+        return self.authorization
 
     def execute(self, name, arguments):
         args = validate_operation(name, arguments)
@@ -147,7 +142,7 @@ class ResearchOperationService:
 
     def context(self, node_id, action, *, lock=False, mutable=True):
         node = self.reader.node(node_id)
-        if action not in self.write.allowed_actions or action not in allowed_actions(self.workspace, self.user, node):
+        if action not in self.authorization.actions or action not in allowed_actions(self.workspace, self.user, node):
             raise ResearchReadError("permission_denied", "This action is outside the current write permission.", 403)
         if lock:
             chain = ResearchChain.objects.select_for_update().get(pk=node.chain_id)
@@ -203,8 +198,10 @@ class ResearchOperationService:
         return value
 
     def seal(self, operation):
+        source = ({"authorization_source": "unified_mcp.v1", "connection": str(operation.original_connection_id)}
+                  if operation.original_connection_id else {"grant": str(operation.original_grant_id)})
         return digest({"workspace": str(operation.workspace_id), "user": str(operation.user_id),
-            "node": str(operation.node_id), "grant": str(operation.original_grant_id),
+            "node": str(operation.node_id), **source,
             "request_id": operation.request_id, "action": operation.action, "payload": operation.payload,
             "sources": operation.source_refs, "preconditions": operation.preconditions,
             "agent_label": operation.agent_label, "expires_at": operation.expires_at.isoformat()})
@@ -237,11 +234,14 @@ class ResearchOperationService:
         if previous:
             if previous.deleted_at or previous.request_hash != request_hash:
                 raise ResearchReadError("idempotency_conflict", "request_id was already used for a different proposal.", 409)
+            if not ResearchAgentOperation.objects.filter(pk=previous.pk, **self.authorization.operation_filters).exists():
+                raise ResearchReadError("idempotency_conflict", "request_id belongs to another credential source.", 409)
+            self.check_visibility(previous)
             return self.present(previous)
         operation = ResearchAgentOperation(workspace=self.workspace, user=self.user, node=node,
-            original_grant=self.write, request_id=request_id, action=action, payload=payload, source_refs=source_refs or [],
+            **self.authorization.original_source, request_id=request_id, action=action, payload=payload, source_refs=source_refs or [],
             preconditions=self.preconditions(node, action, payload, source_refs or [], lock=True), request_hash=request_hash,
-            agent_label=self.write.agent_label, expires_at=timezone.now() + timedelta(hours=24))
+            agent_label=self.authorization.agent_label, expires_at=timezone.now() + timedelta(hours=24))
         operation.proposal_hash = self.seal(operation)
         operation.save()
         self.audit(operation, "prepare")
@@ -252,7 +252,7 @@ class ResearchOperationService:
         if lock:
             rows = rows.select_for_update()
         operation = rows.filter(pk=operation_id, workspace=self.workspace, user=self.user,
-                                node_id=self.grant.chain_node_id).first()
+                                **self.authorization.operation_filters).first()
         if not operation:
             raise ResearchReadError("not_found", "Operation not found in current scope.", 404)
         self.context(operation.node_id, operation.action, mutable=False)
@@ -277,14 +277,21 @@ class ResearchOperationService:
             return self.readback(operation)
         return self.present(operation)
 
-    def list_research_operations(self, node_id, cursor=None, limit=10):
+    def list_research_operations(self, node_id, cursor=None, limit=10, request_id=None):
         self.reader.node(node_id)
         rows = ResearchAgentOperation.objects.filter(workspace=self.workspace, user=self.user, node_id=node_id,
-                                                     action__in=self.write.allowed_actions).order_by("id")
+                                                     action__in=self.authorization.actions).filter(
+                                                     **self.authorization.operation_filters).order_by("id")
+        if request_id is not None:
+            rows = rows.filter(request_id=request_id)
+        binding = {**self.authorization.cursor_binding,
+                   **({"request_id": request_id} if request_id is not None or self.authorization.cursor_binding else {})}
         if cursor:
             try:
                 state = signing.loads(cursor, salt="research.operations.list", max_age=3600)
                 if state["node"] != str(node_id) or state["user"] != str(self.user.pk):
+                    raise ValueError()
+                if any(state.get(key) != value for key, value in binding.items()):
                     raise ValueError()
                 rows = rows.filter(pk__gt=state["after"])
             except (signing.BadSignature, ValueError, KeyError, TypeError):
@@ -309,7 +316,7 @@ class ResearchOperationService:
             anchor = item
         more = bool(anchor and (len(candidates) > limit or anchor != candidates[-1]))
         return {"data": data, "page": {"has_more": more,
-            "next_cursor": signing.dumps({"node": str(node_id), "user": str(self.user.pk), "after": str(anchor.pk)}, salt="research.operations.list") if more else None}}
+            "next_cursor": signing.dumps({"node": str(node_id), "user": str(self.user.pk), "after": str(anchor.pk), **binding}, salt="research.operations.list") if more else None}}
 
     @transaction.atomic
     def cancel_research_operation(self, operation_id):
@@ -380,7 +387,7 @@ class ResearchOperationService:
         else:
             target, kind = None, "event"
         metadata = {"operation_id": str(operation.pk), "agent_label": operation.agent_label,
-                    "grant_id": str(self.grant.context_id), "proposing_user_id": str(operation.user_id),
+                    **self.authorization.provenance, "proposing_user_id": str(operation.user_id),
                     "executing_user_id": str(self.user.pk), "authorization_source": "agent_client"}
         if hasattr(operation, "approval"):
             metadata["approving_user_id"] = str(operation.approval.actor_id)
@@ -401,7 +408,7 @@ class ResearchOperationService:
         result = dict(operation.result)
         try:
             # A fresh resolver rechecks current ACL, target existence and public projection.
-            self.reader = ResearchReadService(workspace=self.workspace, user=self.user, grant=self.grant)
+            self.reader = self.authorization.reader(self.workspace, self.user)
             self.reader.execute("read_research_resource", {"node_id": str(operation.node_id), "kind": result["kind"],
                                 "resource_id": result["object_id"], "max_chars": 8000})
             node = self.reader.node(operation.node_id)

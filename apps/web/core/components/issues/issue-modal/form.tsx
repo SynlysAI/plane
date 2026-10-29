@@ -472,22 +472,24 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   setGptAssistantModal={setGptAssistantModal}
                   handleGptAssistantClose={() => reset(getValues())}
                   onAssetUpload={onAssetUpload}
+                  onAttachFiles={!data?.id && !isDraft && onAddPendingAttachments ? onAddPendingAttachments : undefined}
+                  attachmentContent={
+                    !data?.id && !isDraft && projectId && onAddPendingAttachments && onRemovePendingAttachment ? (
+                      <IssuePendingAttachments
+                        attachments={pendingAttachments}
+                        onRemove={onRemovePendingAttachment}
+                        onValidationChange={(error) => {
+                          setPendingAttachmentError(error);
+                        }}
+                        workspaceSlug={workspaceSlug?.toString() ?? ""}
+                        projectId={projectId}
+                        disabled={isDisabled}
+                      />
+                    ) : null
+                  }
                   onClose={onClose}
                 />
               </div>
-              {!data?.id && !isDraft && projectId && onAddPendingAttachments && onRemovePendingAttachment && (
-                <IssuePendingAttachments
-                  attachments={pendingAttachments}
-                  onAdd={onAddPendingAttachments}
-                  onRemove={onRemovePendingAttachment}
-                  onValidationChange={(error) => {
-                    setPendingAttachmentError(error);
-                  }}
-                  workspaceSlug={workspaceSlug?.toString() ?? ""}
-                  projectId={projectId}
-                  disabled={isDisabled}
-                />
-              )}
             </div>
             <div
               className={cn(

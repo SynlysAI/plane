@@ -10,6 +10,7 @@ from plane.app.views import (
     ProjectInvitationsViewset,
     ProjectMemberViewSet,
     ProjectMemberUserEndpoint,
+    ProjectMemberRoleByUserEndpoint,
     ProjectJoinEndpoint,
     ProjectUserViewsEndpoint,
     ProjectIdentifierEndpoint,
@@ -78,6 +79,11 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/members/",
         ProjectMemberViewSet.as_view({"get": "list", "post": "create"}),
         name="project-member",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/members/by-user/<uuid:member_id>/role/",
+        ProjectMemberRoleByUserEndpoint.as_view(),
+        name="project-member-role-by-user",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/members/<uuid:pk>/",

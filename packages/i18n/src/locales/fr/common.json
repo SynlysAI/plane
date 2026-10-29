@@ -838,7 +838,10 @@
       "invalid": "Seules les images JPEG, JPG, PNG, WebP ou GIF sont prises en charge.",
       "upload": "Téléverser des images"
     },
-    "delete": "Supprimer la pièce jointe"
+    "delete": "Supprimer la pièce jointe",
+    "editor_file": {
+      "upload": "Ajouter une pièce jointe"
+    }
   },
   "label": {
     "select": "Sélectionner une étiquette",

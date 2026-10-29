@@ -59,15 +59,19 @@ const workspaceStore = {
   fetchWorkspaces: mocks.fetch,
 };
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => workspaceStore }));
+vi.mock("@/hooks/store/use-command-palette", () => ({
+  useCommandPalette: () => ({ profileSettingsModal: { isOpen: true } }),
+}));
 vi.mock("@/hooks/store/user", () => ({
   useUser: () => ({ data: { display_name: "Local researcher", id: "internal-local-user-id" } }),
 }));
 vi.mock("@/components/core/page-title", () => ({ PageHead: () => null }));
+vi.mock("@/components/mcp/unified-mcp-manager", () => ({ UnifiedMCPManager: () => <div>统一连接入口</div> }));
 vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams(mocks.query), mocks.setParams],
   Navigate: ({ to, replace }: any) => <div data-to={to} data-replace={replace} />,
 }));
-import { MCPManagement } from "@/components/mcp/mcp-management";
+import { LegacyMCPManagement as MCPManagement } from "@/components/mcp/legacy-mcp-management";
 import { NativeMCPManager } from "@/components/mcp/native-mcp-manager";
 import { emptyNative } from "@/components/mcp/mcp-services";
 import { MCPProfileSettings } from "@/components/settings/profile/content/pages/mcp";
@@ -161,13 +165,25 @@ async function nodes() {
   await click("Research · ACTIVE");
 }
 
-it("unifies both businesses, lazy-loads permission-filtered chains/nodes and does not duplicate workspace selectors", async () => {
+it("shows only the unified connection workflow in profile settings without loading legacy services", async () => {
   mocks.query = "mode=research&node=secret-node&token=secret";
   await render(<MCPProfileSettings inModal />);
+  expect(container.textContent).toContain("统一连接入口");
+  expect(container.querySelector("summary")).toBeNull();
+  expect(container.textContent).not.toContain("secret");
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.candidates).not.toHaveBeenCalled();
+  expect(mocks.connections).not.toHaveBeenCalled();
+});
+
+it("preserves permission-filtered legacy chains/nodes without duplicate workspace selectors", async () => {
+  mocks.query = "mode=research&node=secret-node&token=secret";
+  await render();
   expect(container.textContent).toContain("行政项目接入");
   expect(container.textContent).toContain("科研链 / 科研节点");
   expect(container.textContent).toContain("https://remote.test");
   expect(container.textContent).toContain("独立验证");
+  expect(container.textContent).toContain("兼容连接");
   expect(container.querySelector("select")).toBeNull();
   expect(container.querySelector('[aria-label="行政项目访问 denied"]')).toBeNull();
   expect(mocks.candidates).toHaveBeenCalledWith("public", { q: "", cursor: undefined });

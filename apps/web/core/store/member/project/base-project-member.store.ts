@@ -352,7 +352,7 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
    */
   updateMemberRole = async (workspaceSlug: string, projectId: string, userId: string, role: EUserProjectRoles) => {
     const memberDetails = this.getProjectMemberDetails(userId, projectId);
-    if (!memberDetails || !memberDetails?.id) throw new Error("Member not found");
+    if (!memberDetails) throw new Error("Member not found");
     // original data to revert back in case of error
     const isCurrentUser = this.rootStore.user.data?.id === userId;
     const membershipBeforeUpdate = { ...this.getProjectMembershipByUserId(userId, projectId) };
@@ -370,17 +370,12 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
             [workspaceSlug, projectId],
             updatedProjectRole
           );
+          set(this.rootStore.user.permission.projectUserInfo, [workspaceSlug, projectId, "role"], updatedProjectRole);
         }
-        set(this.rootStore.user.permission.projectUserInfo, [workspaceSlug, projectId, "role"], updatedProjectRole);
       });
-      const response = await this.projectMemberService.updateProjectMember(
-        workspaceSlug,
-        projectId,
-        memberDetails?.id,
-        {
-          role,
-        }
-      );
+      const response = memberDetails.id
+        ? await this.projectMemberService.updateProjectMember(workspaceSlug, projectId, memberDetails.id, { role })
+        : await this.projectMemberService.updateProjectMemberRoleByUser(workspaceSlug, projectId, userId, role);
       await this.fetchProjectMembers(workspaceSlug, projectId);
       return response;
     } catch (error) {

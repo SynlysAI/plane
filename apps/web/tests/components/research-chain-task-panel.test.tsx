@@ -3,6 +3,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TResearchChainNodeTask } from "@plane/types";
+import { ResearchChainTaskPanel } from "@/components/research/chains/research-chain-task-panel";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
@@ -201,7 +202,6 @@ afterEach(async () => {
 });
 
 async function renderPanel(initialTaskId?: string) {
-  const { ResearchChainTaskPanel } = await import("@/components/research/chains/research-chain-task-panel");
   await act(async () => {
     root.render(
       <ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" initialTaskId={initialTaskId} />
@@ -515,7 +515,6 @@ it("does not show task sharing in the create peek", async () => {
 });
 
 it("keeps task requests scoped to the selected node supplied by the detail container", async () => {
-  const { ResearchChainTaskPanel } = await import("@/components/research/chains/research-chain-task-panel");
   await act(async () => {
     root.render(<ResearchChainTaskPanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
   });

@@ -732,7 +732,9 @@ class TestReportWithdraw:
             title=f"{item.period_key} 报告已撤回",
         ).exists()
 
-        review_results = env["advisor_client"].get(env["url"], {"scope": "review"}).json()["results"]
+        review_response = env["advisor_client"].get(env["url"], {"scope": "review"})
+        assert review_response.status_code == 200, review_response.json()
+        review_results = review_response.json()["results"]
         assert all(row["id"] != report_id for row in review_results)
         withdrawn_detail = env["admin_client"].get(f"{env['url']}{report_id}/")
         assert withdrawn_detail.status_code == 200
@@ -818,17 +820,17 @@ class TestReportConcurrentStateFlow:
             return list(executor.map(execute, operations))
 
     def test_concurrent_submit_creates_one_official_version(self, env):
-        from plane.research.views import reports as report_views
+        from plane.research.services import report_workflow
 
         report = create_report(env).json()
         submit_url = f"{env['url']}{report['id']}/submit/"
-        create_snapshot = report_views.create_report_snapshot
+        create_snapshot = report_workflow.create_report_snapshot
 
         def delayed_snapshot(*args, **kwargs):
             sleep(0.15)
             return create_snapshot(*args, **kwargs)
 
-        with patch.object(report_views, "create_report_snapshot", side_effect=delayed_snapshot):
+        with patch.object(report_workflow, "create_report_snapshot", side_effect=delayed_snapshot):
             statuses = self._run_together(
                 lambda: client_for(env["student"]).post(
                     submit_url,

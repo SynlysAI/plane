@@ -59,7 +59,9 @@ from plane.utils.host import base_host
 from plane.utils.home_activity import record_project_activity
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
 from plane.utils.administrative_projects import (
+    ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE,
     administrative_organization_project_ids,
+    administrative_settings_write_blocked,
     administrative_projects_for_user,
     restrict_administrative_project_visibility,
     administrative_project_filter,
@@ -67,6 +69,8 @@ from plane.utils.administrative_projects import (
     research_project_ids,
     user_can_manage_administrative_project,
 )
+
+ADMINISTRATIVE_LOCK_PROJECT_FIELDS = {"module_view", "issue_views_view", "is_module_required", "is_label_required"}
 
 
 def _cached_research_review_ids(request, slug):
@@ -379,6 +383,10 @@ class ProjectViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
+        if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
+            request.user, workspace
+        ):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = ProjectSerializer(
             data={**request.data}, context={"workspace_id": workspace.id, "request": request}
@@ -467,6 +475,10 @@ class ProjectViewSet(BaseViewSet):
         workspace = Workspace.objects.get(slug=slug)
 
         project = Project.objects.get(pk=pk, workspace__slug=slug)
+        if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
+            request.user, workspace, project
+        ):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         intake_view = request.data.get("inbox_view", project.intake_view)
         current_instance = json.dumps(ProjectSerializer(project).data, cls=DjangoJSONEncoder)
         if project.archived_at:

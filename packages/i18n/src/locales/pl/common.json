@@ -838,7 +838,10 @@
       "invalid": "Obsługiwane są tylko obrazy JPEG, JPG, PNG, WebP i GIF.",
       "upload": "Prześlij obrazy"
     },
-    "delete": "Usuń załącznik"
+    "delete": "Usuń załącznik",
+    "editor_file": {
+      "upload": "Dodaj załącznik"
+    }
   },
   "label": {
     "select": "Wybierz etykietę",

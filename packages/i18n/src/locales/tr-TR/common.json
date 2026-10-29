@@ -838,7 +838,10 @@
       "invalid": "Yalnızca JPEG, JPG, PNG, WebP ve GIF görselleri desteklenir.",
       "upload": "Görsel yükle"
     },
-    "delete": "Eki sil"
+    "delete": "Eki sil",
+    "editor_file": {
+      "upload": "Ek ekle"
+    }
   },
   "label": {
     "select": "Etiket seç",

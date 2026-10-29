@@ -5,7 +5,11 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import WorkspaceAdministrativeViewDefault, WorkspaceMember
+from plane.db.models import (
+    WorkspaceAdministrativeViewDefault,
+    WorkspaceMember,
+    WorkspaceResearchSetting,
+)
 from plane.tests.research_fixtures import add_workspace_member, make_user
 
 
@@ -108,6 +112,31 @@ def test_non_admin_cannot_publish_default_layout(env, role):
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert not WorkspaceAdministrativeViewDefault.objects.filter(workspace=env["workspace"]).exists()
+
+
+def test_default_layout_remains_admin_only_when_administrative_lock_is_enabled(env):
+    """行政配置锁定开启时，全员默认布局仍只由工作区管理员发布。"""
+    WorkspaceResearchSetting.objects.update_or_create(
+        workspace=env["workspace"],
+        defaults={"administrative_settings_admin_only": True},
+    )
+    member = make_user(first_name="Locked", last_name="Member")
+    add_workspace_member(env["workspace"], member, role=15)
+
+    member_response = client_for(member).patch(
+        endpoint_url(env["workspace"]),
+        {"display_filters": {"layout": "list"}},
+        format="json",
+    )
+    admin_response = env["client"].patch(
+        endpoint_url(env["workspace"]),
+        {"display_filters": {"layout": "list"}},
+        format="json",
+    )
+
+    assert member_response.status_code == status.HTTP_403_FORBIDDEN
+    assert admin_response.status_code == status.HTTP_200_OK, admin_response.data
+    assert admin_response.json()["display_filters"]["layout"] == "list"
 
 
 def test_invalid_default_layout_payload_is_rejected(env):

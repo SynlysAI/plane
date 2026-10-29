@@ -18,6 +18,7 @@ import { EUserProjectRoles } from "@plane/types";
 // helpers
 import { getTabIndex } from "@plane/utils";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useLabel } from "@/hooks/store/use-label";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -38,6 +39,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
   const { isMobile } = usePlatformOS();
   const { fetchProjectLabels, getProjectLabels } = useLabel();
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId);
   // states
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
   const [popperElement, setPopperElement] = useState<HTMLElement | null>(null);
@@ -46,7 +48,9 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   const canCreateLabel =
-    projectId && allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+    !isAdministrativeSettingsLocked &&
+    projectId &&
+    allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
 
   const projectLabels = getProjectLabels(projectId);
 
@@ -91,7 +95,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
 
   const issueLabels = values ?? [];
 
-  const label = <span className="text-body-xs-medium text-placeholder">{t("label.select")}</span>;
+  const labelButtonText = <span className="text-body-xs-medium text-placeholder">{t("label.select")}</span>;
 
   const searchInputKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (query !== "" && e.key === "Escape") {
@@ -108,8 +112,11 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
 
   const handleAddLabel = async (labelName: string) => {
     setSubmitting(true);
-    const label = await onAddLabel(workspaceSlug, projectId, { name: labelName, color: getRandomLabelColor() });
-    onSelect([...values, label.id]);
+    const createdLabel = await onAddLabel(workspaceSlug, projectId, {
+      name: labelName,
+      color: getRandomLabelColor(),
+    });
+    onSelect([...values, createdLabel.id]);
     setQuery("");
     setSubmitting(false);
   };
@@ -134,7 +141,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
             prependIcon={<AddOutline />}
             onClick={() => !projectLabels && fetchLabels()}
           >
-            {label}
+            {labelButtonText}
           </Button>
         </Combobox.Button>
 
@@ -197,6 +204,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
                 <LoadingOutline className="spin h-3.5 w-3.5" />
               ) : canCreateLabel ? (
                 <ul className="space-y-1">
+                  {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- Headless UI provides option keyboard selection. */}
                   <Combobox.Option
                     as="li"
                     value={query}

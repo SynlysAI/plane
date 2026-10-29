@@ -118,7 +118,7 @@ class APITokenLogMiddleware:
 
     # Headers whose values must never be persisted in plaintext logs
     SENSITIVE_HEADERS = frozenset({"x-api-key", "authorization", "cookie", "x-mcp-csrf", "x-csrftoken",
-                                   "x-research-context-token", "x-research-context-hash"})
+                                   "x-research-context-token", "x-research-context-hash", "x-weekly-report-token"})
 
     def _redacted_headers(self, request):
         """
@@ -132,6 +132,11 @@ class APITokenLogMiddleware:
         return str(redacted)
 
     def process_request(self, request, response, request_body):
+        # These routes have their own summary-only audit. Never persist bodies
+        # or a one-time issued secret, even if an unrelated X-Api-Key was sent.
+        if (request.path == "/api/mcp/" or request.path.startswith("/api/mcp/connections/")
+                or "/mcp/weekly-report/" in request.path or "/weekly-report-agent/" in request.path):
+            return
         api_key_header = "X-Api-Key"
         api_key = request.headers.get(api_key_header)
 

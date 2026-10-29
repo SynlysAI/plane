@@ -82,6 +82,10 @@ export function useCommentAttachments(
 
   /** 批次校验数量和大小，通过后并行上传且分别保留结果。 */
   function addFiles(files: File[]) {
+    if (files.length === 0) {
+      setError(t("attachment.upload_zone.empty"));
+      return;
+    }
     if (!limits) {
       setError(t("comment.attachment_limits_failed"));
       return;

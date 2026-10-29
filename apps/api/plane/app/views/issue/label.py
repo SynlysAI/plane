@@ -18,6 +18,10 @@ from plane.app.serializers import LabelSerializer
 from plane.app.permissions import allow_permission, ProjectBasePermission, ROLE
 from plane.db.models import Project, Label
 from plane.research.utils.project_review import project_member_filters
+from plane.utils.administrative_projects import (
+    ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE,
+    administrative_settings_write_blocked,
+)
 from plane.utils.cache import invalidate_cache
 from plane.utils.work_item_required_fields import required_label_delete_error
 
@@ -50,6 +54,9 @@ class LabelViewSet(BaseViewSet):
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False, multiple=True)
     @allow_permission([ROLE.ADMIN])
     def create(self, request, slug, project_id):
+        project = Project.objects.get(pk=project_id, workspace__slug=slug)
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         try:
             serializer = LabelSerializer(data=request.data, context={"project_id": project_id})
             if serializer.is_valid():
@@ -65,6 +72,9 @@ class LabelViewSet(BaseViewSet):
     @invalidate_cache(path="/api/workspaces/:slug/labels/", url_params=True, user=False)
     @allow_permission([ROLE.ADMIN])
     def partial_update(self, request, *args, **kwargs):
+        project = Project.objects.get(pk=kwargs["project_id"], workspace__slug=kwargs["slug"])
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         # Check if the label name is unique within the project
         if (
             "name" in request.data
@@ -93,6 +103,8 @@ class LabelViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN])
     def destroy(self, request, *args, **kwargs):
         label = self.get_object()
+        if administrative_settings_write_blocked(request.user, label.project.workspace, label.project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_label_delete_error(label.project, label)
         if required_error is not None:
             return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
@@ -105,6 +117,8 @@ class BulkCreateIssueLabelsEndpoint(BaseAPIView):
         label_data = request.data.get("label_data", [])
 
         project = Project.objects.get(pk=project_id)
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
         labels = Label.objects.bulk_create(
             [

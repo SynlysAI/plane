@@ -6,7 +6,7 @@
 
 // types
 import { API_BASE_URL } from "@plane/constants";
-import type { IProjectBulkAddFormData, TProjectMembership } from "@plane/types";
+import type { EUserProjectRoles, IProjectBulkAddFormData, TProjectMembership } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
@@ -58,6 +58,22 @@ export class ProjectMemberService extends APIService {
     data: Partial<TProjectMembership>
   ): Promise<TProjectMembership> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/members/${memberId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /** 按用户 ID 更新行政项目成员角色，支持纯组织继承成员。 */
+  async updateProjectMemberRoleByUser(
+    workspaceSlug: string,
+    projectId: string,
+    memberId: string,
+    role: EUserProjectRoles
+  ): Promise<TProjectMembership> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/members/by-user/${memberId}/role/`, {
+      role,
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

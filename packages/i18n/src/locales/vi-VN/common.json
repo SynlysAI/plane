@@ -838,7 +838,10 @@
       "invalid": "Chỉ hỗ trợ hình ảnh JPEG, JPG, PNG, WebP hoặc GIF.",
       "upload": "Tải hình ảnh lên"
     },
-    "delete": "Xóa tệp đính kèm"
+    "delete": "Xóa tệp đính kèm",
+    "editor_file": {
+      "upload": "Thêm tệp đính kèm"
+    }
   },
   "label": {
     "select": "Chọn nhãn",

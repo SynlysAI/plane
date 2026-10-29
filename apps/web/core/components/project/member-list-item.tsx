@@ -85,6 +85,7 @@ export const ProjectMemberListItem = observer(function ProjectMemberListItem(pro
         columns={columns}
         data={(memberDetails?.filter((member): member is IProjectMemberDetails => member !== null) ?? []) as any}
         keyExtractor={(rowData) => rowData?.member.id ?? ""}
+        tableClassName="min-w-[64rem]"
         tHeadClassName="border-b border-subtle"
         thClassName="text-left font-medium divide-x-0 text-placeholder"
         tBodyClassName="divide-y-0"

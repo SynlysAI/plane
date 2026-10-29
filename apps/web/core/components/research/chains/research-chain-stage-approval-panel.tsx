@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { useTranslation } from "@plane/i18n";
 import type { TResearchChainNode, TResearchChainStageApproval, TResearchChainStageReviewAction } from "@plane/types";
@@ -16,9 +16,10 @@ import { ResearchChainService } from "@/services/research/chain.service";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { getResearchErrorDetail } from "@/components/research/common/error-messages";
 import {
+  DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS,
   LINKABLE_UPLOAD_STATUSES,
-  RESEARCH_CHAIN_UPLOAD_MAX_BYTES,
   formatResearchChainFileSize,
+  researchChainUploadHintParams,
   researchChainUploadStatusKey,
   type TResearchChainKnowledgeController,
 } from "@/components/research/chains/use-research-chain-knowledge";
@@ -142,6 +143,7 @@ export function ResearchChainStageApprovalPanel({
   onDecision,
 }: Props) {
   const { t, currentLocale } = useTranslation();
+  const effectiveUploadLimits = knowledge.uploadLimits ?? DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS;
   const candidateNodes = useMemo(
     () => nodes.filter((node) => nodeMatchesStage(node, nodes, stage.stage_code)),
     [nodes, stage.stage_code]
@@ -161,6 +163,7 @@ export function ResearchChainStageApprovalPanel({
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const requirementSelectRef = useRef<HTMLSelectElement>(null);
   const missingMaterials = stage.materials.filter((material) => !material.complete);
   const selectedRequirement = stage.materials.find((material) => material.code === requirementCode);
   const linkableUploads = useMemo(
@@ -230,6 +233,7 @@ export function ResearchChainStageApprovalPanel({
   /** 切换到某个缺失材料的关联表单。 */
   const supplementMaterial = (code: string) => {
     setRequirementCode(code);
+    requirementSelectRef.current?.focus();
   };
 
   /** 上传一份资料并立即关联到当前材料要求。 */
@@ -428,6 +432,7 @@ export function ResearchChainStageApprovalPanel({
                         <button
                           type="button"
                           className="text-11 text-secondary hover:text-primary"
+                          aria-controls={`${stage.id}-stage-material-link-form`}
                           onClick={() => supplementMaterial(material.code)}
                         >
                           {t("research.chains.stage_approval.supplement")}
@@ -449,7 +454,7 @@ export function ResearchChainStageApprovalPanel({
               </ul>
 
               {can(stage, "edit_materials") && (
-                <div className="mt-3 space-y-2 border-t border-subtle pt-3">
+                <div id={`${stage.id}-stage-material-link-form`} className="mt-3 space-y-2 border-t border-subtle pt-3">
                   {knowledge.state !== "ready" && knowledge.state !== "degraded" && (
                     <p className="text-11 text-secondary">{t("research.chains.stage_approval.upload_unavailable")}</p>
                   )}
@@ -463,10 +468,11 @@ export function ResearchChainStageApprovalPanel({
                   )}
                   <div className="grid gap-2 sm:grid-cols-[minmax(150px,0.65fr)_minmax(180px,1fr)_auto]">
                     <select
+                      ref={requirementSelectRef}
                       value={requirementCode}
                       onChange={(event) => setRequirementCode(event.target.value)}
                       aria-label={t("research.chains.stage_approval.requirement")}
-                      className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
+                      className="focus:outline-accent-primary rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary focus:outline focus:outline-1 focus:outline-offset-1"
                     >
                       {stage.materials.map((material) => (
                         <option key={material.id} value={material.code}>
@@ -511,13 +517,15 @@ export function ResearchChainStageApprovalPanel({
                       "application/msword": [".doc"],
                       "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
                     }}
-                    maxSize={RESEARCH_CHAIN_UPLOAD_MAX_BYTES}
+                    maxSize={
+                      knowledge.maxUploadSizeBytes ?? Math.max(...Object.values(effectiveUploadLimits)) * 1024 * 1024
+                    }
                     disabled={!knowledge.canUpload || busy}
                     uploading={knowledge.uploading || busy}
                     variant="inline"
                     title={t("research.chains.stage_approval.material_upload")}
                     uploadingTitle={t("research.knowledge.uploading")}
-                    hint={t("research.knowledge.upload_hint", { size: "50MB" })}
+                    hint={t("research.knowledge.upload_hint", researchChainUploadHintParams(effectiveUploadLimits))}
                   />
                 </div>
               )}

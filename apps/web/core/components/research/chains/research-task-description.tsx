@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileOutline, RefreshOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
 import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
-import { Button } from "@plane/propel/button";
 import type { EditorRefApi } from "@plane/editor";
 import type {
   TCommentAttachmentLimits,
@@ -12,7 +11,7 @@ import type {
   TResearchTaskInstructionAttachment,
 } from "@plane/types";
 import { convertBytesToSize, getFileURL, isDescriptionContentEmpty } from "@plane/utils";
-import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
+import { EditorFileUploadButton } from "@/components/editor/editor-file-upload-button";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { getCommentAttachmentLimitError } from "@/components/comments/comment-attachment-limits";
 import { taskImageDownloadSource } from "@/components/research/common/research-image";
@@ -63,7 +62,6 @@ export function ResearchTaskDescription({
   const { t } = useTranslation();
   const service = useMemo(() => new ResearchChainTaskService(), []);
   const editorRef = useRef<EditorRefApi>(null);
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const entriesRef = useRef<TAttachmentDraft[]>([]);
   const loadedTaskIdRef = useRef<string | null>(null);
@@ -186,6 +184,10 @@ export function ResearchTaskDescription({
 
   const addFiles = useCallback(
     (files: File[]) => {
+      if (files.length === 0) {
+        setAttachmentError(t("attachment.upload_zone.empty"));
+        return;
+      }
       if (!limits) {
         setAttachmentError(t("research.chain_tasks.attachment_limits_failed"));
         return;
@@ -269,8 +271,18 @@ export function ResearchTaskDescription({
             },
             validation: { maxFileSize: limits?.image.max_bytes ?? DEFAULT_IMAGE_LIMIT },
           }}
+          onAttachFiles={addFiles}
           onChange={(_json, html) => onChange(html)}
         />
+        {editable && (
+          <div className="flex justify-end">
+            <EditorFileUploadButton
+              editorRef={editorRef}
+              onAttachFiles={addFiles}
+              disabled={!limits || attachmentUploadCount > 0}
+            />
+          </div>
+        )}
         {showPlaceholder && (
           <p className="pointer-events-none absolute top-0 left-3 text-13 text-placeholder">
             {t("research.chain_tasks.instruction_empty")}
@@ -283,104 +295,70 @@ export function ResearchTaskDescription({
         </p>
       )}
 
-      <section aria-label={t("research.chain_tasks.attachments_title")} className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-12 font-medium text-primary">{t("research.chain_tasks.attachments_title")}</h3>
-          {editable && (
-            <>
-              <input
-                ref={attachmentInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  addFiles(Array.from(event.target.files ?? []));
-                  event.target.value = "";
-                }}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!limits || attachmentUploadCount > 0}
-                onClick={() => attachmentInputRef.current?.click()}
-              >
-                {t("research.chain_tasks.add_attachment")}
-              </Button>
-            </>
+      {(entries.length > 0 || attachmentError) && (
+        <section aria-label={t("research.chain_tasks.attachments_title")} className="space-y-2">
+          {attachmentError && (
+            <p role="alert" className="text-12 text-danger-primary">
+              {attachmentError}
+            </p>
           )}
-        </div>
-        {attachmentError && (
-          <p role="alert" className="text-12 text-danger-primary">
-            {attachmentError}
-          </p>
-        )}
-        {editable && (
-          <AttachmentUploadZone
-            onFiles={addFiles}
-            multiple
-            disabled={!limits || attachmentUploadCount > 0}
-            uploading={attachmentUploadCount > 0}
-            variant={entries.length ? "compact" : "block"}
-          />
-        )}
-        {entries.length ? (
-          <ul className="divide-y divide-subtle border-t border-subtle text-12">
-            {entries.map((entry) => (
-              <li key={entry.key} className="flex min-h-9 items-center gap-2 py-2">
-                <FileOutline className="size-4 shrink-0 text-tertiary" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  {entry.attachment ? (
-                    <a
-                      href={getFileURL(entry.attachment.download_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block truncate text-primary hover:underline"
-                    >
-                      {entry.name}
-                    </a>
-                  ) : (
-                    <span className="block truncate text-primary" title={entry.name}>
-                      {entry.name}
+          {entries.length ? (
+            <ul className="divide-y divide-subtle border-t border-subtle text-12">
+              {entries.map((entry) => (
+                <li key={entry.key} className="flex min-h-9 items-center gap-2 py-2">
+                  <FileOutline className="size-4 shrink-0 text-tertiary" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    {entry.attachment ? (
+                      <a
+                        href={getFileURL(entry.attachment.download_url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block truncate text-primary hover:underline"
+                      >
+                        {entry.name}
+                      </a>
+                    ) : (
+                      <span className="block truncate text-primary" title={entry.name}>
+                        {entry.name}
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-tertiary">{convertBytesToSize(entry.size)}</span>
+                  {entry.status === "uploading" && (
+                    <span role="status" className="shrink-0 text-secondary">
+                      {t("research.chain_tasks.uploading")}
                     </span>
                   )}
-                </div>
-                <span className="shrink-0 text-tertiary">{convertBytesToSize(entry.size)}</span>
-                {entry.status === "uploading" && (
-                  <span role="status" className="shrink-0 text-secondary">
-                    {t("research.chain_tasks.uploading")}
-                  </span>
-                )}
-                {entry.status === "failed" && (
-                  <>
-                    <span role="alert" className="shrink-0 text-danger-primary">
-                      {t("research.chain_tasks.upload_failed")}
-                    </span>
+                  {entry.status === "failed" && (
+                    <>
+                      <span role="alert" className="shrink-0 text-danger-primary">
+                        {t("research.chain_tasks.upload_failed")}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-tertiary hover:bg-surface-2 hover:text-secondary"
+                        aria-label={t("research.chain_tasks.retry_upload")}
+                        onClick={() => void uploadAttachment(entry)}
+                      >
+                        <RefreshOutline className="size-3.5" aria-hidden />
+                      </button>
+                    </>
+                  )}
+                  {editable && entry.status !== "uploading" && (
                     <button
                       type="button"
-                      className="rounded p-1 text-tertiary hover:bg-surface-2 hover:text-secondary"
-                      aria-label={t("research.chain_tasks.retry_upload")}
-                      onClick={() => void uploadAttachment(entry)}
+                      className="rounded px-1 text-tertiary hover:bg-surface-2 hover:text-secondary"
+                      onClick={() => void removeAttachment(entry)}
                     >
-                      <RefreshOutline className="size-3.5" aria-hidden />
+                      {t("common.remove")}
                     </button>
-                  </>
-                )}
-                {editable && entry.status !== "uploading" && (
-                  <button
-                    type="button"
-                    className="rounded px-1 text-tertiary hover:bg-surface-2 hover:text-secondary"
-                    onClick={() => void removeAttachment(entry)}
-                  >
-                    {t("common.remove")}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-12 text-placeholder">{t("research.chain_tasks.attachments_empty")}</p>
-        )}
-      </section>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      )}
     </div>
   );
 }

@@ -46,9 +46,8 @@ from plane.app.serializers import (
     ProjectUserPropertySerializer,
 )
 from plane.bgtasks.issue_activities_task import issue_activity
-from plane.bgtasks.issue_description_version_task import issue_description_version_task
 from plane.bgtasks.recent_visited_task import recent_visited_task
-from plane.bgtasks.webhook_task import model_activity
+from plane.utils.issue_mutations import save_issue
 from plane.db.models import (
     CycleIssue,
     FileAsset,
@@ -425,20 +424,7 @@ class IssueViewSet(BaseViewSet):
         )
 
         if serializer.is_valid():
-            serializer.save()
-
-            # Track the issue
-            issue_activity.delay(
-                type="issue.activity.created",
-                requested_data=json.dumps(self.request.data, cls=DjangoJSONEncoder),
-                actor_id=str(request.user.id),
-                issue_id=str(serializer.data.get("id", None)),
-                project_id=str(project_id),
-                current_instance=None,
-                epoch=int(timezone.now().timestamp()),
-                notification=True,
-                origin=base_host(request=request, is_app=True),
-            )
+            save_issue(serializer=serializer, project=project, actor=request.user, request=request)
             queryset = self.get_queryset()
             queryset = self.apply_annotations(queryset)
             issue = (
@@ -479,23 +465,6 @@ class IssueViewSet(BaseViewSet):
             )
             datetime_fields = ["created_at", "updated_at"]
             issue = user_timezone_converter(issue, datetime_fields, request.user.user_timezone)
-            # Send the model activity
-            model_activity.delay(
-                model_name="issue",
-                model_id=str(serializer.data["id"]),
-                requested_data=request.data,
-                current_instance=None,
-                actor_id=request.user.id,
-                slug=slug,
-                origin=base_host(request=request, is_app=True),
-            )
-            # updated issue description version
-            issue_description_version_task.delay(
-                updated_issue=json.dumps(request.data, cls=DjangoJSONEncoder),
-                issue_id=str(serializer.data["id"]),
-                user_id=request.user.id,
-                is_creating=True,
-            )
             return Response(issue, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -698,7 +667,6 @@ class IssueViewSet(BaseViewSet):
 
         current_instance = json.dumps(IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder)
 
-        requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
         serializer = IssueCreateSerializer(
             issue,
             data=request.data,
@@ -706,37 +674,10 @@ class IssueViewSet(BaseViewSet):
             context={"project_id": project_id, "workspace_id": issue.workspace_id, "actor": request.user},
         )
         if serializer.is_valid():
-            serializer.save()
-            # Check if the update is a migration description update
-            is_migration_description_update = skip_activity and is_description_update
-            # Log all the updates
-            if not is_migration_description_update:
-                issue_activity.delay(
-                    type="issue.activity.updated",
-                    requested_data=requested_data,
-                    actor_id=str(request.user.id),
-                    issue_id=str(pk),
-                    project_id=str(project_id),
-                    current_instance=current_instance,
-                    epoch=int(timezone.now().timestamp()),
-                    notification=True,
-                    origin=base_host(request=request, is_app=True),
-                )
-                model_activity.delay(
-                    model_name="issue",
-                    model_id=str(serializer.data.get("id", None)),
-                    requested_data=request.data,
-                    current_instance=current_instance,
-                    actor_id=request.user.id,
-                    slug=slug,
-                    origin=base_host(request=request, is_app=True),
-                )
-                # updated issue description version
-                issue_description_version_task.delay(
-                    updated_issue=current_instance,
-                    issue_id=str(serializer.data.get("id", None)),
-                    user_id=request.user.id,
-                )
+            save_issue(
+                serializer=serializer, project=issue.project, actor=request.user, request=request,
+                previous=current_instance, skip_effects=skip_activity and is_description_update,
+            )
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

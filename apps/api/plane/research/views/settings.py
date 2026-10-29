@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 import pytz
+from django.conf import settings as django_settings
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -141,6 +142,23 @@ class ResearchSettingsEndpoint(ResearchAPIView):
                     return research_error(
                         ResearchErrorCode.FILE_SIZE_EXCEEDED,
                         f"{field} must be a positive integer.",
+                    )
+                deployment_limit_mb = max(
+                    int(
+                        getattr(
+                            django_settings,
+                            "RESEARCH_CHAIN_UPLOAD_MAX_BYTES",
+                            500 * 1024 * 1024,
+                        )
+                    )
+                    // (1024 * 1024),
+                    1,
+                )
+                if field in {"image_max_mb", "pdf_max_mb", "markdown_max_mb", "office_max_mb"} and value > deployment_limit_mb:
+                    return research_error(
+                        ResearchErrorCode.FILE_SIZE_EXCEEDED,
+                        f"{field} cannot exceed the deployment limit of {deployment_limit_mb}MB.",
+                        status.HTTP_400_BAD_REQUEST,
                     )
                 setattr(setting, field, value)
                 changed.append(field)

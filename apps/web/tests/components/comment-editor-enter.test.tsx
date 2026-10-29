@@ -3,11 +3,21 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
-const captured = vi.hoisted(() => ({ enter: undefined as (() => void) | undefined }));
+const captured = vi.hoisted(() => ({
+  enter: undefined as (() => void) | undefined,
+  attachFiles: undefined as ((files: File[]) => void | Promise<void>) | undefined,
+}));
 vi.mock("@plane/editor", () => ({
-  LiteTextEditorWithRef: React.forwardRef(function Editor(props: { onEnterKeyPress: () => void }, _ref) {
+  LiteTextEditorWithRef: React.forwardRef(function Editor(
+    props: {
+      onEnterKeyPress: () => void;
+      fileHandler: { attachFiles?: (files: File[]) => void | Promise<void> };
+    },
+    _ref
+  ) {
     // 模拟 TipTap：快捷键扩展只在第一次初始化时捕获回调。
     if (!captured.enter) captured.enter = props.onEnterKeyPress;
+    captured.attachFiles = props.fileHandler.attachFiles;
     return null;
   }),
 }));
@@ -16,7 +26,7 @@ vi.mock("@/components/editor/embeds/mentions", () => ({ EditorMentionsRoot: () =
 vi.mock("@/components/editor/lite-text/toolbar", () => ({ IssueCommentToolbar: () => null }));
 vi.mock("@/hooks/editor", () => ({
   useEditorMention: () => ({ fetchMentions: vi.fn() }),
-  useEditorConfig: () => ({ getEditorFileHandlers: vi.fn() }),
+  useEditorConfig: () => ({ getEditorFileHandlers: () => ({}) }),
 }));
 vi.mock("@/hooks/store/use-member", () => ({ useMember: () => ({ getUserDetails: vi.fn() }) }));
 vi.mock("@/hooks/use-parse-editor-content", () => ({ useParseEditorContent: () => ({ getEditorMetaData: vi.fn() }) }));
@@ -31,6 +41,7 @@ let root: ReturnType<typeof createRoot>;
 afterEach(async () => {
   await act(async () => root.unmount());
   captured.enter = undefined;
+  captured.attachFiles = undefined;
 });
 
 it("uses the newest submit validation even when the editor retains its initial Enter shortcut", async () => {
@@ -53,4 +64,35 @@ it("uses the newest submit validation even when the editor retains its initial E
   await act(async () => initialShortcut?.());
   expect(original).not.toHaveBeenCalled();
   expect(current).toHaveBeenCalledOnce();
+});
+
+it("forwards an empty folder result to the comment attachment queue", async () => {
+  const container = document.createElement("div");
+  root = createRoot(container);
+  const onAttachFiles = vi.fn();
+  const props = {
+    editable: true as const,
+    workspaceId: "ws",
+    workspaceSlug: "lab",
+    id: "draft",
+    initialValue: "<p></p>",
+    value: null,
+    uploadFile: vi.fn(),
+    duplicateFile: vi.fn(),
+    onAttachFiles,
+  };
+
+  await act(async () => root.render(<LiteTextEditor {...props} />));
+  await act(async () => captured.attachFiles?.([]));
+
+  expect(onAttachFiles).toHaveBeenCalledWith([]);
+
+  onAttachFiles.mockClear();
+  await act(async () => {
+    container
+      .querySelector<HTMLInputElement>('input[type="file"]')
+      ?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  expect(onAttachFiles).not.toHaveBeenCalled();
 });

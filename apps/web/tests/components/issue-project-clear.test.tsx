@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
-import React, { act } from "react";
+import React, { act, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { FormProvider, useForm } from "react-hook-form";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { EditorRefApi } from "@plane/editor";
 import type { TIssue } from "@plane/types";
 
 const mocks = vi.hoisted(() => ({
   getProjectMemberIds: vi.fn(),
+  isEditorReadyToDiscard: vi.fn(),
   onClose: vi.fn(),
   onSubmit: vi.fn(),
+  setToast: vi.fn(),
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -39,6 +42,7 @@ vi.mock("@plane/i18n", () => ({
       ({
         clear_project: "清除项目",
         discard: "放弃",
+        error: "错误",
         project_required_to_save: "请选择项目后再保存",
         save: "保存",
         saving: "保存中",
@@ -53,16 +57,59 @@ vi.mock("@plane/propel/button", () => ({
 }));
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { ERROR: "error" },
-  setToast: vi.fn(),
+  setToast: mocks.setToast,
 }));
 vi.mock("@makeplane/propel/components/switch", () => ({ Switch: () => <input type="checkbox" /> }));
 vi.mock("@plane/utils", () => ({
   cn: (...values: unknown[]) => values.filter(Boolean).join(" "),
   convertWorkItemDataToSearchResponse: vi.fn(),
+  getDescriptionPlaceholderI18n: () => "description-placeholder",
   getChangedIssuefields: vi.fn((data: unknown) => data),
   getTabIndex: () => ({ getIndex: () => 0 }),
   getUpdateFormDataForReset: vi.fn((_projectId: string | null, values: unknown) => values),
 }));
+vi.mock("@makeplane/propel/icons", () => ({
+  AiStar1Outline: () => null,
+  CloseOutline: () => null,
+}));
+vi.mock("@/components/editor/editor-file-upload-button", () => ({
+  EditorFileUploadButton: ({ onFilesSelected }: { onFilesSelected?: (files: File[]) => void }) => (
+    <button
+      type="button"
+      aria-label="添加附件"
+      onClick={() => onFilesSelected?.([new File(["material"], "材料.pdf", { type: "application/pdf" })])}
+    >
+      添加附件
+    </button>
+  ),
+}));
+vi.mock("@/components/core/modals/gpt-assistant-popover", () => ({
+  GptAssistantPopover: () => null,
+}));
+vi.mock("@/components/editor/rich-text", () => ({
+  RichTextEditor: React.forwardRef<EditorRefApi | null, Record<string, unknown>>(function RichTextEditor(_props, ref) {
+    if (ref) {
+      (ref as React.MutableRefObject<EditorRefApi | null>).current = {
+        isEditorReadyToDiscard: mocks.isEditorReadyToDiscard,
+      };
+    }
+    return <div>rich-text-editor</div>;
+  }),
+}));
+vi.mock("@/hooks/store/use-editor-asset", () => ({
+  useEditorAsset: () => ({
+    uploadEditorAsset: vi.fn(),
+    duplicateEditorAsset: vi.fn(),
+  }),
+}));
+vi.mock("@/hooks/store/use-instance", () => ({
+  useInstance: () => ({ config: null }),
+}));
+vi.mock("@/hooks/store/use-workspace", () => ({
+  useWorkspace: () => ({ getWorkspaceBySlug: vi.fn() }),
+}));
+vi.mock("@/services/workspace.service", () => ({ WorkspaceService: vi.fn() }));
+vi.mock("@/services/ai.service", () => ({ AIService: vi.fn() }));
 vi.mock("@/components/dropdowns/project/dropdown", () => ({
   ProjectDropdown: ({
     value,
@@ -135,11 +182,13 @@ vi.mock("@/hooks/use-project-issue-properties", () => ({
 vi.mock("@plane/ui", () => ({
   EModalPosition: { TOP: "top" },
   EModalWidth: { XXL: "xxl" },
+  Loader: Object.assign(({ children }: { children?: React.ReactNode }) => <div>{children}</div>, { Item: () => null }),
   ModalCore: ({ children, isOpen }: { children: React.ReactNode; isOpen: boolean }) =>
     isOpen ? <div>{children}</div> : null,
 }));
 
 const { IssueFormRoot } = await import("@/components/issues/issue-modal/form");
+const { IssueDescriptionEditor } = await import("@/components/issues/issue-modal/components/description-editor");
 const { IssueProjectSelect } = await import("@/components/issues/issue-modal/components/project-select");
 const { ConfirmIssueDiscard } = await import("@/components/issues/confirm-issue-discard");
 
@@ -170,6 +219,52 @@ function IssueFormHarness() {
       handleDuplicateIssueModal={vi.fn()}
       issueTitleRef={{ current: null }}
     />
+  );
+}
+
+function DescriptionEditorHarness({
+  projectId,
+  simulateBusyEditorRef = false,
+  isEditorLoading = false,
+  onAttachFiles,
+}: {
+  projectId: string | null;
+  simulateBusyEditorRef?: boolean;
+  isEditorLoading?: boolean;
+  onAttachFiles?: (files: File[]) => void;
+}) {
+  const methods = useForm<TIssue>({ defaultValues: { description_html: "<p></p>" } as Partial<TIssue> });
+  const editorRef = useRef<EditorRefApi | null>(null);
+  const submitBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (simulateBusyEditorRef) {
+      editorRef.current = { isEditorReadyToDiscard: mocks.isEditorReadyToDiscard };
+    }
+  }, [simulateBusyEditorRef]);
+
+  return (
+    <FormProvider {...methods}>
+      <IssueDescriptionEditor
+        control={methods.control}
+        isDraft={false}
+        issueName="测试工作项"
+        issueId={undefined}
+        descriptionHtmlData={isEditorLoading ? undefined : "<p></p>"}
+        editorRef={editorRef}
+        submitBtnRef={submitBtnRef}
+        gptAssistantModal={false}
+        workspaceSlug="lab"
+        projectId={projectId}
+        handleFormChange={() => undefined}
+        handleDescriptionHTMLDataChange={() => undefined}
+        setGptAssistantModal={() => undefined}
+        handleGptAssistantClose={() => undefined}
+        onAssetUpload={() => undefined}
+        onAttachFiles={onAttachFiles}
+        onClose={mocks.onClose}
+      />
+    </FormProvider>
   );
 }
 
@@ -221,6 +316,97 @@ describe("new work item project clearing", () => {
     expect(discardButton!.disabled).toBe(false);
     await act(async () => discardButton!.click());
     expect(mocks.onClose).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("closes with Escape while the project is empty even if the editor ref is busy", async () => {
+    mocks.isEditorReadyToDiscard.mockReturnValue(false);
+    await act(async () => root.render(<DescriptionEditorHarness projectId={null} simulateBusyEditorRef />));
+
+    const escapeEvent = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      document.dispatchEvent(escapeEvent);
+    });
+
+    expect(mocks.onClose).toHaveBeenCalledExactlyOnceWith();
+    expect(mocks.setToast).not.toHaveBeenCalled();
+    expect(escapeEvent.defaultPrevented).toBe(false);
+  });
+
+  it("asks for a project before queueing an attachment", async () => {
+    const onAttachFiles = vi.fn();
+    await act(async () => root.render(<DescriptionEditorHarness projectId={null} onAttachFiles={onAttachFiles} />));
+
+    const uploadButton = container.querySelector<HTMLButtonElement>('button[aria-label="添加附件"]');
+    expect(uploadButton).not.toBeNull();
+    await act(async () => uploadButton!.click());
+
+    expect(onAttachFiles).not.toHaveBeenCalled();
+    expect(mocks.setToast).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: "请选择项目后再保存" }));
+  });
+
+  it("does not expose the file picker before the editor can route images inline", async () => {
+    const onAttachFiles = vi.fn();
+    await act(async () =>
+      root.render(<DescriptionEditorHarness projectId="project-1" isEditorLoading onAttachFiles={onAttachFiles} />)
+    );
+
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="添加附件"]')).toBeNull();
+    expect(onAttachFiles).not.toHaveBeenCalled();
+  });
+
+  it("asks for a project before queueing a dropped attachment", async () => {
+    const onAttachFiles = vi.fn();
+    const file = new File(["material"], "材料.pdf", { type: "application/pdf" });
+    await act(async () => root.render(<DescriptionEditorHarness projectId={null} onAttachFiles={onAttachFiles} />));
+
+    const dropZone = container.querySelector<HTMLElement>("[role='presentation']");
+    expect(dropZone).not.toBeNull();
+    const dragEnter = new Event("dragenter", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragEnter, "dataTransfer", {
+      value: { types: ["Files"], files: [file], items: [{ kind: "file", getAsFile: () => file }] },
+    });
+    await act(async () => dropZone!.dispatchEvent(dragEnter));
+    expect(dropZone!.className).toContain("border-strong");
+    expect(dropZone!.className).toContain("bg-surface-hover");
+
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: {
+        types: ["Files"],
+        files: [file],
+        items: [{ kind: "file", getAsFile: () => file }],
+      },
+    });
+
+    await act(async () => {
+      dropZone!.dispatchEvent(drop);
+      await Promise.resolve();
+    });
+
+    expect(onAttachFiles).not.toHaveBeenCalled();
+    expect(mocks.setToast).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: "请选择项目后再保存" }));
+  });
+
+  it("keeps Escape protection when a project is selected and the editor is busy", async () => {
+    mocks.isEditorReadyToDiscard.mockReturnValue(false);
+    await act(async () => root.render(<DescriptionEditorHarness projectId="project-1" />));
+
+    const escapeEvent = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      document.dispatchEvent(escapeEvent);
+    });
+
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(mocks.setToast).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: "error" }));
+    expect(escapeEvent.defaultPrevented).toBe(true);
   });
 
   it("restores saving after a project is selected again", async () => {

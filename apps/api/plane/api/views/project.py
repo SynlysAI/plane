@@ -51,7 +51,9 @@ from plane.api.serializers import (
 )
 from plane.app.permissions import ProjectBasePermission, WorkSpaceAdminPermission
 from plane.utils.administrative_projects import (
+    ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE,
     administrative_projects,
+    administrative_settings_write_blocked,
     administrative_projects_for_user,
     restrict_administrative_project_visibility,
 )
@@ -77,6 +79,8 @@ from plane.utils.openapi import (
     ARCHIVED_RESPONSE,
     UNARCHIVED_RESPONSE,
 )
+
+ADMINISTRATIVE_LOCK_PROJECT_FIELDS = {"module_view", "issue_views_view"}
 
 
 def _accessible_projects(user, workspace_slug):
@@ -245,8 +249,15 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
         """
         try:
             workspace = Workspace.objects.get(slug=slug)
+            if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
+                request.user, workspace
+            ):
+                return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
-            serializer = ProjectCreateSerializer(data={**request.data}, context={"workspace_id": workspace.id, "request": request})
+            serializer = ProjectCreateSerializer(
+                data={**request.data},
+                context={"workspace_id": workspace.id, "request": request},
+            )
 
             if serializer.is_valid():
                 with transaction.atomic():
@@ -516,9 +527,10 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
         Retrieve details of a specific project.
         """
         administrative = administrative_projects(slug).filter(pk=pk)
-        if administrative.exists() and not restrict_administrative_project_visibility(
-            administrative, request.user, slug
-        ).exists():
+        if (
+            administrative.exists()
+            and not restrict_administrative_project_visibility(administrative, request.user, slug).exists()
+        ):
             return Response(
                 {
                     "error": "Project membership must be configured by an administrator",
@@ -560,6 +572,10 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
         try:
             workspace = Workspace.objects.get(slug=slug)
             project = Project.objects.get(pk=pk)
+            if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
+                request.user, workspace, project
+            ):
+                return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
             current_instance = json.dumps(ProjectSerializer(project).data, cls=DjangoJSONEncoder)
 
             intake_view = request.data.get("intake_view", project.intake_view)

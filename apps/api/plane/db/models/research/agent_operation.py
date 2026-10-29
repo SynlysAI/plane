@@ -18,7 +18,8 @@ class ResearchAgentOperation(BaseModel):
     workspace = models.ForeignKey("db.Workspace", on_delete=models.PROTECT)
     user = models.ForeignKey("db.User", on_delete=models.PROTECT)
     node = models.ForeignKey("db.ResearchChainNode", on_delete=models.PROTECT)
-    original_grant = models.ForeignKey("db.ResearchAgentWriteGrant", on_delete=models.PROTECT)
+    original_grant = models.ForeignKey("db.ResearchAgentWriteGrant", on_delete=models.PROTECT, null=True, blank=True)
+    original_connection = models.ForeignKey("db.UnifiedMCPConnection", on_delete=models.PROTECT, null=True, blank=True)
     request_id = models.CharField(max_length=128)
     action = models.CharField(max_length=40)
     payload = models.JSONField(default=dict)
@@ -33,7 +34,16 @@ class ResearchAgentOperation(BaseModel):
 
     class Meta:
         db_table = "research_agent_operations"
-        constraints = [models.UniqueConstraint(fields=["workspace", "user", "request_id"], name="rsch_op_request_uq")]
+        constraints = [
+            models.UniqueConstraint(fields=["workspace", "user", "request_id"], name="rsch_op_request_uq"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(original_grant__isnull=False, original_connection__isnull=True)
+                    | models.Q(original_grant__isnull=True, original_connection__isnull=False)
+                ),
+                name="rsch_op_one_source_ck",
+            ),
+        ]
         indexes = [models.Index(fields=["node", "user", "created_at"], name="rsch_op_node_user_idx")]
 
 

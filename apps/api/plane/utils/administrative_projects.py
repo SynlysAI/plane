@@ -15,9 +15,13 @@ from plane.db.models import (
     WorkspaceMember,
     User,
     IssueAssignee,
+    WorkspaceResearchSetting,
 )
 from plane.db.models.project import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
+
+
+ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE = "行政项目模块、标签与视图配置已由工作区管理员锁定。"
 
 
 def research_project_ids():
@@ -42,6 +46,66 @@ def administrative_project_filter(prefix=""):
     """
     field = f"{prefix}id__in" if prefix else "id__in"
     return ~Q(**{field: research_project_ids()})
+
+
+def is_administrative_settings_admin(user, workspace) -> bool:
+    """判断用户是否可越过行政项目配置锁定。
+
+    Args:
+        user: 当前请求用户。
+        workspace: 工作区对象或主键。
+
+    Returns:
+        用户是系统管理员或有效工作区管理员时为 True。
+    """
+    if user is None or not getattr(user, "is_authenticated", False) or workspace is None:
+        return False
+
+    from plane.research.utils.roles import is_system_admin
+
+    workspace_id = getattr(workspace, "id", workspace)
+    return (
+        is_system_admin(user)
+        or WorkspaceMember.objects.filter(
+            workspace_id=workspace_id,
+            member=user,
+            role=ROLE.ADMIN.value,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).exists()
+    )
+
+
+def administrative_settings_admin_only(workspace) -> bool:
+    """读取工作区的行政项目配置锁定状态。
+
+    Args:
+        workspace: 工作区对象或主键。
+
+    Returns:
+        锁定开启时为 True；默认或配置缺失时为 False。
+    """
+    setting = getattr(workspace, "research_setting", None)
+    if setting is None:
+        workspace_id = getattr(workspace, "id", workspace)
+        setting = WorkspaceResearchSetting.objects.filter(workspace_id=workspace_id).first()
+    return bool(getattr(setting, "administrative_settings_admin_only", False))
+
+
+def administrative_settings_write_blocked(user, workspace, project=None) -> bool:
+    """判断当前用户是否被行政项目配置锁定拦截。
+
+    Args:
+        user: 当前请求用户。
+        workspace: 工作区对象或主键。
+        project: 可选项目对象；传入时仅行政项目受锁限制。
+
+    Returns:
+        需要拒绝本次模块、标签或视图配置写入时为 True。
+    """
+    if project is not None and Project.objects.filter(pk=project.id, id__in=research_project_ids()).exists():
+        return False
+    return administrative_settings_admin_only(workspace) and not is_administrative_settings_admin(user, workspace)
 
 
 def administrative_projects(workspace_slug):

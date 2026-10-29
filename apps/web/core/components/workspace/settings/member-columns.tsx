@@ -42,20 +42,21 @@ export function NameColumn(props: NameProps) {
   const { rowData, workspaceSlug, isAdmin, currentUser, setRemoveMemberModal } = props;
   // derived values
   const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
+  const fullName = [first_name, last_name].filter(Boolean).join(" ");
   const isSuspended = rowData.is_active === false;
 
   return (
     <Disclosure>
       {() => (
         <div className="group relative">
-          <div className="flex w-72 items-center justify-between gap-x-4 gap-y-2">
-            <div className="flex flex-1 items-center gap-x-2 gap-y-2">
+          <div className="flex w-72 min-w-0 items-center justify-between gap-x-4">
+            <div className="flex min-w-0 flex-1 items-center gap-x-2">
               {isSuspended ? (
-                <div className="rounded-full bg-layer-1">
+                <div className="shrink-0 rounded-full bg-layer-1">
                   <DeactivatedUserOutline className="size-6 text-placeholder" />
                 </div>
               ) : avatar_url && avatar_url.trim() !== "" ? (
-                <Link href={`/${workspaceSlug}/profile/${id}`}>
+                <Link href={`/${workspaceSlug}/profile/${id}`} className="shrink-0">
                   <span className="relative flex size-6 items-center justify-center rounded-full text-on-color capitalize">
                     <img
                       src={getFileURL(avatar_url)}
@@ -65,14 +66,14 @@ export function NameColumn(props: NameProps) {
                   </span>
                 </Link>
               ) : (
-                <Link href={`/${workspaceSlug}/profile/${id}`}>
+                <Link href={`/${workspaceSlug}/profile/${id}`} className="shrink-0">
                   <span className="relative flex size-6 items-center justify-center rounded-full bg-layer-3 text-11 text-tertiary capitalize">
                     {(email ?? display_name ?? "?")[0]}
                   </span>
                 </Link>
               )}
-              <span className={isSuspended ? "text-placeholder" : ""}>
-                {first_name} {last_name}
+              <span className={`min-w-0 truncate ${isSuspended ? "text-placeholder" : ""}`} title={fullName}>
+                {fullName}
               </span>
             </div>
 

@@ -176,6 +176,11 @@ def test_chain_knowledge_bases_return_only_the_bound_library(env):
     ]
     assert response.json()["scope"] == "LEGACY_CHAIN"
     assert response.json()["chain_id"] == str(env["chain"].id)
+    assert response.json()["upload_limits"] == {
+        "pdf_max_mb": 100,
+        "markdown_max_mb": 5,
+        "office_max_mb": 50,
+    }
 
 
 def test_chain_knowledge_request_blocks_new_upload_until_admin_binding(env):
@@ -295,8 +300,16 @@ def test_scoped_upload_accepts_5_1mb_and_reports_parse_processing(env):
     assert response.json()["data"]["status"] == ResearchChainUpload.Status.PROCESSING
 
 
-def test_scoped_upload_rejects_files_over_fifty_mb(env):
-    """Files above the research-chain limit fail before an upstream call."""
+@pytest.mark.parametrize(
+    ("file_name", "content_type", "limit_mb", "label"),
+    [
+        ("large.pdf", "application/pdf", 100, "PDF"),
+        ("large.md", "text/markdown", 5, "Markdown/TXT"),
+        ("large.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 50, "DOC/DOCX"),
+    ],
+)
+def test_scoped_upload_rejects_files_over_workspace_type_limit(env, file_name, content_type, limit_mb, label):
+    """Each research file type uses its workspace limit before an upstream call."""
     _mark_ready(env)
     with patch("plane.research.services.integrations.adapters.RagPortalClient.upload") as upload_mock:
         response = env["owner_client"].post(
@@ -304,7 +317,11 @@ def test_scoped_upload_rejects_files_over_fifty_mb(env):
             {
                 "node_id": str(env["node"].id),
                 "kb_id": "kb-1",
-                "file": SimpleUploadedFile("large.pdf", b"x" * (50 * 1024 * 1024 + 1), content_type="application/pdf"),
+                "file": SimpleUploadedFile(
+                    file_name,
+                    b"x" * (limit_mb * 1024 * 1024 + 1),
+                    content_type=content_type,
+                ),
             },
             format="multipart",
             HTTP_X_REQUEST_ID="req-upload-too-large",
@@ -312,9 +329,47 @@ def test_scoped_upload_rejects_files_over_fifty_mb(env):
 
     assert response.status_code == 413
     assert response.json()["error_code"] == "file_size_exceeded"
-    assert response.json()["message"] == "The research file exceeds the configured chain upload limit."
+    assert response.json()["message"] == f"{label} research files cannot exceed {limit_mb}MB."
     assert upload_mock.call_count == 0
     assert not ResearchChainUpload.objects.filter(request_id="req-upload-too-large").exists()
+
+
+def test_scoped_upload_allows_pdf_near_deployment_limit(env, settings):
+    """A PDF below the 500MiB deployment ceiling reaches the upstream client."""
+    WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(pdf_max_mb=500)
+    settings.RESEARCH_CHAIN_UPLOAD_MAX_BYTES = 500 * 1024 * 1024
+    _mark_ready(env)
+    receipt = {
+        "external_id": "knowledge-near-deployment-limit",
+        "external_type": "KNOWLEDGE_ENTRY",
+        "external_parent_id": "kb-1",
+        "title": "near-limit.pdf",
+        "summary": "pending",
+        "source_url": "/api/uploads/near-limit",
+        "acl_hint": {},
+        "metadata": {"upload_id": "near-limit", "task_id": "task-near-limit", "parse_status": "pending"},
+    }
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.upload",
+        return_value=_result(items=[receipt], request_id="req-upload-near-limit"),
+    ) as upload_mock:
+        response = env["owner_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+            {
+                "node_id": str(env["node"].id),
+                "kb_id": "kb-1",
+                "file": SimpleUploadedFile(
+                    "near-limit.pdf",
+                    b"x" * (500 * 1024 * 1024 - 1),
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+            HTTP_X_REQUEST_ID="req-upload-near-limit",
+        )
+
+    assert response.status_code == 201, response.json()
+    assert upload_mock.call_count == 1
 
 
 def test_upload_list_returns_secure_plane_download_and_preview_urls(env):

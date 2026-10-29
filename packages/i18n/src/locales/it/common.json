@@ -838,7 +838,10 @@
       "invalid": "Sono supportati solo immagini JPEG, JPG, PNG, WebP o GIF.",
       "upload": "Carica immagini"
     },
-    "delete": "Elimina allegato"
+    "delete": "Elimina allegato",
+    "editor_file": {
+      "upload": "Aggiungi allegato"
+    }
   },
   "label": {
     "select": "Seleziona etichetta",

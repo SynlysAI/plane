@@ -73,7 +73,12 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
 
   return (
     <>
-      <div className="divide-y-[0.5px] divide-subtle overflow-scroll">
+      <div
+        role="region"
+        aria-label={t("workspace_settings.settings.members.title")}
+        tabIndex={0}
+        className="focus-visible:outline-accent-primary min-w-0 divide-y-[0.5px] divide-subtle overflow-x-auto overscroll-x-contain focus-visible:outline focus-visible:outline-1"
+      >
         {searchedMemberIds?.length !== 0 && <WorkspaceMembersListItem memberDetails={memberDetails ?? []} />}
         {searchedInvitationsIds?.length === 0 && searchedMemberIds?.length === 0 && (
           <h4 className="mt-16 text-center text-body-xs-regular text-placeholder">{t("no_matching_members")}</h4>

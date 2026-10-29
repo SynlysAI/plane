@@ -1,0 +1,4322 @@
+{
+  "contract_version": "plane.unified-mcp.v1",
+  "protocol_version": "2025-03-26",
+  "notice": "Phase 1 design artifact; not a running server or a runtime registration catalogue. Native ACL, state, URL origin and linkage checks remain mandatory.",
+  "connection_create_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "workspaces": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "workspace_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "domains": {
+              "type": "object",
+              "properties": {
+                "administrative": {
+                  "type": "string",
+                  "enum": ["read", "read_write"]
+                },
+                "research": {
+                  "type": "string",
+                  "enum": ["read", "read_write"]
+                }
+              },
+              "required": [],
+              "additionalProperties": false,
+              "minProperties": 1
+            }
+          },
+          "required": ["workspace_id", "domains"],
+          "additionalProperties": false
+        },
+        "minItems": 1,
+        "maxItems": 20
+      },
+      "include_future_objects": {
+        "type": "boolean"
+      }
+    },
+    "required": ["name", "workspaces", "include_future_objects"],
+    "additionalProperties": false
+  },
+  "tools": [
+    {
+      "name": "plane_list_workspaces",
+      "description": "List only selected workspaces still accessible to this connection owner.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_list_containers",
+      "description": "List administrative projects and research chains; follow every returned cursor.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspace_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "domain": {
+            "type": "string",
+            "enum": ["administrative", "research", "all"]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": ["workspace_slug"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_list_nodes",
+      "description": "List research nodes. Administrative projects return not_applicable and a task-list entry.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "container": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "anyOf": [
+                  {
+                    "const": "administrative"
+                  },
+                  {
+                    "const": "research"
+                  }
+                ]
+              },
+              "workspace_slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "object_type": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["Project"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["ResearchChain"]
+                  }
+                ]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Project"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Project"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Project"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChain"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChain"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChain"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "node_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": ["container"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_list_tasks",
+      "description": "List native tasks in their real parent; administrative Issue parent means immediate subtasks.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Project", "Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Project", "Issue"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          },
+          "state_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assignee_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          },
+          "status": {
+            "type": "string",
+            "enum": ["DRAFT", "ASSIGNED", "COMPLETED", "CANCELLED"]
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "parent": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Project", "Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Project", "Issue"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Project", "Issue"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "state_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "assignee_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "cursor": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "default": 20
+              }
+            },
+            "required": ["parent"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "parent": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": ["DRAFT", "ASSIGNED", "COMPLETED", "CANCELLED"]
+              },
+              "assignee_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "cursor": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "default": 20
+              }
+            },
+            "required": ["parent"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_get_context",
+      "description": "Read one bounded context section. Use capabilities for editable fields, candidate assignees and transitions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "anyOf": [
+                  {
+                    "const": "administrative"
+                  },
+                  {
+                    "const": "research"
+                  }
+                ]
+              },
+              "workspace_slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "object_type": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["Project", "Issue"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["ResearchChain", "ResearchChainNode", "ResearchChainNodeTask"]
+                  }
+                ]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Project", "Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Project", "Issue"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Project", "Issue"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChain", "ResearchChainNode", "ResearchChainNodeTask"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChain", "ResearchChainNode", "ResearchChainNodeTask"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChain", "ResearchChainNode", "ResearchChainNodeTask"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          },
+          "section": {
+            "type": "string",
+            "enum": ["details", "capabilities", "comments", "resources", "events", "snapshots", "operations"]
+          },
+          "resource_kind": {
+            "type": "string",
+            "enum": [
+              "analysis",
+              "snapshot",
+              "upload",
+              "paper_review",
+              "report",
+              "experiment",
+              "stage_material",
+              "topic_material",
+              "external_reference",
+              "agent_event",
+              "event",
+              "task",
+              "task_comment"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": ["target", "section"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_read_resource",
+      "description": "Read allowed bounded native content, never fetch URLs or file bytes. Formal reports require an explicit version.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parent": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["issue_description", "issue_comment", "issue_activity"]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "analysis",
+                  "snapshot",
+                  "upload",
+                  "paper_review",
+                  "report",
+                  "experiment",
+                  "stage_material",
+                  "topic_material",
+                  "external_reference",
+                  "agent_event",
+                  "event",
+                  "task",
+                  "task_comment"
+                ]
+              }
+            ]
+          },
+          "resource_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 16000,
+            "default": 8000
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "parent": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Issue"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Issue"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["issue_description", "issue_comment", "issue_activity"]
+              },
+              "resource_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "cursor": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "max_chars": {
+                "type": "integer",
+                "minimum": 256,
+                "maximum": 16000,
+                "default": 8000
+              }
+            },
+            "required": ["parent", "kind", "resource_id"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "parent": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "analysis",
+                  "snapshot",
+                  "upload",
+                  "paper_review",
+                  "report",
+                  "experiment",
+                  "stage_material",
+                  "topic_material",
+                  "external_reference",
+                  "agent_event",
+                  "event",
+                  "task",
+                  "task_comment"
+                ]
+              },
+              "resource_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "cursor": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "max_chars": {
+                "type": "integer",
+                "minimum": 256,
+                "maximum": 16000,
+                "default": 8000
+              }
+            },
+            "required": ["parent", "kind", "resource_id"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_create_task",
+      "description": "Create one administrative Issue directly. For research creation, prepare and execute a research proposal.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parent": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "const": "administrative"
+              },
+              "workspace_slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "object_type": {
+                "type": "string",
+                "enum": ["Project", "Issue"]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Project", "Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Project", "Issue"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "description_html": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 30000
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["urgent", "high", "medium", "low", "none"]
+          },
+          "assignee_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 1,
+            "uniqueItems": true
+          },
+          "start_date": {
+            "type": ["string", "null"],
+            "format": "date"
+          },
+          "target_date": {
+            "type": ["string", "null"],
+            "format": "date"
+          }
+        },
+        "required": ["parent", "request_id", "name"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_update_task",
+      "description": "Replace explicit editable fields directly; research lifecycle status and resource binding are separate operations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNodeTask"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "description_html": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 30000
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": ["urgent", "high", "medium", "low", "none"]
+                  },
+                  "assignee_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 1,
+                    "uniqueItems": true
+                  },
+                  "start_date": {
+                    "type": ["string", "null"],
+                    "format": "date"
+                  },
+                  "target_date": {
+                    "type": ["string", "null"],
+                    "format": "date"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "minProperties": 1
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 8000
+                  },
+                  "assignee": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "due_at": {
+                    "type": ["string", "null"],
+                    "format": "date-time"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "minProperties": 1
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Issue"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Issue"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "changes": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "description_html": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 30000
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": ["urgent", "high", "medium", "low", "none"]
+                  },
+                  "assignee_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 1,
+                    "uniqueItems": true
+                  },
+                  "start_date": {
+                    "type": ["string", "null"],
+                    "format": "date"
+                  },
+                  "target_date": {
+                    "type": ["string", "null"],
+                    "format": "date"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "minProperties": 1
+              }
+            },
+            "required": ["target", "changes"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNodeTask"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "changes": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 8000
+                  },
+                  "assignee": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "due_at": {
+                    "type": ["string", "null"],
+                    "format": "date-time"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "minProperties": 1
+              }
+            },
+            "required": ["target", "changes"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_add_comment",
+      "description": "Append one administrative comment directly. Research comments retain prepare/execute.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "const": "administrative"
+              },
+              "workspace_slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "object_type": {
+                "type": "string",
+                "enum": ["Issue"]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "comment_html": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30000
+          }
+        },
+        "required": ["target", "request_id", "comment_html"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_transition_task",
+      "description": "Use a native administrative state id or an explicitly permitted research task action; never set research status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNodeTask"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            ]
+          },
+          "action": {
+            "anyOf": [
+              {
+                "const": "set_state"
+              },
+              {
+                "type": "string",
+                "enum": ["complete"]
+              },
+              {
+                "type": "string",
+                "enum": ["reopen", "cancel"]
+              }
+            ]
+          },
+          "state_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "comment": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 8000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "administrative"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["Issue"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Issue"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "administrative"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["Issue"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "action": {
+                "const": "set_state"
+              },
+              "state_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": ["target", "action", "state_id"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNodeTask"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["complete"]
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "comment": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 8000
+              }
+            },
+            "required": ["target", "action", "request_id"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNodeTask"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNodeTask"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["reopen", "cancel"]
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000
+              }
+            },
+            "required": ["target", "action", "request_id", "reason"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_prepare_research_operation",
+      "description": "Prepare an immutable proposal with one closed action schema; no business mutation and no extra Plane approval.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "const": "research"
+              },
+              "workspace_slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "object_type": {
+                "type": "string",
+                "enum": ["ResearchChainNode"]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "const": "create_task"
+              },
+              {
+                "const": "append_task_comment"
+              },
+              {
+                "const": "save_analysis_draft"
+              },
+              {
+                "const": "attach_task_resource"
+              },
+              {
+                "const": "append_research_note"
+              }
+            ]
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["title"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "task_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["task_id", "text"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  },
+                  "conclusion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["method", "summary"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "task_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "resource_type": {
+                    "type": "string",
+                    "enum": ["REPORT", "STAGE_MATERIAL", "PAPER_REVIEW", "SNAPSHOT", "EXTERNAL_REF"]
+                  },
+                  "resource_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": ["task_id", "resource_type", "resource_id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "analysis",
+                    "snapshot",
+                    "upload",
+                    "paper_review",
+                    "report",
+                    "experiment",
+                    "stage_material",
+                    "topic_material",
+                    "external_reference",
+                    "agent_event",
+                    "event",
+                    "task",
+                    "task_comment"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "usage": {
+                  "type": "string",
+                  "enum": ["metadata", "body"]
+                }
+              },
+              "required": ["kind", "id", "usage"],
+              "additionalProperties": false
+            },
+            "maxItems": 8
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "node": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "action": {
+                "const": "create_task"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["title"],
+                "additionalProperties": false
+              },
+              "source_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "analysis",
+                        "snapshot",
+                        "upload",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference",
+                        "agent_event",
+                        "event",
+                        "task",
+                        "task_comment"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "usage": {
+                      "type": "string",
+                      "enum": ["metadata", "body"]
+                    }
+                  },
+                  "required": ["kind", "id", "usage"],
+                  "additionalProperties": false
+                },
+                "maxItems": 8
+              }
+            },
+            "required": ["node", "request_id", "action", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "node": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "action": {
+                "const": "append_task_comment"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "task_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["task_id", "text"],
+                "additionalProperties": false
+              },
+              "source_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "analysis",
+                        "snapshot",
+                        "upload",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference",
+                        "agent_event",
+                        "event",
+                        "task",
+                        "task_comment"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "usage": {
+                      "type": "string",
+                      "enum": ["metadata", "body"]
+                    }
+                  },
+                  "required": ["kind", "id", "usage"],
+                  "additionalProperties": false
+                },
+                "maxItems": 8
+              }
+            },
+            "required": ["node", "request_id", "action", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "node": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "action": {
+                "const": "save_analysis_draft"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  },
+                  "conclusion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["method", "summary"],
+                "additionalProperties": false
+              },
+              "source_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "analysis",
+                        "snapshot",
+                        "upload",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference",
+                        "agent_event",
+                        "event",
+                        "task",
+                        "task_comment"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "usage": {
+                      "type": "string",
+                      "enum": ["metadata", "body"]
+                    }
+                  },
+                  "required": ["kind", "id", "usage"],
+                  "additionalProperties": false
+                },
+                "maxItems": 8
+              }
+            },
+            "required": ["node", "request_id", "action", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "node": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "action": {
+                "const": "attach_task_resource"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "task_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "resource_type": {
+                    "type": "string",
+                    "enum": ["REPORT", "STAGE_MATERIAL", "PAPER_REVIEW", "SNAPSHOT", "EXTERNAL_REF"]
+                  },
+                  "resource_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": ["task_id", "resource_type", "resource_id"],
+                "additionalProperties": false
+              },
+              "source_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "analysis",
+                        "snapshot",
+                        "upload",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference",
+                        "agent_event",
+                        "event",
+                        "task",
+                        "task_comment"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "usage": {
+                      "type": "string",
+                      "enum": ["metadata", "body"]
+                    }
+                  },
+                  "required": ["kind", "id", "usage"],
+                  "additionalProperties": false
+                },
+                "maxItems": 8
+              }
+            },
+            "required": ["node", "request_id", "action", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "node": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "const": "research"
+                      },
+                      "workspace_slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "object_type": {
+                        "type": "string",
+                        "enum": ["ResearchChainNode"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["domain", "workspace_slug", "object_type", "url"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "action": {
+                "const": "append_research_note"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              },
+              "source_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "analysis",
+                        "snapshot",
+                        "upload",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference",
+                        "agent_event",
+                        "event",
+                        "task",
+                        "task_comment"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "usage": {
+                      "type": "string",
+                      "enum": ["metadata", "body"]
+                    }
+                  },
+                  "required": ["kind", "id", "usage"],
+                  "additionalProperties": false
+                },
+                "maxItems": 8
+              }
+            },
+            "required": ["node", "request_id", "action", "payload"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_execute_research_operation",
+      "description": "Execute the exact authorized proposal; after timeout query the same operation id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspace_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["workspace_slug", "operation_id"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_get_research_operation",
+      "description": "Recover proposal and durable commit/readback result within live credential scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspace_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["workspace_slug", "operation_id"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_list_research_operations",
+      "description": "Find existing proposals by node and optionally request id; enables recovery after prepare timeout.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "const": "research"
+              },
+              "workspace_slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "object_type": {
+                "type": "string",
+                "enum": ["ResearchChainNode"]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "const": "research"
+                  },
+                  "workspace_slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "object_type": {
+                    "type": "string",
+                    "enum": ["ResearchChainNode"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": ["domain", "workspace_slug", "object_type", "url"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": ["node"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "plane_get_write_result",
+      "description": "Recover an administrative create/comment receipt; this lookup never executes a write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspace_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        },
+        "required": ["workspace_slug", "request_id"],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    }
+  ],
+  "valid_examples": [
+    {
+      "tool": "plane_list_workspaces",
+      "arguments": {
+        "limit": 20
+      }
+    },
+    {
+      "tool": "plane_list_containers",
+      "arguments": {
+        "workspace_slug": "lab",
+        "domain": "all"
+      }
+    },
+    {
+      "tool": "plane_list_nodes",
+      "arguments": {
+        "container": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChain",
+          "id": "00000000-0000-4000-8000-000000000005"
+        }
+      }
+    },
+    {
+      "tool": "plane_list_tasks",
+      "arguments": {
+        "parent": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Project",
+          "id": "00000000-0000-4000-8000-000000000001"
+        },
+        "query": "验收"
+      }
+    },
+    {
+      "tool": "plane_list_tasks",
+      "arguments": {
+        "parent": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "status": "ASSIGNED",
+        "assignee_id": "00000000-0000-4000-8000-000000000006"
+      }
+    },
+    {
+      "tool": "plane_get_context",
+      "arguments": {
+        "target": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Issue",
+          "id": "00000000-0000-4000-8000-000000000002"
+        },
+        "section": "capabilities"
+      }
+    },
+    {
+      "tool": "plane_get_context",
+      "arguments": {
+        "target": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "url": "https://plane.example/lab/research/chains/00000000-0000-4000-8000-000000000005/?tab=nodes&node=00000000-0000-4000-8000-000000000003"
+        },
+        "section": "resources",
+        "resource_kind": "analysis"
+      }
+    },
+    {
+      "tool": "plane_read_resource",
+      "arguments": {
+        "parent": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "kind": "report",
+        "resource_id": "00000000-0000-4000-8000-000000000007",
+        "version": 2
+      }
+    },
+    {
+      "tool": "plane_create_task",
+      "arguments": {
+        "parent": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Project",
+          "id": "00000000-0000-4000-8000-000000000001"
+        },
+        "request_id": "admin-create-1",
+        "name": "验收任务",
+        "assignee_ids": ["00000000-0000-4000-8000-000000000006"]
+      }
+    },
+    {
+      "tool": "plane_update_task",
+      "arguments": {
+        "target": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Issue",
+          "id": "00000000-0000-4000-8000-000000000002"
+        },
+        "changes": {
+          "assignee_ids": [],
+          "target_date": "2026-10-30"
+        }
+      }
+    },
+    {
+      "tool": "plane_update_task",
+      "arguments": {
+        "target": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNodeTask",
+          "id": "00000000-0000-4000-8000-000000000004"
+        },
+        "changes": {
+          "title": "复核数据",
+          "due_at": null
+        }
+      }
+    },
+    {
+      "tool": "plane_add_comment",
+      "arguments": {
+        "target": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Issue",
+          "id": "00000000-0000-4000-8000-000000000002"
+        },
+        "request_id": "admin-comment-1",
+        "comment_html": "<p>已完成核对。</p>"
+      }
+    },
+    {
+      "tool": "plane_transition_task",
+      "arguments": {
+        "target": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Issue",
+          "id": "00000000-0000-4000-8000-000000000002"
+        },
+        "action": "set_state",
+        "state_id": "00000000-0000-4000-8000-000000000008"
+      }
+    },
+    {
+      "tool": "plane_transition_task",
+      "arguments": {
+        "target": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNodeTask",
+          "id": "00000000-0000-4000-8000-000000000004"
+        },
+        "action": "reopen",
+        "request_id": "return-1",
+        "reason": "请补充对照数据"
+      }
+    },
+    {
+      "tool": "plane_execute_research_operation",
+      "arguments": {
+        "workspace_slug": "lab",
+        "operation_id": "00000000-0000-4000-8000-000000000009"
+      }
+    },
+    {
+      "tool": "plane_get_research_operation",
+      "arguments": {
+        "workspace_slug": "lab",
+        "operation_id": "00000000-0000-4000-8000-000000000009"
+      }
+    },
+    {
+      "tool": "plane_list_research_operations",
+      "arguments": {
+        "node": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "research-1"
+      }
+    },
+    {
+      "tool": "plane_get_write_result",
+      "arguments": {
+        "workspace_slug": "lab",
+        "request_id": "admin-create-1"
+      }
+    },
+    {
+      "tool": "plane_prepare_research_operation",
+      "arguments": {
+        "node": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "research-create_task",
+        "action": "create_task",
+        "payload": {
+          "title": "复核数据"
+        }
+      }
+    },
+    {
+      "tool": "plane_prepare_research_operation",
+      "arguments": {
+        "node": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "research-append_task_comment",
+        "action": "append_task_comment",
+        "payload": {
+          "task_id": "00000000-0000-4000-8000-000000000004",
+          "text": "已复核"
+        }
+      }
+    },
+    {
+      "tool": "plane_prepare_research_operation",
+      "arguments": {
+        "node": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "research-save_analysis_draft",
+        "action": "save_analysis_draft",
+        "payload": {
+          "method": "对照分析",
+          "summary": "待审核"
+        }
+      }
+    },
+    {
+      "tool": "plane_prepare_research_operation",
+      "arguments": {
+        "node": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "research-attach_task_resource",
+        "action": "attach_task_resource",
+        "payload": {
+          "task_id": "00000000-0000-4000-8000-000000000004",
+          "resource_type": "REPORT",
+          "resource_id": "00000000-0000-4000-8000-000000000007",
+          "version": 2
+        }
+      }
+    },
+    {
+      "tool": "plane_prepare_research_operation",
+      "arguments": {
+        "node": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "research-append_research_note",
+        "action": "append_research_note",
+        "payload": {
+          "text": "记录本次复核过程"
+        }
+      }
+    }
+  ],
+  "invalid_examples": [
+    {
+      "tool": "plane_list_tasks",
+      "arguments": {
+        "parent": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "state_id": "00000000-0000-4000-8000-000000000008"
+      }
+    },
+    {
+      "tool": "plane_list_tasks",
+      "arguments": {
+        "parent": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Project",
+          "id": "00000000-0000-4000-8000-000000000001"
+        },
+        "status": "SUBMITTED"
+      }
+    },
+    {
+      "tool": "plane_list_workspaces",
+      "arguments": {
+        "limit": true
+      }
+    },
+    {
+      "tool": "plane_list_workspaces",
+      "arguments": {
+        "limit": 51
+      }
+    },
+    {
+      "tool": "plane_create_task",
+      "arguments": {
+        "parent": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "x",
+        "name": "不能绕过提案"
+      }
+    },
+    {
+      "tool": "plane_create_task",
+      "arguments": {
+        "parent": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Project",
+          "id": "00000000-0000-4000-8000-000000000001"
+        },
+        "request_id": "x",
+        "name": "x",
+        "assignee_ids": ["00000000-0000-4000-8000-000000000006", "00000000-0000-4000-8000-000000000007"]
+      }
+    },
+    {
+      "tool": "plane_update_task",
+      "arguments": {
+        "target": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNodeTask",
+          "id": "00000000-0000-4000-8000-000000000004"
+        },
+        "changes": {
+          "status": "COMPLETED"
+        }
+      }
+    },
+    {
+      "tool": "plane_update_task",
+      "arguments": {
+        "target": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNodeTask",
+          "id": "00000000-0000-4000-8000-000000000004"
+        },
+        "changes": {
+          "assignee": null
+        }
+      }
+    },
+    {
+      "tool": "plane_update_task",
+      "arguments": {
+        "target": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Issue",
+          "id": "00000000-0000-4000-8000-000000000002"
+        },
+        "changes": {}
+      }
+    },
+    {
+      "tool": "plane_transition_task",
+      "arguments": {
+        "target": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNodeTask",
+          "id": "00000000-0000-4000-8000-000000000004"
+        },
+        "action": "cancel",
+        "request_id": "x"
+      }
+    },
+    {
+      "tool": "plane_add_comment",
+      "arguments": {
+        "target": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNodeTask",
+          "id": "00000000-0000-4000-8000-000000000004"
+        },
+        "request_id": "x",
+        "comment_html": "<p>x</p>"
+      }
+    },
+    {
+      "tool": "plane_prepare_research_operation",
+      "arguments": {
+        "node": {
+          "domain": "research",
+          "workspace_slug": "lab",
+          "object_type": "ResearchChainNode",
+          "id": "00000000-0000-4000-8000-000000000003"
+        },
+        "request_id": "x",
+        "action": "create_task",
+        "payload": {
+          "title": "x",
+          "assignee": "00000000-0000-4000-8000-000000000006"
+        }
+      }
+    },
+    {
+      "tool": "plane_execute_research_operation",
+      "arguments": {
+        "workspace_slug": "lab",
+        "operation_id": "00000000-0000-4000-8000-000000000009",
+        "payload": {}
+      }
+    },
+    {
+      "tool": "plane_get_write_result",
+      "arguments": {
+        "workspace_slug": "lab",
+        "request_id": "bad request"
+      }
+    },
+    {
+      "tool": "plane_get_context",
+      "arguments": {
+        "target": {
+          "domain": "administrative",
+          "workspace_slug": "lab",
+          "object_type": "Issue",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "url": "https://plane.example"
+        },
+        "section": "details"
+      }
+    }
+  ],
+  "updated_for_develop": "2026-10-29: native research tasks complete/reopen/cancel; report approvals are separate."
+}

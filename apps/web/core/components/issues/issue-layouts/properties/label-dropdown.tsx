@@ -22,6 +22,7 @@ import { EUserProjectRoles } from "@plane/types";
 import { ComboDropDown } from "@plane/ui";
 import { sortBySelectedFirst } from "@plane/utils";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useLabel } from "@/hooks/store/use-label";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useDropdownKeyDown } from "@/hooks/use-dropdown-key-down";
@@ -96,9 +97,12 @@ export function LabelDropdown(props: ILabelDropdownProps) {
   const { isMobile } = usePlatformOS();
   const storeLabels = getProjectLabels(projectId);
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId ?? undefined);
 
   const canCreateLabel =
-    projectId && allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+    !isAdministrativeSettingsLocked &&
+    projectId &&
+    allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
 
   let projectLabels: IIssueLabel[] = defaultOptions;
   if (storeLabels && storeLabels.length > 0) projectLabels = storeLabels;
