@@ -102,6 +102,8 @@ from .task import ResearchChainNodeTask, ResearchTaskComment, ResearchTaskSubscr
 from .template import ReportTemplate
 
 __all__ = [
+    "ReportAgentGrant",
+    "ReportAgentOperation",
     "ResearchAgentOperation",
     "ResearchAgentOperationApproval",
     "ResearchAgentWriteGrant",
@@ -204,3 +206,5 @@ __all__ = [
     "ResearchTaskComment",
     "ResearchTaskSubscriber",
 ]
+
+from .report_agent import ReportAgentGrant, ReportAgentOperation

@@ -818,17 +818,17 @@ class TestReportConcurrentStateFlow:
             return list(executor.map(execute, operations))
 
     def test_concurrent_submit_creates_one_official_version(self, env):
-        from plane.research.views import reports as report_views
+        from plane.research.services import report_workflow
 
         report = create_report(env).json()
         submit_url = f"{env['url']}{report['id']}/submit/"
-        create_snapshot = report_views.create_report_snapshot
+        create_snapshot = report_workflow.create_report_snapshot
 
         def delayed_snapshot(*args, **kwargs):
             sleep(0.15)
             return create_snapshot(*args, **kwargs)
 
-        with patch.object(report_views, "create_report_snapshot", side_effect=delayed_snapshot):
+        with patch.object(report_workflow, "create_report_snapshot", side_effect=delayed_snapshot):
             statuses = self._run_together(
                 lambda: client_for(env["student"]).post(
                     submit_url,

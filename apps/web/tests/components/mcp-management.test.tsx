@@ -59,6 +59,9 @@ const workspaceStore = {
   fetchWorkspaces: mocks.fetch,
 };
 vi.mock("@/hooks/store/use-workspace", () => ({ useWorkspace: () => workspaceStore }));
+vi.mock("@/hooks/store/use-command-palette", () => ({
+  useCommandPalette: () => ({ profileSettingsModal: { isOpen: true } }),
+}));
 vi.mock("@/hooks/store/user", () => ({
   useUser: () => ({ data: { display_name: "Local researcher", id: "internal-local-user-id" } }),
 }));

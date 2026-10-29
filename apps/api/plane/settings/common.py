@@ -652,3 +652,7 @@ ATTACHMENT_PREVIEW_CONVERTER_URL = os.environ.get("ATTACHMENT_PREVIEW_CONVERTER_
 ATTACHMENT_PREVIEW_VERSION = "gotenberg-8.38.1-v1"
 ATTACHMENT_PREVIEW_MAX_BYTES = 100 * 1024 * 1024
 ATTACHMENT_PREVIEW_TIMEOUT = 120
+
+# Personal report credentials never enable the node MCP write surface.
+# Enabled by default; deployments can explicitly opt out with 0.
+RESEARCH_WEEKLY_REPORT_MCP_ENABLED = os.environ.get("RESEARCH_WEEKLY_REPORT_MCP_ENABLED", "1") == "1"
