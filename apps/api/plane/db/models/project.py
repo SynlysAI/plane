@@ -243,11 +243,11 @@ class ProjectMember(ProjectBaseModel):
             min_sort_order = min_sort_order_result.get("min_sort_order")
 
             # create project user property with project sort order
-            ProjectUserProperty.objects.create(
+            ProjectUserProperty.objects.get_or_create(
                 workspace_id=self.project.workspace_id,
                 project=self.project,
                 user=self.member,
-                sort_order=(min_sort_order - 10000 if min_sort_order is not None else 65535),
+                defaults={"sort_order": (min_sort_order - 10000 if min_sort_order is not None else 65535)},
             )
 
         super(ProjectMember, self).save(*args, **kwargs)

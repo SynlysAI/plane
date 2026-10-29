@@ -157,9 +157,9 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
         />
       )}
       {selectedMemberIds.length > 0 && (
-        <div className="flex items-center justify-between border-b border-subtle bg-surface-2 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-subtle bg-surface-2 px-3 py-2">
           <span className="text-12 text-secondary">已选择 {selectedMemberIds.length} 名成员</span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => setSelectedMemberIds([])}>
               取消选择
             </Button>
@@ -190,6 +190,7 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
         columns={columns ?? []}
         data={memberDetails?.filter((member): member is IWorkspaceMember => member !== null) ?? []}
         keyExtractor={(rowData) => rowData?.member.id ?? ""}
+        tableClassName="min-w-[80rem]"
         tHeadClassName="border-b border-subtle"
         thClassName="text-left font-medium divide-x-0 text-placeholder"
         tBodyClassName="divide-y-0"

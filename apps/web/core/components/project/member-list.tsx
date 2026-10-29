@@ -90,13 +90,13 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       />
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 overflow-x-hidden border-b border-subtle py-2">
+      <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-subtle py-2">
         <div className="shrink-0 text-14 font-semibold">{t("common.members")}</div>
-        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-          <div className="flex min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+          <div className="flex min-w-0 flex-1 basis-40 items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
             <SearchOutline className="h-3.5 w-3.5" />
             <input
-              className="w-full max-w-[234px] border-none bg-transparent text-13 placeholder:text-placeholder focus:outline-none"
+              className="w-full max-w-[234px] min-w-0 border-none bg-transparent text-13 placeholder:text-placeholder focus:outline-none"
               placeholder={t("search")}
               value={searchQuery}
               // oxlint-disable-next-line jsx_a11y/no-autofocus -- Focus the member search when entering member management.
@@ -124,7 +124,12 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
       {!projectMemberIds ? (
         <MembersSettingsLoader />
       ) : (
-        <div className="divide-y divide-subtle overflow-scroll">
+        <div
+          role="region"
+          aria-label={t("common.members")}
+          tabIndex={0}
+          className="focus-visible:outline-accent-primary min-w-0 divide-y divide-subtle overflow-x-auto overscroll-x-contain focus-visible:outline focus-visible:outline-1"
+        >
           {searchedProjectMembers.length !== 0 && (
             <ProjectMemberListItem
               memberDetails={memberDetails ?? []}

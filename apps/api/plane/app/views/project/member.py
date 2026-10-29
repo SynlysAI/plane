@@ -5,6 +5,7 @@
 # Third Party imports
 from rest_framework.response import Response
 from rest_framework import status
+from django.db import transaction
 from django.db.models import Min
 
 # Module imports
@@ -25,6 +26,7 @@ from plane.app.permissions.base import allow_permission, ROLE
 from plane.research.utils.project_review import research_review_project_ids_for_slug, user_can_review_research_project
 from plane.utils.administrative_projects import (
     administrative_organization_project_ids,
+    administrative_projects,
     administrative_projects_for_user,
     effective_project_member,
     project_member_roster,
@@ -245,9 +247,21 @@ class ProjectMemberViewSet(BaseViewSet):
                 )
 
             new_role = int(request.data.get("role"))
+            is_administrative_project = administrative_projects(slug).filter(pk=project_id).exists()
+            can_promote_administrative_member = (
+                is_administrative_project
+                and not is_workspace_admin
+                and requested_project_member.role == ROLE.ADMIN.value
+                and project_member.role < ROLE.ADMIN.value
+                and new_role == ROLE.ADMIN.value
+            )
 
             # Cannot assign a role equal to or higher than your own
-            if new_role >= requested_project_member.role and not is_workspace_admin:
+            if (
+                new_role >= requested_project_member.role
+                and not is_workspace_admin
+                and not can_promote_administrative_member
+            ):
                 return Response(
                     {"error": "You cannot assign a role equal to or higher than your own"},
                     status=status.HTTP_403_FORBIDDEN,
@@ -392,6 +406,121 @@ class ProjectMemberUserEndpoint(BaseAPIView):
             data["original_role"] = project_member.role
 
         return Response(data, status=status.HTTP_200_OK)
+
+
+class ProjectMemberRoleByUserEndpoint(BaseAPIView):
+    """按用户 ID 调整行政项目成员角色，并维护直接授权关系。"""
+
+    def patch(self, request, slug, project_id, member_id):
+        """切换行政项目成员的成员或管理员角色。"""
+        try:
+            requested_role = int(request.data.get("role"))
+        except (TypeError, ValueError):
+            return Response({"role": ["Role must be 15 or 20."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        if requested_role not in (ROLE.MEMBER.value, ROLE.ADMIN.value):
+            return Response({"role": ["Role must be 15 or 20."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        project = (
+            administrative_projects(slug)
+            .select_related("workspace")
+            .filter(pk=project_id)
+            .first()
+        )
+        if project is None:
+            return Response(
+                {"error": "Role updates by user are only available for administrative projects."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        requester_workspace_member = WorkspaceMember.objects.filter(
+            workspace=project.workspace,
+            member=request.user,
+            is_active=True,
+        ).first()
+        target_workspace_member = WorkspaceMember.objects.filter(
+            workspace=project.workspace,
+            member_id=member_id,
+            is_active=True,
+        ).first()
+        if requester_workspace_member is None or target_workspace_member is None:
+            return Response({"error": "Workspace member not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if target_workspace_member.role == ROLE.GUEST.value and requested_role == ROLE.ADMIN.value:
+            return Response(
+                {
+                    "error": "You cannot assign a project role higher than the workspace role.",
+                    "error_code": "role_higher_than_workspace",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        requester_project_member = effective_project_member(request.user, slug, project_id)
+        if requester_project_member is None or requester_project_member.role < ROLE.ADMIN.value:
+            return Response({"error": "You do not have permission to update roles."}, status=status.HTTP_403_FORBIDDEN)
+
+        target_roster_row = next(
+            (row for row in project_member_roster(project) if row["member"] == str(member_id)),
+            None,
+        )
+        if target_roster_row is None:
+            return Response({"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND)
+        target_effective_role = target_roster_row["role"]
+
+        is_workspace_admin = requester_workspace_member.role == ROLE.ADMIN.value
+        if request.user.id == target_workspace_member.member_id and not is_workspace_admin:
+            return Response({"error": "You cannot update your own role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_is_workspace_admin = target_workspace_member.role == ROLE.ADMIN.value
+        if not is_workspace_admin:
+            if target_is_workspace_admin:
+                return Response(
+                    {"error": "You cannot update the role of a workspace administrator."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if target_effective_role >= requester_project_member.role:
+                return Response(
+                    {"error": "You cannot update a member with a role equal to or higher than your own."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if requested_role > requester_project_member.role:
+                return Response(
+                    {"error": "You cannot assign a role higher than your own."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        with transaction.atomic():
+            direct_member = (
+                ProjectMember.objects.select_for_update()
+                .filter(project=project, member_id=member_id)
+                .first()
+            )
+            inherited = target_roster_row["membership_source"] == "ORGANIZATION"
+
+            if direct_member is None:
+                if requested_role == ROLE.MEMBER.value:
+                    # Organization inheritance already grants member access; avoid a redundant row.
+                    result = target_roster_row
+                else:
+                    direct_member = ProjectMember(
+                        project=project,
+                        workspace=project.workspace,
+                        member_id=member_id,
+                        role=requested_role,
+                        is_active=True,
+                    )
+                    direct_member.save()
+                    result = next(row for row in project_member_roster(project) if row["member"] == str(member_id))
+            elif requested_role == ROLE.MEMBER.value and not direct_member.is_active and inherited:
+                # Keep historical inactive rows inactive when inheritance alone is sufficient.
+                result = target_roster_row
+            else:
+                direct_member.role = requested_role
+                direct_member.is_active = True
+                direct_member.save(update_fields=["role", "is_active", "updated_at"])
+                result = next(row for row in project_member_roster(project) if row["member"] == str(member_id))
+
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class UserProjectRolesEndpoint(BaseAPIView):
