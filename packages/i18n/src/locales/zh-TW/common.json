@@ -8,10 +8,6 @@
       "by_month": "按月",
       "custom_period": "自訂週期"
     },
-    "todo": {
-      "next_reopen": "標記未完成",
-      "next_complete": "標記完成"
-    },
     "approval_route": {
       "subtitle": "提交前請確認唯一審批人；抄送僅用於通知，不產生審批權限。",
       "single_reviewer": "單選審批人",
@@ -33,47 +29,27 @@
         "reviewer": "審批人"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "已撤回提交",
+        "completed": "標記完成任務",
+        "reopened": "回滾為未完成"
+      },
+      "withdraw": "撤回",
+      "submitted_by": "提交人",
+      "approval_reviewer": "審批人",
+      "submit_approval_title": "選擇任務審批人",
+      "complete": "標記完成",
+      "reopen": "標記未完成",
+      "completed_by": "完成人"
+    },
     "reports": {
       "approval_reviewer": "審批人：{name}",
       "submit_approval_title": "選擇報告審批人"
     },
-    "chain_tasks": {
-      "reopen": "標記未完成",
-      "submitted_by": "提交人",
-      "complete": "標記完成",
-      "approval_reviewer": "審批人",
-      "events": {
-        "completed": "標記完成任務",
-        "reopened": "回滾為未完成",
-        "withdrawn": "已撤回提交"
-      },
-      "completed_by": "完成人",
-      "submit_approval_title": "選擇任務審批人",
-      "withdraw": "撤回"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "標記未完成",
+      "next_complete": "標記完成"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "連結已複製",
   "add_project": "新增專案",
   "create_project": "建立專案",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "無法從我的最愛移除專案。請再試一次。",
   "project_created_successfully": "專案建立成功",
   "project_created_successfully_description": "專案建立成功。您現在可以開始新增工作事項。",
@@ -258,11 +235,13 @@
   "description_placeholder": "描述",
   "only_alphanumeric_non_latin_characters_allowed": "僅允許英數字元和非拉丁字元。",
   "project_id_is_required": "專案 ID 為必填",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "僅允許英數字元和非拉丁字元。",
   "project_id_min_char": "專案 ID 至少必須有 1 個字元",
   "project_id_max_char": "專案 ID 最多只能有 {max} 個字元",
   "project_description_placeholder": "輸入專案描述",
   "select_network": "選擇網路",
+  "select_project": "Select project",
   "lead": "負責人",
   "date_range": "日期範圍",
   "private": "私人",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "一次只能上傳一個檔案。",
     "file_size_limit": "檔案大小必須小於或等於 {size}MB。",
     "drag_and_drop": "拖曳到任何位置以上傳",
-    "delete": "刪除附件",
-    "editor_image": {
-      "insert_failed": "圖片插入失敗，請重試。",
-      "invalid": "僅支援 JPEG、JPG、PNG、WebP 或 GIF 圖片。",
-      "upload": "上傳圖片"
-    },
-    "create": {
-      "draft_notice": "附件會在工作項目正式儲存後上傳；儲存為草稿不會保留附件。",
-      "hint": "儲存工作項目後自動上傳。",
-      "remove": "移除附件",
-      "title": "附件",
-      "upload_failed": "工作項目已建立，但 {total} 個附件中有 {failed} 個上傳失敗：{names}。請在工作項目詳情頁補傳。",
-      "zone_title": "拖曳檔案到這裡，或點選多個附件"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "附件會在工作項目正式儲存後上傳；儲存為草稿不會保留附件。",
+      "hint": "儲存工作項目後自動上傳。",
+      "remove": "移除附件",
+      "title": "附件",
+      "upload_failed": "工作項目已建立，但 {total} 個附件中有 {failed} 個上傳失敗：{names}。請在工作項目詳情頁補傳。",
+      "zone_title": "拖曳檔案到這裡，或點選多個附件"
+    },
+    "editor_image": {
+      "insert_failed": "圖片插入失敗，請重試。",
+      "invalid": "僅支援 JPEG、JPG、PNG、WebP 或 GIF 圖片。",
+      "upload": "上傳圖片"
+    },
+    "delete": "刪除附件"
   },
   "label": {
     "select": "選擇標籤",
@@ -1003,8 +982,5 @@
     "session_expired": "上一個工作階段已失效，已開始新的工作階段。",
     "interrupt_notice": "執行已中斷且需要核准，核准功能即將推出。",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

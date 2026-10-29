@@ -8,10 +8,6 @@
       "by_month": "Theo tháng",
       "custom_period": "Kỳ tùy chỉnh"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "Đã sao chép liên kết",
   "add_project": "Thêm dự án",
   "create_project": "Tạo dự án",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Không thể xóa dự án khỏi mục yêu thích. Vui lòng thử lại.",
   "project_created_successfully": "Dự án đã được tạo thành công",
   "project_created_successfully_description": "Dự án đã được tạo thành công. Bây giờ bạn có thể bắt đầu thêm mục công việc.",
@@ -258,11 +235,13 @@
   "description_placeholder": "Mô tả",
   "only_alphanumeric_non_latin_characters_allowed": "Chỉ cho phép các ký tự chữ số và không phải Latin.",
   "project_id_is_required": "ID dự án là bắt buộc",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Chỉ cho phép các ký tự chữ số và không phải Latin.",
   "project_id_min_char": "ID dự án phải có ít nhất 1 ký tự",
   "project_id_max_char": "ID dự án chỉ được tối đa {max} ký tự",
   "project_description_placeholder": "Nhập mô tả dự án",
   "select_network": "Chọn mạng",
+  "select_project": "Select project",
   "lead": "Người phụ trách",
   "date_range": "Khoảng thời gian",
   "private": "Riêng tư",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "Chỉ có thể tải lên một tệp mỗi lần.",
     "file_size_limit": "Kích thước tệp phải nhỏ hơn hoặc bằng {size}MB.",
     "drag_and_drop": "Kéo và thả vào bất kỳ đâu để tải lên",
-    "delete": "Xóa tệp đính kèm",
-    "editor_image": {
-      "insert_failed": "Không thể chèn hình ảnh. Hãy thử lại.",
-      "invalid": "Chỉ hỗ trợ hình ảnh JPEG, JPG, PNG, WebP hoặc GIF.",
-      "upload": "Tải hình ảnh lên"
-    },
-    "create": {
-      "draft_notice": "Tệp đính kèm được tải lên sau khi lưu mục công việc; bản nháp không giữ lại chúng.",
-      "hint": "Tự động tải lên sau khi lưu mục công việc.",
-      "remove": "Xóa tệp đính kèm",
-      "title": "Tệp đính kèm",
-      "upload_failed": "Đã tạo mục công việc, nhưng {failed} trong {total} tệp đính kèm không tải lên được: {names}. Hãy thử lại trong mục công việc.",
-      "zone_title": "Kéo tệp vào đây hoặc bấm để chọn nhiều tệp"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Tệp đính kèm được tải lên sau khi lưu mục công việc; bản nháp không giữ lại chúng.",
+      "hint": "Tự động tải lên sau khi lưu mục công việc.",
+      "remove": "Xóa tệp đính kèm",
+      "title": "Tệp đính kèm",
+      "upload_failed": "Đã tạo mục công việc, nhưng {failed} trong {total} tệp đính kèm không tải lên được: {names}. Hãy thử lại trong mục công việc.",
+      "zone_title": "Kéo tệp vào đây hoặc bấm để chọn nhiều tệp"
+    },
+    "editor_image": {
+      "insert_failed": "Không thể chèn hình ảnh. Hãy thử lại.",
+      "invalid": "Chỉ hỗ trợ hình ảnh JPEG, JPG, PNG, WebP hoặc GIF.",
+      "upload": "Tải hình ảnh lên"
+    },
+    "delete": "Xóa tệp đính kèm"
   },
   "label": {
     "select": "Chọn nhãn",
@@ -1003,8 +982,5 @@
     "session_expired": "Phiên trước đã hết hạn, phiên mới đã bắt đầu.",
     "interrupt_notice": "Quá trình chạy bị gián đoạn và cần phê duyệt. Tính năng phê duyệt sắp ra mắt.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

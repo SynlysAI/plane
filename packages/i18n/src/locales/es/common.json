@@ -8,10 +8,6 @@
       "by_month": "Por mes",
       "custom_period": "Período personalizado"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "Enlace copiado",
   "add_project": "Agregar proyecto",
   "create_project": "Crear proyecto",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "No se pudo eliminar el proyecto de favoritos. Por favor, inténtalo de nuevo.",
   "project_created_successfully": "Proyecto creado exitosamente",
   "project_created_successfully_description": "Proyecto creado exitosamente. Ahora puedes comenzar a agregar elementos de trabajo.",
@@ -258,11 +235,13 @@
   "description_placeholder": "Descripción",
   "only_alphanumeric_non_latin_characters_allowed": "Solo se permiten caracteres alfanuméricos y no latinos.",
   "project_id_is_required": "El ID del proyecto es requerido",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Solo se permiten caracteres alfanuméricos y no latinos.",
   "project_id_min_char": "El ID del proyecto debe tener al menos 1 carácter",
   "project_id_max_char": "El ID del proyecto debe tener como máximo {max} caracteres",
   "project_description_placeholder": "Ingresa la descripción del proyecto",
   "select_network": "Seleccionar red",
+  "select_project": "Select project",
   "lead": "Líder",
   "date_range": "Rango de fechas",
   "private": "Privado",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "Solo se puede subir un archivo a la vez.",
     "file_size_limit": "El archivo debe tener {size}MB o menos de tamaño.",
     "drag_and_drop": "Arrastra y suelta en cualquier lugar para subir",
-    "delete": "Eliminar archivo adjunto",
-    "editor_image": {
-      "insert_failed": "No se pudieron insertar las imágenes. Inténtalo de nuevo.",
-      "invalid": "Solo se admiten imágenes JPEG, JPG, PNG, WebP o GIF.",
-      "upload": "Subir imágenes"
-    },
-    "create": {
-      "draft_notice": "Los adjuntos se suben al guardar el elemento de trabajo; el borrador no los conserva.",
-      "hint": "Se suben automáticamente al guardar el elemento de trabajo.",
-      "remove": "Quitar adjunto",
-      "title": "Adjuntos",
-      "upload_failed": "El elemento de trabajo se creó, pero {failed} de {total} adjuntos no se subieron: {names}. Reinténtalo desde el elemento.",
-      "zone_title": "Arrastra archivos aquí o haz clic para seleccionar varios"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Los adjuntos se suben al guardar el elemento de trabajo; el borrador no los conserva.",
+      "hint": "Se suben automáticamente al guardar el elemento de trabajo.",
+      "remove": "Quitar adjunto",
+      "title": "Adjuntos",
+      "upload_failed": "El elemento de trabajo se creó, pero {failed} de {total} adjuntos no se subieron: {names}. Reinténtalo desde el elemento.",
+      "zone_title": "Arrastra archivos aquí o haz clic para seleccionar varios"
+    },
+    "editor_image": {
+      "insert_failed": "No se pudieron insertar las imágenes. Inténtalo de nuevo.",
+      "invalid": "Solo se admiten imágenes JPEG, JPG, PNG, WebP o GIF.",
+      "upload": "Subir imágenes"
+    },
+    "delete": "Eliminar archivo adjunto"
   },
   "label": {
     "select": "Seleccionar etiqueta",
@@ -1003,8 +982,5 @@
     "session_expired": "La sesión anterior caducó. Se ha iniciado una nueva.",
     "interrupt_notice": "La ejecución se interrumpió y requiere aprobación. La gestión de aprobaciones llegará pronto.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

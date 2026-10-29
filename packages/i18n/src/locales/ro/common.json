@@ -8,10 +8,6 @@
       "by_month": "După lună",
       "custom_period": "Perioadă personalizată"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "Link copiat",
   "add_project": "Adaugă proiect",
   "create_project": "Creează proiect",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Nu s-a putut elimina proiectul din favorite. Încearcă din nou.",
   "project_created_successfully": "Proiect creat cu succes",
   "project_created_successfully_description": "Proiect creat cu succes. Poți începe să adaugi activități în el.",
@@ -258,11 +235,13 @@
   "description_placeholder": "Descriere",
   "only_alphanumeric_non_latin_characters_allowed": "Sunt permise doar caractere alfanumerice și non-latine.",
   "project_id_is_required": "ID-ul proiectului este obligatoriu",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Sunt permise doar caractere alfanumerice și non-latine.",
   "project_id_min_char": "ID-ul proiectului trebuie să aibă cel puțin 1 caracter",
   "project_id_max_char": "ID-ul proiectului trebuie să aibă cel mult {max} caractere",
   "project_description_placeholder": "Introdu descrierea proiectului",
   "select_network": "Selectează rețeaua",
+  "select_project": "Select project",
   "lead": "Lider",
   "date_range": "Interval de date",
   "private": "Privat",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "Se poate încărca doar un fișier o dată.",
     "file_size_limit": "Fișierul trebuie să aibă {size}MB sau mai puțin.",
     "drag_and_drop": "Trage și plasează oriunde pentru a încărca",
-    "delete": "Șterge atașamentul",
-    "editor_image": {
-      "insert_failed": "Inserarea imaginilor a eșuat. Reîncercați.",
-      "invalid": "Sunt acceptate doar imagini JPEG, JPG, PNG, WebP sau GIF.",
-      "upload": "Încarcă imagini"
-    },
-    "create": {
-      "draft_notice": "Atașamentele se încarcă după salvarea elementului de lucru; schița nu le păstrează.",
-      "hint": "Se încarcă automat după salvarea elementului de lucru.",
-      "remove": "Elimină atașamentul",
-      "title": "Atașamente",
-      "upload_failed": "Elementul de lucru a fost creat, dar {failed} din {total} atașamente nu s-au încărcat: {names}. Reîncercați din element.",
-      "zone_title": "Trageți fișierele aici sau faceți clic pentru a selecta mai multe"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Atașamentele se încarcă după salvarea elementului de lucru; schița nu le păstrează.",
+      "hint": "Se încarcă automat după salvarea elementului de lucru.",
+      "remove": "Elimină atașamentul",
+      "title": "Atașamente",
+      "upload_failed": "Elementul de lucru a fost creat, dar {failed} din {total} atașamente nu s-au încărcat: {names}. Reîncercați din element.",
+      "zone_title": "Trageți fișierele aici sau faceți clic pentru a selecta mai multe"
+    },
+    "editor_image": {
+      "insert_failed": "Inserarea imaginilor a eșuat. Reîncercați.",
+      "invalid": "Sunt acceptate doar imagini JPEG, JPG, PNG, WebP sau GIF.",
+      "upload": "Încarcă imagini"
+    },
+    "delete": "Șterge atașamentul"
   },
   "label": {
     "select": "Selectează eticheta",
@@ -1003,8 +982,5 @@
     "session_expired": "Sesiunea anterioară a expirat, a început una nouă.",
     "interrupt_notice": "Rularea a fost întreruptă și necesită aprobare. Gestionarea aprobarilor va fi disponibilă în curând.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

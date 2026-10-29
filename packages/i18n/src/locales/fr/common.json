@@ -8,10 +8,6 @@
       "by_month": "Par mois",
       "custom_period": "Période personnalisée"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "Lien copié",
   "add_project": "Ajouter un projet",
   "create_project": "Créer un projet",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Impossible de supprimer le projet des favoris. Veuillez réessayer.",
   "project_created_successfully": "Projet créé avec succès",
   "project_created_successfully_description": "Projet créé avec succès. Vous pouvez maintenant commencer à ajouter des éléments de travail.",
@@ -258,11 +235,13 @@
   "description_placeholder": "Description",
   "only_alphanumeric_non_latin_characters_allowed": "Seuls les caractères alphanumériques et non latins sont autorisés.",
   "project_id_is_required": "L’ID du projet est requis",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Seuls les caractères alphanumériques et non latins sont autorisés.",
   "project_id_min_char": "L’ID du projet doit comporter au moins 1 caractère",
   "project_id_max_char": "L'ID du projet doit comporter au plus {max} caractères",
   "project_description_placeholder": "Entrez la description du projet",
   "select_network": "Sélectionner le réseau",
+  "select_project": "Select project",
   "lead": "Responsable",
   "date_range": "Plage de dates",
   "private": "Privé",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "Un seul fichier peut être téléchargé à la fois.",
     "file_size_limit": "Le fichier doit faire {size}MB ou moins.",
     "drag_and_drop": "Glissez-déposez n’importe où pour uploader",
-    "delete": "Supprimer la pièce jointe",
-    "editor_image": {
-      "insert_failed": "Échec de l'insertion des images. Réessayez.",
-      "invalid": "Seules les images JPEG, JPG, PNG, WebP ou GIF sont prises en charge.",
-      "upload": "Téléverser des images"
-    },
-    "create": {
-      "draft_notice": "Les pièces jointes sont téléversées après l'enregistrement de l'élément ; un brouillon ne les conserve pas.",
-      "hint": "Téléversées automatiquement après l'enregistrement.",
-      "remove": "Retirer la pièce jointe",
-      "title": "Pièces jointes",
-      "upload_failed": "L'élément a été créé, mais {failed} sur {total} pièces jointes n'ont pas été téléversées : {names}. Réessayez depuis l'élément.",
-      "zone_title": "Déposez des fichiers ici ou cliquez pour en sélectionner plusieurs"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Les pièces jointes sont téléversées après l'enregistrement de l'élément ; un brouillon ne les conserve pas.",
+      "hint": "Téléversées automatiquement après l'enregistrement.",
+      "remove": "Retirer la pièce jointe",
+      "title": "Pièces jointes",
+      "upload_failed": "L'élément a été créé, mais {failed} sur {total} pièces jointes n'ont pas été téléversées : {names}. Réessayez depuis l'élément.",
+      "zone_title": "Déposez des fichiers ici ou cliquez pour en sélectionner plusieurs"
+    },
+    "editor_image": {
+      "insert_failed": "Échec de l'insertion des images. Réessayez.",
+      "invalid": "Seules les images JPEG, JPG, PNG, WebP ou GIF sont prises en charge.",
+      "upload": "Téléverser des images"
+    },
+    "delete": "Supprimer la pièce jointe"
   },
   "label": {
     "select": "Sélectionner une étiquette",
@@ -1003,8 +982,5 @@
     "session_expired": "La session précédente a expiré. Une nouvelle session a commencé.",
     "interrupt_notice": "L'exécution a été interrompue et nécessite une approbation. La gestion des approbations arrive bientôt.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

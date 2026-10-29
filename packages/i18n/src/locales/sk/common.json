@@ -8,10 +8,6 @@
       "by_month": "Podľa mesiaca",
       "custom_period": "Vlastné obdobie"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "Odkaz skopírovaný",
   "add_project": "Pridať projekt",
   "create_project": "Vytvoriť projekt",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Nepodarilo sa odstrániť projekt z obľúbených. Skúste to prosím znova.",
   "project_created_successfully": "Projekt bol úspešne vytvorený",
   "project_created_successfully_description": "Projekt bol úspešne vytvorený. Teraz môžete začať pridávať pracovné položky.",
@@ -258,11 +235,13 @@
   "description_placeholder": "Popis",
   "only_alphanumeric_non_latin_characters_allowed": "Sú povolené iba alfanumerické a nelatinské znaky.",
   "project_id_is_required": "ID projektu je povinné",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Sú povolené iba alfanumerické a nelatinské znaky.",
   "project_id_min_char": "ID projektu musí mať aspoň 1 znak",
   "project_id_max_char": "ID projektu môže mať maximálne {max} znakov",
   "project_description_placeholder": "Zadajte popis projektu",
   "select_network": "Vybrať sieť",
+  "select_project": "Select project",
   "lead": "Vedúci",
   "date_range": "Rozsah dát",
   "private": "Súkromný",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "Je možné nahrať iba jeden súbor naraz.",
     "file_size_limit": "Súbor musí byť menší ako {size}MB.",
     "drag_and_drop": "Pretiahnite súbor kamkoľvek pre nahratie",
-    "delete": "Zmazať prílohu",
-    "editor_image": {
-      "insert_failed": "Vloženie obrázkov zlyhalo. Skúste to znova.",
-      "invalid": "Podporované sú iba obrázky JPEG, JPG, PNG, WebP a GIF.",
-      "upload": "Nahrať obrázky"
-    },
-    "create": {
-      "draft_notice": "Prílohy sa nahrajú po uložení pracovnej položky; koncept ich neuchová.",
-      "hint": "Po uložení pracovnej položky sa nahrajú automaticky.",
-      "remove": "Odstrániť prílohu",
-      "title": "Prílohy",
-      "upload_failed": "Pracovná položka bola vytvorená, ale {failed} z {total} príloh sa nenahralo: {names}. Skúste to znova v detaile položky.",
-      "zone_title": "Pretiahnite súbory sem alebo kliknutím vyberte viac súborov"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Prílohy sa nahrajú po uložení pracovnej položky; koncept ich neuchová.",
+      "hint": "Po uložení pracovnej položky sa nahrajú automaticky.",
+      "remove": "Odstrániť prílohu",
+      "title": "Prílohy",
+      "upload_failed": "Pracovná položka bola vytvorená, ale {failed} z {total} príloh sa nenahralo: {names}. Skúste to znova v detaile položky.",
+      "zone_title": "Pretiahnite súbory sem alebo kliknutím vyberte viac súborov"
+    },
+    "editor_image": {
+      "insert_failed": "Vloženie obrázkov zlyhalo. Skúste to znova.",
+      "invalid": "Podporované sú iba obrázky JPEG, JPG, PNG, WebP a GIF.",
+      "upload": "Nahrať obrázky"
+    },
+    "delete": "Zmazať prílohu"
   },
   "label": {
     "select": "Vybrať štítok",
@@ -1003,8 +982,5 @@
     "session_expired": "Predchádzajúca relácia vypršala, bola spustená nová.",
     "interrupt_notice": "Beh bol prerušený a vyžaduje schválenie. Podpora schvaľovania čoskoro pribudne.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

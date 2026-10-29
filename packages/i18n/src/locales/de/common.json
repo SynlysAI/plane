@@ -8,10 +8,6 @@
       "by_month": "Nach Monat",
       "custom_period": "Benutzerdefinierter Zeitraum"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "Link kopiert",
   "add_project": "Projekt hinzufügen",
   "create_project": "Projekt erstellen",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Projekt konnte nicht aus den Favoriten entfernt werden. Bitte versuchen Sie es erneut.",
   "project_created_successfully": "Projekt erfolgreich erstellt",
   "project_created_successfully_description": "Das Projekt wurde erfolgreich erstellt. Sie können nun Arbeitselemente hinzufügen.",
@@ -258,11 +235,13 @@
   "description_placeholder": "Beschreibung",
   "only_alphanumeric_non_latin_characters_allowed": "Es sind nur alphanumerische und nicht-lateinische Zeichen erlaubt.",
   "project_id_is_required": "Projekt-ID ist erforderlich",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Es sind nur alphanumerische und nicht-lateinische Zeichen erlaubt.",
   "project_id_min_char": "Projekt-ID muss mindestens 1 Zeichen lang sein",
   "project_id_max_char": "Projekt-ID darf maximal {max} Zeichen lang sein",
   "project_description_placeholder": "Geben Sie eine Projektbeschreibung ein",
   "select_network": "Netzwerk auswählen",
+  "select_project": "Select project",
   "lead": "Leitung",
   "date_range": "Datumsbereich",
   "private": "Privat",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "Es kann jeweils nur eine Datei hochgeladen werden.",
     "file_size_limit": "Die Datei muss kleiner als {size} MB sein.",
     "drag_and_drop": "Datei hierher ziehen, um sie hochzuladen",
-    "delete": "Anhang löschen",
-    "editor_image": {
-      "insert_failed": "Bilder konnten nicht eingefügt werden. Bitte erneut versuchen.",
-      "invalid": "Nur JPEG-, JPG-, PNG-, WebP- und GIF-Bilder werden unterstützt.",
-      "upload": "Bilder hochladen"
-    },
-    "create": {
-      "draft_notice": "Anhänge werden nach dem Speichern des Arbeitselements hochgeladen; ein Entwurf speichert sie nicht.",
-      "hint": "Werden nach dem Speichern des Arbeitselements hochgeladen.",
-      "remove": "Anhang entfernen",
-      "title": "Anhänge",
-      "upload_failed": "Das Arbeitselement wurde erstellt, aber {failed} von {total} Anhängen wurden nicht hochgeladen: {names}. Bitte im Arbeitselement erneut versuchen.",
-      "zone_title": "Dateien hierher ziehen oder mehrere Dateien auswählen"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Anhänge werden nach dem Speichern des Arbeitselements hochgeladen; ein Entwurf speichert sie nicht.",
+      "hint": "Werden nach dem Speichern des Arbeitselements hochgeladen.",
+      "remove": "Anhang entfernen",
+      "title": "Anhänge",
+      "upload_failed": "Das Arbeitselement wurde erstellt, aber {failed} von {total} Anhängen wurden nicht hochgeladen: {names}. Bitte im Arbeitselement erneut versuchen.",
+      "zone_title": "Dateien hierher ziehen oder mehrere Dateien auswählen"
+    },
+    "editor_image": {
+      "insert_failed": "Bilder konnten nicht eingefügt werden. Bitte erneut versuchen.",
+      "invalid": "Nur JPEG-, JPG-, PNG-, WebP- und GIF-Bilder werden unterstützt.",
+      "upload": "Bilder hochladen"
+    },
+    "delete": "Anhang löschen"
   },
   "label": {
     "select": "Label auswählen",
@@ -1003,8 +982,5 @@
     "session_expired": "Die vorherige Sitzung ist abgelaufen. Eine neue wurde gestartet.",
     "interrupt_notice": "Die Ausführung wurde unterbrochen und erfordert eine Freigabe. Die Freigabeverwaltung folgt in Kürze.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

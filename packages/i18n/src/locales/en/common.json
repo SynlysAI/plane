@@ -215,6 +215,7 @@
   "link_copied": "Link copied",
   "add_project": "Add project",
   "create_project": "Create project",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Couldn't remove the project from favorites. Please try again.",
   "project_created_successfully": "Project created successfully",
   "project_created_successfully_description": "Project created successfully. You can now start adding work items to it.",
@@ -232,11 +233,13 @@
   "description_placeholder": "Description",
   "only_alphanumeric_non_latin_characters_allowed": "Only Alphanumeric & Non-latin characters are allowed.",
   "project_id_is_required": "Project code is required",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Only Alphanumeric & Non-latin characters are allowed.",
   "project_id_min_char": "Project code must contain at least 1 character",
   "project_id_max_char": "Project code must contain at most {max} characters",
   "project_description_placeholder": "Enter project description",
   "select_network": "Select network",
+  "select_project": "Select project",
   "lead": "Lead",
   "date_range": "Date range",
   "private": "Private",
@@ -810,20 +813,6 @@
     "count_limit": "A work item can have at most {count} attachments.",
     "file_size_limit": "File must be of {size}MB or less in size.",
     "drag_and_drop": "Drag and drop anywhere to upload",
-    "delete": "Delete attachment",
-    "editor_image": {
-      "insert_failed": "Image insertion failed. Please try again.",
-      "invalid": "Only JPEG, JPG, PNG, WebP, or GIF image files are supported.",
-      "upload": "Upload images"
-    },
-    "create": {
-      "draft_notice": "Attachments upload after the work item is saved; saving a draft does not keep them.",
-      "hint": "Uploaded automatically after the work item is saved.",
-      "remove": "Remove attachment",
-      "title": "Attachments",
-      "upload_failed": "The work item was created, but {failed} of {total} attachments failed to upload: {names}. Please retry from the work item.",
-      "zone_title": "Drag files here, or click to select multiple files"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -835,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Attachments upload after the work item is saved; saving a draft does not keep them.",
+      "hint": "Uploaded automatically after the work item is saved.",
+      "remove": "Remove attachment",
+      "title": "Attachments",
+      "upload_failed": "The work item was created, but {failed} of {total} attachments failed to upload: {names}. Please retry from the work item.",
+      "zone_title": "Drag files here, or click to select multiple files"
+    },
+    "editor_image": {
+      "insert_failed": "Image insertion failed. Please try again.",
+      "invalid": "Only JPEG, JPG, PNG, WebP, or GIF image files are supported.",
+      "upload": "Upload images"
+    },
+    "delete": "Delete attachment"
   },
   "label": {
     "select": "Add labels",
@@ -1612,6 +1615,13 @@
         "material_title_fallback": "Material title",
         "reference": "Source reference (optional)",
         "add_material": "Add material",
+        "material_upload": "Upload and link",
+        "select_upload": "Select topic material",
+        "link_material": "Link material",
+        "upload_empty": "No linkable material exists for this node yet. Upload one first.",
+        "upload_unavailable": "Topic material upload is not ready. Complete knowledge-base binding before linking materials.",
+        "upload_processing": "Parsing; available for review submission",
+        "unlinked_file": "No linked file; not counted as complete",
         "route": "Approval route",
         "submit_review": "Submit / review",
         "submit_check": "Submission check",
@@ -1650,14 +1660,7 @@
         "history_count": "{count} past reviews",
         "action_approve": "Approve",
         "action_return": "Return",
-        "action_failed": "The action did not complete. Please retry.",
-        "upload_processing": "Parsing; available for review submission",
-        "select_upload": "Select topic material",
-        "material_upload": "Upload and link",
-        "link_material": "Link material",
-        "unlinked_file": "No linked file; not counted as complete",
-        "upload_unavailable": "Topic material upload is not ready. Complete knowledge-base binding before linking materials.",
-        "upload_empty": "No linkable material exists for this node yet. Upload one first."
+        "action_failed": "The action did not complete. Please retry."
       }
     },
     "chain_tasks": {
@@ -1751,8 +1754,8 @@
         "completed": "Marked task complete",
         "cancelled": "cancelled the task",
         "updated": "updated the task",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
+        "withdrawn": "Submission withdrawn",
+        "reopened": "Reopened task"
       },
       "resources": {
         "REPORT": "Periodic report",
@@ -1783,12 +1786,12 @@
         "completed": "Completed",
         "cancelled": "Cancelled"
       },
-      "reopen": "Mark incomplete",
+      "withdraw": "Withdraw",
       "submitted_by": "Submitted by",
       "approval_reviewer": "Reviewer",
-      "completed_by": "Completed by",
       "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
     },
     "paper_reviews": {
       "panel_title": "Paper review",
@@ -1874,6 +1877,13 @@
       "file_label": "Research file",
       "select_file": "Select file",
       "no_file_selected": "No file selected",
+      "upload_hint": "PDF / Markdown / TXT / DOC / DOCX, up to {size} per file",
+      "gateway_too_large": "The gateway rejected the file. Research-chain materials must be {size} or smaller.",
+      "status_processing": "Parsing",
+      "status_success": "Completed",
+      "status_failed": "Failed",
+      "status_degraded": "Degraded",
+      "status_unknown": "Unknown status",
       "upload": "Upload through BFF",
       "uploading": "Uploading…",
       "refresh_status": "Refresh status",
@@ -1890,14 +1900,7 @@
       "candidate_id": "External library ID",
       "candidate_source": "Source",
       "candidate_seen": "Last seen",
-      "unassigned": "This project has no team, so a personal knowledge base will not be created. Assign the owner to a team first.",
-      "gateway_too_large": "The gateway rejected the file. Research-chain materials must be {size} or smaller.",
-      "status_processing": "Parsing",
-      "status_success": "Completed",
-      "status_unknown": "Unknown status",
-      "status_failed": "Failed",
-      "status_degraded": "Degraded",
-      "upload_hint": "PDF / Markdown / TXT / DOC / DOCX, up to {size} per file"
+      "unassigned": "This project has no team, so a personal knowledge base will not be created. Assign the owner to a team first."
     },
     "agent": {
       "description": "Same-origin agent workbench with server-side context authorization.",
@@ -2193,14 +2196,14 @@
       "apply_filters": "Apply filters",
       "total_results": "{count} total",
       "untitled": "Untitled",
+      "share_type_administrative_work_item": "Administrative work item",
+      "share_type_research_work_item": "Research work item",
       "copy_share": "Copy",
       "copy_share_aria": "Copy share link: {title}",
       "share_copied_title": "Share text copied",
       "share_copied_message": "The title and link have been copied to your clipboard.",
       "share_copy_failed_title": "Copy failed",
-      "share_copy_failed_message": "Please try again later.",
-      "share_type_administrative_work_item": "Administrative work item",
-      "share_type_research_work_item": "Research work item"
+      "share_copy_failed_message": "Please try again later."
     },
     "roles": {
       "owner": "Node owner",
@@ -3418,8 +3421,5 @@
     "disclaimer": "AI-generated content, for reference only.",
     "approve": "Approve",
     "reject": "Reject"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

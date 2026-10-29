@@ -8,10 +8,6 @@
       "by_month": "За місяцем",
       "custom_period": "Власний період"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "Посилання скопійовано",
   "add_project": "Додати проєкт",
   "create_project": "Створити проєкт",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Не вдалося видалити проєкт із вибраного. Спробуйте ще раз.",
   "project_created_successfully": "Проєкт успішно створено",
   "project_created_successfully_description": "Проєкт успішно створений. Тепер ви можете почати додавати робочі одиниці.",
@@ -258,11 +235,13 @@
   "description_placeholder": "Опис",
   "only_alphanumeric_non_latin_characters_allowed": "Дозволені лише алфанумеричні та нелатинські символи.",
   "project_id_is_required": "ID проєкту є обов'язковим",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Дозволені лише алфанумеричні та нелатинські символи.",
   "project_id_min_char": "ID проєкту має містити принаймні 1 символ",
   "project_id_max_char": "ID проєкту може містити максимум {max} символів",
   "project_description_placeholder": "Введіть опис проєкту",
   "select_network": "Вибрати мережу",
+  "select_project": "Select project",
   "lead": "Керівник",
   "date_range": "Діапазон дат",
   "private": "Приватний",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "Можна завантажити лише один файл одночасно.",
     "file_size_limit": "Файл має бути меншим за {size}МБ.",
     "drag_and_drop": "Перетягніть файл сюди для завантаження",
-    "delete": "Видалити вкладення",
-    "editor_image": {
-      "insert_failed": "Не вдалося вставити зображення. Спробуйте ще раз.",
-      "invalid": "Підтримуються лише зображення JPEG, JPG, PNG, WebP і GIF.",
-      "upload": "Завантажити зображення"
-    },
-    "create": {
-      "draft_notice": "Вкладення завантажуються після збереження робочого елемента; чернетка їх не зберігає.",
-      "hint": "Автоматично завантажуються після збереження робочого елемента.",
-      "remove": "Видалити вкладення",
-      "title": "Вкладення",
-      "upload_failed": "Робочий елемент створено, але не вдалося завантажити {failed} із {total} вкладень: {names}. Повторіть в робочому елементі.",
-      "zone_title": "Перетягніть файли сюди або натисніть, щоб вибрати кілька файлів"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Вкладення завантажуються після збереження робочого елемента; чернетка їх не зберігає.",
+      "hint": "Автоматично завантажуються після збереження робочого елемента.",
+      "remove": "Видалити вкладення",
+      "title": "Вкладення",
+      "upload_failed": "Робочий елемент створено, але не вдалося завантажити {failed} із {total} вкладень: {names}. Повторіть в робочому елементі.",
+      "zone_title": "Перетягніть файли сюди або натисніть, щоб вибрати кілька файлів"
+    },
+    "editor_image": {
+      "insert_failed": "Не вдалося вставити зображення. Спробуйте ще раз.",
+      "invalid": "Підтримуються лише зображення JPEG, JPG, PNG, WebP і GIF.",
+      "upload": "Завантажити зображення"
+    },
+    "delete": "Видалити вкладення"
   },
   "label": {
     "select": "Вибрати мітку",
@@ -1003,8 +982,5 @@
     "session_expired": "Попередній сеанс завершився, розпочато новий.",
     "interrupt_notice": "Виконання перервано й потребує підтвердження. Підтримка підтверджень з'явиться незабаром.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

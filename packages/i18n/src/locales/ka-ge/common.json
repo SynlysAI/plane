@@ -8,10 +8,6 @@
       "by_month": "თვის მიხედვით",
       "custom_period": "მორგებული პერიოდი"
     },
-    "todo": {
-      "next_reopen": "Mark incomplete",
-      "next_complete": "Mark complete"
-    },
     "approval_route": {
       "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
       "single_reviewer": "Single reviewer",
@@ -33,47 +29,27 @@
         "reviewer": "Reviewer"
       }
     },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
     "reports": {
       "approval_reviewer": "Reviewer: {name}",
       "submit_approval_title": "Select report reviewer"
     },
-    "chain_tasks": {
-      "reopen": "Mark incomplete",
-      "submitted_by": "Submitted by",
-      "complete": "Mark complete",
-      "approval_reviewer": "Reviewer",
-      "events": {
-        "completed": "Marked task complete",
-        "reopened": "Reopened task",
-        "withdrawn": "Submission withdrawn"
-      },
-      "completed_by": "Completed by",
-      "submit_approval_title": "Select task reviewer",
-      "withdraw": "Withdraw"
-    },
-    "knowledge": {
-      "gateway_too_large": {},
-      "status_processing": {},
-      "status_success": {},
-      "status_unknown": {},
-      "status_failed": {},
-      "status_degraded": {},
-      "upload_hint": {}
-    },
-    "chains": {
-      "stage_approval": {
-        "upload_processing": {},
-        "select_upload": {},
-        "material_upload": {},
-        "link_material": {},
-        "unlinked_file": {},
-        "upload_unavailable": {},
-        "upload_empty": {}
-      }
-    },
-    "common": {
-      "share_type_administrative_work_item": {},
-      "share_type_research_work_item": {}
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -241,6 +217,7 @@
   "link_copied": "ბმული კოპირებულია",
   "add_project": "პროექტის დამატება",
   "create_project": "პროექტის შექმნა",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "პროექტის ფავორიტებიდან ამოღება ვერ მოხერხდა. გთხოვთ, სცადოთ ხელახლა.",
   "project_created_successfully": "პროექტი წარმატებით შეიქმნა",
   "project_created_successfully_description": "პროექტი წარმატებით შეიქმნა. ახლა შეგიძლიათ დაიწყოთ სამუშაო ელემენტების დამატება.",
@@ -258,11 +235,13 @@
   "description_placeholder": "აღწერა",
   "only_alphanumeric_non_latin_characters_allowed": "დაშვებულია მხოლოდ ალფანუმერული და არა-ლათინური სიმბოლოები.",
   "project_id_is_required": "პროექტის ID სავალდებულოა",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "დაშვებულია მხოლოდ ალფანუმერული და არა-ლათინური სიმბოლოები.",
   "project_id_min_char": "პროექტის ID უნდა იყოს მინიმუმ 1 სიმბოლო",
   "project_id_max_char": "პროექტის ID უნდა იყოს მაქსიმუმ {max} სიმბოლო",
   "project_description_placeholder": "შეიყვანეთ პროექტის აღწერა",
   "select_network": "აირჩიეთ ქსელი",
+  "select_project": "Select project",
   "lead": "ხელმძღვანელი",
   "date_range": "თარიღის დიაპაზონი",
   "private": "პირადი",
@@ -834,20 +813,6 @@
     "only_one_file_allowed": "ერთდროულად მხოლოდ ერთი ფაილის ატვირთვა შეიძლება.",
     "file_size_limit": "ფაილი უნდა იყოს {size}MB-ზე ნაკლები ზომის.",
     "drag_and_drop": "გადააადგილეთ და ჩააგდეთ ნებისმიერ ადგილას ატვირთვისთვის",
-    "delete": "დანართის წაშლა",
-    "editor_image": {
-      "insert_failed": "Image insertion failed. Please try again.",
-      "invalid": "Only JPEG, JPG, PNG, WebP, or GIF image files are supported.",
-      "upload": "Upload images"
-    },
-    "create": {
-      "draft_notice": "Attachments upload after the work item is saved; saving a draft does not keep them.",
-      "hint": "Uploaded automatically after the work item is saved.",
-      "remove": "Remove attachment",
-      "title": "Attachments",
-      "upload_failed": "The work item was created, but {failed} of {total} attachments failed to upload: {names}. Please retry from the work item.",
-      "zone_title": "Drag files here, or click to select multiple files"
-    },
     "upload_zone": {
       "title": "Drag files or folders here, or click to select",
       "active": "Release to upload",
@@ -859,7 +824,21 @@
       "max_files": "Select at most {count} files at a time.",
       "only_one": "Only one file can be selected.",
       "invalid": "One or more files do not meet upload requirements."
-    }
+    },
+    "create": {
+      "draft_notice": "Attachments upload after the work item is saved; saving a draft does not keep them.",
+      "hint": "Uploaded automatically after the work item is saved.",
+      "remove": "Remove attachment",
+      "title": "Attachments",
+      "upload_failed": "The work item was created, but {failed} of {total} attachments failed to upload: {names}. Please retry from the work item.",
+      "zone_title": "Drag files here, or click to select multiple files"
+    },
+    "editor_image": {
+      "insert_failed": "Image insertion failed. Please try again.",
+      "invalid": "Only JPEG, JPG, PNG, WebP, or GIF image files are supported.",
+      "upload": "Upload images"
+    },
+    "delete": "დანართის წაშლა"
   },
   "label": {
     "select": "იარლიყის არჩევა",
@@ -1003,8 +982,5 @@
     "session_expired": "წინა სესიას ვადა გაუვიდა, დაიწყო ახალი.",
     "interrupt_notice": "გაშვება შეწყდა და დადასტურებას საჭიროობს. დადასტურების ფუნქცია მალე დაემატება.",
     "shortcut_hint": "Cmd+J"
-  },
-  "project_required_to_save": "Select a project before saving",
-  "select_project": "Select project",
-  "clear_project": "Clear project"
+  }
 }

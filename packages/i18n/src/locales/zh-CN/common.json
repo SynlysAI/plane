@@ -215,6 +215,7 @@
   "link_copied": "链接已复制",
   "add_project": "添加项目",
   "create_project": "创建项目",
+  "clear_project": "清除项目",
   "failed_to_remove_project_from_favorites": "无法从收藏中移除项目。请重试。",
   "project_created_successfully": "项目创建成功",
   "project_created_successfully_description": "项目创建成功。您现在可以开始添加工作项了。",
@@ -232,11 +233,13 @@
   "description_placeholder": "描述",
   "only_alphanumeric_non_latin_characters_allowed": "仅允许字母数字和非拉丁字符。",
   "project_id_is_required": "项目编号为必填项",
+  "project_required_to_save": "请选择项目后再保存",
   "project_id_allowed_char": "仅允许字母数字和非拉丁字符。",
   "project_id_min_char": "项目编号至少需要1个字符",
   "project_id_max_char": "项目编号最多只能有{max}个字符",
   "project_description_placeholder": "输入项目描述",
   "select_network": "选择网络",
+  "select_project": "请选择项目",
   "lead": "负责人",
   "date_range": "日期范围",
   "private": "私有",
@@ -810,20 +813,6 @@
     "count_limit": "每个工作项最多附加 {count} 个文件。",
     "file_size_limit": "文件大小必须小于或等于 {size}MB。",
     "drag_and_drop": "拖放到任意位置以上传",
-    "delete": "删除附件",
-    "editor_image": {
-      "insert_failed": "图片插入失败，请重试。",
-      "invalid": "仅支持 JPEG、JPG、PNG、WebP 或 GIF 图片。",
-      "upload": "上传图片"
-    },
-    "create": {
-      "draft_notice": "附件会在工作项正式保存后上传；保存为草稿不会保留附件。",
-      "hint": "保存工作项后自动上传。",
-      "remove": "移除附件",
-      "title": "附件",
-      "upload_failed": "工作项已创建，但 {total} 个附件中有 {failed} 个上传失败：{names}。请在工作项详情页补传。",
-      "zone_title": "拖拽文件到这里，或点击选择多个附件"
-    },
     "upload_zone": {
       "title": "拖拽文件或文件夹到这里，或点击选择",
       "active": "松开以上传",
@@ -835,7 +824,21 @@
       "max_files": "一次最多可选择 {count} 个文件。",
       "only_one": "仅支持选择一个文件。",
       "invalid": "文件不符合上传要求。"
-    }
+    },
+    "create": {
+      "draft_notice": "附件会在工作项正式保存后上传；保存为草稿不会保留附件。",
+      "hint": "保存工作项后自动上传。",
+      "remove": "移除附件",
+      "title": "附件",
+      "upload_failed": "工作项已创建，但 {total} 个附件中有 {failed} 个上传失败：{names}。请在工作项详情页补传。",
+      "zone_title": "拖拽文件到这里，或点击选择多个附件"
+    },
+    "editor_image": {
+      "insert_failed": "图片插入失败，请重试。",
+      "invalid": "仅支持 JPEG、JPG、PNG、WebP 或 GIF 图片。",
+      "upload": "上传图片"
+    },
+    "delete": "删除附件"
   },
   "label": {
     "select": "选择标签",
@@ -1635,6 +1638,13 @@
         "material_title_fallback": "材料名称",
         "reference": "来源引用（可选）",
         "add_material": "添加材料",
+        "material_upload": "上传并关联",
+        "select_upload": "选择课题资料",
+        "link_material": "关联材料",
+        "upload_empty": "当前节点还没有可关联资料，请先上传。",
+        "upload_unavailable": "课题资料上传未就绪，先完成知识库绑定后再关联材料。",
+        "upload_processing": "解析中，可用于提交审核",
+        "unlinked_file": "未关联文件，不计入完成度",
         "route": "审批路径",
         "submit_review": "提交 / 审核",
         "submit_check": "提交检查",
@@ -1673,14 +1683,7 @@
         "history_count": "历史审核 {count} 次",
         "action_approve": "通过",
         "action_return": "驳回",
-        "action_failed": "操作未完成，请重试",
-        "upload_processing": "解析中，可用于提交审核",
-        "select_upload": "选择课题资料",
-        "material_upload": "上传并关联",
-        "link_material": "关联材料",
-        "unlinked_file": "未关联文件，不计入完成度",
-        "upload_unavailable": "课题资料上传未就绪，先完成知识库绑定后再关联材料。",
-        "upload_empty": "当前节点还没有可关联资料，请先上传。"
+        "action_failed": "操作未完成，请重试"
       }
     },
     "chain_tasks": {
@@ -1774,8 +1777,8 @@
         "completed": "标记完成任务",
         "cancelled": "取消了任务",
         "updated": "更新了任务",
-        "reopened": "回滚为未完成",
-        "withdrawn": "已撤回提交"
+        "withdrawn": "已撤回提交",
+        "reopened": "回滚为未完成"
       },
       "resources": {
         "REPORT": "周期报告",
@@ -1806,12 +1809,12 @@
         "completed": "已完成",
         "cancelled": "已取消"
       },
-      "reopen": "标记未完成",
+      "withdraw": "撤回",
       "submitted_by": "提交人",
       "approval_reviewer": "审批人",
-      "completed_by": "完成人",
       "submit_approval_title": "选择任务审批人",
-      "withdraw": "撤回"
+      "reopen": "标记未完成",
+      "completed_by": "完成人"
     },
     "paper_reviews": {
       "panel_title": "论文评审",
@@ -1898,6 +1901,13 @@
       "file_label": "研究文件",
       "select_file": "选择文件",
       "no_file_selected": "未选择任何文件",
+      "upload_hint": "PDF / Markdown / TXT / DOC / DOCX，单文件不超过 {size}",
+      "gateway_too_large": "文件被网关拒绝，研究链资料单文件不能超过 {size}。",
+      "status_processing": "解析中",
+      "status_success": "已完成",
+      "status_failed": "失败",
+      "status_degraded": "降级",
+      "status_unknown": "状态未知",
       "upload": "通过 BFF 上传",
       "uploading": "上传中…",
       "refresh_status": "刷新状态",
@@ -1914,14 +1924,7 @@
       "candidate_id": "外部库 ID",
       "candidate_source": "来源",
       "candidate_seen": "最近可见",
-      "unassigned": "当前课题没有小组归属，不能创建个人知识库，请先把负责人归入小组。",
-      "gateway_too_large": "文件被网关拒绝，研究链资料单文件不能超过 {size}。",
-      "status_processing": "解析中",
-      "status_success": "已完成",
-      "status_unknown": "状态未知",
-      "status_failed": "失败",
-      "status_degraded": "降级",
-      "upload_hint": "PDF / Markdown / TXT / DOC / DOCX，单文件不超过 {size}"
+      "unassigned": "当前课题没有小组归属，不能创建个人知识库，请先把负责人归入小组。"
     },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",
@@ -2218,14 +2221,14 @@
       "apply_filters": "应用筛选",
       "total_results": "共 {count} 条",
       "untitled": "未命名",
+      "share_type_administrative_work_item": "行政工作项",
+      "share_type_research_work_item": "科研工作项",
       "copy_share": "复制",
       "copy_share_aria": "复制分享链接：{title}",
       "share_copied_title": "分享内容已复制",
       "share_copied_message": "标题和链接已复制到剪贴板。",
       "share_copy_failed_title": "复制失败",
-      "share_copy_failed_message": "请稍后重试。",
-      "share_type_administrative_work_item": "行政工作项",
-      "share_type_research_work_item": "科研工作项"
+      "share_copy_failed_message": "请稍后重试。"
     },
     "roles": {
       "owner": "节点负责人",
@@ -3449,8 +3452,5 @@
     "disclaimer": "内容由 AI 生成，仅供参考",
     "approve": "批准",
     "reject": "拒绝"
-  },
-  "project_required_to_save": "请选择项目后再保存",
-  "select_project": "请选择项目",
-  "clear_project": "清除项目"
+  }
 }
