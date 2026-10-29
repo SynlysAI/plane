@@ -14,15 +14,16 @@ vi.mock("@plane/i18n", () => ({
       ({
         "attachment.editor_image.invalid": "仅支持上传图片文件。",
         "attachment.editor_image.insert_failed": "图片插入失败，请重试。",
-        "attachment.editor_image.upload": "上传图片",
-        "attachment.file_size_limit": "文件大小必须小于或等于 {size}MB。",
+        "attachment.editor_file.upload": "添加附件",
       })[key]?.replace("{size}", String(values?.size ?? "")) ?? key,
   }),
 }));
 vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: { ERROR: "error" }, setToast: mocks.setToast }));
-vi.mock("@/hooks/use-file-size", () => ({ useFileSize: () => ({ maxFileSize: 5 * 1024 * 1024 }) }));
+vi.mock("@makeplane/propel/components/tooltip", () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
-const { DescriptionImageUploadButton } = await import("@/components/editor/description-image-upload-button");
+const { EditorFileUploadButton } = await import("@/components/editor/editor-file-upload-button");
 
 Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -32,12 +33,23 @@ let root: Root | null = null;
 const editorRef = { current: { insertImageFiles: mocks.insertImageFiles } };
 
 /** 挂载正文图片上传按钮。 */
-async function mount(disabled = false) {
+async function mount(
+  disabled = false,
+  onAttachFiles?: (files: File[]) => void,
+  onFilesSelected?: (files: File[]) => void
+) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<DescriptionImageUploadButton disabled={disabled} editorRef={editorRef} />);
+    root!.render(
+      <EditorFileUploadButton
+        disabled={disabled}
+        editorRef={editorRef}
+        onAttachFiles={onAttachFiles}
+        onFilesSelected={onFilesSelected}
+      />
+    );
   });
 }
 
@@ -80,13 +92,35 @@ it("inserts every selected image through the editor ref", async () => {
   expect(mocks.setToast).not.toHaveBeenCalled();
 });
 
-it("rejects non-image and oversized files before insertion", async () => {
+it("keeps images inline and sends other files to the attachment queue", async () => {
+  const onAttachFiles = vi.fn();
+  const image = imageFile("图一.png");
+  const attachment = imageFile("合同.pdf", MEGABYTE, "application/pdf");
+  await mount(false, onAttachFiles);
+  await selectFiles([image, attachment]);
+
+  expect(mocks.insertImageFiles).toHaveBeenCalledWith([image]);
+  expect(onAttachFiles).toHaveBeenCalledWith([attachment]);
+  expect(mocks.setToast).not.toHaveBeenCalled();
+});
+
+it("rejects non-image files when the surface has no attachment queue", async () => {
   await mount();
-  await selectFiles([imageFile("合同.pdf", MEGABYTE, "application/pdf"), imageFile("超限.png", 6 * MEGABYTE)]);
+  await selectFiles([imageFile("合同.pdf", MEGABYTE, "application/pdf")]);
 
   expect(mocks.insertImageFiles).not.toHaveBeenCalled();
   expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "仅支持上传图片文件。" }));
-  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "文件大小必须小于或等于 5MB。" }));
+});
+
+it("routes all selected files to a host that must validate the current context", async () => {
+  const onFilesSelected = vi.fn();
+  const image = imageFile("图一.png");
+  const attachment = imageFile("合同.pdf", MEGABYTE, "application/pdf");
+  await mount(false, undefined, onFilesSelected);
+  await selectFiles([image, attachment]);
+
+  expect(onFilesSelected).toHaveBeenCalledWith([image, attachment]);
+  expect(mocks.insertImageFiles).not.toHaveBeenCalled();
 });
 
 it("reports an insertion failure and resets the input for retry", async () => {

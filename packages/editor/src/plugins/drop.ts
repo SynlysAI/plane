@@ -5,20 +5,22 @@
  */
 
 import type { Editor } from "@tiptap/core";
+import { fromEvent } from "file-selector";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 // constants
-import { ACCEPTED_ATTACHMENT_MIME_TYPES, ACCEPTED_IMAGE_MIME_TYPES } from "@/constants/config";
+import { ACCEPTED_ATTACHMENT_MIME_TYPES, ACCEPTED_IMAGE_MIME_TYPES } from "../constants/config";
 // types
-import type { TEditorCommands, TExtensions } from "@/types";
+import type { TEditorCommands, TExtensions, TFileHandler } from "@/types";
 
 type Props = {
   disabledExtensions?: TExtensions[];
   flaggedExtensions?: TExtensions[];
   editor: Editor;
+  fileHandler: TFileHandler;
 };
 
 export const DropHandlerPlugin = (props: Props): Plugin => {
-  const { disabledExtensions, flaggedExtensions, editor } = props;
+  const { disabledExtensions, editor, fileHandler } = props;
 
   return new Plugin({
     key: new PluginKey("drop-handler-plugin"),
@@ -32,21 +34,13 @@ export const DropHandlerPlugin = (props: Props): Plugin => {
         ) {
           event.preventDefault();
           const files = Array.from(event.clipboardData.files);
-          const acceptedFiles = files.filter(
-            (f) => ACCEPTED_IMAGE_MIME_TYPES.includes(f.type) || ACCEPTED_ATTACHMENT_MIME_TYPES.includes(f.type)
-          );
-
-          if (acceptedFiles.length) {
-            const pos = view.state.selection.from;
-            insertFilesSafely({
-              disabledExtensions,
-              flaggedExtensions,
-              editor,
-              files: acceptedFiles,
-              initialPos: pos,
-              event: "drop",
-            });
-          }
+          void dispatchEditorFiles({
+            disabledExtensions,
+            editor,
+            files,
+            initialPos: view.state.selection.from,
+            attachFiles: fileHandler.attachFiles,
+          });
           return true;
         }
         return false;
@@ -56,39 +50,81 @@ export const DropHandlerPlugin = (props: Props): Plugin => {
           editor.isEditable &&
           !moved &&
           event.dataTransfer &&
-          event.dataTransfer.files &&
-          event.dataTransfer.files.length > 0
+          ((event.dataTransfer.files?.length ?? 0) > 0 || (event.dataTransfer.items?.length ?? 0) > 0)
         ) {
           event.preventDefault();
-          const files = Array.from(event.dataTransfer.files);
-          const acceptedFiles = files.filter(
-            (f) => ACCEPTED_IMAGE_MIME_TYPES.includes(f.type) || ACCEPTED_ATTACHMENT_MIME_TYPES.includes(f.type)
-          );
-
-          if (acceptedFiles.length) {
-            const coordinates = view.posAtCoords({
+          const initialPos =
+            view.posAtCoords({
               left: event.clientX,
               top: event.clientY,
-            });
+            })?.pos ?? view.state.selection.from;
 
-            if (coordinates) {
-              const pos = coordinates.pos;
-              insertFilesSafely({
+          void fromEvent(event)
+            .then((items) =>
+              dispatchEditorFiles({
                 disabledExtensions,
                 editor,
-                files: acceptedFiles,
-                initialPos: pos,
+                files: items.filter(isFileLike),
+                initialPos,
+                attachFiles: fileHandler.attachFiles,
                 event: "drop",
-              });
-            }
-            return true;
-          }
+              })
+            )
+            .catch((error) => console.error("Error in reading dropped editor files:", error));
+          return true;
         }
         return false;
       },
     },
   });
 };
+
+const IMAGE_FILE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+/** Identify inline images by MIME type or a common image extension. */
+function isImageFile(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return ACCEPTED_IMAGE_MIME_TYPES.includes(file.type) || IMAGE_FILE_EXTENSIONS.has(extension);
+}
+
+/** Accept File objects across DOM realms without relying on instanceof. */
+function isFileLike(item: unknown): item is File {
+  if (typeof item !== "object" || item === null) return false;
+  const file = item as Partial<File>;
+  return (
+    typeof file.name === "string" &&
+    typeof file.type === "string" &&
+    typeof file.size === "number" &&
+    typeof file.slice === "function"
+  );
+}
+
+type TDispatchEditorFilesArgs = {
+  disabledExtensions?: TExtensions[];
+  editor: Editor;
+  files: File[];
+  initialPos: number;
+  attachFiles?: (files: File[]) => void | Promise<void>;
+  event?: "insert" | "drop";
+};
+
+/** Keep images inline and hand all other files to the host attachment surface. */
+async function dispatchEditorFiles(args: TDispatchEditorFilesArgs) {
+  const { attachFiles, disabledExtensions, editor, event = "insert", files, initialPos } = args;
+  const inlineImages = files.filter(isImageFile);
+  const externalAttachments = files.filter((file) => !isImageFile(file));
+
+  if (inlineImages.length > 0) {
+    await insertFilesSafely({
+      disabledExtensions,
+      editor,
+      files: inlineImages,
+      initialPos,
+      event,
+    });
+  }
+  if (files.length === 0 || externalAttachments.length > 0) await attachFiles?.(externalAttachments);
+}
 
 type InsertFilesSafelyArgs = {
   disabledExtensions?: TExtensions[];
@@ -116,7 +152,7 @@ export const insertFilesSafely = async (args: InsertFilesSafelyArgs) => {
         if (["image", "attachment"].includes(type)) fileType = type;
         else throw new Error("Wrong file type passed");
       } else {
-        if (ACCEPTED_IMAGE_MIME_TYPES.includes(file.type)) fileType = "image";
+        if (isImageFile(file)) fileType = "image";
         else if (ACCEPTED_ATTACHMENT_MIME_TYPES.includes(file.type)) fileType = "attachment";
       }
       // insert file depending on the type at the current position

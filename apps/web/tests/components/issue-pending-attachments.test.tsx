@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   limits: vi.fn(),
-  onAdd: vi.fn(),
   onRemove: vi.fn(),
   onValidationChange: vi.fn(),
 }));
@@ -41,15 +40,14 @@ let container: HTMLDivElement;
 let root: Root | null = null;
 
 /** 挂载创建态附件组件。 */
-async function mount() {
+async function mount(attachments: { id: string; file: File }[] = []) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
     root!.render(
       <IssuePendingAttachments
-        attachments={[]}
-        onAdd={mocks.onAdd}
+        attachments={attachments}
         onRemove={mocks.onRemove}
         onValidationChange={mocks.onValidationChange}
         projectId="project-1"
@@ -57,16 +55,6 @@ async function mount() {
       />
     );
   });
-}
-
-/** 模拟文件选择。 */
-async function selectFiles(files: File[]) {
-  await act(async () => {
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-    Object.defineProperty(input, "files", { configurable: true, value: files });
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await act(async () => await Promise.resolve());
 }
 
 /** 创建可指定大小的文件。 */
@@ -93,26 +81,26 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("adds a selected file batch without partial writes", async () => {
-  await mount();
+it("shows a selected file batch and keeps it pending until save", async () => {
   const first = file("材料一.pdf", "application/pdf", MEGABYTE);
   const second = file(
     "材料二.docx",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     MEGABYTE
   );
-  await selectFiles([first, second]);
+  await mount([
+    { id: "first", file: first },
+    { id: "second", file: second },
+  ]);
 
-  expect(mocks.onAdd).toHaveBeenCalledTimes(1);
-  expect(mocks.onAdd).toHaveBeenCalledWith([first, second]);
+  expect(container.textContent).toContain("材料一.pdf");
+  expect(container.textContent).toContain("材料二.docx");
   expect(mocks.onValidationChange).toHaveBeenLastCalledWith(null);
 });
 
-it("blocks an oversized attachment before it enters the queue", async () => {
-  await mount();
-  await selectFiles([file("超限.png", "image/png", 21 * MEGABYTE)]);
+it("reports an oversized attachment in the pending queue", async () => {
+  await mount([{ id: "oversize", file: file("超限.png", "image/png", 21 * MEGABYTE) }]);
 
-  expect(mocks.onAdd).not.toHaveBeenCalled();
   expect(container.textContent).toContain("图片文件不能超过 20 MB。");
 });
 
@@ -120,7 +108,7 @@ it("reports the queue error when the work item limit would be exceeded", async (
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const attachments = Array.from({ length: 50 }, (_, index) => ({
+  const attachments = Array.from({ length: 51 }, (_, index) => ({
     id: `attachment-${index}`,
     file: file(`材料-${index}.pdf`, "application/pdf", MEGABYTE),
   }));
@@ -129,7 +117,6 @@ it("reports the queue error when the work item limit would be exceeded", async (
     root!.render(
       <IssuePendingAttachments
         attachments={attachments}
-        onAdd={mocks.onAdd}
         onRemove={mocks.onRemove}
         onValidationChange={mocks.onValidationChange}
         projectId="project-1"
@@ -137,9 +124,7 @@ it("reports the queue error when the work item limit would be exceeded", async (
       />
     );
   });
-  await selectFiles([file("第五十一份.pdf", "application/pdf", MEGABYTE)]);
 
-  expect(mocks.onAdd).not.toHaveBeenCalled();
   expect(container.textContent).toContain("每个工作项最多附加 50 个文件。");
 });
 

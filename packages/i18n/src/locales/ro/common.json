@@ -838,7 +838,10 @@
       "invalid": "Sunt acceptate doar imagini JPEG, JPG, PNG, WebP sau GIF.",
       "upload": "Încarcă imagini"
     },
-    "delete": "Șterge atașamentul"
+    "delete": "Șterge atașamentul",
+    "editor_file": {
+      "upload": "Adaugă atașament"
+    }
   },
   "label": {
     "select": "Selectează eticheta",

@@ -27,6 +27,8 @@ type Props = {
   activeTitle?: string;
   uploadingTitle?: string;
   inputAriaLabel?: string;
+  clickToSelect?: boolean;
+  showPrompt?: boolean;
   variant?: TUploadZoneVariant;
   className?: string;
   children?: ReactNode;
@@ -79,6 +81,8 @@ export function AttachmentUploadZone(props: Props) {
     activeTitle,
     uploadingTitle,
     inputAriaLabel,
+    clickToSelect = true,
+    showPrompt = true,
     onReject,
     variant = "block",
     className,
@@ -101,7 +105,7 @@ export function AttachmentUploadZone(props: Props) {
         return;
       }
       setZoneError(null);
-      void onFiles(acceptedFiles);
+      void Promise.resolve(onFiles(acceptedFiles)).catch(() => undefined);
     },
     [maxFiles, multiple, onFiles, onReject, t]
   );
@@ -113,6 +117,8 @@ export function AttachmentUploadZone(props: Props) {
     maxFiles,
     maxSize,
     minSize,
+    noClick: !clickToSelect,
+    noKeyboard: !clickToSelect,
     disabled: disabled || uploading,
   });
 
@@ -127,32 +133,45 @@ export function AttachmentUploadZone(props: Props) {
     <div
       {...getRootProps({
         className: cn(
-          "flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-subtle bg-surface-1 text-center text-12 text-secondary transition-colors outline-none",
-          "focus-visible:border-accent-primary hover:bg-surface-2",
+          showPrompt
+            ? "flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-subtle bg-surface-1 text-center text-12 text-secondary transition-colors outline-none"
+            : "relative flex min-w-0 flex-col rounded-sm border border-dashed border-transparent transition-colors",
+          clickToSelect && "cursor-pointer",
           VARIANT_CLASSNAMES[variant],
-          isDragActive && "border-accent-primary bg-surface-2 text-primary",
+          "hover:bg-surface-hover focus-visible:border-strong",
+          className,
+          isDragActive && "!bg-surface-hover !border !border-strong text-primary",
           isDragReject && "border-danger-strong text-danger-primary",
           (disabled || uploading) && "cursor-not-allowed opacity-60",
-          variant === "inline" && "flex-row text-left",
-          className
+          variant === "inline" && "flex-row text-left"
         ),
         "aria-busy": uploading,
       })}
     >
-      <input
-        {...getInputProps({
-          disabled: disabled || uploading,
-          "aria-label": inputAriaLabel ?? title ?? t("attachment.upload_zone.title"),
-        })}
-      />
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={cn(variant === "inline" && "truncate", resolvedError && "text-danger-primary")}>
-          {resolvedError ?? resolvedTitle}
+      {clickToSelect && (
+        <input
+          {...getInputProps({
+            disabled: disabled || uploading,
+            "aria-label": inputAriaLabel ?? title ?? t("attachment.upload_zone.title"),
+          })}
+        />
+      )}
+      {showPrompt ? (
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className={cn(variant === "inline" && "truncate", resolvedError && "text-danger-primary")}>
+            {resolvedError ?? resolvedTitle}
+          </span>
+          {hint && !resolvedError && !isDragActive && !uploading ? (
+            <span className="text-11 text-tertiary">{hint}</span>
+          ) : null}
         </span>
-        {hint && !resolvedError && !isDragActive && !uploading ? (
-          <span className="text-11 text-tertiary">{hint}</span>
-        ) : null}
-      </span>
+      ) : (
+        resolvedError && (
+          <span role="alert" className="px-3 py-2 text-caption-sm-regular text-danger-primary">
+            {resolvedError}
+          </span>
+        )
+      )}
       {children}
     </div>
   );

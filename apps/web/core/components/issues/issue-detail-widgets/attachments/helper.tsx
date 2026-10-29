@@ -6,10 +6,13 @@
 
 import { useCallback, useMemo } from "react";
 import { setPromiseToast, TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
 // types
 import type { TAttachmentUploadStatus } from "@/store/issue/issue-details/attachment.store";
 
@@ -35,13 +38,40 @@ export const useAttachmentOperations = (
   issueServiceType: TIssueServiceType = EIssueServiceType.ISSUES
 ): TAttachmentHelpers => {
   const {
-    attachment: { createAttachment, removeAttachment, getAttachmentsUploadStatusByIssueId },
+    attachment: { createAttachment, removeAttachment, getAttachmentsByIssueId, getAttachmentsUploadStatusByIssueId },
   } = useIssueDetail(issueServiceType);
+  const { t } = useTranslation();
+  const { getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
+  const attachmentCount = getAttachmentsByIssueId(issueId)?.length ?? 0;
 
   const uploadAttachments = useCallback(
     async (files: File[]) => {
       if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
-      if (files.length === 0) return;
+      if (files.length === 0) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: t("attachment.upload_zone.empty"),
+        });
+        return;
+      }
+      if (attachmentCount + files.length > MAX_FILE_ATTACHMENTS) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: t("attachment.count_limit", { count: MAX_FILE_ATTACHMENTS }),
+        });
+        return;
+      }
+      const limitError = files.map((file) => getLimitError(file)).find(Boolean);
+      if (limitError) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("toast.error"),
+          message: limitError,
+        });
+        return;
+      }
       // Sequential execution keeps the issue attachment count and toast completion deterministic.
       const attachmentUploadPromise = (async () => {
         /* eslint-disable no-await-in-loop -- Sequential uploads prevent attachment-count races. */
@@ -67,7 +97,7 @@ export const useAttachmentOperations = (
 
       await attachmentUploadPromise;
     },
-    [createAttachment, issueId, projectId, workspaceSlug]
+    [attachmentCount, createAttachment, getLimitError, issueId, projectId, t, workspaceSlug]
   );
 
   const attachmentOperations: TAttachmentOperations = useMemo(

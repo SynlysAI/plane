@@ -838,7 +838,10 @@
       "invalid": "JPEG、JPG、PNG、WebP、GIF 画像のみ利用できます。",
       "upload": "画像をアップロード"
     },
-    "delete": "添付ファイルを削除"
+    "delete": "添付ファイルを削除",
+    "editor_file": {
+      "upload": "添付ファイルを追加"
+    }
   },
   "label": {
     "select": "ラベルを選択",

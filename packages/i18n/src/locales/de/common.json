@@ -838,7 +838,10 @@
       "invalid": "Nur JPEG-, JPG-, PNG-, WebP- und GIF-Bilder werden unterstützt.",
       "upload": "Bilder hochladen"
     },
-    "delete": "Anhang löschen"
+    "delete": "Anhang löschen",
+    "editor_file": {
+      "upload": "Anhang hinzufügen"
+    }
   },
   "label": {
     "select": "Label auswählen",

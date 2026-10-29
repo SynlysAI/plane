@@ -4,15 +4,13 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { observer } from "mobx-react";
 import { CloseOutline } from "@makeplane/propel/icons";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
 import { cn } from "@plane/utils";
-// components
-import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 // hooks
 import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
 
@@ -23,7 +21,6 @@ export type TIssuePendingAttachment = {
 
 type Props = {
   attachments: TIssuePendingAttachment[];
-  onAdd: (files: File[]) => void;
   onRemove: (attachmentId: string) => void;
   onValidationChange: (error: string | null) => void;
   workspaceSlug: string;
@@ -66,10 +63,9 @@ export async function uploadPendingIssueAttachments(args: TUploadPendingIssueAtt
 }
 
 export const IssuePendingAttachments = observer(function IssuePendingAttachments(props: Props) {
-  const { attachments, onAdd, onRemove, onValidationChange, workspaceSlug, projectId, disabled = false } = props;
+  const { attachments, onRemove, onValidationChange, workspaceSlug, projectId, disabled = false } = props;
   const { t } = useTranslation();
-  const [selectionError, setSelectionError] = useState<string | null>(null);
-  const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
+  const { getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
 
   const getQueueError = useCallback(() => {
     if (attachments.length > MAX_FILE_ATTACHMENTS) {
@@ -82,44 +78,18 @@ export const IssuePendingAttachments = observer(function IssuePendingAttachments
     onValidationChange(getQueueError());
   }, [getQueueError, onValidationChange]);
 
-  const handleFiles = useCallback(
-    (files: File[]) => {
-      if (files.length === 0) return;
-      if (attachments.length + files.length > MAX_FILE_ATTACHMENTS) {
-        setSelectionError(t("attachment.count_limit", { count: MAX_FILE_ATTACHMENTS }));
-        return;
-      }
-
-      const limitError = files.map((file) => getLimitError(file)).find(Boolean);
-      if (limitError) {
-        setSelectionError(limitError);
-        return;
-      }
-
-      setSelectionError(null);
-      onAdd(files);
-    },
-    [attachments.length, getLimitError, onAdd, t]
-  );
+  const queueError = getQueueError();
+  if (attachments.length === 0 && !queueError) return null;
 
   return (
-    <section className="rounded-lg border border-subtle bg-surface-1 px-4 pt-3 pb-3">
-      <div className="flex items-baseline justify-between gap-3 pb-2">
-        <h4 className="text-caption-medium text-secondary">{t("attachment.create.title")}</h4>
-        <span className="text-caption-sm-regular text-tertiary">{t("attachment.create.hint")}</span>
-      </div>
-      <AttachmentUploadZone
-        error={selectionError}
-        onFiles={handleFiles}
-        multiple
-        maxSize={maxFileSize}
-        disabled={disabled || limitsLoading}
-        title={t("attachment.create.zone_title")}
-        activeTitle={t("attachment.upload_zone.active")}
-        variant="compact"
-      />
+    <section aria-label={t("attachment.create.title")} className="pt-3">
+      {queueError && (
+        <p role="alert" className="pb-2 text-caption-sm-regular text-danger-primary">
+          {queueError}
+        </p>
+      )}
       {attachments.length > 0 && (
-        <ul className="mt-2 divide-y divide-subtle overflow-hidden rounded-md border border-subtle bg-surface-2">
+        <ul className="divide-y divide-subtle overflow-hidden rounded-md border border-subtle bg-surface-2">
           {attachments.map((attachment) => (
             <li key={attachment.id} className="flex min-h-9 items-center gap-3 px-3 py-1.5">
               <span

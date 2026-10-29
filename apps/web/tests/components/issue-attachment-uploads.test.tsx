@@ -14,6 +14,24 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/use-file-size", () => ({ useFileSize: () => ({ maxFileSize: 5 * 1024 * 1024 }) }));
+vi.mock("@/hooks/use-issue-attachment-limits", () => ({
+  useIssueAttachmentLimits: (...args: unknown[]) => {
+    const result = mocks.limits(...args);
+    return {
+      ...result,
+      isLoading: !result.limits && !result.error,
+      maxFileSize: result.limits ? Math.max(...Object.values(result.limits).map((limit) => limit.max_bytes)) : 0,
+      getLimitError: (file: File) => {
+        if (!result.limits) return "无法获取当前工作区附件限制";
+        if (file.type.startsWith("image/") && file.size > result.limits.image.max_bytes)
+          return `图片文件不能超过 ${result.limits.image.max_mb} MB。`;
+        if (file.type.includes("presentation") && file.size > result.limits.office.max_bytes)
+          return `办公文件不能超过 ${result.limits.office.max_mb} MB。`;
+        return null;
+      },
+    };
+  },
+}));
 vi.mock("@/components/comments/use-comment-attachment-limits", () => ({
   useCommentAttachmentLimits: (...args: unknown[]) => mocks.limits(...args),
 }));
@@ -23,13 +41,12 @@ vi.mock("@/hooks/store/use-issue-detail", () => ({
     setLastWidgetAction: mocks.setLastWidgetAction,
     toggleDeleteAttachmentModal: vi.fn(),
     attachmentDeleteModalId: null,
-    attachment: { getAttachmentsByIssueId: () => mocks.attachmentIds },
-  }),
-}));
-vi.mock("@/components/issues/issue-detail-widgets/attachments/helper", () => ({
-  useAttachmentOperations: () => ({
-    operations: { create: mocks.create, createMany: mocks.createMany },
-    snapshot: { uploadStatus: [] },
+    attachment: {
+      createAttachment: mocks.create,
+      removeAttachment: vi.fn(),
+      getAttachmentsByIssueId: () => mocks.attachmentIds,
+      getAttachmentsUploadStatusByIssueId: () => [],
+    },
   }),
 }));
 vi.mock("@/components/issues/attachment/attachment-list-item", () => ({ IssueAttachmentsListItem: () => null }));
@@ -42,12 +59,16 @@ vi.mock("@plane/i18n", () => ({
       key === "attachment.count_limit" ? `每个工作项最多附加 ${values?.count} 个文件。` : key,
   }),
 }));
-vi.mock("@plane/propel/toast", () => ({ TOAST_TYPE: { ERROR: "error" }, setToast: mocks.setToast }));
+vi.mock("@plane/propel/toast", () => ({
+  TOAST_TYPE: { ERROR: "error" },
+  setPromiseToast: vi.fn(),
+  setToast: mocks.setToast,
+}));
 
 const { IssueAttachmentActionButton } =
   await import("@/components/issues/issue-detail-widgets/attachments/quick-action-button");
-const { IssueAttachmentItemList } = await import("@/components/issues/attachment/attachment-item-list");
 const { IssueAttachmentUpload } = await import("@/components/issues/attachment/attachment-upload");
+const { IssueAttachmentDropZone } = await import("@/components/issues/attachment/attachment-drop-zone");
 
 Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
 const MEGABYTE = 1024 * 1024;
@@ -122,44 +143,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("allows a six MB office attachment in the issue attachment list", async () => {
-  await mount(
-    <IssueAttachmentItemList
-      workspaceSlug="lab"
-      projectId="project"
-      issueId="issue"
-      attachmentHelpers={{ operations: attachmentOperations(), snapshot: { uploadStatus: [] } }}
-    />
-  );
-  await selectFile(
-    makeFile("行政材料.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", 6 * MEGABYTE)
-  );
-  expect(mocks.createMany).toHaveBeenCalledTimes(1);
-});
-
-it("uploads file batches from all three work item attachment entries", async () => {
+it("uploads file batches from the quick action and standalone upload area", async () => {
   const files = [
     makeFile("第一份.pptx", "application/octet-stream", 1024),
     makeFile("第二份.md", "text/markdown", 2048),
   ];
 
   await mount(
-    <IssueAttachmentItemList
-      workspaceSlug="lab"
-      projectId="project"
-      issueId="issue"
-      attachmentHelpers={{ operations: attachmentOperations(), snapshot: { uploadStatus: [] } }}
-    />
-  );
-  await selectFiles(files);
-  expect(mocks.createMany).toHaveBeenCalledWith(files);
-
-  await act(async () => root!.unmount());
-  await mount(
     <IssueAttachmentActionButton workspaceSlug="lab" projectId="project" issueId="issue" issueServiceType="issues" />
   );
   await selectFiles(files);
-  expect(mocks.createMany).toHaveBeenCalledWith(files);
+  expect(mocks.create).toHaveBeenNthCalledWith(1, "lab", "project", "issue", files[0]);
+  expect(mocks.create).toHaveBeenNthCalledWith(2, "lab", "project", "issue", files[1]);
 
   await act(async () => root!.unmount());
   await mount(
@@ -174,18 +169,57 @@ it("uploads file batches from all three work item attachment entries", async () 
   expect(mocks.createMany).toHaveBeenCalledWith(files);
 });
 
-it("blocks an oversized image in the issue attachment list", async () => {
+it("uploads a dropped batch from the attachment content area without a click input", async () => {
+  const files = [makeFile("报告.pdf", "application/pdf", 1024), makeFile("数据.csv", "text/csv", 2048)];
   await mount(
-    <IssueAttachmentItemList
+    <IssueAttachmentDropZone
       workspaceSlug="lab"
       projectId="project"
       issueId="issue"
       attachmentHelpers={{ operations: attachmentOperations(), snapshot: { uploadStatus: [] } }}
+      hasContent
+    >
+      <div>attachments</div>
+    </IssueAttachmentDropZone>
+  );
+
+  const dropTarget = container.querySelector<HTMLDivElement>("[role='presentation']");
+  expect(dropTarget).not.toBeNull();
+  expect(container.querySelector('input[type="file"]')).toBeNull();
+
+  const dataTransfer = {
+    files,
+    items: files.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })),
+    types: ["Files"],
+  };
+  const dragEnter = new Event("dragenter", { bubbles: true });
+  Object.defineProperty(dragEnter, "dataTransfer", { value: dataTransfer });
+  const drop = new Event("drop", { bubbles: true });
+  Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
+
+  await act(async () => dropTarget!.dispatchEvent(dragEnter));
+  expect(dropTarget!.className).toContain("border-strong");
+  expect(dropTarget!.className).toContain("bg-surface-hover");
+
+  await act(async () => {
+    dropTarget!.dispatchEvent(drop);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(mocks.createMany).toHaveBeenCalledWith(files);
+});
+
+it("blocks an oversized image in the standalone upload area", async () => {
+  await mount(
+    <IssueAttachmentUpload
+      workspaceSlug="lab"
+      projectId="project"
+      attachmentOperations={{ createMany: mocks.createMany }}
     />
   );
   await selectFile(makeFile("现场照片.png", "image/png", 21 * MEGABYTE));
-  expect(mocks.createMany).not.toHaveBeenCalled();
-  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "图片文件不能超过 20 MB。" }));
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("图片文件不能超过 20 MB。");
 });
 
 it("blocks an oversized image from the quick action with the category limit", async () => {
@@ -193,7 +227,7 @@ it("blocks an oversized image from the quick action with the category limit", as
     <IssueAttachmentActionButton workspaceSlug="lab" projectId="project" issueId="issue" issueServiceType="issues" />
   );
   await selectFile(makeFile("现场照片.png", "image/png", 21 * MEGABYTE));
-  expect(mocks.createMany).not.toHaveBeenCalled();
+  expect(mocks.create).not.toHaveBeenCalled();
   expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "图片文件不能超过 20 MB。" }));
 });
 
@@ -229,21 +263,6 @@ it("blocks attachment upload when workspace limits cannot be loaded", async () =
   expect(mocks.createMany).not.toHaveBeenCalled();
   expect(mocks.limits).toHaveBeenCalledWith("lab", "project");
   expect(container.textContent).toContain("无法获取当前工作区附件限制");
-});
-
-it("blocks the fifty-first attachment from the issue attachment list", async () => {
-  mocks.attachmentIds = Array.from({ length: 50 }, (_, index) => `asset-${index}`);
-  await mount(
-    <IssueAttachmentItemList
-      workspaceSlug="lab"
-      projectId="project"
-      issueId="issue"
-      attachmentHelpers={{ operations: attachmentOperations(), snapshot: { uploadStatus: [] } }}
-    />
-  );
-  await selectFile(makeFile("第五十一份.pptx", "application/octet-stream", 1024));
-  expect(mocks.createMany).not.toHaveBeenCalled();
-  expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ message: "每个工作项最多附加 50 个文件。" }));
 });
 
 it("blocks the fifty-first attachment from the quick action", async () => {

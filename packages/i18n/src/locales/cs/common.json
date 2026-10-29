@@ -838,7 +838,10 @@
       "invalid": "Podporovány jsou pouze obrázky JPEG, JPG, PNG, WebP a GIF.",
       "upload": "Nahrát obrázky"
     },
-    "delete": "Smazat přílohu"
+    "delete": "Smazat přílohu",
+    "editor_file": {
+      "upload": "Přidat přílohu"
+    }
   },
   "label": {
     "select": "Vybrat štítek",

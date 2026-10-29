@@ -838,7 +838,10 @@
       "invalid": "Only JPEG, JPG, PNG, WebP, or GIF image files are supported.",
       "upload": "Upload images"
     },
-    "delete": "დანართის წაშლა"
+    "delete": "დანართის წაშლა",
+    "editor_file": {
+      "upload": "მიართების დამატება"
+    }
   },
   "label": {
     "select": "იარლიყის არჩევა",

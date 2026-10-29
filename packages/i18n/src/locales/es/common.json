@@ -838,7 +838,10 @@
       "invalid": "Solo se admiten imágenes JPEG, JPG, PNG, WebP o GIF.",
       "upload": "Subir imágenes"
     },
-    "delete": "Eliminar archivo adjunto"
+    "delete": "Eliminar archivo adjunto",
+    "editor_file": {
+      "upload": "Añadir archivo adjunto"
+    }
   },
   "label": {
     "select": "Seleccionar etiqueta",
