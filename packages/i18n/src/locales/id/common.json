@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Hanya satu file yang dapat diunggah pada satu waktu.",
     "file_size_limit": "File harus berukuran {size}MB atau lebih kecil.",
     "drag_and_drop": "Seret dan jatuhkan di mana saja untuk mengunggah",
-    "delete": "Hapus lampiran"
+    "delete": "Hapus lampiran",
+    "editor_image": {
+      "insert_failed": "Gagal menyisipkan gambar. Coba lagi.",
+      "invalid": "Hanya gambar JPEG, JPG, PNG, WebP, atau GIF yang didukung.",
+      "upload": "Unggah gambar"
+    },
+    "create": {
+      "draft_notice": "Lampiran diunggah setelah item kerja disimpan; draf tidak menyimpannya.",
+      "hint": "Otomatis diunggah setelah item kerja disimpan.",
+      "remove": "Hapus lampiran",
+      "title": "Lampiran",
+      "upload_failed": "Item kerja dibuat, tetapi {failed} dari {total} lampiran gagal diunggah: {names}. Coba lagi dari item kerja.",
+      "zone_title": "Tarik berkas ke sini atau klik untuk memilih beberapa berkas"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Pilih label",
@@ -954,5 +979,8 @@
     "session_expired": "Sesi sebelumnya telah kedaluwarsa, sesi baru telah dimulai.",
     "interrupt_notice": "Eksekusi terganggu dan memerlukan persetujuan. Fitur persetujuan akan segera tersedia.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

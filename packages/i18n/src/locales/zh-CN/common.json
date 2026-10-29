@@ -810,7 +810,32 @@
     "count_limit": "每个工作项最多附加 {count} 个文件。",
     "file_size_limit": "文件大小必须小于或等于 {size}MB。",
     "drag_and_drop": "拖放到任意位置以上传",
-    "delete": "删除附件"
+    "delete": "删除附件",
+    "editor_image": {
+      "insert_failed": "图片插入失败，请重试。",
+      "invalid": "仅支持 JPEG、JPG、PNG、WebP 或 GIF 图片。",
+      "upload": "上传图片"
+    },
+    "create": {
+      "draft_notice": "附件会在工作项正式保存后上传；保存为草稿不会保留附件。",
+      "hint": "保存工作项后自动上传。",
+      "remove": "移除附件",
+      "title": "附件",
+      "upload_failed": "工作项已创建，但 {total} 个附件中有 {failed} 个上传失败：{names}。请在工作项详情页补传。",
+      "zone_title": "拖拽文件到这里，或点击选择多个附件"
+    },
+    "upload_zone": {
+      "title": "拖拽文件或文件夹到这里，或点击选择",
+      "active": "松开以上传",
+      "uploading": "正在上传…",
+      "empty": "文件夹为空、浏览器不支持文件夹拖拽，或没有可上传的文件。",
+      "invalid_type": "包含不支持的文件类型。",
+      "too_large": "文件超过大小限制。",
+      "empty_file": "文件不能为空。",
+      "max_files": "一次最多可选择 {count} 个文件。",
+      "only_one": "仅支持选择一个文件。",
+      "invalid": "文件不符合上传要求。"
+    }
   },
   "label": {
     "select": "选择标签",
@@ -3408,5 +3433,8 @@
     "disclaimer": "内容由 AI 生成，仅供参考",
     "approve": "批准",
     "reject": "拒绝"
-  }
+  },
+  "project_required_to_save": "请选择项目后再保存",
+  "select_project": "请选择项目",
+  "clear_project": "清除项目"
 }

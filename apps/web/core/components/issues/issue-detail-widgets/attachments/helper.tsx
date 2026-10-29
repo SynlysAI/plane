@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { setPromiseToast, TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
@@ -15,6 +15,7 @@ import type { TAttachmentUploadStatus } from "@/store/issue/issue-details/attach
 
 export type TAttachmentOperations = {
   create: (file: File) => Promise<void>;
+  createMany: (files: File[]) => Promise<void>;
   remove: (attachmentId: string) => Promise<void>;
 };
 
@@ -37,25 +38,42 @@ export const useAttachmentOperations = (
     attachment: { createAttachment, removeAttachment, getAttachmentsUploadStatusByIssueId },
   } = useIssueDetail(issueServiceType);
 
+  const uploadAttachments = useCallback(
+    async (files: File[]) => {
+      if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
+      if (files.length === 0) return;
+      // Sequential execution keeps the issue attachment count and toast completion deterministic.
+      const attachmentUploadPromise = (async () => {
+        /* eslint-disable no-await-in-loop -- Sequential uploads prevent attachment-count races. */
+        for (const file of files) {
+          await createAttachment(workspaceSlug, projectId, issueId, file);
+        }
+        /* eslint-enable no-await-in-loop */
+      })();
+      setPromiseToast(attachmentUploadPromise, {
+        loading: "Uploading attachment...",
+        success: {
+          title: "Attachment uploaded",
+          message: () =>
+            files.length === 1
+              ? "The attachment has been successfully uploaded"
+              : `${files.length} attachments have been successfully uploaded`,
+        },
+        error: {
+          title: "Attachment not uploaded",
+          message: () => "One or more attachments could not be uploaded",
+        },
+      });
+
+      await attachmentUploadPromise;
+    },
+    [createAttachment, issueId, projectId, workspaceSlug]
+  );
+
   const attachmentOperations: TAttachmentOperations = useMemo(
     () => ({
-      create: async (file) => {
-        if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
-        const attachmentUploadPromise = createAttachment(workspaceSlug, projectId, issueId, file);
-        setPromiseToast(attachmentUploadPromise, {
-          loading: "Uploading attachment...",
-          success: {
-            title: "Attachment uploaded",
-            message: () => "The attachment has been successfully uploaded",
-          },
-          error: {
-            title: "Attachment not uploaded",
-            message: () => "The attachment could not be uploaded",
-          },
-        });
-
-        await attachmentUploadPromise;
-      },
+      create: async (file) => uploadAttachments([file]),
+      createMany: uploadAttachments,
       remove: async (attachmentId) => {
         try {
           if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
@@ -74,7 +92,7 @@ export const useAttachmentOperations = (
         }
       },
     }),
-    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment]
+    [uploadAttachments, workspaceSlug, projectId, issueId, removeAttachment]
   );
   const attachmentsUploadStatus = getAttachmentsUploadStatusByIssueId(issueId);
 

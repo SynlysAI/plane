@@ -13,10 +13,10 @@ export function absoluteShareUrl(href: string, origin = window.location.origin):
 }
 
 /**
- * 构造 Tower 式分享文本，保留对象类型与标题上下文。
+ * 构造带对象类型与标题上下文的统一分享文本。
  *
  * Args:
- *   typeLabel: 已本地化的对象类型，例如“科研行动项”“周报”。
+ *   typeLabel: 已本地化的对象类型，例如“行政工作项”“周报”。
  *   title: 分享对象标题。
  *   href: 应用路由或完整链接。
  *

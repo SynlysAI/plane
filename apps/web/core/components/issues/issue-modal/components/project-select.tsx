@@ -9,7 +9,9 @@ import { observer } from "mobx-react";
 import type { Control } from "react-hook-form";
 import { Controller } from "react-hook-form";
 // plane imports
+import { CloseOutline } from "@makeplane/propel/icons";
 import { ETabIndices } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // types
 import type { TIssue } from "@plane/types";
 import { getTabIndex } from "@plane/utils";
@@ -27,6 +29,7 @@ type TIssueProjectSelectProps = {
 
 export const IssueProjectSelect = observer(function IssueProjectSelect(props: TIssueProjectSelectProps) {
   const { control, disabled = false, handleFormChange } = props;
+  const { t } = useTranslation();
   // store hooks
   const { isMobile } = usePlatformOS();
   // context hooks
@@ -42,7 +45,7 @@ export const IssueProjectSelect = observer(function IssueProjectSelect(props: TI
         required: true,
       }}
       render={({ field: { value, onChange } }) => (
-        <div className="h-7">
+        <div className="flex h-7 items-center gap-1">
           <ProjectDropdown
             value={value}
             onChange={(projectId) => {
@@ -54,7 +57,23 @@ export const IssueProjectSelect = observer(function IssueProjectSelect(props: TI
             renderCondition={(projectId) => allowedProjectIds.includes(projectId)}
             tabIndex={getIndex("project_id")}
             disabled={disabled}
+            placeholder={t("select_project")}
           />
+          {!disabled && value && (
+            <button
+              type="button"
+              aria-label={t("clear_project")}
+              title={t("clear_project")}
+              className="hover:bg-surface-hover focus-visible:ring-border-strong grid size-6 place-items-center rounded-md text-tertiary transition-colors hover:text-secondary focus-visible:ring-1 focus-visible:outline-none"
+              onClick={(event) => {
+                event.stopPropagation();
+                onChange(null);
+                handleFormChange();
+              }}
+            >
+              <CloseOutline className="size-3.5" />
+            </button>
+          )}
         </div>
       )}
     />

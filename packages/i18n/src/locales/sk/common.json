@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Je možné nahrať iba jeden súbor naraz.",
     "file_size_limit": "Súbor musí byť menší ako {size}MB.",
     "drag_and_drop": "Pretiahnite súbor kamkoľvek pre nahratie",
-    "delete": "Zmazať prílohu"
+    "delete": "Zmazať prílohu",
+    "editor_image": {
+      "insert_failed": "Vloženie obrázkov zlyhalo. Skúste to znova.",
+      "invalid": "Podporované sú iba obrázky JPEG, JPG, PNG, WebP a GIF.",
+      "upload": "Nahrať obrázky"
+    },
+    "create": {
+      "draft_notice": "Prílohy sa nahrajú po uložení pracovnej položky; koncept ich neuchová.",
+      "hint": "Po uložení pracovnej položky sa nahrajú automaticky.",
+      "remove": "Odstrániť prílohu",
+      "title": "Prílohy",
+      "upload_failed": "Pracovná položka bola vytvorená, ale {failed} z {total} príloh sa nenahralo: {names}. Skúste to znova v detaile položky.",
+      "zone_title": "Pretiahnite súbory sem alebo kliknutím vyberte viac súborov"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Vybrať štítok",
@@ -954,5 +979,8 @@
     "session_expired": "Predchádzajúca relácia vypršala, bola spustená nová.",
     "interrupt_notice": "Beh bol prerušený a vyžaduje schválenie. Podpora schvaľovania čoskoro pribudne.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

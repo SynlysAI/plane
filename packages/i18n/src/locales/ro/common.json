@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Se poate încărca doar un fișier o dată.",
     "file_size_limit": "Fișierul trebuie să aibă {size}MB sau mai puțin.",
     "drag_and_drop": "Trage și plasează oriunde pentru a încărca",
-    "delete": "Șterge atașamentul"
+    "delete": "Șterge atașamentul",
+    "editor_image": {
+      "insert_failed": "Inserarea imaginilor a eșuat. Reîncercați.",
+      "invalid": "Sunt acceptate doar imagini JPEG, JPG, PNG, WebP sau GIF.",
+      "upload": "Încarcă imagini"
+    },
+    "create": {
+      "draft_notice": "Atașamentele se încarcă după salvarea elementului de lucru; schița nu le păstrează.",
+      "hint": "Se încarcă automat după salvarea elementului de lucru.",
+      "remove": "Elimină atașamentul",
+      "title": "Atașamente",
+      "upload_failed": "Elementul de lucru a fost creat, dar {failed} din {total} atașamente nu s-au încărcat: {names}. Reîncercați din element.",
+      "zone_title": "Trageți fișierele aici sau faceți clic pentru a selecta mai multe"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Selectează eticheta",
@@ -954,5 +979,8 @@
     "session_expired": "Sesiunea anterioară a expirat, a început una nouă.",
     "interrupt_notice": "Rularea a fost întreruptă și necesită aprobare. Gestionarea aprobarilor va fi disponibilă în curând.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

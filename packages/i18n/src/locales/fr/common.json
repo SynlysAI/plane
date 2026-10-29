@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Un seul fichier peut être téléchargé à la fois.",
     "file_size_limit": "Le fichier doit faire {size}MB ou moins.",
     "drag_and_drop": "Glissez-déposez n’importe où pour uploader",
-    "delete": "Supprimer la pièce jointe"
+    "delete": "Supprimer la pièce jointe",
+    "editor_image": {
+      "insert_failed": "Échec de l'insertion des images. Réessayez.",
+      "invalid": "Seules les images JPEG, JPG, PNG, WebP ou GIF sont prises en charge.",
+      "upload": "Téléverser des images"
+    },
+    "create": {
+      "draft_notice": "Les pièces jointes sont téléversées après l'enregistrement de l'élément ; un brouillon ne les conserve pas.",
+      "hint": "Téléversées automatiquement après l'enregistrement.",
+      "remove": "Retirer la pièce jointe",
+      "title": "Pièces jointes",
+      "upload_failed": "L'élément a été créé, mais {failed} sur {total} pièces jointes n'ont pas été téléversées : {names}. Réessayez depuis l'élément.",
+      "zone_title": "Déposez des fichiers ici ou cliquez pour en sélectionner plusieurs"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Sélectionner une étiquette",
@@ -954,5 +979,8 @@
     "session_expired": "La session précédente a expiré. Une nouvelle session a commencé.",
     "interrupt_notice": "L'exécution a été interrompue et nécessite une approbation. La gestion des approbations arrive bientôt.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Je možné nahrát pouze jeden soubor najednou.",
     "file_size_limit": "Soubor musí být menší než {size}MB.",
     "drag_and_drop": "Přetáhněte soubor kamkoli pro nahrání",
-    "delete": "Smazat přílohu"
+    "delete": "Smazat přílohu",
+    "editor_image": {
+      "insert_failed": "Vložení obrázku selhalo. Zkuste to znovu.",
+      "invalid": "Podporovány jsou pouze obrázky JPEG, JPG, PNG, WebP a GIF.",
+      "upload": "Nahrát obrázky"
+    },
+    "create": {
+      "draft_notice": "Přílohy se nahrají po uložení pracovní položky; koncept je neuchová.",
+      "hint": "Po uložení pracovní položky se nahrají automaticky.",
+      "remove": "Odebrat přílohu",
+      "title": "Přílohy",
+      "upload_failed": "Pracovní položka byla vytvořena, ale {failed} z {total} příloh se nenahrálo: {names}. Zkuste to znovu v detailu položky.",
+      "zone_title": "Přetáhněte soubory sem, nebo kliknutím vyberte více souborů"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Vybrat štítek",
@@ -954,5 +979,8 @@
     "session_expired": "Předchozí relace vypršela, byla spuštěna nová.",
     "interrupt_notice": "Běh byl přerušen a vyžaduje schválení. Podpora schvalování brzy přibude.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

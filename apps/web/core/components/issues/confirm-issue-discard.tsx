@@ -14,10 +14,11 @@ type Props = {
   handleClose: () => void;
   onDiscard: () => void;
   onConfirm: () => Promise<void>;
+  saveDisabled?: boolean;
 };
 
 export function ConfirmIssueDiscard(props: Props) {
-  const { isOpen, handleClose, onDiscard, onConfirm } = props;
+  const { isOpen, handleClose, onDiscard, onConfirm, saveDisabled = false } = props;
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,6 +28,8 @@ export function ConfirmIssueDiscard(props: Props) {
   };
 
   const handleDeletion = async () => {
+    if (saveDisabled || isLoading) return;
+
     setIsLoading(true);
     await onConfirm();
     setIsLoading(false);
@@ -56,7 +59,7 @@ export function ConfirmIssueDiscard(props: Props) {
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleDeletion} loading={isLoading}>
+          <Button variant="primary" onClick={handleDeletion} loading={isLoading} disabled={saveDisabled}>
             {isLoading ? "Saving" : "Save to Drafts"}
           </Button>
         </div>

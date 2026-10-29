@@ -32,7 +32,6 @@ IMAGE_TYPES = {"image/jpeg": {".jpg", ".jpeg"}, "image/png": {".png"}, "image/we
 EDITABLE_TASK_STATUSES = {
     "DRAFT",
     "ASSIGNED",
-    "NEEDS_REVISION",
 }
 
 

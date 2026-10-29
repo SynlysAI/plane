@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Es kann jeweils nur eine Datei hochgeladen werden.",
     "file_size_limit": "Die Datei muss kleiner als {size} MB sein.",
     "drag_and_drop": "Datei hierher ziehen, um sie hochzuladen",
-    "delete": "Anhang löschen"
+    "delete": "Anhang löschen",
+    "editor_image": {
+      "insert_failed": "Bilder konnten nicht eingefügt werden. Bitte erneut versuchen.",
+      "invalid": "Nur JPEG-, JPG-, PNG-, WebP- und GIF-Bilder werden unterstützt.",
+      "upload": "Bilder hochladen"
+    },
+    "create": {
+      "draft_notice": "Anhänge werden nach dem Speichern des Arbeitselements hochgeladen; ein Entwurf speichert sie nicht.",
+      "hint": "Werden nach dem Speichern des Arbeitselements hochgeladen.",
+      "remove": "Anhang entfernen",
+      "title": "Anhänge",
+      "upload_failed": "Das Arbeitselement wurde erstellt, aber {failed} von {total} Anhängen wurden nicht hochgeladen: {names}. Bitte im Arbeitselement erneut versuchen.",
+      "zone_title": "Dateien hierher ziehen oder mehrere Dateien auswählen"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Label auswählen",
@@ -954,5 +979,8 @@
     "session_expired": "Die vorherige Sitzung ist abgelaufen. Eine neue wurde gestartet.",
     "interrupt_notice": "Die Ausführung wurde unterbrochen und erfordert eine Freigabe. Die Freigabeverwaltung folgt in Kürze.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

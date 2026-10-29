@@ -9,7 +9,6 @@ import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
 import { usePopper } from "react-popper";
 import { CalendarOutline, CloseOutline } from "@makeplane/propel/icons";
-import { Combobox } from "@headlessui/react";
 // ui
 import type { Matcher } from "@plane/propel/calendar";
 import { Calendar } from "@plane/propel/calendar";
@@ -166,6 +165,7 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
   return (
     <ComboDropDown
       as="div"
+      role="group"
       ref={dropdownRef}
       tabIndex={tabIndex}
       className={cn("h-full", className)}
@@ -180,10 +180,9 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
     >
       {isOpen &&
         createPortal(
-          <Combobox.Options
-            as="ul"
+          /* 普通容器不取消原生 select 的 mousedown，保证月份 / 年份下拉可打开。 */
+          <div
             data-prevent-outside-click
-            static
             className="z-30"
             ref={setPopperElement}
             style={styles.popper}
@@ -211,7 +210,7 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
                 weekStartsOn={startOfWeek}
               />
             </div>
-          </Combobox.Options>,
+          </div>,
           document.body
         )}
     </ComboDropDown>

@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Можно загрузить только один файл",
     "file_size_limit": "Максимальный размер файла - {size} МБ",
     "drag_and_drop": "Перетащите файл для загрузки",
-    "delete": "Удалить вложение"
+    "delete": "Удалить вложение",
+    "editor_image": {
+      "insert_failed": "Не удалось вставить изображения. Повторите попытку.",
+      "invalid": "Поддерживаются только изображения JPEG, JPG, PNG, WebP и GIF.",
+      "upload": "Загрузить изображения"
+    },
+    "create": {
+      "draft_notice": "Вложения загружаются после сохранения рабочего элемента; черновик их не сохраняет.",
+      "hint": "Автоматически загружаются после сохранения рабочего элемента.",
+      "remove": "Удалить вложение",
+      "title": "Вложения",
+      "upload_failed": "Рабочий элемент создан, но не удалось загрузить {failed} из {total} вложений: {names}. Повторите в рабочем элементе.",
+      "zone_title": "Перетащите файлы сюда или нажмите для выбора нескольких файлов"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Выбрать метку",
@@ -954,5 +979,8 @@
     "session_expired": "Предыдущий сеанс истёк, начат новый.",
     "interrupt_notice": "Выполнение прервано и требует утверждения. Поддержка утверждений скоро появится.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Możesz przesłać tylko jeden plik naraz.",
     "file_size_limit": "Plik musi być mniejszy niż {size}MB.",
     "drag_and_drop": "Przeciągnij plik w dowolne miejsce, aby przesłać",
-    "delete": "Usuń załącznik"
+    "delete": "Usuń załącznik",
+    "editor_image": {
+      "insert_failed": "Nie udało się wstawić obrazów. Spróbuj ponownie.",
+      "invalid": "Obsługiwane są tylko obrazy JPEG, JPG, PNG, WebP i GIF.",
+      "upload": "Prześlij obrazy"
+    },
+    "create": {
+      "draft_notice": "Załączniki są przesyłane po zapisaniu elementu pracy; szkic ich nie zachowuje.",
+      "hint": "Przesyłane automatycznie po zapisaniu elementu pracy.",
+      "remove": "Usuń załącznik",
+      "title": "Załączniki",
+      "upload_failed": "Element pracy został utworzony, ale nie przesłano {failed} z {total} załączników: {names}. Spróbuj ponownie w elemencie pracy.",
+      "zone_title": "Przeciągnij pliki tutaj lub kliknij, aby wybrać wiele plików"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Wybierz etykietę",
@@ -954,5 +979,8 @@
     "session_expired": "Poprzednia sesja wygasła, rozpoczęto nową.",
     "interrupt_notice": "Działanie zostało przerwane i wymaga zatwierdzenia. Obsługa zatwierdzeń wkrótce będzie dostępna.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

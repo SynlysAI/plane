@@ -145,6 +145,7 @@ export type CoreEditorRefApi = {
   copyMarkdownToClipboard: () => void;
   getSelectedText: () => string | null;
   getSelectionAnchor: () => TEditorSelectionAnchor | null;
+  insertImageFiles: (files: File[]) => boolean;
   insertText: (contentHTML: string, insertOnNextLine?: boolean) => void;
   isAnyDropbarOpen: () => boolean;
   isEditorReadyToDiscard: () => boolean;

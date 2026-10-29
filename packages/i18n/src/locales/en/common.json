@@ -810,7 +810,32 @@
     "count_limit": "A work item can have at most {count} attachments.",
     "file_size_limit": "File must be of {size}MB or less in size.",
     "drag_and_drop": "Drag and drop anywhere to upload",
-    "delete": "Delete attachment"
+    "delete": "Delete attachment",
+    "editor_image": {
+      "insert_failed": "Image insertion failed. Please try again.",
+      "invalid": "Only JPEG, JPG, PNG, WebP, or GIF image files are supported.",
+      "upload": "Upload images"
+    },
+    "create": {
+      "draft_notice": "Attachments upload after the work item is saved; saving a draft does not keep them.",
+      "hint": "Uploaded automatically after the work item is saved.",
+      "remove": "Remove attachment",
+      "title": "Attachments",
+      "upload_failed": "The work item was created, but {failed} of {total} attachments failed to upload: {names}. Please retry from the work item.",
+      "zone_title": "Drag files here, or click to select multiple files"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Add labels",
@@ -3377,5 +3402,8 @@
     "disclaimer": "AI-generated content, for reference only.",
     "approve": "Approve",
     "reject": "Reject"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

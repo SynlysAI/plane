@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Apenas um arquivo pode ser enviado por vez.",
     "file_size_limit": "O arquivo deve ter {size}MB ou menos.",
     "drag_and_drop": "Arraste e solte em qualquer lugar para enviar",
-    "delete": "Excluir anexo"
+    "delete": "Excluir anexo",
+    "editor_image": {
+      "insert_failed": "Falha ao inserir imagens. Tente novamente.",
+      "invalid": "Somente imagens JPEG, JPG, PNG, WebP ou GIF são suportadas.",
+      "upload": "Enviar imagens"
+    },
+    "create": {
+      "draft_notice": "Os anexos são enviados após salvar o item de trabalho; o rascunho não os mantém.",
+      "hint": "Enviados automaticamente após salvar o item de trabalho.",
+      "remove": "Remover anexo",
+      "title": "Anexos",
+      "upload_failed": "O item de trabalho foi criado, mas {failed} de {total} anexos falharam no envio: {names}. Tente novamente no item.",
+      "zone_title": "Arraste arquivos aqui ou clique para selecionar vários"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Selecionar etiqueta",
@@ -954,5 +979,8 @@
     "session_expired": "A sessão anterior expirou. Uma nova sessão foi iniciada.",
     "interrupt_notice": "A execução foi interrompida e requer aprovação. O gerenciamento de aprovações chega em breve.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

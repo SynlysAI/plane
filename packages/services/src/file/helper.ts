@@ -10,6 +10,23 @@ import { fileTypeFromBuffer } from "file-type";
 import type { TFileMetaDataLite, TFileSignedURLResponse } from "@plane/types";
 import { DANGEROUS_EXTENSIONS } from "@plane/constants";
 
+const CFB_MIME_TYPE = "application/x-cfb";
+const LEGACY_OFFICE_CFB_MIME_BY_EXTENSION: Record<string, string> = {
+  doc: "application/msword",
+  xls: "application/vnd.ms-excel",
+  ppt: "application/vnd.ms-powerpoint",
+};
+
+/**
+ * @description 从文件名中提取小写扩展名。
+ * @param {string} filename
+ * @returns 不带点号的扩展名；无扩展名时返回空字符串。
+ */
+const getFileExtension = (filename: string): string => {
+  const parts = filename.split(".");
+  return parts.length > 1 ? (parts[parts.length - 1]?.toLowerCase() ?? "") : "";
+};
+
 /**
  * @description Filename validation - checks for double extensions and dangerous patterns
  * @param {string} filename
@@ -75,7 +92,11 @@ const detectMimeTypeFromSignature = async (file: File): Promise<string> => {
     const uint8Array = new Uint8Array(buffer);
 
     const fileType = await fileTypeFromBuffer(uint8Array);
-    return fileType?.mime || "";
+    const mimeType = fileType?.mime || "";
+    if (mimeType !== CFB_MIME_TYPE) return mimeType;
+
+    // CFB 只能说明文件是 OLE 复合文档；仅在扩展名明确属于旧版 Office 时归一。
+    return LEGACY_OFFICE_CFB_MIME_BY_EXTENSION[getFileExtension(file.name)] ?? mimeType;
   } catch (_error) {
     return "";
   }

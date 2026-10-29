@@ -16,7 +16,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // types
 import type { TAttachmentOperations } from "../issue-detail-widgets/attachments/helper";
 
-type TAttachmentOperationsModal = Pick<TAttachmentOperations, "create">;
+type TAttachmentOperationsModal = Pick<TAttachmentOperations, "createMany">;
 
 type Props = {
   workspaceSlug: string;
@@ -44,23 +44,22 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
         setValidationError(null);
         return;
       }
-      const currentFile: File = acceptedFiles[0];
-      if (!currentFile || !workspaceSlug) return;
+      if (acceptedFiles.length === 0 || !workspaceSlug) return;
 
       const attachmentCount = getAttachmentsByIssueId(issueId)?.length ?? 0;
-      if (attachmentCount >= MAX_FILE_ATTACHMENTS) {
+      if (attachmentCount + acceptedFiles.length > MAX_FILE_ATTACHMENTS) {
         setValidationError(t("attachment.count_limit", { count: MAX_FILE_ATTACHMENTS }));
         return;
       }
 
-      const limitError = getLimitError(currentFile);
+      const limitError = acceptedFiles.map((file) => getLimitError(file)).find(Boolean);
       if (limitError) {
         setValidationError(limitError);
         return;
       }
       setValidationError(null);
       setIsLoading(true);
-      attachmentOperations.create(currentFile).finally(() => setIsLoading(false));
+      attachmentOperations.createMany(acceptedFiles).finally(() => setIsLoading(false));
     },
     [attachmentOperations, getAttachmentsByIssueId, getLimitError, issueId, t, workspaceSlug]
   );
@@ -68,7 +67,7 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
   const { getRootProps, getInputProps, isDragActive, isDragReject, fileRejections } = useDropzone({
     onDrop,
     maxSize: maxFileSize,
-    multiple: false,
+    multiple: true,
     disabled: limitsLoading || isLoading || disabled,
   });
 
@@ -91,7 +90,7 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
         ) : isLoading ? (
           <p className="text-center">Uploading...</p>
         ) : (
-          <p className="text-center">Click or drag a file here</p>
+          <p className="text-center">Click or drag files or folders here</p>
         )}
       </span>
     </div>

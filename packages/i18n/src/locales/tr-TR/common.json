@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Aynı anda yalnızca bir dosya yüklenebilir.",
     "file_size_limit": "Dosya boyutu {size}MB veya daha az olmalıdır.",
     "drag_and_drop": "Yüklemek için herhangi bir yere sürükleyip bırakın",
-    "delete": "Eki sil"
+    "delete": "Eki sil",
+    "editor_image": {
+      "insert_failed": "Görseller eklenemedi. Tekrar deneyin.",
+      "invalid": "Yalnızca JPEG, JPG, PNG, WebP ve GIF görselleri desteklenir.",
+      "upload": "Görsel yükle"
+    },
+    "create": {
+      "draft_notice": "Ekler iş öğesi kaydedildikten sonra yüklenir; taslak bunları saklamaz.",
+      "hint": "İş öğesi kaydedildikten sonra otomatik yüklenir.",
+      "remove": "Eki kaldır",
+      "title": "Ekler",
+      "upload_failed": "İş öğesi oluşturuldu ama {total} ekten {failed} tanesi yüklenemedi: {names}. İş öğesinden tekrar deneyin.",
+      "zone_title": "Dosyaları buraya sürükleyin veya birden çok dosya seçmek için tıklayın"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Etiket seç",
@@ -954,5 +979,8 @@
     "session_expired": "Önceki oturumun süresi doldu. Yeni bir oturum başlatıldı.",
     "interrupt_notice": "Çalışma kesintiye uğradı ve onay gerektiriyor. Onay yönetimi yakında kullanıma sunulacak.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

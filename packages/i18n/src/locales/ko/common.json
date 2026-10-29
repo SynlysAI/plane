@@ -810,7 +810,32 @@
     "only_one_file_allowed": "한 번에 하나의 파일만 업로드할 수 있습니다.",
     "file_size_limit": "파일 크기는 {size}MB 이하이어야 합니다.",
     "drag_and_drop": "업로드하려면 아무 곳에나 드래그 앤 드롭하세요",
-    "delete": "첨부 파일 삭제"
+    "delete": "첨부 파일 삭제",
+    "editor_image": {
+      "insert_failed": "이미지를 삽입하지 못했습니다. 다시 시도하세요.",
+      "invalid": "JPEG, JPG, PNG, WebP, GIF 이미지만 지원됩니다.",
+      "upload": "이미지 업로드"
+    },
+    "create": {
+      "draft_notice": "첨부 파일은 작업 항목 저장 후 업로드되며 초안에는 저장되지 않습니다.",
+      "hint": "작업 항목 저장 후 자동으로 업로드됩니다.",
+      "remove": "첨부 파일 제거",
+      "title": "첨부 파일",
+      "upload_failed": "작업 항목이 생성되었지만 전체 {total}개 중 {failed}개 첨부 파일을 업로드하지 못했습니다: {names}. 작업 항목에서 다시 시도하세요.",
+      "zone_title": "여기로 파일을 끌어오거나 클릭해서 여러 개 선택"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "레이블 선택",
@@ -954,5 +979,8 @@
     "session_expired": "이전 세션이 만료되어 새 세션을 시작했습니다.",
     "interrupt_notice": "실행이 중단되어 승인이 필요합니다. 승인 기능은 곧 제공될 예정입니다.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

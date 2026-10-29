@@ -14,6 +14,7 @@ import { useTranslation } from "@plane/i18n";
 import type { MakeOptional, TSearchEntityRequestPayload, TSearchResponse } from "@plane/types";
 import { cn, isCommentEmpty } from "@plane/utils";
 // components
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { EditorMentionsRoot } from "@/components/editor/embeds/mentions";
 import { IssueCommentToolbar } from "@/components/editor/lite-text/toolbar";
 // hooks
@@ -215,7 +216,6 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
         )}
       </div>
 
-      {attachmentContent}
       {editable && onAttachFiles && (
         <input
           ref={fileInputRef}
@@ -230,6 +230,16 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
           }}
         />
       )}
+      {editable && onAttachFiles && (
+        <AttachmentUploadZone
+          onFiles={onAttachFiles}
+          multiple
+          disabled={isSubmitting}
+          variant="compact"
+          className="mt-2"
+        />
+      )}
+      {attachmentContent}
 
       {/* Full Toolbar - conditionally rendered */}
       {isFullVariant && editable && (

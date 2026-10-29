@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Можна завантажити лише один файл одночасно.",
     "file_size_limit": "Файл має бути меншим за {size}МБ.",
     "drag_and_drop": "Перетягніть файл сюди для завантаження",
-    "delete": "Видалити вкладення"
+    "delete": "Видалити вкладення",
+    "editor_image": {
+      "insert_failed": "Не вдалося вставити зображення. Спробуйте ще раз.",
+      "invalid": "Підтримуються лише зображення JPEG, JPG, PNG, WebP і GIF.",
+      "upload": "Завантажити зображення"
+    },
+    "create": {
+      "draft_notice": "Вкладення завантажуються після збереження робочого елемента; чернетка їх не зберігає.",
+      "hint": "Автоматично завантажуються після збереження робочого елемента.",
+      "remove": "Видалити вкладення",
+      "title": "Вкладення",
+      "upload_failed": "Робочий елемент створено, але не вдалося завантажити {failed} із {total} вкладень: {names}. Повторіть в робочому елементі.",
+      "zone_title": "Перетягніть файли сюди або натисніть, щоб вибрати кілька файлів"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Вибрати мітку",
@@ -954,5 +979,8 @@
     "session_expired": "Попередній сеанс завершився, розпочато новий.",
     "interrupt_notice": "Виконання перервано й потребує підтвердження. Підтримка підтверджень з'явиться незабаром.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }

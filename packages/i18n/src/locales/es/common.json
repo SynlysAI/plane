@@ -810,7 +810,32 @@
     "only_one_file_allowed": "Solo se puede subir un archivo a la vez.",
     "file_size_limit": "El archivo debe tener {size}MB o menos de tamaño.",
     "drag_and_drop": "Arrastra y suelta en cualquier lugar para subir",
-    "delete": "Eliminar archivo adjunto"
+    "delete": "Eliminar archivo adjunto",
+    "editor_image": {
+      "insert_failed": "No se pudieron insertar las imágenes. Inténtalo de nuevo.",
+      "invalid": "Solo se admiten imágenes JPEG, JPG, PNG, WebP o GIF.",
+      "upload": "Subir imágenes"
+    },
+    "create": {
+      "draft_notice": "Los adjuntos se suben al guardar el elemento de trabajo; el borrador no los conserva.",
+      "hint": "Se suben automáticamente al guardar el elemento de trabajo.",
+      "remove": "Quitar adjunto",
+      "title": "Adjuntos",
+      "upload_failed": "El elemento de trabajo se creó, pero {failed} de {total} adjuntos no se subieron: {names}. Reinténtalo desde el elemento.",
+      "zone_title": "Arrastra archivos aquí o haz clic para seleccionar varios"
+    },
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    }
   },
   "label": {
     "select": "Seleccionar etiqueta",
@@ -954,5 +979,8 @@
     "session_expired": "La sesión anterior caducó. Se ha iniciado una nueva.",
     "interrupt_notice": "La ejecución se interrumpió y requiere aprobación. La gestión de aprobaciones llegará pronto.",
     "shortcut_hint": "Cmd+J"
-  }
+  },
+  "project_required_to_save": "Select a project before saving",
+  "select_project": "Select project",
+  "clear_project": "Clear project"
 }
