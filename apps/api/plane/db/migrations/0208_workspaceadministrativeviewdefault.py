@@ -8,6 +8,9 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+    # 兼容重编号前已应用的本地迁移记录。
+    replaces = [("db", "0207_workspaceadministrativeviewdefault")]
+
     dependencies = [
         ("db", "0207_research_approval_routes"),
     ]

@@ -32,6 +32,8 @@ def backfill_report_routes(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # 本地中间部署曾以 0206 应用过本迁移；重编号后保留替换关系。
+    replaces = [("db", "0206_research_approval_routes")]
 
     dependencies = [
         ('db', '0206_administrative_required_work_item_fields'),

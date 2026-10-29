@@ -8,6 +8,9 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     """Link stage material items to scoped research chain uploads."""
 
+    # 兼容重编号前已应用的本地迁移记录。
+    replaces = [("db", "0208_stage_material_upload_link")]
+
     dependencies = [
         ("db", "0208_workspaceadministrativeviewdefault"),
     ]
