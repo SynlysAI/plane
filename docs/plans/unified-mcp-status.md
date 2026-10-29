@@ -468,3 +468,7 @@ $env:DJANGO_SETTINGS_MODULE = 'unified_phase5_settings'
 最新前端十文件 **117 passed**；原名称校验用例改为参数化，保留全部输入断言，严格 lint 的循环警告已消除。新入口和脚本 Ruff 检查通过，相关前端严格 lint 通过；凭据扫描未发现真实密钥。类型和页面构建沿用本轮删除入口后的成功验证，生产源码未再修改。后端沿用同步后的 **207 passed / 1 failed** 加受影响文件 **4 passed** 复验结果，详细环境原因见前节，不将两轮数字相加或宣称同次全通过。
 
 提交前快照、文件清单、凭据扫描和最新前端日志在本机忽略目录 `.runtime/unified-mcp-pr-20261029/`，不随合并请求发布。ScienceDiscovery 目标 Agent 验证、生产升级及发布验收仍需按发布说明执行。
+
+### GitHub 提交结果
+
+功能提交 `989f79ba` 已推送至 `codex/unified-mcp-20261029`，已创建 [PR #40：统一行政与科研连接，简化 MCP 配置页](https://github.com/SynlysAI/plane/pull/40)，目标分支为 `develop`，状态为 open、非草稿、等待合并。正常提交检查通过，未自动合并或部署。GitHub 连接器创建请求返回集成权限 403 后，使用本机原有 Git 登录完成创建；凭据仅在内存中使用，未写入提交或日志。
