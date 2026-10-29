@@ -4,5 +4,5 @@ requires-python = ">=3.12"
 
 [[package]]
 name = "plane"
-version = "8.11.0"
+version = "8.11.1"
 source = { virtual = "." }
