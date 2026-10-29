@@ -45,6 +45,7 @@ beforeEach(() => {
   mocks.getKnowledgeBases.mockResolvedValue({
     items: [{ external_id: "kb-1", title: "Materials" }],
     degraded: false,
+    uploadLimits: { pdf_max_mb: 500, markdown_max_mb: 500, office_max_mb: 500 },
   });
   mocks.getKnowledgeUploads.mockResolvedValue({ data: [] });
   mocks.uploadKnowledgeFile.mockResolvedValue({
@@ -97,7 +98,7 @@ it("uploads a selected file to the bound group library without a library selecto
   expect(container.querySelector("h3")?.textContent).toContain("课题资料");
   expect(container.querySelector("select")).toBeNull();
   expect(container.textContent).toContain("选择资料");
-  expect(container.textContent).toContain("单文件不超过 50MB");
+  expect(container.textContent).toContain("PDF ≤ 500MB；Markdown/TXT ≤ 500MB；DOC/DOCX ≤ 500MB");
   await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
 
   expect(mocks.uploadKnowledgeFile).toHaveBeenCalledWith(
@@ -167,6 +168,43 @@ it("keeps the upload record available when reference confirmation fails", async 
   expect(container.textContent).toContain("选择资料");
 });
 
+it("shows a success state after confirming a reference", async () => {
+  await renderPanel();
+  await act(async () => undefined);
+  await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "确认引用")?.click();
+  });
+
+  expect(mocks.confirmKnowledgeReference).toHaveBeenCalled();
+  expect(container.textContent).toContain("引用已确认");
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "确认引用")).toBe(false);
+});
+
+it("shows confirmation progress while the reference request is pending", async () => {
+  let resolveConfirmation: (() => void) | undefined;
+  mocks.confirmKnowledgeReference.mockReturnValueOnce(
+    new Promise<void>((resolve) => {
+      resolveConfirmation = resolve;
+    })
+  );
+  await renderPanel();
+  await act(async () => undefined);
+  await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "确认引用")?.click();
+    await Promise.resolve();
+  });
+
+  const confirmingButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "确认中");
+  expect(confirmingButton?.disabled).toBe(true);
+
+  await act(async () => resolveConfirmation?.());
+  expect(container.textContent).toContain("引用已确认");
+});
+
 it("keeps validation failures actionable instead of presenting them as upstream degradation", async () => {
   mocks.uploadKnowledgeFile.mockRejectedValueOnce({ error_code: "file_type_not_allowed" });
   await renderPanel();
@@ -187,19 +225,25 @@ it("explains a gateway 413 response as the research-chain size limit", async () 
   await act(async () => undefined);
   await selectFile(new File(["paper"], "paper.pdf", { type: "application/pdf" }));
 
-  expect(container.textContent).toContain("文件被网关拒绝，研究链资料单文件不能超过 50MB。");
+  expect(container.textContent).toContain("文件被网关拒绝，PDF 资料单文件不能超过 500MB。");
   expect(mocks.uploadKnowledgeFile).toHaveBeenCalled();
 });
 
-it("rejects files over 50MB before sending a request", async () => {
+it("rejects a file over the returned Markdown limit before sending a request", async () => {
+  mocks.getKnowledgeBases.mockReset();
+  mocks.getKnowledgeBases.mockResolvedValueOnce({
+    items: [{ external_id: "kb-1", title: "Materials" }],
+    degraded: false,
+    uploadLimits: { pdf_max_mb: 500, markdown_max_mb: 5, office_max_mb: 50 },
+  });
   await renderPanel();
   await act(async () => undefined);
 
-  const file = new File(["paper"], "large.pdf", { type: "application/pdf" });
-  Object.defineProperty(file, "size", { value: 50 * 1024 * 1024 + 1 });
+  const file = new File(["paper"], "large.md", { type: "text/markdown" });
+  Object.defineProperty(file, "size", { value: 5 * 1024 * 1024 + 1 });
   await selectFile(file);
 
-  expect(container.textContent).toContain("文件超过大小限制。");
+  expect(container.textContent).toContain("文件超过限制，Markdown/TXT 资料单文件不能超过 5MB。");
   expect(mocks.uploadKnowledgeFile).not.toHaveBeenCalled();
 });
 

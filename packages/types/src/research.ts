@@ -181,6 +181,12 @@ export type TResearchChain = {
   updated_at: string;
 };
 
+export type TResearchChainUploadLimits = {
+  pdf_max_mb: number;
+  markdown_max_mb: number;
+  office_max_mb: number;
+};
+
 export type TResearchChainSummaryNode = {
   id: string;
   title: string;

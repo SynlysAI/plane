@@ -20,6 +20,11 @@ import {
 
 const agentService = new ResearchAgentService();
 
+type TAgentFileUploadFailure = {
+  file: File;
+  message: string;
+};
+
 /** SD 十类产物 kind → Plane 六类快照类型的默认收敛（§15.3，可按真实样本调整）。 */
 const SD_ARTIFACT_TYPE_MAP: Record<string, string> = {
   report: "ANALYSIS_SUMMARY",
@@ -59,7 +64,8 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
   const [reconnecting, setReconnecting] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadError, setUploadError] = useState("");
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [failedUploads, setFailedUploads] = useState<TAgentFileUploadFailure[]>([]);
   const [artifactDrawerOpen, setArtifactDrawerOpen] = useState(false);
   const [artifactDraft, setArtifactDraft] = useState("");
   const [artifactType, setArtifactType] = useState("ANALYSIS_SUMMARY");
@@ -91,6 +97,10 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     setApprovalFor(null);
     setApprovalResult("");
     setApprovalError("");
+    setUploadingFile(false);
+    setUploadError("");
+    setUploadedFiles([]);
+    setFailedUploads([]);
 
     const closeQuietly = async (value: TResearchAgentSession | null) => {
       if (!value || value.status === "CLOSED") return;
@@ -266,23 +276,29 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     }
   }, [message, sending, workspaceSlug, reports]);
 
-  /** 上传一个分析文件到当前会话的 ScienceDiscovery 工作区（任意类型，§9）。 */
-  const uploadFile = useCallback(
-    async (file: File) => {
+  /** 逐个上传分析文件到当前会话的 ScienceDiscovery 工作区，失败不影响后续文件。 */
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
       const current = sessionRef.current;
-      if (!current || uploadingFile) return;
+      if (!current || uploadingFile || files.length === 0) return;
       setUploadingFile(true);
       setUploadError("");
-      setUploadedFile(null);
-      try {
-        const result = await agentService.uploadSessionFile(workspaceSlug, current.session_id, file);
-        if (result.event) setEvents((previous) => mergeAgentEvents(previous, [result.event!]));
-        setUploadedFile(result.upload?.file_name ?? file.name);
-      } catch (failure) {
-        setUploadError((failure as { message?: string })?.message ?? t("research.agent.file_upload_error"));
-      } finally {
-        setUploadingFile(false);
+      setFailedUploads((previous) => previous.filter((failure) => !files.includes(failure.file)));
+
+      /* eslint-disable no-await-in-loop -- 顺序上传保持 ScienceDiscovery 工作区事件顺序稳定。 */
+      for (const file of files) {
+        try {
+          const result = await agentService.uploadSessionFile(workspaceSlug, current.session_id, file);
+          if (result.event) setEvents((previous) => mergeAgentEvents(previous, [result.event!]));
+          setUploadedFiles((previous) => [...previous, result.upload?.file_name ?? file.name]);
+        } catch (failure) {
+          const failureMessage = (failure as { message?: string })?.message ?? t("research.agent.file_upload_error");
+          setUploadError(failureMessage);
+          setFailedUploads((previous) => [...previous, { file, message: failureMessage }]);
+        }
       }
+      /* eslint-enable no-await-in-loop */
+      setUploadingFile(false);
     },
     [t, uploadingFile, workspaceSlug]
   );
@@ -435,7 +451,8 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     reconnecting,
     uploadingFile,
     uploadError,
-    uploadedFile,
+    uploadedFiles,
+    failedUploads,
     artifactDrawerOpen,
     setArtifactDrawerOpen,
     artifactDraft,
@@ -462,7 +479,7 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     stop,
     reconnect,
     send,
-    uploadFile,
+    uploadFiles,
     saveArtifact,
     prepareArtifactSave,
     downloadArtifact,

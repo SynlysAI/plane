@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useTranslation } from "@plane/i18n";
+import type { TResearchChainUploadLimits } from "@plane/types";
 
 import { getResearchErrorDetail, getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchChainService, type TResearchChainUpload } from "@/services/research/chain.service";
 
-export const RESEARCH_CHAIN_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 export const LINKABLE_UPLOAD_STATUSES = new Set(["PROCESSING", "SUCCESS"]);
+export const DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS: TResearchChainUploadLimits = {
+  pdf_max_mb: 500,
+  markdown_max_mb: 500,
+  office_max_mb: 500,
+};
+
+export type TResearchChainFileLimit = {
+  kind: "PDF" | "MARKDOWN" | "OFFICE";
+  label: string;
+  maxMb: number;
+};
 
 type TPanelState = "idle" | "loading" | "ready" | "degraded" | "forbidden" | "error";
 const KB_READY_STATE = "READY";
@@ -24,6 +35,8 @@ export type TResearchChainKnowledgeController = {
   chainId: string;
   nodeId: string;
   uploads: TResearchChainUpload[];
+  uploadLimits?: TResearchChainUploadLimits;
+  maxUploadSizeBytes?: number;
   state: TPanelState;
   knowledgeBaseId: string;
   knowledgeState: string;
@@ -36,8 +49,33 @@ export type TResearchChainKnowledgeController = {
   load: () => Promise<void>;
   uploadFiles: (files: File[]) => Promise<TResearchChainUpload[]>;
   refreshUpload: (uploadId: string) => Promise<void>;
-  confirmUpload: (upload: TResearchChainUpload) => Promise<void>;
+  confirmUpload: (upload: TResearchChainUpload) => Promise<boolean>;
 };
+
+/** Resolve the effective client-side limit from a research material filename. */
+export function researchChainFileLimitForName(
+  fileName: string,
+  limits: TResearchChainUploadLimits
+): TResearchChainFileLimit | null {
+  const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (extension === "pdf") return { kind: "PDF", label: "PDF", maxMb: limits.pdf_max_mb };
+  if (["md", "markdown", "txt"].includes(extension)) {
+    return { kind: "MARKDOWN", label: "Markdown/TXT", maxMb: limits.markdown_max_mb };
+  }
+  if (["doc", "docx"].includes(extension)) {
+    return { kind: "OFFICE", label: "DOC/DOCX", maxMb: limits.office_max_mb };
+  }
+  return null;
+}
+
+/** Build the three type-specific values used by the shared upload hint. */
+export function researchChainUploadHintParams(limits: TResearchChainUploadLimits) {
+  return {
+    pdf: `${limits.pdf_max_mb}MB`,
+    markdown: `${limits.markdown_max_mb}MB`,
+    office: `${limits.office_max_mb}MB`,
+  };
+}
 
 /** Read one localized status label key for a scoped research upload. */
 export function researchChainUploadStatusKey(status: string): string {
@@ -64,6 +102,7 @@ export function useResearchChainKnowledge(
 ): TResearchChainKnowledgeController {
   const { t } = useTranslation();
   const [uploads, setUploads] = useState<TResearchChainUpload[]>([]);
+  const [uploadLimits, setUploadLimits] = useState<TResearchChainUploadLimits>(DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS);
   const [knowledgeBaseId, setKnowledgeBaseId] = useState("");
   const [state, setState] = useState<TPanelState>("idle");
   const [uploading, setUploading] = useState(false);
@@ -94,6 +133,7 @@ export function useResearchChainKnowledge(
       ]);
       if (generationRef.current !== generation) return;
       setKnowledgeState(payload.state ?? KB_READY_STATE);
+      setUploadLimits(payload.uploadLimits ?? DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS);
       setOrgUnitName(payload.orgUnitName ?? "");
       setConnectionStatus(payload.connectionStatus ?? "");
       setKnowledgeBaseId(payload.items[0]?.external_id ?? "");
@@ -122,8 +162,20 @@ export function useResearchChainKnowledge(
       setUploading(true);
       setDegradedReason("");
       setActionError("");
+      let activeFile: File | null = null;
       try {
         for (const file of files) {
+          activeFile = file;
+          const fileLimit = researchChainFileLimitForName(file.name, uploadLimits);
+          if (!fileLimit || file.size > fileLimit.maxMb * 1024 * 1024) {
+            setActionError(
+              t("research.knowledge.file_too_large", {
+                type: fileLimit?.label ?? "Research",
+                size: `${fileLimit?.maxMb ?? Math.max(...Object.values(uploadLimits))}MB`,
+              })
+            );
+            break;
+          }
           // Sequential uploads deliberately avoid concurrent RAGPortal parsing jobs.
           // oxlint-disable-next-line no-await-in-loop
           const payload = await chainService.uploadKnowledgeFile(workspaceSlug, chainId, nodeId, knowledgeBaseId, file);
@@ -143,10 +195,14 @@ export function useResearchChainKnowledge(
           const detail = (error as { error_code?: string }).error_code ? getResearchErrorDetail(error) : null;
           const errorKey = getResearchErrorKey(error);
           const translatedError = errorKey !== "research.errors.generic" ? t(errorKey) : null;
+          const fileLimit = researchChainFileLimitForName(activeFile?.name ?? "", uploadLimits);
           setDegradedReason("");
           setActionError(
             payload.status === 413
-              ? t("research.knowledge.gateway_too_large", { size: "50MB" })
+              ? t("research.knowledge.gateway_too_large", {
+                  type: fileLimit?.label ?? "Research",
+                  size: `${fileLimit?.maxMb ?? Math.max(...Object.values(uploadLimits))}MB`,
+                })
               : (translatedError ?? detail ?? t("research.knowledge.action_failed"))
           );
           setState(payload.error_code === "research_permission_denied" ? "forbidden" : "ready");
@@ -156,7 +212,7 @@ export function useResearchChainKnowledge(
       }
       return created;
     },
-    [chainId, knowledgeBaseId, knowledgeState, nodeId, t, uploading, workspaceSlug]
+    [chainId, knowledgeBaseId, knowledgeState, nodeId, t, uploadLimits, uploading, workspaceSlug]
   );
 
   const refreshUpload = useCallback(
@@ -175,17 +231,20 @@ export function useResearchChainKnowledge(
   );
 
   const confirmUpload = useCallback(
-    async (upload: TResearchChainUpload) => {
-      if (!nodeId) return;
+    async (upload: TResearchChainUpload): Promise<boolean> => {
+      if (!nodeId) return false;
       const generation = generationRef.current;
       setActionError("");
       try {
         await chainService.confirmKnowledgeReference(workspaceSlug, chainId, nodeId, upload);
-        if (generationRef.current !== generation) return;
+        if (generationRef.current !== generation) return false;
         setUploads((current) => current.map((item) => (item.id === upload.id ? { ...item, status: "SUCCESS" } : item)));
+        return true;
       } catch (error) {
+        if (generationRef.current !== generation) return false;
         const detail = (error as { error_code?: string }).error_code ? getResearchErrorDetail(error) : null;
         setActionError(detail ?? t("research.knowledge.action_failed"));
+        return false;
       }
     },
     [chainId, nodeId, t, workspaceSlug]
@@ -195,6 +254,8 @@ export function useResearchChainKnowledge(
     chainId,
     nodeId,
     uploads,
+    uploadLimits,
+    maxUploadSizeBytes: Math.max(...Object.values(uploadLimits)) * 1024 * 1024,
     state,
     knowledgeBaseId,
     knowledgeState,

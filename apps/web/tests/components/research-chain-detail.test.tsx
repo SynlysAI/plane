@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   getChainStageApprovals: vi.fn(),
   createChainNode: vi.fn(),
   transitionChainNode: vi.fn(),
+  submitChainStage: vi.fn(),
+  reviewChainStage: vi.fn(),
+  getNodeTasks: vi.fn(),
   openAssistant: vi.fn(),
   query: "tab=nodes",
   setSearchParams: vi.fn(),
@@ -122,6 +125,13 @@ vi.mock("@/services/research/chain.service", () => ({
     getChainStageApprovals = mocks.getChainStageApprovals;
     createChainNode = mocks.createChainNode;
     transitionChainNode = mocks.transitionChainNode;
+    submitChainStage = mocks.submitChainStage;
+    reviewChainStage = mocks.reviewChainStage;
+  },
+}));
+vi.mock("@/services/research/chain-task.service", () => ({
+  ResearchChainTaskService: class {
+    getNodeTasks = mocks.getNodeTasks;
   },
 }));
 
@@ -301,6 +311,9 @@ beforeEach(() => {
     ],
   });
   mocks.transitionChainNode.mockResolvedValue({ node, event: {} });
+  mocks.getNodeTasks.mockResolvedValue([]);
+  mocks.submitChainStage.mockResolvedValue({});
+  mocks.reviewChainStage.mockResolvedValue(stageApproval);
 });
 
 afterEach(async () => {
@@ -389,6 +402,145 @@ it("renders the authoritative stage approval summary and material gaps", async (
   expect(container.textContent).toContain("已提交 2/5");
   expect(container.textContent).toContain("待补充");
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("提交审核");
+});
+
+it("aggregates the chain overview and jumps straight into the current stage", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=overview";
+  mocks.getChainMembers.mockResolvedValue([
+    { user_id: "user-1", display_name: "李四", role: "OWNER", is_owner: true },
+    { user_id: "user-2", display_name: "张三", role: "MEMBER", is_owner: false },
+  ]);
+  mocks.getNodeTasks.mockResolvedValue([
+    {
+      id: "task-1",
+      title: "补充文献综述",
+      status: "ASSIGNED",
+      due_at: "2026-10-30T00:00:00Z",
+      assignee_detail: { id: "user-2", display_name: "张三" },
+    },
+  ]);
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.querySelector("[data-research-overview-command]")).not.toBeNull();
+  expect(container.textContent).toContain("当前阶段");
+  expect(container.textContent).toContain("文献调研");
+  expect(container.textContent).toContain("当前节点");
+  expect(container.textContent).toContain("材料 0/1");
+  expect(container.textContent).toContain("待办任务");
+  expect(container.textContent).toContain("补充文献综述");
+  expect(container.textContent).toContain("最近动态");
+  expect(container.textContent).toContain("创建节点");
+  expect(container.textContent).toContain("关键指标");
+  expect(container.textContent).toContain("阶段审批 3/13");
+  expect(container.textContent).toContain("李四 · 张三");
+  expect(container.textContent).toContain("快捷入口");
+
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "继续当前阶段")?.click();
+  });
+  expect(mocks.setSearchParams).toHaveBeenCalledTimes(1);
+  const nextParams = mocks.setSearchParams.mock.calls[0][0] as URLSearchParams;
+  expect(nextParams.get("tab")).toBe("nodes");
+  expect(nextParams.get("stage")).toBe("literature_review");
+  expect(nextParams.get("node")).toBe("node-1");
+
+  const openAgent = [...container.querySelectorAll("button")].find((button) => button.textContent === "请智能体分析");
+  await act(async () => openAgent?.click());
+  expect(mocks.openAssistant).toHaveBeenCalledWith("node-1");
+});
+
+it("keeps stage submit one click away once materials are ready", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=overview";
+  mocks.getChainStageApprovals.mockResolvedValue({
+    ...stageApprovalSummary,
+    stages: [
+      {
+        ...stageApproval,
+        materials: [{ ...stageApproval.materials[0], submitted_count: 5, complete: true }],
+        capabilities: {
+          schema_version: "research-capabilities.v1",
+          actions: {
+            submit: { allowed: true, reason_code: "", reason: "" },
+          },
+        },
+      },
+    ],
+  });
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  const submit = [...container.querySelectorAll("button")].find((button) => button.textContent === "提交审核");
+  expect(submit).not.toBeNull();
+  await act(async () => submit?.click());
+  expect(mocks.submitChainStage).toHaveBeenCalledWith("lab", "chain-1", "LITERATURE_REVIEW", {
+    node_id: "node-1",
+    requires_pi: undefined,
+  });
+});
+
+it("lets the current reviewer approve or return from the overview", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=overview";
+  mocks.getChainStageApprovals.mockResolvedValue({
+    ...stageApprovalSummary,
+    stages: [
+      {
+        ...stageApproval,
+        status: "AWAITING_ADVISOR",
+        capabilities: {
+          schema_version: "research-capabilities.v1",
+          actions: {
+            review: { allowed: true, reason_code: "", reason: "" },
+          },
+        },
+      },
+    ],
+  });
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("直接导师");
+
+  const approve = [...container.querySelectorAll("button")].find((button) => button.textContent === "通过");
+  await act(async () => approve?.click());
+  await act(async () => undefined);
+  await act(async () => undefined);
+  expect(mocks.reviewChainStage).toHaveBeenCalledWith("lab", "chain-1", "LITERATURE_REVIEW", {
+    action: "APPROVE",
+    comment: undefined,
+  });
+
+  const returnButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "驳回");
+  await act(async () => returnButton?.click());
+  const dialog = container.querySelector("[data-stage-return-dialog]");
+  expect(dialog).not.toBeNull();
+  await act(async () => {
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "确认驳回")?.click();
+  });
+  expect(container.textContent).toContain("驳回时请填写审批意见。");
+
+  const textarea = dialog?.querySelector("textarea");
+  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  await act(async () => {
+    if (textarea instanceof HTMLTextAreaElement) {
+      valueSetter?.call(textarea, "缺少实验记录");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "确认驳回")?.click();
+  });
+  expect(mocks.reviewChainStage).toHaveBeenCalledWith("lab", "chain-1", "LITERATURE_REVIEW", {
+    action: "RETURN",
+    comment: "缺少实验记录",
+  });
 });
 
 it("mounts the paper review panel with selected node events for paper writing replay", async () => {

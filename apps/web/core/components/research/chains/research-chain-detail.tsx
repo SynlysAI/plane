@@ -27,6 +27,7 @@ import { ResearchStatusBadge } from "@/components/research/common/research-statu
 import { ResearchTabLink } from "@/components/research/common/research-tab-link";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { pickCurrentNode } from "@/components/research/chains/research-selection";
+import { ResearchChainOverviewCommand } from "@/components/research/chains/research-chain-overview-command";
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
 import { ResearchChainStageApprovalPanel } from "@/components/research/chains/research-chain-stage-approval-panel";
 import { ResearchChainKnowledgePanel } from "@/components/research/chains/research-chain-knowledge-panel";
@@ -642,39 +643,77 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           </p>
         )}
 
+        {creatingNodeInline && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-backdrop p-4">
+            <form
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("research.chains.create_node_title")}
+              className="w-full max-w-md rounded-lg border border-subtle bg-surface-1 p-5 shadow-[0_8px_24px_rgba(37,37,34,0.16)]"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void createNode();
+              }}
+            >
+              <label className="flex flex-col gap-1 text-12 text-secondary">
+                <span>{t("research.chains.node_title")}</span>
+                <input
+                  value={nodeTitle}
+                  onChange={(event) => setNodeTitle(event.target.value)}
+                  placeholder={t("research.chains.node_title_placeholder")}
+                  className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
+                />
+              </label>
+              <div className="mt-3 flex justify-end gap-2">
+                <Button type="button" variant="secondary" size="base" onClick={() => setCreatingNodeInline(false)}>
+                  {t("research.chain_tasks.cancel_edit")}
+                </Button>
+                <Button variant="primary" size="base" type="submit" disabled={!nodeTitle.trim() || creating}>
+                  {t("research.chains.create_node")}
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {activeTab === "overview" && (
-          <section className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
-            <article className="rounded-lg border border-subtle bg-surface-1 p-4">
-              <h4 className="text-13 font-semibold text-primary">{t("research.chains.overview.meta")}</h4>
-              <dl className="mt-3 space-y-2 text-12">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-tertiary">{t("research.chains.status")}</dt>
-                  <dd className="text-primary">{t(`research.chains.chain_status.${chain?.status.toLowerCase()}`)}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-tertiary">{t("research.chains.visibility")}</dt>
-                  <dd className="text-primary">
-                    {t(`research.projects.chain_visibility.${chain?.visibility.toLowerCase()}`)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-tertiary">{t("research.chains.updated_at")}</dt>
-                  <dd className="text-primary">
-                    {chain ? formatResearchDateTime(chain.updated_at, currentLocale) : "-"}
-                  </dd>
-                </div>
-              </dl>
-            </article>
-            <article className="rounded-lg border border-subtle bg-surface-1 p-4">
-              <h4 className="text-13 font-semibold text-primary">{t("research.chains.overview.node_summary")}</h4>
-              <p className="mt-2 text-12 text-secondary">
-                {t("research.chains.overview.node_count", { count: nodes.length })}
-              </p>
-              <p className="mt-1 text-12 text-secondary">
-                {t("research.chains.overview.member_count", { count: members.length })}
-              </p>
-            </article>
-          </section>
+          <ResearchChainOverviewCommand
+            workspaceSlug={workspaceSlug}
+            chainId={chainId}
+            chain={chain}
+            nodes={nodes}
+            members={members}
+            currentNode={current}
+            stages={workflow.stages}
+            stageApprovalSummary={stageApprovalSummary}
+            onOpenStage={(stageId, nodeId, options) => {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.set("tab", "nodes");
+              nextParams.set("stage", stageId);
+              if (nodeId) nextParams.set("node", nodeId);
+              else nextParams.delete("node");
+              if (options?.taskId) nextParams.set("task", options.taskId);
+              else nextParams.delete("task");
+              if (options?.approval) nextParams.set("approval", "1");
+              else nextParams.delete("approval");
+              setSearchParams(nextParams);
+            }}
+            onOpenMembers={() => {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.set("tab", "members");
+              nextParams.delete("stage");
+              nextParams.delete("node");
+              nextParams.delete("task");
+              nextParams.delete("approval");
+              setSearchParams(nextParams);
+            }}
+            onCreateNode={() => {
+              setCreatingNodeInline(true);
+              setNodeTitle("");
+            }}
+            onOpenAgent={(nodeId) => assistant.openWithLocal(nodeId)}
+            onRefresh={() => load()}
+          />
         )}
 
         {activeTab === "nodes" && (
@@ -708,48 +747,6 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                       <span className="text-16 leading-none">+</span>
                       新增节点
                     </button>
-                    {creatingNodeInline && (
-                      <div className="fixed inset-0 z-40 flex items-center justify-center bg-backdrop p-4">
-                        <form
-                          role="dialog"
-                          aria-modal="true"
-                          aria-label={t("research.chains.create_node_title")}
-                          className="w-full max-w-md rounded-lg border border-subtle bg-surface-1 p-5 shadow-[0_8px_24px_rgba(37,37,34,0.16)]"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            void createNode();
-                          }}
-                        >
-                          <label className="flex flex-col gap-1 text-12 text-secondary">
-                            <span>{t("research.chains.node_title")}</span>
-                            <input
-                              value={nodeTitle}
-                              onChange={(event) => setNodeTitle(event.target.value)}
-                              placeholder={t("research.chains.node_title_placeholder")}
-                              className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary"
-                            />
-                          </label>
-                          <div className="mt-3 flex justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="base"
-                              onClick={() => setCreatingNodeInline(false)}
-                            >
-                              {t("research.chain_tasks.cancel_edit")}
-                            </Button>
-                            <Button
-                              variant="primary"
-                              size="base"
-                              type="submit"
-                              disabled={!nodeTitle.trim() || creating}
-                            >
-                              {t("research.chains.create_node")}
-                            </Button>
-                          </div>
-                        </form>
-                      </div>
-                    )}
                   </>
                 }
                 detailSlot={

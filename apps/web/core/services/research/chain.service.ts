@@ -14,6 +14,7 @@ import type {
   TResearchChainStageApprovalSummary,
   TResearchChainStageMaterialItem,
   TResearchChainSnapshot,
+  TResearchChainUploadLimits,
 } from "@plane/types";
 import { notifyWorkspaceTodosUpdated } from "@/helpers/workspace-todos.helper";
 import { APIService } from "@/services/api.service";
@@ -377,6 +378,7 @@ export class ResearchChainService extends APIService {
               org_unit_name?: string | null;
               connection_status?: "not_connected" | "connected" | "degraded";
               candidates?: TResearchKnowledgeCandidate[];
+              upload_limits?: TResearchChainUploadLimits;
             }
           | undefined;
         return {
@@ -390,6 +392,11 @@ export class ResearchChainService extends APIService {
           orgUnitName: payload?.org_unit_name ?? "",
           connectionStatus: payload?.connection_status ?? "",
           candidates: payload?.candidates ?? [],
+          uploadLimits: payload?.upload_limits ?? {
+            pdf_max_mb: 500,
+            markdown_max_mb: 500,
+            office_max_mb: 500,
+          },
         };
       })
       .catch((err) => {
