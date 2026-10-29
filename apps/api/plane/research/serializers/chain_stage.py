@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from plane.research.serializers.chain import ResearchChainUploadSerializer
 from plane.db.models import (
     ResearchChainStage,
     ResearchChainStageMaterialItem,
@@ -44,6 +45,7 @@ class ResearchChainStageMaterialItemSerializer(serializers.ModelSerializer):
     """Expose one submitted stage material item."""
 
     schema_version = serializers.SerializerMethodField()
+    upload_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = ResearchChainStageMaterialItem
@@ -55,6 +57,8 @@ class ResearchChainStageMaterialItemSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "source_node",
+            "upload",
+            "upload_detail",
             "external_reference",
             "request_id",
             "created_at",
@@ -63,6 +67,21 @@ class ResearchChainStageMaterialItemSerializer(serializers.ModelSerializer):
 
     def get_schema_version(self, _obj):
         return "research-chain-stage-material.v1"
+
+    def get_upload_detail(self, obj):
+        """Return only the file fields reviewers need to open a linked upload."""
+        if obj.upload_id is None:
+            return None
+        upload = ResearchChainUploadSerializer(obj.upload).data
+        return {
+            "id": upload["id"],
+            "status": upload["status"],
+            "file_name": upload["file_name"],
+            "file_size": upload["file_size"],
+            "preview_url": upload["preview_url"],
+            "download_url": upload["download_url"],
+            "error_code": upload["error_code"],
+        }
 
 
 class ResearchChainStageReviewActionSerializer(serializers.ModelSerializer):

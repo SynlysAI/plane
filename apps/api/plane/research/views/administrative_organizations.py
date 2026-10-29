@@ -303,30 +303,49 @@ class AdministrativeOrganizationMemberEndpoint(AdministrativeAPIView):
         role = request.data.get("role", AdministrativeOrganizationMember.Role.MEMBER)
         if role not in AdministrativeOrganizationMember.Role.values:
             return Response({"message": "Role is invalid."}, status=422)
-        relation = (
-            AdministrativeOrganizationMember.all_objects.filter(
-                workspace=workspace,
-                organization=organization,
-                member=member,
+        try:
+            with transaction.atomic():
+                relation = (
+                    AdministrativeOrganizationMember.all_objects.select_for_update()
+                    .filter(
+                        workspace=workspace,
+                        organization=organization,
+                        member=member,
+                    )
+                    .order_by("-updated_at")
+                    .first()
+                )
+                if relation is None:
+                    relation = AdministrativeOrganizationMember.objects.create(
+                        workspace=workspace,
+                        organization=organization,
+                        member=member,
+                        role=role,
+                        created_by=request.user,
+                    )
+                    created = True
+                elif relation.is_active and relation.deleted_at is None:
+                    return Response(
+                        {
+                            "code": "MEMBER_ALREADY_IN_ORGANIZATION",
+                            "message": "Member is already in this organization.",
+                        },
+                        status=409,
+                    )
+                else:
+                    relation.role = role
+                    relation.is_active = True
+                    relation.deleted_at = None
+                    relation.save(update_fields=["role", "is_active", "deleted_at", "updated_at"])
+                    created = False
+        except IntegrityError:
+            return Response(
+                {
+                    "code": "MEMBER_ALREADY_IN_ORGANIZATION",
+                    "message": "Member is already in this organization.",
+                },
+                status=409,
             )
-            .order_by("-updated_at")
-            .first()
-        )
-        if relation is None:
-            relation = AdministrativeOrganizationMember.objects.create(
-                workspace=workspace,
-                organization=organization,
-                member=member,
-                role=role,
-                created_by=request.user,
-            )
-            created = True
-        else:
-            relation.role = role
-            relation.is_active = True
-            relation.deleted_at = None
-            relation.save(update_fields=["role", "is_active", "deleted_at", "updated_at"])
-            created = False
         return Response(
             {"id": str(relation.member_id), "role": relation.role},
             status=201 if created else 200,

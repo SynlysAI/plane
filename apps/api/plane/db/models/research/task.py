@@ -13,8 +13,6 @@ class ResearchChainNodeTask(BaseModel):
     class Status(models.TextChoices):
         DRAFT = "DRAFT", "Draft"
         ASSIGNED = "ASSIGNED", "Assigned"
-        SUBMITTED = "SUBMITTED", "Submitted"
-        NEEDS_REVISION = "NEEDS_REVISION", "Needs revision"
         COMPLETED = "COMPLETED", "Completed"
         CANCELLED = "CANCELLED", "Cancelled"
 
@@ -59,8 +57,14 @@ class ResearchChainNodeTask(BaseModel):
         blank=True,
         related_name="assigned_by_research_chain_tasks",
     )
+    completed_by = models.ForeignKey(
+        "db.User",
+        on_delete=models.SET_NULL,
+        related_name="completed_research_chain_tasks",
+        null=True,
+        blank=True,
+    )
     due_at = models.DateTimeField(null=True, blank=True)
-    submitted_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     resource_type = models.CharField(
         max_length=24,

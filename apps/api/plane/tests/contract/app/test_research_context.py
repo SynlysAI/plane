@@ -116,6 +116,15 @@ def test_workspace_scoped_token_cannot_read_another_workspace(env):
 
 def test_context_does_not_return_an_unrelated_private_project(env):
     owner, workspace, _project = env
+    requester = make_user(first_name="Requester")
+    add_workspace_member(workspace, requester)
+    OrgUnitMember.objects.create(
+        workspace=workspace,
+        org_unit=OrgUnit.objects.get(workspace=workspace),
+        user=requester,
+        org_role=OrgUnitMember.OrgRole.REVIEWER,
+        is_primary=True,
+    )
     other = make_user(first_name="Other")
     add_workspace_member(workspace, other)
     OrgUnitMember.objects.create(
@@ -133,9 +142,9 @@ def test_context_does_not_return_an_unrelated_private_project(env):
         format="json",
     ).json()
 
-    owner_client = APIClient()
-    owner_client.force_authenticate(user=owner)
-    response = owner_client.get(
+    requester_client = APIClient()
+    requester_client.force_authenticate(user=requester)
+    response = requester_client.get(
         f"/api/research/workspaces/{workspace.slug}/context/?project_id={private_project['id']}"
     )
 
@@ -274,7 +283,7 @@ def test_report_resource_returns_only_latest_official_metadata_and_hides_drafts(
     page.save()
     submitted = owner_client.post(
         f"/api/research/workspaces/{workspace.slug}/reports/{report['id']}/submit/",
-        {},
+        {"reviewer_id": str(advisor.id), "cc_user_ids": []},
         format="json",
     )
     assert submitted.status_code == 200
@@ -304,6 +313,15 @@ def test_report_resource_returns_only_latest_official_metadata_and_hides_drafts(
 def test_material_and_experiment_resources_resolve_requested_version_metadata_only(env):
     owner, workspace, project = env
     stage = ResearchStageInstance.objects.filter(project_id=project["id"]).first()
+    if stage is None:
+        stage = ResearchStageInstance.objects.create(
+            workspace=workspace,
+            project_id=project["id"],
+            stage="PRE_OPENING",
+            status=ResearchStageInstance.Status.NOT_STARTED,
+            sort_order=1,
+            org_unit=OrgUnit.objects.get(workspace=workspace),
+        )
     material_page = Page.objects.create(
         workspace=workspace,
         owned_by=owner,

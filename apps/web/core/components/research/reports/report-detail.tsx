@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { observer } from "mobx-react";
 // plane imports
@@ -18,7 +18,6 @@ import {
 import type { TReportVisibility } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { TEditorCommentAnchor, TEditorSelectionAnchor } from "@plane/editor";
-import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, ModalCore } from "@plane/ui";
@@ -27,9 +26,11 @@ import { ReportBody, type ReportBodyRef } from "@/components/research/reports/re
 import { ResearchDeleteButton } from "@/components/research/common/research-delete-button";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchDetailHeader, ResearchDetailSurface } from "@/components/research/common/research-data-surface";
-import { formatShareText } from "@/components/research/common/share-link";
+import { ResearchApprovalRouteDialog } from "@/components/research/common/research-approval-route-dialog";
+import { ShareLinkIconButton } from "@/components/common/share-link-icon-button";
 import { ResearchReportAttachments } from "@/components/research/reports/report-attachments";
 import { ResearchReportComments, useResearchReportCommentsPanel } from "@/components/research/reports/report-comments";
+import { ResearchReportService } from "@/services/research/report.service";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -59,9 +60,11 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
   const { t, currentLocale } = useTranslation();
   const navigate = useNavigate();
   const research = useResearch();
+  const reportService = useMemo(() => new ResearchReportService(), []);
   const { getWorkspaceBySlug } = useWorkspace();
   const [returnReason, setReturnReason] = useState("");
   const [showReturn, setShowReturn] = useState(false);
+  const [showSubmitRoute, setShowSubmitRoute] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState("");
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -118,25 +121,42 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
     research.markReportRead(workspaceSlug, report.id).catch(() => undefined);
   }, [currentUserId, report, research, workspaceSlug]);
 
-  const handleSubmit = useCallback(async () => {
+  const loadApprovalRoute = useCallback(
+    () => reportService.getApprovalRoute(workspaceSlug, reportId),
+    [reportId, reportService, workspaceSlug]
+  );
+
+  const submitWithRoute = useCallback(
+    async (reviewerId: string, ccUserIds: string[]) => {
+      if (pendingAction) return;
+      setPendingAction("submit");
+      try {
+        if (!(await bodyRef.current?.save())) return;
+        await research.submitReport(workspaceSlug, reportId, {
+          reviewer_id: reviewerId,
+          cc_user_ids: ccUserIds,
+        });
+        await Promise.all([research.fetchReport(workspaceSlug, reportId), research.fetchReports(workspaceSlug)]);
+        setShowSubmitRoute(false);
+        setErrorKey(null);
+        setToast({
+          type: TOAST_TYPE.SUCCESS,
+          title: t("research.feedback.report_submitted.title"),
+          message: t("research.feedback.report_submitted.message"),
+        });
+      } catch (error) {
+        setErrorKey(getResearchErrorKey(error));
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [pendingAction, reportId, research, t, workspaceSlug]
+  );
+
+  const handleSubmit = useCallback(() => {
     if (pendingAction) return;
-    setPendingAction("submit");
-    try {
-      if (!(await bodyRef.current?.save())) return;
-      await research.submitReport(workspaceSlug, reportId);
-      await Promise.all([research.fetchReport(workspaceSlug, reportId), research.fetchReports(workspaceSlug)]);
-      setErrorKey(null);
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("research.feedback.report_submitted.title"),
-        message: t("research.feedback.report_submitted.message"),
-      });
-    } catch (error) {
-      setErrorKey(getResearchErrorKey(error));
-    } finally {
-      setPendingAction(null);
-    }
-  }, [pendingAction, reportId, research, t, workspaceSlug]);
+    setShowSubmitRoute(true);
+  }, [pendingAction]);
 
   const handleWithdraw = useCallback(async () => {
     if (pendingAction) return;
@@ -221,35 +241,10 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
     [pendingAction, report?.visibility, reportId, research, t, workspaceSlug]
   );
 
-  /** 复制带类型、周期与作者的当前报告分享文本。 */
-  const handleCopyLink = useCallback(async () => {
-    const title = [report?.period_key, authorName].filter(Boolean).join(" · ") || t("research.common.untitled");
-    try {
-      if (!report) return;
-      await copyTextToClipboard(
-        formatShareText(
-          t(REPORT_TYPE_LABELS[report.report_type]),
-          title,
-          `/${workspaceSlug}/research/reports/${reportId}`
-        )
-      );
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("research.common.share_copied_title"),
-        message: t("research.common.share_copied_message"),
-      });
-    } catch {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("research.common.share_copy_failed_title"),
-        message: t("research.common.share_copy_failed_message"),
-      });
-    }
-  }, [authorName, report, reportId, t, workspaceSlug]);
-
   if (!report) {
     return <p className="p-5 text-13 text-tertiary">{t("research.common.loading")}</p>;
   }
+  const shareTitle = [report.period_key, authorName].filter(Boolean).join(" · ") || t("research.common.untitled");
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto bg-canvas p-5">
@@ -265,6 +260,13 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
           <>
             {authorName && <span>{t("research.reports.author", { name: authorName })}</span>}
             <span>{t(REPORT_STATUS_LABELS[report.status])}</span>
+            {report.approval_route?.reviewer_detail && (
+              <span>
+                {t("research.reports.approval_reviewer", {
+                  name: report.approval_route.reviewer_detail.display_name,
+                })}
+              </span>
+            )}
             {readState && <span>{t(`research.reports.read.${readState}`)}</span>}
             {report.latest_read_at && (
               <span className="tabular-nums">
@@ -279,9 +281,12 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
         hint={t(`research.reports.next_step.${report.status.toLowerCase()}`)}
         actions={
           <>
-            <Button variant="secondary" size="sm" onClick={() => void handleCopyLink()}>
-              {t("copy_link")}
-            </Button>
+            <ShareLinkIconButton
+              typeLabel={t(REPORT_TYPE_LABELS[report.report_type])}
+              title={shareTitle}
+              href={`/${workspaceSlug}/research/reports/${reportId}`}
+              ariaLabel={t("research.common.copy_share_aria", { title: shareTitle })}
+            />
             {report.can_delete && (
               <ResearchDeleteButton
                 name={`${report.period_key} · ${t(REPORT_TYPE_LABELS[report.report_type])}`}
@@ -304,7 +309,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
                 size="sm"
                 loading={pendingAction === "submit"}
                 disabled={pendingAction !== null || bodyBusy}
-                onClick={() => void handleSubmit()}
+                onClick={handleSubmit}
               >
                 {t("research.reports.submit")}
               </Button>
@@ -396,6 +401,16 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
               <p className="mt-1 text-11 text-tertiary">{t("research.reports.visibility_confidential_hint")}</p>
             )}
           </ResearchDetailSurface>
+
+          <ResearchApprovalRouteDialog
+            open={showSubmitRoute}
+            title={t("research.reports.submit_approval_title")}
+            load={loadApprovalRoute}
+            submitting={pendingAction === "submit"}
+            serverError={errorKey ? t(errorKey) : undefined}
+            onSubmit={submitWithRoute}
+            onClose={() => pendingAction === null && setShowSubmitRoute(false)}
+          />
 
           <ModalCore isOpen={showReturn} handleClose={() => pendingAction === null && setShowReturn(false)}>
             <section className="bg-surface-1 p-5">

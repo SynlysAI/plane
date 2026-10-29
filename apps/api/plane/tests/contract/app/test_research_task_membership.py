@@ -9,8 +9,12 @@ import pytest
 from django.core.management import call_command
 from rest_framework.test import APIClient
 
-from plane.db.models import ProjectMember, ResearchChainNodeTask, ResearchChainEvent
-from plane.research.services.chain_tasks import ChainTaskPermissionError, submit_task
+from plane.db.models import (
+    ProjectMember,
+    ResearchChainNodeTask,
+    ResearchChainEvent,
+)
+from plane.research.services.chain_tasks import ChainTaskPermissionError, complete_task
 from plane.research.services.research_todos import collect_chain_task_todos
 from plane.tests.research_fixtures import make_research_boundary_fixture
 
@@ -48,7 +52,7 @@ def legacy_task(env, status="ASSIGNED"):
     Returns:
         新建的历史科研任务。
     """
-    return ResearchChainNodeTask.objects.create(
+    task = ResearchChainNodeTask.objects.create(
         workspace=env["workspace"],
         chain=env["chain"],
         node=env["paper_node"],
@@ -60,6 +64,7 @@ def legacy_task(env, status="ASSIGNED"):
         request_id=str(uuid4()),
         payload_hash="legacy",
     )
+    return task
 
 
 def test_nonmember_create_and_reassignment_rejected(env):
@@ -91,18 +96,31 @@ def test_membership_restores_todo_detail_comments_and_submission(env):
     member = ProjectMember.objects.create(project=env["project"], member=env["group_member"], role=15)
     data = env["member_client"].get(detail).json()["data"]
     assert data["assignee_is_valid"] is True
-    assert data["capabilities"]["actions"]["submit"]["allowed"] is True
+    assert data["capabilities"]["actions"]["complete"]["allowed"] is True
     assert env["member_client"].get(detail + "comments/").status_code == 200
-    todos = collect_chain_task_todos(env["workspace"], env["group_member"], "to_me")
+    todos = collect_chain_task_todos(env["workspace"], env["student"], "visible")
     assert [row["object_id"] for row in todos] == [str(task.id)]
     member.is_active = False
     member.save(update_fields=["is_active"])
-    assert env["member_client"].post(detail + "submit/", {"request_id": str(uuid4())}, format="json").status_code == 404
+    assert (
+        env["member_client"]
+        .post(
+            detail + "complete/",
+            {"request_id": str(uuid4())},
+            format="json",
+        )
+        .status_code
+        == 404
+    )
     member.is_active = True
     member.save(update_fields=["is_active"])
-    response = env["member_client"].post(detail + "submit/", {"request_id": str(uuid4())}, format="json")
+    response = env["member_client"].post(
+        detail + "complete/",
+        {"request_id": str(uuid4())},
+        format="json",
+    )
     assert response.status_code == 200, response.data
-    assert response.json()["data"]["status"] == "SUBMITTED"
+    assert response.json()["data"]["status"] == "COMPLETED"
 
 
 def test_submit_rechecks_membership_inside_transaction(env):
@@ -111,10 +129,15 @@ def test_submit_rechecks_membership_inside_transaction(env):
     ProjectMember.objects.create(project=env["project"], member=env["group_member"], role=15)
     with patch("plane.research.services.chain_tasks.validate_assignable_user", side_effect=[True, False]):
         with pytest.raises(ChainTaskPermissionError):
-            submit_task(task=task, actor=env["group_member"], request_id=str(uuid4()), content_hash="submit")
+            complete_task(
+                task=task,
+                actor=env["group_member"],
+                request_id=str(uuid4()),
+                content_hash="submit",
+            )
     task.refresh_from_db()
     assert task.status == "ASSIGNED"
-    assert not ResearchChainEvent.objects.filter(chain=env["chain"], event_type="TASK_SUBMITTED").exists()
+    assert not ResearchChainEvent.objects.filter(chain=env["chain"], event_type="TASK_COMPLETED").exists()
 
 
 def test_unassigned_task_reports_invalid_assignee(env):
@@ -134,17 +157,19 @@ def test_unassigned_task_reports_invalid_assignee(env):
     assert data["assignee"] is None
     assert data["assignee_detail"] is None
     assert data["assignee_is_valid"] is False
-    assert data["capabilities"]["actions"]["submit"]["allowed"] is False
+    assert data["capabilities"]["actions"]["complete"]["allowed"] is False
 
 
-def test_invalid_submitted_task_keeps_review_workflow(env):
-    """负责人失效不改变已经提交的审核流转。"""
-    task = legacy_task(env, status="SUBMITTED")
-    todos = collect_chain_task_todos(env["workspace"], env["advisor"], "to_me")
+def test_invalid_completed_task_cannot_be_reopened_by_assignee(env):
+    """负责人失效时不能回滚已完成的行动项。"""
+    task = legacy_task(env, status="COMPLETED")
+    task.completed_by = task.assignee
+    task.save(update_fields=["completed_by", "updated_at"])
+    todos = collect_chain_task_todos(env["workspace"], env["student"], "visible")
     row = next(row for row in todos if row["object_id"] == str(task.id))
-    assert row["handling_status"] == "IN_PROGRESS"
-    assert row["next_action"] == "REVIEW"
-    assert row["capabilities"]["actions"]["review"]["allowed"] is True
+    assert row["handling_status"] == "DONE"
+    assert row["next_action"] == "ASSIGN"
+    assert row["capabilities"]["actions"]["reopen"]["allowed"] is False
 
 
 def test_assignment_audit_is_read_only_and_scoped(env):

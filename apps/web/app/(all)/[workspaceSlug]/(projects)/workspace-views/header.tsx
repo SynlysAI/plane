@@ -7,11 +7,20 @@
 import { useCallback, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import useSWR from "swr";
+import { isEqual } from "lodash-es";
 // plane imports
-import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE, DEFAULT_GLOBAL_VIEWS_LIST } from "@plane/constants";
+import {
+  EIssueFilterType,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  ISSUE_DISPLAY_FILTERS_BY_PAGE,
+  DEFAULT_GLOBAL_VIEWS_LIST,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { ViewsOutline } from "@makeplane/propel/icons";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties, ICustomSearchSelectOption } from "@plane/types";
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
 import { Breadcrumbs, Header, BreadcrumbNavigationSearchDropdown } from "@plane/ui";
@@ -27,7 +36,11 @@ import { WorkspaceViewQuickActions } from "@/components/workspace/views/quick-ac
 // hooks
 import { useGlobalView } from "@/hooks/store/use-global-view";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { WorkspaceService } from "@/services/workspace.service";
+
+const workspaceService = new WorkspaceService();
 
 export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
   // states
@@ -41,7 +54,9 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
     issuesFilter: { filters, updateFilters },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { getViewDetailsById, currentWorkspaceViews } = useGlobalView();
+  const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
+  const [isSavingDefaultLayout, setIsSavingDefaultLayout] = useState(false);
 
   const issueFilters = globalViewId ? filters[globalViewId.toString()] : undefined;
 
@@ -75,6 +90,24 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
   const isDefaultView = DEFAULT_GLOBAL_VIEWS_LIST.find((view) => view.key === globalViewId);
 
   const defaultViewDetails = DEFAULT_GLOBAL_VIEWS_LIST.find((view) => view.key === globalViewId);
+  const canManageDefaultLayout = Boolean(
+    isDefaultView &&
+    workspaceSlug &&
+    allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE, workspaceSlug.toString())
+  );
+  const { data: savedDefaultLayout, mutate: mutateDefaultLayout } = useSWR(
+    canManageDefaultLayout && workspaceSlug
+      ? ["WORKSPACE_ADMINISTRATIVE_VIEW_DEFAULT", workspaceSlug.toString()]
+      : null,
+    ([, slug]) => workspaceService.fetchAdministrativeViewDefault(slug),
+    { revalidateIfStale: false, revalidateOnFocus: false, revalidateOnReconnect: false }
+  );
+  const hasDefaultLayoutChanges = Boolean(
+    canManageDefaultLayout &&
+    savedDefaultLayout &&
+    (!isEqual(issueFilters?.displayFilters, savedDefaultLayout.display_filters) ||
+      !isEqual(issueFilters?.displayProperties, savedDefaultLayout.display_properties))
+  );
 
   const defaultOptions = DEFAULT_GLOBAL_VIEWS_LIST.map((view) => ({
     value: view.key,
@@ -99,6 +132,31 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
     const layout = activeLayout ?? EIssueLayoutTypes.SPREADSHEET;
     return ISSUE_DISPLAY_FILTERS_BY_PAGE.my_issues.layoutOptions[layout];
   }, [activeLayout]);
+
+  const handleSaveDefaultLayout = useCallback(async () => {
+    if (!workspaceSlug || !issueFilters) return;
+    setIsSavingDefaultLayout(true);
+    try {
+      const savedLayout = await workspaceService.updateAdministrativeViewDefault(workspaceSlug.toString(), {
+        display_filters: { ...issueFilters.displayFilters },
+        display_properties: { ...issueFilters.displayProperties },
+      });
+      await mutateDefaultLayout(savedLayout, { revalidate: false });
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: "已同步给全部成员",
+        message: "成员下次进入或刷新系统默认视图时将使用该布局。",
+      });
+    } catch {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "保存失败",
+        message: "全员默认布局未保存，请稍后重试。",
+      });
+    } finally {
+      setIsSavingDefaultLayout(false);
+    }
+  }, [issueFilters, mutateDefaultLayout, workspaceSlug]);
 
   return (
     <>
@@ -138,7 +196,7 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
 
         <Header.RightItem className="items-center">
           {globalViewId && <WorkItemFiltersToggle entityType={EIssuesStoreType.GLOBAL} entityId={globalViewId} />}
-          {!isLocked && (
+          {!isLocked && (!isDefaultView || canManageDefaultLayout) && (
             <FiltersDropdown title={t("common.display")} placement="bottom-end">
               <DisplayFiltersSelection
                 layoutDisplayFiltersOptions={currentLayoutFilters}
@@ -148,6 +206,14 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
                 handleDisplayPropertiesUpdate={handleDisplayProperties}
               />
             </FiltersDropdown>
+          )}
+          {isDefaultView && !canManageDefaultLayout && (
+            <span className="text-12 text-tertiary">布局由工作区管理员统一设置</span>
+          )}
+          {hasDefaultLayoutChanges && (
+            <Button variant="secondary" size="lg" onClick={handleSaveDefaultLayout} disabled={isSavingDefaultLayout}>
+              {isSavingDefaultLayout ? "正在保存…" : "保存为全员默认布局"}
+            </Button>
           )}
           <Button variant="primary" size="lg" onClick={() => setCreateViewModal(true)}>
             {t("workspace_views.add_view")}

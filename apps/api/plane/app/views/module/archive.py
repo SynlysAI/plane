@@ -33,6 +33,7 @@ from plane.app.serializers import ModuleDetailSerializer
 from plane.db.models import Issue, Module, ModuleLink, UserFavorite, Project
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.timezone_converter import user_timezone_converter
+from plane.utils.work_item_required_fields import required_module_operation_error
 
 
 # Module imports
@@ -543,6 +544,9 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
 
     def post(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
+        required_error = required_module_operation_error(module.project, module)
+        if required_error is not None:
+            return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
         if module.status not in ["completed", "cancelled"]:
             return Response(
                 {"error": "Only completed or cancelled modules can be archived"},

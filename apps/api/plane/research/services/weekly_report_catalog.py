@@ -54,6 +54,12 @@ SCHEMAS = {
                 "period_key": {"type": "string", "minLength": 1, "maxLength": 8, "pattern": "^\\d{4}-W\\d{2}$"},
                 "expected_revision": {"type": "string", "minLength": 1, "maxLength": 2048},
                 "body_markdown": {"type": "string", "minLength": 1, "maxLength": 50000},
+                "reviewer_id": {"type": "string", "format": "uuid", "maxLength": 36},
+                "cc_user_ids": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {"type": "string", "format": "uuid", "maxLength": 36},
+                },
                 "source_refs": {
                     "type": "array",
                     "maxItems": 8,

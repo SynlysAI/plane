@@ -5,7 +5,12 @@ from uuid import UUID
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.db.models import ResearchChainEvent, ResearchChainNode, ResearchChainStageMaterialItem
+from plane.db.models import (
+    ResearchChainEvent,
+    ResearchChainNode,
+    ResearchChainStageMaterialItem,
+    ResearchChainUpload,
+)
 from plane.research.serializers.chain_stage import (
     ResearchChainStageMaterialItemSerializer,
     ResearchChainStagePrecheckSerializer,
@@ -91,7 +96,7 @@ class ResearchChainStageApprovalListEndpoint(ResearchAPIView):
         stages = list(
             chain.stage_approvals.filter(deleted_at__isnull=True)
             .prefetch_related(
-                "material_requirements__items",
+                "material_requirements__items__upload__workspace",
                 "review_actions__reviewer",
                 "prechecks",
             )
@@ -167,7 +172,7 @@ class ResearchChainStageApprovalBaseEndpoint(ResearchAPIView):
 
 
 class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint):
-    """Add a hard stage material item with request idempotency."""
+    """Link one research upload to a stage material requirement."""
 
     def post(self, request, slug, chain_id, stage_code):
         workspace, chain, error = self._chain(request, slug, chain_id)
@@ -183,43 +188,37 @@ class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint)
         permission_error = self._writable(request, chain)
         if permission_error:
             return permission_error
-        title = str(request.data.get("title") or "").strip()
         requirement_code = str(request.data.get("requirement_code") or "").strip()
-        if not title or not requirement_code:
+        if not requirement_code:
             return research_error(
                 ResearchErrorCode.CHAIN_INVALID,
-                "requirement_code and title are required.",
+                "requirement_code is required.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if len(title) > 500 or len(str(request.data.get("external_reference") or "")) > 1000:
+        if not request.data.get("upload_id"):
             return research_error(
                 ResearchErrorCode.CHAIN_INVALID,
-                "material title and external_reference exceed their length limits.",
+                "upload_id is required.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        source_node = None
-        if request.data.get("source_node_id"):
-            source_node_id, uuid_error = _uuid_value(request.data["source_node_id"], "source_node_id")
-            if uuid_error:
-                return uuid_error
-            source_node = ResearchChainNode.objects.filter(
-                pk=source_node_id, chain=chain, deleted_at__isnull=True
-            ).first()
-            if source_node is None:
-                return research_error(
-                    ResearchErrorCode.CHAIN_INVALID,
-                    "source_node_id is not an active node in this chain.",
-                    status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
+        upload_id, uuid_error = _uuid_value(request.data["upload_id"], "upload_id")
+        if uuid_error:
+            return uuid_error
+        upload = (
+            ResearchChainUpload.objects.select_related("workspace", "node").filter(pk=upload_id, chain=chain).first()
+        )
+        if upload is None:
+            return research_error(
+                ResearchErrorCode.CHAIN_INVALID,
+                "upload_id must reference an upload in this chain.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
         existing = ResearchChainStageMaterialItem.objects.filter(request_id=request_id).first()
         if existing is not None:
             same_payload = (
                 existing.stage_id == stage.id
                 and existing.requirement.code == requirement_code
-                and existing.title == title
-                and existing.description == str(request.data.get("description") or "").strip()
-                and existing.source_node_id == (source_node.id if source_node else None)
-                and existing.external_reference == str(request.data.get("external_reference") or "").strip()
+                and existing.upload_id == upload.id
             )
             if not same_payload:
                 return conflict_response()
@@ -235,10 +234,7 @@ class ResearchChainStageMaterialEndpoint(ResearchChainStageApprovalBaseEndpoint)
                 stage,
                 request.user,
                 requirement_code=requirement_code,
-                title=title,
-                description=str(request.data.get("description") or "").strip(),
-                source_node=source_node,
-                external_reference=str(request.data.get("external_reference") or "").strip(),
+                upload=upload,
                 request_id=request_id,
             )
         except ChainStageRuleError as rule_error:

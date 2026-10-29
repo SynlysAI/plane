@@ -30,6 +30,12 @@ body {
   @apply font-body bg-canvas text-primary;
 }
 
+/* 产品已自带密码可见性切换按钮，隐藏浏览器原生控件避免重复显示。 */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
 /* emoji icon picker */
 @utility conical-gradient {
   background: conic-gradient(

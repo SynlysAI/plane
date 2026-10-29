@@ -5,7 +5,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -51,6 +51,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
   const { t } = useTranslation();
   // refs
   const editorRef = useRef<EditorRefApi>(null);
+  const activitySectionRef = useRef<HTMLDivElement>(null);
   // states
   const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
   // hooks
@@ -63,6 +64,13 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
   const { setShowAlert } = useReloadConfirmations(isSubmitting === "submitting");
   // derived values
   const issue = issueId ? getIssueById(issueId) : undefined;
+  const isMobileViewport = windowSize[0] < 768;
+  const activitySectionId = `work-item-activity-${issueId}`;
+
+  /** Scroll the activity section into view without changing the current route. */
+  const scrollToActivity = useCallback(() => {
+    activitySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -83,6 +91,11 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
     isContentEditable ? "border-strong" : "border-subtle"
   );
   const showDescriptionPlaceholder = !isContentEditable && isDescriptionContentEmpty(issue.description_html);
+  const activitySection = (
+    <div id={activitySectionId} ref={activitySectionRef} className="scroll-mt-20">
+      <IssueActivity workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={isArchived} />
+    </div>
+  );
 
   return (
     <>
@@ -108,6 +121,19 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
               >
                 {isEditMode ? t("common.done") : t("common.edit")}
               </button>
+            )}
+            {isMobileViewport && (
+              <a
+                href={`#${activitySectionId}`}
+                aria-controls={activitySectionId}
+                className="rounded-md px-2 py-1 text-13 text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary md:hidden"
+                onClick={(event) => {
+                  event.preventDefault();
+                  scrollToActivity();
+                }}
+              >
+                {t("common.activity")}
+              </a>
             )}
           </div>
         </div>
@@ -181,6 +207,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
         </div>
       </div>
 
+      {isMobileViewport && activitySection}
+
       <IssueDetailWidgets
         workspaceSlug={workspaceSlug}
         projectId={projectId}
@@ -191,7 +219,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
         issueServiceType={EIssueServiceType.ISSUES}
       />
 
-      {windowSize[0] < 768 && (
+      {isMobileViewport && (
         <PeekOverviewProperties
           workspaceSlug={workspaceSlug}
           projectId={projectId}
@@ -201,7 +229,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
         />
       )}
 
-      <IssueActivity workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={isArchived} />
+      {!isMobileViewport && activitySection}
     </>
   );
 });

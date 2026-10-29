@@ -41,6 +41,8 @@ def proposal(service, *, action="submit", request_id=None, body="## 本周完成
         "expected_revision": context["revision"],
         "body_markdown": body,
     }
+    if action == "submit" and context["approval_route"]["default_reviewer_id"]:
+        args["reviewer_id"] = context["approval_route"]["default_reviewer_id"]
     return service.execute("prepare_weekly_report_operation", args), args
 
 
@@ -624,14 +626,14 @@ def test_shared_workflow_business_error_is_rolled_back_then_durably_rejected(env
     assert db.Page.objects.count() == page_count
 
 
-def test_proposal_effects_do_not_promise_notifications_without_any_recipient(env):
+def test_submission_without_a_reviewer_cannot_create_a_proposal(env):
     db.MentorBinding.objects.filter(workspace=env["workspace"]).delete()
     grant, _ = connection(env)
     service = WeeklyReportService(grant=grant)
-    prepared, _ = proposal(service)
-    assert prepared["proposal"]["effects"]["creates_in_app_notifications"] is False
-    committed = service.execute("execute_weekly_report_operation", {"operation_id": prepared["operation_id"]})
-    assert committed["result"]["notification_record_ids"] == []
+    with pytest.raises(WeeklyReportError) as failure:
+        proposal(service)
+    assert failure.value.code == "approval_reviewer_required"
+    assert not db.ReportAgentOperation.objects.exists()
 
 
 def test_web_withdraw_then_mcp_resubmit_preserves_original_commit(env):
@@ -705,7 +707,12 @@ def test_web_submit_and_withdraw_does_not_make_old_draft_proposal_valid_again(en
     draft = service.execute("execute_weekly_report_operation", {"operation_id": drafted["operation_id"]})
     stale, _ = proposal(service, action="save_draft", body="提交撤回前的旧提案。")
     report_url = f"{env['url']}{draft['report_id']}/"
-    assert env["student_client"].post(f"{report_url}submit/", {}, format="json").status_code == 200
+    assert (
+        env["student_client"]
+        .post(f"{report_url}submit/", {"reviewer_id": str(env["advisor"].pk)}, format="json")
+        .status_code
+        == 200
+    )
     assert env["student_client"].post(f"{report_url}withdraw/", {}, format="json").status_code == 200
     with pytest.raises(WeeklyReportError) as error:
         service.execute("execute_weekly_report_operation", {"operation_id": stale["operation_id"]})
@@ -714,3 +721,20 @@ def test_web_submit_and_withdraw_does_not_make_old_draft_proposal_valid_again(en
     assert report.status == "DRAFT"
     assert "旧提案" not in report.page.description_stripped
     assert report.official_snapshots.count() == 1
+
+
+def test_weekly_mcp_persists_explicit_approval_selection_without_automatic_reviewer(env):
+    grant, _ = connection(env)
+    service = WeeklyReportService(grant=grant)
+    context = service.execute("get_weekly_report_context", {"period_offset": -1})
+    prepared, args = proposal(service, context=context)
+    assert prepared["proposal"]["approval_route"]["reviewer_id"] == str(env["advisor"].pk)
+    missing = {**args, "request_id": str(uuid4())}
+    missing.pop("reviewer_id")
+    with pytest.raises(WeeklyReportError) as failure:
+        service.execute("prepare_weekly_report_operation", missing)
+    assert failure.value.code == "approval_reviewer_required"
+    result = service.execute("execute_weekly_report_operation", {"operation_id": prepared["operation_id"]})
+    assert result["status"] == "COMMITTED"
+    route = db.ResearchApprovalRoute.objects.get(resource_id=result["report_id"], status="ACTIVE")
+    assert str(route.reviewer_id) == args["reviewer_id"]

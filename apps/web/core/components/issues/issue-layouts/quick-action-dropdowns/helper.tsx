@@ -20,8 +20,9 @@ import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EIssuesStoreType, TIssue } from "@plane/types";
 import type { TContextMenuItem } from "@plane/ui";
-import { copyUrlToClipboard, generateWorkItemLink } from "@plane/utils";
+import { copyTextToClipboard, generateWorkItemLink } from "@plane/utils";
 import { createCopyMenuWithDuplication } from "./copy-menu-helper";
+import { formatShareText } from "@/components/common/share-link";
 
 // Generic helper function to handle optional function calls gracefully
 // Overload for functions without parameters
@@ -90,6 +91,8 @@ export interface MenuItemFactoryProps {
 // Common action handlers hook
 export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
   const { issue, workspaceSlug, projectIdentifier, handleRestore } = props;
+  const { t } = useTranslation();
+  const shareTitle = issue.name.trim() || t("research.common.untitled");
 
   const workItemLink = useMemo(
     () =>
@@ -104,7 +107,9 @@ export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
   );
 
   const handleCopyIssueLink = () =>
-    copyUrlToClipboard(workItemLink).then(() =>
+    copyTextToClipboard(
+      formatShareText(t("research.common.share_type_administrative_work_item"), shareTitle, workItemLink)
+    ).then(() =>
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Link copied",

@@ -7,6 +7,49 @@
       "by_week": "按週",
       "by_month": "按月",
       "custom_period": "自訂週期"
+    },
+    "approval_route": {
+      "subtitle": "提交前請確認唯一審批人；抄送僅用於通知，不產生審批權限。",
+      "single_reviewer": "單選審批人",
+      "reviewer": "審批人",
+      "cc": "抄送通知（可選）",
+      "confirm": "我確認將本內容提交給 {name} 審批",
+      "recommended": "推薦",
+      "no_candidates": "暫無可用審批人，請先補齊導師或組織負責人配置。",
+      "loading": "正在讀取審批候選組…",
+      "load_failed": "審批候選組讀取失敗，請稍後重試。",
+      "submit": "確認提交",
+      "roles": {
+        "primary_advisor": "主導師",
+        "advisor": "直接導師",
+        "main_pi": "主 PI",
+        "unit_owner": "組織負責人",
+        "unit_pi": "組織 PI",
+        "unit_admin": "組織管理員",
+        "reviewer": "審批人"
+      }
+    },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "已撤回提交",
+        "completed": "標記完成任務",
+        "reopened": "回滾為未完成"
+      },
+      "withdraw": "撤回",
+      "submitted_by": "提交人",
+      "approval_reviewer": "審批人",
+      "submit_approval_title": "選擇任務審批人",
+      "complete": "標記完成",
+      "reopen": "標記未完成",
+      "completed_by": "完成人"
+    },
+    "reports": {
+      "approval_reviewer": "審批人：{name}",
+      "submit_approval_title": "選擇報告審批人"
+    },
+    "todo": {
+      "next_reopen": "標記未完成",
+      "next_complete": "標記完成"
     }
   },
   "cloud_maintenance_message": {
@@ -174,6 +217,7 @@
   "link_copied": "連結已複製",
   "add_project": "新增專案",
   "create_project": "建立專案",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "無法從我的最愛移除專案。請再試一次。",
   "project_created_successfully": "專案建立成功",
   "project_created_successfully_description": "專案建立成功。您現在可以開始新增工作事項。",
@@ -191,11 +235,13 @@
   "description_placeholder": "描述",
   "only_alphanumeric_non_latin_characters_allowed": "僅允許英數字元和非拉丁字元。",
   "project_id_is_required": "專案 ID 為必填",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "僅允許英數字元和非拉丁字元。",
   "project_id_min_char": "專案 ID 至少必須有 1 個字元",
   "project_id_max_char": "專案 ID 最多只能有 {max} 個字元",
   "project_description_placeholder": "輸入專案描述",
   "select_network": "選擇網路",
+  "select_project": "Select project",
   "lead": "負責人",
   "date_range": "日期範圍",
   "private": "私人",
@@ -767,6 +813,31 @@
     "only_one_file_allowed": "一次只能上傳一個檔案。",
     "file_size_limit": "檔案大小必須小於或等於 {size}MB。",
     "drag_and_drop": "拖曳到任何位置以上傳",
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    },
+    "create": {
+      "draft_notice": "附件會在工作項目正式儲存後上傳；儲存為草稿不會保留附件。",
+      "hint": "儲存工作項目後自動上傳。",
+      "remove": "移除附件",
+      "title": "附件",
+      "upload_failed": "工作項目已建立，但 {total} 個附件中有 {failed} 個上傳失敗：{names}。請在工作項目詳情頁補傳。",
+      "zone_title": "拖曳檔案到這裡，或點選多個附件"
+    },
+    "editor_image": {
+      "insert_failed": "圖片插入失敗，請重試。",
+      "invalid": "僅支援 JPEG、JPG、PNG、WebP 或 GIF 圖片。",
+      "upload": "上傳圖片"
+    },
     "delete": "刪除附件"
   },
   "label": {

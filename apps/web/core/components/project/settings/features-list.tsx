@@ -117,7 +117,10 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
                     featureItem={featureItem}
                     value={Boolean(currentProjectDetails?.[featureItem.property as keyof IProject])}
                     handleSubmit={handleSubmit}
-                    disabled={!isAdmin}
+                    disabled={
+                      !isAdmin ||
+                      (featureItem.property === "module_view" && Boolean(currentProjectDetails?.is_module_required))
+                    }
                   />
                 }
               />

@@ -15,6 +15,12 @@ const STORAGE_KEY = "comment-attachment-browser-fixture";
 store.workspaceRoot.workspaces.workspace = { id: "workspace", slug: "lab", name: "公共工作区" } as never;
 // 真实组件、编辑器和草稿逻辑；仅持久化边界替换为浏览器本地存储。
 FileService.prototype.checkIfAssetExists = async () => ({ exists: true });
+FileService.prototype.getCommentAttachmentLimits = async () => ({
+  image: { max_mb: 20, max_bytes: 20 * 1024 * 1024 },
+  pdf: { max_mb: 100, max_bytes: 100 * 1024 * 1024 },
+  markdown: { max_mb: 5, max_bytes: 5 * 1024 * 1024 },
+  office: { max_mb: 50, max_bytes: 50 * 1024 * 1024 },
+});
 
 /** 运行可刷新保留评论的浏览器验收工作台。 */
 function Fixture() {

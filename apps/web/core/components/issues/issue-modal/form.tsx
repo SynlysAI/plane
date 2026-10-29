@@ -36,6 +36,10 @@ import {
   IssueProjectSelect,
   IssueTitleInput,
 } from "@/components/issues/issue-modal/components";
+import {
+  IssuePendingAttachments,
+  type TIssuePendingAttachment,
+} from "@/components/issues/issue-modal/components/pending-attachments";
 // helpers
 // hooks
 import { useIssueModal } from "@/hooks/context/use-issue-modal";
@@ -52,11 +56,14 @@ export interface IssueFormProps {
   issueTitleRef: React.MutableRefObject<HTMLInputElement | null>;
   isCreateMoreToggleEnabled: boolean;
   onAssetUpload: (assetId: string) => void;
+  pendingAttachments?: TIssuePendingAttachment[];
+  onAddPendingAttachments?: (files: File[]) => void;
+  onRemovePendingAttachment?: (attachmentId: string) => void;
   onCreateMoreToggleChange: (value: boolean) => void;
   onChange?: (formData: Partial<TIssue> | null) => void;
   onClose: () => void;
   onSubmit: (values: Partial<TIssue>, is_draft_issue?: boolean) => Promise<void>;
-  projectId: string;
+  projectId: string | null;
   isDraft: boolean;
   moveToIssue?: boolean;
   modalTitle?: string;
@@ -78,6 +85,9 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     data,
     issueTitleRef,
     onAssetUpload,
+    pendingAttachments = [],
+    onAddPendingAttachments,
+    onRemovePendingAttachment,
     onChange,
     onClose,
     onSubmit,
@@ -99,6 +109,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   // states
   const [gptAssistantModal, setGptAssistantModal] = useState(false);
   const [isMoving, setIsMoving] = useState<boolean>(false);
+  const [pendingAttachmentError, setPendingAttachmentError] = useState<string | null>(null);
 
   // refs
   const editorRef = useRef<EditorRefApi>(null);
@@ -152,15 +163,30 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   } = methods;
 
   const projectId = watch("project_id");
+  const currentProjectDetails = projectId ? getProjectById(projectId) : undefined;
   const assignableProjectMemberIds = projectId ? getProjectMemberIds(projectId, false) : null;
   const hasNoAssignableProjectMembers = assignableProjectMemberIds?.length === 0;
+  const administrativeRequiredFieldErrors =
+    currentProjectDetails?.is_research_project === false
+      ? [
+          ...(currentProjectDetails.is_module_required && (watch("module_ids")?.length ?? 0) === 0
+            ? ["请选择模块"]
+            : []),
+          ...(currentProjectDetails.is_label_required && (watch("label_ids")?.length ?? 0) === 0 ? ["请选择标签"] : []),
+        ]
+      : [];
+  const requiredFieldErrors = isDraft ? [] : administrativeRequiredFieldErrors;
+  const draftPromotionErrors = isDraft && moveToIssue ? administrativeRequiredFieldErrors : [];
+  const hasRequiredFieldErrors = requiredFieldErrors.length > 0;
+  const hasDraftPromotionErrors = draftPromotionErrors.length > 0;
   const activeAdditionalPropertiesLength = getActiveAdditionalPropertiesLength({
     projectId: projectId,
     workspaceSlug: workspaceSlug?.toString(),
     watch: watch,
   });
 
-  const isDisabled = isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers;
+  const isDisabled =
+    !projectId || isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers || hasRequiredFieldErrors;
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -216,7 +242,9 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   }, [workItemTemplateId]);
 
   const handleFormSubmit = async (formData: Partial<TIssue>, is_draft_issue = false) => {
+    if (!projectId) return;
     if (hasNoAssignableProjectMembers) return;
+    if (!isDraft && !is_draft_issue && hasRequiredFieldErrors) return;
 
     // Check if the editor is ready to discard
     if (!editorRef.current?.isEditorReadyToDiscard()) {
@@ -237,6 +265,15 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       })
     )
       return;
+
+    if (!data?.id && !isDraft && pendingAttachmentError) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: pendingAttachmentError,
+      });
+      return;
+    }
 
     const submitData = !data?.id
       ? formData
@@ -278,6 +315,14 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
   const handleMoveToProjects = async () => {
     if (!data?.id || !data?.project_id || !data) return;
+    if (hasDraftPromotionErrors) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: draftPromotionErrors.join("；"),
+      });
+      return;
+    }
     setIsMoving(true);
     try {
       await handleCreateUpdatePropertyValues({
@@ -379,6 +424,9 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   />
                 </div>
               </div>
+              {!projectId && (
+                <p className="pb-4 text-caption-sm-regular text-tertiary">{t("project_required_to_save")}</p>
+              )}
               {watch("parent_id") && selectedParentIssue && (
                 <div className="pb-4">
                   <IssueParentTag
@@ -427,6 +475,19 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   onClose={onClose}
                 />
               </div>
+              {!data?.id && !isDraft && projectId && onAddPendingAttachments && onRemovePendingAttachment && (
+                <IssuePendingAttachments
+                  attachments={pendingAttachments}
+                  onAdd={onAddPendingAttachments}
+                  onRemove={onRemovePendingAttachment}
+                  onValidationChange={(error) => {
+                    setPendingAttachmentError(error);
+                  }}
+                  workspaceSlug={workspaceSlug?.toString() ?? ""}
+                  projectId={projectId}
+                  disabled={isDisabled}
+                />
+              )}
             </div>
             <div
               className={cn(
@@ -454,6 +515,11 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   {t("research.assignment.empty_administrative")}
                 </p>
               )}
+              {requiredFieldErrors.map((error) => (
+                <p key={error} role="alert" className="px-5 pb-3 text-caption-sm-regular text-tertiary">
+                  {error}
+                </p>
+              ))}
               {showActionButtons && (
                 <div className="flex items-center justify-end gap-4 border-t-[0.5px] border-subtle pt-6 pb-3">
                   {!data?.id && (
@@ -502,7 +568,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                         type="button"
                         loading={isMoving}
                         onClick={handleMoveToProjects}
-                        disabled={isMoving}
+                        disabled={isMoving || hasDraftPromotionErrors}
                         size="lg"
                       >
                         {t("add_to_project")}

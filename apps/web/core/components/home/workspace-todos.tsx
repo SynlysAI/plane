@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "@plane/i18n";
-import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { ProjectDomainsService, domainError, type TWorkspaceTodoPage } from "@/services/project-domains.service";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
-import { formatShareText } from "@/components/research/common/share-link";
+import { ShareLinkIconButton } from "@/components/common/share-link-icon-button";
 import {
   ResearchChainStageApprovalQueue,
   type TChainStageApprovalQueueItem,
@@ -113,34 +111,6 @@ export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceS
     setQueueCompleted(!next);
   };
 
-  /**
-   * 复制带科研 / 行政领域上下文的待办分享文本。
-   *
-   * Args:
-   *   todo: 服务端投影出的待办事项。
-   */
-  const handleCopyLink = async (todo: TWorkspaceTodoPage["results"][number]) => {
-    const title = todo.title.trim() || t("research.common.untitled");
-    const typeLabel =
-      todo.domain === "RESEARCH"
-        ? t("research.todo.share_type_research")
-        : t("research.todo.share_type_administrative");
-    try {
-      await copyTextToClipboard(formatShareText(typeLabel, title, todo.href));
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("research.common.share_copied_title"),
-        message: t("research.common.share_copied_message"),
-      });
-    } catch {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("research.common.share_copy_failed_title"),
-        message: t("research.common.share_copy_failed_message"),
-      });
-    }
-  };
-
   return (
     <>
       {activeQueueId && (
@@ -203,6 +173,10 @@ export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceS
             const isStageApproval = todo.source === CHAIN_STAGE_SOURCE;
             const isActive = todo.id === activeQueueId;
             const shareTitle = todo.title.trim() || t("research.common.untitled");
+            const shareTypeLabel =
+              todo.domain === "RESEARCH"
+                ? t("research.todo.share_type_research")
+                : t("research.todo.share_type_administrative");
             return (
               <li
                 key={todo.id}
@@ -231,15 +205,13 @@ export function WorkspaceTodos({ workspaceSlug, embedded = false }: { workspaceS
                     </span>
                     {todo.due_at && <ResearchTodoUrgency dueAt={todo.due_at} />}
                   </Link>
-                  <Button
-                    variant="secondary"
-                    size="sm"
+                  <ShareLinkIconButton
+                    typeLabel={shareTypeLabel}
+                    title={shareTitle}
+                    href={todo.href}
                     className="shrink-0"
-                    aria-label={t("research.common.copy_share_aria", { title: shareTitle })}
-                    onClick={() => void handleCopyLink(todo)}
-                  >
-                    {t("research.common.copy_share")}
-                  </Button>
+                    ariaLabel={t("research.common.copy_share_aria", { title: shareTitle })}
+                  />
                 </div>
               </li>
             );

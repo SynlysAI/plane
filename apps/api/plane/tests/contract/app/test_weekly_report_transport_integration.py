@@ -96,6 +96,7 @@ def test_real_mcp_client_create_submit_recover_and_revoke(report_env, live_serve
                     {
                         "request_id": str(uuid4()),
                         "action": "submit",
+                        "reviewer_id": str(env["advisor"].pk),
                         "period_key": current["period"]["key"],
                         "expected_revision": current["revision"],
                         "body_markdown": f"## 本周完成\n\n通过真实 {transport.upper()} 客户端提交。",
@@ -223,6 +224,7 @@ def test_page_table_contention_returns_retryable_failure_then_recovers_same_oper
         {
             "request_id": str(uuid4()),
             "action": "submit",
+            "reviewer_id": str(env["advisor"].pk),
             "period_key": context["period"]["key"],
             "expected_revision": context["revision"],
             "body_markdown": "## 本周完成\n\n锁争用恢复验收。",
@@ -292,6 +294,7 @@ def test_two_tcp_agents_commit_one_snapshot(report_env, live_server, settings, s
             {
                 "request_id": str(uuid4()),
                 "action": "submit",
+                "reviewer_id": str(env["advisor"].pk),
                 "period_key": context["period"]["key"],
                 "expected_revision": context["revision"],
                 "body_markdown": "## 本周完成\n\n两个客户端竞争。",

@@ -158,16 +158,37 @@ export class WorkspaceIssuesFilter extends IssueFilterHelperStore implements IWo
       sub_group_by: [],
     };
 
-    const _filters = this.handleIssuesLocalFilters.get(EIssuesStoreType.GLOBAL, workspaceSlug, undefined, viewId);
-    displayFilters = this.computedDisplayFilters(_filters?.display_filters, {
-      layout: EIssueLayoutTypes.SPREADSHEET,
-      order_by: "-created_at",
-    });
-    displayProperties = this.computedDisplayProperties(_filters?.display_properties);
-    kanbanFilters = {
-      group_by: _filters?.kanban_filters?.group_by || [],
-      sub_group_by: _filters?.kanban_filters?.sub_group_by || [],
-    };
+    if (STATIC_VIEW_TYPES.includes(viewId)) {
+      // System views follow one workspace-wide default. Browser-local filters are
+      // deliberately ignored so a member cannot override the published layout.
+      try {
+        const defaultLayout = await this.issueFilterService.fetchAdministrativeViewDefault(workspaceSlug);
+        displayFilters = this.computedDisplayFilters(defaultLayout.display_filters);
+        displayProperties = this.computedDisplayProperties(defaultLayout.display_properties);
+      } catch {
+        displayFilters = this.computedDisplayFilters(
+          {},
+          {
+            layout: EIssueLayoutTypes.SPREADSHEET,
+            order_by: "-created_at",
+            show_empty_groups: true,
+            sub_issue: true,
+          }
+        );
+        displayProperties = this.computedDisplayProperties({});
+      }
+    } else {
+      const _filters = this.handleIssuesLocalFilters.get(EIssuesStoreType.GLOBAL, workspaceSlug, undefined, viewId);
+      displayFilters = this.computedDisplayFilters(_filters?.display_filters, {
+        layout: EIssueLayoutTypes.SPREADSHEET,
+        order_by: "-created_at",
+      });
+      displayProperties = this.computedDisplayProperties(_filters?.display_properties);
+      kanbanFilters = {
+        group_by: _filters?.kanban_filters?.group_by || [],
+        sub_group_by: _filters?.kanban_filters?.sub_group_by || [],
+      };
+    }
 
     // Get the view details if the view is not a static view
     if (STATIC_VIEW_TYPES.includes(viewId) === false) {
@@ -259,11 +280,6 @@ export class WorkspaceIssuesFilter extends IssueFilterHelperStore implements IWo
           });
 
           this.rootIssueStore.workspaceIssues.fetchIssuesWithExistingPagination(workspaceSlug, viewId, "mutation");
-
-          if (["all-issues", "assigned", "created", "subscribed"].includes(viewId))
-            this.handleIssuesLocalFilters.set(EIssuesStoreType.GLOBAL, type, workspaceSlug, undefined, viewId, {
-              display_filters: _filters.displayFilters,
-            });
           break;
         }
         case EIssueFilterType.DISPLAY_PROPERTIES: {
@@ -278,10 +294,6 @@ export class WorkspaceIssuesFilter extends IssueFilterHelperStore implements IWo
                 updatedDisplayProperties[_key as keyof IIssueDisplayProperties]
               );
             });
-            if (["all-issues", "assigned", "created", "subscribed"].includes(viewId))
-              this.handleIssuesLocalFilters.set(EIssuesStoreType.GLOBAL, type, workspaceSlug, undefined, viewId, {
-                display_properties: _filters.displayProperties,
-              });
           });
           break;
         }
@@ -291,7 +303,7 @@ export class WorkspaceIssuesFilter extends IssueFilterHelperStore implements IWo
           _filters.kanbanFilters = { ..._filters.kanbanFilters, ...updatedKanbanFilters };
 
           const currentUserId = this.rootIssueStore.currentUserId;
-          if (currentUserId)
+          if (currentUserId && !STATIC_VIEW_TYPES.includes(viewId))
             this.handleIssuesLocalFilters.set(EIssuesStoreType.GLOBAL, type, workspaceSlug, undefined, viewId, {
               kanban_filters: _filters.kanbanFilters,
             });

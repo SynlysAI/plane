@@ -496,6 +496,9 @@ it("renders and switches one full-row module per waterfall tab", async () => {
   await act(async () => undefined);
 
   const tabs = container.querySelector('[data-testid="workspace-home-waterfall-tabs"]');
+  expect(tabs?.className).toContain("sticky top-[calc(var(--padding-page-y)*-1)]");
+  expect(tabs?.className).toContain("z-10");
+  expect(tabs?.className).toContain("bg-canvas");
   expect([...(tabs?.querySelectorAll('[role="tab"]') ?? [])].map((tab) => tab.textContent)).toEqual([
     "我的待办",
     "科研项目概览",
@@ -581,6 +584,9 @@ it("restores widget defaults, aggregate mode, and compact density together", asy
   ]);
   await renderHome();
   await act(async () => undefined);
+  expect(container.querySelector('[data-testid="workspace-home-columns"]')?.parentElement?.className).toContain(
+    "shrink-0"
+  );
   const customize = [...container.querySelectorAll("button")].find((button) => button.textContent === "自定义首页");
   await act(async () => customize?.click());
   const reset = [...container.querySelectorAll("button")].find((button) => button.textContent === "恢复默认布局");
@@ -600,6 +606,8 @@ it("restores widget defaults, aggregate mode, and compact density together", asy
     })
   );
   const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  expect(grid.parentElement?.className).toContain("xl:flex-1");
+  expect(grid.parentElement?.className).not.toContain("shrink-0");
   expect(grid.children).toHaveLength(5);
   expect(grid.className).toContain("xl:grid-cols-12");
   expect(container.querySelector('[data-testid="workspace-home-waterfall-tabs"]')).toBeNull();

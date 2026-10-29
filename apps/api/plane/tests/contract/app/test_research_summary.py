@@ -102,6 +102,7 @@ def env(db):
         "student_one": student_one,
         "student_two": student_two,
         "workspace": workspace,
+        "root": root,
         "group": group,
         "admin_client": client_for(admin),
         "pi_client": client_for(pi),
@@ -121,11 +122,28 @@ def create_report(env, client, period_key="2026-W38"):
     ).json()
 
 
+def submit_report(env, client, report_id, *, reviewer_id=None, cc_user_ids=None):
+    """Submit one summary fixture report to an explicit approval route."""
+    return client.post(
+        f"{env['reports_url']}{report_id}/submit/",
+        {
+            "reviewer_id": str(reviewer_id or env["advisor"].id),
+            "cc_user_ids": cc_user_ids or [],
+        },
+        format="json",
+    )
+
+
 @pytest.mark.django_db
 class TestReportSummary:
     def test_counts_match_the_detail_list(self, env):
         report = create_report(env, env["student_one_client"])
-        env["student_one_client"].post(f"{env['reports_url']}{report['id']}/submit/", {}, format="json")
+        submit_report(
+            env,
+            env["student_one_client"],
+            report["id"],
+            cc_user_ids=[str(env["pi"].id)],
+        )
 
         summary = env["pi_client"].get(f"{env['summary_url']}?period_key=2026-W38").json()
         assert summary["period_key"] == "2026-W38"
@@ -160,8 +178,16 @@ class TestReportSummary:
         stranger = make_user()
         add_workspace_member(env["workspace"], stranger)
         MentorBinding.objects.create(workspace=env["workspace"], mentor=stranger, mentee=env["student_one"])
+        outside_group = create_unit(env["workspace"], "Outside aggregation", env["root"])
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=outside_group,
+            user=stranger,
+            org_role=OrgUnitMember.OrgRole.REVIEWER,
+        )
         summary = client_for(stranger).get(f"{env['summary_url']}?period_key=2026-W38").json()
-        assert summary["by_unit"] == []
+        assert [unit["org_unit_name"] for unit in summary["by_unit"]] == ["Outside aggregation"]
+        assert all(count == 0 for count in summary["by_unit"][0]["counts"].values())
         assert summary["counts"]["not_submitted"] == 0
 
     def test_cannot_aggregate_an_out_of_scope_node(self, env):
@@ -215,7 +241,12 @@ class TestReportNotifications:
     def test_submission_notifies_reviewers(self, env):
         report = create_report(env, env["student_one_client"])
         Notification.objects.all().delete()
-        env["student_one_client"].post(f"{env['reports_url']}{report['id']}/submit/", {}, format="json")
+        submit_report(
+            env,
+            env["student_one_client"],
+            report["id"],
+            cc_user_ids=[str(env["pi"].id)],
+        )
 
         notifications = Notification.objects.filter(entity_name="research_report")
         assert notifications.count() >= 2  # principal investigator + advisor
@@ -227,7 +258,7 @@ class TestReportNotifications:
 
     def test_return_and_accept_notify_the_author(self, env):
         report = create_report(env, env["student_one_client"])
-        env["student_one_client"].post(f"{env['reports_url']}{report['id']}/submit/", {}, format="json")
+        submit_report(env, env["student_one_client"], report["id"], reviewer_id=env["pi"].id)
         Notification.objects.all().delete()
 
         env["pi_client"].post(f"{env['reports_url']}{report['id']}/return/", {"comment": "补充数据"}, format="json")
@@ -237,7 +268,7 @@ class TestReportNotifications:
         assert returned.first().message["comment"] == "补充数据"
 
         Notification.objects.all().delete()
-        env["student_one_client"].post(f"{env['reports_url']}{report['id']}/submit/", {}, format="json")
+        submit_report(env, env["student_one_client"], report["id"], reviewer_id=env["pi"].id)
         env["pi_client"].post(f"{env['reports_url']}{report['id']}/accept/", {}, format="json")
         accepted = Notification.objects.filter(entity_name="research_report", receiver_id=env["student_one"].id)
         assert accepted.count() == 1
@@ -245,6 +276,6 @@ class TestReportNotifications:
 
     def test_notifications_do_not_touch_existing_issue_notifications(self, env):
         report = create_report(env, env["student_one_client"])
-        env["student_one_client"].post(f"{env['reports_url']}{report['id']}/submit/", {}, format="json")
+        submit_report(env, env["student_one_client"], report["id"])
         assert Notification.objects.filter(entity_name="issue").count() == 0
         assert PeriodicReport.objects.count() == 1

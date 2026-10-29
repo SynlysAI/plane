@@ -21,7 +21,7 @@ import {
   type TWorkbenchPeekMode,
 } from "@/components/research/chains/research-chain-workbench-peek";
 import { useTransientMenu } from "@/hooks/use-transient-menu";
-import { ResearchChainTaskService } from "@/services/research/chain-task.service";
+import { ResearchChainTaskService, type TResearchChainTaskAction } from "@/services/research/chain-task.service";
 
 type Props = {
   workspaceSlug: string;
@@ -45,7 +45,7 @@ type TTaskFormState = {
 
 type TReasonActionState = {
   taskId: string;
-  action: Extract<TResearchChainNodeTaskAction, "return" | "cancel">;
+  action: Extract<TResearchChainNodeTaskAction, "cancel">;
   reason: string;
 };
 
@@ -60,13 +60,11 @@ const EMPTY_FORM: TTaskFormState = {
 const TASK_STATUS_KEYS: Record<TResearchChainNodeTask["status"], string> = {
   DRAFT: "research.chain_tasks.status.draft",
   ASSIGNED: "research.chain_tasks.status.assigned",
-  SUBMITTED: "research.chain_tasks.status.submitted",
-  NEEDS_REVISION: "research.chain_tasks.status.needs_revision",
   COMPLETED: "research.chain_tasks.status.completed",
   CANCELLED: "research.chain_tasks.status.cancelled",
 };
 
-const LIFECYCLE_ACTIONS = ["submit", "return", "complete", "cancel"] as const;
+const LIFECYCLE_ACTIONS = ["complete", "reopen", "cancel"] as const;
 
 /**
  * Convert an ISO deadline to the value shape accepted by a date input.
@@ -441,7 +439,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
    *   task: Target task.
    *   action: Server lifecycle action.
    */
-  const runAction = async (task: TResearchChainNodeTask, action: "submit" | "complete") => {
+  const runAction = async (task: TResearchChainNodeTask, action: Exclude<TResearchChainTaskAction, "cancel">) => {
     const busyKey = `${task.id}:${action}`;
     setActionBusy(busyKey);
     setActionError("");
@@ -456,7 +454,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
     }
   };
 
-  /** Validate and submit a return/cancel reason to the task action endpoint. */
+  /** Validate and submit a cancellation reason to the task action endpoint. */
   const submitReasonAction = async () => {
     if (!reasonAction?.reason.trim()) {
       setActionError(t("research.chain_tasks.reason_required"));
@@ -474,9 +472,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
         reasonAction.action,
         { reason: reasonAction.reason.trim() }
       );
-      upsertTask(
-        reasonAction.action === "return" ? { ...updated, return_reason: reasonAction.reason.trim() } : updated
-      );
+      upsertTask(updated);
       setReasonAction(null);
       setStatusMenuId(null);
     } catch (error) {
@@ -653,7 +649,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
                                   role="menuitem"
                                   className="block w-full rounded-sm px-2 py-1.5 text-left text-12 text-primary hover:bg-surface-2"
                                   onClick={() => {
-                                    if (action === "return" || action === "cancel") {
+                                    if (action === "cancel") {
                                       setReasonAction({ taskId: task.id, action, reason: "" });
                                       setActionError("");
                                       closeStatusMenu();
@@ -749,7 +745,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
           onCreate={() => void submitForm()}
           onAction={(action) => {
             if (!activeTask) return;
-            if (action === "return" || action === "cancel") {
+            if (action === "cancel") {
               setReasonAction({ taskId: activeTask.id, action, reason: "" });
               setActionError("");
               return;
@@ -763,21 +759,11 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
         <div
           role="dialog"
           data-reason-dialog=""
-          aria-label={t(
-            reasonAction.action === "return"
-              ? "research.chain_tasks.return_reason"
-              : "research.chain_tasks.cancel_reason"
-          )}
+          aria-label={t("research.chain_tasks.cancel_reason")}
           className="fixed top-24 right-6 z-40 w-80 rounded-md border border-subtle bg-surface-1 p-4 shadow-[0_8px_24px_rgba(37,37,34,0.08)]"
         >
           <label className="flex flex-col gap-1 text-11 text-tertiary">
-            <span>
-              {t(
-                reasonAction.action === "return"
-                  ? "research.chain_tasks.return_reason"
-                  : "research.chain_tasks.cancel_reason"
-              )}
-            </span>
+            <span>{t("research.chain_tasks.cancel_reason")}</span>
             <textarea
               value={reasonAction.reason}
               rows={3}

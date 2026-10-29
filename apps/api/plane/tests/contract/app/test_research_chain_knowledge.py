@@ -254,10 +254,67 @@ def test_scoped_upload_is_idempotent_and_creates_reference_event(env):
     assert upload_mock.call_args.kwargs["metadata"]["research_project_id"] == str(env["project"].id)
     assert upload_mock.call_args.kwargs["metadata"]["chain_node_id"] == str(env["node"].id)
     upload = ResearchChainUpload.objects.get(request_id="req-upload")
-    assert upload.status == ResearchChainUpload.Status.PENDING
+    assert upload.status == ResearchChainUpload.Status.PROCESSING
     assert upload.knowledge_id == "knowledge-1"
     assert ResearchExternalReference.objects.filter(external_id="knowledge-1").exists()
     assert ResearchChainEvent.objects.filter(request_id="req-upload", event_type="DATA_CHANGE").count() == 1
+
+
+def test_scoped_upload_accepts_5_1mb_and_reports_parse_processing(env):
+    """A 5.1MB document passes the research-chain limit and enters parsing."""
+    _mark_ready(env)
+    receipt = {
+        "external_id": "knowledge-51mb",
+        "external_type": "KNOWLEDGE_ENTRY",
+        "external_parent_id": "kb-1",
+        "title": "paper-5.1mb.pdf",
+        "summary": "pending",
+        "source_url": "/api/uploads/51mb",
+        "acl_hint": {},
+        "metadata": {"upload_id": "51mb", "task_id": "task-51mb", "parse_status": "pending"},
+    }
+    with patch(
+        "plane.research.services.integrations.adapters.RagPortalClient.upload",
+        return_value=_result(items=[receipt], request_id="req-upload-51mb"),
+    ) as upload_mock:
+        response = env["owner_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+            {
+                "node_id": str(env["node"].id),
+                "kb_id": "kb-1",
+                "file": SimpleUploadedFile(
+                    "paper-5.1mb.pdf", b"x" * int(5.1 * 1024 * 1024), content_type="application/pdf"
+                ),
+            },
+            format="multipart",
+            HTTP_X_REQUEST_ID="req-upload-51mb",
+        )
+
+    assert response.status_code == 201, response.json()
+    assert upload_mock.call_count == 1
+    assert response.json()["data"]["status"] == ResearchChainUpload.Status.PROCESSING
+
+
+def test_scoped_upload_rejects_files_over_fifty_mb(env):
+    """Files above the research-chain limit fail before an upstream call."""
+    _mark_ready(env)
+    with patch("plane.research.services.integrations.adapters.RagPortalClient.upload") as upload_mock:
+        response = env["owner_client"].post(
+            f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/uploads/",
+            {
+                "node_id": str(env["node"].id),
+                "kb_id": "kb-1",
+                "file": SimpleUploadedFile("large.pdf", b"x" * (50 * 1024 * 1024 + 1), content_type="application/pdf"),
+            },
+            format="multipart",
+            HTTP_X_REQUEST_ID="req-upload-too-large",
+        )
+
+    assert response.status_code == 413
+    assert response.json()["error_code"] == "file_size_exceeded"
+    assert response.json()["message"] == "The research file exceeds the configured chain upload limit."
+    assert upload_mock.call_count == 0
+    assert not ResearchChainUpload.objects.filter(request_id="req-upload-too-large").exists()
 
 
 def test_upload_list_returns_secure_plane_download_and_preview_urls(env):

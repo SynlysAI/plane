@@ -7,6 +7,49 @@
       "by_week": "주별",
       "by_month": "월별",
       "custom_period": "사용자 지정 기간"
+    },
+    "approval_route": {
+      "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
+      "single_reviewer": "Single reviewer",
+      "reviewer": "Reviewer",
+      "cc": "Carbon copy (optional)",
+      "confirm": "I confirm submitting this to {name} for review",
+      "recommended": "Recommended",
+      "no_candidates": "No reviewer is available. Configure an advisor or organisation lead first.",
+      "loading": "Loading approval candidates…",
+      "load_failed": "Could not load approval candidates. Please retry.",
+      "submit": "Submit",
+      "roles": {
+        "primary_advisor": "Primary advisor",
+        "advisor": "Direct advisor",
+        "main_pi": "Main PI",
+        "unit_owner": "Unit owner",
+        "unit_pi": "Unit PI",
+        "unit_admin": "Unit administrator",
+        "reviewer": "Reviewer"
+      }
+    },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
+    "reports": {
+      "approval_reviewer": "Reviewer: {name}",
+      "submit_approval_title": "Select report reviewer"
+    },
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -174,6 +217,7 @@
   "link_copied": "링크 복사됨",
   "add_project": "프로젝트 추가",
   "create_project": "프로젝트 생성",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "프로젝트를 즐겨찾기에서 제거하지 못했습니다. 다시 시도해주세요.",
   "project_created_successfully": "프로젝트가 성공적으로 생성되었습니다",
   "project_created_successfully_description": "프로젝트가 성공적으로 생성되었습니다. 이제 작업 항목을 추가할 수 있습니다.",
@@ -191,11 +235,13 @@
   "description_placeholder": "설명",
   "only_alphanumeric_non_latin_characters_allowed": "영숫자 및 비라틴 문자만 허용됩니다.",
   "project_id_is_required": "프로젝트 ID가 필요합니다",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "영숫자 및 비라틴 문자만 허용됩니다.",
   "project_id_min_char": "프로젝트 ID는 최소 1자 이상이어야 합니다",
   "project_id_max_char": "프로젝트 ID는 최대 {max}자 이하여야 합니다",
   "project_description_placeholder": "프로젝트 설명 입력",
   "select_network": "네트워크 선택",
+  "select_project": "Select project",
   "lead": "리드",
   "date_range": "날짜 범위",
   "private": "비공개",
@@ -767,6 +813,31 @@
     "only_one_file_allowed": "한 번에 하나의 파일만 업로드할 수 있습니다.",
     "file_size_limit": "파일 크기는 {size}MB 이하이어야 합니다.",
     "drag_and_drop": "업로드하려면 아무 곳에나 드래그 앤 드롭하세요",
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    },
+    "create": {
+      "draft_notice": "첨부 파일은 작업 항목 저장 후 업로드되며 초안에는 저장되지 않습니다.",
+      "hint": "작업 항목 저장 후 자동으로 업로드됩니다.",
+      "remove": "첨부 파일 제거",
+      "title": "첨부 파일",
+      "upload_failed": "작업 항목이 생성되었지만 전체 {total}개 중 {failed}개 첨부 파일을 업로드하지 못했습니다: {names}. 작업 항목에서 다시 시도하세요.",
+      "zone_title": "여기로 파일을 끌어오거나 클릭해서 여러 개 선택"
+    },
+    "editor_image": {
+      "insert_failed": "이미지를 삽입하지 못했습니다. 다시 시도하세요.",
+      "invalid": "JPEG, JPG, PNG, WebP, GIF 이미지만 지원됩니다.",
+      "upload": "이미지 업로드"
+    },
     "delete": "첨부 파일 삭제"
   },
   "label": {

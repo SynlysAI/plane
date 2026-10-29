@@ -13,6 +13,7 @@ import { useParams } from "next/navigation";
 import { AttachOutline, DueDateOutline, LinkOutline, StartDateOutline, ViewsOutline } from "@makeplane/propel/icons";
 // i18n
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import type { TIssue, IIssueDisplayProperties, TIssuePriorities } from "@plane/types";
 // ui
@@ -30,6 +31,7 @@ import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
+import { REQUIRED_FIELD_MESSAGES, isRequiredSelectionMissing } from "@/components/issues/required-fields";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
@@ -113,6 +115,14 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   };
 
   const handleLabel = async (ids: string[]) => {
+    if (isRequiredSelectionMissing(projectDetails, "label_ids", ids)) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "Error!",
+        message: REQUIRED_FIELD_MESSAGES.label_ids,
+      });
+      return;
+    }
     if (updateIssue) await updateIssue(issue.project_id, issue.id, { label_ids: ids });
   };
 
@@ -123,6 +133,14 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   const handleModule = useCallback(
     (moduleIds: string[] | null) => {
       if (!issue || !issue.module_ids || !moduleIds) return;
+      if (isRequiredSelectionMissing(projectDetails, "module_ids", moduleIds)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: REQUIRED_FIELD_MESSAGES.module_ids,
+        });
+        return;
+      }
 
       const updatedModuleIds = xor(issue.module_ids, moduleIds);
       const modulesToAdd: string[] = [];
@@ -133,7 +151,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       if (modulesToAdd.length > 0) issueOperations.addModulesToIssue(modulesToAdd);
       if (modulesToRemove.length > 0) issueOperations.removeModulesFromIssue(modulesToRemove);
     },
-    [issueOperations, issue]
+    [issueOperations, issue, projectDetails]
   );
 
   const handleCycle = useCallback(

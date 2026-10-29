@@ -4,6 +4,7 @@ import axios from "axios";
 import { setLanguage, TranslationProvider } from "@plane/i18n";
 
 import { ResearchChainKnowledgePanel } from "@/components/research/chains/research-chain-knowledge-panel";
+import { useResearchChainKnowledge } from "@/components/research/chains/use-research-chain-knowledge";
 import { ResearchChainService } from "@/services/research/chain.service";
 // oxlint-disable-next-line import/no-unassigned-import -- 验收沿用应用真实样式。
 import "../../styles/globals.css";
@@ -47,10 +48,16 @@ ResearchChainService.prototype.getKnowledgeBases = async () => ({
 ResearchChainService.prototype.getKnowledgeUploads = async () => ({ data: [upload] });
 ResearchChainService.prototype.getKnowledgeUpload = async () => ({ data: upload, degraded: false });
 ResearchChainService.prototype.uploadKnowledgeFile = async () => ({
-  data: { ...upload, id: "fixture-new-upload", status: "PENDING" as const },
+  data: { ...upload, id: "fixture-new-upload", status: "PROCESSING" as const },
   degraded: false,
 });
 ResearchChainService.prototype.confirmKnowledgeReference = async () => ({ ok: true });
+
+/** 用共享资料控制器渲染真实面板，保持与节点详情一致。 */
+function KnowledgeFixture() {
+  const knowledge = useResearchChainKnowledge("fixture", "fixture-chain", "fixture-node");
+  return <ResearchChainKnowledgePanel knowledge={knowledge} />;
+}
 
 await setLanguage("zh-CN");
 document.documentElement.dataset.theme = "light";
@@ -58,7 +65,7 @@ createRoot(document.getElementById("root")!).render(
   <TranslationProvider>
     <main className="min-h-screen bg-canvas p-6 text-primary">
       <section className="mx-auto max-w-4xl overflow-hidden rounded-lg border border-subtle bg-surface-1">
-        <ResearchChainKnowledgePanel workspaceSlug="fixture" chainId="fixture-chain" nodeId="fixture-node" />
+        <KnowledgeFixture />
       </section>
     </main>
   </TranslationProvider>

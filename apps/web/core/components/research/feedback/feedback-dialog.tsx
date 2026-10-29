@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import type { TFeedbackStatus, TResearchFeedback } from "@plane/types";
 import { Button } from "@plane/propel/button";
@@ -9,6 +9,7 @@ import { ResearchFilterToolbar } from "@/components/research/common/research-dat
 import { ResearchBrowseRefresh } from "@/components/research/common/research-browse-toolbar";
 import { MessageSquare } from "lucide-react";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { ResearchFeedbackService } from "@/services/research/feedback.service";
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -63,6 +64,19 @@ function ScreenshotLink({ url, index }: { url: string; index: number }) {
   );
 }
 
+/** 从剪贴板数据提取图片文件，兼容 files 与 items 两种浏览器暴露形式。 */
+function getClipboardImageFiles(clipboardData: DataTransfer | null): File[] {
+  if (!clipboardData) return [];
+
+  const directFiles = Array.from(clipboardData.files ?? []);
+  const itemFiles = Array.from(clipboardData.items ?? [])
+    .map((item) => (item.kind === "file" ? item.getAsFile() : null))
+    .filter((file): file is File => file !== null);
+  const candidates = [...directFiles, ...itemFiles].filter((file) => file.type.startsWith("image/"));
+
+  return Array.from(new Set(candidates));
+}
+
 /** 全局反馈、本人记录与工作空间统计，管理者可在统计视图处置反馈。 */
 export const FeedbackDialog = observer(function FeedbackDialog({
   workspaceSlug,
@@ -105,7 +119,6 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const [count, setCount] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [listLoading, setListLoading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const idempotency = useRef(createIdempotencyKey());
   const queryVersion = useRef(0);
   const canManage = Boolean(
@@ -213,25 +226,45 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   };
 
   /** 预览截图；每条限制三张，每张最多 10 MB。 */
-  const addShots = (files: FileList | null) => {
-    if (!files) return;
-    const next = Array.from(files);
-    if (
-      shots.length + next.length > 3 ||
-      next.some(
-        (file) =>
-          !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
-          file.size > 10 * 1024 * 1024 ||
-          file.size === 0
-      )
-    ) {
-      setError("最多 3 张 PNG/JPEG/WebP 截图，每张不超过 10 MB。");
-      return;
-    }
-    setShots((current) => [...current, ...next.map((file) => ({ file, preview: URL.createObjectURL(file) }))]);
-    idempotency.current = createIdempotencyKey();
-    setError("");
-  };
+  const addShots = useCallback(
+    (next: File[]) => {
+      if (next.length === 0) return;
+      if (
+        shots.length + next.length > 3 ||
+        next.some(
+          (file) =>
+            !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
+            file.size > 10 * 1024 * 1024 ||
+            file.size === 0
+        )
+      ) {
+        setError("最多 3 张 PNG/JPEG/WebP 截图，每张不超过 10 MB。");
+        return;
+      }
+      setShots((current) => [...current, ...next.map((file) => ({ file, preview: URL.createObjectURL(file) }))]);
+      idempotency.current = createIdempotencyKey();
+      setError("");
+    },
+    [shots]
+  );
+
+  useEffect(() => {
+    if (!open || view !== "submit") return undefined;
+
+    /** 处理提交视图内的图片粘贴；纯文本粘贴保持浏览器默认行为。 */
+    const handlePaste = (event: ClipboardEvent) => {
+      if (busy) return;
+
+      const files = getClipboardImageFiles(event.clipboardData);
+      if (files.length === 0) return;
+
+      event.preventDefault();
+      addShots(files);
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [addShots, busy, open, view]);
 
   /** 成功后清空表单，失败保留文本和全部截图供同标识重试。 */
   const submit = async () => {
@@ -595,23 +628,19 @@ export const FeedbackDialog = observer(function FeedbackDialog({
               </label>
               <fieldset className="flex flex-col gap-2 border-0 p-0">
                 <legend className="text-13">截图</legend>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button variant="secondary" size="sm" type="button" onClick={() => fileInputRef.current?.click()}>
-                    添加截图（{shots.length}/3）
-                  </Button>
-                  <span className="text-12 text-tertiary">PNG / JPEG / WebP，每张不超过 10 MB</span>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  aria-label="反馈截图"
-                  className="hidden"
-                  type="file"
-                  multiple
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={(event) => {
-                    addShots(event.target.files);
-                    event.target.value = "";
+                <AttachmentUploadZone
+                  onFiles={addShots}
+                  accept={{
+                    "image/png": [],
+                    "image/jpeg": [],
+                    "image/webp": [],
                   }}
+                  multiple
+                  maxFiles={3}
+                  maxSize={10 * 1024 * 1024}
+                  inputAriaLabel="反馈截图"
+                  title={`添加截图（${shots.length}/3）`}
+                  hint="PNG / JPEG / WebP，每张不超过 10 MB，支持粘贴、拖拽或选择文件"
                 />
                 <div className="flex flex-wrap gap-3">
                   {shots.map((shot, index) => (

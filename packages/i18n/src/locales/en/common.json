@@ -215,6 +215,7 @@
   "link_copied": "Link copied",
   "add_project": "Add project",
   "create_project": "Create project",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Couldn't remove the project from favorites. Please try again.",
   "project_created_successfully": "Project created successfully",
   "project_created_successfully_description": "Project created successfully. You can now start adding work items to it.",
@@ -232,11 +233,13 @@
   "description_placeholder": "Description",
   "only_alphanumeric_non_latin_characters_allowed": "Only Alphanumeric & Non-latin characters are allowed.",
   "project_id_is_required": "Project code is required",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Only Alphanumeric & Non-latin characters are allowed.",
   "project_id_min_char": "Project code must contain at least 1 character",
   "project_id_max_char": "Project code must contain at most {max} characters",
   "project_description_placeholder": "Enter project description",
   "select_network": "Select network",
+  "select_project": "Select project",
   "lead": "Lead",
   "date_range": "Date range",
   "private": "Private",
@@ -810,6 +813,31 @@
     "count_limit": "A work item can have at most {count} attachments.",
     "file_size_limit": "File must be of {size}MB or less in size.",
     "drag_and_drop": "Drag and drop anywhere to upload",
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    },
+    "create": {
+      "draft_notice": "Attachments upload after the work item is saved; saving a draft does not keep them.",
+      "hint": "Uploaded automatically after the work item is saved.",
+      "remove": "Remove attachment",
+      "title": "Attachments",
+      "upload_failed": "The work item was created, but {failed} of {total} attachments failed to upload: {names}. Please retry from the work item.",
+      "zone_title": "Drag files here, or click to select multiple files"
+    },
+    "editor_image": {
+      "insert_failed": "Image insertion failed. Please try again.",
+      "invalid": "Only JPEG, JPG, PNG, WebP, or GIF image files are supported.",
+      "upload": "Upload images"
+    },
     "delete": "Delete attachment"
   },
   "label": {
@@ -1258,7 +1286,7 @@
       "next_return": "Return",
       "next_accept": "Accept",
       "next_withdraw": "Withdraw",
-      "next_complete": "Complete",
+      "next_complete": "Mark complete",
       "next_cancel": "Cancel",
       "next_approve": "Approve",
       "next_reject": "Reject",
@@ -1303,7 +1331,8 @@
       "handling_assign": "Assigned to me",
       "handling_process": "Awaiting my action",
       "share_type_research": "Research action item",
-      "share_type_administrative": "Administrative action item"
+      "share_type_administrative": "Administrative action item",
+      "next_reopen": "Mark incomplete"
     },
     "overview": {
       "description": "Research management for this workspace: organisation, projects, periodic reports and office approvals.",
@@ -1586,6 +1615,13 @@
         "material_title_fallback": "Material title",
         "reference": "Source reference (optional)",
         "add_material": "Add material",
+        "material_upload": "Upload and link",
+        "select_upload": "Select topic material",
+        "link_material": "Link material",
+        "upload_empty": "No linkable material exists for this node yet. Upload one first.",
+        "upload_unavailable": "Topic material upload is not ready. Complete knowledge-base binding before linking materials.",
+        "upload_processing": "Parsing; available for review submission",
+        "unlinked_file": "No linked file; not counted as complete",
         "route": "Approval route",
         "submit_review": "Submit / review",
         "submit_check": "Submission check",
@@ -1653,7 +1689,7 @@
       "assign": "Assign",
       "submit": "Submit",
       "return": "Return",
-      "complete": "Complete",
+      "complete": "Mark complete",
       "cancel": "Cancel task",
       "confirm": "Confirm",
       "cancel_edit": "Cancel",
@@ -1715,9 +1751,11 @@
         "assigned": "assigned the task",
         "submitted": "submitted the task",
         "returned": "returned the task",
-        "completed": "completed the task",
+        "completed": "Marked task complete",
         "cancelled": "cancelled the task",
-        "updated": "updated the task"
+        "updated": "updated the task",
+        "withdrawn": "Submission withdrawn",
+        "reopened": "Reopened task"
       },
       "resources": {
         "REPORT": "Periodic report",
@@ -1747,7 +1785,13 @@
         "needs_revision": "Needs revision",
         "completed": "Completed",
         "cancelled": "Cancelled"
-      }
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
     },
     "paper_reviews": {
       "panel_title": "Paper review",
@@ -1833,6 +1877,13 @@
       "file_label": "Research file",
       "select_file": "Select file",
       "no_file_selected": "No file selected",
+      "upload_hint": "PDF / Markdown / TXT / DOC / DOCX, up to {size} per file",
+      "gateway_too_large": "The gateway rejected the file. Research-chain materials must be {size} or smaller.",
+      "status_processing": "Parsing",
+      "status_success": "Completed",
+      "status_failed": "Failed",
+      "status_degraded": "Degraded",
+      "status_unknown": "Unknown status",
       "upload": "Upload through BFF",
       "uploading": "Uploading…",
       "refresh_status": "Refresh status",
@@ -2145,6 +2196,8 @@
       "apply_filters": "Apply filters",
       "total_results": "{count} total",
       "untitled": "Untitled",
+      "share_type_administrative_work_item": "Administrative work item",
+      "share_type_research_work_item": "Research work item",
       "copy_share": "Copy",
       "copy_share_aria": "Copy share link: {title}",
       "share_copied_title": "Share text copied",
@@ -2420,7 +2473,9 @@
         "status": "Status",
         "read_state": "Read state",
         "visibility": "Visibility"
-      }
+      },
+      "approval_reviewer": "Reviewer: {name}",
+      "submit_approval_title": "Select report reviewer"
     },
     "attachments": {
       "title": "Attachments and body import",
@@ -3284,6 +3339,27 @@
       "outcome": "outcome",
       "system": "System",
       "business_object": "business object"
+    },
+    "approval_route": {
+      "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
+      "single_reviewer": "Single reviewer",
+      "reviewer": "Reviewer",
+      "cc": "Carbon copy (optional)",
+      "confirm": "I confirm submitting this to {name} for review",
+      "recommended": "Recommended",
+      "no_candidates": "No reviewer is available. Configure an advisor or organisation lead first.",
+      "loading": "Loading approval candidates…",
+      "load_failed": "Could not load approval candidates. Please retry.",
+      "submit": "Submit",
+      "roles": {
+        "primary_advisor": "Primary advisor",
+        "advisor": "Direct advisor",
+        "main_pi": "Main PI",
+        "unit_owner": "Unit owner",
+        "unit_pi": "Unit PI",
+        "unit_admin": "Unit administrator",
+        "reviewer": "Reviewer"
+      }
     }
   },
   "page_offline_save": {

@@ -58,13 +58,10 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
 
   const onDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-      const totalAttachedFiles = acceptedFiles.length + rejectedFiles.length;
-
       if (rejectedFiles.length === 0) {
-        const currentFile: File = acceptedFiles[0];
-        if (!currentFile || !workspaceSlug) return;
+        if (acceptedFiles.length === 0 || !workspaceSlug) return;
 
-        if (attachmentCount >= MAX_FILE_ATTACHMENTS) {
+        if (attachmentCount + acceptedFiles.length > MAX_FILE_ATTACHMENTS) {
           setToast({
             type: TOAST_TYPE.ERROR,
             title: t("toast.error"),
@@ -73,7 +70,7 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
           return;
         }
 
-        const limitError = getLimitError(currentFile);
+        const limitError = acceptedFiles.map((file) => getLimitError(file)).find(Boolean);
         if (limitError) {
           setToast({
             type: TOAST_TYPE.ERROR,
@@ -85,7 +82,7 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
 
         setIsLoading(true);
         attachmentOperations
-          .create(currentFile)
+          .createMany(acceptedFiles)
           .catch(() => {
             setToast({
               type: TOAST_TYPE.ERROR,
@@ -105,10 +102,7 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
         type: TOAST_TYPE.ERROR,
         title: "Error!",
         message:
-          totalAttachedFiles > 1
-            ? "Only one file can be uploaded at a time."
-            : (getLimitError(rejectedFiles[0]?.file) ??
-              `File must be of ${maxFileSize / 1024 / 1024}MB or less in size.`),
+          getLimitError(rejectedFiles[0]?.file) ?? `File must be of ${maxFileSize / 1024 / 1024}MB or less in size.`,
       });
       return;
     },
@@ -127,7 +121,7 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
     maxSize: maxFileSize,
-    multiple: false,
+    multiple: true,
     disabled: limitsLoading || isLoading || disabled,
   });
 

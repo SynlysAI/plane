@@ -696,6 +696,22 @@ def test_organization_member_management_and_rejoin(env):
     relation = AdministrativeOrganizationMember.objects.get(
         organization=env["organization"], member=env["ordinary_member"]
     )
+    duplicated = env["admin_client"].post(
+        members_url,
+        {"member": str(env["ordinary_member"].id), "role": "ADMIN"},
+        format="json",
+    )
+    assert duplicated.status_code == 409, duplicated.json()
+    assert duplicated.json()["code"] == "MEMBER_ALREADY_IN_ORGANIZATION"
+    assert (
+        AdministrativeOrganizationMember.objects.filter(
+            organization=env["organization"], member=env["ordinary_member"]
+        ).count()
+        == 1
+    )
+    relation.refresh_from_db()
+    assert relation.role == AdministrativeOrganizationMember.Role.MEMBER
+
     relation.is_active = False
     relation.deleted_at = timezone.now()
     relation.save(update_fields=["is_active", "deleted_at", "updated_at"])

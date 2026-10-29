@@ -11,6 +11,11 @@ from django.utils import timezone
 
 from plane.db import models as db
 from plane.research.services import report_workflow as workflow
+from plane.research.services.approval_routes import (
+    ApprovalRouteError,
+    approval_route_payload,
+    validate_route_selection,
+)
 from plane.research.services.weekly_report_body import (
     BODY_FIELDS,
     FALLBACK,
@@ -28,9 +33,9 @@ from plane.research.services.weekly_report_policy import (
     check_grant,
     consistency_barrier,
 )
+from plane.research.utils.acl import build_actor_context, direct_advisor_ids
 from plane.research.utils.audit import record_audit_event
 from plane.research.utils.notifications import report_reviewer_ids
-from plane.research.utils.acl import build_actor_context, direct_advisor_ids
 from plane.research.utils.periods import InvalidPeriod, parse_period, period_for_offset
 from plane.research.utils.reports import active_grants, effective_report_visibility, is_editable
 from plane.research.utils.settings import default_visibility_for, report_timezone_for
@@ -173,7 +178,8 @@ class WeeklyReportService:
             "effective_visibility": visibility,
             "audience_summary": summary,
         }
-        policy_state = {}
+        route_options = approval_route_payload("PERIODIC_REPORT", notification_report, self.user)
+        policy_state = {"approval_candidates": route_options["candidates"]}
         policy_state["notification_recipients"] = reviewer_ids
         actor = build_actor_context(self.user, self.workspace.pk)
         policy_state["effective_actor"] = {
@@ -233,6 +239,8 @@ class WeeklyReportService:
             "state_hash": state_hash,
             "content": {"template_content": template_body, "report_content": report_content},
             "reviewer_ids": reviewer_ids,
+            "approval_route": route_options,
+            "approval_resource": notification_report,
         }
 
     def check_revision(self, revision, env):
@@ -291,6 +299,7 @@ class WeeklyReportService:
             }
             if report
             else None,
+            "approval_route": env["approval_route"],
             "content_page": {
                 "encoding": "utf-8-json",
                 "text": text[offset:end],
@@ -387,7 +396,15 @@ class WeeklyReportService:
 
     @transaction.atomic
     def prepare_weekly_report_operation(
-        self, request_id, action, period_key, expected_revision, body_markdown, source_refs=None
+        self,
+        request_id,
+        action,
+        period_key,
+        expected_revision,
+        body_markdown,
+        source_refs=None,
+        reviewer_id=None,
+        cc_user_ids=None,
     ):
         refs = source_refs or []
         consistency_barrier(sources=bool(refs))
@@ -399,6 +416,11 @@ class WeeklyReportService:
                 "expected_revision": expected_revision,
                 "body_markdown": body_markdown,
                 "source_refs": refs,
+                **(
+                    {"reviewer_id": reviewer_id, "cc_user_ids": cc_user_ids or []}
+                    if reviewer_id is not None or cc_user_ids is not None
+                    else {}
+                ),
             }
         )
         previous = db.ReportAgentOperation.objects.filter(
@@ -417,6 +439,18 @@ class WeeklyReportService:
             )
         normalized = normalize_body(body_markdown)
         source_state = self.source_state(refs)
+        route_selection = None
+        if action == "submit":
+            try:
+                route_selection = validate_route_selection(
+                    "PERIODIC_REPORT",
+                    env["approval_resource"],
+                    self.user,
+                    reviewer_id,
+                    cc_user_ids,
+                )
+            except ApprovalRouteError as error:
+                raise WeeklyReportError(error.error_code, error.message, 422) from error
         report = env["report"]
         old = env["content"]["report_content"]
         delta = list(
@@ -457,6 +491,12 @@ class WeeklyReportService:
             },
             "agent_label": self.grant.label,
         }
+        if route_selection is not None:
+            proposal["approval_route"] = {
+                "reviewer_id": route_selection["reviewer_id"],
+                "cc_user_ids": route_selection["cc_user_ids"],
+            }
+            proposal["effects"]["creates_in_app_notifications"] = True
         operation = db.ReportAgentOperation(
             workspace=self.workspace,
             user=self.user,
@@ -543,6 +583,7 @@ class WeeklyReportService:
                 payload = {field: proposed[field] for field in BODY_FIELDS if field != "description_stripped"}
                 payload["description_binary"] = ""
                 if operation.action == "submit":
+                    payload.update(operation.payload["proposal"].get("approval_route", {}))
                     report = workflow.submit_report(
                         workspace=self.workspace, actor=self.user, report_id=report.pk, payload=payload
                     )

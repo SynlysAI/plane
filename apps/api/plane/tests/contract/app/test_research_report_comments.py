@@ -132,7 +132,7 @@ def make_report(env, *, anchorless=False):
     page.save(update_fields=["description_json", "description_html", "description_stripped", "updated_at"])
     submitted = env["student_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/reports/{report['id']}/submit/",
-        {},
+        {"reviewer_id": str(env["advisor"].id), "cc_user_ids": []},
         format="json",
     )
     assert submitted.status_code == 200, submitted.data

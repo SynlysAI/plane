@@ -10,7 +10,6 @@ import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
 import { usePopper } from "react-popper";
 import { ArrowNarrowRightOutline, CalendarOutline, CloseOutline, DueDateOutline } from "@makeplane/propel/icons";
-import { Combobox } from "@headlessui/react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 // ui
@@ -255,10 +254,9 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
   );
 
   const comboOptions = (
-    <Combobox.Options
-      as="ul"
+    /* 普通容器不取消原生 select 的 mousedown，保证月份 / 年份下拉可打开。 */
+    <div
       data-prevent-outside-click
-      static
       className="z-30"
       ref={setPopperElement}
       style={styles.popper}
@@ -280,7 +278,7 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
           initialFocus
         />
       </div>
-    </Combobox.Options>
+    </div>
   );
 
   const Options = renderInPortal ? createPortal(comboOptions, document.body) : comboOptions;
@@ -288,6 +286,7 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
   return (
     <ComboDropDown
       as="div"
+      role="group"
       ref={dropdownRef}
       tabIndex={tabIndex}
       className={cn("h-full", className)}

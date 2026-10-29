@@ -43,13 +43,31 @@ from plane.preview.service import PERMANENT_ERRORS, PreviewError, file_kind, get
 from plane.preview.content import stream_preview_content
 
 ALLOWED_UPLOAD_EXTENSIONS = frozenset({"pdf", "md", "markdown", "txt", "doc", "docx"})
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+UPLOAD_HASH_CHUNK_SIZE = 1024 * 1024
 UPLOAD_STATUS_MAP = {
-    "pending": ResearchChainUpload.Status.PENDING,
+    "pending": ResearchChainUpload.Status.PROCESSING,
     "processing": ResearchChainUpload.Status.PROCESSING,
     "success": ResearchChainUpload.Status.SUCCESS,
     "failed": ResearchChainUpload.Status.FAILED,
 }
+
+
+def _stream_sha256(uploaded_file):
+    """Hash an upload in bounded chunks and leave the stream ready for reuse.
+
+    Args:
+        uploaded_file: Django uploaded file owned by the current request.
+
+    Returns:
+        The lowercase hexadecimal SHA-256 digest of the complete file.
+    """
+    digest = hashlib.sha256()
+    try:
+        for chunk in uploaded_file.chunks(chunk_size=UPLOAD_HASH_CHUNK_SIZE):
+            digest.update(chunk)
+    finally:
+        uploaded_file.seek(0)
+    return digest.hexdigest()
 
 
 def _rag_client(workspace):
@@ -200,7 +218,10 @@ def _append_event(*, chain, node, request, event_type, summary, refs, metadata, 
 class ResearchChainKnowledgeBaseListEndpoint(ResearchAPIView):
     """``GET /chains/<chain_id>/knowledge-bases/``."""
 
-    nav_capability = NAV_RESEARCH_CHAIN
+    # Chain visibility is the authoritative gate; direct collaborators may not
+    # hold a separate organisation-unit membership.
+    nav_capability = None
+    research_membership_required = False
 
     def get(self, request, slug, chain_id):
         workspace, error = self.get_workspace(section="research_chain")
@@ -216,7 +237,8 @@ class ResearchChainKnowledgeBaseListEndpoint(ResearchAPIView):
 class ResearchChainUploadEndpoint(ResearchAPIView):
     """List node uploads or create one through the scoped BFF."""
 
-    nav_capability = NAV_RESEARCH_CHAIN
+    nav_capability = None
+    research_membership_required = False
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request, slug, chain_id):
@@ -284,14 +306,13 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                 "Only PDF, Markdown, text and Word documents can be uploaded.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if uploaded.size > MAX_UPLOAD_BYTES:
+        if uploaded.size > settings.RESEARCH_CHAIN_UPLOAD_MAX_BYTES:
             return research_error(
                 ResearchErrorCode.FILE_SIZE_EXCEEDED,
-                "The research file exceeds the 50MB Phase 1 limit.",
+                "The research file exceeds the configured chain upload limit.",
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
-        file_bytes = uploaded.read()
-        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        file_hash = _stream_sha256(uploaded)
         digest = payload_hash(
             {
                 "request_id": request_id,
@@ -375,7 +396,7 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
             )
         result = client.upload(
             file_name=file_name,
-            file_content=file_bytes,
+            file_content=uploaded,
             kb_id=knowledge_base_id,
             metadata=upstream_metadata,
             request=request,
@@ -494,7 +515,8 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
 class ResearchChainUploadDetailEndpoint(ResearchAPIView):
     """``GET /chains/<chain_id>/uploads/<upload_id>/`` and refresh status."""
 
-    nav_capability = NAV_RESEARCH_CHAIN
+    nav_capability = None
+    research_membership_required = False
 
     def get(self, request, slug, chain_id, upload_id):
         workspace, error = self.get_workspace(section="research_chain")
@@ -554,7 +576,8 @@ class ResearchChainUploadDetailEndpoint(ResearchAPIView):
 class ResearchChainUploadDownloadEndpoint(ResearchAPIView):
     """Proxy one externally stored research upload after Plane ACL checks."""
 
-    nav_capability = NAV_RESEARCH_CHAIN
+    nav_capability = None
+    research_membership_required = False
 
     def get(self, request, slug, chain_id, upload_id):
         workspace, error = self.get_workspace(section="research_chain")
@@ -599,7 +622,8 @@ class ResearchChainUploadDownloadEndpoint(ResearchAPIView):
 class ResearchChainUploadPreviewEndpoint(ResearchAPIView):
     """Create, query, and stream previews for external research uploads."""
 
-    nav_capability = NAV_RESEARCH_CHAIN
+    nav_capability = None
+    research_membership_required = False
 
     def get(self, request, slug, chain_id, upload_id, content=False):
         """Return preview status or the ready private payload."""

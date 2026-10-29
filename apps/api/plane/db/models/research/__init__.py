@@ -18,6 +18,7 @@ from .experiment import (
 from .feedback import ResearchFeedback, ResearchFeedbackReply, ResearchFeedbackScreenshot
 from .identity import IdentityMapping
 from .account_link import AccountLink
+from .approval_route import ResearchApprovalRoute
 from .chain import (
     ResearchChain,
     ResearchChainEvent,
@@ -108,6 +109,7 @@ __all__ = [
     "ResearchAgentWriteGrant",
     "IdentityMapping",
     "AccountLink",
+    "ResearchApprovalRoute",
     "ResearchChain",
     "ResearchChainStage",
     "ResearchChainStageMaterialItem",

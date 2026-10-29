@@ -67,8 +67,8 @@ vi.mock("@/components/research/outcomes/outcome-list", () => ({
   OutcomeList: () => <div>outcome-list</div>,
 }));
 vi.mock("@/components/research/chains/research-chain-knowledge-panel", () => ({
-  ResearchChainKnowledgePanel: ({ chainId, nodeId }: { chainId: string; nodeId: string }) => (
-    <div data-testid="chain-knowledge-panel" data-chain={chainId} data-node={nodeId}>
+  ResearchChainKnowledgePanel: ({ knowledge }: { knowledge: { chainId: string; nodeId: string } }) => (
+    <div data-testid="chain-knowledge-panel" data-chain={knowledge.chainId} data-node={knowledge.nodeId}>
       knowledge-panel
     </div>
   ),

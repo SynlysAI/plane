@@ -45,7 +45,10 @@ def create(env):
 
 def submit(env, report, payload=None):
     return workflow.submit_report(
-        workspace=env["workspace"], actor=env["student"], report_id=report.pk, payload=payload or {}
+        workspace=env["workspace"],
+        actor=env["student"],
+        report_id=report.pk,
+        payload={"reviewer_id": str(env["advisor"].pk), **(payload or {})},
     )
 
 
@@ -277,3 +280,24 @@ def test_shared_workflow_rejects_terminal_report_without_overwriting_body(env, s
     assert error.value.status_code == 409
     assert PeriodicReportSnapshot.objects.filter(report=report).count() == 1
     assert Page.objects.get(pk=report.page_id).description_html == "<p>official</p>"
+
+
+def test_shared_submit_requires_explicit_reviewer_and_rolls_back_body_snapshot(env):
+    from plane.db.models import ResearchApprovalRoute
+
+    report = create(env)
+    original = report.page.description_html
+    with pytest.raises(workflow.ReportWorkflowError) as failure:
+        workflow.submit_report(
+            workspace=env["workspace"], actor=env["student"], report_id=report.pk, payload=body("not committed")
+        )
+    assert failure.value.status_code == 422
+    assert failure.value.data["error_code"] == "approval_reviewer_required"
+    report.refresh_from_db()
+    report.page.refresh_from_db()
+    assert report.status == "DRAFT" and report.page.description_html == original
+    assert not PeriodicReportSnapshot.objects.filter(report=report).exists()
+    assert not ResearchApprovalRoute.objects.filter(resource_id=report.pk).exists()
+    submit(env, report, body("explicit selection"))
+    route = ResearchApprovalRoute.objects.get(resource_id=report.pk, status="ACTIVE")
+    assert route.reviewer_id == env["advisor"].pk and route.submitted_by_id == env["student"].pk

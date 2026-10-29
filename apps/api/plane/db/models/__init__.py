@@ -83,6 +83,7 @@ from .workspace import (
     WorkspaceUserProperties,
     WorkspaceUserLink,
     WorkspaceHomePreference,
+    WorkspaceAdministrativeViewDefault,
     HomeActivityEvent,
     WorkspaceUserPreference,
 )
@@ -111,6 +112,7 @@ from .research import (
     STAGE_SORT_ORDER,
     IdentityMapping,
     AccountLink,
+    ResearchApprovalRoute,
     ResearchChain,
     ResearchChainStage,
     ResearchChainStageMaterialItem,

@@ -9,7 +9,6 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.db.models import (
-    MentorBinding,
     OrgUnit,
     Page,
     PeriodicReport,
@@ -30,6 +29,13 @@ from plane.research.serializers import (
     PeriodicReportSerializer,
     ReportAccessGrantSerializer,
     ReportReviewLogSerializer,
+)
+from plane.research.services.approval_routes import (
+    actor_can_review_route,
+    active_approval_route_map,
+    approval_route_payload,
+    close_active_route,
+    routed_resource_ids,
 )
 from plane.research.utils.acl import (
     build_actor_context,
@@ -58,6 +64,7 @@ from plane.research.utils.notifications import (
     notify_report_returned,
     notify_report_withdrawn,
 )
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, report_resource, visible_reports_queryset
 from plane.research.utils.settings import default_visibility_for
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy
@@ -71,9 +78,11 @@ def serialize_report(
     include_draft_content=False,
     mentor_cache=None,
     confidential_cache=None,
+    approval_route_cache=None,
 ):
     context = context if context is not None else build_actor_context(request.user, report.workspace_id)
     confidential_cache = confidential_cache if confidential_cache is not None else {}
+    approval_route_cache = approval_route_cache if approval_route_cache is not None else {}
     return PeriodicReportSerializer(
         report,
         context={
@@ -82,6 +91,7 @@ def serialize_report(
             "include_draft_content": include_draft_content,
             "mentor_cache": mentor_cache,
             "confidential_cache": confidential_cache,
+            "_research_report_approval_routes": approval_route_cache,
         },
     ).data
 
@@ -281,10 +291,12 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
             queryset = queryset.filter(org_unit_id=org_unit_id)
         if owner_id:
             queryset = queryset.filter(owner_id=owner_id)
+        # A report only needs to overlap the selected range; weekly and monthly
+        # periods can start before or end after the user's filter boundary.
         if date_from:
-            queryset = queryset.filter(period_start__gte=date_from)
+            queryset = queryset.filter(period_end__gte=date_from)
         if date_to:
-            queryset = queryset.filter(period_end__lte=date_to)
+            queryset = queryset.filter(period_start__lte=date_to)
         if truthy(request.GET.get("mine")):
             queryset = queryset.filter(owner=request.user)
 
@@ -305,38 +317,38 @@ class ResearchReportListCreateEndpoint(ResearchAPIView):
         if scope == "mine":
             visible_queryset = visible_queryset.filter(owner=request.user)
         elif scope == "review":
-            review_scope = Q(org_unit_id__in=context.managing_unit_ids) | Q(
-                owner_id__in=MentorBinding.objects.filter(
-                    workspace=workspace,
-                    mentor=request.user,
-                    is_primary_advisor=True,
-                    effective_from__lte=timezone.localdate(),
-                    deleted_at__isnull=True,
-                )
-                .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=timezone.localdate()))
-                .values("mentee_id")
-            )
             visible_queryset = visible_queryset.filter(status="SUBMITTED").exclude(owner=request.user)
-            if not context.is_main_pi:
-                visible_queryset = visible_queryset.filter(review_scope)
+            if not is_research_admin(request.user, workspace.id):
+                visible_queryset = visible_queryset.filter(
+                    id__in=routed_resource_ids(workspace.id, "PERIODIC_REPORT", request.user)
+                )
         elif scope == "deleted":
             pass
         elif scope != "all":
             return Response({"error_code": "invalid_scope"}, status=400)
         mentor_cache = {}
-        return self.paginate(
-            request=request,
-            queryset=visible_queryset,
-            on_results=lambda reports: [
+        approval_route_cache = {}
+
+        def serialize_page(reports):
+            approval_route_cache.update(
+                active_approval_route_map("PERIODIC_REPORT", [report.id for report in reports], workspace.id)
+            )
+            return [
                 serialize_report(
                     report,
                     request,
                     context,
                     mentor_cache=mentor_cache,
                     confidential_cache=confidential_cache,
+                    approval_route_cache=approval_route_cache,
                 )
                 for report in reports
-            ],
+            ]
+
+        return self.paginate(
+            request=request,
+            queryset=visible_queryset,
+            on_results=serialize_page,
             default_per_page=50,
             max_per_page=100,
         )
@@ -360,6 +372,7 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
     """``GET``/``PATCH /api/research/workspaces/<slug>/reports/<report_id>/``"""
 
     nav_capability = NAV_REPORTS
+    research_membership_required = False
 
     def _visible_report(self, request, workspace, report_id, action="view"):
         report = report_queryset(workspace).filter(pk=report_id).first()
@@ -371,7 +384,7 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
         return report, None
 
     def get(self, request, slug, report_id):
-        workspace, error = self.get_workspace(section="reports")
+        workspace, error = self.get_workspace(section="reports", nav=None, research_member=False)
         if error:
             return error
         report, error = self._visible_report(request, workspace, report_id)
@@ -383,7 +396,7 @@ class ResearchReportDetailEndpoint(ResearchAPIView):
         )
 
     def patch(self, request, slug, report_id):
-        workspace, error = self.get_workspace(section="reports")
+        workspace, error = self.get_workspace(section="reports", nav=None, research_member=False)
         if error:
             return error
         try:
@@ -615,6 +628,7 @@ class ResearchReportWithdrawEndpoint(ResearchAPIView):
                 report.official_snapshots.order_by("-version_no").values_list("version_no", flat=True).first()
             )
             previous = report.status
+            route = close_active_route("PERIODIC_REPORT", report.id, report.workspace_id, request.user)
             report.status = target
             report.submitted_at = None
             report.accepted_at = None
@@ -642,11 +656,36 @@ class ResearchReportWithdrawEndpoint(ResearchAPIView):
                 "report_type": report.report_type,
                 "snapshot_version": snapshot_version,
                 "comment": comment[:240],
+                "approval_route": str(route.id) if route else None,
             },
             request=request,
         )
-        notify_report_withdrawn(report, request.user, comment)
+        notify_report_withdrawn(report, request.user, comment, route=route)
         return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
+
+
+class ResearchReportApprovalRouteEndpoint(ResearchAPIView):
+    """``GET /api/research/workspaces/<slug>/reports/<report_id>/approval-route/``"""
+
+    nav_capability = NAV_REPORTS
+
+    def get(self, request, slug, report_id):
+        """Return report approval candidates for the author or an administrator."""
+        workspace, error = self.get_workspace(section="reports")
+        if error:
+            return error
+        report = report_queryset(workspace).filter(pk=report_id).first()
+        if report is None:
+            return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+        if report.owner_id != request.user.id and not is_research_admin(request.user, workspace.id):
+            return research_permission_denied()
+        data = approval_route_payload("PERIODIC_REPORT", report, report.owner)
+        return Response(
+            {
+                "schema_version": data["schema_version"],
+                "data": data,
+            }
+        )
 
 
 class ResearchReportReturnEndpoint(ResearchAPIView):
@@ -671,16 +710,16 @@ class ResearchReportReturnEndpoint(ResearchAPIView):
             report = report_queryset(workspace).select_for_update(of=("self",)).filter(pk=report_id).first()
             if report is None:
                 return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
-            context = build_actor_context(request.user, workspace.id)
-            if not check_access(request.user, "return", report_resource(report), context=context):
-                return research_permission_denied()
             if not can_transition(report.status, target):
                 return research_conflict(
                     ResearchErrorCode.REPORT_STATE_CONFLICT,
                     "The report status does not allow this action.",
                 )
+            if not actor_can_review_route(workspace, "PERIODIC_REPORT", report.id, request.user):
+                return research_permission_denied()
 
             previous = report.status
+            route = close_active_route("PERIODIC_REPORT", report.id, report.workspace_id, request.user)
             report.status = target
             report.reviewer = request.user
             report.save(update_fields=["status", "reviewer", "updated_at"])
@@ -700,10 +739,14 @@ class ResearchReportReturnEndpoint(ResearchAPIView):
             resource_id=report.id,
             org_unit=report.org_unit,
             actor=request.user,
-            metadata={"period_key": report.period_key, "reason_provided": True},
+            metadata={
+                "period_key": report.period_key,
+                "reason_provided": True,
+                "approval_route": str(route.id) if route else None,
+            },
             request=request,
         )
-        notify_report_returned(report, request.user, comment)
+        notify_report_returned(report, request.user, comment, route=route)
         return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 
@@ -721,16 +764,16 @@ class ResearchReportAcceptEndpoint(ResearchAPIView):
             report = report_queryset(workspace).select_for_update(of=("self",)).filter(pk=report_id).first()
             if report is None:
                 return research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
-            context = build_actor_context(request.user, workspace.id)
-            if not check_access(request.user, "accept", report_resource(report), context=context):
-                return research_permission_denied()
             if not can_transition(report.status, target):
                 return research_conflict(
                     ResearchErrorCode.REPORT_STATE_CONFLICT,
                     "The report status does not allow this action.",
                 )
+            if not actor_can_review_route(workspace, "PERIODIC_REPORT", report.id, request.user):
+                return research_permission_denied()
 
             previous = report.status
+            route = close_active_route("PERIODIC_REPORT", report.id, report.workspace_id, request.user)
             report.status = target
             report.accepted_at = timezone.now()
             report.reviewer = request.user
@@ -751,10 +794,14 @@ class ResearchReportAcceptEndpoint(ResearchAPIView):
             resource_id=report.id,
             org_unit=report.org_unit,
             actor=request.user,
-            metadata={"period_key": report.period_key, "report_type": report.report_type},
+            metadata={
+                "period_key": report.period_key,
+                "report_type": report.report_type,
+                "approval_route": str(route.id) if route else None,
+            },
             request=request,
         )
-        notify_report_accepted(report, request.user)
+        notify_report_accepted(report, request.user, route=route)
         return Response(serialize_report(report, request, include_draft_content=True), status=status.HTTP_200_OK)
 
 

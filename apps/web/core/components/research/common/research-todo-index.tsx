@@ -5,14 +5,11 @@ import Link from "next/link";
 import { useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
 import { Skeleton } from "@plane/propel/skeleton";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type {
   TResearchTodoEnvelope,
   TResearchTodoHandlingStatus,
-  TResearchTodoNextAction,
   TResearchTodoScope,
   TResearchTodoSource,
 } from "@plane/types";
@@ -20,7 +17,7 @@ import type {
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { formatResearchDate } from "@/components/research/common/research-format";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
-import { formatShareText } from "@/components/research/common/share-link";
+import { ShareLinkIconButton } from "@/components/common/share-link-icon-button";
 import {
   ResearchChainStageApprovalQueue,
   type TChainStageApprovalQueueItem,
@@ -50,20 +47,6 @@ const HANDLING_LABEL_KEYS: Record<TResearchTodoHandlingStatus, string> = {
   RETURNED: "research.todo.handling_returned",
   DONE: "research.todo.handling_done",
   BLOCKED: "research.todo.handling_blocked",
-};
-
-const NEXT_ACTION_LABEL_KEYS: Record<TResearchTodoNextAction, string> = {
-  READ: "research.todo.next_read",
-  REVIEW: "research.todo.next_review",
-  SUBMIT: "research.todo.next_submit",
-  ASSIGN: "research.todo.next_assign",
-  RETURN: "research.todo.next_return",
-  ACCEPT: "research.todo.next_accept",
-  WITHDRAW: "research.todo.next_withdraw",
-  COMPLETE: "research.todo.next_complete",
-  CANCEL: "research.todo.next_cancel",
-  APPROVE: "research.todo.next_approve",
-  REJECT: "research.todo.next_reject",
 };
 
 const BUSINESS_STATUS_LABEL_KEYS: Record<string, string> = {
@@ -239,30 +222,6 @@ export function ResearchTodoEnvelopeList({
     setQueueCompleted(!next);
   };
 
-  /**
-   * 复制带标题与绝对链接的科研待办分享文本。
-   *
-   * Args:
-   *   todo: 服务端聚合出的科研待办。
-   */
-  const handleCopyLink = async (todo: TResearchTodoEnvelope) => {
-    const title = todo.title.trim() || t("research.common.untitled");
-    try {
-      await copyTextToClipboard(formatShareText(t("research.todo.share_type_research"), title, todo.href));
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("research.common.share_copied_title"),
-        message: t("research.common.share_copied_message"),
-      });
-    } catch {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("research.common.share_copy_failed_title"),
-        message: t("research.common.share_copy_failed_message"),
-      });
-    }
-  };
-
   const queue = activeQueueId ? (
     <ResearchChainStageApprovalQueue
       workspaceSlug={workspaceSlug}
@@ -393,18 +352,17 @@ export function ResearchTodoEnvelopeList({
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      aria-label={t("research.common.copy_share_aria", { title: shareTitle })}
-                      onClick={() => void handleCopyLink(todo)}
-                    >
-                      {t("research.common.copy_share")}
-                    </Button>
+                    <ShareLinkIconButton
+                      typeLabel={t("research.todo.share_type_research")}
+                      title={shareTitle}
+                      href={todo.href}
+                      ariaLabel={t("research.common.copy_share_aria", { title: shareTitle })}
+                    />
                     <Link
                       href={todo.href}
                       data-peek-trigger={isStageApproval ? "" : undefined}
                       aria-current={isActive ? "true" : undefined}
+                      aria-label={`${shareTitle}：${t("research.todo.open")}`}
                       className="text-12 text-accent-primary transition-colors hover:underline"
                       onClick={(event) => {
                         if (!isStageApproval) return;
@@ -423,7 +381,7 @@ export function ResearchTodoEnvelopeList({
                         setActiveQueueId(todo.id);
                       }}
                     >
-                      {t(NEXT_ACTION_LABEL_KEYS[todo.next_action])}
+                      {t("research.todo.open")}
                     </Link>
                   </div>
                 </li>

@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { OUTCOME_STATUSES, OUTCOME_STATUS_LABELS, OUTCOME_TYPES, OUTCOME_TYPE_LABELS } from "@plane/constants";
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@plane/propel/button";
 import { ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
 // components
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import {
   ResearchFilterToolbar,
@@ -28,6 +29,10 @@ import { useResearch } from "@/hooks/store/use-research";
 import { ResearchOutcomeService } from "@/services/research/outcome.service";
 
 const outcomeService = new ResearchOutcomeService();
+const OUTCOME_ATTACHMENT_ACCEPT = {
+  "application/pdf": [".pdf"],
+  "text/markdown": [".md", ".markdown"],
+};
 
 type Props = {
   workspaceSlug: string;
@@ -45,12 +50,40 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
   const [doi, setDoi] = useState("");
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [uploadingOutcomeId, setUploadingOutcomeId] = useState<string | null>(null);
-  const outcomeFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void research.fetchOutcomes(workspaceSlug, projectId).catch((error) => setErrorKey(getResearchErrorKey(error)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug, projectId]);
+
+  /** Upload a flattened attachment batch to one draft outcome. */
+  const uploadOutcomeFiles = async (outcomeId: string, files: File[]) => {
+    setUploadingOutcomeId(outcomeId);
+    try {
+      /* eslint-disable no-await-in-loop -- One outcome must finish presign, upload, and register before the next. */
+      for (const file of files) {
+        const presigned = await outcomeService.presignOutcomeAttachment(workspaceSlug, outcomeId, {
+          file_name: file.name,
+          content_type: file.type || "application/octet-stream",
+          size: file.size,
+        });
+        const form = new FormData();
+        Object.entries(presigned.upload_data.fields).forEach(([key, value]) => form.append(key, value));
+        form.append("file", file);
+        const response = await fetch(presigned.upload_data.url, { method: "POST", body: form });
+        if (!response.ok) throw new Error("upload_failed");
+        await outcomeService.registerOutcomeAttachment(workspaceSlug, outcomeId, presigned.asset_id);
+      }
+      /* eslint-enable no-await-in-loop */
+      // Upload and registration happen outside the research store, so refresh once per batch.
+      await research.fetchOutcomes(workspaceSlug, projectId);
+      setErrorKey(null);
+    } catch (error) {
+      setErrorKey(getResearchErrorKey(error));
+    } finally {
+      setUploadingOutcomeId(null);
+    }
+  };
 
   return (
     <ResearchListSurface>
@@ -156,49 +189,53 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
                   </ResearchStatusBadge>
                 </TableCell>
                 <TableCell className="text-right text-tertiary tabular-nums">
-                  {outcome.can_delete && (
-                    <ResearchDeleteButton
-                      name={outcome.title}
-                      disabled={uploadingOutcomeId === outcome.id}
-                      onDelete={async () => {
-                        await research.deleteOutcome(workspaceSlug, outcome.id);
-                      }}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className="mr-3 text-12 text-accent-primary hover:underline disabled:opacity-50"
-                    disabled={outcome.status !== "DRAFT" || uploadingOutcomeId === outcome.id}
-                    onClick={() => {
-                      setUploadingOutcomeId(outcome.id);
-                      outcomeFileRef.current?.click();
-                    }}
-                  >
-                    {uploadingOutcomeId === outcome.id
-                      ? t("research.outcomes.uploading")
-                      : t("research.outcomes.upload_file")}
-                  </button>
-                  {outcome.links?.length ?? 0}
-                  {outcome.attachments?.map((attachment) => (
-                    <span key={attachment.id} className="ml-2 inline-flex items-center gap-1">
-                      <a className="text-12 text-accent-primary hover:underline" href={attachment.download_url}>
-                        {attachment.file_name}
-                      </a>
-                      {outcome.status === "DRAFT" && (
-                        <button
-                          type="button"
-                          className="text-11 text-danger-primary hover:underline"
-                          onClick={() =>
-                            void outcomeService
-                              .deleteOutcomeAttachment(workspaceSlug, outcome.id, attachment.id)
-                              .then(() => research.fetchOutcomes(workspaceSlug, projectId))
-                          }
-                        >
-                          {t("research.outcomes.remove_file")}
-                        </button>
+                  <div className="flex flex-col items-end gap-2">
+                    <div>
+                      {outcome.can_delete && (
+                        <ResearchDeleteButton
+                          name={outcome.title}
+                          disabled={uploadingOutcomeId === outcome.id}
+                          onDelete={async () => {
+                            await research.deleteOutcome(workspaceSlug, outcome.id);
+                          }}
+                        />
                       )}
-                    </span>
-                  ))}
+                      {outcome.links?.length ?? 0}
+                      {outcome.attachments?.map((attachment) => (
+                        <span key={attachment.id} className="ml-2 inline-flex items-center gap-1">
+                          <a className="text-12 text-accent-primary hover:underline" href={attachment.download_url}>
+                            {attachment.file_name}
+                          </a>
+                          {outcome.status === "DRAFT" && (
+                            <button
+                              type="button"
+                              className="text-11 text-danger-primary hover:underline"
+                              onClick={() =>
+                                void outcomeService
+                                  .deleteOutcomeAttachment(workspaceSlug, outcome.id, attachment.id)
+                                  .then(() => research.fetchOutcomes(workspaceSlug, projectId))
+                              }
+                            >
+                              {t("research.outcomes.remove_file")}
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                    {outcome.status === "DRAFT" && (
+                      <AttachmentUploadZone
+                        onFiles={(files) => uploadOutcomeFiles(outcome.id, files)}
+                        accept={OUTCOME_ATTACHMENT_ACCEPT}
+                        multiple
+                        disabled={uploadingOutcomeId !== null}
+                        uploading={uploadingOutcomeId === outcome.id}
+                        variant="compact"
+                        className="w-full max-w-72"
+                        title={t("research.outcomes.upload_file")}
+                        hint="PDF / Markdown，支持文件夹"
+                      />
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -212,40 +249,6 @@ export const OutcomeList = observer(function OutcomeList({ workspaceSlug, projec
           </TableBody>
         </Table>
       </ResearchTableSurface>
-      <input
-        ref={outcomeFileRef}
-        type="file"
-        accept=".pdf,.md,.markdown,application/pdf,text/markdown"
-        className="hidden"
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-          const outcomeId = uploadingOutcomeId;
-          event.target.value = "";
-          if (!file || !outcomeId) return;
-          try {
-            const presigned = await outcomeService.presignOutcomeAttachment(workspaceSlug, outcomeId, {
-              file_name: file.name,
-              content_type: file.type || "application/octet-stream",
-              size: file.size,
-            });
-            const form = new FormData();
-            Object.entries(presigned.upload_data.fields).forEach(([key, value]) => form.append(key, value));
-            form.append("file", file);
-            const response = await fetch(presigned.upload_data.url, { method: "POST", body: form });
-            if (!response.ok) throw new Error("upload_failed");
-            await outcomeService.registerOutcomeAttachment(workspaceSlug, outcomeId, presigned.asset_id);
-            // The upload and attachment registration happen outside the research
-            // store, so reload the project outcomes before clearing the busy state.
-            // This makes the newly registered file visible without a page refresh.
-            await research.fetchOutcomes(workspaceSlug, projectId);
-            setErrorKey(null);
-          } catch (error) {
-            setErrorKey(getResearchErrorKey(error));
-          } finally {
-            setUploadingOutcomeId(null);
-          }
-        }}
-      />
       <p className="text-11 text-tertiary">{t("research.outcomes.link_hint")}</p>
     </ResearchListSurface>
   );

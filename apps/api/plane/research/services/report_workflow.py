@@ -32,6 +32,7 @@ from plane.db.models import (
     ReportTemplate,
     ResearchProjectProfile,
 )
+from plane.research.services.approval_routes import ApprovalRouteError, create_approval_route
 from plane.research.utils.acl import build_actor_context, can_narrow, check_access
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
 from plane.research.utils.errors import ResearchErrorCode
@@ -480,6 +481,19 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
         report=report,
         deleted_at__isnull=True,
     ).update(official_version_no=snapshot.version_no)
+    try:
+        route = create_approval_route(
+            workspace=workspace,
+            resource_type="PERIODIC_REPORT",
+            resource=report,
+            submitted_by=actor,
+            reviewer_id=payload.get("reviewer_id"),
+            cc_user_ids=payload.get("cc_user_ids", []),
+            request_id=f"report-{report.id}-v{snapshot.version_no}",
+        )
+    except ApprovalRouteError as error:
+        # Escape the atomic workflow so rejected routing rolls back the snapshot/body too.
+        raise ReportWorkflowError(error.error_code, error.message, 422) from error
     report.status = target
     report.submitted_at = timezone.now()
     report.save(update_fields=["status", "submitted_at", "updated_at"])
@@ -502,8 +516,13 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
         resource_id=report.id,
         org_unit=report.org_unit,
         actor=actor,
-        metadata={"period_key": report.period_key, "report_type": report.report_type},
+        metadata={
+            "period_key": report.period_key,
+            "report_type": report.report_type,
+            "approval_route": str(route.id),
+            "reviewer": str(route.reviewer_id),
+        },
         request=request,
     )
-    report._workflow_notifications = notify_report_submitted(report, actor)
+    report._workflow_notifications = notify_report_submitted(report, actor, route=route)
     return report

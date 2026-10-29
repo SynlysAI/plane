@@ -18,8 +18,7 @@ from plane.research.services.chain_tasks import (
     complete_task,
     create_task,
     list_tasks,
-    return_task,
-    submit_task,
+    reopen_task,
     update_task,
 )
 from plane.research.services.idempotency import payload_hash, request_id_from
@@ -98,7 +97,7 @@ def _task_context(view, request, slug, chain_id, node_id, task_id):
         return None, None, None, error
     task = (
         ResearchChainNodeTask.objects.filter(workspace=workspace, chain=chain, node=node, pk=task_id)
-        .select_related("workspace", "chain", "node", "assignee", "assigned_by")
+        .select_related("workspace", "chain", "node", "assignee", "assigned_by", "completed_by")
         .prefetch_related("instruction_attachments__asset")
         .first()
     )
@@ -238,9 +237,8 @@ class ResearchChainNodeTaskActionEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     ACTIONS = {
-        "submit": submit_task,
-        "return": return_task,
         "complete": complete_task,
+        "reopen": reopen_task,
         "cancel": cancel_task,
     }
 
@@ -267,7 +265,7 @@ class ResearchChainNodeTaskActionEndpoint(ResearchAPIView):
             "content_hash": digest,
             "request": request,
         }
-        if action in {"return", "cancel"}:
+        if action in {"reopen", "cancel"}:
             kwargs["reason"] = request.data.get("reason")
         elif action == "complete":
             kwargs["comment"] = request.data.get("comment", "")
@@ -295,9 +293,7 @@ class ResearchTaskNotificationRecipientsEndpoint(ResearchAPIView):
     nav_capability = NAV_RESEARCH_CHAIN
 
     def get(self, request, slug, chain_id, node_id, task_id):
-        workspace, chain, _node, task_or_error = _task_context(
-            self, request, slug, chain_id, node_id, task_id
-        )
+        workspace, chain, _node, task_or_error = _task_context(self, request, slug, chain_id, node_id, task_id)
         if isinstance(task_or_error, Response):
             return task_or_error
         return Response(
@@ -309,9 +305,7 @@ class ResearchTaskNotificationRecipientsEndpoint(ResearchAPIView):
         )
 
     def put(self, request, slug, chain_id, node_id, task_id):
-        workspace, chain, _node, task_or_error = _task_context(
-            self, request, slug, chain_id, node_id, task_id
-        )
+        workspace, chain, _node, task_or_error = _task_context(self, request, slug, chain_id, node_id, task_id)
         if isinstance(task_or_error, Response):
             return task_or_error
         readonly_error = _chain_readonly_error(chain)
@@ -358,17 +352,13 @@ class ResearchTaskNotificationRecipientSelfEndpoint(ResearchAPIView):
         )
 
     def post(self, request, slug, chain_id, node_id, task_id):
-        workspace, chain, _node, task_or_error = _task_context(
-            self, request, slug, chain_id, node_id, task_id
-        )
+        workspace, chain, _node, task_or_error = _task_context(self, request, slug, chain_id, node_id, task_id)
         if isinstance(task_or_error, Response):
             return task_or_error
         return self._response(request, workspace, chain, task_or_error, True)
 
     def delete(self, request, slug, chain_id, node_id, task_id):
-        workspace, chain, _node, task_or_error = _task_context(
-            self, request, slug, chain_id, node_id, task_id
-        )
+        workspace, chain, _node, task_or_error = _task_context(self, request, slug, chain_id, node_id, task_id)
         if isinstance(task_or_error, Response):
             return task_or_error
         return self._response(request, workspace, chain, task_or_error, False)

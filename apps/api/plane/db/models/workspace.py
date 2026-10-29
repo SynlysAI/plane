@@ -533,6 +533,71 @@ class WorkspaceHomePreference(BaseModel):
         return f"{self.workspace.name} {self.user.email} {self.key}"
 
 
+def get_default_administrative_view_display_filters():
+    """Return the current built-in display layout for administrative system views."""
+
+    return {
+        "calendar": {"show_weekends": False, "layout": "month"},
+        "group_by": None,
+        "sub_group_by": None,
+        "layout": "spreadsheet",
+        "order_by": "-created_at",
+        "show_empty_groups": True,
+        "sub_issue": True,
+    }
+
+
+def get_default_administrative_view_display_properties():
+    """Return the current built-in field visibility for administrative system views."""
+
+    return {
+        "assignee": True,
+        "start_date": True,
+        "due_date": True,
+        "labels": True,
+        "key": False,
+        "priority": True,
+        "state": True,
+        "sub_issue_count": True,
+        "link": True,
+        "attachment_count": True,
+        "estimate": True,
+        "created_on": True,
+        "updated_on": True,
+        "modules": True,
+        "cycle": True,
+        "issue_type": True,
+    }
+
+
+class WorkspaceAdministrativeViewDefault(BaseModel):
+    """Workspace-wide layout defaults for administrative system views."""
+
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="administrative_view_defaults",
+    )
+    display_filters = models.JSONField(default=get_default_administrative_view_display_filters)
+    display_properties = models.JSONField(default=get_default_administrative_view_display_properties)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="workspace_admin_view_default_unique_workspace_when_active",
+            )
+        ]
+        verbose_name = "Workspace Administrative View Default"
+        verbose_name_plural = "Workspace Administrative View Defaults"
+        db_table = "workspace_administrative_view_defaults"
+        ordering = ("-updated_at",)
+
+    def __str__(self):
+        return f"{self.workspace.name} administrative view default"
+
+
 class HomeActivityEventQuerySet(models.QuerySet):
     """Reject mutations because the home feed is an append-only audit surface."""
 

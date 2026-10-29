@@ -5,10 +5,13 @@
  */
 
 import { observer } from "mobx-react";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Button } from "@plane/propel/button";
 import { CloseOutline, LabelsFilled } from "@makeplane/propel/icons";
 // types
 import { useLabel } from "@/hooks/store/use-label";
+import { useProject } from "@/hooks/store/use-project";
+import { REQUIRED_FIELD_MESSAGES, isRequiredSelectionMissing } from "@/components/issues/required-fields";
 import type { TLabelOperations } from "./root";
 
 type TLabelListItem = {
@@ -25,12 +28,22 @@ export const LabelListItem = observer(function LabelListItem(props: TLabelListIt
   const { workspaceSlug, projectId, issueId, labelId, values, labelOperations, disabled } = props;
   // hooks
   const { getLabelById } = useLabel();
+  const { getProjectById } = useProject();
+  const project = getProjectById(projectId);
 
   const label = getLabelById(labelId);
 
   const handleLabel = async () => {
     if (values && !disabled) {
       const currentLabels = values.filter((_labelId) => _labelId !== labelId);
+      if (isRequiredSelectionMissing(project, "label_ids", currentLabels)) {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: REQUIRED_FIELD_MESSAGES.label_ids,
+        });
+        return;
+      }
       await labelOperations.updateIssue(workspaceSlug, projectId, issueId, { label_ids: currentLabels });
     }
   };

@@ -40,6 +40,11 @@ from plane.utils.filters import ComplexFilterBackend
 from plane.utils.filters import IssueFilterSet
 from .. import BaseViewSet
 from plane.utils.host import base_host
+from plane.utils.work_item_required_fields import (
+    MODULE_REQUIRED_ERROR,
+    active_issue_module_ids,
+    module_removal_would_violate_requirement,
+)
 
 
 class ModuleIssueViewSet(BaseViewSet):
@@ -259,6 +264,15 @@ class ModuleIssueViewSet(BaseViewSet):
         modules = request.data.get("modules", [])
         removed_modules = request.data.get("removed_modules", [])
         project = Project.objects.get(pk=project_id)
+        issue = Issue.objects.filter(workspace__slug=slug, project_id=project_id, pk=issue_id).first()
+        if issue is None:
+            return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
+        if module_removal_would_violate_requirement(
+            project,
+            active_issue_module_ids(issue),
+            removed_modules,
+        ):
+            return Response({"module_ids": [MODULE_REQUIRED_ERROR]}, status=status.HTTP_400_BAD_REQUEST)
 
         if modules:
             _ = ModuleIssue.objects.bulk_create(
@@ -324,6 +338,16 @@ class ModuleIssueViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def destroy(self, request, slug, project_id, module_id, issue_id):
+        project = Project.objects.get(pk=project_id)
+        issue = Issue.objects.filter(workspace__slug=slug, project_id=project_id, pk=issue_id).first()
+        if issue is None:
+            return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
+        if module_removal_would_violate_requirement(
+            project,
+            active_issue_module_ids(issue),
+            [module_id],
+        ):
+            return Response({"module_ids": [MODULE_REQUIRED_ERROR]}, status=status.HTTP_400_BAD_REQUEST)
         module_issue = ModuleIssue.objects.filter(
             workspace__slug=slug,
             project_id=project_id,

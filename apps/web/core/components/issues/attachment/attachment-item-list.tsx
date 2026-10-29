@@ -55,7 +55,6 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
     fetchActivities,
   } = useIssueDetail(issueServiceType);
   const { operations: attachmentOperations, snapshot: attachmentSnapshot } = attachmentHelpers;
-  const { create: createAttachment } = attachmentOperations;
   const { uploadStatus } = attachmentSnapshot;
   // file size categories
   const { isLoading: limitsLoading, maxFileSize, getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
@@ -70,13 +69,10 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
 
   const onDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-      const totalAttachedFiles = acceptedFiles.length + rejectedFiles.length;
-
       if (rejectedFiles.length === 0) {
-        const currentFile: File = acceptedFiles[0];
-        if (!currentFile || !workspaceSlug) return;
+        if (acceptedFiles.length === 0 || !workspaceSlug) return;
 
-        if (attachmentCount >= MAX_FILE_ATTACHMENTS) {
+        if (attachmentCount + acceptedFiles.length > MAX_FILE_ATTACHMENTS) {
           setToast({
             type: TOAST_TYPE.ERROR,
             title: t("toast.error"),
@@ -85,7 +81,7 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
           return;
         }
 
-        const limitError = getLimitError(currentFile);
+        const limitError = acceptedFiles.map((file) => getLimitError(file)).find(Boolean);
         if (limitError) {
           setToast({
             type: TOAST_TYPE.ERROR,
@@ -96,7 +92,8 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
         }
 
         setIsUploading(true);
-        createAttachment(currentFile)
+        attachmentOperations
+          .createMany(acceptedFiles)
           .catch(() => {
             setToast({
               type: TOAST_TYPE.ERROR,
@@ -115,20 +112,17 @@ export const IssueAttachmentItemList = observer(function IssueAttachmentItemList
         type: TOAST_TYPE.ERROR,
         title: t("toast.error"),
         message:
-          totalAttachedFiles > 1
-            ? t("attachment.only_one_file_allowed")
-            : (getLimitError(rejectedFiles[0]?.file) ??
-              t("attachment.file_size_limit", { size: maxFileSize / 1024 / 1024 })),
+          getLimitError(rejectedFiles[0]?.file) ?? t("attachment.file_size_limit", { size: maxFileSize / 1024 / 1024 }),
       });
       return;
     },
-    [attachmentCount, createAttachment, getLimitError, maxFileSize, workspaceSlug, handleFetchPropertyActivities, t]
+    [attachmentCount, attachmentOperations, getLimitError, maxFileSize, workspaceSlug, handleFetchPropertyActivities, t]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     maxSize: maxFileSize,
-    multiple: false,
+    multiple: true,
     disabled: limitsLoading || isUploading || disabled,
   });
 

@@ -128,6 +128,7 @@ from plane.research.views import (
     ResearchProjectRestoreEndpoint,
     ResearchReportAcceptEndpoint,
     ResearchReportAccessEndpoint,
+    ResearchReportApprovalRouteEndpoint,
     ResearchReportDetailEndpoint,
     ResearchReportHistoryEndpoint,
     ResearchReportListCreateEndpoint,
@@ -1314,6 +1315,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/submit/",
         ResearchReportSubmitEndpoint.as_view(),
         name="research-report-submit",
+    ),
+    path(
+        "research/workspaces/<str:slug>/reports/<uuid:report_id>/approval-route/",
+        ResearchReportApprovalRouteEndpoint.as_view(),
+        name="research-report-approval-route",
     ),
     path(
         "research/workspaces/<str:slug>/reports/<uuid:report_id>/restore/",

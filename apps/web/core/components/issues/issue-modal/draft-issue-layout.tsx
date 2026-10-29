@@ -36,6 +36,7 @@ export const DraftIssueLayout = observer(function DraftIssueLayout(props: DraftI
   const { handleCreateUpdatePropertyValues } = useIssueModal();
   const { createIssue } = useWorkspaceDraftIssues();
   const { t } = useTranslation();
+  const selectedProjectId = changesMade ? changesMade.project_id : projectId;
 
   const sanitizeChanges = (): Partial<TIssue> => {
     const sanitizedChanges = { ...changesMade };
@@ -76,12 +77,12 @@ export const DraftIssueLayout = observer(function DraftIssueLayout(props: DraftI
   };
 
   const handleCreateDraftIssue = async () => {
-    if (!changesMade || !workspaceSlug || !projectId) return;
+    if (!changesMade || !workspaceSlug || !selectedProjectId) return;
 
     const payload = {
       ...changesMade,
       name: changesMade?.name && changesMade?.name?.trim() !== "" ? changesMade.name?.trim() : "Untitled",
-      project_id: projectId,
+      project_id: selectedProjectId,
     };
 
     const response = await createIssue(workspaceSlug.toString(), payload)
@@ -108,7 +109,7 @@ export const DraftIssueLayout = observer(function DraftIssueLayout(props: DraftI
       handleCreateUpdatePropertyValues({
         issueId: response.id,
         issueTypeId: response.type_id,
-        projectId,
+        projectId: selectedProjectId,
         workspaceSlug: workspaceSlug?.toString(),
         isDraft: true,
       });
@@ -129,6 +130,7 @@ export const DraftIssueLayout = observer(function DraftIssueLayout(props: DraftI
         isOpen={issueDiscardModal}
         handleClose={() => setIssueDiscardModal(false)}
         onConfirm={handleCreateDraftIssue}
+        saveDisabled={!selectedProjectId}
         onDiscard={() => {
           onChange(null);
           setIssueDiscardModal(false);

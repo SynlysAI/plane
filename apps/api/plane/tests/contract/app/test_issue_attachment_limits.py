@@ -106,6 +106,26 @@ def test_issue_attachment_uses_workspace_office_limit(session_client, attachment
 
 
 @pytest.mark.django_db
+def test_issue_attachment_presign_accepts_legacy_word_document(session_client, attachment_context):
+    """旧版 Word 文档使用已允许的 msword MIME 获得上传槽。"""
+    configure_limits(attachment_context[0], office=50)
+    payload = {"name": "行政材料.doc", "type": "application/msword", "size": 128}
+
+    with patch("plane.app.views.issue.attachment.S3Storage") as storage:
+        storage.return_value.generate_presigned_post.return_value = {"url": "https://storage.test", "fields": {}}
+        response = session_client.post(attachments_url(attachment_context), payload, format="json")
+
+    assert response.status_code == 200, response.data
+    asset = FileAsset.objects.get(id=response.data["asset_id"])
+    assert asset.attributes["type"] == "application/msword"
+    storage.return_value.generate_presigned_post.assert_called_once_with(
+        object_name=asset.asset.name,
+        file_type="application/msword",
+        file_size=50 * MEGABYTE,
+    )
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("file_name", "content_type", "category", "limit_mb"),
     [
