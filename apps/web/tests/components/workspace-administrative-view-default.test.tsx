@@ -119,7 +119,10 @@ vi.mock("@/services/workspace.service", () => ({
   },
 }));
 
-vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
+vi.mock("mobx-react", () => ({
+  enableStaticRendering: vi.fn(),
+  observer: (component: unknown) => component,
+}));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ workspaceSlug: "lab", globalViewId: headerMocks.globalViewId }),
 }));

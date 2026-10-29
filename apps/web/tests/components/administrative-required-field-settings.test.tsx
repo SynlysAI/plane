@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
   getProjectLabels: vi.fn(),
 }));
 
-vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
+vi.mock("mobx-react", () => ({
+  enableStaticRendering: vi.fn(),
+  observer: (component: unknown) => component,
+}));
 vi.mock("react-router", () => ({ useParams: () => ({ workspaceSlug: "lab" }) }));
 vi.mock("@plane/propel/toast", () => ({ setPromiseToast: vi.fn() }));
 vi.mock("@makeplane/propel/components/switch", () => ({
