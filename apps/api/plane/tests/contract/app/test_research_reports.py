@@ -732,7 +732,9 @@ class TestReportWithdraw:
             title=f"{item.period_key} 报告已撤回",
         ).exists()
 
-        review_results = env["advisor_client"].get(env["url"], {"scope": "review"}).json()["results"]
+        review_response = env["advisor_client"].get(env["url"], {"scope": "review"})
+        assert review_response.status_code == 200, review_response.json()
+        review_results = review_response.json()["results"]
         assert all(row["id"] != report_id for row in review_results)
         withdrawn_detail = env["admin_client"].get(f"{env['url']}{report_id}/")
         assert withdrawn_detail.status_code == 200

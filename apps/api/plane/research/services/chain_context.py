@@ -113,14 +113,19 @@ def normalise_reference(ref):
 
 
 class ResearchReadService:
-    def __init__(self, *, workspace, user, grant=None):
+    def __init__(self, *, workspace, user, grant=None, authorization=None):
+        if grant is not None and authorization is not None:
+            raise ValueError("Choose one explicit research authorization source.")
         self.workspace, self.user, self.grant = workspace, user, grant
+        self.authorization = authorization
         self.actor = build_actor_context(user, workspace.id)
         self._reference_cache = {}
         self._truncated = False
 
     def execute(self, name, arguments):
         args = validate_arguments(name, arguments)
+        if self.authorization is not None:
+            self.authorization.authenticate(name)
         if self.grant is not None:
             if (self.grant.workspace_id != self.workspace.id or self.grant.user_id != self.user.id
                     or self.grant.revoked_at or self.grant.expires_at <= timezone.now()
@@ -131,6 +136,7 @@ class ResearchReadService:
             "workspace": self.workspace.id, "user": self.user.id,
             "grant": self.grant.context_id if self.grant else None,
             "policy": self.grant.policy_hash if self.grant else None,
+            **({"authorization": self.authorization.binding} if self.authorization is not None else {}),
             "tool": name, "args": {k: v for k, v in args.items() if k != "cursor"},
         }).encode()).hexdigest()
         result = getattr(self, name)(**args)
@@ -153,6 +159,8 @@ class ResearchReadService:
             rows = rows.filter(project_id=self.grant.project_id)
             if self.grant.chain_node_id:
                 rows = rows.filter(nodes__id=self.grant.chain_node_id, nodes__deleted_at__isnull=True)
+        if self.authorization is not None:
+            rows = self.authorization.scoped_chains(rows)
         return rows.distinct()
 
     def chain(self, chain_id):
@@ -167,6 +175,8 @@ class ResearchReadService:
             rows = rows.filter(chain=chain)
         if self.grant and self.grant.chain_node_id:
             rows = rows.filter(pk=self.grant.chain_node_id)
+        if self.authorization is not None:
+            rows = self.authorization.scoped_nodes(rows)
         return rows
 
     def node(self, node_id):
@@ -230,6 +240,8 @@ class ResearchReadService:
 
     def _node_data(self, node):
         restricted = bool(self.grant and self.grant.chain_node_id)
+        if self.authorization is not None and node.parent_node_id:
+            restricted = not self.nodes().filter(pk=node.parent_node_id).exists()
         return {"id": str(node.id), "chain_id": str(node.chain_id), "project_id": str(node.chain.project_id),
                 "title": _clip(node.title), "node_type": node.node_type, "status": node.status,
                 "parent_node_id": str(node.parent_node_id) if node.parent_node_id and not restricted else None,
@@ -285,14 +297,14 @@ class ResearchReadService:
         }
         sections = []
         for kind, codes in types.items():
-            rows = node.events.all()
+            rows = self._candidates(node, "event")
             rows = rows.exclude(refs=[]) if codes is None else rows.filter(event_type__in=codes)
             sample = list(rows.order_by("-created_at", "-id")[:2])
             sections.append({"kind": kind, "sample": [self._event_data(node, row) for row in sample],
                              "sample_only": True})
         # Output-only snapshots are still discoverable when no OUTPUT event exists.
         snapshots = [{"id": str(row.snapshot_id), "version": row.version, "summary": _clip(row.summary)}
-                     for row in node.snapshots.order_by("-created_at", "-id")[:3]]
+                     for row in self._candidates(node, "snapshot").order_by("-created_at", "-id")[:3]]
         return {"data": {"node": self._node_data(node), "evidence_sections": sections,
                          "snapshot_sample": snapshots, "read_only": True,
                          "scope_kind": ("node" if self.grant.chain_node_id else "project") if self.grant else "visible_projects",
@@ -301,7 +313,7 @@ class ResearchReadService:
 
     def list_research_node_events(self, node_id, event_type=None, cursor=None, limit=20):
         node = self.node(node_id)
-        rows = node.events.all()
+        rows = self._candidates(node, "event")
         if event_type:
             rows = rows.filter(event_type=event_type)
         return self._page(rows, lambda row: self._event_data(node, row), cursor=cursor, limit=limit)
@@ -317,14 +329,14 @@ class ResearchReadService:
 
     def list_research_node_snapshots(self, node_id, type=None, cursor=None, limit=20):
         node = self.node(node_id)
-        rows = node.snapshots.all()
+        rows = self._candidates(node, "snapshot")
         if type:
             rows = rows.filter(snapshot_type=type)
         return self._page(rows, lambda row: self._snapshot_data(node, row), cursor=cursor, limit=limit)
 
     def list_research_node_tasks(self, node_id, status=None, cursor=None, limit=20):
         node = self.node(node_id)
-        rows = ResearchChainNodeTask.objects.filter(workspace=self.workspace, chain=node.chain, node=node)
+        rows = self._candidates(node, "task")
         if status:
             rows = rows.filter(status=status)
         return self._page(rows, lambda row: {
@@ -343,7 +355,9 @@ class ResearchReadService:
         ).first()
         if task is None:
             raise ResearchReadError("not_found", "Research task not found in the current scope.", 404)
-        return self._page(task.comments.select_related("actor"), lambda row: {
+        if not self._candidates(task.node, "task").filter(pk=task.pk).exists():
+            raise ResearchReadError("not_found", "Research task not found in the current scope.", 404)
+        return self._page(self._candidates(task.node, "task_comment").filter(task=task).select_related("actor"), lambda row: {
             "id": str(row.id), "task_id": str(task.id), "actor_id": str(row.actor_id),
             "author": _clip(row.actor.display_name, 100), "text": _clip(row.comment_stripped, 2000),
             "content_ref": {"kind": "task_comment", "id": str(row.id), "node_id": str(task.node_id)},
@@ -412,6 +426,10 @@ class ResearchReadService:
         return self._page(rows, project, cursor=cursor, limit=limit)
 
     def _candidates(self, node, kind):
+        rows = self._raw_candidates(node, kind)
+        return self.authorization.scoped_resources(rows, node, kind) if self.authorization is not None else rows
+
+    def _raw_candidates(self, node, kind):
         model = MODELS[kind]
         if kind in {"analysis", "upload", "paper_review", "task"}:
             return model.objects.filter(node=node, chain=node.chain, workspace=self.workspace)
@@ -492,11 +510,16 @@ class ResearchReadService:
         if not self._allowed(node, kind, obj):
             return None
         version = obj.version if kind == "snapshot" else None
+        report_version_changed = False
         if kind == "report":
-            latest = obj.official_snapshots.order_by("-version_no").first()
+            versions = self.authorization.report_versions(obj) if self.authorization is not None else obj.official_snapshots.all()
+            latest = versions.order_by("-version_no").first()
             if latest is None:
                 return None
             version = latest.version_no
+            if self.authorization is not None:
+                current = obj.official_snapshots.order_by("-version_no").first()
+                report_version_changed = current is not None and current.version_no != version
             if self.grant:
                 version = next(item["version_no"] for item in self.grant.allowed_reports if str(item.get("report_id")) == str(obj.id))
         title = (obj.file_name if kind == "upload" else f"{obj.period_key} {obj.report_type}" if kind == "report"
@@ -506,6 +529,10 @@ class ResearchReadService:
                 "node_id": str(node.id), "title": _clip(title), "version": version,
                 "status": getattr(obj, "status", None), "content_available": kind in CONTENT_KINDS,
                 "content_state": "readable" if kind in CONTENT_KINDS else "metadata_only"}
+        if report_version_changed:
+            # The shared report reader intentionally accepts only the latest
+            # formal version. A frozen connection must not silently adopt it.
+            data.update(content_available=False, content_state="version_changed")
         if kind == "upload":
             data.update(file_type=obj.file_type, size_bytes=obj.file_size, parsed_content_available=False)
         elif kind == "topic_material":
@@ -576,6 +603,8 @@ class ResearchReadService:
             if self.grant and not any(str(item.get("report_id")) == str(obj.id) and item.get("version_no") == version
                                       for item in self.grant.allowed_reports):
                 raise ResearchReadError("scope_denied", "This formal report version is not granted.", 403)
+            if self.authorization is not None and not self.authorization.report_versions(obj).filter(version_no=version).exists():
+                raise ResearchReadError("scope_denied", "This formal report version is outside the connection scope.", 403)
             try:
                 report = selected_report_content(workspace=self.workspace, actor=self.user,
                     project_id=node.chain.project_id, selections=[{"report_id": str(obj.id), "version_no": version}])[0]

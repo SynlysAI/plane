@@ -255,6 +255,7 @@ function ConnectionCard({
     <article className="flex min-w-0 flex-col gap-3 rounded-lg border border-subtle p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h4 className="mr-auto text-14 font-medium break-words">{label}</h4>
+        <span className="rounded bg-surface-2 px-2 py-0.5 text-11 text-secondary">兼容连接</span>
         <span className="rounded bg-surface-2 px-2 py-0.5 text-11 text-secondary">{type}</span>
         <span className="rounded bg-surface-2 px-2 py-0.5 text-11 text-secondary">{capability}</span>
         <span className="text-12 text-secondary">{expired === null ? "确认有效期…" : expired ? "已到期" : "有效"}</span>

@@ -12,15 +12,10 @@
             "properties": {
               "period_offset": {
                 "type": "integer",
-                "enum": [
-                  -1,
-                  0
-                ]
+                "enum": [-1, 0]
               }
             },
-            "required": [
-              "period_offset"
-            ],
+            "required": ["period_offset"],
             "additionalProperties": false
           },
           {
@@ -33,9 +28,7 @@
                 "pattern": "^\\d{4}-W\\d{2}$"
               }
             },
-            "required": [
-              "period_key"
-            ],
+            "required": ["period_key"],
             "additionalProperties": false
           },
           {
@@ -53,10 +46,7 @@
                 "maxLength": 4096
               }
             },
-            "required": [
-              "period_key",
-              "cursor"
-            ],
+            "required": ["period_key", "cursor"],
             "additionalProperties": false
           }
         ]
@@ -76,9 +66,7 @@
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
               },
               "action": {
-                "enum": [
-                  "save_draft"
-                ]
+                "enum": ["save_draft"]
               },
               "period_key": {
                 "type": "string",
@@ -142,24 +130,12 @@
                       "maxLength": 500
                     }
                   },
-                  "required": [
-                    "kind",
-                    "id",
-                    "node_id",
-                    "version",
-                    "content_hash"
-                  ],
+                  "required": ["kind", "id", "node_id", "version", "content_hash"],
                   "additionalProperties": false
                 }
               }
             },
-            "required": [
-              "request_id",
-              "action",
-              "period_key",
-              "expected_revision",
-              "body_markdown"
-            ],
+            "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
             "additionalProperties": false
           },
           {
@@ -172,9 +148,7 @@
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
               },
               "action": {
-                "enum": [
-                  "submit"
-                ]
+                "enum": ["submit"]
               },
               "period_key": {
                 "type": "string",
@@ -238,13 +212,7 @@
                       "maxLength": 500
                     }
                   },
-                  "required": [
-                    "kind",
-                    "id",
-                    "node_id",
-                    "version",
-                    "content_hash"
-                  ],
+                  "required": ["kind", "id", "node_id", "version", "content_hash"],
                   "additionalProperties": false
                 }
               },
@@ -265,14 +233,7 @@
                 }
               }
             },
-            "required": [
-              "request_id",
-              "action",
-              "period_key",
-              "expected_revision",
-              "body_markdown",
-              "reviewer_id"
-            ],
+            "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown", "reviewer_id"],
             "additionalProperties": false
           }
         ]
@@ -290,9 +251,7 @@
             "format": "uuid"
           }
         },
-        "required": [
-          "operation_id"
-        ],
+        "required": ["operation_id"],
         "additionalProperties": false
       }
     },
@@ -308,9 +267,7 @@
             "format": "uuid"
           }
         },
-        "required": [
-          "operation_id"
-        ],
+        "required": ["operation_id"],
         "additionalProperties": false
       }
     },
@@ -326,9 +283,7 @@
             "format": "uuid"
           }
         },
-        "required": [
-          "operation_id"
-        ],
+        "required": ["operation_id"],
         "additionalProperties": false
       }
     }

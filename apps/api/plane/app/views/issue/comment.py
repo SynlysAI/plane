@@ -25,6 +25,7 @@ from plane.db.models import IssueComment, ProjectMember, CommentReaction, Projec
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.host import base_host
 from plane.bgtasks.webhook_task import model_activity
+from plane.utils.issue_mutations import issue_action_allowed, save_issue_comment
 
 
 class IssueCommentViewSet(BaseViewSet):
@@ -70,17 +71,7 @@ class IssueCommentViewSet(BaseViewSet):
     def create(self, request, slug, project_id, issue_id):
         project = get_object_or_404(Project, pk=project_id, workspace__slug=slug, archived_at__isnull=True)
         issue = get_object_or_404(Issue, pk=issue_id, project=project, workspace__slug=slug)
-        if (
-            ProjectMember.objects.filter(
-                workspace__slug=slug,
-                project_id=project_id,
-                member=request.user,
-                role=5,
-                is_active=True,
-            ).exists()
-            and not project.guest_view_all_features
-            and not issue.created_by == request.user
-        ):
+        if not issue_action_allowed(request.user, project, "comment", issue):
             return Response(
                 {"error": "You are not allowed to comment on the issue"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -90,28 +81,7 @@ class IssueCommentViewSet(BaseViewSet):
             context={"request": request, "attachment_issue": issue},
         )
         if serializer.is_valid():
-            serializer.save(project_id=project_id, issue_id=issue_id, actor=request.user)
-            issue_activity.delay(
-                type="comment.activity.created",
-                requested_data=json.dumps(serializer.data, cls=DjangoJSONEncoder),
-                actor_id=str(self.request.user.id),
-                issue_id=str(self.kwargs.get("issue_id")),
-                project_id=str(self.kwargs.get("project_id")),
-                current_instance=None,
-                epoch=int(timezone.now().timestamp()),
-                notification=True,
-                origin=base_host(request=request, is_app=True),
-            )
-            # Send the model activity
-            model_activity.delay(
-                model_name="issue_comment",
-                model_id=str(serializer.data["id"]),
-                requested_data=request.data,
-                current_instance=None,
-                actor_id=request.user.id,
-                slug=slug,
-                origin=base_host(request=request, is_app=True),
-            )
+            save_issue_comment(serializer=serializer, issue=issue, actor=request.user, request=request)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

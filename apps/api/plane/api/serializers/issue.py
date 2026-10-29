@@ -84,11 +84,9 @@ class IssueSerializer(BaseSerializer):
         exclude = ["description_json", "description_stripped"]
 
     def validate(self, data):
-        if (
-            data.get("start_date", None) is not None
-            and data.get("target_date", None) is not None
-            and data.get("start_date", None) > data.get("target_date", None)
-        ):
+        start_date = data.get("start_date", getattr(self.instance, "start_date", None))
+        target_date = data.get("target_date", getattr(self.instance, "target_date", None))
+        if start_date is not None and target_date is not None and start_date > target_date:
             raise serializers.ValidationError("Start date cannot exceed target date")
 
         try:

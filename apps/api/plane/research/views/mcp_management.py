@@ -203,6 +203,8 @@ class ResearchMCPConnectionsEndpoint(ResearchMCPManagementBase):
             protocol = "agent-operations"
         else:
             check_membership(workspace, request.user, lock=True)
+            from plane.mcp.authorization import active_unified_read_count
+
             if data["actions"]:
                 raise ResearchReadError("scope_denied", "只读连接不能授予写入能力。", 403)
             if (
@@ -211,7 +213,7 @@ class ResearchMCPConnectionsEndpoint(ResearchMCPManagementBase):
                     chain_node=node, write_grant__isnull=True, revoked_at__isnull=True, expires_at__gt=timezone.now()
                 )
                 .count()
-                >= 5
+                + active_unified_read_count(request.user, workspace, node.pk) >= 5
             ):
                 raise ResearchReadError("grant_limit", "此节点已有 5 条有效只读连接，请先撤销旧连接。", 409)
             grant, raw = issue_context_token(

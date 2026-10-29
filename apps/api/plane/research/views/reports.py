@@ -65,6 +65,7 @@ from plane.research.utils.notifications import (
     notify_report_returned,
     notify_report_withdrawn,
 )
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.reports import can_transition, report_resource, visible_reports_queryset
 from plane.research.utils.settings import default_visibility_for
 from plane.research.views.base import ResearchAPIView, parse_date, parse_uuid, resolve_user, truthy

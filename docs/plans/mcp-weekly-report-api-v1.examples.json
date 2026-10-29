@@ -14,15 +14,8 @@
           "name": "Synthetic weekly API example",
           "enabled": true,
           "unavailable_reason": null,
-          "actions": [
-            "save_draft",
-            "submit"
-          ],
-          "ttl_days": [
-            1,
-            7,
-            30
-          ],
+          "actions": ["save_draft", "submit"],
+          "ttl_days": [1, 7, 30],
           "period_policy": "current_and_previous_week.v1",
           "period_description": "仅本人本周与上周的周报，周期按工作区报告时区计算。"
         }
@@ -48,15 +41,8 @@
           "name": "Synthetic weekly API example",
           "enabled": true,
           "unavailable_reason": null,
-          "actions": [
-            "save_draft",
-            "submit"
-          ],
-          "ttl_days": [
-            1,
-            7,
-            30
-          ],
+          "actions": ["save_draft", "submit"],
+          "ttl_days": [1, 7, 30],
           "period_policy": "current_and_previous_week.v1",
           "period_description": "仅本人本周与上周的周报，周期按工作区报告时区计算。"
         }
@@ -73,10 +59,7 @@
     "path": "/api/research/workspaces/weekly-phase2-example-852e54/mcp/weekly-report/connections/",
     "request": {
       "label": "Synthetic weekly connection",
-      "actions": [
-        "save_draft",
-        "submit"
-      ],
+      "actions": ["save_draft", "submit"],
       "ttl_days": 7
     },
     "status": 201,
@@ -84,10 +67,7 @@
       "id": "3989d23d-6ab2-4c72-8515-8e7f3cb35774",
       "workspace": "weekly-phase2-example-852e54",
       "label": "Synthetic weekly connection",
-      "actions": [
-        "save_draft",
-        "submit"
-      ],
+      "actions": ["save_draft", "submit"],
       "report_type": "WEEKLY",
       "period_policy": "current_and_previous_week.v1",
       "created_at": "2026-10-26T11:09:18.389250+00:00",
@@ -114,10 +94,7 @@
           "id": "3989d23d-6ab2-4c72-8515-8e7f3cb35774",
           "workspace": "weekly-phase2-example-852e54",
           "label": "Synthetic weekly connection",
-          "actions": [
-            "save_draft",
-            "submit"
-          ],
+          "actions": ["save_draft", "submit"],
           "report_type": "WEEKLY",
           "period_policy": "current_and_previous_week.v1",
           "created_at": "2026-10-26T11:09:18.389250+00:00",
@@ -148,15 +125,10 @@
                 "properties": {
                   "period_offset": {
                     "type": "integer",
-                    "enum": [
-                      -1,
-                      0
-                    ]
+                    "enum": [-1, 0]
                   }
                 },
-                "required": [
-                  "period_offset"
-                ],
+                "required": ["period_offset"],
                 "additionalProperties": false
               },
               {
@@ -169,9 +141,7 @@
                     "pattern": "^\\d{4}-W\\d{2}$"
                   }
                 },
-                "required": [
-                  "period_key"
-                ],
+                "required": ["period_key"],
                 "additionalProperties": false
               },
               {
@@ -189,10 +159,7 @@
                     "maxLength": 4096
                   }
                 },
-                "required": [
-                  "period_key",
-                  "cursor"
-                ],
+                "required": ["period_key", "cursor"],
                 "additionalProperties": false
               }
             ]
@@ -219,9 +186,7 @@
                     "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
                   },
                   "action": {
-                    "enum": [
-                      "save_draft"
-                    ]
+                    "enum": ["save_draft"]
                   },
                   "period_key": {
                     "type": "string",
@@ -285,24 +250,12 @@
                           "maxLength": 500
                         }
                       },
-                      "required": [
-                        "kind",
-                        "id",
-                        "node_id",
-                        "version",
-                        "content_hash"
-                      ],
+                      "required": ["kind", "id", "node_id", "version", "content_hash"],
                       "additionalProperties": false
                     }
                   }
                 },
-                "required": [
-                  "request_id",
-                  "action",
-                  "period_key",
-                  "expected_revision",
-                  "body_markdown"
-                ],
+                "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
                 "additionalProperties": false
               },
               {
@@ -315,9 +268,7 @@
                     "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
                   },
                   "action": {
-                    "enum": [
-                      "submit"
-                    ]
+                    "enum": ["submit"]
                   },
                   "period_key": {
                     "type": "string",
@@ -381,13 +332,7 @@
                           "maxLength": 500
                         }
                       },
-                      "required": [
-                        "kind",
-                        "id",
-                        "node_id",
-                        "version",
-                        "content_hash"
-                      ],
+                      "required": ["kind", "id", "node_id", "version", "content_hash"],
                       "additionalProperties": false
                     }
                   },
@@ -408,14 +353,7 @@
                     }
                   }
                 },
-                "required": [
-                  "request_id",
-                  "action",
-                  "period_key",
-                  "expected_revision",
-                  "body_markdown",
-                  "reviewer_id"
-                ],
+                "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown", "reviewer_id"],
                 "additionalProperties": false
               }
             ]
@@ -440,9 +378,7 @@
                 "format": "uuid"
               }
             },
-            "required": [
-              "operation_id"
-            ],
+            "required": ["operation_id"],
             "additionalProperties": false
           },
           "annotations": {
@@ -465,9 +401,7 @@
                 "format": "uuid"
               }
             },
-            "required": [
-              "operation_id"
-            ],
+            "required": ["operation_id"],
             "additionalProperties": false
           },
           "annotations": {
@@ -490,9 +424,7 @@
                 "format": "uuid"
               }
             },
-            "required": [
-              "operation_id"
-            ],
+            "required": ["operation_id"],
             "additionalProperties": false
           },
           "annotations": {
@@ -528,14 +460,8 @@
       },
       "policy": {
         "version": "current_and_previous_week.v1",
-        "allowed_period_keys": [
-          "2026-W43",
-          "2026-W44"
-        ],
-        "allowed_actions": [
-          "save_draft",
-          "submit"
-        ],
+        "allowed_period_keys": ["2026-W43", "2026-W44"],
+        "allowed_actions": ["save_draft", "submit"],
         "effective_visibility": "WORKSPACE",
         "audience_summary": "Visibility: WORKSPACE; policy ceiling: WORKSPACE; scope: {\"custom_grants\":[],\"direct_advisor_ids\":[],\"org_unit_id\":\"efb0b307-6d60-4783-86b9-fad8389f0b5d\",\"workspace_id\":\"a8ccc825-e4a5-4680-b6a5-4b720d91c8c2\"}",
         "policy_hash": "0d6a3a9cf01bae9a12bcfb275262e9e348e91e6f3a84dd94d2cfdf53d362895c"
@@ -696,14 +622,8 @@
         },
         "policy": {
           "version": "current_and_previous_week.v1",
-          "allowed_period_keys": [
-            "2026-W43",
-            "2026-W44"
-          ],
-          "allowed_actions": [
-            "save_draft",
-            "submit"
-          ],
+          "allowed_period_keys": ["2026-W43", "2026-W44"],
+          "allowed_actions": ["save_draft", "submit"],
           "effective_visibility": "WORKSPACE",
           "audience_summary": "Visibility: WORKSPACE; policy ceiling: WORKSPACE; scope: {\"custom_grants\":[],\"direct_advisor_ids\":[],\"org_unit_id\":\"efb0b307-6d60-4783-86b9-fad8389f0b5d\",\"workspace_id\":\"a8ccc825-e4a5-4680-b6a5-4b720d91c8c2\"}",
           "policy_hash": "0d6a3a9cf01bae9a12bcfb275262e9e348e91e6f3a84dd94d2cfdf53d362895c"
@@ -783,15 +703,9 @@
         "policy": {
           "version": "current_and_previous_week.v1",
           "policy_hash": "0d6a3a9cf01bae9a12bcfb275262e9e348e91e6f3a84dd94d2cfdf53d362895c",
-          "allowed_actions": [
-            "save_draft",
-            "submit"
-          ],
+          "allowed_actions": ["save_draft", "submit"],
           "audience_summary": "Visibility: WORKSPACE; policy ceiling: WORKSPACE; scope: {\"custom_grants\":[],\"direct_advisor_ids\":[],\"org_unit_id\":\"efb0b307-6d60-4783-86b9-fad8389f0b5d\",\"workspace_id\":\"a8ccc825-e4a5-4680-b6a5-4b720d91c8c2\"}",
-          "allowed_period_keys": [
-            "2026-W43",
-            "2026-W44"
-          ],
+          "allowed_period_keys": ["2026-W43", "2026-W44"],
           "effective_visibility": "WORKSPACE"
         },
         "effects": {
@@ -911,9 +825,7 @@
         "report_url": "https://plane.example/weekly-phase2-example-852e54/research/reports/61346766-31fc-44f1-b5b9-bb69d46365ad",
         "audit_id": "cb2aca2f-52cf-4ada-815c-bdec5cc4ed21",
         "committed_at": "2026-10-26T11:09:19.281344+00:00",
-        "notification_record_ids": [
-          "a7b6286d-50a8-4d67-8d49-907768803022"
-        ],
+        "notification_record_ids": ["a7b6286d-50a8-4d67-8d49-907768803022"],
         "approval_route_id": "8c64cefb-3e38-41e6-97ad-7f93b12e493a",
         "reviewer_id": "b3f8c254-9026-4e46-89c4-d1519944d67e"
       },
@@ -961,15 +873,9 @@
         "policy": {
           "version": "current_and_previous_week.v1",
           "policy_hash": "0d6a3a9cf01bae9a12bcfb275262e9e348e91e6f3a84dd94d2cfdf53d362895c",
-          "allowed_actions": [
-            "save_draft",
-            "submit"
-          ],
+          "allowed_actions": ["save_draft", "submit"],
           "audience_summary": "Visibility: WORKSPACE; policy ceiling: WORKSPACE; scope: {\"custom_grants\":[],\"direct_advisor_ids\":[],\"org_unit_id\":\"efb0b307-6d60-4783-86b9-fad8389f0b5d\",\"workspace_id\":\"a8ccc825-e4a5-4680-b6a5-4b720d91c8c2\"}",
-          "allowed_period_keys": [
-            "2026-W43",
-            "2026-W44"
-          ],
+          "allowed_period_keys": ["2026-W43", "2026-W44"],
           "effective_visibility": "WORKSPACE"
         },
         "effects": {
@@ -1089,9 +995,7 @@
         "report_url": "https://plane.example/weekly-phase2-example-852e54/research/reports/61346766-31fc-44f1-b5b9-bb69d46365ad",
         "committed_at": "2026-10-26T11:09:19.281344+00:00",
         "snapshot_version": 1,
-        "notification_record_ids": [
-          "a7b6286d-50a8-4d67-8d49-907768803022"
-        ],
+        "notification_record_ids": ["a7b6286d-50a8-4d67-8d49-907768803022"],
         "approval_route_id": "8c64cefb-3e38-41e6-97ad-7f93b12e493a",
         "reviewer_id": "b3f8c254-9026-4e46-89c4-d1519944d67e"
       },
@@ -1139,15 +1043,9 @@
         "policy": {
           "version": "current_and_previous_week.v1",
           "policy_hash": "0d6a3a9cf01bae9a12bcfb275262e9e348e91e6f3a84dd94d2cfdf53d362895c",
-          "allowed_actions": [
-            "save_draft",
-            "submit"
-          ],
+          "allowed_actions": ["save_draft", "submit"],
           "audience_summary": "Visibility: WORKSPACE; policy ceiling: WORKSPACE; scope: {\"custom_grants\":[],\"direct_advisor_ids\":[],\"org_unit_id\":\"efb0b307-6d60-4783-86b9-fad8389f0b5d\",\"workspace_id\":\"a8ccc825-e4a5-4680-b6a5-4b720d91c8c2\"}",
-          "allowed_period_keys": [
-            "2026-W43",
-            "2026-W44"
-          ],
+          "allowed_period_keys": ["2026-W43", "2026-W44"],
           "effective_visibility": "WORKSPACE"
         },
         "effects": {
@@ -1267,9 +1165,7 @@
         "report_url": "https://plane.example/weekly-phase2-example-852e54/research/reports/61346766-31fc-44f1-b5b9-bb69d46365ad",
         "committed_at": "2026-10-26T11:09:19.281344+00:00",
         "snapshot_version": 1,
-        "notification_record_ids": [
-          "a7b6286d-50a8-4d67-8d49-907768803022"
-        ],
+        "notification_record_ids": ["a7b6286d-50a8-4d67-8d49-907768803022"],
         "approval_route_id": "8c64cefb-3e38-41e6-97ad-7f93b12e493a",
         "reviewer_id": "b3f8c254-9026-4e46-89c4-d1519944d67e"
       },
@@ -1301,15 +1197,10 @@
                   "properties": {
                     "period_offset": {
                       "type": "integer",
-                      "enum": [
-                        -1,
-                        0
-                      ]
+                      "enum": [-1, 0]
                     }
                   },
-                  "required": [
-                    "period_offset"
-                  ],
+                  "required": ["period_offset"],
                   "additionalProperties": false
                 },
                 {
@@ -1322,9 +1213,7 @@
                       "pattern": "^\\d{4}-W\\d{2}$"
                     }
                   },
-                  "required": [
-                    "period_key"
-                  ],
+                  "required": ["period_key"],
                   "additionalProperties": false
                 },
                 {
@@ -1342,10 +1231,7 @@
                       "maxLength": 4096
                     }
                   },
-                  "required": [
-                    "period_key",
-                    "cursor"
-                  ],
+                  "required": ["period_key", "cursor"],
                   "additionalProperties": false
                 }
               ]
@@ -1372,9 +1258,7 @@
                       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
                     },
                     "action": {
-                      "enum": [
-                        "save_draft"
-                      ]
+                      "enum": ["save_draft"]
                     },
                     "period_key": {
                       "type": "string",
@@ -1438,24 +1322,12 @@
                             "maxLength": 500
                           }
                         },
-                        "required": [
-                          "kind",
-                          "id",
-                          "node_id",
-                          "version",
-                          "content_hash"
-                        ],
+                        "required": ["kind", "id", "node_id", "version", "content_hash"],
                         "additionalProperties": false
                       }
                     }
                   },
-                  "required": [
-                    "request_id",
-                    "action",
-                    "period_key",
-                    "expected_revision",
-                    "body_markdown"
-                  ],
+                  "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
                   "additionalProperties": false
                 },
                 {
@@ -1468,9 +1340,7 @@
                       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
                     },
                     "action": {
-                      "enum": [
-                        "submit"
-                      ]
+                      "enum": ["submit"]
                     },
                     "period_key": {
                       "type": "string",
@@ -1534,13 +1404,7 @@
                             "maxLength": 500
                           }
                         },
-                        "required": [
-                          "kind",
-                          "id",
-                          "node_id",
-                          "version",
-                          "content_hash"
-                        ],
+                        "required": ["kind", "id", "node_id", "version", "content_hash"],
                         "additionalProperties": false
                       }
                     },
@@ -1593,9 +1457,7 @@
                   "format": "uuid"
                 }
               },
-              "required": [
-                "operation_id"
-              ],
+              "required": ["operation_id"],
               "additionalProperties": false
             },
             "annotations": {
@@ -1618,9 +1480,7 @@
                   "format": "uuid"
                 }
               },
-              "required": [
-                "operation_id"
-              ],
+              "required": ["operation_id"],
               "additionalProperties": false
             },
             "annotations": {
@@ -1643,9 +1503,7 @@
                   "format": "uuid"
                 }
               },
-              "required": [
-                "operation_id"
-              ],
+              "required": ["operation_id"],
               "additionalProperties": false
             },
             "annotations": {
