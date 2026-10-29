@@ -7,6 +7,49 @@
       "by_week": "Podle týdne",
       "by_month": "Podle měsíce",
       "custom_period": "Vlastní období"
+    },
+    "approval_route": {
+      "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
+      "single_reviewer": "Single reviewer",
+      "reviewer": "Reviewer",
+      "cc": "Carbon copy (optional)",
+      "confirm": "I confirm submitting this to {name} for review",
+      "recommended": "Recommended",
+      "no_candidates": "No reviewer is available. Configure an advisor or organisation lead first.",
+      "loading": "Loading approval candidates…",
+      "load_failed": "Could not load approval candidates. Please retry.",
+      "submit": "Submit",
+      "roles": {
+        "primary_advisor": "Primary advisor",
+        "advisor": "Direct advisor",
+        "main_pi": "Main PI",
+        "unit_owner": "Unit owner",
+        "unit_pi": "Unit PI",
+        "unit_admin": "Unit administrator",
+        "reviewer": "Reviewer"
+      }
+    },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
+    "reports": {
+      "approval_reviewer": "Reviewer: {name}",
+      "submit_approval_title": "Select report reviewer"
+    },
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -174,6 +217,7 @@
   "link_copied": "Odkaz zkopírován",
   "add_project": "Přidat projekt",
   "create_project": "Vytvořit projekt",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Nepodařilo se odstranit projekt z oblíbených. Zkuste to prosím znovu.",
   "project_created_successfully": "Projekt úspěšně vytvořen",
   "project_created_successfully_description": "Projekt byl úspěšně vytvořen. Nyní můžete začít přidávat pracovní položky.",
@@ -191,11 +235,13 @@
   "description_placeholder": "Popis",
   "only_alphanumeric_non_latin_characters_allowed": "Jsou povoleny pouze alfanumerické a nelatinské znaky.",
   "project_id_is_required": "ID projektu je povinné",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Jsou povoleny pouze alfanumerické a nelatinské znaky.",
   "project_id_min_char": "ID projektu musí mít alespoň 1 znak",
   "project_id_max_char": "ID projektu může mít maximálně {max} znaků",
   "project_description_placeholder": "Zadejte popis projektu",
   "select_network": "Vybrat síť",
+  "select_project": "Select project",
   "lead": "Vedoucí",
   "date_range": "Rozsah dat",
   "private": "Soukromý",
@@ -767,6 +813,31 @@
     "only_one_file_allowed": "Je možné nahrát pouze jeden soubor najednou.",
     "file_size_limit": "Soubor musí být menší než {size}MB.",
     "drag_and_drop": "Přetáhněte soubor kamkoli pro nahrání",
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    },
+    "create": {
+      "draft_notice": "Přílohy se nahrají po uložení pracovní položky; koncept je neuchová.",
+      "hint": "Po uložení pracovní položky se nahrají automaticky.",
+      "remove": "Odebrat přílohu",
+      "title": "Přílohy",
+      "upload_failed": "Pracovní položka byla vytvořena, ale {failed} z {total} příloh se nenahrálo: {names}. Zkuste to znovu v detailu položky.",
+      "zone_title": "Přetáhněte soubory sem, nebo kliknutím vyberte více souborů"
+    },
+    "editor_image": {
+      "insert_failed": "Vložení obrázku selhalo. Zkuste to znovu.",
+      "invalid": "Podporovány jsou pouze obrázky JPEG, JPG, PNG, WebP a GIF.",
+      "upload": "Nahrát obrázky"
+    },
     "delete": "Smazat přílohu"
   },
   "label": {

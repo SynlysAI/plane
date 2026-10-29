@@ -12,6 +12,7 @@ import type {
   TResearchTaskInstructionAttachment,
 } from "@plane/types";
 import { convertBytesToSize, getFileURL, isDescriptionContentEmpty } from "@plane/utils";
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { RichTextEditor } from "@/components/editor/rich-text";
 import { getCommentAttachmentLimitError } from "@/components/comments/comment-attachment-limits";
 import { taskImageDownloadSource } from "@/components/research/common/research-image";
@@ -312,6 +313,15 @@ export function ResearchTaskDescription({
           <p role="alert" className="text-12 text-danger-primary">
             {attachmentError}
           </p>
+        )}
+        {editable && (
+          <AttachmentUploadZone
+            onFiles={addFiles}
+            multiple
+            disabled={!limits || attachmentUploadCount > 0}
+            uploading={attachmentUploadCount > 0}
+            variant={entries.length ? "compact" : "block"}
+          />
         )}
         {entries.length ? (
           <ul className="divide-y divide-subtle border-t border-subtle text-12">

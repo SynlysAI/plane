@@ -34,10 +34,7 @@ type TResearchChainNodeDetail = {
 
 type TResearchChainStageMaterialCreatePayload = {
   requirement_code: string;
-  title: string;
-  description?: string;
-  source_node_id?: string;
-  external_reference?: string;
+  upload_id: string;
 };
 
 function request_id() {
@@ -416,7 +413,15 @@ export class ResearchChainService extends APIService {
     })
       .then((res) => res?.data as { data: TResearchChainUpload; degraded?: boolean })
       .catch((err) => {
-        throw err?.response?.data ?? err;
+        const response = err?.response;
+        if (response && (typeof response.data === "string" || response.data == null)) {
+          throw {
+            error_code: response.status === 413 ? "file_size_exceeded" : "upstream_error",
+            message: "",
+            status: response.status,
+          };
+        }
+        throw { ...(response?.data ?? err), status: response?.status ?? 0 };
       });
   }
 

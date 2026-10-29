@@ -32,7 +32,7 @@ CHAIN_ACTIONS = (
     "restore",
 )
 NODE_ACTIONS = ("view", "edit", "transition", "upload", "agent_review", "delete")
-OPEN_NODE_TASK_STATUSES = ("DRAFT", "ASSIGNED", "SUBMITTED", "NEEDS_REVISION")
+OPEN_NODE_TASK_STATUSES = ("DRAFT", "ASSIGNED")
 TASK_COUNT_NODE_STATUSES = tuple(
     status for status in ResearchChainNode.Status.values if status != ResearchChainNode.Status.ARCHIVED
 )

@@ -375,6 +375,7 @@ OIDC_PROVIDER_NAME = os.environ.get("OIDC_PROVIDER_NAME", "ai4ms-oidc")
 RESEARCH_IMAGE_MAX_MB = int(os.environ.get("RESEARCH_IMAGE_MAX_MB", 20))
 RESEARCH_PDF_MAX_MB = int(os.environ.get("RESEARCH_PDF_MAX_MB", 100))
 RESEARCH_MARKDOWN_MAX_MB = int(os.environ.get("RESEARCH_MARKDOWN_MAX_MB", 5))
+RESEARCH_CHAIN_UPLOAD_MAX_BYTES = int(os.environ.get("RESEARCH_CHAIN_UPLOAD_MAX_BYTES", 50 * 1024 * 1024))
 
 # P1 sub module switches (workspace settings may override them)
 RESEARCH_STAGE_ENABLED = os.environ.get("RESEARCH_STAGE_ENABLED", "1") == "1"

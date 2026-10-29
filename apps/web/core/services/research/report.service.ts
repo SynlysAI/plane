@@ -7,6 +7,7 @@
 import { API_BASE_URL, researchEndpoints } from "@plane/constants";
 import type {
   TPeriodicReport,
+  TResearchApprovalRoute,
   TPaginationInfo,
   TReportAttachment,
   TReportComment,
@@ -122,10 +123,29 @@ export class ResearchReportService extends APIService {
   async submitReport(
     workspaceSlug: string,
     reportId: string,
-    payload: { comment?: string; description_json?: object; description_html?: string } = {}
+    payload: {
+      comment?: string;
+      description_json?: object;
+      description_html?: string;
+      reviewer_id?: string;
+      cc_user_ids?: string[];
+    } = {}
   ) {
     return this.post(researchEndpoints.reportSubmit(workspaceSlug, reportId), payload)
       .then((res) => res?.data as TPeriodicReport)
+      .catch((err) => {
+        throw err?.response?.data;
+      });
+  }
+
+  /** 读取周报/月报提交审批路由候选组。 */
+  async getApprovalRoute(workspaceSlug: string, reportId: string) {
+    return this.get(researchEndpoints.reportApprovalRoute(workspaceSlug, reportId))
+      .then((res) => {
+        const payload = res?.data as { data?: TResearchApprovalRoute } | undefined;
+        if (!payload?.data) throw payload ?? {};
+        return payload.data;
+      })
       .catch((err) => {
         throw err?.response?.data;
       });

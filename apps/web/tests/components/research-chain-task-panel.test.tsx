@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   getNotificationRecipients: vi.fn(),
   updateNotificationRecipients: vi.fn(),
   updateNotificationSelfSubscription: vi.fn(),
+  copyTextToClipboard: vi.fn(),
+  setToast: vi.fn(),
 }));
 const capturedDescription = vi.hoisted(() => ({ props: null as null | { editable: boolean; value: string } }));
 
@@ -27,6 +29,27 @@ vi.mock("@plane/i18n", () => ({
     },
     currentLocale: "zh-CN",
   }),
+}));
+vi.mock("@plane/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@plane/utils")>()),
+  copyTextToClipboard: mocks.copyTextToClipboard,
+}));
+vi.mock("@plane/propel/toast", () => ({
+  TOAST_TYPE: { SUCCESS: "SUCCESS", ERROR: "ERROR" },
+  setToast: mocks.setToast,
+}));
+vi.mock("@makeplane/propel/components/tooltip", () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock("@plane/propel/icon-button", () => ({
+  IconButton: ({
+    icon: Icon,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon: React.FC<{ className?: string }> }) => (
+    <button type="button" {...props}>
+      <Icon />
+    </button>
+  ),
 }));
 vi.mock("@/services/research/chain-task.service", () => ({
   ResearchChainTaskService: class {
@@ -72,16 +95,18 @@ function task(overrides: Partial<TResearchChainNodeTask> = {}): TResearchChainNo
     title: "整理开题文献",
     instruction: "补充近三年实验方法对比。",
     instruction_attachments: [],
-    status: "SUBMITTED",
+    status: "ASSIGNED",
     assignee: "student-1",
     assignee_is_valid: true,
     assignee_detail: { id: "student-1", display_name: "李同学" },
     assigned_by: "advisor-1",
     assigned_by_detail: { id: "advisor-1", display_name: "王导师" },
+    completed_by: null,
+    completed_by_detail: null,
     due_at: "2026-10-20T00:00:00Z",
-    submitted_at: "2026-10-09T08:00:00Z",
+    can_complete: true,
+    can_reopen: false,
     completed_at: null,
-    return_reason: "实验样本说明不足",
     resource_type: "NONE",
     resource_id: null,
     request_id: "request-1",
@@ -91,9 +116,8 @@ function task(overrides: Partial<TResearchChainNodeTask> = {}): TResearchChainNo
         view: capability(true),
         edit: capability(true),
         assign: capability(true),
-        submit: capability(false),
-        return: capability(true),
         complete: capability(true),
+        reopen: capability(false),
         cancel: capability(false),
       },
     },
@@ -165,6 +189,9 @@ beforeEach(() => {
   mocks.getNotificationRecipients.mockResolvedValue(notificationRecipients);
   mocks.updateNotificationRecipients.mockResolvedValue(notificationRecipients);
   mocks.updateNotificationSelfSubscription.mockResolvedValue(notificationRecipients);
+  mocks.copyTextToClipboard.mockReset();
+  mocks.copyTextToClipboard.mockResolvedValue(undefined);
+  mocks.setToast.mockReset();
 });
 
 afterEach(async () => {
@@ -231,6 +258,7 @@ async function clickOutsideMenu(target: Element) {
 
 it("opens an existing research task read-only until editing is explicitly enabled", async () => {
   await renderPanel();
+  console.log("step rendered");
   await act(async () => button("整理开题文献").click());
 
   const peek = container.querySelector("aside");
@@ -263,6 +291,48 @@ it("shows and saves notification members inside the research task peek", async (
     "student-1",
     "advisor-1",
   ]);
+});
+
+it("lets the assignee directly complete and reopen a task without approval routing", async () => {
+  const completed = task({
+    status: "COMPLETED",
+    completed_at: "2026-10-10T08:00:00Z",
+    completed_by: "student-1",
+    completed_by_detail: { id: "student-1", display_name: "李同学" },
+    can_complete: false,
+    can_reopen: true,
+    capabilities: {
+      schema_version: "research-capabilities.v1",
+      actions: {
+        view: capability(true),
+        edit: capability(false),
+        assign: capability(false),
+        complete: capability(false),
+        reopen: capability(true),
+        cancel: capability(false),
+      },
+    },
+  });
+  mocks.getNodeTasks.mockResolvedValue([completed]);
+  mocks.runNodeTaskAction.mockResolvedValue(
+    task({
+      status: "ASSIGNED",
+      completed_at: null,
+      completed_by: null,
+      completed_by_detail: null,
+      can_complete: true,
+      can_reopen: false,
+      capabilities: undefined,
+    })
+  );
+  await renderPanel();
+
+  const status = container.querySelector<HTMLButtonElement>('button[aria-label="状态"]');
+  if (!status) throw new Error("status button not found");
+  await act(async () => status.click());
+  await act(async () => button("标记未完成").click());
+  expect(mocks.runNodeTaskAction).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "reopen");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
 it("saves changed title and instruction together when leaving task edit mode", async () => {
@@ -348,8 +418,7 @@ it("hides the edit toggle but keeps permitted property and workflow actions avai
   const peek = container.querySelector("aside");
   expect(peek?.querySelector("[data-task-edit-toggle]")).toBeNull();
   expect(peek?.querySelector('button[aria-label="责任人"]')).not.toBeNull();
-  expect(peek?.textContent).toContain("退回");
-  expect(peek?.textContent).toContain("完成");
+  expect(peek?.textContent).toContain("标记完成");
 });
 
 it("resets edit mode when switching from one research task to another", async () => {
@@ -366,15 +435,23 @@ it("resets edit mode when switching from one research task to another", async ()
   expect(container.querySelector("aside")?.textContent).toContain("请补充实验记录。");
 });
 
-it("shows task metadata, status text, scoped candidates, and the return reason", async () => {
+it("shows task metadata, status text, and scoped candidates", async () => {
+  mocks.getNodeTasks.mockResolvedValue([
+    task({
+      status: "COMPLETED",
+      completed_at: "2026-10-09T08:00:00Z",
+      completed_by: "student-1",
+      completed_by_detail: { id: "student-1", display_name: "李同学" },
+      can_complete: false,
+      can_reopen: true,
+    }),
+  ]);
   await renderPanel();
 
   expect(container.textContent).toContain("整理开题文献");
   expect(container.textContent).toContain("李同学");
   expect(container.textContent).toContain("2026/10/20");
-  expect(container.textContent).toContain("已提交");
-  expect(container.textContent).toContain("SUBMITTED");
-  expect(container.textContent).not.toContain("实验样本说明不足");
+  expect(container.textContent).toContain("已完成");
 
   await act(async () => button("整理开题文献").click());
   const peek = container.querySelector("aside");
@@ -385,7 +462,7 @@ it("shows task metadata, status text, scoped candidates, and the return reason",
   expect(peek?.textContent).toContain("补充近三年实验方法对比。");
   expect(peek?.textContent).toContain("王导师");
   expect(peek?.textContent).toContain("2026/10/9");
-  expect(peek?.textContent).toContain("实验样本说明不足");
+  expect(peek?.textContent).toContain("完成人");
 
   const assignee = container.querySelector('button[aria-label="责任人"]') as HTMLButtonElement;
   await act(async () => assignee.click());
@@ -401,7 +478,7 @@ it("shows task metadata, status text, scoped candidates, and the return reason",
 });
 
 it("uses the administrative peek pattern for an empty research instruction", async () => {
-  mocks.getNodeTasks.mockResolvedValue([task({ instruction: "", return_reason: null })]);
+  mocks.getNodeTasks.mockResolvedValue([task({ instruction: "" })]);
   await renderPanel();
   await act(async () => button("整理开题文献").click());
   const peek = container.querySelector("aside");
@@ -409,6 +486,32 @@ it("uses the administrative peek pattern for an empty research instruction", asy
   expect(peek?.textContent).not.toContain("添加责任人");
   expect(peek?.textContent).not.toContain("添加截止时间");
   expect(peek?.textContent).toContain("创建了任务");
+});
+
+it("copies a research task deep link with share context", async () => {
+  const locationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
+  Object.defineProperty(window, "location", { value: { origin: "http://pilab.local" }, configurable: true });
+
+  try {
+    await renderPanel("task-1");
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label^="复制分享链接："]')?.click());
+
+    expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
+      "OpenEVA 科研工作项: 整理开题文献 ( http://pilab.local/lab/research/chains/chain-1?tab=nodes&node=node-1&task=task-1 )"
+    );
+    expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
+    expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
+  } finally {
+    if (locationDescriptor) Object.defineProperty(window, "location", locationDescriptor);
+  }
+});
+
+it("does not show task sharing in the create peek", async () => {
+  await renderPanel();
+  await act(async () => button("+ 创建任务").click());
+
+  expect(container.querySelector('button[aria-label^="复制分享链接："]')).toBeNull();
+  expect(mocks.copyTextToClipboard).not.toHaveBeenCalled();
 });
 
 it("keeps task requests scoped to the selected node supplied by the detail container", async () => {
@@ -433,7 +536,6 @@ it("creates a task using only a candidate returned by assignable-users", async (
     id: "task-2",
     title: "补充实验记录",
     status: "ASSIGNED",
-    return_reason: null,
     capabilities: undefined,
   });
   mocks.createNodeTask.mockResolvedValue(created);
@@ -461,24 +563,6 @@ it("creates a task using only a candidate returned by assignable-users", async (
   expect(container.textContent).toContain("已指派");
 });
 
-it("requires and submits a return reason", async () => {
-  mocks.runNodeTaskAction.mockResolvedValue(task({ status: "NEEDS_REVISION", return_reason: "请补充样本信息" }));
-  await renderPanel();
-
-  await act(async () => button("已提交").click());
-  await act(async () => button("退回").click());
-  await act(async () => button("确认提交").click());
-  expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("请先填写原因。");
-
-  await setInput("textarea", "请补充样本信息");
-  await act(async () => button("确认提交").click());
-  expect(mocks.runNodeTaskAction).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "return", {
-    reason: "请补充样本信息",
-  });
-  expect(container.textContent).toContain("需修订");
-});
-
 it("cancels row date and status menus after clicking elsewhere without invoking APIs", async () => {
   await renderPanel();
   const panelHeading = container.querySelector("h3");
@@ -495,8 +579,10 @@ it("cancels row date and status menus after clicking elsewhere without invoking 
   expect(container.querySelector('input[type="date"]')).toBeNull();
   expect(mocks.updateNodeTask).not.toHaveBeenCalled();
 
-  await act(async () => button("已提交").click());
-  expect([...container.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "退回")).toBe(true);
+  await act(async () => button("已指派").click());
+  expect([...container.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "标记完成")).toBe(
+    true
+  );
 
   await clickOutsideMenu(panelHeading);
   expect(container.querySelector('[role="menu"]')).toBeNull();
@@ -551,7 +637,7 @@ it("cancels peek layout and more menus without closing the task peek", async () 
 });
 
 it("keeps task cancellation in the header menu and requires a reason before cancelling", async () => {
-  const draft = task({ status: "DRAFT", instruction: "", return_reason: null });
+  const draft = task({ status: "DRAFT", instruction: "" });
   draft.capabilities!.actions.return = capability(false);
   draft.capabilities!.actions.complete = capability(false);
   draft.capabilities!.actions.cancel = capability(true);

@@ -94,6 +94,8 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
   );
 
   // Fetch issues
+  // Re-entering a system view must resolve the latest workspace-wide layout,
+  // even when SWR still has an issue cache from the previous visit.
   const { isLoading: issuesLoading } = useSWR(
     workspaceSlug && globalViewId ? `WORKSPACE_GLOBAL_VIEW_ISSUES_${workspaceSlug}_${globalViewId}` : null,
     async () => {
@@ -108,7 +110,7 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
         toggleLoading(false);
       }
     },
-    { revalidateIfStale: false, revalidateOnFocus: false }
+    { revalidateIfStale: isDefaultView, revalidateOnFocus: false }
   );
 
   // Empty state

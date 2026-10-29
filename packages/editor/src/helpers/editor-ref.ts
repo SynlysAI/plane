@@ -23,6 +23,7 @@ import { commentAnchorsPluginKey, getSelectionAnchorFromDocument } from "@/exten
 import type { EditorRefApi, IEditorProps, TEditorCommands } from "@/types";
 // local imports
 import { getParagraphCount } from "./common";
+import { insertImage } from "./editor-commands";
 import { insertContentAtSavedSelection } from "./insert-content-at-cursor-position";
 import { scrollSummary, scrollToNodeViaDOMCoordinates } from "./scroll-to-node";
 
@@ -186,6 +187,17 @@ export const getEditorRefHelpers = (args: TArgs): EditorRefApi => {
       if (!editor) return null;
       const { from, to } = editor.state.selection;
       return getSelectionAnchorFromDocument(editor.state.doc, from, to);
+    },
+    /** 在编辑器当前光标处插入选中的图片文件。 */
+    insertImageFiles: (files) => {
+      if (!editor || files.length === 0) return false;
+
+      let allInserted = true;
+      for (const file of files) {
+        const inserted = insertImage({ editor, event: "drop", file });
+        allInserted = allInserted && inserted;
+      }
+      return allInserted;
     },
     insertText: (contentHTML, insertOnNextLine) => {
       if (!editor) return;

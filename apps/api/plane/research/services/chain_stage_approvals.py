@@ -2,11 +2,13 @@
 
 from dataclasses import dataclass
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 from rest_framework import status
 
+from plane.preview.service import file_kind
 from plane.research.utils.audit import (
     ResearchAuditAction,
     ResearchResourceType,
@@ -31,6 +33,8 @@ CHAIN_STAGE_CODES = (
     "COMPLETION",
     "TRANSFER",
 )
+
+LINKABLE_UPLOAD_STATUSES = {"PROCESSING", "SUCCESS"}
 
 
 @dataclass(frozen=True)
@@ -434,8 +438,41 @@ def resolve_principal(chain):
     )
 
 
+def _upload_detail(upload):
+    """Project the reviewer-facing fields of one linked research upload.
+
+    Args:
+        upload: Research chain upload linked to a stage material item.
+
+    Returns:
+        A dictionary with status, file metadata and Plane-only access URLs.
+    """
+    if upload is None:
+        return None
+    previewable = (
+        upload.knowledge_id and settings.ATTACHMENT_PREVIEW_ENABLED and file_kind(upload.file_name) != "unsupported"
+    )
+    return {
+        "id": str(upload.id),
+        "status": upload.status,
+        "file_name": upload.file_name,
+        "file_size": upload.file_size,
+        "preview_url": (
+            f"/api/research/workspaces/{upload.workspace.slug}/chains/{upload.chain_id}/uploads/{upload.id}/preview/"
+            if previewable
+            else ""
+        ),
+        "download_url": (
+            f"/api/research/workspaces/{upload.workspace.slug}/chains/{upload.chain_id}/uploads/{upload.id}/download/"
+            if upload.knowledge_id
+            else ""
+        ),
+        "error_code": upload.error_code,
+    }
+
+
 def material_state(stage):
-    """Project one stage's requirements and submitted material counts.
+    """Project requirement counts using linked, non-failed research uploads.
 
     Args:
         stage: The Research Chain stage to inspect.
@@ -452,26 +489,29 @@ def material_state(stage):
     else:
         requirements = list(
             stage.material_requirements.filter(deleted_at__isnull=True)
-            .prefetch_related("items")
+            .prefetch_related("items__upload__workspace")
             .order_by("sort_order")
         )
     result = []
     for requirement in requirements:
         items = [item for item in requirement.items.all() if item.deleted_at is None]
+        linked_items = [item for item in items if item.upload_id and item.upload.status in LINKABLE_UPLOAD_STATUSES]
         result.append(
             {
                 "id": str(requirement.id),
                 "code": requirement.code,
                 "title": requirement.title,
                 "minimum_count": requirement.minimum_count,
-                "submitted_count": len(items),
-                "complete": len(items) >= requirement.minimum_count,
+                "submitted_count": len(linked_items),
+                "complete": len(linked_items) >= requirement.minimum_count,
                 "items": [
                     {
                         "id": str(item.id),
                         "title": item.title,
                         "description": item.description,
                         "source_node": str(item.source_node_id) if item.source_node_id else None,
+                        "upload": str(item.upload_id) if item.upload_id else None,
+                        "upload_detail": _upload_detail(item.upload),
                         "external_reference": item.external_reference,
                         "created_at": item.created_at.isoformat(),
                     }
@@ -584,13 +624,21 @@ def add_stage_material(
     actor,
     *,
     requirement_code,
-    title,
-    description="",
-    source_node=None,
-    external_reference="",
+    upload,
     request_id="",
 ):
-    """Add one student material item and mark the stage as in progress."""
+    """Link one scoped upload to a stage material requirement.
+
+    Args:
+        stage: The Research Chain stage receiving the material.
+        actor: User creating the material link.
+        requirement_code: Fixed requirement code for this stage.
+        upload: Research chain upload supplying the material file.
+        request_id: Idempotency key supplied by the API caller.
+
+    Returns:
+        The created stage material item.
+    """
     from plane.db.models import ResearchChainStageMaterialItem
 
     with transaction.atomic():
@@ -611,19 +659,33 @@ def add_stage_material(
                 "requirement_code is not defined for this stage.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if source_node is not None and source_node.chain_id != locked_stage.chain_id:
+        if upload is None or upload.chain_id != locked_stage.chain_id:
             raise ChainStageRuleError(
                 ResearchErrorCode.CHAIN_INVALID,
-                "source_node is not in this chain.",
+                "upload_id must reference an upload in this chain.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if upload.status not in LINKABLE_UPLOAD_STATUSES:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_INVALID,
+                "Only processing or successful research uploads can be linked.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        duplicate = requirement.items.filter(upload=upload, deleted_at__isnull=True).exists()
+        if duplicate:
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_INVALID,
+                "This research upload is already linked to this material requirement.",
+                status.HTTP_409_CONFLICT,
             )
         item = ResearchChainStageMaterialItem.objects.create(
             stage=locked_stage,
             requirement=requirement,
-            title=str(title or "").strip(),
-            description=str(description or "").strip(),
-            source_node=source_node,
-            external_reference=str(external_reference or "").strip(),
+            title=upload.file_name[:500],
+            description="",
+            source_node=upload.node,
+            upload=upload,
+            external_reference="",
             request_id=request_id,
             created_by=actor,
         )
@@ -636,8 +698,8 @@ def add_stage_material(
             actor,
             request_id or str(item.id),
             f"Added material: {item.title}",
-            {"requirement": requirement.code},
-            node=source_node,
+            {"requirement": requirement.code, "upload_id": str(upload.id), "upload_status": upload.status},
+            node=upload.node,
         )
         _audit_stage(
             ResearchAuditAction.CHAIN_STAGE_MATERIAL_ADD, locked_stage, actor, {"requirement": requirement.code}
@@ -789,6 +851,13 @@ def _material_snapshot(stage):
             "minimum_count": item["minimum_count"],
             "submitted_count": item["submitted_count"],
             "titles": [material["title"] for material in item["items"]],
+            "items": [
+                {
+                    "title": material["title"],
+                    "upload": material.get("upload_detail"),
+                }
+                for material in item["items"]
+            ],
         }
         for item in material_state(stage)
     ]

@@ -31,9 +31,17 @@ import type {
   IWorkspaceUserPropertiesResponse,
   IWorkspaceMemberTag,
   IWorkspaceMemberTagGroup,
+  IIssueDisplayFilterOptions,
+  IIssueDisplayProperties,
 } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
+
+export interface IWorkspaceAdministrativeViewDefault {
+  display_filters: IIssueDisplayFilterOptions;
+  display_properties: IIssueDisplayProperties;
+  updated_at: string | null;
+}
 
 export class WorkspaceService extends APIService {
   constructor() {
@@ -77,6 +85,25 @@ export class WorkspaceService extends APIService {
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
+      });
+  }
+
+  async fetchAdministrativeViewDefault(workspaceSlug: string): Promise<IWorkspaceAdministrativeViewDefault> {
+    return this.get(`/api/workspaces/${workspaceSlug}/administrative-view-default/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response;
+      });
+  }
+
+  async updateAdministrativeViewDefault(
+    workspaceSlug: string,
+    data: Partial<Pick<IWorkspaceAdministrativeViewDefault, "display_filters" | "display_properties">>
+  ): Promise<IWorkspaceAdministrativeViewDefault> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/administrative-view-default/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response;
       });
   }
 

@@ -129,6 +129,16 @@ it("成果表格显示发表日期，登记弹窗提交完整字段", async () =
   });
 });
 
+it("成果列表不提供复制分享入口", async () => {
+  await renderOutcomes();
+
+  expect(
+    [...container.querySelectorAll("button")].some(
+      (item) => item.getAttribute("aria-label")?.startsWith("复制分享链接：") || item.textContent === "复制"
+    )
+  ).toBe(false);
+});
+
 it("登记失败时错误保留在弹窗内", async () => {
   mocks.createOutcome.mockRejectedValue(new Error("forbidden"));
   await renderOutcomes();

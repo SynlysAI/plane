@@ -47,19 +47,23 @@ def _digest(*parts):
     return sha256(":".join(str(part) for part in parts).encode()).hexdigest()
 
 
-def _task(env, status, *, due=None, title="节点任务"):
-    return ResearchChainNodeTask.objects.create(
+def _task(env, status, *, due=None, title="节点任务", assignee=None):
+    task = ResearchChainNodeTask.objects.create(
         workspace=env["workspace"],
         chain=env["chain"],
         node=env["paper_node"],
         title=title,
         status=status,
-        assignee=env["group_member"],
+        assignee=assignee or env["group_member"],
         assigned_by=env["student"],
         due_at=due,
         request_id=f"todo-task-{uuid4()}",
         payload_hash=_digest(uuid4()),
     )
+    if status == ResearchChainNodeTask.Status.COMPLETED:
+        task.completed_by = task.assignee
+        task.save(update_fields=["completed_by", "updated_at"])
+    return task
 
 
 def _owned_task(env, status, *, assignee=None, assigned_by=None, created_by=None, title="责任任务"):
@@ -192,17 +196,24 @@ def env(db, settings):
                 due=now + timedelta(days=2),
                 title="补充实验图表",
             ),
-            "submitted_task": _task(
+            "completed_task": _task(
                 fixture,
-                ResearchChainNodeTask.Status.SUBMITTED,
+                ResearchChainNodeTask.Status.COMPLETED,
                 due=now - timedelta(hours=1),
-                title="提交论文对照说明",
+                title="已完成论文对照说明",
             ),
-            "returned_task": _task(
+            "open_task": _task(
                 fixture,
-                ResearchChainNodeTask.Status.NEEDS_REVISION,
+                ResearchChainNodeTask.Status.ASSIGNED,
                 due=now + timedelta(days=1),
                 title="修订技术路线说明",
+            ),
+            "advisor_task": _task(
+                fixture,
+                ResearchChainNodeTask.Status.ASSIGNED,
+                due=now + timedelta(days=3),
+                title="导师补充评审意见",
+                assignee=fixture["advisor"],
             ),
             "waiting_paper": _paper(fixture, ResearchPaperReview.Status.WAITING_REVIEW),
             "returned_paper": _paper(fixture, ResearchPaperReview.Status.NEEDS_REVISION),
@@ -246,7 +257,7 @@ class TestResearchTodoScopesAndAcl:
         env["project"].research_profile.save(update_fields=["workflow_status", "is_active", "updated_at"])
 
         payload = _payload(_get(env, "student", "?scope=visible"))
-        task_ids = {str(env[key].id) for key in ("assigned_task", "submitted_task", "returned_task")}
+        task_ids = {str(env[key].id) for key in ("assigned_task", "completed_task", "open_task", "advisor_task")}
 
         assert task_ids.isdisjoint({item["object_id"] for item in _items(payload) if item["source"] == "CHAIN_TASK"})
 
@@ -315,15 +326,20 @@ class TestResearchTodoScopesAndAcl:
         assert student_tasks[str(invalid_owner.id)]["next_action"] == "ASSIGN"
         assert {str(unassigned.id), str(invalid_owner.id)}.isdisjoint(member_tasks)
 
-    def test_submitted_chain_task_only_todos_qualified_reviewers(self, env):
+    def test_completed_chain_task_only_todos_its_assignee(self, env):
         student_items = _items(_payload(_get(env, "student", "?scope=to_me")))
         member_items = _items(_payload(_get(env, "member", "?scope=to_me")))
         advisor_items = _items(_payload(_get(env, "advisor", "?scope=to_me")))
-        task_id = str(env["submitted_task"].id)
+        task_id = str(env["completed_task"].id)
 
         assert task_id not in {item["object_id"] for item in student_items if item["source"] == "CHAIN_TASK"}
-        assert task_id not in {item["object_id"] for item in member_items if item["source"] == "CHAIN_TASK"}
-        assert task_id in {item["object_id"] for item in advisor_items if item["source"] == "CHAIN_TASK"}
+        member_item = next(
+            item for item in member_items if item["source"] == "CHAIN_TASK" and item["object_id"] == task_id
+        )
+        assert member_item["next_action"] == "REOPEN"
+        assert member_item["capabilities"]["actions"]["reopen"]["allowed"] is True
+        assert member_item["capabilities"]["actions"]["complete"]["allowed"] is False
+        assert task_id not in {item["object_id"] for item in advisor_items if item["source"] == "CHAIN_TASK"}
 
     def test_mine_uses_actual_creator_and_historical_fallbacks(self, env):
         creator_task = _owned_task(
@@ -454,10 +470,10 @@ class TestResearchTodoScopesAndAcl:
         assert report["capabilities"]["actions"]["read"]["allowed"] is True
         assert report["capabilities"]["actions"]["review"]["allowed"] is True
 
-        task = next(item for item in _items(payload) if item["object_id"] == str(env["submitted_task"].id))
-        assert task["handling_status"] == "IN_PROGRESS"
-        assert task["next_action"] == "REVIEW"
-        assert task["capabilities"]["actions"]["return"]["allowed"] is True
+        task = next(item for item in _items(payload) if item["object_id"] == str(env["advisor_task"].id))
+        assert task["handling_status"] == "TODO"
+        assert task["next_action"] == "COMPLETE"
+        assert task["capabilities"]["actions"]["complete"]["allowed"] is True
 
     def test_mine_returns_items_started_by_the_current_user(self, env):
         payload = _payload(_get(env, "student", "?scope=mine"))
@@ -492,9 +508,10 @@ class TestResearchTodoScopesAndAcl:
         assert "CHAIN_TASK" in sources
         assert "PAPER_REVIEW" in sources
 
-        submitted = next(item for item in _items(payload) if item["object_id"] == str(env["submitted_task"].id))
+        completed = next(item for item in _items(payload) if item["object_id"] == str(env["completed_task"].id))
         waiting = next(item for item in _items(payload) if item["object_id"] == str(env["waiting_paper"].id))
-        assert submitted["capabilities"]["actions"]["review"]["allowed"] is True
+        assert completed["capabilities"]["actions"]["complete"]["allowed"] is False
+        assert completed["capabilities"]["actions"]["reopen"]["allowed"] is False
         assert waiting["capabilities"]["actions"]["review"]["allowed"] is True
 
     def test_expired_org_member_and_invalid_project_member_cannot_act(self, env):
@@ -554,12 +571,13 @@ class TestResearchTodoProjectionContract:
     def test_status_and_capability_mappings_cover_actionable_sources(self, env):
         payload = _payload(_get(env, "member", "?scope=visible"))
         items = {(item["object_id"], item["handling_status"], item["next_action"]) for item in _items(payload)}
-        assert (str(env["assigned_task"].id), "TODO", "SUBMIT") in items
-        assert (str(env["returned_task"].id), "RETURNED", "SUBMIT") in items
+        assert (str(env["assigned_task"].id), "TODO", "COMPLETE") in items
+        assert (str(env["open_task"].id), "TODO", "COMPLETE") in items
+        assert (str(env["completed_task"].id), "DONE", "REOPEN") in items
 
         assigned = next(item for item in _items(payload) if item["object_id"] == str(env["assigned_task"].id))
-        assert assigned["capabilities"]["actions"]["submit"]["allowed"] is True
-        assert assigned["capabilities"]["actions"]["return"]["allowed"] is False
+        assert assigned["capabilities"]["actions"]["complete"]["allowed"] is True
+        assert assigned["capabilities"]["actions"]["reopen"]["allowed"] is False
         assert assigned["requester"]["id"] == str(env["student"].id)
         assert [user["id"] for user in assigned["assignees"]] == [str(env["group_member"].id)]
 
@@ -573,14 +591,14 @@ class TestResearchTodoProjectionContract:
     def test_stable_order_puts_overdue_before_future(self, env):
         payload = _payload(_get(env, "member", "?scope=visible"))
         ids = [item["id"] for item in _items(payload)]
-        assert ids.index(f"CHAIN_TASK:{env['submitted_task'].id}") < ids.index(f"CHAIN_TASK:{env['assigned_task'].id}")
+        assert ids.index(f"CHAIN_TASK:{env['completed_task'].id}") < ids.index(f"CHAIN_TASK:{env['assigned_task'].id}")
         assert len(ids) == len(set(ids))
 
     def test_urgency_is_projected_and_overdue_is_textually_unambiguous(self, env):
         payload = _payload(_get(env, "member", "?scope=visible"))
         items = {item["object_id"]: item for item in _items(payload)}
 
-        assert items[str(env["submitted_task"].id)]["urgency"] == "OVERDUE"
+        assert items[str(env["completed_task"].id)]["urgency"] == "OVERDUE"
         assert items[str(env["assigned_task"].id)]["urgency"] == "DUE_SOON"
 
     def test_cursor_continues_without_overlap(self, env):

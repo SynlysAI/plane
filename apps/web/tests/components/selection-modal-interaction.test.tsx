@@ -66,8 +66,9 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("use-font-face-observer", () => ({ default: () => true }));
 vi.mock("@plane/propel/toast", () => ({
-  TOAST_TYPE: { SUCCESS: "success", ERROR: "error" },
+  TOAST_TYPE: { SUCCESS: "success", ERROR: "error", WARNING: "warning" },
   setToast: vi.fn(),
 }));
 vi.mock("@plane/utils", async (importOriginal) => ({
@@ -141,6 +142,7 @@ import { ProjectMultiSelectModal } from "@/components/project/multi-select-modal
 import { AdministrativeOrganizationManager } from "@/components/research/navigation/administrative-organization-manager";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { SendProjectInvitationModal } from "@/components/project/send-project-invitation-modal";
+import { setToast } from "@plane/propel/toast";
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -247,6 +249,75 @@ it("can choose a role and add organization members while the member list stays o
   interactive(add);
   await act(async () => add.click());
   expect(mocks.addMember).toHaveBeenCalledWith("lab", "org", "user-1", "MEMBER");
+});
+
+it("blocks organization members who are already active in the organization", async () => {
+  const organization = {
+    id: "org",
+    name: "Office",
+    members: [],
+  };
+  const renderManager = (members: typeof organization.members) =>
+    root.render(
+      <AdministrativeOrganizationManager
+        action="members"
+        organizationId="org"
+        workspaceSlug="lab"
+        organizations={[{ ...organization, members }] as never}
+        onClose={mocks.close}
+        onUpdated={async () => {}}
+      />
+    );
+  await act(async () => renderManager(organization.members));
+  await openAndSelect();
+  await act(async () => renderManager([{ id: "user-1", name: "Alice", email: "alice@example.test", role: "MEMBER" }]));
+  const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "添加成员"
+  )!;
+  await act(async () => add.click());
+
+  expect(mocks.addMember).not.toHaveBeenCalled();
+  expect(setToast).toHaveBeenCalledWith({
+    type: "warning",
+    title: "无法重复添加成员",
+    message: "所选成员已在该组织中，请取消选择；如需调整角色，请在成员列表操作。",
+  });
+});
+
+it("shows the duplicate-member message when the API reports an existing member", async () => {
+  mocks.addMember.mockRejectedValueOnce({
+    response: {
+      data: {
+        code: "MEMBER_ALREADY_IN_ORGANIZATION",
+        message: "Member is already in this organization.",
+      },
+    },
+  });
+  const organization = { id: "org", name: "Office", members: [] };
+  await act(async () =>
+    root.render(
+      <AdministrativeOrganizationManager
+        action="members"
+        organizationId="org"
+        workspaceSlug="lab"
+        organizations={[organization] as never}
+        onClose={mocks.close}
+        onUpdated={async () => {}}
+      />
+    )
+  );
+  await openAndSelect();
+  const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "添加成员"
+  )!;
+  await act(async () => add.click());
+
+  expect(mocks.addMember).toHaveBeenCalledExactlyOnceWith("lab", "org", "user-1", "MEMBER");
+  expect(setToast).toHaveBeenCalledWith({
+    type: "error",
+    title: "组织操作失败",
+    message: "所选成员已在该组织中，请取消选择；如需调整角色，请在成员列表操作。",
+  });
 });
 
 it("supports adding mixed-role project members through the real multi-select combobox", async () => {

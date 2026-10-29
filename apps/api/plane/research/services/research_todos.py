@@ -12,12 +12,11 @@ common ``research-todo.v2`` envelope.
 import logging
 from datetime import date, datetime, time, timedelta
 
-from django.db.models import Q, TextChoices
+from django.db.models import TextChoices
 from django.utils import timezone
 
 from plane.db.models import (
     ApprovalRequest,
-    MentorBinding,
     PeriodicReport,
     ResearchAgentSession,
     ResearchChainStage,
@@ -27,15 +26,15 @@ from plane.db.models import (
     StageReviewerAssignment,
     StageReview,
     User,
-    WorkspaceResearchSetting,
 )
 from plane.research.services.chain_tasks import (
     actor_can_cancel_task,
-    actor_can_review_task,
-    actor_can_submit_task,
+    actor_can_complete_task,
+    actor_can_reopen_task,
     chain_writer,
     chain_assignable_user_ids,
 )
+from plane.research.services.approval_routes import actor_can_review_route, active_approval_route
 from plane.research.services.chain_stage_approvals import ChainStageRuleError, resolve_advisor, resolve_principal
 from plane.research.services.paper_review import (
     actor_can_review_paper,
@@ -213,8 +212,7 @@ def collect_chain_task_todos(workspace, user, scope):
     statuses = (
         ResearchChainNodeTask.Status.DRAFT,
         ResearchChainNodeTask.Status.ASSIGNED,
-        ResearchChainNodeTask.Status.SUBMITTED,
-        ResearchChainNodeTask.Status.NEEDS_REVISION,
+        ResearchChainNodeTask.Status.COMPLETED,
     )
     tasks = (
         ResearchChainNodeTask.objects.filter(
@@ -233,6 +231,7 @@ def collect_chain_task_todos(workspace, user, scope):
             "created_by",
             "assignee",
             "assigned_by",
+            "completed_by",
         )
         .order_by("-updated_at", "-created_at")
     )
@@ -248,36 +247,32 @@ def collect_chain_task_todos(workspace, user, scope):
         if task.chain_id not in assignable_ids_by_chain:
             assignable_ids_by_chain[task.chain_id] = chain_assignable_user_ids(workspace, task.chain)
         assignee_is_valid = task.assignee_id is not None and task.assignee_id in assignable_ids_by_chain[task.chain_id]
-        can_submit = actor_can_submit_task(workspace, task, user, assignee_is_valid=assignee_is_valid)
-        can_review = actor_can_review_task(workspace, task, user)
+        can_complete = actor_can_complete_task(workspace, task, user, assignee_is_valid=assignee_is_valid)
+        can_reopen = actor_can_reopen_task(workspace, task, user, assignee_is_valid=assignee_is_valid)
         can_cancel = actor_can_cancel_task(workspace, task, user)
         editable = task.status in (
             ResearchChainNodeTask.Status.DRAFT,
             ResearchChainNodeTask.Status.ASSIGNED,
-            ResearchChainNodeTask.Status.NEEDS_REVISION,
         )
         can_edit = editable and chain_writer(workspace, user, task.chain)
         decisions = {
             "view": True,
             "edit": can_edit,
             "assign": can_edit,
-            "submit": can_submit,
-            "review": can_review and task.status == ResearchChainNodeTask.Status.SUBMITTED,
-            "return": can_review and task.status == ResearchChainNodeTask.Status.SUBMITTED,
-            "complete": can_review and task.status == ResearchChainNodeTask.Status.SUBMITTED,
-            "cancel": can_cancel and editable,
+            "complete": can_complete,
+            "reopen": can_reopen,
+            "cancel": can_cancel and task.status != ResearchChainNodeTask.Status.CANCELLED,
         }
-        if task.status == ResearchChainNodeTask.Status.SUBMITTED:
-            next_action = "REVIEW"
-        elif assignee_is_valid:
-            next_action = "SUBMIT"
+        if can_complete:
+            next_action = "COMPLETE"
+        elif can_reopen:
+            next_action = "REOPEN"
         else:
             next_action = "ASSIGN"
         handling = {
             ResearchChainNodeTask.Status.DRAFT: "TODO",
             ResearchChainNodeTask.Status.ASSIGNED: "TODO",
-            ResearchChainNodeTask.Status.SUBMITTED: "IN_PROGRESS",
-            ResearchChainNodeTask.Status.NEEDS_REVISION: "RETURNED",
+            ResearchChainNodeTask.Status.COMPLETED: "DONE",
         }[task.status]
         assignees = [task.assignee] if task.assignee is not None and assignee_is_valid else []
         todo = _todo(
@@ -294,7 +289,7 @@ def collect_chain_task_todos(workspace, user, scope):
             due_at=task.due_at,
             href=f"/{workspace.slug}/research/chains/{task.chain_id}?node={task.node_id}&task={task.id}",
             capabilities=capability_map(
-                ("view", "edit", "assign", "submit", "review", "return", "complete", "cancel"),
+                ("view", "edit", "assign", "complete", "reopen", "cancel"),
                 decisions,
             ),
             trace_ref={
@@ -305,11 +300,11 @@ def collect_chain_task_todos(workspace, user, scope):
             },
             updated_at=task.updated_at,
         )
-        submitted_to_me = task.status == ResearchChainNodeTask.Status.SUBMITTED and can_review
+        actionable_to_me = can_complete or can_reopen
         editable_to_me = editable and (
             (assignee_is_valid and task.assignee_id == user.id) or (not assignee_is_valid and initiator.id == user.id)
         )
-        if scope != "to_me" or submitted_to_me or editable_to_me:
+        if scope != "to_me" or actionable_to_me or editable_to_me:
             result.append(todo)
     return result
 
@@ -319,26 +314,11 @@ def _latest_snapshot_version(report):
 
 
 def _report_assignees(report):
-    """Resolve the current formal report handler from existing report relations."""
+    """Resolve the current formal report handler from its active route."""
     if report.status != PeriodicReport.Status.SUBMITTED:
         return [report.owner]
-    today = timezone.localdate()
-    mentors = (
-        MentorBinding.objects.filter(
-            workspace_id=report.workspace_id,
-            mentee_id=report.owner_id,
-            is_primary_advisor=True,
-            deleted_at__isnull=True,
-            effective_from__lte=today,
-        )
-        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
-        .select_related("mentor")
-    )
-    users = [membership.mentor for membership in mentors]
-    setting = WorkspaceResearchSetting.objects.filter(workspace_id=report.workspace_id).first()
-    if setting is not None and setting.main_pi_id:
-        users.append(setting.main_pi)
-    return users or [report.owner]
+    route = active_approval_route("PERIODIC_REPORT", report.id, report.workspace_id)
+    return [route.reviewer] if route is not None else [report.owner]
 
 
 def collect_report_todos(workspace, user, scope):
@@ -378,12 +358,11 @@ def collect_report_todos(workspace, user, scope):
         )
         editable = report.status in (PeriodicReport.Status.DRAFT, PeriodicReport.Status.NEEDS_REVISION)
         can_edit = editable and check_access(user, "edit", report_resource(report, confidential_cache), context=context)
-        can_return = report.status == PeriodicReport.Status.SUBMITTED and check_access(
-            user, "return", report_resource(report, confidential_cache), context=context
+        can_review = report.status == PeriodicReport.Status.SUBMITTED and actor_can_review_route(
+            workspace, "PERIODIC_REPORT", report.id, user
         )
-        can_accept = report.status == PeriodicReport.Status.SUBMITTED and check_access(
-            user, "accept", report_resource(report, confidential_cache), context=context
-        )
+        can_return = can_review
+        can_accept = can_review
         decisions = {
             "view": True,
             "read": read_allowed,

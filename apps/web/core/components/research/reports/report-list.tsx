@@ -13,7 +13,6 @@ import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, REPORT_TYPES } from "@plane/c
 import type { TReportStatus, TReportType } from "@plane/constants";
 import type { TPeriodicReport, TReportTemplateOption } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
-import { copyTextToClipboard } from "@plane/utils";
 import { Button } from "@plane/propel/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -39,7 +38,6 @@ import {
   ResearchTableSurface,
 } from "@/components/research/common/research-data-surface";
 import { ResearchListState } from "@/components/research/common/research-list-state";
-import { formatShareText } from "@/components/research/common/share-link";
 // components
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import {
@@ -68,33 +66,6 @@ function reportReadState(report: TPeriodicReport): ReportReadState | null {
   if (report.status === "DRAFT") return null;
   if (report.status !== "SUBMITTED") return "reviewed";
   return (report.read_count ?? 0) > 0 ? "read_pending_review" : "waiting";
-}
-
-/**
- * 返回报告分享标题中的作者显示名。
- *
- * Args:
- *   report: 周期报告投影。
- *
- * Returns:
- *   作者显示名、邮箱或作者 ID；均缺失时返回空字符串。
- */
-function reportOwnerName(report: TPeriodicReport): string {
-  return report.owner_detail?.display_name || report.owner_detail?.email || report.owner || "";
-}
-
-/**
- * 构造报告分享标题。
- *
- * Args:
- *   report: 周期报告投影。
- *   untitledLabel: 已本地化的未命名标题。
- *
- * Returns:
- *   “周期 · 作者”格式的分享标题。
- */
-function reportShareTitle(report: TPeriodicReport, untitledLabel: string): string {
-  return [report.period_key, reportOwnerName(report)].filter(Boolean).join(" · ") || untitledLabel;
 }
 
 /** Report list with period / status / type / owner filters (P0-UI-02). */
@@ -381,34 +352,6 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
     [navigate, restoringReportId, research, t, workspaceSlug]
   );
 
-  /**
-   * 复制带报告类型、周期与作者的分享文本。
-   *
-   * Args:
-   *   report: 当前列表中的周期报告。
-   */
-  const handleCopyLink = useCallback(
-    async (report: TPeriodicReport) => {
-      const title = reportShareTitle(report, t("research.common.untitled"));
-      const href = `/${workspaceSlug}/research/reports/${report.id}`;
-      try {
-        await copyTextToClipboard(formatShareText(t(REPORT_TYPE_LABELS[report.report_type]), title, href));
-        setToast({
-          type: TOAST_TYPE.SUCCESS,
-          title: t("research.common.share_copied_title"),
-          message: t("research.common.share_copied_message"),
-        });
-      } catch {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: t("research.common.share_copy_failed_title"),
-          message: t("research.common.share_copy_failed_message"),
-        });
-      }
-    },
-    [t, workspaceSlug]
-  );
-
   const clearFilters = () =>
     query.patch({
       status: "",
@@ -634,16 +577,6 @@ const ReportListContent = observer(function ReportListContent({ workspaceSlug, v
                       )
                     ) : (
                       <span className="inline-flex items-center justify-end gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          aria-label={t("research.common.copy_share_aria", {
-                            title: reportShareTitle(report, t("research.common.untitled")),
-                          })}
-                          onClick={() => void handleCopyLink(report)}
-                        >
-                          {t("research.common.copy_share")}
-                        </Button>
                         <Link
                           href={`/${workspaceSlug}/research/reports/${report.id}`}
                           className="text-12 text-accent-primary hover:underline"

@@ -7,6 +7,49 @@
       "by_week": "Por semana",
       "by_month": "Por mês",
       "custom_period": "Período personalizado"
+    },
+    "approval_route": {
+      "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
+      "single_reviewer": "Single reviewer",
+      "reviewer": "Reviewer",
+      "cc": "Carbon copy (optional)",
+      "confirm": "I confirm submitting this to {name} for review",
+      "recommended": "Recommended",
+      "no_candidates": "No reviewer is available. Configure an advisor or organisation lead first.",
+      "loading": "Loading approval candidates…",
+      "load_failed": "Could not load approval candidates. Please retry.",
+      "submit": "Submit",
+      "roles": {
+        "primary_advisor": "Primary advisor",
+        "advisor": "Direct advisor",
+        "main_pi": "Main PI",
+        "unit_owner": "Unit owner",
+        "unit_pi": "Unit PI",
+        "unit_admin": "Unit administrator",
+        "reviewer": "Reviewer"
+      }
+    },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
+    "reports": {
+      "approval_reviewer": "Reviewer: {name}",
+      "submit_approval_title": "Select report reviewer"
+    },
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -174,6 +217,7 @@
   "link_copied": "Link copiado",
   "add_project": "Adicionar projeto",
   "create_project": "Criar projeto",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Não foi possível remover o projeto dos favoritos. Por favor, tente novamente.",
   "project_created_successfully": "Projeto criado com sucesso",
   "project_created_successfully_description": "Projeto criado com sucesso. Agora você pode começar a adicionar itens de trabalho a ele.",
@@ -191,11 +235,13 @@
   "description_placeholder": "Descrição",
   "only_alphanumeric_non_latin_characters_allowed": "Apenas caracteres alfanuméricos e não latinos são permitidos.",
   "project_id_is_required": "O ID do projeto é obrigatório",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Apenas caracteres alfanuméricos e não latinos são permitidos.",
   "project_id_min_char": "O ID do projeto deve ter pelo menos 1 caractere",
   "project_id_max_char": "O ID do projeto deve ter no máximo {max} caracteres",
   "project_description_placeholder": "Insira a descrição do projeto",
   "select_network": "Selecione a rede",
+  "select_project": "Select project",
   "lead": "Líder",
   "date_range": "Intervalo de datas",
   "private": "Privado",
@@ -767,6 +813,31 @@
     "only_one_file_allowed": "Apenas um arquivo pode ser enviado por vez.",
     "file_size_limit": "O arquivo deve ter {size}MB ou menos.",
     "drag_and_drop": "Arraste e solte em qualquer lugar para enviar",
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    },
+    "create": {
+      "draft_notice": "Os anexos são enviados após salvar o item de trabalho; o rascunho não os mantém.",
+      "hint": "Enviados automaticamente após salvar o item de trabalho.",
+      "remove": "Remover anexo",
+      "title": "Anexos",
+      "upload_failed": "O item de trabalho foi criado, mas {failed} de {total} anexos falharam no envio: {names}. Tente novamente no item.",
+      "zone_title": "Arraste arquivos aqui ou clique para selecionar vários"
+    },
+    "editor_image": {
+      "insert_failed": "Falha ao inserir imagens. Tente novamente.",
+      "invalid": "Somente imagens JPEG, JPG, PNG, WebP ou GIF são suportadas.",
+      "upload": "Enviar imagens"
+    },
     "delete": "Excluir anexo"
   },
   "label": {

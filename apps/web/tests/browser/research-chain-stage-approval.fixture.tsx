@@ -5,12 +5,26 @@ import { setLanguage, TranslationProvider } from "@plane/i18n";
 import type { TResearchChainNode, TResearchChainStageApproval } from "@plane/types";
 
 import { ResearchChainStageApprovalPanel } from "@/components/research/chains/research-chain-stage-approval-panel";
+import { useResearchChainKnowledge } from "@/components/research/chains/use-research-chain-knowledge";
 import { ResearchChainService } from "@/services/research/chain.service";
 // oxlint-disable-next-line import/no-unassigned-import -- 使用实际页面样式验证布局。
 import "./research-home-workbench.fixture.css";
 
 /** 生成隔离验收使用的权限决策。 */
 const decision = (allowed: boolean) => ({ allowed, reason_code: "fixture", reason: "隔离测试" });
+
+const fixtureUpload = {
+  id: "fixture-upload",
+  status: "PROCESSING" as const,
+  knowledge_id: "fixture-knowledge",
+  knowledge_base_id: "fixture-kb",
+  file_name: "formal-experiment-plan.pdf",
+  file_type: "pdf",
+  file_size: 5.1 * 1024 * 1024,
+  preview_url: "/fixture-preview/",
+  download_url: "/fixture-download/",
+  error_code: "",
+};
 
 /** 生成一个浏览器验收使用的阶段节点。 */
 function fixtureNode(id: string, type: string, title: string): TResearchChainNode {
@@ -44,6 +58,16 @@ function completeMaterial(id: string, code: string, title: string) {
         title: `${title} v1`,
         description: "",
         source_node: "fixture-node",
+        upload: fixtureUpload.id,
+        upload_detail: {
+          id: fixtureUpload.id,
+          status: fixtureUpload.status,
+          file_name: fixtureUpload.file_name,
+          file_size: fixtureUpload.file_size,
+          preview_url: fixtureUpload.preview_url,
+          download_url: fixtureUpload.download_url,
+          error_code: fixtureUpload.error_code,
+        },
         external_reference: "",
         created_at: "2026-10-22T01:00:00Z",
       },
@@ -253,8 +277,48 @@ const scenarios: Record<string, { label: string; stage: TResearchChainStageAppro
 const scenarioName = new URLSearchParams(window.location.search).get("scenario") ?? "missing";
 const scenario = scenarios[scenarioName] ?? scenarios.missing;
 
+/** 用共享资料控制器渲染阶段面板，验证上传与关联的真实数据流。 */
+function StageApprovalFixture() {
+  const knowledge = useResearchChainKnowledge("fixture-workspace", "fixture-chain", "fixture-node");
+  return (
+    <ResearchChainStageApprovalPanel
+      workspaceSlug="fixture-workspace"
+      chainId="fixture-chain"
+      stage={scenario.stage}
+      nodes={scenario.nodes}
+      preferredNodeId={scenario.nodes[0]?.id ?? null}
+      applicantName="研究负责人"
+      defaultExpanded={new URLSearchParams(window.location.search).get("expanded") === "1"}
+      knowledge={knowledge}
+      onCreateNode={() => undefined}
+      onChanged={() => undefined}
+    />
+  );
+}
+
 ResearchChainService.prototype.createChainStageMaterial = async () => undefined;
 ResearchChainService.prototype.deleteChainStageMaterial = async () => undefined;
+ResearchChainService.prototype.getKnowledgeBases = async () => ({
+  items: [{ external_id: fixtureUpload.knowledge_base_id, title: "器件小组共享库" }],
+  degraded: false,
+  degraded_reason: "",
+  state: "READY" as const,
+  request_id: "",
+  scope: "GROUP" as const,
+  orgUnitId: "fixture-team",
+  orgUnitName: "器件小组",
+  connectionStatus: "connected" as const,
+  candidates: [],
+});
+ResearchChainService.prototype.getKnowledgeUploads = async () => ({ data: [fixtureUpload] });
+ResearchChainService.prototype.getKnowledgeUpload = async () => ({
+  data: fixtureUpload,
+  degraded: false,
+});
+ResearchChainService.prototype.uploadKnowledgeFile = async () => ({
+  data: { ...fixtureUpload, id: "fixture-new-upload" },
+  degraded: false,
+});
 ResearchChainService.prototype.runChainStagePrecheck = async () => undefined;
 ResearchChainService.prototype.submitChainStage = async () => scenario.stage;
 ResearchChainService.prototype.reviewChainStage = async () => scenario.stage;
@@ -266,17 +330,7 @@ createRoot(document.getElementById("root")!).render(
     <main className="min-h-screen bg-canvas p-6">
       <section className="mx-auto max-w-5xl overflow-hidden rounded-lg border border-subtle bg-surface-1">
         <p className="border-b border-subtle px-4 py-2 text-11 text-tertiary">{scenario.label}</p>
-        <ResearchChainStageApprovalPanel
-          workspaceSlug="fixture-workspace"
-          chainId="fixture-chain"
-          stage={scenario.stage}
-          nodes={scenario.nodes}
-          preferredNodeId={scenario.nodes[0]?.id ?? null}
-          applicantName="研究负责人"
-          defaultExpanded={new URLSearchParams(window.location.search).get("expanded") === "1"}
-          onCreateNode={() => undefined}
-          onChanged={() => undefined}
-        />
+        <StageApprovalFixture />
       </section>
     </main>
   </TranslationProvider>

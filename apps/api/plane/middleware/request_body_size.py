@@ -2,8 +2,17 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import re
+
 from django.core.exceptions import RequestDataTooBig
 from django.http import JsonResponse
+
+RESEARCH_CHAIN_UPLOAD_PATH = re.compile(r"^/api/research/workspaces/[^/]+/chains/[^/]+/uploads(?:/.*)?$")
+
+
+def is_research_chain_upload(path: str) -> bool:
+    """Return whether a path owns its dedicated upload size limit."""
+    return RESEARCH_CHAIN_UPLOAD_PATH.match(path) is not None
 
 
 class RequestBodySizeLimitMiddleware:
@@ -16,6 +25,8 @@ class RequestBodySizeLimitMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if is_research_chain_upload(request.path):
+            return self.get_response(request)
         try:
             _ = request.body
         except RequestDataTooBig:

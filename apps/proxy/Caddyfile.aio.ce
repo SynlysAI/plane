@@ -1,38 +1,62 @@
-(plane_proxy) {
+(global_request_body) {
 	request_body {
 		max_size {$FILE_SIZE_LIMIT}
 	}
+}
 
-    handle /spaces/* {
-        reverse_proxy localhost:3002
-    }
-	
-    handle /live/* {
-        reverse_proxy localhost:3005
-    }
+(research_request_body) {
+	request_body {
+		max_size {$RESEARCH_CHAIN_UPLOAD_MAX_BYTES}
+	}
+}
+
+(plane_proxy) {
+	handle /api/research/workspaces/*/chains/*/uploads {
+		import research_request_body
+		reverse_proxy localhost:3004
+	}
+
+	handle /api/research/workspaces/*/chains/*/uploads/* {
+		import research_request_body
+		reverse_proxy localhost:3004
+	}
+
 	handle /api/* {
-        reverse_proxy localhost:3004
-    }
+		import global_request_body
+		reverse_proxy localhost:3004
+	}
+
+	handle /spaces/* {
+		import global_request_body
+		reverse_proxy localhost:3002
+	}
+
+	handle /live/* {
+		import global_request_body
+		reverse_proxy localhost:3005
+	}
 
 	handle /auth/* {
-        reverse_proxy localhost:3004
-    }
+		import global_request_body
+		reverse_proxy localhost:3004
+	}
 
 	handle_path /god-mode* {
-        root * /app/admin
-        try_files {path} {path}/ /index.html
-        file_server
-    }
-    handle_path /* {
-        root * /app/web
-        try_files {path} {path}/ /index.html
-        file_server
-    }
+		root * /app/admin
+		try_files {path} {path}/ /god-mode/index.html
+		file_server
+	}
+
+	handle_path /* {
+		root * /app/web
+		try_files {path} {path}/ /index.html
+		file_server
+	}
 }
 
 {
 	{$CERT_EMAIL}
-	acme_ca {$CERT_ACME_CA:https://acme-v02.api.letsencrypt.org/directory} 
+	acme_ca {$CERT_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
 	{$CERT_ACME_DNS}
 	servers {
 		max_header_size 25MB

@@ -22,7 +22,7 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import type { TNameDescriptionLoader } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
-import { copyUrlToClipboard, generateWorkItemLink } from "@plane/utils";
+import { copyTextToClipboard, generateWorkItemLink } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -34,6 +34,7 @@ import { IssueSubscription } from "../issue-detail/subscription";
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
 import { NameDescriptionUpdateStatus } from "../issue-update-status";
 import { IconButton } from "@plane/propel/icon-button";
+import { formatShareText } from "@/components/common/share-link";
 
 export type TPeekModes = "side-peek" | "modal" | "full-screen";
 
@@ -121,11 +122,14 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
     sequenceId: issueDetails?.sequence_id,
     isArchived,
   });
+  const shareTitle = issueDetails?.name.trim() || t("research.common.untitled");
 
   const handleCopyText = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    await copyUrlToClipboard(workItemLink);
+    await copyTextToClipboard(
+      formatShareText(t("research.common.share_type_administrative_work_item"), shareTitle, workItemLink)
+    );
     setToast({
       type: TOAST_TYPE.SUCCESS,
       title: t("common.link_copied"),
@@ -211,7 +215,13 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
             <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
           )}
           <Tooltip label={t("common.actions.copy_link")} disabled={isMobile}>
-            <IconButton variant="secondary" size="lg" onClick={handleCopyText} icon={LinkOutline} />
+            <IconButton
+              variant="secondary"
+              size="lg"
+              onClick={handleCopyText}
+              icon={LinkOutline}
+              aria-label={t("common.actions.copy_link")}
+            />
           </Tooltip>
           {issueDetails && (
             <WorkItemDetailQuickActions

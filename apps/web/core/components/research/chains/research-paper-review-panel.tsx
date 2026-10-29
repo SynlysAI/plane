@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type {
@@ -10,6 +10,7 @@ import type {
   TResearchPaperReviewVersion,
 } from "@plane/types";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchPaperReviewService } from "@/services/research/paper-review.service";
 
@@ -155,7 +156,6 @@ async function fileSha256(file: File) {
 export function ResearchPaperReviewPanel({ workspaceSlug, chainId, nodeId, events }: Props) {
   const { t, currentLocale } = useTranslation();
   const service = useMemo(() => new ResearchPaperReviewService(), []);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [reviews, setReviews] = useState<TResearchPaperReview[]>([]);
   const [review, setReview] = useState<TResearchPaperReview | null>(null);
   const [chainEvents, setChainEvents] = useState<TResearchChainEvent[]>(events);
@@ -260,7 +260,6 @@ export function ResearchPaperReviewPanel({ workspaceSlug, chainId, nodeId, event
   const resetUploadForm = () => {
     setFile(null);
     setChangeSummary("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   /** Validate, upload, bind and then refresh the next paper version. */
@@ -508,19 +507,24 @@ export function ResearchPaperReviewPanel({ workspaceSlug, chainId, nodeId, event
                       void submitVersion();
                     }}
                   >
-                    <label className="flex min-w-0 flex-col gap-1 text-11 text-tertiary">
+                    <div className="flex min-w-0 flex-col gap-1 text-11 text-tertiary">
                       <span>{t("research.paper_reviews.file")}</span>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".pdf,.md,.markdown,application/pdf,text/markdown"
-                        className="rounded-md border border-subtle bg-surface-1 px-3 py-2 text-12 text-primary"
-                        onChange={(event) => {
-                          setFile(event.target.files?.[0] ?? null);
+                      <AttachmentUploadZone
+                        onFiles={(files) => {
+                          setFile(files[0] ?? null);
                           setFormError("");
                         }}
+                        onReject={() => setFile(null)}
+                        accept={{
+                          "application/pdf": [".pdf"],
+                          "text/markdown": [".md", ".markdown"],
+                        }}
+                        uploading={busy === "submit"}
+                        variant="compact"
+                        title={file ? file.name : t("research.paper_reviews.file")}
+                        hint="PDF / Markdown，仅支持一个文件"
                       />
-                    </label>
+                    </div>
                     <label className="flex min-w-0 flex-col gap-1 text-11 text-tertiary">
                       <span>{t("research.paper_reviews.change_summary")}</span>
                       <textarea

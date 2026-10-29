@@ -10,6 +10,7 @@ import type { TResearchChain, TResearchChainNode, TResearchChainStageApproval } 
 
 import { ResearchChainStageApprovalPanel } from "@/components/research/chains/research-chain-stage-approval-panel";
 import { ResearchChainWorkbenchPeek } from "@/components/research/chains/research-chain-workbench-peek";
+import { useResearchChainKnowledge } from "@/components/research/chains/use-research-chain-knowledge";
 import { ResearchChainService } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
@@ -57,6 +58,8 @@ export function ResearchChainStageApprovalQueue({ workspaceSlug, items, activeId
   const [context, setContext] = useState<TQueueContext | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const requestVersion = useRef(0);
+  const knowledgeNodeId = hrefParam(activeItem?.href ?? "", "node") ?? context?.stage.submitted_node ?? "";
+  const knowledge = useResearchChainKnowledge(workspaceSlug, chainId ?? "", knowledgeNodeId);
 
   const load = useCallback(async () => {
     if (!activeItem || !chainId) {
@@ -148,6 +151,7 @@ export function ResearchChainStageApprovalQueue({ workspaceSlug, items, activeId
           preferredNodeId={hrefParam(activeItem.href, "node")}
           applicantName={context.chain.owner_name ?? activeItem.requester?.display_name ?? null}
           defaultExpanded
+          knowledge={knowledge}
           onChanged={() => undefined}
           onDecision={async () => onHandled(activeItem.id)}
         />

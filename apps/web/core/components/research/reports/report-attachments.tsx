@@ -4,14 +4,15 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { Button } from "@plane/propel/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 // components
 import { AttachmentPreviewLink } from "@/components/attachments/preview";
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { getResearchErrorDetail, getResearchErrorKey } from "@/components/research/common/error-messages";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -20,6 +21,19 @@ type Props = {
   workspaceSlug: string;
   reportId: string;
   editable: boolean;
+};
+
+const REPORT_ATTACHMENT_ACCEPT = {
+  "application/pdf": [".pdf"],
+  "text/markdown": [".md", ".markdown"],
+  "text/plain": [".txt", ".csv", ".tsv"],
+  "application/msword": [".doc"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "application/vnd.ms-excel": [".xls"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.ms-powerpoint": [".ppt"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+  "image/*": [],
 };
 
 /**
@@ -34,8 +48,9 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
 }: Props) {
   const { t } = useTranslation();
   const research = useResearch();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachmentError, setError] = useState<unknown>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const attachments = research.reportAttachments[reportId] ?? [];
 
@@ -47,17 +62,35 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
   }, [workspaceSlug, reportId]);
 
   const handleUpload = useCallback(
-    async (file: File) => {
+    async (files: File[]) => {
+      const failedFiles: string[] = [];
+      setUploadError(null);
+      setIsUploading(true);
       try {
-        await research.uploadReportAttachment(workspaceSlug, reportId, {
-          file_name: file.name,
-          content_type: file.type || "application/octet-stream",
-          size: file.size,
-          body: file,
-        });
+        /* eslint-disable no-await-in-loop -- Preserve the batch order and continue after individual failures. */
+        for (const file of files) {
+          try {
+            await research.uploadReportAttachment(workspaceSlug, reportId, {
+              file_name: file.name,
+              content_type: file.type || "application/octet-stream",
+              size: file.size,
+              body: file,
+            });
+          } catch {
+            failedFiles.push(file.name);
+          }
+        }
+        /* eslint-enable no-await-in-loop */
+        if (failedFiles.length > 0) {
+          setUploadError(
+            failedFiles.length === files.length
+              ? `${files.length} 个附件上传失败，请重试。`
+              : `${failedFiles.length} 个附件上传失败，其余 ${files.length - failedFiles.length} 个已上传。`
+          );
+        }
         setError(null);
-      } catch (error) {
-        setError(error);
+      } finally {
+        setIsUploading(false);
       }
     },
     [reportId, research, workspaceSlug]
@@ -79,25 +112,19 @@ export const ResearchReportAttachments = observer(function ResearchReportAttachm
     <section className="flex flex-col gap-3 rounded-xl border border-subtle bg-surface-1 p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-13 font-semibold text-primary">{t("research.attachments.title")}</h3>
-        {editable && (
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="xl" onClick={() => fileInputRef.current?.click()}>
-              {t("research.attachments.upload_file")}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".md,.markdown,.txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.tsv,image/*,application/pdf"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void handleUpload(file);
-                event.target.value = "";
-              }}
-            />
-          </div>
-        )}
       </div>
+
+      {editable && (
+        <AttachmentUploadZone
+          onFiles={handleUpload}
+          accept={REPORT_ATTACHMENT_ACCEPT}
+          multiple
+          uploading={isUploading}
+          error={uploadError}
+          title={t("research.attachments.upload_file")}
+          hint="支持一次选择或拖拽多个文件和文件夹"
+        />
+      )}
 
       {attachmentError !== null && (
         <div className="rounded-md border border-danger-strong/40 bg-danger-subtle px-3 py-2 text-12 text-danger-primary">

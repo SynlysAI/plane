@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
 vi.mock("next/navigation", () => ({ useParams: () => ({ workspaceSlug: "lab" }) }));
 vi.mock("@plane/constants", () => ({
+  API_BASE_URL: "",
   DEFAULT_WORK_ITEM_FORM_VALUES: { project_id: null, assignee_ids: [], name: "" },
   ETabIndices: { ISSUE_FORM: "issue-form" },
 }));

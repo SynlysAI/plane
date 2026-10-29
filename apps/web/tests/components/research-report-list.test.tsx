@@ -170,21 +170,6 @@ function button(label: string) {
   return target;
 }
 
-/**
- * 按可访问名称查找按钮，避免同屏多个复制按钮误点。
- *
- * Args:
- *   label: 目标按钮的可访问名称。
- *
- * Returns:
- *   匹配的按钮元素。
- */
-function buttonByName(label: string) {
-  const target = container.querySelector(`button[aria-label="${label}"]`);
-  expect(target).toBeInstanceOf(HTMLButtonElement);
-  return target as HTMLButtonElement;
-}
-
 beforeEach(() => {
   activeTemplate = { ...template };
   vi.useFakeTimers();
@@ -436,12 +421,7 @@ it("报告列表 scope=mine 新链接不再输出 mine 请求参数", async () =
   expect(mocks.fetchReports.mock.calls[0]?.[1]).not.toHaveProperty("mine");
 });
 
-it("报告列表复制周报和月报分享内容", async () => {
-  const locationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
-  Object.defineProperty(window, "location", {
-    value: { origin: "http://pilab.local" },
-    configurable: true,
-  });
+it("报告列表仅保留打开入口且不提供复制分享", async () => {
   mocks.getReports.mockReturnValue([
     {
       id: "report-weekly",
@@ -461,30 +441,21 @@ it("报告列表复制周报和月报分享内容", async () => {
     },
   ]);
 
-  try {
-    await act(async () =>
-      root.render(
-        <MemoryRouter initialEntries={["/lab/research/reports"]}>
-          <ReportScopeProbe />
-        </MemoryRouter>
-      )
-    );
-    await act(async () => undefined);
-    await act(async () => buttonByName("复制分享链接：2026-W40 · 学生一").click());
-    await act(async () => buttonByName("复制分享链接：2026-10 · student@lab.local").click());
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/lab/research/reports"]}>
+        <ReportScopeProbe />
+      </MemoryRouter>
+    )
+  );
+  await act(async () => undefined);
 
-    expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
-      1,
-      "Plane 周报: 2026-W40 · 学生一 ( http://pilab.local/lab/research/reports/report-weekly )"
-    );
-    expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
-      2,
-      "Plane 月报: 2026-10 · student@lab.local ( http://pilab.local/lab/research/reports/report-monthly )"
-    );
-    expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
-  } finally {
-    if (locationDescriptor) Object.defineProperty(window, "location", locationDescriptor);
-  }
+  expect(container.querySelector('a[href="/lab/research/reports/report-weekly"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/lab/research/reports/report-monthly"]')).not.toBeNull();
+  expect(
+    [...container.querySelectorAll("button")].some((item) => item.getAttribute("aria-label")?.includes("复制分享链接"))
+  ).toBe(false);
+  expect(mocks.copyTextToClipboard).not.toHaveBeenCalled();
 });
 
 it("已删除报告使用独立范围且不提供详情链接", async () => {

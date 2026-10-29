@@ -49,6 +49,11 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
   const { t } = useTranslation();
   // derived values
   const userData = userProjectsData?.user_data;
+  const profileSidebarCollapsedRef = useRef(profileSidebarCollapsed);
+
+  useEffect(() => {
+    profileSidebarCollapsedRef.current = profileSidebarCollapsed;
+  }, [profileSidebarCollapsed]);
 
   useOutsideClickDetector(ref, () => {
     if (profileSidebarCollapsed === false) {
@@ -74,7 +79,7 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
       if (window && window.innerWidth < 768) {
         toggleProfileSidebar(true);
       }
-      if (window && profileSidebarCollapsed && window.innerWidth >= 768) {
+      if (window && profileSidebarCollapsedRef.current && window.innerWidth >= 768) {
         toggleProfileSidebar(false);
       }
     };
@@ -82,7 +87,7 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
     window.addEventListener("resize", handleToggleProfileSidebar);
     handleToggleProfileSidebar();
     return () => window.removeEventListener("resize", handleToggleProfileSidebar);
-  }, []);
+  }, [toggleProfileSidebar]);
 
   return (
     <div
@@ -147,6 +152,9 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
             <div className="mt-9 divide-y divide-subtle">
               {userProjectsData.project_data.map((project, index) => {
                 const projectDetails = getProjectById(project.id);
+                // 项目 store 未加载（例如直链进入资料页）时，使用接口返回的名称与图标兜底。
+                const projectName = projectDetails?.name ?? project.name;
+                const projectLogoProps = projectDetails?.logo_props ?? project.logo_props;
 
                 const totalIssues =
                   project.created_issues + project.assigned_issues + project.pending_issues + project.completed_issues;
@@ -156,8 +164,6 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
                     ? 0
                     : Math.round((project.completed_issues / project.assigned_issues) * 100);
 
-                if (!projectDetails) return null;
-
                 return (
                   <Disclosure key={project.id} as="div" className={`${index === 0 ? "pb-3" : "py-3"}`}>
                     {({ open }) => (
@@ -165,9 +171,9 @@ export const ProfileSidebar = observer(function ProfileSidebar(props: TProfileSi
                         <Disclosure.Button className="flex w-full items-center justify-between gap-2">
                           <div className="flex w-3/4 items-center gap-2">
                             <span className="grid h-7 w-7 flex-shrink-0 place-items-center">
-                              <Logo logo={projectDetails.logo_props} />
+                              <Logo logo={projectLogoProps} />
                             </span>
-                            <div className="truncate text-13 font-medium break-words">{projectDetails.name}</div>
+                            <div className="truncate text-13 font-medium break-words">{projectName}</div>
                           </div>
                           <div className="flex flex-shrink-0 items-center gap-2">
                             {project.assigned_issues > 0 && (

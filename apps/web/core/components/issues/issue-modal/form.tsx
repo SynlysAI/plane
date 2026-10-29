@@ -36,6 +36,10 @@ import {
   IssueProjectSelect,
   IssueTitleInput,
 } from "@/components/issues/issue-modal/components";
+import {
+  IssuePendingAttachments,
+  type TIssuePendingAttachment,
+} from "@/components/issues/issue-modal/components/pending-attachments";
 // helpers
 // hooks
 import { useIssueModal } from "@/hooks/context/use-issue-modal";
@@ -52,11 +56,14 @@ export interface IssueFormProps {
   issueTitleRef: React.MutableRefObject<HTMLInputElement | null>;
   isCreateMoreToggleEnabled: boolean;
   onAssetUpload: (assetId: string) => void;
+  pendingAttachments?: TIssuePendingAttachment[];
+  onAddPendingAttachments?: (files: File[]) => void;
+  onRemovePendingAttachment?: (attachmentId: string) => void;
   onCreateMoreToggleChange: (value: boolean) => void;
   onChange?: (formData: Partial<TIssue> | null) => void;
   onClose: () => void;
   onSubmit: (values: Partial<TIssue>, is_draft_issue?: boolean) => Promise<void>;
-  projectId: string;
+  projectId: string | null;
   isDraft: boolean;
   moveToIssue?: boolean;
   modalTitle?: string;
@@ -78,6 +85,9 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     data,
     issueTitleRef,
     onAssetUpload,
+    pendingAttachments = [],
+    onAddPendingAttachments,
+    onRemovePendingAttachment,
     onChange,
     onClose,
     onSubmit,
@@ -99,6 +109,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   // states
   const [gptAssistantModal, setGptAssistantModal] = useState(false);
   const [isMoving, setIsMoving] = useState<boolean>(false);
+  const [pendingAttachmentError, setPendingAttachmentError] = useState<string | null>(null);
 
   // refs
   const editorRef = useRef<EditorRefApi>(null);
@@ -174,7 +185,8 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     watch: watch,
   });
 
-  const isDisabled = isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers || hasRequiredFieldErrors;
+  const isDisabled =
+    !projectId || isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers || hasRequiredFieldErrors;
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -230,6 +242,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   }, [workItemTemplateId]);
 
   const handleFormSubmit = async (formData: Partial<TIssue>, is_draft_issue = false) => {
+    if (!projectId) return;
     if (hasNoAssignableProjectMembers) return;
     if (!isDraft && !is_draft_issue && hasRequiredFieldErrors) return;
 
@@ -252,6 +265,15 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       })
     )
       return;
+
+    if (!data?.id && !isDraft && pendingAttachmentError) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: pendingAttachmentError,
+      });
+      return;
+    }
 
     const submitData = !data?.id
       ? formData
@@ -402,6 +424,9 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   />
                 </div>
               </div>
+              {!projectId && (
+                <p className="pb-4 text-caption-sm-regular text-tertiary">{t("project_required_to_save")}</p>
+              )}
               {watch("parent_id") && selectedParentIssue && (
                 <div className="pb-4">
                   <IssueParentTag
@@ -450,6 +475,19 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   onClose={onClose}
                 />
               </div>
+              {!data?.id && !isDraft && projectId && onAddPendingAttachments && onRemovePendingAttachment && (
+                <IssuePendingAttachments
+                  attachments={pendingAttachments}
+                  onAdd={onAddPendingAttachments}
+                  onRemove={onRemovePendingAttachment}
+                  onValidationChange={(error) => {
+                    setPendingAttachmentError(error);
+                  }}
+                  workspaceSlug={workspaceSlug?.toString() ?? ""}
+                  projectId={projectId}
+                  disabled={isDisabled}
+                />
+              )}
             </div>
             <div
               className={cn(

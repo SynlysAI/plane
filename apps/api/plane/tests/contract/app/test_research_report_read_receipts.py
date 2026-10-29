@@ -112,7 +112,7 @@ def env(db):
     report = created.json()
     submitted = student_client.post(
         f"/api/research/workspaces/{workspace.slug}/reports/{report['id']}/submit/",
-        {},
+        {"reviewer_id": str(advisor.id), "cc_user_ids": []},
         format="json",
     )
     assert submitted.status_code == 200
@@ -122,6 +122,7 @@ def env(db):
         "advisor": advisor,
         "colleague": colleague,
         "workspace": workspace,
+        "group": group,
         "report": report,
         "admin_client": client_for(admin),
         "student_client": student_client,
@@ -165,10 +166,14 @@ class TestResearchReportReadReceipts:
         assert detail["has_read"] is True
         assert detail["read_count"] == 1
         assert detail["latest_read_at"] == first_read_at
-        listed = env["advisor_client"].get(
-            f"/api/research/workspaces/{env['workspace'].slug}/reports/",
-            {"scope": "review"},
-        ).json()
+        listed = (
+            env["advisor_client"]
+            .get(
+                f"/api/research/workspaces/{env['workspace'].slug}/reports/",
+                {"scope": "review"},
+            )
+            .json()
+        )
         row = next(item for item in listed["results"] if item["id"] == env["report"]["id"])
         assert (row["has_read"], row["read_count"], row["latest_read_at"]) == (True, 1, first_read_at)
 
@@ -221,6 +226,12 @@ class TestResearchReportReadReceipts:
         pi = make_user(first_name="MainPI", email="mainpi@example.com")
         add_workspace_member(env["workspace"], pi)
         WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).update(main_pi=pi)
+        OrgUnitMember.objects.create(
+            workspace=env["workspace"],
+            org_unit=env["group"],
+            user=pi,
+            org_role=OrgUnitMember.OrgRole.PI,
+        )
 
         read = client_for(pi).post(env["read_url"], {}, format="json")
 
@@ -245,7 +256,11 @@ class TestResearchReportReadReceipts:
             {"comment": "Please add experiment details."},
             format="json",
         )
-        resubmitted = env["student_client"].post(f"{env['detail_url']}submit/", {}, format="json")
+        resubmitted = env["student_client"].post(
+            f"{env['detail_url']}submit/",
+            {"reviewer_id": str(env["advisor"].id), "cc_user_ids": []},
+            format="json",
+        )
         accepted = env["advisor_client"].post(f"{env['detail_url']}accept/", {}, format="json")
 
         assert returned.status_code == 200

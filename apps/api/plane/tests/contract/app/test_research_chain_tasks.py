@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Research Chain node task API contracts."""
+"""Research Chain action-item task API contracts."""
 
-from collections import Counter
 from uuid import uuid4
 
 import pytest
@@ -13,13 +12,13 @@ from rest_framework.test import APIClient
 from plane.db.models import (
     Notification,
     ProjectMember,
+    ResearchApprovalRoute,
     ResearchAuditEvent,
     ResearchChainEvent,
     ResearchChainNode,
     ResearchChainNodeTask,
     ResearchTaskSubscriber,
 )
-from plane.research.services.chain_tasks import actor_can_review_task
 from plane.tests.research_fixtures import make_research_boundary_fixture
 
 pytestmark = pytest.mark.contract
@@ -29,7 +28,7 @@ pytestmark = pytest.mark.contract
 def env(db, settings):
     settings.RESEARCH_MODULE_ENABLED = True
     fixture = make_research_boundary_fixture()
-    for key in ("group_member",):
+    for key in ("group_member", "advisor"):
         ProjectMember.objects.create(project=fixture["project"], member=fixture[key], role=15)
     fixture.update(
         {
@@ -64,6 +63,16 @@ def _notification_url(env, task_id, suffix=""):
     return f"{_url(env, task_id)}notification-recipients/{suffix}"
 
 
+def _action(env, task_id, action, client=None, **payload):
+    response = (client or env["member_client"]).post(
+        _action_url(env, task_id, action),
+        {"request_id": f"{action}-{uuid4()}", **payload},
+        format="json",
+    )
+    assert response.status_code == 200, response.json()
+    return response.json()["data"]
+
+
 def _create(env, client=None, **overrides):
     payload = {
         "title": "整理论文实验图表",
@@ -78,179 +87,109 @@ def _create(env, client=None, **overrides):
 
 @pytest.mark.django_db
 class TestResearchChainNodeTaskApi:
-    def test_create_assign_submit_return_resubmit_and_complete(self, env):
-        task = _create(env)
-        assert task["status"] == "DRAFT"
-        assert task["request_id"]
-        assert task["schema_version"] == "research-chain-task.v1"
+    def test_assignee_can_repeatedly_complete_and_reopen_task(self, env):
+        task = _create(env, assignee=str(env["group_member"].id))
+        assert task["status"] == "ASSIGNED"
 
-        assigned = (
-            env["student_client"]
-            .patch(
-                _url(env, task["id"]),
-                {"assignee": str(env["group_member"].id)},
-                format="json",
-            )
-            .json()["data"]
-        )
-        assert assigned["status"] == "ASSIGNED"
-        assert assigned["assignee"] == str(env["group_member"].id)
-        assert assigned["assigned_by"] == str(env["student"].id)
-        assert assigned["assignee_detail"]["display_name"]
-
-        submitted = (
-            env["member_client"]
-            .post(
-                _action_url(env, task["id"], "submit"),
-                {"request_id": f"submit-{uuid4()}"},
-                format="json",
-            )
-            .json()["data"]
-        )
-        assert submitted["status"] == "SUBMITTED"
-        assert submitted["submitted_at"]
-
-        returned = (
-            env["advisor_client"]
-            .post(
-                _action_url(env, task["id"], "return"),
-                {"request_id": f"return-{uuid4()}", "reason": "图中样本量缺失。"},
-                format="json",
-            )
-            .json()["data"]
-        )
-        assert returned["status"] == "NEEDS_REVISION"
-
-        resubmitted = (
-            env["member_client"]
-            .post(
-                _action_url(env, task["id"], "submit"),
-                {"request_id": f"resubmit-{uuid4()}"},
-                format="json",
-            )
-            .json()["data"]
-        )
-        assert resubmitted["status"] == "SUBMITTED"
-
-        completed = (
-            env["advisor_client"]
-            .post(
-                _action_url(env, task["id"], "complete"),
-                {"request_id": f"complete-{uuid4()}", "comment": "图表信息完整。"},
-                format="json",
-            )
-            .json()["data"]
-        )
+        completed = _action(env, task["id"], "complete", comment="图表信息完整。")
         assert completed["status"] == "COMPLETED"
         assert completed["completed_at"]
+        assert completed["completed_by"] == str(env["group_member"].id)
+        assert completed["can_reopen"] is True
+
+        reopened = _action(env, task["id"], "reopen", reason="需要补充一版图注。")
+        assert reopened["status"] == "ASSIGNED"
+        assert reopened["completed_at"] is None
+        assert reopened["completed_by"] is None
+        assert reopened["can_complete"] is True
+
+        completed_again = _action(env, task["id"], "complete")
+        assert completed_again["status"] == "COMPLETED"
 
         assert list(ResearchChainEvent.objects.filter(node=env["paper_node"]).values_list("event_type", flat=True)) == [
             "TASK_CREATED",
-            "TASK_ASSIGNED",
-            "TASK_SUBMITTED",
-            "TASK_RETURNED",
-            "TASK_SUBMITTED",
+            "TASK_COMPLETED",
+            "TASK_REOPENED",
             "TASK_COMPLETED",
         ]
         assert list(
             ResearchAuditEvent.objects.filter(workspace=env["workspace"], resource_id=task["id"])
             .order_by("created_at")
             .values_list("action", flat=True)
-        ) == [
-            "task.create",
-            "task.update",
-            "task.submit",
-            "task.return",
-            "task.submit",
-            "task.complete",
-        ]
-        notification_actions = Counter(
-            Notification.objects.filter(entity_name="research_chain_task", data__task_id=task["id"]).values_list(
-                "data__action", flat=True
-            )
+        ) == ["task.create", "task.complete", "task.reopen", "task.complete"]
+
+    def test_advisor_or_pi_assignee_can_complete_without_task_review(self, env):
+        task = _create(env, assignee=str(env["advisor"].id))
+        assert task["status"] == "ASSIGNED"
+
+        completed = _action(env, task["id"], "complete", client=env["advisor_client"])
+        assert completed["status"] == "COMPLETED"
+        assert not ResearchApprovalRoute.objects.filter(resource_id=task["id"]).exists()
+
+    def test_only_current_assignee_can_complete_or_reopen(self, env):
+        assigned = _create(env, assignee=str(env["group_member"].id))
+        forbidden_complete = env["student_client"].post(
+            _action_url(env, assigned["id"], "complete"),
+            {"request_id": f"forbidden-complete-{uuid4()}"},
+            format="json",
         )
-        assert notification_actions == {
-            "assigned": 1,
-            "submitted": 6,
-            "returned": 1,
-            "completed": 1,
-        }
-        env["paper_node"].refresh_from_db()
-        assert env["paper_node"].status == ResearchChainNode.Status.ACTIVE
+        assert forbidden_complete.status_code == 403
+        assert forbidden_complete.json()["error_code"] == "research_permission_denied"
+        assert ResearchChainNodeTask.objects.get(pk=assigned["id"]).status == "ASSIGNED"
 
-    def test_tasks_can_be_listed_and_filtered(self, env):
-        first = _create(env, title="First", assignee=str(env["group_member"].id))
-        _create(env, title="Second")
+        _action(env, assigned["id"], "complete")
+        forbidden_reopen = env["admin_client"].post(
+            _action_url(env, assigned["id"], "reopen"),
+            {"request_id": f"forbidden-reopen-{uuid4()}"},
+            format="json",
+        )
+        assert forbidden_reopen.status_code == 403
+        assert ResearchChainNodeTask.objects.get(pk=assigned["id"]).status == "COMPLETED"
 
-        response = env["advisor_client"].get(_url(env), {"status": "ASSIGNED"})
-        assert response.status_code == 200, response.json()
-        data = response.json()["data"]
-        assert [item["id"] for item in data] == [first["id"]]
-        assert data[0]["title"] == "First"
+    def test_task_approval_actions_and_route_are_no_longer_exposed(self, env):
+        task = _create(env, assignee=str(env["group_member"].id))
+        for action in ("submit", "withdraw", "return"):
+            response = env["member_client"].post(
+                _action_url(env, task["id"], action),
+                {"request_id": f"legacy-{action}-{uuid4()}"},
+                format="json",
+            )
+            assert response.status_code == 404
+            assert response.json()["error_code"] == "research_chain_invalid"
 
-    def test_notification_members_can_be_managed_and_notified(self, env):
+        route = env["member_client"].get(
+            _url(
+                env,
+                task["id"],
+            ).rstrip("/")
+            + "/approval-route/"
+        )
+        assert route.status_code in (404, 405)
+        assert not ResearchApprovalRoute.objects.filter(resource_id=task["id"]).exists()
+
+    def test_notification_members_continue_to_receive_task_updates(self, env):
         ProjectMember.objects.create(project=env["project"], member=env["descendant"], role=15)
         descendant_client = _client(env["descendant"])
         task = _create(env, assignee=str(env["group_member"].id))
 
-        response = env["student_client"].get(_notification_url(env, task["id"]))
-        assert response.status_code == 200, response.json()
-        payload = response.json()["data"]
-        candidate_ids = {item["id"] for item in payload["candidates"]}
-        assert {str(env["cross_org"].id), str(env["descendant"].id)} <= candidate_ids
-        assert payload["schema_version"] == "task-notification-recipients.v1"
-        assert payload["can_manage"] is True
+        listed = env["student_client"].get(_notification_url(env, task["id"])).json()["data"]
+        assert str(env["descendant"].id) in {item["id"] for item in listed["candidates"]}
 
-        response = env["student_client"].put(
+        replaced = env["student_client"].put(
             _notification_url(env, task["id"]),
-            {"user_ids": [str(env["cross_org"].id)]},
+            {"user_ids": [str(env["descendant"].id)]},
             format="json",
         )
-        assert response.status_code == 200, response.json()
-        assert response.json()["data"]["cc_user_ids"] == [str(env["cross_org"].id)]
+        assert replaced.status_code == 200, replaced.json()
+        assert replaced.json()["data"]["cc_user_ids"] == [str(env["descendant"].id)]
         assert ResearchTaskSubscriber.objects.filter(
-            task_id=task["id"], subscriber=env["cross_org"], source="CC"
+            task_id=task["id"], subscriber=env["descendant"], source="CC"
         ).exists()
-        assert ResearchAuditEvent.objects.filter(
-            resource_id=task["id"], action="task.notification_members.update"
-        ).exists()
+        assert descendant_client.post(_notification_url(env, task["id"], "me/"), {}, format="json").status_code == 200
+
+        _action(env, task["id"], "complete")
         assert Notification.objects.filter(
-            entity_name="research_chain_task", receiver=env["cross_org"], data__action="cc_added"
-        ).exists()
-
-        response = descendant_client.post(_notification_url(env, task["id"], "me/"), {}, format="json")
-        assert response.status_code == 200, response.json()
-        assert response.json()["data"]["current_user_self_subscribed"] is True
-
-        response = env["student_client"].put(
-            _notification_url(env, task["id"]),
-            {"user_ids": []},
-            format="json",
-        )
-        assert response.status_code == 200, response.json()
-        assert not ResearchTaskSubscriber.objects.filter(
-            task_id=task["id"], subscriber=env["cross_org"], source="CC", deleted_at__isnull=True
-        ).exists()
-        assert ResearchTaskSubscriber.objects.filter(
-            task_id=task["id"], subscriber=env["descendant"], source="SELF", deleted_at__isnull=True
-        ).exists()
-
-        renamed = env["student_client"].patch(
-            _url(env, task["id"]), {"title": "整理论文图表与样本量"}, format="json"
-        )
-        assert renamed.status_code == 200, renamed.json()
-        assert Notification.objects.filter(
-            entity_name="research_chain_task", receiver=env["descendant"], data__action="updated"
-        ).exists()
-
-        submitted = env["member_client"].post(
-            _action_url(env, task["id"], "submit"),
-            {"request_id": f"notify-submit-{uuid4()}"},
-            format="json",
-        )
-        assert submitted.status_code == 200, submitted.json()
-        assert Notification.objects.filter(
-            entity_name="research_chain_task", receiver=env["descendant"], data__action="submitted"
+            entity_name="research_chain_task", receiver=env["descendant"], data__action="completed"
         ).exists()
 
     def test_notification_member_outside_boundary_is_rejected(self, env):
@@ -280,39 +219,7 @@ class TestResearchChainNodeTaskApi:
         assert response.json()["error_code"] == "research_permission_denied"
         assert not ResearchChainNodeTask.objects.filter(title="越权任务").exists()
 
-    def test_only_current_assignee_can_submit(self, env):
-        task = _create(env, assignee=str(env["group_member"].id))
-        response = env["student_client"].post(
-            _action_url(env, task["id"], "submit"),
-            {"request_id": f"wrong-submit-{uuid4()}"},
-            format="json",
-        )
-
-        assert response.status_code == 403
-        assert response.json()["error_code"] == "research_permission_denied"
-        task = ResearchChainNodeTask.objects.get(pk=task["id"])
-        assert task.status == ResearchChainNodeTask.Status.ASSIGNED
-
-    def test_review_actions_require_research_review_permission(self, env):
-        task = _create(env, assignee=str(env["group_member"].id))
-        env["member_client"].post(
-            _action_url(env, task["id"], "submit"),
-            {"request_id": f"admin-submit-{uuid4()}"},
-            format="json",
-        )
-        persisted_task = ResearchChainNodeTask.objects.get(pk=task["id"])
-        assert actor_can_review_task(env["workspace"], persisted_task, env["workspace_admin"])
-        response = env["member_client"].post(
-            _action_url(env, task["id"], "return"),
-            {"request_id": f"unauthorized-return-{uuid4()}", "reason": "Current assignee."},
-            format="json",
-        )
-
-        assert response.status_code == 403
-        assert response.json()["error_code"] == "research_permission_denied"
-        assert ResearchChainNodeTask.objects.get(pk=task["id"]).status == "SUBMITTED"
-
-    def test_manager_can_cancel_open_task(self, env):
+    def test_manager_can_cancel_task(self, env):
         task = _create(env, assignee=str(env["group_member"].id))
         response = env["student_client"].post(
             _action_url(env, task["id"], "cancel"),
@@ -343,16 +250,8 @@ class TestResearchChainNodeTaskApi:
         task = _create(env, assignee=str(env["group_member"].id))
         before_updated_at = env["paper_node"].updated_at
 
-        env["member_client"].post(
-            _action_url(env, task["id"], "submit"),
-            {"request_id": f"isolate-submit-{uuid4()}"},
-            format="json",
-        )
-        env["advisor_client"].post(
-            _action_url(env, task["id"], "complete"),
-            {"request_id": f"isolate-complete-{uuid4()}"},
-            format="json",
-        )
+        _action(env, task["id"], "complete")
+        _action(env, task["id"], "reopen")
 
         env["paper_node"].refresh_from_db()
         assert env["paper_node"].status == ResearchChainNode.Status.ACTIVE

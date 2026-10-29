@@ -291,12 +291,21 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
         user_data = target_workspace_member.member
         projects = []
         if requesting_workspace_member.role >= 15:
+            # 项目列表展示“对方参与且我可见”的交集：两次反向关系 filter 分别
+            # 匹配请求用户与目标用户的活跃成员记录，避免同一 join 上条件互斥；
+            # name 直接随统计返回，供前端在项目 store 未加载时兜底展示。
             projects = (
                 Project.objects.filter(
                     workspace__slug=slug,
                     project_projectmember__member=request.user,
                     project_projectmember__is_active=True,
+                    project_projectmember__deleted_at__isnull=True,
                     archived_at__isnull=True,
+                )
+                .filter(
+                    project_projectmember__member_id=user_id,
+                    project_projectmember__is_active=True,
+                    project_projectmember__deleted_at__isnull=True,
                 )
                 .annotate(
                     created_issues=Count(
@@ -346,12 +355,14 @@ class WorkspaceUserProfileEndpoint(BaseAPIView):
                 )
                 .values(
                     "id",
+                    "name",
                     "logo_props",
                     "created_issues",
                     "assigned_issues",
                     "completed_issues",
                     "pending_issues",
                 )
+                .distinct()
             )
 
         return Response(

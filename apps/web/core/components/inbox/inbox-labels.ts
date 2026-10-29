@@ -57,6 +57,7 @@ export const INBOX_ACTION_LABELS: Record<string, string> = {
   ACCEPT: "接受",
   WITHDRAW: "撤回",
   COMPLETE: "完成",
+  REOPEN: "标记未完成",
   CANCEL: "取消",
   APPROVE: "批准",
   REJECT: "驳回",

@@ -110,16 +110,18 @@ class ResearchIntegrationListEndpoint(ResearchAPIView):
         for system in DEFAULT_SYSTEMS:
             connection = existing.get(system)
             if connection is None:
-                payload.append({
-                    "system": system,
-                    "display_name": system,
-                    "configured": False,
-                    "is_enabled": False,
-                    "health_status": "UNKNOWN",
-                    "credential_mode": "SHARED",
-                    "has_credential": False,
-                    **registration_metadata(system, connection),
-                })
+                payload.append(
+                    {
+                        "system": system,
+                        "display_name": system,
+                        "configured": False,
+                        "is_enabled": False,
+                        "health_status": "UNKNOWN",
+                        "credential_mode": "SHARED",
+                        "has_credential": False,
+                        **registration_metadata(system, connection),
+                    }
+                )
                 continue
             data = ExternalSystemConnectionSerializer(connection).data
             data["configured"] = True
@@ -229,27 +231,31 @@ class ResearchIntegrationHealthEndpoint(ResearchAPIView):
         for system in DEFAULT_SYSTEMS:
             connection = existing.get(system)
             if connection is None:
-                payload.append({
-                    "system": system,
-                    "status": "UNKNOWN",
-                    "configured": False,
-                    "enabled": False,
-                    "last_success_at": None,
-                    "degraded_reason": "not_configured",
-                    **registration_metadata(system, connection),
-                })
+                payload.append(
+                    {
+                        "system": system,
+                        "status": "UNKNOWN",
+                        "configured": False,
+                        "enabled": False,
+                        "last_success_at": None,
+                        "degraded_reason": "not_configured",
+                        **registration_metadata(system, connection),
+                    }
+                )
                 continue
-            payload.append({
-                "system": system,
-                "status": connection.health_status,
-                "configured": True,
-                "enabled": connection.is_enabled,
-                "last_health_at": connection.last_health_at,
-                "last_success_at": connection.last_success_at,
-                "degraded_reason": connection.last_error or ("" if connection.is_enabled else "disabled"),
-                "degraded_mode": connection.degraded_mode,
-                **registration_metadata(system, connection),
-            })
+            payload.append(
+                {
+                    "system": system,
+                    "status": connection.health_status,
+                    "configured": True,
+                    "enabled": connection.is_enabled,
+                    "last_health_at": connection.last_health_at,
+                    "last_success_at": connection.last_success_at,
+                    "degraded_reason": connection.last_error or ("" if connection.is_enabled else "disabled"),
+                    "degraded_mode": connection.degraded_mode,
+                    **registration_metadata(system, connection),
+                }
+            )
         return Response({"results": payload, "count": len(payload)}, status=status.HTTP_200_OK)
 
 
@@ -373,6 +379,9 @@ class ResearchSystemSearchEndpoint(ResearchAPIView):
 class ResearchKnowledgeSearchEndpoint(ResearchSystemSearchEndpoint):
     system = "RAGPORTAL"
     operation = "fetch_knowledge_entries"
+    # Source ACL and group-library filters decide visibility; public entries
+    # remain available to workspace members outside research organisations.
+    research_membership_required = False
 
     def prepare_items(self, items, request, workspace):
         """Grant team members retrieval of their whole shared library.
@@ -442,9 +451,7 @@ class ResearchExternalReferenceSyncEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
             return error
-        reference, error = ResearchExternalReferenceDetailEndpoint()._load(
-            request, workspace, reference_id
-        )
+        reference, error = ResearchExternalReferenceDetailEndpoint()._load(request, workspace, reference_id)
         if error:
             return error
         connection = connection_map(workspace).get(reference.system)
@@ -506,9 +513,9 @@ class ResearchExternalReferenceListCreateEndpoint(ResearchAPIView):
         workspace, error = self.get_workspace(section=SECTION)
         if error:
             return error
-        query = ResearchExternalReference.objects.filter(
-            workspace=workspace, deleted_at__isnull=True
-        ).prefetch_related("links")
+        query = ResearchExternalReference.objects.filter(workspace=workspace, deleted_at__isnull=True).prefetch_related(
+            "links"
+        )
         for field in ("system", "external_type", "status"):
             if request.GET.get(field):
                 query = query.filter(**{field: str(request.GET[field]).upper()})

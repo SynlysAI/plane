@@ -44,6 +44,8 @@ LOGGER = logging.getLogger("plane.api")
 class ResearchReportAttachmentListCreateEndpoint(ResearchAPIView):
     """``GET``/``POST /api/research/workspaces/<slug>/reports/<report_id>/attachments/``"""
 
+    research_membership_required = False
+
     def _report(self, request, workspace, report_id):
         report = report_queryset(workspace).filter(pk=report_id).first()
         if report is None:
@@ -222,6 +224,8 @@ class ResearchReportAttachmentPresignEndpoint(ResearchAPIView):
     stay independent from ``FILE_SIZE_LIMIT`` (review item T-11).
     """
 
+    research_membership_required = False
+
     def post(self, request, slug, report_id):
         workspace, error = self.get_workspace(section="reports")
         if error:
@@ -313,6 +317,8 @@ class ResearchReportAttachmentPresignEndpoint(ResearchAPIView):
 class ResearchReportAttachmentDetailEndpoint(ResearchAPIView):
     """``DELETE`` and ``GET .../download/`` for a report attachment."""
 
+    research_membership_required = False
+
     def _attachment(self, request, workspace, report_id, attachment_id, action="view"):
         attachment = (
             ReportAttachment.all_objects.filter(
@@ -326,6 +332,11 @@ class ResearchReportAttachmentDetailEndpoint(ResearchAPIView):
         if attachment is None:
             return None, research_not_found(ResearchErrorCode.ATTACHMENT_NOT_FOUND, "Attachment not found.")
         context = build_actor_context(request.user, workspace.id)
+        if not check_access(request.user, "view", report_resource(attachment.report), context=context):
+            return None, research_not_found(ResearchErrorCode.REPORT_NOT_FOUND, "Report not found.")
+        resource = report_resource(attachment.report)
+        if action != "view" and not check_access(request.user, action, resource, context=context):
+            return None, research_permission_denied()
         if attachment.report.owner_id != request.user.id:
             latest_version = (
                 attachment.report.official_snapshots.order_by("-version_no")
@@ -334,8 +345,6 @@ class ResearchReportAttachmentDetailEndpoint(ResearchAPIView):
             )
             if attachment.official_version_no != latest_version:
                 return None, research_permission_denied()
-        if not check_access(request.user, action, report_resource(attachment.report), context=context):
-            return None, research_permission_denied()
         return attachment, None
 
     def delete(self, request, slug, report_id, attachment_id):
@@ -402,6 +411,8 @@ class ResearchReportMarkdownImportEndpoint(ResearchAPIView):
     local relative paths are reported back for manual upload (P0-FILE-03,
     P0-FILE-07).
     """
+
+    research_membership_required = False
 
     def post(self, request, slug, report_id):
         workspace, error = self.get_workspace(section="reports")

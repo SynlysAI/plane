@@ -7,6 +7,7 @@ from datetime import timedelta
 from threading import Barrier
 from time import sleep
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from django.db import close_old_connections
@@ -129,6 +130,20 @@ def create_report(env, **payload):
     return env["student_client"].post(
         env["url"],
         {"report_type": "WEEKLY", "period_key": "2026-W38", **payload},
+        format="json",
+    )
+
+
+def submit_report_to_reviewer(env, report_id, *, client=None, reviewer_id=None, cc_user_ids=None):
+    """Submit one report to its default or explicitly selected reviewer."""
+    submitter = client or env["student_client"]
+    if reviewer_id is None:
+        route = submitter.get(f"{env['url']}{report_id}/approval-route/")
+        assert route.status_code == 200, route.json()
+        reviewer_id = route.json()["data"]["default_reviewer_id"] or str(uuid4())
+    return submitter.post(
+        f"{env['url']}{report_id}/submit/",
+        {"reviewer_id": str(reviewer_id), "cc_user_ids": cc_user_ids or []},
         format="json",
     )
 
@@ -304,7 +319,7 @@ class TestReportCreation:
         page.refresh_from_db()
         assert page.description_html == "<p>Progress</p>"
 
-        submitted = client.post(f"{env['url']}{payload['id']}/submit/", {}, format="json")
+        submitted = submit_report_to_reviewer(env, payload["id"], client=client)
         assert submitted.status_code == 200
         assert submitted.json()["project"] is None
         assert PeriodicReportSnapshot.objects.get(report_id=payload["id"]).description_html == "<p>Progress</p>"
@@ -324,7 +339,7 @@ class TestReportStateMachine:
         report_id = report["id"]
         detail_url = f"{env['url']}{report_id}/"
 
-        submitted = env["student_client"].post(f"{detail_url}submit/", {}, format="json")
+        submitted = submit_report_to_reviewer(env, report_id)
         assert submitted.status_code == 200
         assert submitted.json()["status"] == "SUBMITTED"
         # 提交响应必须直接携带正文，否则前端 store 整体替换后正文会闪退成“加载中”。
@@ -341,7 +356,7 @@ class TestReportStateMachine:
         assert returned.status_code == 200
         assert returned.json()["status"] == "NEEDS_REVISION"
 
-        resubmitted = env["student_client"].post(f"{detail_url}submit/", {}, format="json")
+        resubmitted = submit_report_to_reviewer(env, report_id)
         assert resubmitted.status_code == 200
         assert resubmitted.json()["status"] == "SUBMITTED"
 
@@ -356,7 +371,7 @@ class TestReportStateMachine:
 
     def test_return_requires_a_reason(self, env):
         report = create_report(env).json()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         response = env["advisor_client"].post(f"{env['url']}{report['id']}/return/", {"comment": ""}, format="json")
         assert response.status_code == 422
         assert response.json()["error_code"] == "report_return_reason_required"
@@ -373,7 +388,7 @@ class TestReportStateMachine:
         page.description_html = "<p>Official version</p>"
         page.save()
 
-        submitted = env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submitted = submit_report_to_reviewer(env, report["id"])
 
         assert submitted.status_code == 200
         snapshot = PeriodicReportSnapshot.objects.get(report_id=report["id"], version_no=1)
@@ -384,7 +399,7 @@ class TestReportStateMachine:
         report = create_report(env).json()
         PeriodicReport.objects.filter(pk=report["id"]).update(org_unit=None)
 
-        response = env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        response = submit_report_to_reviewer(env, report["id"])
 
         assert response.status_code == 422
         assert response.json()["error_code"] == "org_unit_not_found"
@@ -394,7 +409,7 @@ class TestReportStateMachine:
         page = Page.objects.get(pk=report["page"])
         page.description_html = "<p>Submitted v1</p>"
         page.save()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         env["advisor_client"].post(
             f"{env['url']}{report['id']}/return/",
             {"comment": "revise"},
@@ -416,13 +431,13 @@ class TestReportStateMachine:
 
     def test_colleague_cannot_review(self, env):
         report = create_report(env).json()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         response = env["colleague_client"].post(f"{env['url']}{report['id']}/accept/", {}, format="json")
         assert response.status_code == 403
 
     def test_accepted_report_is_terminal(self, env):
         report = create_report(env).json()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         env["advisor_client"].post(f"{env['url']}{report['id']}/accept/", {}, format="json")
         response = env["advisor_client"].post(
             f"{env['url']}{report['id']}/return/", {"comment": "too late"}, format="json"
@@ -439,7 +454,7 @@ class TestReportStateMachine:
         editable = env["student_client"].patch(page_url, {"description_html": "<p>Draft body</p>"}, format="json")
         assert editable.status_code == 200
 
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         blocked = env["student_client"].patch(
             page_url, {"description_html": "<p>Edited after submit</p>"}, format="json"
         )
@@ -467,7 +482,7 @@ class TestReportStateMachine:
         )
         assert editable.status_code == 200
 
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         blocked = env["student_client"].patch(
             description_url,
             {"description_html": "<p>Edited after submit</p>"},
@@ -662,7 +677,7 @@ class TestReportWithdraw:
             API representation of the newly submitted report.
         """
         report = create_report(env, **payload).json()
-        response = env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        response = submit_report_to_reviewer(env, report["id"])
         assert response.status_code == 200, response.json()
         return report
 
@@ -737,7 +752,7 @@ class TestReportWithdraw:
         assert blocked_reply.status_code == 409
         assert blocked_reply.json()["error_code"] == "report_state_conflict"
 
-        assert env["student_client"].post(f"{env['url']}{report_id}/submit/", {}, format="json").status_code == 200
+        assert submit_report_to_reviewer(env, report_id).status_code == 200
         item.refresh_from_db()
         assert item.status == "SUBMITTED"
         assert item.official_snapshots.count() == 2
@@ -772,11 +787,13 @@ class TestReportWithdraw:
 
         returned = self.submit_report(env, period_key="2026-W40")
         assert (
-            env["advisor_client"].post(
+            env["advisor_client"]
+            .post(
                 f"{env['url']}{returned['id']}/return/",
                 {"comment": "Needs more detail."},
                 format="json",
-            ).status_code
+            )
+            .status_code
             == 200
         )
         returned_response = env["student_client"].post(f"{env['url']}{returned['id']}/withdraw/", {}, format="json")
@@ -813,8 +830,16 @@ class TestReportConcurrentStateFlow:
 
         with patch.object(report_views, "create_report_snapshot", side_effect=delayed_snapshot):
             statuses = self._run_together(
-                lambda: client_for(env["student"]).post(submit_url, {}, format="json"),
-                lambda: client_for(env["student"]).post(submit_url, {}, format="json"),
+                lambda: client_for(env["student"]).post(
+                    submit_url,
+                    {"reviewer_id": str(env["advisor"].id), "cc_user_ids": []},
+                    format="json",
+                ),
+                lambda: client_for(env["student"]).post(
+                    submit_url,
+                    {"reviewer_id": str(env["advisor"].id), "cc_user_ids": []},
+                    format="json",
+                ),
             )
 
         assert sorted(statuses) == [200, 409]
@@ -824,7 +849,7 @@ class TestReportConcurrentStateFlow:
     def test_withdraw_and_accept_compete_on_one_submitted_state(self, env):
         report = create_report(env).json()
         report_url = f"{env['url']}{report['id']}/"
-        assert env["student_client"].post(f"{report_url}submit/", {}, format="json").status_code == 200
+        assert submit_report_to_reviewer(env, report["id"]).status_code == 200
 
         statuses = sorted(
             self._run_together(
@@ -844,7 +869,7 @@ class TestReportConcurrentStateFlow:
 
         report = create_report(env).json()
         report_url = f"{env['url']}{report['id']}/"
-        submitted = env["student_client"].post(f"{report_url}submit/", {}, format="json")
+        submitted = submit_report_to_reviewer(env, report["id"])
         assert submitted.status_code == 200
         transition_allowed = report_views.can_transition
 
@@ -892,9 +917,26 @@ class TestReportAccessControl:
         response = env["student_client"].get(env["url"], params)
         assert response.status_code == 400
 
+    def test_list_date_filter_returns_overlapping_report_periods(self, env):
+        """验证报告周期与筛选区间相交时即返回，而不是要求周期完整落在区间内。"""
+        create_report(env, period_key="2026-W42").json()
+        starts_before = create_report(env, period_key="2026-W43").json()
+        ends_after = create_report(env, period_key="2026-W44").json()
+
+        response = env["student_client"].get(
+            env["url"],
+            {"date_from": "2026-10-21", "date_to": "2026-10-27"},
+        )
+
+        assert response.status_code == 200
+        assert {item["id"] for item in response.json()["results"]} == {
+            starts_before["id"],
+            ends_after["id"],
+        }
+
     def test_list_filters_visibility_in_sql_before_pagination(self, env, mocker):
         report = create_report(env, period_key="2026-W09").json()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         object_acl = mocker.patch(
             "plane.research.views.reports.check_access",
             side_effect=AssertionError("report list must not scan objects through Python ACL"),
@@ -916,7 +958,7 @@ class TestReportAccessControl:
         owner_list = env["student_client"].get(env["url"]).json()
         assert owner_list["count"] == 2
 
-        env["student_client"].post(f"{env['url']}{advised['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, advised["id"])
         advisor_list = env["advisor_client"].get(env["url"]).json()
         assert {item["id"] for item in advisor_list["results"]} == {advised["id"]}
 
@@ -934,7 +976,7 @@ class TestReportAccessControl:
         )
         unit = create_report(env, visibility="UNIT", period_key="2026-W12").json()
         assert unit["visibility"] == "UNIT"
-        env["student_client"].post(f"{env['url']}{unit['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, unit["id"])
         # a member of the same organisation node now sees the report
         colleague_list = env["colleague_client"].get(env["url"]).json()
         assert {item["id"] for item in colleague_list["results"]} == {unit["id"]}
@@ -944,7 +986,7 @@ class TestReportAccessControl:
             weekly_default_visibility="DIRECT_ADVISOR"
         )
         report = create_report(env).json()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
         advisor_list = env["advisor_client"].get(env["url"]).json()
         assert {item["id"] for item in advisor_list["results"]} == {report["id"]}
 
@@ -989,7 +1031,7 @@ class TestReportAccessControl:
 
         historical = create_report(env, period_key="2026-W20").json()
         assert historical["visibility"] == "WORKSPACE"
-        env["student_client"].post(f"{env['url']}{historical['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, historical["id"])
         outsider_client = client_for(outsider)
         principal_client = client_for(principal)
         manager_client = client_for(manager)
@@ -1049,7 +1091,7 @@ class TestReportAccessControl:
             is_primary_advisor=False,
         )
         report = create_report(env, period_key="2026-W13").json()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
 
         detail = client_for(joint).get(f"{env['url']}{report['id']}/")
         assert detail.status_code == 200
@@ -1074,7 +1116,7 @@ class TestReportAccessControl:
             org_role=OrgUnitMember.OrgRole.ADVISOR,
         )
         report = create_report(env, period_key="2026-W14").json()
-        env["student_client"].post(f"{env['url']}{report['id']}/submit/", {}, format="json")
+        submit_report_to_reviewer(env, report["id"])
 
         assert client_for(unbound).get(f"{env['url']}{report['id']}/").status_code == 404
 

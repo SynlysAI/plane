@@ -5,7 +5,6 @@ import {
   ActivityOutline,
   ArrowNarrowRightOutline,
   CheckDoneOutline,
-  ClockOutline,
   CloseOutline,
   CompletedAtOutline,
   CreatedAtOutline,
@@ -16,7 +15,6 @@ import {
   ModalPeekOutline,
   MoreHorizontalOutline,
   ReplyOutline,
-  SendOutline,
   SidePeekOutline,
   SortAscendingOutline,
   SortDescendingOutline,
@@ -36,6 +34,7 @@ import type {
   TResearchTaskInstructionAttachment,
 } from "@plane/types";
 import { cn } from "@plane/utils";
+import { ShareLinkIconButton } from "@/components/common/share-link-icon-button";
 import { formatResearchDate, formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
 import { ResearchTodoUrgency } from "@/components/research/common/research-todo-urgency";
@@ -59,7 +58,7 @@ type TTaskFormState = {
 };
 
 type TCandidateState = "loading" | "ready" | "forbidden" | "error";
-type TLifecycleAction = Extract<TResearchChainNodeTaskAction, "submit" | "return" | "complete" | "cancel">;
+type TLifecycleAction = Extract<TResearchChainNodeTaskAction, "complete" | "reopen" | "cancel">;
 type TActivityOrder = "asc" | "desc";
 
 type TActivityItem = {
@@ -94,13 +93,11 @@ type Props = {
   onAction: (action: TLifecycleAction) => void;
 };
 
-const LIFECYCLE_ACTIONS: TLifecycleAction[] = ["submit", "return", "complete", "cancel"];
+const LIFECYCLE_ACTIONS: TLifecycleAction[] = ["complete", "reopen", "cancel"];
 
 const STATUS_KEYS: Record<TResearchChainNodeTask["status"], string> = {
   DRAFT: "research.chain_tasks.status.draft",
   ASSIGNED: "research.chain_tasks.status.assigned",
-  SUBMITTED: "research.chain_tasks.status.submitted",
-  NEEDS_REVISION: "research.chain_tasks.status.needs_revision",
   COMPLETED: "research.chain_tasks.status.completed",
   CANCELLED: "research.chain_tasks.status.cancelled",
 };
@@ -108,8 +105,7 @@ const STATUS_KEYS: Record<TResearchChainNodeTask["status"], string> = {
 const EVENT_KEYS: Record<string, string> = {
   TASK_CREATED: "research.chain_tasks.events.created",
   TASK_ASSIGNED: "research.chain_tasks.events.assigned",
-  TASK_SUBMITTED: "research.chain_tasks.events.submitted",
-  TASK_RETURNED: "research.chain_tasks.events.returned",
+  TASK_REOPENED: "research.chain_tasks.events.reopened",
   TASK_COMPLETED: "research.chain_tasks.events.completed",
   TASK_CANCELLED: "research.chain_tasks.events.cancelled",
 };
@@ -120,9 +116,23 @@ const PEEK_MODES: { key: TWorkbenchPeekMode; icon: typeof SidePeekOutline; label
   { key: "full", icon: FullScreenPeekOutline, label: "research.chain_tasks.peek_full" },
 ];
 
+/**
+ * 构造科研链任务详情的稳定深链。
+ *
+ * Args:
+ *   workspaceSlug: 工作区标识。
+ *   task: 当前打开的科研链任务。
+ *
+ * Returns:
+ *   带 nodes、node 与 task 查询参数的任务详情链接。
+ */
+function researchChainTaskShareHref(workspaceSlug: string, task: TResearchChainNodeTask): string {
+  const params = new URLSearchParams({ tab: "nodes", node: task.node, task: task.id });
+  return `/${workspaceSlug}/research/chains/${task.chain}?${params.toString()}`;
+}
+
 const ACTION_ICONS = {
-  submit: SendOutline,
-  return: ReplyOutline,
+  reopen: ReplyOutline,
   complete: CheckDoneOutline,
   cancel: CloseOutline,
 } as const;
@@ -196,6 +206,7 @@ function actorName(actorId: string | null, task: TResearchChainNodeTask, candida
   if (!actorId) return "";
   if (task.assignee_detail?.id === actorId) return task.assignee_detail.display_name;
   if (task.assigned_by_detail?.id === actorId) return task.assigned_by_detail.display_name;
+  if (task.completed_by_detail?.id === actorId) return task.completed_by_detail.display_name;
   return candidates.find((candidate) => candidate.user_id === actorId)?.display_name || "";
 }
 
@@ -227,27 +238,10 @@ function synthesizedActivity(task: TResearchChainNodeTask, t: (key: string) => s
       at: task.created_at,
     });
   }
-  if (task.submitted_at) {
-    items.push({
-      id: "submitted",
-      actor: userName(task.assignee_detail),
-      verb: t("research.chain_tasks.events.submitted"),
-      at: task.submitted_at,
-    });
-  }
-  if (task.return_reason) {
-    items.push({
-      id: "returned",
-      actor: userName(task.assigned_by_detail),
-      verb: t("research.chain_tasks.events.returned"),
-      at: task.updated_at || task.submitted_at || task.created_at,
-      detail: task.return_reason,
-    });
-  }
   if (task.completed_at) {
     items.push({
       id: "completed",
-      actor: userName(task.assigned_by_detail),
+      actor: userName(task.completed_by_detail) || userName(task.assignee_detail),
       verb: t("research.chain_tasks.events.completed"),
       at: task.completed_at,
     });
@@ -286,7 +280,10 @@ function eventActivity(
     actor: actorName(event.actor, task, candidates),
     verb: EVENT_KEYS[event.event_type] ? t(EVENT_KEYS[event.event_type]) : event.summary || event.event_type,
     at: event.occurred_at,
-    detail: event.event_type === "TASK_RETURNED" ? task.return_reason || undefined : undefined,
+    detail:
+      event.event_type === "TASK_REOPENED" && typeof event.metadata?.reason === "string"
+        ? event.metadata.reason
+        : undefined,
   }));
 }
 
@@ -330,6 +327,17 @@ export function ResearchChainTaskPeek(props: Props) {
   const status = task?.status ?? "DRAFT";
   const title =
     kind === "create" ? t("research.chain_tasks.create") : task?.title || t("research.chain_tasks.panel_title");
+  const shareLink =
+    kind === "task" && task ? (
+      <ShareLinkIconButton
+        typeLabel={t("research.common.share_type_research_work_item")}
+        title={task.title.trim() || t("research.common.untitled")}
+        href={researchChainTaskShareHref(workspaceSlug, task)}
+        ariaLabel={t("research.common.copy_share_aria", {
+          title: task.title.trim() || t("research.common.untitled"),
+        })}
+      />
+    ) : null;
   const dueValue = kind === "create" ? form.dueAt : task?.due_at || "";
   const assigneeValue = kind === "create" ? form.assignee : task?.assignee || "";
 
@@ -403,6 +411,7 @@ export function ResearchChainTaskPeek(props: Props) {
           formBusy={formBusy}
           lifecycle={lifecycle}
           actionBusy={actionBusy}
+          shareLink={shareLink}
           onModeChange={onModeChange}
           onClose={onClose}
           onAction={onAction}
@@ -522,6 +531,11 @@ export function ResearchChainTaskPeek(props: Props) {
                 <ReadOnlyValue value={userName(task.assigned_by_detail)} />
               </PropertyRow>
             )}
+            {task?.completed_by_detail && (
+              <PropertyRow icon={UserOutline} label={t("research.chain_tasks.completed_by")}>
+                <ReadOnlyValue value={userName(task.completed_by_detail)} />
+              </PropertyRow>
+            )}
             <PropertyRow icon={DueDateOutline} label={t("research.chain_tasks.due_at")}>
               <DueDateControl
                 value={dueValue}
@@ -537,9 +551,6 @@ export function ResearchChainTaskPeek(props: Props) {
             </PropertyRow>
             {task && (
               <>
-                <PropertyRow icon={ClockOutline} label={t("research.chain_tasks.submitted_at")}>
-                  <ReadOnlyValue value={formatResearchDateTime(task.submitted_at, locale)} />
-                </PropertyRow>
                 <PropertyRow icon={CompletedAtOutline} label={t("research.chain_tasks.completed_at")}>
                   <ReadOnlyValue value={formatResearchDateTime(task.completed_at, locale)} />
                 </PropertyRow>
@@ -548,9 +559,6 @@ export function ResearchChainTaskPeek(props: Props) {
                 </PropertyRow>
                 <PropertyRow icon={CreatedAtOutline} label={t("research.chain_tasks.created_at")}>
                   <ReadOnlyValue value={formatResearchDateTime(task.created_at, locale)} />
-                </PropertyRow>
-                <PropertyRow icon={ReplyOutline} label={t("research.chain_tasks.return_reason")}>
-                  <ReadOnlyValue value={task.return_reason || ""} />
                 </PropertyRow>
                 {task.resource_type !== "NONE" && (
                   <PropertyRow icon={FileOutline} label={t("research.chain_tasks.resource")}>
@@ -651,6 +659,7 @@ function TaskPeekHeader({
   formBusy,
   lifecycle,
   actionBusy,
+  shareLink,
   onModeChange,
   onClose,
   onAction,
@@ -659,6 +668,7 @@ function TaskPeekHeader({
   formBusy: boolean;
   lifecycle: TLifecycleAction[];
   actionBusy: string;
+  shareLink: ReactNode;
   onModeChange: (mode: TWorkbenchPeekMode) => void;
   onClose: () => void;
   onAction: (action: TLifecycleAction) => void;
@@ -737,6 +747,7 @@ function TaskPeekHeader({
       </div>
       <div className="flex items-center gap-3">
         {formBusy && <span className="text-11 text-tertiary">{t("research.chain_tasks.saving")}</span>}
+        {shareLink}
         {lifecycle.length > 0 && (
           <div
             role="presentation"

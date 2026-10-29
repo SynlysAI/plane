@@ -2,7 +2,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TPeriodicReport } from "@plane/types";
+import type { TPeriodicReport, TResearchApprovalRoute } from "@plane/types";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   fetchReports: vi.fn(),
   markReportRead: vi.fn(),
   submitReport: vi.fn(),
+  getApprovalRoute: vi.fn(),
   updateReportVisibility: vi.fn(),
   exportReportMarkdown: vi.fn(),
   copyTextToClipboard: vi.fn(),
@@ -43,6 +44,11 @@ vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 vi.mock("@/hooks/store/use-research", () => ({ useResearch: () => mocks }));
+vi.mock("@/services/research/report.service", () => ({
+  ResearchReportService: class {
+    getApprovalRoute = mocks.getApprovalRoute;
+  },
+}));
 vi.mock("@/hooks/store/use-workspace", () => ({
   useWorkspace: () => ({ getWorkspaceBySlug: () => ({ id: "workspace-1" }) }),
 }));
@@ -243,6 +249,29 @@ function report(projectBound = true): TPeriodicReport {
   } as TPeriodicReport;
 }
 
+const approvalRoute: TResearchApprovalRoute = {
+  schema_version: "research-approval-route.v1",
+  resource_type: "PERIODIC_REPORT",
+  resource_id: "report-1",
+  candidates: [
+    {
+      id: "advisor-1",
+      display_name: "王导师",
+      email: "advisor@example.com",
+      role: "PRIMARY_ADVISOR",
+      is_default: true,
+    },
+  ],
+  default_reviewer_id: "advisor-1",
+  rules: {
+    reviewer_required: true,
+    reviewer_selection: "SINGLE",
+    self_review_allowed: false,
+    cc_allowed: true,
+  },
+  active_route: null,
+};
+
 it("报告正文显示模板章节引导和软性字数警告", async () => {
   await renderBody();
 
@@ -273,6 +302,18 @@ function button(label: string): HTMLButtonElement {
   const element = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent === label);
   if (!element) throw new Error(`未找到按钮：${label}`);
   return element;
+}
+
+/** 确认审批路由弹窗中的默认审批人。 */
+async function confirmApprovalRoute() {
+  await act(async () => undefined);
+  const confirmation = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find((item) =>
+    item.closest("label")?.textContent?.includes("我确认将本内容提交给")
+  );
+  if (!confirmation) throw new Error("审批确认勾选框未显示");
+  act(() => confirmation.click());
+  act(() => button("确认提交").click());
+  await act(async () => undefined);
 }
 
 /** 触发指定文件输入框的用户选择事件。 */
@@ -319,6 +360,7 @@ beforeEach(() => {
   mocks.fetchReportHistory.mockResolvedValue(undefined);
   mocks.fetchReports.mockResolvedValue(undefined);
   mocks.submitReport.mockResolvedValue(undefined);
+  mocks.getApprovalRoute.mockResolvedValue(approvalRoute);
   mocks.markReportRead.mockResolvedValue(undefined);
   mocks.exportReportMarkdown.mockResolvedValue(new Blob(["ZIP"], { type: "application/zip" }));
   mocks.copyTextToClipboard.mockResolvedValue(undefined);
@@ -480,6 +522,7 @@ describe("报告详情正文保存与替换", () => {
     await editBody("<p>失败后保留的本地正文</p>");
 
     await act(async () => button("提交").click());
+    await confirmApprovalRoute();
 
     expect(mocks.submitReport).not.toHaveBeenCalled();
     expect(editor().value).toBe("<p>失败后保留的本地正文</p>");
@@ -487,8 +530,12 @@ describe("报告详情正文保存与替换", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("本地内容已保留");
 
     mocks.saveReportDraft.mockResolvedValue(undefined);
-    await act(async () => button("提交").click());
-    expect(mocks.submitReport).toHaveBeenCalledWith("lab", "report-1");
+    act(() => button("确认提交").click());
+    await act(async () => undefined);
+    expect(mocks.submitReport).toHaveBeenCalledWith("lab", "report-1", {
+      reviewer_id: "advisor-1",
+      cc_user_ids: [],
+    });
   });
 
   it("后台刷新与保存失败均不覆盖未保存正文", async () => {
@@ -688,7 +735,7 @@ describe("周报 Markdown 导出与链接复制", () => {
     expect(button("导出 Markdown").disabled).toBe(false);
   });
 
-  it("复制授权详情页完整链接并提示结果", async () => {
+  it("复制授权详情页完整分享内容并提示结果", async () => {
     const locationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
     Object.defineProperty(window, "location", {
       value: { origin: "http://pilab.local" },
@@ -696,10 +743,12 @@ describe("周报 Markdown 导出与链接复制", () => {
     });
     try {
       await renderDetail();
-      await act(async () => button("复制链接").click());
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('button[aria-label="复制分享链接：2026-W40 · 学生一"]')?.click()
+      );
 
       expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
-        "Plane 周报: 2026-W40 · 学生一 ( http://pilab.local/lab/research/reports/report-1 )"
+        "OpenEVA 周报: 2026-W40 · 学生一 ( http://pilab.local/lab/research/reports/report-1 )"
       );
       expect(mocks.setToast).toHaveBeenCalledWith(
         expect.objectContaining({ type: "success", title: "分享内容已复制" })
@@ -713,7 +762,9 @@ describe("周报 Markdown 导出与链接复制", () => {
     mocks.copyTextToClipboard.mockRejectedValue(new Error("denied"));
     await renderDetail();
 
-    await act(async () => button("复制链接").click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="复制分享链接：2026-W40 · 学生一"]')?.click()
+    );
 
     expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
   });

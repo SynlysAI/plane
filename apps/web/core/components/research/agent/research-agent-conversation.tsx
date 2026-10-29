@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 // components
 import {
   agentPayloadText,
@@ -90,19 +91,14 @@ export function ResearchAgentConversation({ api }: Props) {
         </details>
         {api.session?.provider === "SCIENCE_DISCOVERY" && (
           <div className="mb-2 flex items-center gap-3 text-11 text-secondary">
-            <label className="cursor-pointer rounded-md border border-subtle px-2 py-1 hover:bg-surface-2">
-              {api.uploadingFile ? t("research.agent.file_uploading") : t("research.agent.file_attach")}
-              <input
-                type="file"
-                className="hidden"
-                disabled={!api.session || api.session.status === "CLOSED" || api.uploadingFile}
-                onChange={(changeEvent) => {
-                  const file = changeEvent.target.files?.[0];
-                  changeEvent.target.value = "";
-                  if (file) void api.uploadFile(file);
-                }}
-              />
-            </label>
+            <AttachmentUploadZone
+              onFiles={(files) => void api.uploadFile(files[0])}
+              disabled={!api.session || api.session.status === "CLOSED"}
+              uploading={api.uploadingFile}
+              variant="inline"
+              title={api.uploadingFile ? t("research.agent.file_uploading") : t("research.agent.file_attach")}
+              hint="仅支持一个文件"
+            />
             {api.uploadedFile && (
               <span className="text-success-primary">
                 {t("research.agent.file_uploaded", { name: api.uploadedFile })}

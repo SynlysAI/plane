@@ -6,12 +6,14 @@
 
 import React, { useState } from "react";
 import { observer } from "mobx-react";
-import { copyUrlToClipboard, generateWorkItemLink } from "@plane/utils";
+import { copyTextToClipboard, generateWorkItemLink } from "@plane/utils";
 // plane imports
+import { useTranslation } from "@plane/i18n";
 // helpers
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
+import { formatShareText } from "@/components/common/share-link";
 
 type TCreateIssueToastActionItems = {
   workspaceSlug: string;
@@ -26,6 +28,7 @@ export const CreateIssueToastActionItems = observer(function CreateIssueToastAct
   const { workspaceSlug, issueId, isEpic = false } = props;
   // state
   const [copied, setCopied] = useState(false);
+  const { t } = useTranslation();
   // store hooks
   const {
     issue: { getIssueById },
@@ -35,6 +38,7 @@ export const CreateIssueToastActionItems = observer(function CreateIssueToastAct
   // derived values
   const issue = getIssueById(issueId);
   const projectIdentifier = getProjectIdentifierById(issue?.project_id);
+  const shareTitle = issue?.name.trim() || t("research.common.untitled");
 
   if (!issue) return null;
 
@@ -49,7 +53,9 @@ export const CreateIssueToastActionItems = observer(function CreateIssueToastAct
 
   const copyToClipboard = async (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     try {
-      await copyUrlToClipboard(workItemLink);
+      await copyTextToClipboard(
+        formatShareText(t("research.common.share_type_administrative_work_item"), shareTitle, workItemLink)
+      );
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch (_error) {

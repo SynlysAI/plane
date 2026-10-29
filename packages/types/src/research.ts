@@ -215,6 +215,52 @@ export type TResearchActionCapabilities = {
   actions: Record<string, TResearchActionCapability>;
 };
 
+export type TResearchApprovalRouteResourceType = "PERIODIC_REPORT";
+
+export type TResearchApprovalReviewerRole =
+  | "PRIMARY_ADVISOR"
+  | "ADVISOR"
+  | "MAIN_PI"
+  | "UNIT_OWNER"
+  | "UNIT_PI"
+  | "UNIT_ADMIN";
+
+export type TResearchApprovalRouteCandidate = {
+  id: string;
+  display_name: string;
+  email: string;
+  role: TResearchApprovalReviewerRole;
+  is_default?: boolean;
+};
+
+export type TResearchApprovalRouteDetail = {
+  id: string;
+  resource_type: TResearchApprovalRouteResourceType;
+  resource_id: string;
+  status: "ACTIVE" | "SUPERSEDED";
+  reviewer: string;
+  reviewer_role: TResearchApprovalReviewerRole;
+  reviewer_detail?: TResearchApprovalRouteCandidate | null;
+  submitted_by: string;
+  cc_user_ids: string[];
+  created_at: string;
+};
+
+export type TResearchApprovalRoute = {
+  schema_version: "research-approval-route.v1";
+  resource_type: TResearchApprovalRouteResourceType;
+  resource_id: string;
+  candidates: TResearchApprovalRouteCandidate[];
+  default_reviewer_id: string | null;
+  rules: {
+    reviewer_required: boolean;
+    reviewer_selection: "SINGLE";
+    self_review_allowed: boolean;
+    cc_allowed: boolean;
+  };
+  active_route: TResearchApprovalRouteDetail | null;
+};
+
 export type TResearchChainNodeAction = "START" | "SUBMIT_REVIEW" | "APPROVE" | "RETURN" | "FAIL" | "ARCHIVE";
 
 export type TResearchChainStageStatus =
@@ -230,6 +276,16 @@ export type TResearchChainStageMaterialItem = {
   title: string;
   description: string;
   source_node: string | null;
+  upload: string | null;
+  upload_detail: {
+    id: string;
+    status: "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "DEGRADED";
+    file_name: string;
+    file_size: number;
+    preview_url: string;
+    download_url: string;
+    error_code: string;
+  } | null;
   external_reference: string;
   created_at: string;
 };
@@ -364,13 +420,7 @@ export type TResearchChainMember = {
   is_owner: boolean;
 };
 
-export type TResearchChainNodeTaskStatus =
-  | "DRAFT"
-  | "ASSIGNED"
-  | "SUBMITTED"
-  | "NEEDS_REVISION"
-  | "COMPLETED"
-  | "CANCELLED";
+export type TResearchChainNodeTaskStatus = "DRAFT" | "ASSIGNED" | "COMPLETED" | "CANCELLED";
 
 export type TResearchChainNodeTaskResourceType =
   | "NONE"
@@ -381,7 +431,7 @@ export type TResearchChainNodeTaskResourceType =
   | "SNAPSHOT"
   | "EXTERNAL_REF";
 
-export type TResearchChainNodeTaskAction = "view" | "edit" | "assign" | "submit" | "return" | "complete" | "cancel";
+export type TResearchChainNodeTaskAction = "view" | "edit" | "assign" | "complete" | "reopen" | "cancel";
 
 export type TResearchTaskActionCapability = TResearchActionCapability;
 
@@ -460,10 +510,12 @@ export type TResearchChainNodeTask = {
   assignee_is_valid: boolean;
   assigned_by: string | null;
   assigned_by_detail?: TResearchTaskUserSummary | null;
+  completed_by: string | null;
+  completed_by_detail?: TResearchTaskUserSummary | null;
   due_at: string | null;
-  submitted_at: string | null;
+  can_complete?: boolean;
+  can_reopen?: boolean;
   completed_at: string | null;
-  return_reason?: string | null;
   resource_type: TResearchChainNodeTaskResourceType;
   resource_id: string | null;
   request_id: string;
@@ -564,6 +616,7 @@ export type TResearchTodoNextAction =
   | "ACCEPT"
   | "WITHDRAW"
   | "COMPLETE"
+  | "REOPEN"
   | "CANCEL"
   | "APPROVE"
   | "REJECT";
@@ -832,6 +885,8 @@ export type TPeriodicReport = {
   can_restore?: boolean;
   /** Whether the report author can withdraw the active submission. */
   can_withdraw?: boolean;
+  /** Explicit reviewer selected for the current submission. */
+  approval_route?: TResearchApprovalRouteDetail | null;
   attachment_count?: number;
   latest_official_version: number | null;
   /** Whether the current viewer has read the latest official snapshot. */

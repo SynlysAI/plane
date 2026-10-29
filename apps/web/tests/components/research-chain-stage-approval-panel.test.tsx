@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import translations from "../../../../packages/i18n/src/locales/zh-CN/common.json";
 
 const mocks = vi.hoisted(() => ({
+  uploadFiles: vi.fn(),
   createChainStageMaterial: vi.fn(),
   deleteChainStageMaterial: vi.fn(),
   runChainStagePrecheck: vi.fn(),
@@ -121,6 +122,39 @@ const nodes = [
   },
 ];
 
+const upload = {
+  id: "upload-1",
+  status: "PROCESSING" as const,
+  knowledge_id: "knowledge-1",
+  knowledge_base_id: "kb-1",
+  file_name: "可行性分析.pdf",
+  file_type: "pdf",
+  file_size: 1024,
+  preview_url: "/preview/upload-1/",
+  download_url: "/download/upload-1/",
+  error_code: "",
+};
+
+function knowledgeController(seed: Record<string, unknown> = {}) {
+  return {
+    uploads: [upload],
+    state: "ready",
+    knowledgeBaseId: "kb-1",
+    knowledgeState: "READY",
+    orgUnitName: "超分子材料",
+    connectionStatus: "connected",
+    degradedReason: "",
+    actionError: "",
+    uploading: false,
+    canUpload: true,
+    load: vi.fn(),
+    uploadFiles: mocks.uploadFiles,
+    refreshUpload: vi.fn(),
+    confirmUpload: vi.fn(),
+    ...seed,
+  };
+}
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -140,7 +174,12 @@ afterEach(async () => {
 });
 
 async function renderPanel(
-  options: { stage?: ReturnType<typeof stage>; nodes?: typeof nodes; expanded?: boolean } = {}
+  options: {
+    stage?: ReturnType<typeof stage>;
+    nodes?: typeof nodes;
+    expanded?: boolean;
+    knowledge?: ReturnType<typeof knowledgeController>;
+  } = {}
 ) {
   await act(async () => {
     root.render(
@@ -152,6 +191,7 @@ async function renderPanel(
         preferredNodeId="node-1"
         applicantName="研究负责人"
         defaultExpanded={options.expanded ?? false}
+        knowledge={options.knowledge ?? knowledgeController()}
         onCreateNode={onCreateNode}
         onChanged={onChanged}
       />
@@ -194,7 +234,7 @@ it("opens automatically from an approval-center deep link", async () => {
   expect(container.textContent).toContain("原理可行性分析");
 });
 
-it("shows the first missing material nearby and parses backend missing names", async () => {
+it("links an existing upload and parses backend missing names", async () => {
   mocks.createChainStageMaterial.mockRejectedValue({
     error_code: "research_chain_stage_material_incomplete",
     message: "All required stage materials must be submitted.",
@@ -203,18 +243,63 @@ it("shows the first missing material nearby and parses backend missing names", a
   await renderPanel({ expanded: true });
 
   expect(button("补充")).not.toBeNull();
-  const title = [...container.querySelectorAll<HTMLInputElement>("input")].find((input) =>
-    input.getAttribute("placeholder")?.includes("原理可行性分析")
-  );
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  const uploadSelect = container.querySelector<HTMLSelectElement>('select[aria-label="选择课题资料"]');
+  expect(uploadSelect?.value).toBe("upload-1");
   await act(async () => {
-    setter?.call(title, "可行性说明");
-    title?.dispatchEvent(new Event("input", { bubbles: true }));
+    uploadSelect?.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await act(async () => button("添加材料")?.click());
+  await act(async () => button("关联材料")?.click());
 
-  expect(mocks.createChainStageMaterial).toHaveBeenCalled();
+  expect(mocks.createChainStageMaterial).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION", {
+    requirement_code: "PRINCIPLE_FEASIBILITY",
+    upload_id: "upload-1",
+  });
   expect(container.querySelector("[role='alert']")?.textContent).toContain("缺少材料：原理可行性分析");
+});
+
+it("uploads one file and immediately links it to the selected requirement", async () => {
+  mocks.uploadFiles.mockResolvedValueOnce([upload]);
+  mocks.createChainStageMaterial.mockResolvedValueOnce({});
+  await renderPanel({ expanded: true });
+
+  const input = container.querySelector('input[type="file"]');
+  const file = new File(["paper"], "可行性分析.pdf", { type: "application/pdf" });
+  await act(async () => {
+    Object.defineProperty(input as HTMLInputElement, "files", { configurable: true, value: [file] });
+    input?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => await Promise.resolve());
+
+  expect(mocks.uploadFiles).toHaveBeenCalledWith([file]);
+  expect(mocks.createChainStageMaterial).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION", {
+    requirement_code: "PRINCIPLE_FEASIBILITY",
+    upload_id: "upload-1",
+  });
+  expect(onChanged).toHaveBeenCalled();
+});
+
+it("does not register a title-only material when the upload fails", async () => {
+  mocks.uploadFiles.mockResolvedValueOnce([]);
+  await renderPanel({
+    expanded: true,
+    knowledge: knowledgeController({
+      uploads: [],
+      actionError: "文件被网关拒绝，研究链资料单文件不能超过 50MB。",
+    }),
+  });
+
+  const input = container.querySelector('input[type="file"]');
+  const file = new File(["paper"], "large.pdf", { type: "application/pdf" });
+  await act(async () => {
+    Object.defineProperty(input as HTMLInputElement, "files", { configurable: true, value: [file] });
+    input?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => await Promise.resolve());
+
+  expect(mocks.uploadFiles).toHaveBeenCalledWith([file]);
+  expect(mocks.createChainStageMaterial).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("文件被网关拒绝");
+  expect(container.textContent).toContain("当前节点还没有可关联资料，请先上传。");
 });
 
 it("offers node creation when the stage has no business node", async () => {

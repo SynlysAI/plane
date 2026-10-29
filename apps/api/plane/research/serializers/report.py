@@ -10,10 +10,10 @@ from plane.db.models import (
     ReportAccessGrant,
     ReportReviewLog,
 )
+from plane.research.services.approval_routes import actor_can_review_route, active_approval_route, approval_route_detail
 
 from plane.research.utils.reports import (
     effective_report_visibility,
-    report_resource,
     supervisor_reader_ids,
     weekly_report_is_confidential,
 )
@@ -84,6 +84,7 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     can_review = serializers.SerializerMethodField()
     can_restore = serializers.SerializerMethodField()
     can_withdraw = serializers.SerializerMethodField()
+    approval_route = serializers.SerializerMethodField()
     effective_visibility = serializers.SerializerMethodField()
     weekly_confidential = serializers.SerializerMethodField()
     attachment_count = serializers.SerializerMethodField()
@@ -133,6 +134,7 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
             "can_review",
             "can_restore",
             "can_withdraw",
+            "approval_route",
             "attachment_count",
             "latest_official_version",
             "has_read",
@@ -159,27 +161,20 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
         if request is None:
             return False
         return bool(
-            obj.deleted_at is None
-            and obj.owner_id == request.user.id
-            and obj.status in ("DRAFT", "NEEDS_REVISION")
+            obj.deleted_at is None and obj.owner_id == request.user.id and obj.status in ("DRAFT", "NEEDS_REVISION")
         )
 
     def get_can_review(self, obj):
-        context = self.context.get("actor_context")
-        if context is None:
-            return False
-        from plane.research.utils.acl import check_access
-
         request = self.context.get("request")
         if request is None:
             return False
         if obj.deleted_at is not None:
             return False
-        return check_access(
+        return obj.status == "SUBMITTED" and actor_can_review_route(
+            obj.workspace,
+            "PERIODIC_REPORT",
+            obj.id,
             request.user,
-            "review",
-            report_resource(obj, self.context.get("confidential_cache")),
-            context=context,
         )
 
     def get_can_delete(self, obj):
@@ -201,11 +196,15 @@ class PeriodicReportSerializer(serializers.ModelSerializer):
     def get_can_withdraw(self, obj):
         request = self.context.get("request")
         return bool(
-            request
-            and obj.deleted_at is None
-            and obj.owner_id == request.user.id
-            and obj.status == "SUBMITTED"
+            request and obj.deleted_at is None and obj.owner_id == request.user.id and obj.status == "SUBMITTED"
         )
+
+    def get_approval_route(self, obj):
+        """Return the routed reviewer for the current submitted report."""
+        cache = self.context.setdefault("_research_report_approval_routes", {})
+        if obj.id not in cache:
+            cache[obj.id] = active_approval_route("PERIODIC_REPORT", obj.id, obj.workspace_id)
+        return approval_route_detail(cache[obj.id])
 
     def get_attachment_count(self, obj):
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("attachments")

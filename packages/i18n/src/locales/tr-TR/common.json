@@ -7,6 +7,49 @@
       "by_week": "Haftaya göre",
       "by_month": "Aya göre",
       "custom_period": "Özel dönem"
+    },
+    "approval_route": {
+      "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
+      "single_reviewer": "Single reviewer",
+      "reviewer": "Reviewer",
+      "cc": "Carbon copy (optional)",
+      "confirm": "I confirm submitting this to {name} for review",
+      "recommended": "Recommended",
+      "no_candidates": "No reviewer is available. Configure an advisor or organisation lead first.",
+      "loading": "Loading approval candidates…",
+      "load_failed": "Could not load approval candidates. Please retry.",
+      "submit": "Submit",
+      "roles": {
+        "primary_advisor": "Primary advisor",
+        "advisor": "Direct advisor",
+        "main_pi": "Main PI",
+        "unit_owner": "Unit owner",
+        "unit_pi": "Unit PI",
+        "unit_admin": "Unit administrator",
+        "reviewer": "Reviewer"
+      }
+    },
+    "chain_tasks": {
+      "events": {
+        "withdrawn": "Submission withdrawn",
+        "completed": "Marked task complete",
+        "reopened": "Reopened task"
+      },
+      "withdraw": "Withdraw",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "submit_approval_title": "Select task reviewer",
+      "complete": "Mark complete",
+      "reopen": "Mark incomplete",
+      "completed_by": "Completed by"
+    },
+    "reports": {
+      "approval_reviewer": "Reviewer: {name}",
+      "submit_approval_title": "Select report reviewer"
+    },
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
     }
   },
   "cloud_maintenance_message": {
@@ -174,6 +217,7 @@
   "link_copied": "Bağlantı kopyalandı",
   "add_project": "Proje ekle",
   "create_project": "Proje oluştur",
+  "clear_project": "Clear project",
   "failed_to_remove_project_from_favorites": "Proje favorilerden kaldırılamadı. Lütfen tekrar deneyin.",
   "project_created_successfully": "Proje başarıyla oluşturuldu",
   "project_created_successfully_description": "Proje başarıyla oluşturuldu. Artık iş öğeleri eklemeye başlayabilirsiniz.",
@@ -191,11 +235,13 @@
   "description_placeholder": "Açıklama",
   "only_alphanumeric_non_latin_characters_allowed": "Yalnızca alfasayısal ve Latin olmayan karakterlere izin verilir.",
   "project_id_is_required": "Proje ID gereklidir",
+  "project_required_to_save": "Select a project before saving",
   "project_id_allowed_char": "Yalnızca alfasayısal ve Latin olmayan karakterlere izin verilir.",
   "project_id_min_char": "Proje ID en az 1 karakter olmalı",
   "project_id_max_char": "Proje ID en fazla {max} karakter olmalı",
   "project_description_placeholder": "Proje açıklamasını girin",
   "select_network": "Ağ seç",
+  "select_project": "Select project",
   "lead": "Lider",
   "date_range": "Tarih aralığı",
   "private": "Özel",
@@ -767,6 +813,31 @@
     "only_one_file_allowed": "Aynı anda yalnızca bir dosya yüklenebilir.",
     "file_size_limit": "Dosya boyutu {size}MB veya daha az olmalıdır.",
     "drag_and_drop": "Yüklemek için herhangi bir yere sürükleyip bırakın",
+    "upload_zone": {
+      "title": "Drag files or folders here, or click to select",
+      "active": "Release to upload",
+      "uploading": "Uploading…",
+      "empty": "The folder is empty, the browser does not support folder drag-and-drop, or no uploadable files were found.",
+      "invalid_type": "One or more files have an unsupported type.",
+      "too_large": "One or more files exceed the size limit.",
+      "empty_file": "Files cannot be empty.",
+      "max_files": "Select at most {count} files at a time.",
+      "only_one": "Only one file can be selected.",
+      "invalid": "One or more files do not meet upload requirements."
+    },
+    "create": {
+      "draft_notice": "Ekler iş öğesi kaydedildikten sonra yüklenir; taslak bunları saklamaz.",
+      "hint": "İş öğesi kaydedildikten sonra otomatik yüklenir.",
+      "remove": "Eki kaldır",
+      "title": "Ekler",
+      "upload_failed": "İş öğesi oluşturuldu ama {total} ekten {failed} tanesi yüklenemedi: {names}. İş öğesinden tekrar deneyin.",
+      "zone_title": "Dosyaları buraya sürükleyin veya birden çok dosya seçmek için tıklayın"
+    },
+    "editor_image": {
+      "insert_failed": "Görseller eklenemedi. Tekrar deneyin.",
+      "invalid": "Yalnızca JPEG, JPG, PNG, WebP ve GIF görselleri desteklenir.",
+      "upload": "Görsel yükle"
+    },
     "delete": "Eki sil"
   },
   "label": {

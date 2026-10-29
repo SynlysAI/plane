@@ -120,6 +120,7 @@ from .report_read import (
 from .reports import (
     ResearchReportAcceptEndpoint,
     ResearchReportAccessEndpoint,
+    ResearchReportApprovalRouteEndpoint,
     ResearchReportDetailEndpoint,
     ResearchReportHistoryEndpoint,
     ResearchReportListCreateEndpoint,
@@ -397,6 +398,7 @@ __all__ = [
     "ResearchProjectRestoreEndpoint",
     "ResearchReportAcceptEndpoint",
     "ResearchReportAccessEndpoint",
+    "ResearchReportApprovalRouteEndpoint",
     "ResearchReportDetailEndpoint",
     "ResearchReportHistoryEndpoint",
     "ResearchReportListCreateEndpoint",

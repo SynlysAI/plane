@@ -104,6 +104,22 @@ async function pick(files: File[]) {
   });
 }
 
+/** 在指定元素触发带文件的原生粘贴事件，模拟用户粘贴截图。 */
+async function paste(files: File[], target?: Element) {
+  const pasteTarget = target ?? container.querySelector<HTMLTextAreaElement>('textarea[aria-label="反馈描述"]');
+  if (!pasteTarget) throw new Error("粘贴目标未显示");
+
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      files,
+      items: files.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })),
+    },
+  });
+  await act(async () => pasteTarget.dispatchEvent(event));
+  return event;
+}
+
 /** Format a local date in the same shape as the feedback preset filter. */
 function localDate(offsetDays: number) {
   const date = new Date();
@@ -152,10 +168,7 @@ it("Plane API 故障保留描述和三张截图，重试使用同一幂等键，
   mocks.post.mockRejectedValueOnce(new Error("Plane feedback storage unavailable")).mockResolvedValueOnce({});
   await open();
   await describeFeedback("Upload fails on a weekly report");
-  expect(
-    Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("添加截图"))
-      ?.textContent
-  ).toContain("0/3");
+  expect(container.textContent).toContain("添加截图（0/3）");
   await pick([
     new File(["PNG"], "one.png", { type: "image/png" }),
     new File(["JPEG"], "two.jpg", { type: "image/jpeg" }),
@@ -201,6 +214,55 @@ it("移除截图释放预览，第四张与错误类型不会进入提交清单"
   expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:feedback-2");
   await pick([new File(["GIF"], "not-allowed.gif", { type: "image/gif" })]);
   expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(2);
+});
+
+it("粘贴截图进入预览并随反馈一起提交，纯文本粘贴不被拦截", async () => {
+  await open();
+  await describeFeedback("Pasted screenshot cannot be previewed");
+  const pasted = new File(["PASTED"], "pasted.png", { type: "image/png" });
+
+  const imageEvent = await paste([pasted]);
+  expect(imageEvent.defaultPrevented).toBe(true);
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(1);
+
+  await act(async () =>
+    container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+  );
+  const form = mocks.post.mock.calls[0][1] as FormData;
+  expect(form.getAll("screenshots")).toEqual([pasted]);
+
+  const textEvent = await paste([]);
+  expect(textEvent.defaultPrevented).toBe(false);
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(0);
+});
+
+it("粘贴截图复用数量、类型与大小限制", async () => {
+  await open();
+  const oversized = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.png", { type: "image/png" });
+  await paste([oversized]);
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("最多 3 张");
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(0);
+
+  await paste([new File(["GIF"], "not-allowed.gif", { type: "image/gif" })]);
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(0);
+
+  await paste(Array.from({ length: 3 }, (_, index) => new File(["PNG"], `${index}.png`, { type: "image/png" })));
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(3);
+
+  await paste([new File(["PNG"], "fourth.png", { type: "image/png" })]);
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("最多 3 张");
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(3);
+});
+
+it("切换到我的反馈后，粘贴图片不会进入提交清单", async () => {
+  await open();
+  await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(2)')?.click());
+  const panel = container.querySelector('[role="tabpanel"]');
+  if (!panel) throw new Error("反馈面板未显示");
+
+  const event = await paste([new File(["PNG"], "pasted.png", { type: "image/png" })], panel);
+  expect(event.defaultPrevented).toBe(false);
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(0);
 });
 
 it("列表读取时显示加载态，不误报空结果", async () => {
