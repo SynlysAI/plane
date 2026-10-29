@@ -10,7 +10,6 @@ import { Skeleton } from "@plane/propel/skeleton";
 import type {
   TResearchTodoEnvelope,
   TResearchTodoHandlingStatus,
-  TResearchTodoNextAction,
   TResearchTodoScope,
   TResearchTodoSource,
 } from "@plane/types";
@@ -48,21 +47,6 @@ const HANDLING_LABEL_KEYS: Record<TResearchTodoHandlingStatus, string> = {
   RETURNED: "research.todo.handling_returned",
   DONE: "research.todo.handling_done",
   BLOCKED: "research.todo.handling_blocked",
-};
-
-const NEXT_ACTION_LABEL_KEYS: Record<TResearchTodoNextAction, string> = {
-  READ: "research.todo.next_read",
-  REVIEW: "research.todo.next_review",
-  SUBMIT: "research.todo.next_submit",
-  ASSIGN: "research.todo.next_assign",
-  RETURN: "research.todo.next_return",
-  ACCEPT: "research.todo.next_accept",
-  WITHDRAW: "research.todo.next_withdraw",
-  COMPLETE: "research.todo.next_complete",
-  REOPEN: "research.todo.next_reopen",
-  CANCEL: "research.todo.next_cancel",
-  APPROVE: "research.todo.next_approve",
-  REJECT: "research.todo.next_reject",
 };
 
 const BUSINESS_STATUS_LABEL_KEYS: Record<string, string> = {
@@ -378,6 +362,7 @@ export function ResearchTodoEnvelopeList({
                       href={todo.href}
                       data-peek-trigger={isStageApproval ? "" : undefined}
                       aria-current={isActive ? "true" : undefined}
+                      aria-label={`${shareTitle}：${t("research.todo.open")}`}
                       className="text-12 text-accent-primary transition-colors hover:underline"
                       onClick={(event) => {
                         if (!isStageApproval) return;
@@ -396,7 +381,7 @@ export function ResearchTodoEnvelopeList({
                         setActiveQueueId(todo.id);
                       }}
                     >
-                      {t(NEXT_ACTION_LABEL_KEYS[todo.next_action])}
+                      {t("research.todo.open")}
                     </Link>
                   </div>
                 </li>

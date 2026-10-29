@@ -269,9 +269,15 @@ it("uses server-computed next actions without rendering trace payloads", async (
 
   expect(container.textContent).toContain("周报待阅读 · 2026-W40");
   expect(container.textContent).toContain("周报待审阅 · 2026-W39");
-  expect(container.textContent).toContain("阅读");
-  expect(container.textContent).toContain("审阅");
-  expect(container.textContent).toContain("指派");
+  const actionLinks = [...container.querySelectorAll<HTMLAnchorElement>("a")].filter(
+    (item) => item.textContent === "处理"
+  );
+  expect(actionLinks).toHaveLength(3);
+  expect(actionLinks.map((item) => item.getAttribute("aria-label"))).toEqual([
+    "周报待阅读 · 2026-W40：处理",
+    "周报待审阅 · 2026-W39：处理",
+    "未指派节点任务：处理",
+  ]);
   expect(container.textContent).not.toContain("secret-trace-id");
   const controls = [...container.querySelectorAll("button")].map(
     (item) => item.getAttribute("aria-label") ?? item.textContent ?? ""
@@ -501,7 +507,7 @@ it("copies a research todo share link without opening the stage approval queue",
     await act(async () => buttonByName("复制分享链接：阶段审批一").click());
 
     expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
-      "Plane 科研行动项: 阶段审批一 ( http://pilab.local/lab/research/chains/chain-1?stage=topic_evaluation&approval=1 )"
+      "OpenEVA 科研行动项: 阶段审批一 ( http://pilab.local/lab/research/chains/chain-1?stage=topic_evaluation&approval=1 )"
     );
     expect(container.querySelector('[data-testid="stage-approval-queue"]')).toBeNull();
     expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));

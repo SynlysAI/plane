@@ -497,7 +497,7 @@ it("copies a research task deep link with share context", async () => {
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label^="复制分享链接："]')?.click());
 
     expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
-      "Plane 科研工作项: 整理开题文献 ( http://pilab.local/lab/research/chains/chain-1?tab=nodes&node=node-1&task=task-1 )"
+      "OpenEVA 科研工作项: 整理开题文献 ( http://pilab.local/lab/research/chains/chain-1?tab=nodes&node=node-1&task=task-1 )"
     );
     expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
     expect(mocks.runNodeTaskAction).not.toHaveBeenCalled();

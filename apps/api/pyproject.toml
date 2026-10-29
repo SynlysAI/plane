@@ -1,6 +1,6 @@
 [project]
 name = "Plane"
-version = "8.8.0"
+version = "8.8.1"
 description = "Open-source project management that unlocks customer value"
 
 [tool.ruff]

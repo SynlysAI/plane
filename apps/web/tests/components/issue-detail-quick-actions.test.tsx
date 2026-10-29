@@ -104,7 +104,7 @@ it("copies an administrative work item with title context", async () => {
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="复制链接"]')?.click());
 
     expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
-      "Plane 行政工作项: 采购审批 ( http://pilab.local/lab/projects/admin/ADMIN-12 )"
+      "OpenEVA 行政工作项: 采购审批 ( http://pilab.local/lab/projects/admin/ADMIN-12 )"
     );
     expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
   } finally {
@@ -125,7 +125,7 @@ it("uses the untitled fallback and reports clipboard failures", async () => {
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="复制链接"]')?.click());
 
     expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
-      "Plane 行政工作项: 未命名 ( http://pilab.local/lab/projects/admin/ADMIN-12 )"
+      "OpenEVA 行政工作项: 未命名 ( http://pilab.local/lab/projects/admin/ADMIN-12 )"
     );
     expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "ERROR" }));
   } finally {

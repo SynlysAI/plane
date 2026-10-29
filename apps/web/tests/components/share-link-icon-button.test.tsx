@@ -80,7 +80,7 @@ it("copies a typed share message with an absolute link", async () => {
     );
 
     expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
-      "Plane 行政工作项: 采购审批 ( http://pilab.local/lab/projects/admin/task-1 )"
+      "OpenEVA 行政工作项: 采购审批 ( http://pilab.local/lab/projects/admin/task-1 )"
     );
     expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
   } finally {

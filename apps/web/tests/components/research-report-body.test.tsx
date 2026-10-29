@@ -748,7 +748,7 @@ describe("周报 Markdown 导出与链接复制", () => {
       );
 
       expect(mocks.copyTextToClipboard).toHaveBeenCalledWith(
-        "Plane 周报: 2026-W40 · 学生一 ( http://pilab.local/lab/research/reports/report-1 )"
+        "OpenEVA 周报: 2026-W40 · 学生一 ( http://pilab.local/lab/research/reports/report-1 )"
       );
       expect(mocks.setToast).toHaveBeenCalledWith(
         expect.objectContaining({ type: "success", title: "分享内容已复制" })

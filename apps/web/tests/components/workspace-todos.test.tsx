@@ -338,11 +338,11 @@ it("copies research and administrative todo links with share context", async () 
 
     expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
       1,
-      "Plane 科研行动项: 科研采购审批 ( http://pilab.local/lab/research/chains/chain-1?node=node-1&task=task-1 )"
+      "OpenEVA 科研行动项: 科研采购审批 ( http://pilab.local/lab/research/chains/chain-1?node=node-1&task=task-1 )"
     );
     expect(mocks.copyTextToClipboard).toHaveBeenNthCalledWith(
       2,
-      "Plane 行政行动项: 行政采购审批 ( http://pilab.local/lab/projects/admin/task-1 )"
+      "OpenEVA 行政行动项: 行政采购审批 ( http://pilab.local/lab/projects/admin/task-1 )"
     );
     expect(mocks.setToast).toHaveBeenCalledWith(expect.objectContaining({ type: "SUCCESS" }));
   } finally {
