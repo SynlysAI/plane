@@ -1650,7 +1650,14 @@
         "history_count": "{count} past reviews",
         "action_approve": "Approve",
         "action_return": "Return",
-        "action_failed": "The action did not complete. Please retry."
+        "action_failed": "The action did not complete. Please retry.",
+        "upload_processing": "Parsing; available for review submission",
+        "select_upload": "Select topic material",
+        "material_upload": "Upload and link",
+        "link_material": "Link material",
+        "unlinked_file": "No linked file; not counted as complete",
+        "upload_unavailable": "Topic material upload is not ready. Complete knowledge-base binding before linking materials.",
+        "upload_empty": "No linkable material exists for this node yet. Upload one first."
       }
     },
     "chain_tasks": {
@@ -1883,7 +1890,14 @@
       "candidate_id": "External library ID",
       "candidate_source": "Source",
       "candidate_seen": "Last seen",
-      "unassigned": "This project has no team, so a personal knowledge base will not be created. Assign the owner to a team first."
+      "unassigned": "This project has no team, so a personal knowledge base will not be created. Assign the owner to a team first.",
+      "gateway_too_large": "The gateway rejected the file. Research-chain materials must be {size} or smaller.",
+      "status_processing": "Parsing",
+      "status_success": "Completed",
+      "status_unknown": "Unknown status",
+      "status_failed": "Failed",
+      "status_degraded": "Degraded",
+      "upload_hint": "PDF / Markdown / TXT / DOC / DOCX, up to {size} per file"
     },
     "agent": {
       "description": "Same-origin agent workbench with server-side context authorization.",

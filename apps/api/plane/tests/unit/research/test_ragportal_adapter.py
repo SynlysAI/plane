@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+from io import BytesIO
 
 from unittest.mock import patch
 
@@ -92,6 +93,18 @@ def test_upload_passes_research_scope_metadata_and_request_id(client):
     assert post.call_args.args[0].endswith("/api/uploads")
     assert post.call_args.kwargs["data"]["research_project_id"] == "project-1"
     assert post.call_args.kwargs["headers"]["Idempotency-Key"] == "req-upload-1"
+
+
+def test_upload_forwards_seekable_file_object_without_reading_it(client):
+    """The adapter can stream request-owned file objects without buffering them."""
+    document = BytesIO(b"streamed-pdf")
+    with patch("httpx.post", return_value=FakeResponse(payload={"id": 8, "parse_status": "pending"})) as post:
+        client.upload(file_name="paper.pdf", file_content=document, kb_id="kb-1")
+
+    file_name, forwarded_file = post.call_args.kwargs["files"]["file"]
+    assert file_name == "paper.pdf"
+    assert forwarded_file is document
+    assert document.tell() == 0
 
 
 def test_upload_detail_uses_actual_path(client):

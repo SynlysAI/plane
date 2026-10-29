@@ -30,6 +30,7 @@ import { pickCurrentNode } from "@/components/research/chains/research-selection
 import { ResearchChainWorkflowRail } from "@/components/research/chains/research-chain-workflow-rail";
 import { ResearchChainStageApprovalPanel } from "@/components/research/chains/research-chain-stage-approval-panel";
 import { ResearchChainKnowledgePanel } from "@/components/research/chains/research-chain-knowledge-panel";
+import { useResearchChainKnowledge } from "@/components/research/chains/use-research-chain-knowledge";
 import {
   buildResearchWorkflow,
   type TResearchWorkflowStage,
@@ -166,6 +167,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const selectedStageApproval = stageApprovalSummary?.stages.find(
     (stage) => stage.stage_code === selectedStage?.stageCode
   );
+  const knowledge = useResearchChainKnowledge(workspaceSlug, chainId, selected?.node.id ?? "");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -762,6 +764,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                         preferredNodeId={preferredNodeId}
                         applicantName={chain?.owner_name ?? null}
                         defaultExpanded={approvalDeepLink}
+                        knowledge={knowledge}
                         onCreateNode={() => {
                           setCreatingNodeInline(true);
                           setNodeTitle("");
@@ -777,11 +780,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                           nodeId={selected.node.id}
                           initialTaskId={requestedTaskId}
                         />
-                        <ResearchChainKnowledgePanel
-                          workspaceSlug={workspaceSlug}
-                          chainId={chainId}
-                          nodeId={selected.node.id}
-                        />
+                        <ResearchChainKnowledgePanel knowledge={knowledge} />
                         {selected.node.node_type === "PAPER_WRITING" && (
                           <details className="border-t border-subtle">
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-13 font-medium text-primary">

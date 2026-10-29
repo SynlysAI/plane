@@ -1,31 +1,79 @@
-(plane_proxy) {
+(global_request_body) {
 	request_body {
 		max_size {$FILE_SIZE_LIMIT}
 	}
+}
 
-  redir /spaces /spaces/ permanent
-	reverse_proxy /spaces/* space:3000
+(research_request_body) {
+	request_body {
+		max_size {$RESEARCH_CHAIN_UPLOAD_MAX_BYTES}
+	}
+}
 
-  redir /god-mode /god-mode/ permanent
-	reverse_proxy /god-mode/* admin:3000
-	
-	reverse_proxy /live/* live:3000
+(plane_proxy) {
+	handle /api/research/workspaces/*/chains/*/uploads {
+		import research_request_body
+		reverse_proxy api:8000
+	}
 
-	reverse_proxy /api/* api:8000
+	handle /api/research/workspaces/*/chains/*/uploads/* {
+		import research_request_body
+		reverse_proxy api:8000
+	}
 
-	reverse_proxy /auth/* api:8000
+	handle /api/* {
+		import global_request_body
+		reverse_proxy api:8000
+	}
 
-	reverse_proxy /static/* api:8000
+	handle /auth/* {
+		import global_request_body
+		reverse_proxy api:8000
+	}
 
-	reverse_proxy /{$BUCKET_NAME}/* plane-minio:9000
-	reverse_proxy /{$BUCKET_NAME} plane-minio:9000
+	handle /spaces {
+		redir /spaces/ permanent
+	}
 
-	reverse_proxy /* web:3000
+	handle /spaces/* {
+		import global_request_body
+		reverse_proxy space:3000
+	}
+
+	handle /god-mode {
+		redir /god-mode/ permanent
+	}
+
+	handle /god-mode/* {
+		reverse_proxy admin:3000
+	}
+
+	handle /live/* {
+		import global_request_body
+		reverse_proxy live:3000
+	}
+
+	handle /static/* {
+		reverse_proxy api:8000
+	}
+
+	handle /{$BUCKET_NAME}/* {
+		reverse_proxy plane-minio:9000
+	}
+
+	handle /{$BUCKET_NAME} {
+		reverse_proxy plane-minio:9000
+	}
+
+	handle * {
+		import global_request_body
+		reverse_proxy web:3000
+	}
 }
 
 {
 	{$CERT_EMAIL}
-	acme_ca {$CERT_ACME_CA:https://acme-v02.api.letsencrypt.org/directory} 
+	acme_ca {$CERT_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
 	{$CERT_ACME_DNS}
 	servers {
 		max_header_size 25MB

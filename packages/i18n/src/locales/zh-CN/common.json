@@ -1673,7 +1673,14 @@
         "history_count": "历史审核 {count} 次",
         "action_approve": "通过",
         "action_return": "驳回",
-        "action_failed": "操作未完成，请重试"
+        "action_failed": "操作未完成，请重试",
+        "upload_processing": "解析中，可用于提交审核",
+        "select_upload": "选择课题资料",
+        "material_upload": "上传并关联",
+        "link_material": "关联材料",
+        "unlinked_file": "未关联文件，不计入完成度",
+        "upload_unavailable": "课题资料上传未就绪，先完成知识库绑定后再关联材料。",
+        "upload_empty": "当前节点还没有可关联资料，请先上传。"
       }
     },
     "chain_tasks": {
@@ -1907,7 +1914,14 @@
       "candidate_id": "外部库 ID",
       "candidate_source": "来源",
       "candidate_seen": "最近可见",
-      "unassigned": "当前课题没有小组归属，不能创建个人知识库，请先把负责人归入小组。"
+      "unassigned": "当前课题没有小组归属，不能创建个人知识库，请先把负责人归入小组。",
+      "gateway_too_large": "文件被网关拒绝，研究链资料单文件不能超过 {size}。",
+      "status_processing": "解析中",
+      "status_success": "已完成",
+      "status_unknown": "状态未知",
+      "status_failed": "失败",
+      "status_degraded": "降级",
+      "upload_hint": "PDF / Markdown / TXT / DOC / DOCX，单文件不超过 {size}"
     },
     "agent": {
       "description": "同源智能体工作台，上下文授权全部由服务端完成。",

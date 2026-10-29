@@ -105,7 +105,7 @@ class RagPortalClient(BaseIntegrationClient):
         )
 
     def upload(self, *, file_name, file_content, kb_id, metadata=None, request=None):
-        """Upload a document with research scope metadata."""
+        """Upload bytes or a seekable file object with research scope metadata."""
         data = {"kb_id": str(kb_id)}
         data.update({key: str(value) for key, value in (metadata or {}).items() if value is not None})
         return self.request(

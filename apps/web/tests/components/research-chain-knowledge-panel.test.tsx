@@ -23,6 +23,7 @@ vi.mock("@plane/i18n", () => ({
     },
   }),
 }));
+
 vi.mock("@/services/research/chain.service", () => ({
   ResearchChainService: class {
     getKnowledgeBases = mocks.getKnowledgeBases;
@@ -49,7 +50,7 @@ beforeEach(() => {
   mocks.uploadKnowledgeFile.mockResolvedValue({
     data: {
       id: "upload-1",
-      status: "PENDING",
+      status: "PROCESSING",
       knowledge_id: "knowledge-1",
       knowledge_base_id: "kb-1",
       file_name: "paper.md",
@@ -68,35 +69,37 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("uploads a selected file to the bound group library without a library selector", async () => {
+async function renderPanel() {
   const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
+  const { useResearchChainKnowledge } = await import("@/components/research/chains/use-research-chain-knowledge");
+  function KnowledgeHarness() {
+    const knowledge = useResearchChainKnowledge("lab", "chain-1", "node-1");
+    return <ResearchChainKnowledgePanel knowledge={knowledge} />;
+  }
   await act(async () => {
-    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+    root.render(<KnowledgeHarness />);
   });
-  await act(async () => undefined);
+}
 
+async function selectFile(file: File) {
   const input = container.querySelector('input[type="file"]');
-  expect(input).not.toBeNull();
-  expect(container.querySelector("h3")?.textContent).toContain("课题资料");
-  expect(container.querySelector("select")).toBeNull();
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "选择资料")).toBe(true);
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "上传")).toBe(false);
-  const picker = vi.spyOn(input as HTMLInputElement, "click");
   await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "选择资料")?.click();
-  });
-  expect(picker).toHaveBeenCalledOnce();
-  const file = new File(["# paper"], "paper.md", { type: "text/markdown" });
-  await act(async () => {
-    Object.defineProperty(input, "files", { value: [file] });
+    Object.defineProperty(input as HTMLInputElement, "files", { configurable: true, value: [file] });
     input?.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(container.textContent).toContain("paper.md");
-  expect(container.textContent).toContain("7 B");
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "开始上传")).toBe(true);
-  await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "开始上传")?.click();
-  });
+  await act(async () => await Promise.resolve());
+}
+
+it("uploads a selected file to the bound group library without a library selector", async () => {
+  await renderPanel();
+  await act(async () => undefined);
+
+  expect(container.querySelector("h3")?.textContent).toContain("课题资料");
+  expect(container.querySelector("select")).toBeNull();
+  expect(container.textContent).toContain("选择资料");
+  expect(container.textContent).toContain("单文件不超过 50MB");
+  await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
+
   expect(mocks.uploadKnowledgeFile).toHaveBeenCalledWith(
     "lab",
     "chain-1",
@@ -104,9 +107,8 @@ it("uploads a selected file to the bound group library without a library selecto
     "kb-1",
     expect.objectContaining({ name: "paper.md" })
   );
-  expect((input as HTMLInputElement).value).toBe("");
   expect(container.textContent).toContain("paper.md");
-  expect(container.textContent).toContain("PENDING");
+  expect(container.textContent).toContain("解析中");
 });
 
 it("explains an upstream authentication failure in Chinese", async () => {
@@ -115,23 +117,19 @@ it("explains an upstream authentication failure in Chinese", async () => {
     degraded: true,
     degraded_reason: "unauthorized",
   });
-  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
-  await act(async () => {
-    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
-  });
+  await renderPanel();
   await act(async () => undefined);
 
   expect(container.textContent).toContain("认证失败");
   expect(container.textContent).toContain("人工记录可继续");
 });
 
-it("restores pending uploads for the selected node after a page reload", async () => {
-  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
+it("restores processing uploads for the selected node after a page reload", async () => {
   mocks.getKnowledgeUploads.mockResolvedValueOnce({
     data: [
       {
         id: "upload-restored",
-        status: "PENDING",
+        status: "PROCESSING",
         knowledge_id: "knowledge-restored",
         knowledge_base_id: "kb-1",
         file_name: "restored.md",
@@ -143,38 +141,21 @@ it("restores pending uploads for the selected node after a page reload", async (
       },
     ],
   });
-  await act(async () => {
-    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
-  });
+  await renderPanel();
   await act(async () => undefined);
 
   expect(mocks.getKnowledgeUploads).toHaveBeenCalledWith("lab", "chain-1", "node-1");
   expect(container.textContent).toContain("restored.md");
-  expect(container.textContent).toContain("PENDING");
+  expect(container.textContent).toContain("解析中");
   expect(container.textContent).toContain("确认引用");
-  const previewTrigger = [...container.querySelectorAll("button")].find(
-    (button) => button.textContent === "restored.md"
-  );
-  expect(previewTrigger?.getAttribute("title")).toBe("restored.md");
   expect(container.querySelector('a[aria-label="下载资料"]')?.getAttribute("href")).toBe("/download/upload-restored/");
 });
 
 it("keeps the upload record available when reference confirmation fails", async () => {
-  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
   mocks.confirmKnowledgeReference.mockRejectedValueOnce(new Error("conflict"));
-  await act(async () => {
-    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
-  });
+  await renderPanel();
   await act(async () => undefined);
-  const input = container.querySelector('input[type="file"]');
-  const file = new File(["# paper"], "paper.md", { type: "text/markdown" });
-  await act(async () => {
-    Object.defineProperty(input, "files", { value: [file] });
-    input?.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "开始上传")?.click();
-  });
+  await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
 
   await act(async () => {
     [...container.querySelectorAll("button")].find((button) => button.textContent === "确认引用")?.click();
@@ -183,30 +164,43 @@ it("keeps the upload record available when reference confirmation fails", async 
   expect(mocks.confirmKnowledgeReference).toHaveBeenCalled();
   expect(container.textContent).toContain("paper.md");
   expect(container.textContent).toContain("操作未完成，当前记录已保留。");
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "选择资料")).toBe(true);
-  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "开始上传")).toBe(false);
+  expect(container.textContent).toContain("选择资料");
 });
 
 it("keeps validation failures actionable instead of presenting them as upstream degradation", async () => {
-  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
   mocks.uploadKnowledgeFile.mockRejectedValueOnce({ error_code: "file_type_not_allowed" });
-  await act(async () => {
-    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
+  await renderPanel();
+  await act(async () => undefined);
+  await selectFile(new File(["binary"], "paper.md", { type: "text/markdown" }));
+
+  expect(container.textContent).toContain("不支持该文件类型。");
+  expect(container.textContent).not.toContain("RAGPortal 当前降级");
+});
+
+it("explains a gateway 413 response as the research-chain size limit", async () => {
+  mocks.uploadKnowledgeFile.mockRejectedValueOnce({
+    error_code: "file_size_exceeded",
+    message: "",
+    status: 413,
   });
+  await renderPanel();
+  await act(async () => undefined);
+  await selectFile(new File(["paper"], "paper.pdf", { type: "application/pdf" }));
+
+  expect(container.textContent).toContain("文件被网关拒绝，研究链资料单文件不能超过 50MB。");
+  expect(mocks.uploadKnowledgeFile).toHaveBeenCalled();
+});
+
+it("rejects files over 50MB before sending a request", async () => {
+  await renderPanel();
   await act(async () => undefined);
 
-  const input = container.querySelector('input[type="file"]');
-  const file = new File(["binary"], "paper.exe", { type: "application/octet-stream" });
-  await act(async () => {
-    Object.defineProperty(input, "files", { value: [file] });
-    input?.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await act(async () => {
-    [...container.querySelectorAll("button")].find((button) => button.textContent === "开始上传")?.click();
-  });
+  const file = new File(["paper"], "large.pdf", { type: "application/pdf" });
+  Object.defineProperty(file, "size", { value: 50 * 1024 * 1024 + 1 });
+  await selectFile(file);
 
-  expect(container.textContent).toContain("操作未完成，当前记录已保留。");
-  expect(container.textContent).not.toContain("RAGPortal 当前降级");
+  expect(container.textContent).toContain("文件超过大小限制。");
+  expect(mocks.uploadKnowledgeFile).not.toHaveBeenCalled();
 });
 
 it("blocks uploads while the chain knowledge request awaits administrator binding", async () => {
@@ -216,19 +210,12 @@ it("blocks uploads while the chain knowledge request awaits administrator bindin
     request_id: "request-1",
     degraded: false,
   });
-  const { ResearchChainKnowledgePanel } = await import("@/components/research/chains/research-chain-knowledge-panel");
-  await act(async () => {
-    root.render(<ResearchChainKnowledgePanel workspaceSlug="lab" chainId="chain-1" nodeId="node-1" />);
-  });
+  await renderPanel();
   await act(async () => undefined);
 
   expect(container.textContent).toContain("等待管理员从候选库确认");
-  expect(container.textContent).not.toContain("请检查 RAGPortal 配置");
-  expect(container.textContent).not.toContain("手工建库");
   const input = container.querySelector('input[type="file"]');
-  const selectButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "选择资料");
   expect(input?.hasAttribute("disabled")).toBe(true);
-  expect(selectButton?.hasAttribute("disabled")).toBe(true);
-  expect(selectButton?.getAttribute("aria-describedby")).toContain("knowledge-upload-status");
+  expect(container.textContent).not.toContain("拖拽文件或文件夹到这里");
   expect(mocks.uploadKnowledgeFile).not.toHaveBeenCalled();
 });

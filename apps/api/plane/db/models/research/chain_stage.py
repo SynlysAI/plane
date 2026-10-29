@@ -133,6 +133,13 @@ class ResearchChainStageMaterialItem(BaseModel):
         null=True,
         blank=True,
     )
+    upload = models.ForeignKey(
+        "db.ResearchChainUpload",
+        on_delete=models.SET_NULL,
+        related_name="stage_material_items",
+        null=True,
+        blank=True,
+    )
     external_reference = models.CharField(max_length=1000, blank=True, default="")
     request_id = models.CharField(max_length=128, unique=True)
 
@@ -143,6 +150,13 @@ class ResearchChainStageMaterialItem(BaseModel):
         ordering = ("requirement", "created_at")
         indexes = [
             models.Index(fields=["stage", "requirement"], name="rsch_chain_mat_item_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["requirement", "upload"],
+                condition=Q(deleted_at__isnull=True) & Q(upload__isnull=False),
+                name="rsch_chain_mat_item_upload_uq",
+            ),
         ]
 
     def __str__(self):

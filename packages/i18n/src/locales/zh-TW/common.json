@@ -50,6 +50,26 @@
       "completed_by": "完成人",
       "submit_approval_title": "選擇任務審批人",
       "withdraw": "撤回"
+    },
+    "knowledge": {
+      "gateway_too_large": {},
+      "status_processing": {},
+      "status_success": {},
+      "status_unknown": {},
+      "status_failed": {},
+      "status_degraded": {},
+      "upload_hint": {}
+    },
+    "chains": {
+      "stage_approval": {
+        "upload_processing": {},
+        "select_upload": {},
+        "material_upload": {},
+        "link_material": {},
+        "unlinked_file": {},
+        "upload_unavailable": {},
+        "upload_empty": {}
+      }
     }
   },
   "cloud_maintenance_message": {
