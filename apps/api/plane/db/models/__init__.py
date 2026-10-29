@@ -111,6 +111,7 @@ from .research import (
     STAGE_SORT_ORDER,
     IdentityMapping,
     AccountLink,
+    ResearchApprovalRoute,
     ResearchChain,
     ResearchChainStage,
     ResearchChainStageMaterialItem,

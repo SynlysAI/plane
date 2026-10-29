@@ -17,8 +17,8 @@ from plane.db.models import (
 )
 from plane.research.services.chain_tasks import (
     actor_can_cancel_task,
-    actor_can_review_task,
-    actor_can_submit_task,
+    actor_can_complete_task,
+    actor_can_reopen_task,
     chain_writer,
     chain_assignable_user_ids,
 )
@@ -30,12 +30,11 @@ from plane.research.services.paper_review import (
 from plane.research.utils.action_capabilities import capability_map
 from plane.utils.content_validator import validate_html_content
 
-TASK_ACTIONS = ("view", "edit", "assign", "submit", "return", "complete", "cancel")
+TASK_ACTIONS = ("view", "edit", "assign", "complete", "reopen", "cancel")
 PAPER_REVIEW_ACTIONS = ("view", "submit", "return", "accept", "withdraw")
 EDITABLE_STATUSES = (
     ResearchChainNodeTask.Status.DRAFT,
     ResearchChainNodeTask.Status.ASSIGNED,
-    ResearchChainNodeTask.Status.NEEDS_REVISION,
 )
 
 
@@ -63,12 +62,23 @@ def _capabilities(serializer, task):
         return capability_map(TASK_ACTIONS, {})
     workspace = task.workspace
     cache = serializer.context.setdefault("_research_task_roles", {})
-    cache_key = (workspace.id, task.chain_id, actor.id)
+    cache_key = (workspace.id, task.chain_id, task.id, actor.id)
     if cache_key not in cache:
         cache[cache_key] = {
             "writer": chain_writer(workspace, actor, task.chain),
-            "reviewer": actor_can_review_task(workspace, task, actor),
             "manager": actor_can_cancel_task(workspace, task, actor),
+            "completer": actor_can_complete_task(
+                workspace,
+                task,
+                actor,
+                assignee_is_valid=serializer.get_assignee_is_valid(task),
+            ),
+            "reopener": actor_can_reopen_task(
+                workspace,
+                task,
+                actor,
+                assignee_is_valid=serializer.get_assignee_is_valid(task),
+            ),
         }
     roles = cache[cache_key]
     editable = task.status in EDITABLE_STATUSES
@@ -77,12 +87,9 @@ def _capabilities(serializer, task):
         "view": True,
         "edit": writer,
         "assign": writer,
-        "submit": actor_can_submit_task(
-            workspace, task, actor, assignee_is_valid=serializer.get_assignee_is_valid(task)
-        ),
-        "return": roles["reviewer"] and task.status == ResearchChainNodeTask.Status.SUBMITTED,
-        "complete": roles["reviewer"] and task.status == ResearchChainNodeTask.Status.SUBMITTED,
-        "cancel": roles["manager"] and editable,
+        "complete": roles["completer"],
+        "reopen": roles["reopener"],
+        "cancel": roles["manager"] and task.status != ResearchChainNodeTask.Status.CANCELLED,
     }
     return capability_map(TASK_ACTIONS, decisions)
 
@@ -94,6 +101,9 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
     assignee_detail = serializers.SerializerMethodField()
     assignee_is_valid = serializers.SerializerMethodField()
     assigned_by_detail = serializers.SerializerMethodField()
+    completed_by_detail = serializers.SerializerMethodField()
+    can_complete = serializers.SerializerMethodField()
+    can_reopen = serializers.SerializerMethodField()
     capabilities = serializers.SerializerMethodField()
     instruction_attachments = serializers.SerializerMethodField()
 
@@ -114,8 +124,11 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
             "assignee_is_valid",
             "assigned_by",
             "assigned_by_detail",
+            "completed_by",
+            "completed_by_detail",
             "due_at",
-            "submitted_at",
+            "can_complete",
+            "can_reopen",
             "completed_at",
             "resource_type",
             "resource_id",
@@ -134,9 +147,12 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
             "status",
             "assigned_by",
             "assigned_by_detail",
+            "completed_by",
+            "completed_by_detail",
             "assignee_detail",
             "assignee_is_valid",
-            "submitted_at",
+            "can_complete",
+            "can_reopen",
             "completed_at",
             "request_id",
             "capabilities",
@@ -229,6 +245,18 @@ class ResearchChainNodeTaskSerializer(serializers.ModelSerializer):
     def get_assigned_by_detail(self, obj):
         """Return the assigning user display projection."""
         return _user_detail(obj.assigned_by)
+
+    def get_completed_by_detail(self, obj):
+        """Return the user who last marked the task complete."""
+        return _user_detail(obj.completed_by)
+
+    def get_can_complete(self, obj):
+        """Return whether the current actor can mark this task complete."""
+        return _capabilities(self, obj)["actions"]["complete"]["allowed"]
+
+    def get_can_reopen(self, obj):
+        """Return whether the current actor can reopen this task."""
+        return _capabilities(self, obj)["actions"]["reopen"]["allowed"]
 
     def get_capabilities(self, obj):
         """Return explicit task action decisions for the current actor."""

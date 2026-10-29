@@ -7,6 +7,49 @@
       "by_week": "Haftaya göre",
       "by_month": "Aya göre",
       "custom_period": "Özel dönem"
+    },
+    "todo": {
+      "next_reopen": "Mark incomplete",
+      "next_complete": "Mark complete"
+    },
+    "approval_route": {
+      "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
+      "single_reviewer": "Single reviewer",
+      "reviewer": "Reviewer",
+      "cc": "Carbon copy (optional)",
+      "confirm": "I confirm submitting this to {name} for review",
+      "recommended": "Recommended",
+      "no_candidates": "No reviewer is available. Configure an advisor or organisation lead first.",
+      "loading": "Loading approval candidates…",
+      "load_failed": "Could not load approval candidates. Please retry.",
+      "submit": "Submit",
+      "roles": {
+        "primary_advisor": "Primary advisor",
+        "advisor": "Direct advisor",
+        "main_pi": "Main PI",
+        "unit_owner": "Unit owner",
+        "unit_pi": "Unit PI",
+        "unit_admin": "Unit administrator",
+        "reviewer": "Reviewer"
+      }
+    },
+    "reports": {
+      "approval_reviewer": "Reviewer: {name}",
+      "submit_approval_title": "Select report reviewer"
+    },
+    "chain_tasks": {
+      "reopen": "Mark incomplete",
+      "submitted_by": "Submitted by",
+      "complete": "Mark complete",
+      "approval_reviewer": "Reviewer",
+      "events": {
+        "completed": "Marked task complete",
+        "reopened": "Reopened task",
+        "withdrawn": "Submission withdrawn"
+      },
+      "completed_by": "Completed by",
+      "submit_approval_title": "Select task reviewer",
+      "withdraw": "Withdraw"
     }
   },
   "cloud_maintenance_message": {

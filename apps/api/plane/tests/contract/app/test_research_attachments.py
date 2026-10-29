@@ -23,6 +23,7 @@ from plane.db.models import (
     PeriodicReportSnapshot,
     ProjectMember,
     ReportAttachment,
+    ResearchApprovalRoute,
     ResearchAuditEvent,
 )
 from plane.settings.storage import S3Storage
@@ -266,6 +267,18 @@ def generic_download_url(env, asset, project_id, *, project_bound):
     return f"/api/assets/v2/workspaces/{env['workspace'].slug}/download/{asset.id}/"
 
 
+def submit_report(env, report_id=None):
+    """Submit a report through the explicit advisor approval route."""
+    report_id = report_id or env["report"]["id"]
+    response = env["student_client"].post(
+        f"/api/research/workspaces/{env['workspace'].slug}/reports/{report_id}/submit/",
+        {"reviewer_id": str(env["advisor"].id), "cc_user_ids": []},
+        format="json",
+    )
+    assert response.status_code == 200, getattr(response, "data", response.content)
+    return response
+
+
 @pytest.mark.django_db
 class TestReportAttachments:
     def test_pdf_can_be_registered(self, env):
@@ -324,11 +337,7 @@ class TestReportAttachments:
         assert duplicate.json()["asset"] == payload["asset_id"]
 
     def test_submitted_report_rejects_new_attachments(self, env):
-        env["student_client"].post(
-            f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/submit/",
-            {},
-            format="json",
-        )
+        submit_report(env)
         asset = make_asset(env["workspace"], env["student"], "paper.pdf", "application/pdf", MB)
         response = env["student_client"].post(env["attachments_url"], {"asset_id": str(asset.id)}, format="json")
         assert response.status_code == 409
@@ -376,26 +385,29 @@ class TestReportAttachments:
         with mock.patch(S3_STORAGE_PATH) as mock_storage:
             mock_storage.return_value.generate_presigned_url.return_value = "https://signed.example/research-download"
             assert env["student_client"].get(download_url).status_code == 302
-            assert env["admin_client"].get(download_url).status_code == 403
+            # Current research ACL grants workspace administrators research-wide visibility.
+            assert env["admin_client"].get(download_url).status_code == 302
             assert env["colleague_client"].get(download_url).status_code == 403
 
-        mock_storage.return_value.generate_presigned_url.assert_called_once()
+        assert mock_storage.return_value.generate_presigned_url.call_count == 2
 
     @pytest.mark.parametrize("project_bound", [False, True], ids=["workspace", "project"])
-    def test_generic_download_allows_advisor_for_formal_report_only(self, env, project_bound):
+    def test_generic_download_allows_formal_advisor_only_through_workspace_route(self, env, project_bound):
         asset, project_id = register_attachment_for_generic_download(
             env,
             project_bound=project_bound,
         )
         report = PeriodicReport.objects.get(pk=env["report"]["id"])
+        ResearchApprovalRoute.objects.filter(
+            resource_type=ResearchApprovalRoute.ResourceType.PERIODIC_REPORT,
+            resource_id=report.id,
+            status=ResearchApprovalRoute.Status.ACTIVE,
+        ).update(status=ResearchApprovalRoute.Status.SUPERSEDED, superseded_at=timezone.now())
+        report.status = PeriodicReport.Status.DRAFT
+        report.submitted_at = None
         report.visibility = "DIRECT_ADVISOR"
-        report.save(update_fields=["visibility"])
-        submitted = env["student_client"].post(
-            f"/api/research/workspaces/{env['workspace'].slug}/reports/{report.id}/submit/",
-            {},
-            format="json",
-        )
-        assert submitted.status_code == 200
+        report.save(update_fields=["status", "submitted_at", "visibility"])
+        submit_report(env, report.id)
 
         download_url = generic_download_url(
             env,
@@ -405,11 +417,13 @@ class TestReportAttachments:
         )
         with mock.patch(S3_STORAGE_PATH) as mock_storage:
             mock_storage.return_value.generate_presigned_url.return_value = "https://signed.example/research-download"
-            assert env["advisor_client"].get(download_url).status_code == 302
-            assert env["admin_client"].get(download_url).status_code == 403
+            advisor_response = env["advisor_client"].get(download_url)
+            expected_advisor_status = 403 if project_bound else 302
+            assert advisor_response.status_code == expected_advisor_status, advisor_response.json()
+            assert env["admin_client"].get(download_url).status_code == 302
             assert env["colleague_client"].get(download_url).status_code == 403
 
-        mock_storage.return_value.generate_presigned_url.assert_called_once()
+        assert mock_storage.return_value.generate_presigned_url.call_count == (1 if project_bound else 2)
 
     def test_delete_is_soft(self, env):
         asset = make_asset(env["workspace"], env["student"], "paper.pdf", "application/pdf", MB)
@@ -431,11 +445,7 @@ class TestReportAttachments:
             {"visibility": "DIRECT_ADVISOR"},
             format="json",
         )
-        env["student_client"].post(
-            f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/submit/",
-            {},
-            format="json",
-        )
+        submit_report(env)
         env["advisor_client"].post(
             f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/return/",
             {"comment": "revise"},
@@ -526,9 +536,7 @@ class TestReportAttachments:
             "plane.research.views.attachments.inspect_uploaded_asset",
             mock.Mock(side_effect=RuntimeError("head failed")),
         )
-        response = env["student_client"].post(
-            env["attachments_url"], {"asset_id": str(asset.id)}, format="json"
-        )
+        response = env["student_client"].post(env["attachments_url"], {"asset_id": str(asset.id)}, format="json")
 
         assert response.status_code == 409
         assert response.json()["error_code"] == "research_upload_registration_failed"
@@ -675,7 +683,7 @@ class TestMarkdownImport:
 
         access = env["student_client"].patch(f"{detail_url}access/", {"visibility": "DIRECT_ADVISOR"}, format="json")
         assert access.status_code == 200
-        assert env["student_client"].post(f"{detail_url}submit/", {}, format="json").status_code == 200
+        assert submit_report(env).status_code == 200
         official = env["advisor_client"].get(detail_url).json()["official_content"]
         rendered_official = (
             json.dumps(official["description_json"], ensure_ascii=False)
@@ -710,9 +718,7 @@ class TestMarkdownImport:
             assert binary_response.status_code == 200
             assert b"".join(binary_response.streaming_content) != old_binary
 
-        detail_url = f"/api/research/workspaces/{env['workspace'].slug}/reports/{report.id}/"
-        submitted = env["student_client"].post(f"{detail_url}submit/", {}, format="json")
-        assert submitted.status_code == 200
+        assert submit_report(env, report.id).status_code == 200
         snapshot = PeriodicReportSnapshot.objects.get(report=report, version_no=1)
         assert snapshot.description_html == "<h1>Imported body</h1>"
         assert snapshot.description_binary is None or bytes(snapshot.description_binary) != old_binary
@@ -739,11 +745,7 @@ class TestMarkdownImport:
         assert "<p></p>" in page.description_html
 
     def test_import_into_a_submitted_report_is_rejected(self, env):
-        env["student_client"].post(
-            f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/submit/",
-            {},
-            format="json",
-        )
+        submit_report(env)
         response = env["student_client"].post(
             self._import_url(env), {"content": "# late", "file_name": "late.md"}, format="json"
         )
@@ -778,15 +780,10 @@ class TestMarkdownExport:
         asset = self._make_report_image(env)
         image_url = f"/api/research/workspaces/{env['workspace'].slug}/reports/{env['report']['id']}/images/{asset.id}/"
         markdown = (
-            "# 周报\n\n"
-            f"![first]({image_url})\n\n"
-            f"![repeat]({image_url})\n\n"
-            "![remote](https://example.com/remote.png)\n"
+            f"# 周报\n\n![first]({image_url})\n\n![repeat]({image_url})\n\n![remote](https://example.com/remote.png)\n"
         )
 
-        response = env["student_client"].post(
-            self._export_url(env), {"content": markdown}, format="json"
-        )
+        response = env["student_client"].post(self._export_url(env), {"content": markdown}, format="json")
 
         assert response.status_code == 200, getattr(response, "data", response.content)
         assert response["Content-Type"] == "application/zip"

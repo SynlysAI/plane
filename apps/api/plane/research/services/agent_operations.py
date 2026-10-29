@@ -189,7 +189,7 @@ class ResearchOperationService:
             if not task:
                 raise ResearchReadError("not_found", "Task not found in node scope.", 404)
             if action == "attach_task_resource" and (task.resource_type != "NONE" or task.resource_id is not None
-                    or task.status not in {"DRAFT", "ASSIGNED", "NEEDS_REVISION"}):
+                    or task.status not in {"DRAFT", "ASSIGNED"}):
                 raise ResearchReadError("state_conflict", "Only an editable task without a binding can receive a resource.", 409)
             value["task"] = row_digest(task)
             value["target"].update(task_id=str(task.pk), task_title=task.title)

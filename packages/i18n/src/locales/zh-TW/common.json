@@ -7,6 +7,49 @@
       "by_week": "按週",
       "by_month": "按月",
       "custom_period": "自訂週期"
+    },
+    "todo": {
+      "next_reopen": "標記未完成",
+      "next_complete": "標記完成"
+    },
+    "approval_route": {
+      "subtitle": "提交前請確認唯一審批人；抄送僅用於通知，不產生審批權限。",
+      "single_reviewer": "單選審批人",
+      "reviewer": "審批人",
+      "cc": "抄送通知（可選）",
+      "confirm": "我確認將本內容提交給 {name} 審批",
+      "recommended": "推薦",
+      "no_candidates": "暫無可用審批人，請先補齊導師或組織負責人配置。",
+      "loading": "正在讀取審批候選組…",
+      "load_failed": "審批候選組讀取失敗，請稍後重試。",
+      "submit": "確認提交",
+      "roles": {
+        "primary_advisor": "主導師",
+        "advisor": "直接導師",
+        "main_pi": "主 PI",
+        "unit_owner": "組織負責人",
+        "unit_pi": "組織 PI",
+        "unit_admin": "組織管理員",
+        "reviewer": "審批人"
+      }
+    },
+    "reports": {
+      "approval_reviewer": "審批人：{name}",
+      "submit_approval_title": "選擇報告審批人"
+    },
+    "chain_tasks": {
+      "reopen": "標記未完成",
+      "submitted_by": "提交人",
+      "complete": "標記完成",
+      "approval_reviewer": "審批人",
+      "events": {
+        "completed": "標記完成任務",
+        "reopened": "回滾為未完成",
+        "withdrawn": "已撤回提交"
+      },
+      "completed_by": "完成人",
+      "submit_approval_title": "選擇任務審批人",
+      "withdraw": "撤回"
     }
   },
   "cloud_maintenance_message": {

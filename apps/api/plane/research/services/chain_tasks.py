@@ -35,8 +35,7 @@ from plane.research.utils.collaboration_notifications import (
     notify_task_assigned,
     notify_task_cancelled,
     notify_task_completed,
-    notify_task_returned,
-    notify_task_submitted,
+    notify_task_reopened,
     notify_task_updated,
 )
 from plane.research.utils.org import READABLE_WORKSPACE_ROLES, active_membership_q
@@ -415,22 +414,49 @@ def validate_assignable_user(workspace, chain, user_id) -> bool:
     return assignable_project_members(workspace, chain).filter(member_id=parsed_user_id).exists()
 
 
-def actor_can_review_task(workspace, task, actor) -> bool:
-    """Return whether an actor holds research review rights for a task.
+def actor_can_complete_task(workspace, task, actor, *, assignee_is_valid=None) -> bool:
+    """Return whether the current assignee can mark an action-item task complete.
 
     Args:
         workspace: Workspace that must own the task.
-        task: Research Chain node task under review.
-        actor: User requesting a review action.
+        task: Research Chain node task to complete.
+        actor: User requesting completion.
+        assignee_is_valid: Read-project candidate validity when it is already known.
 
     Returns:
-        True when the actor is a research administrator or a review-only reviewer.
+        True when the actor is the valid current assignee and completion is allowed.
     """
     if actor is None or not getattr(actor, "is_authenticated", False):
         return False
-    if is_research_admin(actor, workspace.id):
-        return True
-    return review_only_actor(workspace, actor, task.chain)
+    if task.assignee_id != actor.id or task.status not in (
+        ResearchChainNodeTask.Status.DRAFT,
+        ResearchChainNodeTask.Status.ASSIGNED,
+    ):
+        return False
+    if assignee_is_valid is None:
+        assignee_is_valid = validate_assignable_user(workspace, task.chain, task.assignee_id)
+    return assignee_is_valid
+
+
+def actor_can_reopen_task(workspace, task, actor, *, assignee_is_valid=None) -> bool:
+    """Return whether the current assignee can reopen a completed task.
+
+    Args:
+        workspace: Workspace that must own the task.
+        task: Research Chain node task to reopen.
+        actor: User requesting reopening.
+        assignee_is_valid: Read-project candidate validity when it is already known.
+
+    Returns:
+        True when the actor is the valid current assignee of a completed task.
+    """
+    if actor is None or not getattr(actor, "is_authenticated", False):
+        return False
+    if task.assignee_id != actor.id or task.status != ResearchChainNodeTask.Status.COMPLETED:
+        return False
+    if assignee_is_valid is None:
+        assignee_is_valid = validate_assignable_user(workspace, task.chain, task.assignee_id)
+    return assignee_is_valid
 
 
 def actor_can_cancel_task(workspace, task, actor) -> bool:
@@ -447,30 +473,6 @@ def actor_can_cancel_task(workspace, task, actor) -> bool:
     if actor is None or not getattr(actor, "is_authenticated", False):
         return False
     return chain_manager(workspace, actor, task.chain)
-
-
-def actor_can_submit_task(workspace, task, actor, *, assignee_is_valid=None) -> bool:
-    """Return whether the current assignee may submit a task now.
-
-    Args:
-        workspace: Workspace used for future scope extensions.
-        task: Research Chain node task to submit.
-        actor: User requesting submission.
-        assignee_is_valid: 本次只读投影已计算的资格；写操作不传入缓存值。
-
-    Returns:
-        True when the actor is the assignee and the state accepts submission.
-    """
-    if actor is None or not getattr(actor, "is_authenticated", False):
-        return False
-    if task.assignee_id != actor.id or task.status not in (
-        ResearchChainNodeTask.Status.ASSIGNED,
-        ResearchChainNodeTask.Status.NEEDS_REVISION,
-    ):
-        return False
-    if assignee_is_valid is None:
-        assignee_is_valid = validate_assignable_user(workspace, task.chain, task.assignee_id)
-    return assignee_is_valid
 
 
 def _request_id(payload) -> str:
@@ -663,9 +665,11 @@ def list_tasks(*, workspace, chain, node, status=None, assignee_id=None, due_bef
     Raises:
         ChainTaskValidationError: When a filter value is malformed.
     """
-    rows = ResearchChainNodeTask.objects.filter(workspace=workspace, chain=chain, node=node).select_related(
-        "workspace", "chain", "node", "assignee", "assigned_by"
-    ).prefetch_related("instruction_attachments__asset")
+    rows = (
+        ResearchChainNodeTask.objects.filter(workspace=workspace, chain=chain, node=node)
+        .select_related("workspace", "chain", "node", "assignee", "assigned_by", "completed_by")
+        .prefetch_related("instruction_attachments__asset")
+    )
     if status:
         normalized_status = str(status).upper()
         if normalized_status not in ResearchChainNodeTask.Status.values:
@@ -793,7 +797,6 @@ def update_task(*, task, actor, payload, request=None):
     if task.status not in (
         ResearchChainNodeTask.Status.DRAFT,
         ResearchChainNodeTask.Status.ASSIGNED,
-        ResearchChainNodeTask.Status.NEEDS_REVISION,
     ):
         raise ChainTaskStateError("Completed or cancelled tasks are read-only.")
     if "assignee" in payload and payload["assignee"] in (None, ""):
@@ -851,7 +854,6 @@ def update_task(*, task, actor, payload, request=None):
             if locked_task.status not in (
                 ResearchChainNodeTask.Status.DRAFT,
                 ResearchChainNodeTask.Status.ASSIGNED,
-                ResearchChainNodeTask.Status.NEEDS_REVISION,
             ):
                 raise ChainTaskStateError("Completed or cancelled tasks are read-only.")
             previous_assignee_id = locked_task.assignee_id
@@ -928,144 +930,60 @@ def _run_task_action(*, task, actor, request_id, event_type, content_hash, actio
             task=locked_task,
             actor=actor,
             action={
-                "TASK_SUBMITTED": ResearchAuditAction.TASK_SUBMIT,
-                "TASK_RETURNED": ResearchAuditAction.TASK_RETURN,
                 "TASK_COMPLETED": ResearchAuditAction.TASK_COMPLETE,
+                "TASK_REOPENED": ResearchAuditAction.TASK_REOPEN,
                 "TASK_CANCELLED": ResearchAuditAction.TASK_CANCEL,
             }[event_type],
             metadata=metadata | {"status": locked_task.status},
             request=request,
         )
-        if event_type == "TASK_SUBMITTED":
-            notify_task_submitted(locked_task, actor)
-        elif event_type == "TASK_RETURNED":
-            notify_task_returned(locked_task, actor, metadata.get("reason", ""))
-        elif event_type == "TASK_COMPLETED":
+        if event_type == "TASK_COMPLETED":
             notify_task_completed(locked_task, actor, metadata.get("comment", ""))
+        elif event_type == "TASK_REOPENED":
+            notify_task_reopened(locked_task, actor, metadata.get("reason", ""))
         elif event_type == "TASK_CANCELLED":
             notify_task_cancelled(locked_task, actor, metadata.get("reason", ""))
         return locked_task, True
 
 
-def submit_task(*, task, actor, request_id, content_hash, request=None):
-    """Submit a task as its current assignee.
-
-    Args:
-        task: Research Chain node task to submit.
-        actor: User claiming to be the current assignee.
-        request_id: Idempotency key supplied by the caller.
-        content_hash: Stable payload hash used for replay.
-        request: Optional HTTP request used for audit client metadata.
-
-    Returns:
-        A ``(task, changed)`` tuple.
-    """
-    request_id = _request_id({"request_id": request_id})
-    if not actor_can_submit_task(task.workspace, task, actor):
-        raise ChainTaskPermissionError("Only the current assignee can submit this task.")
-
-    def action(locked_task):
-        if locked_task.status not in (
-            ResearchChainNodeTask.Status.ASSIGNED,
-            ResearchChainNodeTask.Status.NEEDS_REVISION,
-        ):
-            raise ChainTaskStateError(f"SUBMIT is not allowed from {locked_task.status}.")
-        locked_task.status = ResearchChainNodeTask.Status.SUBMITTED
-        locked_task.submitted_at = timezone.now()
-        locked_task.updated_by = actor
-        locked_task.save(update_fields=["status", "submitted_at", "updated_by", "updated_at"])
-
-    return _run_task_action(
-        task=task,
-        actor=actor,
-        request_id=request_id,
-        event_type="TASK_SUBMITTED",
-        content_hash=content_hash,
-        action=action,
-        request=request,
-        metadata={},
-        guard=lambda locked_task: _require_submit_permission(locked_task, actor),
-    )
-
-
-def _require_submit_permission(task, actor):
-    """Recheck submit authority after the task row has been locked."""
-    if not actor_can_submit_task(task.workspace, task, actor):
-        raise ChainTaskPermissionError("仅有效课题成员中的当前负责人可以提交任务。")
-
-
-def return_task(*, task, actor, reason, request_id, content_hash, request=None):
-    """Return a submitted task for revision.
-
-    Args:
-        task: Research Chain node task to return.
-        actor: Reviewer returning the task.
-        reason: Required revision reason.
-        request_id: Idempotency key supplied by the caller.
-        content_hash: Stable payload hash used for replay.
-        request: Optional HTTP request used for audit client metadata.
-
-    Returns:
-        A ``(task, changed)`` tuple.
-    """
-    request_id = _request_id({"request_id": request_id})
-    reason = str(reason or "").strip()
-    if not reason:
-        raise ChainTaskValidationError("reason is required.")
-    if not actor_can_review_task(task.workspace, task, actor):
-        raise ChainTaskPermissionError("Only research reviewers can return tasks.")
-
-    def action(locked_task):
-        if locked_task.status != ResearchChainNodeTask.Status.SUBMITTED:
-            raise ChainTaskStateError(f"RETURN is not allowed from {locked_task.status}.")
-        locked_task.status = ResearchChainNodeTask.Status.NEEDS_REVISION
-        locked_task.updated_by = actor
-        locked_task.save(update_fields=["status", "updated_by", "updated_at"])
-
-    return _run_task_action(
-        task=task,
-        actor=actor,
-        request_id=request_id,
-        event_type="TASK_RETURNED",
-        content_hash=content_hash,
-        action=action,
-        request=request,
-        metadata={"reason": reason[:500]},
-        guard=lambda locked_task: _require_review_permission(locked_task, actor),
-    )
-
-
-def _require_review_permission(task, actor):
-    """Recheck review authority after related ACL inputs may have changed."""
-    if not actor_can_review_task(task.workspace, task, actor):
-        raise ChainTaskPermissionError("Only research reviewers can manage submitted tasks.")
-
-
 def complete_task(*, task, actor, comment="", request_id=None, content_hash="", request=None):
-    """Complete a submitted task after research review.
+    """Mark an action-item task complete as its current assignee.
 
     Args:
         task: Research Chain node task to complete.
-        actor: Reviewer accepting the task.
-        comment: Optional completion comment.
+        actor: Current assignee marking the task complete.
+        comment: Optional completion note retained in the timeline.
         request_id: Idempotency key supplied by the caller.
         content_hash: Stable payload hash used for replay.
-        request: Optional HTTP request used for audit client metadata.
+        request: Optional HTTP request used for audit metadata.
 
     Returns:
         A ``(task, changed)`` tuple.
     """
     request_id = _request_id({"request_id": request_id})
-    if not actor_can_review_task(task.workspace, task, actor):
-        raise ChainTaskPermissionError("Only research reviewers can complete tasks.")
+    if not actor_can_complete_task(task.workspace, task, actor):
+        raise ChainTaskPermissionError("Only the current assignee can complete this task.")
 
     def action(locked_task):
-        if locked_task.status != ResearchChainNodeTask.Status.SUBMITTED:
+        if locked_task.status not in (
+            ResearchChainNodeTask.Status.DRAFT,
+            ResearchChainNodeTask.Status.ASSIGNED,
+        ):
             raise ChainTaskStateError(f"COMPLETE is not allowed from {locked_task.status}.")
         locked_task.status = ResearchChainNodeTask.Status.COMPLETED
         locked_task.completed_at = timezone.now()
+        locked_task.completed_by = actor
         locked_task.updated_by = actor
-        locked_task.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
+        locked_task.save(
+            update_fields=[
+                "status",
+                "completed_at",
+                "completed_by",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+        return None
 
     return _run_task_action(
         task=task,
@@ -1076,8 +994,69 @@ def complete_task(*, task, actor, comment="", request_id=None, content_hash="", 
         action=action,
         request=request,
         metadata={"comment": str(comment or "")[:500]},
-        guard=lambda locked_task: _require_review_permission(locked_task, actor),
+        guard=lambda locked_task: _require_complete_permission(locked_task, actor),
     )
+
+
+def reopen_task(*, task, actor, reason="", request_id=None, content_hash="", request=None):
+    """Reopen a completed action-item task as its current assignee.
+
+    Args:
+        task: Research Chain node task to reopen.
+        actor: Current assignee reopening the task.
+        reason: Optional reopening note retained in the timeline.
+        request_id: Idempotency key supplied by the caller.
+        content_hash: Stable payload hash used for replay.
+        request: Optional HTTP request used for audit metadata.
+
+    Returns:
+        A ``(task, changed)`` tuple.
+    """
+    request_id = _request_id({"request_id": request_id})
+    if not actor_can_reopen_task(task.workspace, task, actor):
+        raise ChainTaskPermissionError("Only the current assignee can reopen this task.")
+
+    def action(locked_task):
+        if locked_task.status != ResearchChainNodeTask.Status.COMPLETED:
+            raise ChainTaskStateError(f"REOPEN is not allowed from {locked_task.status}.")
+        locked_task.status = ResearchChainNodeTask.Status.ASSIGNED
+        locked_task.completed_at = None
+        locked_task.completed_by = None
+        locked_task.updated_by = actor
+        locked_task.save(
+            update_fields=[
+                "status",
+                "completed_at",
+                "completed_by",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+        return None
+
+    return _run_task_action(
+        task=task,
+        actor=actor,
+        request_id=request_id,
+        event_type="TASK_REOPENED",
+        content_hash=content_hash,
+        action=action,
+        request=request,
+        metadata={"reason": str(reason or "").strip()[:500]},
+        guard=lambda locked_task: _require_reopen_permission(locked_task, actor),
+    )
+
+
+def _require_complete_permission(task, actor):
+    """Recheck completion authority after the task row has been locked."""
+    if not actor_can_complete_task(task.workspace, task, actor):
+        raise ChainTaskPermissionError("Only the current assignee can complete this task.")
+
+
+def _require_reopen_permission(task, actor):
+    """Recheck reopening authority after the task row has been locked."""
+    if not actor_can_reopen_task(task.workspace, task, actor):
+        raise ChainTaskPermissionError("Only the current assignee can reopen this task.")
 
 
 def cancel_task(*, task, actor, reason, request_id, content_hash, request=None):
@@ -1105,12 +1084,15 @@ def cancel_task(*, task, actor, reason, request_id, content_hash, request=None):
         if locked_task.status not in (
             ResearchChainNodeTask.Status.DRAFT,
             ResearchChainNodeTask.Status.ASSIGNED,
-            ResearchChainNodeTask.Status.NEEDS_REVISION,
+            ResearchChainNodeTask.Status.COMPLETED,
         ):
             raise ChainTaskStateError(f"CANCEL is not allowed from {locked_task.status}.")
         locked_task.status = ResearchChainNodeTask.Status.CANCELLED
+        locked_task.completed_at = None
+        locked_task.completed_by = None
         locked_task.updated_by = actor
-        locked_task.save(update_fields=["status", "updated_by", "updated_at"])
+        locked_task.save(update_fields=["status", "completed_at", "completed_by", "updated_by", "updated_at"])
+        return None
 
     return _run_task_action(
         task=task,

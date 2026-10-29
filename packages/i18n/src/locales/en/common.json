@@ -1258,7 +1258,7 @@
       "next_return": "Return",
       "next_accept": "Accept",
       "next_withdraw": "Withdraw",
-      "next_complete": "Complete",
+      "next_complete": "Mark complete",
       "next_cancel": "Cancel",
       "next_approve": "Approve",
       "next_reject": "Reject",
@@ -1303,7 +1303,8 @@
       "handling_assign": "Assigned to me",
       "handling_process": "Awaiting my action",
       "share_type_research": "Research action item",
-      "share_type_administrative": "Administrative action item"
+      "share_type_administrative": "Administrative action item",
+      "next_reopen": "Mark incomplete"
     },
     "overview": {
       "description": "Research management for this workspace: organisation, projects, periodic reports and office approvals.",
@@ -1653,7 +1654,7 @@
       "assign": "Assign",
       "submit": "Submit",
       "return": "Return",
-      "complete": "Complete",
+      "complete": "Mark complete",
       "cancel": "Cancel task",
       "confirm": "Confirm",
       "cancel_edit": "Cancel",
@@ -1715,9 +1716,11 @@
         "assigned": "assigned the task",
         "submitted": "submitted the task",
         "returned": "returned the task",
-        "completed": "completed the task",
+        "completed": "Marked task complete",
         "cancelled": "cancelled the task",
-        "updated": "updated the task"
+        "updated": "updated the task",
+        "reopened": "Reopened task",
+        "withdrawn": "Submission withdrawn"
       },
       "resources": {
         "REPORT": "Periodic report",
@@ -1747,7 +1750,13 @@
         "needs_revision": "Needs revision",
         "completed": "Completed",
         "cancelled": "Cancelled"
-      }
+      },
+      "reopen": "Mark incomplete",
+      "submitted_by": "Submitted by",
+      "approval_reviewer": "Reviewer",
+      "completed_by": "Completed by",
+      "submit_approval_title": "Select task reviewer",
+      "withdraw": "Withdraw"
     },
     "paper_reviews": {
       "panel_title": "Paper review",
@@ -2420,7 +2429,9 @@
         "status": "Status",
         "read_state": "Read state",
         "visibility": "Visibility"
-      }
+      },
+      "approval_reviewer": "Reviewer: {name}",
+      "submit_approval_title": "Select report reviewer"
     },
     "attachments": {
       "title": "Attachments and body import",
@@ -3284,6 +3295,27 @@
       "outcome": "outcome",
       "system": "System",
       "business_object": "business object"
+    },
+    "approval_route": {
+      "subtitle": "Confirm the sole reviewer before submitting. Carbon copies notify only and grant no review rights.",
+      "single_reviewer": "Single reviewer",
+      "reviewer": "Reviewer",
+      "cc": "Carbon copy (optional)",
+      "confirm": "I confirm submitting this to {name} for review",
+      "recommended": "Recommended",
+      "no_candidates": "No reviewer is available. Configure an advisor or organisation lead first.",
+      "loading": "Loading approval candidates…",
+      "load_failed": "Could not load approval candidates. Please retry.",
+      "submit": "Submit",
+      "roles": {
+        "primary_advisor": "Primary advisor",
+        "advisor": "Direct advisor",
+        "main_pi": "Main PI",
+        "unit_owner": "Unit owner",
+        "unit_pi": "Unit PI",
+        "unit_admin": "Unit administrator",
+        "reviewer": "Reviewer"
+      }
     }
   },
   "page_offline_save": {

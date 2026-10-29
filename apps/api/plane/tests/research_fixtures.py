@@ -17,6 +17,7 @@ from plane.db.models import (
     PeriodicReportSnapshot,
     Project,
     ProjectMember,
+    ResearchApprovalRoute,
     ResearchChain,
     ResearchChainNode,
     ResearchProjectProfile,
@@ -129,15 +130,12 @@ def make_org_member(workspace, user, unit=None, org_role=OrgUnitMember.OrgRole.O
         The created active ``OrgUnitMember``.
     """
     if unit is None:
-        root = OrgUnit.objects.filter(
-            workspace=workspace, parent__isnull=True, deleted_at__isnull=True
-        ).first()
+        root = OrgUnit.objects.filter(workspace=workspace, parent__isnull=True, deleted_at__isnull=True).first()
         if root is None:
             root = make_research_org_unit(workspace, "Fixture Root", None, OrgUnit.UnitType.ROOT)
-        unit = (
-            OrgUnit.objects.filter(workspace=workspace, parent=root, deleted_at__isnull=True).first()
-            or make_research_org_unit(workspace, "Fixture Group", root, OrgUnit.UnitType.GROUP)
-        )
+        unit = OrgUnit.objects.filter(
+            workspace=workspace, parent=root, deleted_at__isnull=True
+        ).first() or make_research_org_unit(workspace, "Fixture Group", root, OrgUnit.UnitType.GROUP)
     return OrgUnitMember.objects.create(
         workspace=workspace,
         org_unit=unit,
@@ -283,6 +281,17 @@ def make_research_boundary_fixture():
         description_html=page.description_html,
         description_stripped="Official version 3",
         submitted_by=student,
+    )
+    ResearchApprovalRoute.objects.create(
+        workspace=workspace,
+        resource_type=ResearchApprovalRoute.ResourceType.PERIODIC_REPORT,
+        resource_id=report.id,
+        submitted_by=student,
+        reviewer=advisor,
+        reviewer_role=ResearchApprovalRoute.ReviewerRole.PRIMARY_ADVISOR,
+        cc_user_ids=[],
+        candidate_snapshot=[],
+        request_id=f"boundary-report-route-{uuid4().hex}",
     )
 
     return {

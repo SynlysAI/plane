@@ -254,7 +254,12 @@ export interface IResearchStore {
   submitReport: (
     workspaceSlug: string,
     reportId: string,
-    payload?: { description_json?: object; description_html?: string }
+    payload?: {
+      description_json?: object;
+      description_html?: string;
+      reviewer_id?: string;
+      cc_user_ids?: string[];
+    }
   ) => Promise<TPeriodicReport>;
   withdrawReport: (workspaceSlug: string, reportId: string, comment?: string) => Promise<TPeriodicReport>;
   returnReport: (workspaceSlug: string, reportId: string, comment: string) => Promise<TPeriodicReport>;
@@ -1288,7 +1293,12 @@ export class ResearchStore implements IResearchStore {
   submitReport = async (
     workspaceSlug: string,
     reportId: string,
-    payload: { description_json?: object; description_html?: string } = {}
+    payload: {
+      description_json?: object;
+      description_html?: string;
+      reviewer_id?: string;
+      cc_user_ids?: string[];
+    } = {}
   ) => {
     const report = await this.reportService.submitReport(workspaceSlug, reportId, payload);
     runInAction(() => {

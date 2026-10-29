@@ -785,6 +785,8 @@ export const researchEndpoints = {
   projectRestore: (slug: string, projectId: string) => `${RESEARCH_API_ROOT}/${slug}/projects/${projectId}/restore/`,
   reports: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/reports/`,
   report: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/`,
+  reportApprovalRoute: (slug: string, reportId: string) =>
+    `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/approval-route/`,
   reportSubmit: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/submit/`,
   reportReturn: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/return/`,
   reportAccept: (slug: string, reportId: string) => `${RESEARCH_API_ROOT}/${slug}/reports/${reportId}/accept/`,

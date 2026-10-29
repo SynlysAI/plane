@@ -47,6 +47,7 @@ def _notify(report, receivers, *, actor, title, message, mentioned_ids=None):
                 project_id=report.project_id,
                 data={
                     "report_id": str(report.id),
+                    "action": message.get("action"),
                     "period_key": report.period_key,
                     "report_type": report.report_type,
                     "status": report.status,
@@ -86,22 +87,54 @@ def report_reviewer_ids(report):
     return list(User.objects.filter(id__in=receiver_ids, is_active=True))
 
 
-def notify_report_submitted(report, actor):
-    return _notify(
-        report,
-        report_reviewer_ids(report),
-        actor=actor,
-        title=f"{report.period_key} 报告已提交",
-        message={
-            "action": "submitted",
-            "period_key": report.period_key,
-            "owner": str(report.owner_id),
-            "submitted_at": timezone.now().isoformat(),
-        },
-    )
+def notify_report_submitted(report, actor, route=None):
+    """Notify the routed reviewer and optional carbon-copy readers."""
+    if route is None:
+        return _notify(
+            report,
+            report_reviewer_ids(report),
+            actor=actor,
+            title=f"{report.period_key} 报告已提交",
+            message={
+                "action": "submitted",
+                "period_key": report.period_key,
+                "owner": str(report.owner_id),
+                "submitted_at": timezone.now().isoformat(),
+            },
+        )
+
+    from plane.research.services.approval_routes import route_users
+
+    reviewers, cc_users = route_users(route)
+    return [
+        *_notify(
+            report,
+            reviewers,
+            actor=actor,
+            title=f"{report.period_key} 报告已提交",
+            message={
+                "action": "submitted",
+                "period_key": report.period_key,
+                "owner": str(report.owner_id),
+                "submitted_at": timezone.now().isoformat(),
+            },
+        ),
+        *_notify(
+            report,
+            cc_users,
+            actor=actor,
+            title=f"{report.period_key} 报告提交抄送",
+            message={
+                "action": "submitted.cc",
+                "period_key": report.period_key,
+                "owner": str(report.owner_id),
+                "submitted_at": timezone.now().isoformat(),
+            },
+        ),
+    ]
 
 
-def notify_report_withdrawn(report, actor, comment=""):
+def notify_report_withdrawn(report, actor, comment="", route=None):
     """Notify reviewers that an author withdrew the current submission.
 
     Args:
@@ -112,54 +145,97 @@ def notify_report_withdrawn(report, actor, comment=""):
     Returns:
         Created notification rows for the report's reviewer audience.
     """
-    return _notify(
-        report,
-        report_reviewer_ids(report),
-        actor=actor,
-        title=f"{report.period_key} 报告已撤回",
-        message={
-            "action": "withdrawn",
-            "period_key": report.period_key,
-            "owner": str(report.owner_id),
-            "comment": comment[:500],
-            "withdrawn_at": timezone.now().isoformat(),
-        },
-    )
+    from plane.research.services.approval_routes import route_users
+
+    reviewers, cc_users = route_users(route) if route is not None else ([], [])
+    if route is None:
+        reviewers = report_reviewer_ids(report)
+    return [
+        *_notify(
+            report,
+            reviewers,
+            actor=actor,
+            title=f"{report.period_key} 报告已撤回",
+            message={
+                "action": "withdrawn",
+                "period_key": report.period_key,
+                "owner": str(report.owner_id),
+                "comment": comment[:500],
+                "withdrawn_at": timezone.now().isoformat(),
+            },
+        ),
+        *_notify(
+            report,
+            cc_users,
+            actor=actor,
+            title=f"{report.period_key} 报告撤回抄送",
+            message={
+                "action": "withdrawn.cc",
+                "period_key": report.period_key,
+                "owner": str(report.owner_id),
+                "comment": comment[:500],
+                "withdrawn_at": timezone.now().isoformat(),
+            },
+        ),
+    ]
 
 
-def notify_report_returned(report, actor, comment=""):
+def notify_report_returned(report, actor, comment="", route=None):
     from plane.db.models import User
+    from plane.research.services.approval_routes import route_users
 
     owner = User.objects.filter(pk=report.owner_id, is_active=True).first()
-    return _notify(
-        report,
-        [owner] if owner else [],
-        actor=actor,
-        title=f"{report.period_key} 报告被退回",
-        message={
-            "action": "returned",
-            "period_key": report.period_key,
-            "comment": comment[:500],
-            "reviewer": str(actor.id),
-        },
-    )
+    _reviewers, cc_users = route_users(route)
+    return [
+        *_notify(
+            report,
+            [owner] if owner else [],
+            actor=actor,
+            title=f"{report.period_key} 报告被退回",
+            message={
+                "action": "returned",
+                "period_key": report.period_key,
+                "comment": comment[:500],
+                "reviewer": str(actor.id),
+            },
+        ),
+        *_notify(
+            report,
+            cc_users,
+            actor=actor,
+            title=f"{report.period_key} 报告退回抄送",
+            message={
+                "action": "returned.cc",
+                "period_key": report.period_key,
+                "comment": comment[:500],
+                "reviewer": str(actor.id),
+            },
+        ),
+    ]
 
 
-def notify_report_accepted(report, actor):
+def notify_report_accepted(report, actor, route=None):
     from plane.db.models import User
+    from plane.research.services.approval_routes import route_users
 
     owner = User.objects.filter(pk=report.owner_id, is_active=True).first()
-    return _notify(
-        report,
-        [owner] if owner else [],
-        actor=actor,
-        title=f"{report.period_key} 报告已验收",
-        message={
-            "action": "accepted",
-            "period_key": report.period_key,
-            "reviewer": str(actor.id),
-        },
-    )
+    _reviewers, cc_users = route_users(route)
+    return [
+        *_notify(
+            report,
+            [owner] if owner else [],
+            actor=actor,
+            title=f"{report.period_key} 报告已验收",
+            message={"action": "accepted", "period_key": report.period_key, "reviewer": str(actor.id)},
+        ),
+        *_notify(
+            report,
+            cc_users,
+            actor=actor,
+            title=f"{report.period_key} 报告验收抄送",
+            message={"action": "accepted.cc", "period_key": report.period_key, "reviewer": str(actor.id)},
+        ),
+    ]
 
 
 def mentioned_user_ids(comment_html) -> set:

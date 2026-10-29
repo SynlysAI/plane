@@ -1265,7 +1265,7 @@
       "next_return": "退回",
       "next_accept": "接受",
       "next_withdraw": "撤回",
-      "next_complete": "完成",
+      "next_complete": "标记完成",
       "next_cancel": "取消",
       "next_approve": "批准",
       "next_reject": "拒绝",
@@ -1313,7 +1313,8 @@
       "handling_assign": "指派给我",
       "handling_process": "待我处理",
       "share_type_research": "科研行动项",
-      "share_type_administrative": "行政行动项"
+      "share_type_administrative": "行政行动项",
+      "next_reopen": "标记未完成"
     },
     "overview": {
       "description": "本工作区的科研管理：组织架构、科研项目、周期报告与办公审批。",
@@ -1676,7 +1677,7 @@
       "assign": "指派",
       "submit": "提交",
       "return": "退回",
-      "complete": "完成",
+      "complete": "标记完成",
       "cancel": "取消任务",
       "confirm": "确认提交",
       "cancel_edit": "取消",
@@ -1738,9 +1739,11 @@
         "assigned": "指派了任务",
         "submitted": "提交了任务",
         "returned": "退回了任务",
-        "completed": "完成了任务",
+        "completed": "标记完成任务",
         "cancelled": "取消了任务",
-        "updated": "更新了任务"
+        "updated": "更新了任务",
+        "reopened": "回滚为未完成",
+        "withdrawn": "已撤回提交"
       },
       "resources": {
         "REPORT": "周期报告",
@@ -1770,7 +1773,13 @@
         "needs_revision": "需修订",
         "completed": "已完成",
         "cancelled": "已取消"
-      }
+      },
+      "reopen": "标记未完成",
+      "submitted_by": "提交人",
+      "approval_reviewer": "审批人",
+      "completed_by": "完成人",
+      "submit_approval_title": "选择任务审批人",
+      "withdraw": "撤回"
     },
     "paper_reviews": {
       "panel_title": "论文评审",
@@ -2445,7 +2454,9 @@
         "status": "状态",
         "read_state": "已读状态",
         "visibility": "可见范围"
-      }
+      },
+      "approval_reviewer": "审批人：{name}",
+      "submit_approval_title": "选择报告审批人"
     },
     "attachments": {
       "title": "附件与正文导入",
@@ -3315,6 +3326,27 @@
       "outcome": "成果",
       "system": "系统",
       "business_object": "业务对象"
+    },
+    "approval_route": {
+      "subtitle": "提交前请确认唯一审批人；抄送仅用于通知，不产生审批权限。",
+      "single_reviewer": "单选审批人",
+      "reviewer": "审批人",
+      "cc": "抄送通知（可选）",
+      "confirm": "我确认将本内容提交给 {name} 审批",
+      "recommended": "推荐",
+      "no_candidates": "暂无可用审批人，请先补齐导师或组织负责人配置。",
+      "loading": "正在读取审批候选组…",
+      "load_failed": "审批候选组读取失败，请稍后重试。",
+      "submit": "确认提交",
+      "roles": {
+        "primary_advisor": "主导师",
+        "advisor": "直接导师",
+        "main_pi": "主 PI",
+        "unit_owner": "组织负责人",
+        "unit_pi": "组织 PI",
+        "unit_admin": "组织管理员",
+        "reviewer": "审批人"
+      }
     }
   },
   "page_offline_save": {
