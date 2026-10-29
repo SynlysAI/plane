@@ -108,6 +108,7 @@ catalog:
   "express": "4.22.0"
   "express-winston": "^4.2.0"
   "express-ws": "^5.0.2"
+  "file-selector": "2.1.2"
   "file-type": "^21.3.1"
   "framer-motion": "^12.23.0"
   "frimousse": "^0.3.0"
