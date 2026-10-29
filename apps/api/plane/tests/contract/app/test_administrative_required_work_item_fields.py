@@ -133,6 +133,25 @@ class TestAdministrativeRequiredWorkItemFields:
         assert project.is_module_required is False
 
     @pytest.mark.django_db
+    def test_workspace_admin_outside_project_can_change_required_fields(
+        self, session_client, workspace, administrative_project
+    ):
+        project, _, _ = administrative_project
+        admin = User.objects.create(email="workspace-admin@example.com", username="required-workspace-admin")
+        WorkspaceMember.objects.create(workspace=workspace, member=admin, role=20)
+        session_client.force_authenticate(user=admin)
+
+        response = session_client.patch(
+            self.project_url(workspace.slug, project.id),
+            {"is_module_required": True},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        project.refresh_from_db()
+        assert project.is_module_required is True
+
+    @pytest.mark.django_db
     def test_research_project_cannot_enable_required_fields(self, session_client, workspace, create_user):
         project = Project.objects.create(
             workspace=workspace,
@@ -183,8 +202,8 @@ class TestAdministrativeRequiredWorkItemFields:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["module_ids"] == ["模块（财务报销科目）为必选项。"]
-        assert response.json()["label_ids"] == ["标签（小组）为必选项。"]
+        assert response.json()["module_ids"] == ["模块为必选项。"]
+        assert response.json()["label_ids"] == ["标签为必选项。"]
         assert not Issue.objects.filter(name="报销申请").exists()
 
     @pytest.mark.django_db
@@ -210,6 +229,40 @@ class TestAdministrativeRequiredWorkItemFields:
         issue = Issue.objects.get(name="报销申请")
         assert list(issue.labels.values_list("id", flat=True)) == [label.id]
         assert list(issue.issue_module.values_list("module_id", flat=True)) == [module.id]
+
+    @pytest.mark.django_db
+    def test_legacy_null_module_ids_create_issue_when_rule_disabled(
+        self, session_client, workspace, administrative_project
+    ):
+        project, _, _ = administrative_project
+
+        response = session_client.post(
+            self.issue_url(workspace.slug, project.id),
+            {"name": "兼容创建", "module_ids": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        issue = Issue.objects.get(name="兼容创建")
+        assert not issue.issue_module.filter(deleted_at__isnull=True).exists()
+
+    @pytest.mark.django_db
+    def test_null_module_ids_rejected_when_module_required(
+        self, session_client, workspace, administrative_project
+    ):
+        project, _, _ = administrative_project
+        project.is_module_required = True
+        project.save(update_fields=["is_module_required"])
+
+        response = session_client.post(
+            self.issue_url(workspace.slug, project.id),
+            {"name": "必选创建", "module_ids": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["module_ids"] == ["模块为必选项。"]
+        assert not Issue.objects.filter(name="必选创建").exists()
 
     @pytest.mark.django_db
     def test_formal_issue_cannot_clear_required_fields(self, session_client, workspace, administrative_project):
@@ -251,6 +304,62 @@ class TestAdministrativeRequiredWorkItemFields:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert issue.labels.filter(id=label.id).exists()
         assert ModuleIssue.objects.filter(issue=issue, module=module).exists()
+
+    @pytest.mark.django_db
+    def test_null_module_ids_do_not_clear_existing_modules(
+        self, session_client, workspace, administrative_project
+    ):
+        project, module, _ = administrative_project
+        issue = Issue.objects.create(
+            name="保留模块",
+            workspace=workspace,
+            project=project,
+            created_by=session_client.handler._force_user,
+        )
+        ModuleIssue.objects.create(
+            workspace=workspace,
+            project=project,
+            issue=issue,
+            module=module,
+            created_by=session_client.handler._force_user,
+        )
+
+        response = session_client.patch(
+            self.issue_url(workspace.slug, project.id, issue.id),
+            {"name": "保留模块更新", "module_ids": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert ModuleIssue.objects.filter(issue=issue, module=module, deleted_at__isnull=True).exists()
+
+    @pytest.mark.django_db
+    def test_empty_module_ids_clear_existing_modules_when_rule_disabled(
+        self, session_client, workspace, administrative_project
+    ):
+        project, module, _ = administrative_project
+        issue = Issue.objects.create(
+            name="清空模块",
+            workspace=workspace,
+            project=project,
+            created_by=session_client.handler._force_user,
+        )
+        ModuleIssue.objects.create(
+            workspace=workspace,
+            project=project,
+            issue=issue,
+            module=module,
+            created_by=session_client.handler._force_user,
+        )
+
+        response = session_client.patch(
+            self.issue_url(workspace.slug, project.id, issue.id),
+            {"module_ids": []},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not ModuleIssue.objects.filter(issue=issue, module=module, deleted_at__isnull=True).exists()
 
     @pytest.mark.django_db
     def test_module_relation_api_cannot_remove_last_required_module(
@@ -401,6 +510,36 @@ class TestAdministrativeRequiredWorkItemFields:
         assert cleared.status_code == status.HTTP_400_BAD_REQUEST
         assert issue.labels.filter(id=label.id).exists()
         assert ModuleIssue.objects.filter(issue=issue, module=module).exists()
+
+    @pytest.mark.django_db
+    def test_external_api_null_module_ids_do_not_clear_existing_modules(
+        self,
+        api_key_client,
+        workspace,
+        administrative_project,
+    ):
+        """The external API keeps treating JSON null as an omitted module list."""
+        project, module, _ = administrative_project
+
+        created = api_key_client.post(
+            self.external_issue_url(workspace.slug, project.id),
+            {
+                "name": "外部兼容创建",
+                "module_ids": [str(module.id)],
+            },
+            format="json",
+        )
+        assert created.status_code == status.HTTP_201_CREATED
+        issue = Issue.objects.get(name="外部兼容创建")
+
+        updated = api_key_client.patch(
+            self.external_issue_url(workspace.slug, project.id, issue.id),
+            {"name": "外部兼容更新", "module_ids": None},
+            format="json",
+        )
+
+        assert updated.status_code == status.HTTP_200_OK
+        assert ModuleIssue.objects.filter(issue=issue, module=module, deleted_at__isnull=True).exists()
 
     @pytest.mark.django_db
     def test_draft_may_be_incomplete_but_cannot_promote_without_required_fields(

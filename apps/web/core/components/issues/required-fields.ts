@@ -3,8 +3,8 @@
 export type TRequiredIssueField = "module_ids" | "label_ids";
 
 export const REQUIRED_FIELD_MESSAGES: Record<TRequiredIssueField, string> = {
-  module_ids: "模块（财务报销科目）为必选项。",
-  label_ids: "标签（小组）为必选项。",
+  module_ids: "模块为必选项。",
+  label_ids: "标签为必选项。",
 };
 
 /**

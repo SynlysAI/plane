@@ -72,6 +72,7 @@ class IssueSerializer(BaseSerializer):
         child=serializers.PrimaryKeyRelatedField(queryset=Module.objects.values_list("id", flat=True)),
         write_only=True,
         required=False,
+        allow_null=True,
     )
     type_id = serializers.PrimaryKeyRelatedField(
         source="type", queryset=IssueType.objects.all(), required=False, allow_null=True
@@ -130,6 +131,11 @@ class IssueSerializer(BaseSerializer):
                     f"Assignees {list(invalid_assignee_ids)} are not active members of this project"
                 )
             data["assignees"] = list(valid_assignee_ids)
+
+        # Keep the public API compatible with clients that use JSON null for
+        # an absent module selection; only an empty array clears the relation.
+        if data.get("module_ids") is None and "module_ids" in data:
+            del data["module_ids"]
 
         # Validate labels and modules are from the same project.
         labels_supplied = "labels" in data

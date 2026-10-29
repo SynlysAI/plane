@@ -106,6 +106,7 @@ class IssueCreateSerializer(BaseSerializer):
         child=serializers.PrimaryKeyRelatedField(queryset=Module.objects.all()),
         write_only=True,
         required=False,
+        allow_null=True,
     )
     project_id = serializers.UUIDField(source="project.id", read_only=True)
     workspace_id = serializers.UUIDField(source="workspace.id", read_only=True)
@@ -188,6 +189,11 @@ class IssueCreateSerializer(BaseSerializer):
             attrs["assignee_ids"] = [
                 assignee.id for assignee in requested_assignees if assignee.id in valid_assignee_ids
             ]
+
+        # Legacy work-item forms send ``module_ids: null`` when no module is
+        # selected. Treat null as omitted so partial updates preserve relations.
+        if attrs.get("module_ids") is None and "module_ids" in attrs:
+            del attrs["module_ids"]
 
         # Validate labels and modules are from the same project.
         label_ids_supplied = "label_ids" in attrs
