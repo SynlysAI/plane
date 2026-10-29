@@ -215,6 +215,20 @@ async function chooseFile() {
   return file;
 }
 
+/** Simulate selecting multiple files in the single-version uploader. */
+async function chooseMultipleFiles() {
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  const files = [
+    new File(["first"], "first.pdf", { type: "application/pdf" }),
+    new File(["second"], "second.pdf", { type: "application/pdf" }),
+  ];
+  await act(async () => {
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  return files;
+}
+
 it("shows the author view, metadata, versions, file entries, and Chain Event comments", async () => {
   const chainEvents = [
     event("PAPER_REVIEW_OPENED", { event_id: "opened", refs: [{ kind: "paper_review", id: "other" }] }),
@@ -435,6 +449,18 @@ it("keeps the form data and shows the server error when storage upload fails", a
   expect(mocks.submitPaperVersion).not.toHaveBeenCalled();
   expect(container.textContent).toContain("对象存储暂不可用。");
   expect(container.textContent).toContain("尝试提交第二版。");
+});
+
+it("rejects a multi-file drop without setting a paper version", async () => {
+  await renderPanel();
+  await chooseMultipleFiles();
+  await setInput("textarea", "批量文件不应提交。");
+  await act(async () => button("提交新版本").click());
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("仅支持选择一个文件。");
+  expect(mocks.uploadPaperVersion).not.toHaveBeenCalled();
+  expect(mocks.submitPaperVersion).not.toHaveBeenCalled();
 });
 
 it("surfaces a server rejection without advancing the local review state", async () => {

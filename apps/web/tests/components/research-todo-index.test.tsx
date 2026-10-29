@@ -273,8 +273,14 @@ it("uses server-computed next actions without rendering trace payloads", async (
   expect(container.textContent).toContain("审阅");
   expect(container.textContent).toContain("指派");
   expect(container.textContent).not.toContain("secret-trace-id");
-  const controls = [...container.querySelectorAll("button")].map((item) => item.textContent ?? "");
-  expect(controls.every((label) => ["刷新待办", "我可处理", "我发起", "全部可见", "复制"].includes(label))).toBe(true);
+  const controls = [...container.querySelectorAll("button")].map(
+    (item) => item.getAttribute("aria-label") ?? item.textContent ?? ""
+  );
+  expect(
+    controls.every(
+      (label) => ["刷新待办", "我可处理", "我发起", "全部可见"].includes(label) || label.startsWith("复制分享链接：")
+    )
+  ).toBe(true);
 });
 
 it("filters the server projection by the selected period in one request", async () => {

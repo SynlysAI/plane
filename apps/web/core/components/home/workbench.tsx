@@ -396,7 +396,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
   return (
-    <div className={`flex min-h-full min-w-0 flex-col gap-5 ${isFixedLayout ? "xl:min-h-full xl:flex-1" : ""}`}>
+    <div className={`flex min-h-full min-w-0 flex-col gap-5 ${isFixedLayout ? "xl:min-h-full xl:flex-1" : "shrink-0"}`}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-22 font-semibold text-primary">{t("research.home_workbench.title")}</h1>
@@ -485,7 +485,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
       )}
       {!preferencesLoading && mode === "waterfall" && enabledWidgets.length > 0 && (
         <div
-          className="flex max-w-full gap-1 overflow-x-auto border-b border-subtle pb-2"
+          className="sticky top-[calc(var(--padding-page-y)*-1)] z-10 flex max-w-full gap-1 overflow-x-auto border-b border-subtle bg-canvas pb-2"
           role="tablist"
           aria-label={t("research.home_workbench.mode_waterfall")}
           data-testid="workspace-home-waterfall-tabs"

@@ -70,6 +70,10 @@
         "upload_unavailable": {},
         "upload_empty": {}
       }
+    },
+    "common": {
+      "share_type_administrative_work_item": {},
+      "share_type_research_work_item": {}
     }
   },
   "cloud_maintenance_message": {

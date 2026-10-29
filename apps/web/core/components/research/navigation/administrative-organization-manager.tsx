@@ -14,6 +14,8 @@ const service = new ResearchNavigationService();
 
 export type AdministrativeOrganizationManagerAction = "members" | "rename" | "delete";
 
+const DUPLICATE_MEMBER_MESSAGE = "所选成员已在该组织中，请取消选择；如需调整角色，请在成员列表操作。";
+
 type Props = {
   action: AdministrativeOrganizationManagerAction;
   organizationId: string;
@@ -26,6 +28,11 @@ type Props = {
 
 /** 从服务端错误中提取可读消息。 */
 function errorMessage(error: unknown) {
+  if (error && typeof error === "object" && "response" in error) {
+    const data = (error as { response?: { data?: { code?: unknown; message?: unknown } } }).response?.data;
+    if (data?.code === "MEMBER_ALREADY_IN_ORGANIZATION") return DUPLICATE_MEMBER_MESSAGE;
+    if (data?.message !== undefined) return String(data.message);
+  }
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message?: unknown }).message);
   }
@@ -52,6 +59,10 @@ export function AdministrativeOrganizationManager({
   const [deleteTarget, setDeleteTarget] = useState(defaultOrganization?.id ?? "uncategorized");
   const [isSaving, setIsSaving] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
+  const currentMemberIds = useMemo(
+    () => new Set((organization?.members ?? []).map((member) => member.id)),
+    [organization?.members]
+  );
   const sortedAssignableMembers = useMemo(
     () =>
       // oxlint-disable-next-line unicorn/no-array-sort -- TypeScript target does not include Array#toSorted.
@@ -64,11 +75,14 @@ export function AdministrativeOrganizationManager({
   );
   const filteredMembers = useMemo(() => {
     const query = memberQuery.trim().toLowerCase();
-    if (!query) return sortedAssignableMembers;
-    return sortedAssignableMembers.filter(
+    const candidates = sortedAssignableMembers.filter((member) =>
+      currentMemberIds.has(member.id) ? selectedMembers.includes(member.id) : true
+    );
+    if (!query) return candidates;
+    return candidates.filter(
       (member) => (member.name || "").toLowerCase().includes(query) || member.email.toLowerCase().includes(query)
     );
-  }, [memberQuery, sortedAssignableMembers]);
+  }, [currentMemberIds, memberQuery, selectedMembers, sortedAssignableMembers]);
 
   useEffect(() => {
     setManagerAction(action);
@@ -114,6 +128,14 @@ export function AdministrativeOrganizationManager({
 
   const submitMember = async () => {
     if (selectedMembers.length === 0) return;
+    if (selectedMembers.some((memberId) => currentMemberIds.has(memberId))) {
+      setToast({
+        type: TOAST_TYPE.WARNING,
+        title: "无法重复添加成员",
+        message: DUPLICATE_MEMBER_MESSAGE,
+      });
+      return;
+    }
     const succeeded = await runMutation(
       () =>
         Promise.all(

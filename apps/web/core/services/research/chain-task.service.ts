@@ -28,7 +28,7 @@ type TResearchEnvelope<T> = {
   schema_version: string;
 };
 
-export type TResearchChainTaskAction = "submit" | "return" | "complete" | "cancel";
+export type TResearchChainTaskAction = "complete" | "reopen" | "cancel";
 
 export type TResearchChainTaskActionPayload = {
   reason?: string;

@@ -2198,7 +2198,9 @@
       "share_copied_title": "Share text copied",
       "share_copied_message": "The title and link have been copied to your clipboard.",
       "share_copy_failed_title": "Copy failed",
-      "share_copy_failed_message": "Please try again later."
+      "share_copy_failed_message": "Please try again later.",
+      "share_type_administrative_work_item": "Administrative work item",
+      "share_type_research_work_item": "Research work item"
     },
     "roles": {
       "owner": "Node owner",
