@@ -83,6 +83,7 @@ from .workspace import (
     WorkspaceUserProperties,
     WorkspaceUserLink,
     WorkspaceHomePreference,
+    WorkspaceAdministrativeViewDefault,
     HomeActivityEvent,
     WorkspaceUserPreference,
 )

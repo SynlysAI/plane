@@ -25,6 +25,7 @@ from plane.db.models import (
     Project,
     ProjectMember,
     WorkspaceHomePreference,
+    WorkspaceAdministrativeViewDefault,
     Sticky,
     WorkspaceUserPreference,
 )
@@ -42,6 +43,37 @@ from django.core.exceptions import ValidationError
 import re
 
 
+ADMIN_VIEW_LAYOUTS = {"list", "kanban", "calendar", "spreadsheet", "gantt_chart"}
+ADMIN_VIEW_CALENDAR_LAYOUTS = {"month", "week"}
+ADMIN_VIEW_DISPLAY_FILTER_KEYS = {
+    "calendar",
+    "group_by",
+    "sub_group_by",
+    "layout",
+    "order_by",
+    "show_empty_groups",
+    "sub_issue",
+}
+ADMIN_VIEW_DISPLAY_PROPERTY_KEYS = {
+    "assignee",
+    "start_date",
+    "due_date",
+    "labels",
+    "key",
+    "priority",
+    "state",
+    "sub_issue_count",
+    "link",
+    "attachment_count",
+    "estimate",
+    "created_on",
+    "updated_on",
+    "modules",
+    "cycle",
+    "issue_type",
+}
+
+
 class WorkSpaceSerializer(DynamicBaseSerializer):
     research_enabled = serializers.BooleanField(source="research_setting.module_enabled", read_only=True)
     research_purpose = serializers.CharField(source="research_setting.purpose", read_only=True)
@@ -57,9 +89,7 @@ class WorkSpaceSerializer(DynamicBaseSerializer):
         # digit. Mirrors the frontend HAS_ALPHANUMERIC_REGEX check so the rule
         # cannot be bypassed via a direct API call.
         if not has_alphanumeric(value):
-            raise serializers.ValidationError(
-                "Name must contain at least one letter or number"
-            )
+            raise serializers.ValidationError("Name must contain at least one letter or number")
         return value
 
     def validate_slug(self, value):
@@ -404,6 +434,95 @@ class WorkspaceHomePreferenceSerializer(BaseSerializer):
         """Reject malformed layout metadata before it reaches the home client."""
         if not isinstance(value, dict):
             raise serializers.ValidationError("Config must be an object.")
+        return value
+
+
+class WorkspaceAdministrativeViewDefaultSerializer(BaseSerializer):
+    """Validate and serialize the administrative system-view layout default."""
+
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = WorkspaceAdministrativeViewDefault
+        fields = ["display_filters", "display_properties", "updated_at"]
+        read_only_fields = ["workspace", "created_by", "updated_by", "updated_at"]
+
+    def validate(self, data):
+        """Reject unsupported top-level fields before merging the default layout.
+
+        Args:
+            data: Validated display-filter and display-property overrides.
+
+        Returns:
+            The validated serializer data.
+        """
+        allowed_fields = {"display_filters", "display_properties"}
+        unknown_fields = set(self.initial_data) - allowed_fields
+        if unknown_fields:
+            raise serializers.ValidationError(f"Unsupported fields: {', '.join(sorted(unknown_fields))}.")
+        return data
+
+    def validate_display_filters(self, value):
+        """Reject unsupported or malformed display-filter values.
+
+        Args:
+            value: Requested display-filter overrides.
+
+        Returns:
+            The validated display-filter overrides.
+        """
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Display filters must be an object.")
+
+        unknown_keys = set(value) - ADMIN_VIEW_DISPLAY_FILTER_KEYS
+        if unknown_keys:
+            raise serializers.ValidationError(f"Unsupported display filter keys: {', '.join(sorted(unknown_keys))}.")
+
+        layout = value.get("layout")
+        if layout is not None and (not isinstance(layout, str) or layout not in ADMIN_VIEW_LAYOUTS):
+            raise serializers.ValidationError("Layout must be list, kanban, calendar, spreadsheet, or gantt_chart.")
+
+        for key in ("show_empty_groups", "sub_issue"):
+            if key in value and not isinstance(value[key], bool):
+                raise serializers.ValidationError(f"{key} must be a boolean.")
+
+        for key in ("group_by", "sub_group_by", "order_by"):
+            if key in value and value[key] is not None and not isinstance(value[key], str):
+                raise serializers.ValidationError(f"{key} must be a string or null.")
+
+        calendar = value.get("calendar")
+        if calendar is not None:
+            if not isinstance(calendar, dict):
+                raise serializers.ValidationError("Calendar options must be an object.")
+            if set(calendar) - {"show_weekends", "layout"}:
+                raise serializers.ValidationError("Calendar options contain unsupported keys.")
+            if "show_weekends" in calendar and not isinstance(calendar["show_weekends"], bool):
+                raise serializers.ValidationError("Calendar show_weekends must be a boolean.")
+            calendar_layout = calendar.get("layout")
+            if calendar_layout is not None and (
+                not isinstance(calendar_layout, str) or calendar_layout not in ADMIN_VIEW_CALENDAR_LAYOUTS
+            ):
+                raise serializers.ValidationError("Calendar layout must be month or week.")
+
+        return value
+
+    def validate_display_properties(self, value):
+        """Reject unsupported or malformed display-property values.
+
+        Args:
+            value: Requested display-property overrides.
+
+        Returns:
+            The validated display-property overrides.
+        """
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Display properties must be an object.")
+
+        unknown_keys = set(value) - ADMIN_VIEW_DISPLAY_PROPERTY_KEYS
+        if unknown_keys:
+            raise serializers.ValidationError(f"Unsupported display property keys: {', '.join(sorted(unknown_keys))}.")
+        if any(not isinstance(property_value, bool) for property_value in value.values()):
+            raise serializers.ValidationError("Display properties must be booleans.")
         return value
 
 

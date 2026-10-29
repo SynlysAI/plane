@@ -7,6 +7,7 @@
 import type { TUserPermissions } from "./enums";
 import type { IIssueActivity, TIssuePriorities, TStateGroups } from ".";
 import type { TLoginMediums } from "./instance";
+import type { TLogoProps } from "./common";
 
 /**
  * @description The start of the week for the user
@@ -171,6 +172,9 @@ export interface IUserProfileProjectSegregation {
     completed_issues: number;
     created_issues: number;
     id: string;
+    /** 服务端直接返回的项目名称，项目 store 未加载时用于兜底展示。 */
+    name: string;
+    logo_props: TLogoProps;
     pending_issues: number;
   }[];
   user_data: Pick<IUser, "avatar_url" | "cover_image_url" | "display_name" | "first_name" | "last_name"> & {
