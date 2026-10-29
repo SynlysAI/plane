@@ -1,6 +1,7 @@
 """Shared workflow and REST rollback regressions against a real database."""
 
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from django.db import IntegrityError, transaction
@@ -11,6 +12,7 @@ from plane.db.models import (
     Page,
     PeriodicReport,
     PeriodicReportSnapshot,
+    ResearchApprovalRoute,
     ResearchAuditEvent,
     ReportAttachment,
     ReportReviewLog,
@@ -44,11 +46,12 @@ def create(env):
 
 
 def submit(env, report, payload=None):
+    """Submit a report to its primary advisor for workflow tests."""
+    payload = payload or {}
+    payload.setdefault("reviewer_id", str(env["advisor"].pk))
+    payload.setdefault("cc_user_ids", [])
     return workflow.submit_report(
-        workspace=env["workspace"],
-        actor=env["student"],
-        report_id=report.pk,
-        payload={"reviewer_id": str(env["advisor"].pk), **(payload or {})},
+        workspace=env["workspace"], actor=env["student"], report_id=report.pk, payload=payload
     )
 
 
@@ -71,6 +74,13 @@ def test_shared_create_save_submit_and_returned_resubmit_keep_official_versions(
     assert not Notification.objects.filter(entity_identifier=report.pk).exists()
     submitted = submit(env, report)
     assert submitted.status == "SUBMITTED"
+    route = ResearchApprovalRoute.objects.get(
+        resource_type="PERIODIC_REPORT",
+        resource_id=report.pk,
+        status="ACTIVE",
+    )
+    assert route.reviewer_id == env["advisor"].pk
+    assert route.request_id == f"report-{report.pk}-v1"
     first = PeriodicReportSnapshot.objects.get(report=report, version_no=1)
     assert first.description_html == "<p>v1</p>"
     assert first.description_stripped == "v1"
@@ -83,7 +93,22 @@ def test_shared_create_save_submit_and_returned_resubmit_keep_official_versions(
     second = PeriodicReportSnapshot.objects.get(report=report, version_no=2)
     assert second.description_html == "<p>v2</p>"
     assert ReportReviewLog.objects.filter(report=report, action="SUBMIT").count() == 2
+    assert ResearchApprovalRoute.objects.filter(resource_id=report.pk, status="ACTIVE").count() == 1
     assert Notification.objects.filter(entity_identifier=report.pk, message__action="submitted").count() == 2
+
+
+def test_invalid_reviewer_rolls_back_submission_effects(env):
+    report = create(env)
+    original_body = report.page.description_html
+    payload = {**body("must not commit"), "reviewer_id": str(uuid4()), "cc_user_ids": []}
+
+    with pytest.raises(workflow.ReportWorkflowError) as error:
+        submit(env, report, payload)
+
+    assert error.value.status_code == 422
+    assert error.value.data["error_code"] == "approval_reviewer_invalid"
+    assert_rolled_back(env, report, original_body, (ResearchAuditEvent.objects.count(), Notification.objects.count()))
+    assert not ResearchApprovalRoute.objects.filter(resource_id=report.pk).exists()
 
 
 def test_snapshot_validation_failure_rolls_back_final_body_and_all_effects_via_rest(env):
@@ -92,7 +117,11 @@ def test_snapshot_validation_failure_rolls_back_final_body_and_all_effects_via_r
     counts = (ResearchAuditEvent.objects.count(), Notification.objects.count())
     # Fail after serializer.save(), reproducing the former partial commit path.
     with patch("plane.research.utils.report_images.image_manifest", side_effect=ValueError("image removed")):
-        response = env["student_client"].post(f"{env['url']}{report.pk}/submit/", body("must roll back"), format="json")
+        response = env["student_client"].post(
+            f"{env['url']}{report.pk}/submit/",
+            {**body("must roll back"), "reviewer_id": str(env["advisor"].pk), "cc_user_ids": []},
+            format="json",
+        )
     assert response.status_code == 422
     assert response.json() == {"error_code": "file_type_not_allowed", "message": "image removed"}
     assert_rolled_back(env, report, original_body, counts)
@@ -118,7 +147,11 @@ def test_submit_keeps_serializer_error_shape_and_never_saves_invalid_body(env, p
     report = create(env)
     original_body = report.page.description_html
     counts = (ResearchAuditEvent.objects.count(), Notification.objects.count())
-    response = env["student_client"].post(f"{env['url']}{report.pk}/submit/", payload, format="json")
+    response = env["student_client"].post(
+        f"{env['url']}{report.pk}/submit/",
+        {**payload, "reviewer_id": str(env["advisor"].pk), "cc_user_ids": []},
+        format="json",
+    )
     assert response.status_code == 400
     assert set(response.json()) == {error_field}
     assert_rolled_back(env, report, original_body, counts)

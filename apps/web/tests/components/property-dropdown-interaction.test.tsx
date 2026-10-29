@@ -4,7 +4,10 @@ import { createRoot } from "react-dom/client";
 import { Combobox } from "@headlessui/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@plane/i18n", () => ({
+  DEFAULT_LANGUAGE: "en",
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("@/hooks/use-platform-os", () => ({ usePlatformOS: () => ({ isMobile: false }) }));
 vi.mock("next/navigation", () => ({ useParams: () => ({ workspaceSlug: "workspace" }) }));
 vi.mock("@/hooks/store/user", () => ({ useUserPermissions: () => ({ allowPermissions: () => false }) }));

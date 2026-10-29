@@ -65,8 +65,8 @@ owner/workspace 来自凭据；只读/节点令牌不得写周报；save_draft �
 
 新增五个工具，使用闭合 schema 和明确长度限制：
 
-- `get_weekly_report_context(period_offset | period_key)`：互斥参数，返回固定周期、模板、本人已有报告、可执行动作和 revision。使用工作区报告时区；大正文有边界和分页，不能静默截断后声称完整。
-- `prepare_weekly_report_operation(request_id, action, period_key, expected_revision, body_markdown, source_refs?)`：action=save_draft/submit，只持久化提案，不创建报告；返回最终规范化正文、差异摘要、周期、身份、有效可见性、到期时间、提案哈希和真实副作用。
+- `get_weekly_report_context(period_offset | period_key)`：互斥参数，返回固定周期、模板、本人已有报告、可执行动作、revision 和审批候选人/当前路由。使用工作区报告时区；大正文有边界和分页，不能静默截断后声称完整。
+- `prepare_weekly_report_operation(request_id, action, period_key, expected_revision, body_markdown, source_refs?, reviewer_id?, cc_user_ids?)`：`save_draft` 禁止审批字段；`submit` 必须从 context 候选人中选择 `reviewer_id`，可选携带 `cc_user_ids`。只持久化提案，不创建报告；审批选择和效果必须完整展示并纳入幂等哈希。
 - `execute_weekly_report_operation(operation_id)`：只能执行原提案，不接受正文替换。
 - `get_weekly_report_operation(operation_id)`：恢复持久结果。
 - `cancel_weekly_report_operation(operation_id)`：取消未执行提案。

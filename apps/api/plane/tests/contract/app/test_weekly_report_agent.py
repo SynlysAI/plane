@@ -32,7 +32,15 @@ def connection(env, actions=None):
     )
 
 
-def proposal(service, *, action="submit", request_id=None, body="## 本周完成\n\n完成核心实现。", context=None):
+def proposal(
+    service,
+    *,
+    action="submit",
+    request_id=None,
+    body="## 本周完成\n\n完成核心实现。",
+    context=None,
+    reviewer_id=None,
+):
     context = context or service.execute("get_weekly_report_context", {"period_offset": -1})
     args = {
         "request_id": request_id or str(uuid4()),
@@ -41,8 +49,9 @@ def proposal(service, *, action="submit", request_id=None, body="## 本周完成
         "expected_revision": context["revision"],
         "body_markdown": body,
     }
-    if action == "submit" and context["approval_route"]["default_reviewer_id"]:
-        args["reviewer_id"] = context["approval_route"]["default_reviewer_id"]
+    if action == "submit":
+        args["reviewer_id"] = reviewer_id or context["approval"]["default_reviewer_id"]
+        args["cc_user_ids"] = []
     return service.execute("prepare_weekly_report_operation", args), args
 
 
@@ -51,8 +60,12 @@ def test_new_submit_is_immutable_idempotent_and_recovers_after_readback_outage(e
     service = WeeklyReportService(grant=grant)
     prepared, args = proposal(service)
     assert prepared["report_id"] is None
+    assert prepared["proposal"]["approval"]["reviewer_id"] == args["reviewer_id"]
     assert not db.PeriodicReport.objects.filter(period_key=args["period_key"], workspace=env["workspace"]).exists()
     assert service.execute("prepare_weekly_report_operation", args)["operation_id"] == prepared["operation_id"]
+    with pytest.raises(WeeklyReportError) as error:
+        service.execute("prepare_weekly_report_operation", {**args, "reviewer_id": str(uuid4())})
+    assert error.value.code == "idempotency_conflict"
     operation_id = prepared["operation_id"]
     with patch.object(db.PeriodicReportSnapshot.objects, "get", side_effect=RuntimeError("readback unavailable")):
         committed = service.execute("execute_weekly_report_operation", {"operation_id": operation_id})
@@ -71,6 +84,60 @@ def test_new_submit_is_immutable_idempotent_and_recovers_after_readback_outage(e
         == db.Notification.objects.filter(entity_identifier=result["report_id"]).count()
         == 1
     )
+    route = db.ResearchApprovalRoute.objects.get(
+        resource_type="PERIODIC_REPORT",
+        resource_id=result["report_id"],
+        status="ACTIVE",
+    )
+    assert str(route.reviewer_id) == args["reviewer_id"]
+    assert result["approval_route_id"] == str(route.pk)
+    assert result["reviewer_id"] == args["reviewer_id"]
+
+
+def test_submit_proposal_requires_an_explicit_reviewer(env):
+    grant, _ = connection(env)
+    service = WeeklyReportService(grant=grant)
+    context = service.execute("get_weekly_report_context", {"period_offset": -1})
+    args = {
+        "request_id": str(uuid4()),
+        "action": "submit",
+        "period_key": context["period"]["key"],
+        "expected_revision": context["revision"],
+        "body_markdown": "## 本周完成\n\n缺少审批人。",
+    }
+
+    with pytest.raises(WeeklyReportError) as error:
+        service.execute("prepare_weekly_report_operation", args)
+
+    assert error.value.code == "invalid_arguments"
+    assert not db.ReportAgentOperation.objects.exists()
+
+
+def test_save_draft_schema_rejects_approval_selection(env):
+    grant, _ = connection(env)
+    service = WeeklyReportService(grant=grant)
+    _, args = proposal(service, action="save_draft")
+    invalid_request_id = str(uuid4())
+
+    with pytest.raises(WeeklyReportError) as error:
+        service.execute(
+            "prepare_weekly_report_operation",
+            {**args, "request_id": invalid_request_id, "reviewer_id": str(uuid4())},
+        )
+
+    assert error.value.code == "invalid_arguments"
+    assert not db.ReportAgentOperation.objects.filter(request_id=invalid_request_id).exists()
+
+
+def test_submit_proposal_rejects_reviewer_outside_approval_group(env):
+    grant, _ = connection(env)
+    service = WeeklyReportService(grant=grant)
+
+    with pytest.raises(WeeklyReportError) as error:
+        proposal(service, reviewer_id=str(uuid4()))
+
+    assert error.value.code == "approval_reviewer_invalid"
+    assert not db.ReportAgentOperation.objects.exists()
 
 
 def test_save_draft_then_returned_report_resubmits_with_preserved_v1(env):
@@ -626,14 +693,45 @@ def test_shared_workflow_business_error_is_rolled_back_then_durably_rejected(env
     assert db.Page.objects.count() == page_count
 
 
-def test_submission_without_a_reviewer_cannot_create_a_proposal(env):
+def test_submit_proposal_requires_a_reviewer_when_approval_group_is_empty(env):
     db.MentorBinding.objects.filter(workspace=env["workspace"]).delete()
     grant, _ = connection(env)
     service = WeeklyReportService(grant=grant)
-    with pytest.raises(WeeklyReportError) as failure:
+    context = service.execute("get_weekly_report_context", {"period_offset": -1})
+    assert context["approval"]["candidates"] == []
+    assert context["approval"]["default_reviewer_id"] is None
+
+    with pytest.raises(WeeklyReportError) as error:
         proposal(service)
-    assert failure.value.code == "approval_reviewer_required"
+
+    assert error.value.code == "invalid_arguments"
     assert not db.ReportAgentOperation.objects.exists()
+
+
+def test_approval_route_change_invalidates_prepared_submission(env):
+    grant, _ = connection(env)
+    service = WeeklyReportService(grant=grant)
+    context = service.execute("get_weekly_report_context", {"period_offset": -1})
+    prepared, _ = proposal(service, context=context)
+    db.ResearchApprovalRoute.objects.create(
+        workspace=env["workspace"],
+        resource_type="PERIODIC_REPORT",
+        resource_id=uuid4(),
+        submitted_by=env["student"],
+        reviewer=env["advisor"],
+        reviewer_role="PRIMARY_ADVISOR",
+        request_id=f"concurrent-route-{uuid4()}",
+    )
+
+    with pytest.raises(WeeklyReportError) as error:
+        service.execute("execute_weekly_report_operation", {"operation_id": prepared["operation_id"]})
+
+    assert error.value.code == "report_revision_conflict"
+    operation = db.ReportAgentOperation.objects.get(pk=prepared["operation_id"])
+    assert operation.status == "REJECTED"
+    assert not db.PeriodicReport.objects.filter(
+        workspace=env["workspace"], period_key=context["period"]["key"]
+    ).exists()
 
 
 def test_web_withdraw_then_mcp_resubmit_preserves_original_commit(env):
@@ -708,9 +806,11 @@ def test_web_submit_and_withdraw_does_not_make_old_draft_proposal_valid_again(en
     stale, _ = proposal(service, action="save_draft", body="提交撤回前的旧提案。")
     report_url = f"{env['url']}{draft['report_id']}/"
     assert (
-        env["student_client"]
-        .post(f"{report_url}submit/", {"reviewer_id": str(env["advisor"].pk)}, format="json")
-        .status_code
+        env["student_client"].post(
+            f"{report_url}submit/",
+            {"reviewer_id": str(env["advisor"].pk), "cc_user_ids": []},
+            format="json",
+        ).status_code
         == 200
     )
     assert env["student_client"].post(f"{report_url}withdraw/", {}, format="json").status_code == 200
@@ -721,20 +821,3 @@ def test_web_submit_and_withdraw_does_not_make_old_draft_proposal_valid_again(en
     assert report.status == "DRAFT"
     assert "旧提案" not in report.page.description_stripped
     assert report.official_snapshots.count() == 1
-
-
-def test_weekly_mcp_persists_explicit_approval_selection_without_automatic_reviewer(env):
-    grant, _ = connection(env)
-    service = WeeklyReportService(grant=grant)
-    context = service.execute("get_weekly_report_context", {"period_offset": -1})
-    prepared, args = proposal(service, context=context)
-    assert prepared["proposal"]["approval_route"]["reviewer_id"] == str(env["advisor"].pk)
-    missing = {**args, "request_id": str(uuid4())}
-    missing.pop("reviewer_id")
-    with pytest.raises(WeeklyReportError) as failure:
-        service.execute("prepare_weekly_report_operation", missing)
-    assert failure.value.code == "approval_reviewer_required"
-    result = service.execute("execute_weekly_report_operation", {"operation_id": prepared["operation_id"]})
-    assert result["status"] == "COMMITTED"
-    route = db.ResearchApprovalRoute.objects.get(resource_id=result["report_id"], status="ACTIVE")
-    assert str(route.reviewer_id) == args["reviewer_id"]

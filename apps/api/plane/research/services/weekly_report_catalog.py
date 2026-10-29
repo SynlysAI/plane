@@ -8,6 +8,51 @@ from uuid import UUID
 from plane.research.services.weekly_report_errors import WeeklyReportError
 
 VERSION = "plane.weekly-report.v1"
+WEEKLY_OPERATION_PROPERTIES = {
+    "request_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+    },
+    "action": {"enum": ["save_draft", "submit"]},
+    "period_key": {"type": "string", "minLength": 1, "maxLength": 8, "pattern": "^\\d{4}-W\\d{2}$"},
+    "expected_revision": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "body_markdown": {"type": "string", "minLength": 1, "maxLength": 50000},
+    "source_refs": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "enum": [
+                        "analysis",
+                        "snapshot",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference",
+                    ]
+                },
+                "id": {"type": "string", "minLength": 1, "maxLength": 36, "format": "uuid"},
+                "node_id": {"type": "string", "minLength": 1, "maxLength": 36, "format": "uuid"},
+                "version": {"type": "integer", "minimum": 1},
+                "content_hash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[0-9a-f]{64}$",
+                },
+                "note": {"type": "string", "minLength": 1, "maxLength": 500},
+            },
+            "required": ["kind", "id", "node_id", "version", "content_hash"],
+            "additionalProperties": False,
+        },
+    },
+}
 SCHEMAS = {
     "get_weekly_report_context": {
         "readOnlyHint": True,
@@ -42,60 +87,36 @@ SCHEMAS = {
     "prepare_weekly_report_operation": {
         "readOnlyHint": False,
         "inputSchema": {
-            "type": "object",
-            "properties": {
-                "request_id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 128,
-                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {**WEEKLY_OPERATION_PROPERTIES, "action": {"enum": ["save_draft"]}},
+                    "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
+                    "additionalProperties": False,
                 },
-                "action": {"enum": ["save_draft", "submit"]},
-                "period_key": {"type": "string", "minLength": 1, "maxLength": 8, "pattern": "^\\d{4}-W\\d{2}$"},
-                "expected_revision": {"type": "string", "minLength": 1, "maxLength": 2048},
-                "body_markdown": {"type": "string", "minLength": 1, "maxLength": 50000},
-                "reviewer_id": {"type": "string", "format": "uuid", "maxLength": 36},
-                "cc_user_ids": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {"type": "string", "format": "uuid", "maxLength": 36},
-                },
-                "source_refs": {
-                    "type": "array",
-                    "maxItems": 8,
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "kind": {
-                                "enum": [
-                                    "analysis",
-                                    "snapshot",
-                                    "paper_review",
-                                    "report",
-                                    "experiment",
-                                    "stage_material",
-                                    "topic_material",
-                                    "external_reference",
-                                ]
-                            },
-                            "id": {"type": "string", "minLength": 1, "maxLength": 36, "format": "uuid"},
-                            "node_id": {"type": "string", "minLength": 1, "maxLength": 36, "format": "uuid"},
-                            "version": {"type": "integer", "minimum": 1},
-                            "content_hash": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 64,
-                                "pattern": "^[0-9a-f]{64}$",
-                            },
-                            "note": {"type": "string", "minLength": 1, "maxLength": 500},
+                {
+                    "type": "object",
+                    "properties": {
+                        **WEEKLY_OPERATION_PROPERTIES,
+                        "action": {"enum": ["submit"]},
+                        "reviewer_id": {"type": "string", "minLength": 1, "maxLength": 36, "format": "uuid"},
+                        "cc_user_ids": {
+                            "type": "array",
+                            "maxItems": 100,
+                            "items": {"type": "string", "minLength": 1, "maxLength": 36, "format": "uuid"},
                         },
-                        "required": ["kind", "id", "node_id", "version", "content_hash"],
-                        "additionalProperties": False,
                     },
+                    "required": [
+                        "request_id",
+                        "action",
+                        "period_key",
+                        "expected_revision",
+                        "body_markdown",
+                        "reviewer_id",
+                    ],
+                    "additionalProperties": False,
                 },
-            },
-            "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
-            "additionalProperties": False,
+            ]
         },
     },
     "execute_weekly_report_operation": {
@@ -155,7 +176,9 @@ def tools_for(actions):
     for name, definition in SCHEMAS.items():
         schema = deepcopy(definition["inputSchema"])
         if name == "prepare_weekly_report_operation":
-            schema["properties"]["action"]["enum"] = sorted(actions)
+            schema["oneOf"] = [
+                branch for branch in schema["oneOf"] if branch["properties"]["action"]["enum"][0] in actions
+            ]
         tools.append(
             {
                 "name": name,
@@ -221,6 +244,9 @@ def validate(name, arguments):
         for ref in refs:
             ref["id"], ref["node_id"] = str(UUID(ref["id"])), str(UUID(ref["node_id"]))
         refs.sort(key=lambda r: (r["node_id"], r["kind"], r["id"], r["version"]))
+        if "reviewer_id" in args:
+            args["reviewer_id"] = str(UUID(args["reviewer_id"]))
+            args["cc_user_ids"] = [str(UUID(item)) for item in args.get("cc_user_ids", [])]
         if len({(r["node_id"], r["kind"], r["id"], r["version"]) for r in refs}) != len(refs):
             raise WeeklyReportError("invalid_arguments", "Duplicate source references.")
     if "operation_id" in args:

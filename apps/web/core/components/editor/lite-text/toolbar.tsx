@@ -178,10 +178,10 @@ export function IssueCommentToolbar(props: Props) {
         </div>
         <div className="flex shrink-0 items-stretch gap-2">
           {onAttachFiles && (
-            <Tooltip label="附加文件">
+            <Tooltip label={t("attachment.editor_file.upload")}>
               <button
                 type="button"
-                aria-label="附加文件"
+                aria-label={t("attachment.editor_file.upload")}
                 disabled={isSubmitting}
                 onClick={onAttachFiles}
                 className="grid aspect-square place-items-center rounded-xs p-0.5 text-placeholder hover:bg-layer-1"

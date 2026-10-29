@@ -18,6 +18,7 @@ import { copyUrlToClipboard, cn } from "@plane/utils";
 // helpers
 import { useViewMenuItems } from "@/components/common/quick-actions-helper";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useViewPublish } from "@/components/views/publish";
 // local imports
@@ -40,9 +41,12 @@ export const ViewQuickActions = observer(function ViewQuickActions(props: Props)
   // store hooks
   const { data } = useUser();
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId);
   // auth
-  const isOwner = view?.owned_by === data?.id;
-  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
+  const isOwner = !isAdministrativeSettingsLocked && view?.owned_by === data?.id;
+  const isAdmin =
+    !isAdministrativeSettingsLocked &&
+    allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId);
 
   const { publishContextMenu } = useViewPublish(!!view.anchor, isAdmin || isOwner);
 

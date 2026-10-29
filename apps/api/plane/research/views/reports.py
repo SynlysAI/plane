@@ -52,6 +52,7 @@ from plane.research.utils.audit import (
     record_audit_event,
 )
 from plane.research.utils.capabilities import NAV_REPORTS
+from plane.research.utils.roles import is_research_admin
 from plane.research.utils.errors import (
     ResearchErrorCode,
     research_conflict,

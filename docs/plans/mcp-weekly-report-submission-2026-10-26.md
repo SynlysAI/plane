@@ -70,7 +70,9 @@ Agent
   "period_key": "2026-W43",
   "expected_revision": "<context 返回的版本令牌>",
   "body_markdown": "## 本周完成\n完成事项及结果。\n\n## 问题与风险\n待解决的问题。\n\n## 下周计划\n计划及预期产出。",
-  "source_refs": []
+  "source_refs": [],
+  "reviewer_id": "<从 context.approval.candidates 选择的 UUID>",
+  "cc_user_ids": []
 }
 ```
 

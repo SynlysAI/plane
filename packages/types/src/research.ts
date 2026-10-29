@@ -181,6 +181,12 @@ export type TResearchChain = {
   updated_at: string;
 };
 
+export type TResearchChainUploadLimits = {
+  pdf_max_mb: number;
+  markdown_max_mb: number;
+  office_max_mb: number;
+};
+
 export type TResearchChainSummaryNode = {
   id: string;
   title: string;
@@ -1145,6 +1151,7 @@ export type TResearchIdentity = {
     slug: string;
     purpose: "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
     research_enabled?: boolean;
+    administrative_settings_admin_only?: boolean;
     /** Timezone used to resolve report weeks, months, and submission boundaries. */
     report_timezone?: string;
   };

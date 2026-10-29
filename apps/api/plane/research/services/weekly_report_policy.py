@@ -43,8 +43,15 @@ POLICY_MODELS = (
     db.ResearchUserProfile,
     db.StageReviewerAssignment,
     db.ResearchWorkspaceAccessGrant,
+    db.ResearchApprovalRoute,
 )
-REPORT_MODELS = (db.PeriodicReport, db.Page, db.ReportAttachment, db.FileAsset, db.PeriodicReportSnapshot)
+REPORT_MODELS = (
+    db.PeriodicReport,
+    db.Page,
+    db.ReportAttachment,
+    db.FileAsset,
+    db.PeriodicReportSnapshot,
+)
 
 
 def consistency_barrier(*, sources=False):

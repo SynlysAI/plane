@@ -149,6 +149,24 @@ it("shows saved tags immediately when the cached member is re-rendered", async (
   expect(container.textContent).toContain("保存后标签");
 });
 
+it("truncates long workspace member names and emails while retaining their full values", async () => {
+  const member = createMember([]);
+  member.member.display_name = "科研测试用户".repeat(12);
+  member.member.email = `${"long-member-name-".repeat(8)}@example.org`;
+
+  await act(async () => root.render(<WorkspaceMembersListItem memberDetails={[member]} />));
+
+  const displayName = container.querySelector<HTMLElement>(`[title="${member.member.display_name}"]`);
+  const email = container.querySelector<HTMLElement>(`[title="${member.member.email}"]`);
+  const table = container.querySelector("table");
+
+  expect(displayName?.className).toContain("truncate");
+  expect(email?.className).toContain("truncate");
+  expect(table?.className).toContain("min-w-[80rem]");
+  expect(displayName?.textContent).toBe(member.member.display_name);
+  expect(email?.textContent).toBe(member.member.email);
+});
+
 it("opens the account configuration panel from the member bulk action bar", async () => {
   await act(async () => root.render(<WorkspaceMembersListItem memberDetails={[createMember([])]} />));
 

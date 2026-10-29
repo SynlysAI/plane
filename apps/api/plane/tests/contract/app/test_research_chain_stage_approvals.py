@@ -229,6 +229,11 @@ def test_material_submit_and_review_flow(env):
     assert material.json()["data"]["title"] == "stage-material.pdf"
     assert material.json()["data"]["upload_detail"]["file_name"] == "stage-material.pdf"
 
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    pre_experiment = next(item for item in summary["stages"] if item["stage_code"] == "PRE_EXPERIMENT")
+    assert pre_experiment["materials"][0]["submitted_count"] == 1
+    assert pre_experiment["materials"][0]["complete"] is True
+
     submitted = env["owner_client"].post(
         url(env, "PRE_EXPERIMENT/submit/"),
         {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
@@ -260,6 +265,39 @@ def test_material_submit_and_review_flow(env):
     assert snapshot["items"][0]["upload"]["download_url"].endswith("/download/")
 
 
+def test_five_original_study_uploads_complete_literature_review_requirement(env):
+    """Five distinct uploads satisfy the original-studies requirement."""
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="LITERATURE_REVIEW",
+        title="API literature review",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+
+    for index in range(1, 6):
+        upload = make_upload(env, node, name=f"original-study-{index}.pdf")
+        response = env["owner_client"].post(
+            url(env, "LITERATURE_REVIEW/materials/"),
+            {
+                "request_id": f"material-{uuid4().hex}",
+                "requirement_code": "DIRECT_ORIGINAL_STUDIES",
+                "upload_id": str(upload.id),
+            },
+            format="json",
+        )
+        assert response.status_code == 201, response.json()
+
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    literature_review = next(item for item in summary["stages"] if item["stage_code"] == "LITERATURE_REVIEW")
+    original_studies = next(
+        material for material in literature_review["materials"] if material["code"] == "DIRECT_ORIGINAL_STUDIES"
+    )
+    assert original_studies["submitted_count"] == 5
+    assert original_studies["complete"] is True
+
+
 def test_stage_material_rejects_failed_upload_and_duplicate_requirement_link(env):
     node = ResearchChainNode.objects.create(
         chain=env["chain"],
@@ -282,6 +320,18 @@ def test_stage_material_rejects_failed_upload_and_duplicate_requirement_link(env
     assert failed_response.status_code == 422
 
     upload = make_upload(env, node, name="plan.pdf")
+    invalid_requirement = env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/materials/"),
+        {
+            "request_id": f"material-{uuid4().hex}",
+            "requirement_code": "UNKNOWN_REQUIREMENT",
+            "upload_id": str(upload.id),
+        },
+        format="json",
+    )
+    assert invalid_requirement.status_code == 422
+    assert invalid_requirement.json()["error_code"] == "research_chain_invalid"
+
     payload = {
         "requirement_code": "PRE_EXPERIMENT_PLAN",
         "upload_id": str(upload.id),
@@ -299,6 +349,10 @@ def test_stage_material_rejects_failed_upload_and_duplicate_requirement_link(env
     assert first.status_code == 201, first.json()
     assert duplicate.status_code == 409
     assert "already linked" in duplicate.json()["message"]
+
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    pre_experiment = next(item for item in summary["stages"] if item["stage_code"] == "PRE_EXPERIMENT")
+    assert pre_experiment["materials"][0]["submitted_count"] == 1
 
 
 def test_stage_material_cannot_link_an_upload_from_another_chain(env):

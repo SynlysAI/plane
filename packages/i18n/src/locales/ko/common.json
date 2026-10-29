@@ -838,7 +838,10 @@
       "invalid": "JPEG, JPG, PNG, WebP, GIF 이미지만 지원됩니다.",
       "upload": "이미지 업로드"
     },
-    "delete": "첨부 파일 삭제"
+    "delete": "첨부 파일 삭제",
+    "editor_file": {
+      "upload": "첨부 파일 추가"
+    }
   },
   "label": {
     "select": "레이블 선택",

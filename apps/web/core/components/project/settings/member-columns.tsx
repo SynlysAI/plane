@@ -41,6 +41,7 @@ type AccountTypeProps = {
   currentProjectRole: EUserPermissions | undefined;
   workspaceSlug: string;
   projectId: string;
+  isAdministrativeProject: boolean;
 };
 
 export function NameColumn(props: NameProps) {
@@ -48,15 +49,16 @@ export function NameColumn(props: NameProps) {
   const { t } = useTranslation();
   // derived values
   const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
+  const fullName = [first_name, last_name].filter(Boolean).join(" ");
 
   return (
     <Disclosure>
       {() => (
         <div className="group relative">
-          <div className="flex w-72 items-center gap-2">
-            <div className="flex flex-1 items-center gap-x-2 gap-y-2">
+          <div className="flex w-72 min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-x-2">
               {avatar_url && avatar_url.trim() !== "" ? (
-                <Link href={`/${workspaceSlug}/profile/${id}`}>
+                <Link href={`/${workspaceSlug}/profile/${id}`} className="shrink-0">
                   <span className="relative flex size-6 items-center justify-center rounded-full text-on-color capitalize">
                     <img
                       src={getFileURL(avatar_url)}
@@ -66,18 +68,20 @@ export function NameColumn(props: NameProps) {
                   </span>
                 </Link>
               ) : (
-                <Link href={`/${workspaceSlug}/profile/${id}`}>
+                <Link href={`/${workspaceSlug}/profile/${id}`} className="shrink-0">
                   <span className="relative flex size-6 items-center justify-center rounded-full bg-layer-3 text-11 text-on-color capitalize">
                     {(email ?? display_name ?? "?")[0]}
                   </span>
                 </Link>
               )}
-              {first_name} {last_name}
+              <span className="min-w-0 truncate" title={fullName}>
+                {fullName}
+              </span>
             </div>
             {rowData.original_role != null && (isAdmin || id === currentUser?.id) && (
               <CustomMenu
                 ellipsis
-                buttonClassName="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                buttonClassName="shrink-0 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
                 optionsClassName="p-1.5"
                 placement="bottom-end"
               >
@@ -102,7 +106,7 @@ export function NameColumn(props: NameProps) {
 }
 
 export const AccountTypeColumn = observer(function AccountTypeColumn(props: AccountTypeProps) {
-  const { rowData, projectId, workspaceSlug } = props;
+  const { rowData, projectId, workspaceSlug, isAdministrativeProject } = props;
   const { t } = useTranslation();
   // store hooks
   const {
@@ -137,7 +141,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
   // Workspace admin can change his own role
   // Project admin can change any role except his own and workspace admin's role
   const isRoleEditable =
-    rowData.original_role != null &&
+    (rowData.original_role != null || (isAdministrativeProject && rowData.inherits_organization)) &&
     ((isCurrentUserWorkspaceAdmin && isCurrentUser) ||
       (isCurrentUserProjectAdmin && !isRowDataWorkspaceAdmin && !isCurrentUser));
   const checkCurrentOptionWorkspaceRole = (value: string) => {
@@ -146,14 +150,23 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
 
     const isGuest = [EUserPermissions.GUEST].includes(currentMemberWorkspaceRole);
 
-    return Object.fromEntries(
+    const options = Object.fromEntries(
       Object.entries(ROLE).filter(
         ([key]) =>
           (!isGuest || parseInt(key) === EUserPermissions.GUEST) &&
           (!rowData.inherits_organization || parseInt(key) >= EUserPermissions.MEMBER)
       )
     );
+    if (!isAdministrativeProject) return options;
+    const administrativeOptions = Object.fromEntries(
+      Object.entries(ROLE).filter(([key]) => [EUserPermissions.MEMBER, EUserPermissions.ADMIN].includes(parseInt(key)))
+    );
+    if (currentMemberWorkspaceRole === EUserPermissions.GUEST) {
+      return { [EUserPermissions.MEMBER]: administrativeOptions[EUserPermissions.MEMBER] };
+    }
+    return administrativeOptions;
   };
+  const currentRole = rowData.original_role ?? rowData.role ?? EUserPermissions.GUEST;
 
   return (
     <>
@@ -164,7 +177,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
           rules={{ required: t("project_settings.members.role_required") }}
           render={() => (
             <CustomSelect
-              value={rowData.original_role}
+              value={currentRole}
               onChange={async (value: EUserProjectRoles) => {
                 if (!workspaceSlug) return;
                 await updateMemberRole(workspaceSlug.toString(), projectId.toString(), rowData.member.id, value).catch(

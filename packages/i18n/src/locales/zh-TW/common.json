@@ -838,7 +838,10 @@
       "invalid": "僅支援 JPEG、JPG、PNG、WebP 或 GIF 圖片。",
       "upload": "上傳圖片"
     },
-    "delete": "刪除附件"
+    "delete": "刪除附件",
+    "editor_file": {
+      "upload": "新增附件"
+    }
   },
   "label": {
     "select": "選擇標籤",

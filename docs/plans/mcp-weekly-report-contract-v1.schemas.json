@@ -55,86 +55,188 @@
     "prepare_weekly_report_operation": {
       "readOnlyHint": false,
       "inputSchema": {
-        "type": "object",
-        "properties": {
-          "request_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "action": {
+                "enum": ["save_draft"]
+              },
+              "period_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8,
+                "pattern": "^\\d{4}-W\\d{2}$"
+              },
+              "expected_revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "body_markdown": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              "source_refs": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "analysis",
+                        "snapshot",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36,
+                      "format": "uuid"
+                    },
+                    "node_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36,
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "content_hash": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "note": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": ["kind", "id", "node_id", "version", "content_hash"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
+            "additionalProperties": false
           },
-          "action": {
-            "enum": ["save_draft", "submit"]
-          },
-          "period_key": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 8,
-            "pattern": "^\\d{4}-W\\d{2}$"
-          },
-          "expected_revision": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2048
-          },
-          "body_markdown": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 50000
-          },
-          "source_refs": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": [
-                    "analysis",
-                    "snapshot",
-                    "paper_review",
-                    "report",
-                    "experiment",
-                    "stage_material",
-                    "topic_material",
-                    "external_reference"
-                  ]
-                },
-                "id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 36,
-                  "format": "uuid"
-                },
-                "node_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 36,
-                  "format": "uuid"
-                },
-                "version": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "content_hash": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64,
-                  "pattern": "^[0-9a-f]{64}$"
-                },
-                "note": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 500
+          {
+            "type": "object",
+            "properties": {
+              "request_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "action": {
+                "enum": ["submit"]
+              },
+              "period_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8,
+                "pattern": "^\\d{4}-W\\d{2}$"
+              },
+              "expected_revision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "body_markdown": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000
+              },
+              "source_refs": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "analysis",
+                        "snapshot",
+                        "paper_review",
+                        "report",
+                        "experiment",
+                        "stage_material",
+                        "topic_material",
+                        "external_reference"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36,
+                      "format": "uuid"
+                    },
+                    "node_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36,
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "content_hash": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "note": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": ["kind", "id", "node_id", "version", "content_hash"],
+                  "additionalProperties": false
                 }
               },
-              "required": ["kind", "id", "node_id", "version", "content_hash"],
-              "additionalProperties": false
-            }
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36,
+                "format": "uuid"
+              },
+              "cc_user_ids": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36,
+                  "format": "uuid"
+                }
+              }
+            },
+            "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown", "reviewer_id"],
+            "additionalProperties": false
           }
-        },
-        "required": ["request_id", "action", "period_key", "expected_revision", "body_markdown"],
-        "additionalProperties": false
+        ]
       }
     },
     "execute_weekly_report_operation": {

@@ -14,9 +14,9 @@ import { useTranslation } from "@plane/i18n";
 import type { MakeOptional, TSearchEntityRequestPayload, TSearchResponse } from "@plane/types";
 import { cn, isCommentEmpty } from "@plane/utils";
 // components
-import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { EditorMentionsRoot } from "@/components/editor/embeds/mentions";
 import { IssueCommentToolbar } from "@/components/editor/lite-text/toolbar";
+import { useEditorAttachmentDrop } from "@/components/editor/use-editor-attachment-drop";
 // hooks
 import { useEditorConfig, useEditorMention } from "@/hooks/editor";
 import { useMember } from "@/hooks/store/use-member";
@@ -27,6 +27,13 @@ import { useEditorFlagging } from "@/hooks/use-editor-flagging";
 import { WorkspaceService } from "@/services/workspace.service";
 import { LiteToolbar } from "./lite-toolbar";
 const workspaceService = new WorkspaceService();
+const IMAGE_FILE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+/** Identify editor images by MIME type or common extension. */
+function isInlineImageFile(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return file.type.startsWith("image/") || IMAGE_FILE_EXTENSIONS.has(extension);
+}
 
 function isMutableRefObject<T>(forwardedRef: React.ForwardedRef<T>): forwardedRef is React.MutableRefObject<T | null> {
   return !!forwardedRef && typeof forwardedRef === "object" && "current" in forwardedRef;
@@ -52,7 +59,7 @@ type LiteTextEditorWrapperProps = MakeOptional<
   editorClassName?: string;
   submitButtonText?: string;
   disabledMenuItems?: TEditorCommands[];
-  onAttachFiles?: (files: File[]) => void;
+  onAttachFiles?: (files: File[]) => void | Promise<void>;
   attachmentContent?: React.ReactNode;
   hasAttachments?: boolean;
   isSubmitDisabled?: boolean;
@@ -139,16 +146,34 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   const { getEditorFileHandlers } = useEditorConfig();
   // derived values
   const isEmpty = isCommentEmpty(props.initialValue) && !hasAttachments;
+  const { isAttachmentDragActive, attachmentDragHandlers } = useEditorAttachmentDrop({ onAttachFiles });
+
+  /** Keep selected images inline and route other files to the comment attachment queue. */
+  const handleFileSelection = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) {
+        if (onAttachFiles) void onAttachFiles(files);
+        return;
+      }
+      const inlineImages = files.filter(isInlineImageFile);
+      const externalAttachments = files.filter((file) => !isInlineImageFile(file));
+      if (inlineImages.length > 0) editorRef?.insertImageFiles(inlineImages);
+      if (externalAttachments.length > 0 && onAttachFiles) void onAttachFiles(externalAttachments);
+    },
+    [editorRef, onAttachFiles]
+  );
 
   return (
     <div
       className={cn(
         "relative rounded-sm border border-subtle",
+        isAttachmentDragActive && "bg-surface-hover border-strong",
         {
           "p-3": editable && !isLiteVariant,
         },
         parentClassName
       )}
+      {...attachmentDragHandlers}
       onFocus={() => isFullVariant && !showToolbarInitially && setIsFocused(true)}
       onBlur={() => isFullVariant && !showToolbarInitially && setIsFocused(false)}
     >
@@ -161,14 +186,17 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
             disabledExtensions={[...liteTextEditorExtensions.disabled, ...additionalDisabledExtensions]}
             editable={editable}
             flaggedExtensions={liteTextEditorExtensions.flagged}
-            fileHandler={getEditorFileHandlers({
-              projectId,
-              uploadFile: editable ? props.uploadFile : async () => "",
-              duplicateFile: editable ? props.duplicateFile : async () => "",
-              workspaceId,
-              workspaceSlug,
-              fileHandlerOverrides,
-            })}
+            fileHandler={{
+              ...getEditorFileHandlers({
+                projectId,
+                uploadFile: editable ? props.uploadFile : async () => "",
+                duplicateFile: editable ? props.duplicateFile : async () => "",
+                workspaceId,
+                workspaceSlug,
+                fileHandlerOverrides,
+              }),
+              ...(editable && onAttachFiles ? { attachFiles: handleFileSelection } : {}),
+            }}
             getEditorMetaData={getEditorMetaData}
             handleEditorReady={(ready) => {
               if (ready) {
@@ -225,21 +253,18 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
           aria-label="选择评论附件"
           disabled={isSubmitting}
           onChange={(event) => {
-            onAttachFiles(Array.from(event.target.files ?? []));
+            const files = Array.from(event.target.files ?? []);
+            if (files.length > 0) handleFileSelection(files);
             event.target.value = "";
           }}
         />
       )}
-      {editable && onAttachFiles && (
-        <AttachmentUploadZone
-          onFiles={onAttachFiles}
-          multiple
-          disabled={isSubmitting}
-          variant="compact"
-          className="mt-2"
-        />
-      )}
       {attachmentContent}
+      {onAttachFiles && (
+        <span role="status" className="sr-only">
+          {isAttachmentDragActive ? t("attachment.upload_zone.active") : ""}
+        </span>
+      )}
 
       {/* Full Toolbar - conditionally rendered */}
       {isFullVariant && editable && (

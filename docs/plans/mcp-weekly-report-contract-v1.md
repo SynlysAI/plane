@@ -24,13 +24,13 @@
 UUID 使用标准 UUID 字符串；时间使用 RFC3339 UTC；日期为 YYYY-MM-DD；周期为规范 YYYY-Www，并再校验实际 ISO 周是否存在。
 所有字符串拒绝空白值、NUL 和无效 Unicode；正文先规范 CRLF→LF 和 Unicode NFC，再验证字符/体积边界，不静默裁剪。
 
-| 工具                            | 请求与副作用                                                                                                                                                                 | readOnlyHint |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| get_weekly_report_context       | 初次传 period_offset=-1/0 或 period_key，二者互斥且必须择一；分页传 period_key+cursor。只读。                                                                                | true         |
-| prepare_weekly_report_operation | request_id(1–128 ASCII)、action、固定 period_key、expected_revision(1–2048)、body_markdown(1–50,000)、可选 source_refs(≤8)。只持久提案及审计，不创建 Report/Page/快照/通知。 | false        |
-| execute_weekly_report_operation | 仅 operation_id；执行原提案，禁止正文/周期替换。submit 会改变正式状态、追加快照、写审阅日志/审计/站内通知，并进入现有审阅流程。                                              | false        |
-| get_weekly_report_operation     | 仅 operation_id；恢复原提案和持久结果，不重做业务写入。                                                                                                                      | true         |
-| cancel_weekly_report_operation  | 仅 operation_id；取消未执行提案，不撤销已提交业务数据。                                                                                                                      | false        |
+| 工具                            | 请求与副作用                                                                                                                                                                                                        | readOnlyHint |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| get_weekly_report_context       | 初次传 period_offset=-1/0 或 period_key，二者互斥且必须择一；分页传 period_key+cursor。只读。                                                                                                                       | true         |
+| prepare_weekly_report_operation | `save_draft` 只接受正文/周期/revision/source_refs；`submit` 还必须提供 UUID `reviewer_id`，可选 UUID 数组 `cc_user_ids`。审批选择进入请求哈希和不可变提案；prepare 只持久提案及审计，不创建 Report/Page/快照/通知。 | false        |
+| execute_weekly_report_operation | 仅 operation_id；执行原提案，禁止正文/周期替换。submit 会改变正式状态、追加快照、写审阅日志/审计/站内通知，并进入现有审阅流程。                                                                                     | false        |
+| get_weekly_report_operation     | 仅 operation_id；恢复原提案和持久结果，不重做业务写入。                                                                                                                                                             | true         |
+| cancel_weekly_report_operation  | 仅 operation_id；取消未执行提案，不撤销已提交业务数据。                                                                                                                                                             | false        |
 
 第 2 阶段机器命名空间固定为 `/api/research/workspaces/<slug>/weekly-report-agent/`，提供 `tools/`、`tools/<name>/`、`mcp/`。
 URL slug 必须与凭据工作区一致。登录态管理 API 使用独立 `/mcp/weekly-report/` 子命名空间，session + CSRF；机器凭据不能签发新凭据。
@@ -45,18 +45,19 @@ HTTP JSON RPC 与 STDIO 必须返回同一目录/schema/错误码和只读标记
 
 ### 3.1 公共结构
 
-| 结构            | 字段与限制                                                                                                                                                                                                                                           |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| identity        | workspace_id:UUID, user_id:UUID, display_name:string≤255                                                                                                                                                                                             |
-| period          | report_type:"WEEKLY", key:string(8), start:date, end:date, timezone:string≤255                                                                                                                                                                       |
-| policy          | version:"current_and_previous_week.v1", allowed_period_keys:string[≤2], allowed_actions:(save_draft\|submit)[≤2], effective_visibility:现有 ReportVisibility 枚举, audience_summary:string≤2,000, policy_hash:sha256                                 |
-| template        | id:UUID?, version:sha256, is_fallback:boolean；version 覆盖解析变量前模板和解析变量/回退模板                                                                                                                                                         |
-| report          | id:UUID, status:DRAFT\|NEEDS_REVISION\|SUBMITTED\|ACCEPTED, official_version:integer≥0, url:string≤2,048                                                                                                                                             |
-| normalized_body | body_markdown:string≤50,000, description_json:编辑器 doc JSON, description_html:string, description_stripped:string, body_hash:sha256；JSON+HTML+纯文本合计≤512 KiB UTF-8，JSON≤2,000节点、深度≤16                                                   |
-| source_result   | kind, id, node_id, version, content_hash:沿用输入；verification:"visible_version_checked", read_evidence:"declared_only", note:string≤500?                                                                                                           |
-| effects         | creates_report:boolean, saves_draft:boolean, changes_status_to:DRAFT\|NEEDS_REVISION\|SUBMITTED, appends_official_snapshot:boolean, appends_review_log:boolean, writes_audit:boolean, creates_in_app_notifications:boolean, external_delivery:"none" |
-| diff            | previous_body_hash:sha256?, proposed_body_hash:sha256, added_lines:integer≥0, removed_lines:integer≥0, summary:string≤2,000；摘要不是完整正文的替代品                                                                                                |
-| commit_result   | report_id:UUID, period:period, status:DRAFT\|NEEDS_REVISION\|SUBMITTED, snapshot_version:integer≥1?, body_hash:sha256, report_url:string≤2,048, audit_id:UUID, committed_at:RFC3339, notification_record_ids:UUID[≤1,000]                            |
+| 结构            | 字段与限制                                                                                                                                                                                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| identity        | workspace_id:UUID, user_id:UUID, display_name:string≤255                                                                                                                                                                                                              |
+| period          | report_type:"WEEKLY", key:string(8), start:date, end:date, timezone:string≤255                                                                                                                                                                                        |
+| policy          | version:"current_and_previous_week.v1", allowed_period_keys:string[≤2], allowed_actions:(save_draft\|submit)[≤2], effective_visibility:现有 ReportVisibility 枚举, audience_summary:string≤2,000, policy_hash:sha256                                                  |
+| template        | id:UUID?, version:sha256, is_fallback:boolean；version 覆盖解析变量前模板和解析变量/回退模板                                                                                                                                                                          |
+| report          | id:UUID, status:DRAFT\|NEEDS_REVISION\|SUBMITTED\|ACCEPTED, official_version:integer≥0, url:string≤2,048                                                                                                                                                              |
+| approval        | schema_version, candidates:候选人数组, default_reviewer_id:UUID?, rules:闭合规则, active_route:route?；候选项包含 id、display_name、email、role、is_default                                                                                                           |
+| normalized_body | body_markdown:string≤50,000, description_json:编辑器 doc JSON, description_html:string, description_stripped:string, body_hash:sha256；JSON+HTML+纯文本合计≤512 KiB UTF-8，JSON≤2,000节点、深度≤16                                                                    |
+| source_result   | kind, id, node_id, version, content_hash:沿用输入；verification:"visible_version_checked", read_evidence:"declared_only", note:string≤500?                                                                                                                            |
+| effects         | creates_report:boolean, saves_draft:boolean, changes_status_to:DRAFT\|NEEDS_REVISION\|SUBMITTED, appends_official_snapshot:boolean, appends_review_log:boolean, writes_audit:boolean, creates_in_app_notifications:boolean, external_delivery:"none"                  |
+| diff            | previous_body_hash:sha256?, proposed_body_hash:sha256, added_lines:integer≥0, removed_lines:integer≥0, summary:string≤2,000；摘要不是完整正文的替代品                                                                                                                 |
+| commit_result   | report_id:UUID, period:period, status:DRAFT\|NEEDS_REVISION\|SUBMITTED, snapshot_version:integer≥1?, body_hash:sha256, report_url:string≤2,048, audit_id:UUID, committed_at:RFC3339, notification_record_ids:UUID[≤1,000], approval_route_id:UUID?, reviewer_id:UUID? |
 
 sha256 均为 64 个小写十六进制字符。report_url 是现有网页可打开的报告链接，不加入 Agent 展示分支。
 body_hash 是规范 JSON 对象 `{description_json,description_html,description_stripped}` 的 SHA256（UTF-8 NFC、排序键、紧凑分隔符）；Markdown 和二进制另由 proposal_hash/revision 覆盖。
@@ -64,7 +65,7 @@ save_draft 的 snapshot_version=null（即使已有 v1），不得拿上一正�
 
 ### 3.2 get_weekly_report_context
 
-响应字段：contract_version、identity、period、policy、template、report:report?、revision:string(1–2048)、content_page。
+响应字段：contract_version、identity、period、policy、template、report:report?、approval、revision:string(1–2048)、content_page。
 不存在报告时 report=null，revision 仍必须绑定“该周期尚不存在”的前置条件。
 已 SUBMITTED/ACCEPTED 时 allowed_actions=[]，返回现有正式版本，只能提示冲突，不能自动退回。
 
@@ -80,11 +81,11 @@ complete 当且仅当 next_cursor=null 且 offset+len(text)==total_chars。
 这四个工具统一返回 operation：contract_version、operation_id:UUID、request_id:string≤128、status、action、identity、period、report_id:UUID?、expected_revision、proposal_hash:sha256、expires_at:RFC3339、proposal、result:commit_result?、readback、failure。
 
 - status = PROPOSED | COMMITTED | CANCELLED | EXPIRED | REJECTED；不持久暴露中间执行状态。锁事务中的执行进度不可被误报为业务失败。
-- proposal 是闭合对象：normalized_body、template、policy、source_refs:source_result[≤8]、diff、effects、agent_label:string≤100。
+- proposal 是闭合对象：normalized_body、template、policy、source_refs:source_result[≤8]、diff、effects、approval:{reviewer_id:UUID,reviewer_role,cc_user_ids:UUID[≤100]}|null、agent_label:string≤100。submit 的 reviewer_id 必须来自当前 approval.candidates；save_draft 的审批字段被 schema 拒绝。
 - readback = not_applicable | verified | pending。只有 COMMITTED 使用 verified/pending，其余为 not_applicable。
 - failure 为 null 或 `{error_code:string≤80,message:string≤1,000}`；只在 EXPIRED/REJECTED 非空。
 - result 仅 COMMITTED 非空，并与事务中持久的原 result 完全一致；prepare 不创建报告，未存在时 report_id=null。
-- prepare 同 workspace/user/request_id、相同规范输入返回原 operation（含已 COMMITTED 的结果）；不同输入返回 idempotency_conflict。request_hash 包含动作、固定周期、原 expected_revision、规范 Markdown 和排序去重的引用，不包括瞬时当前状态；不能先重做业务验证而破坏丢响应恢复。
+- prepare 同 workspace/user/request_id、相同规范输入返回原 operation（含已 COMMITTED 的结果）；不同输入返回 idempotency_conflict。request_hash 包含动作、固定周期、原 expected_revision、规范 Markdown、审批人、抄送人和排序去重的引用，不包括瞬时当前状态；不能先重做业务验证而破坏丢响应恢复。
 - 重复 prepare 仍要求当前有效凭据，并且只能回读原 grant 的操作；换 grant 不能接管旧提案或复用 request_id 改正文。跨用户/工作区/grant 的 operation_id 返回 not_found。
 - execute 仅在 PROPOSED 下执行；COMMITTED 返回原结果；CANCELLED/EXPIRED/REJECTED 返回对应终态及 failure（取消的 failure=null），无业务写入。取消 PROPOSED→CANCELLED；重复取消幂等；取消 COMMITTED 返回原 COMMITTED，明确未撤销。
 - 查询会把已超时 PROPOSED 持久转为 EXPIRED；execute 的预置条件/权限/策略失败可持久转为 REJECTED（业务回滚后另一个事务锁 operation 写终态），不得带半成品 result。临时数据库/网络故障不标 REJECTED，按同 operation_id 恢复。
@@ -118,7 +119,7 @@ revision 为签名的不透明版本令牌，不能只取 report.updated_at。�
 这是比单个报告行锁更保守的实现，会阻塞相关表的其他写入（包括其他工作区），带来源时覆盖研究域更多表；负载验证和更细的锁协议仍须后续评估，不能宣称只影响当前报告。
 所有可影响 revision 的写入路径必须参与相同锁协议或有等效防竞态措施，包括通用 Page 保存、图片/附件变化及组织/策略变化；仅锁 Report 而任由关联数据写入并不满足并发安全。
 阶段 2 已用上述屏障覆盖现有后端写路径；未来缩小屏障时必须保留同等防竞态措施，不修改报告前端。
-同一事务中执行：重验授权与 proposal_hash/原前置版本→保存正文→既有 submit 状态机与不可变快照→附件正式版本→审阅日志→来源审计→持久通知→COMMITTED/result。
+同一事务中执行：重验授权与 proposal_hash/原前置版本及审批候选人→保存正文→既有 submit 状态机与不可变快照→创建 ResearchApprovalRoute→附件正式版本→审阅日志→来源审计→向选定 reviewer/CC 写持久通知→COMMITTED/result。审批路由表进入一致性屏障和 revision 前置摘要。
 共享服务异常必须穿过最外层业务事务，不能捕获后正常退出原子块导致部分正文提交。
 
 proposal_hash 覆盖契约版本、workspace/user/grant、request_id、action、固定 period、expected_revision、完整 normalized_body、来源、模板、策略、effects、expires_at；使用 UTF-8 NFC、JSON 排序键/紧凑分隔符的 SHA256，不哈希裁剪展示。

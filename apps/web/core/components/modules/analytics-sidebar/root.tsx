@@ -24,7 +24,7 @@ import { MODULE_STATUS, EUserPermissions, EUserPermissionsLevel, EEstimateSystem
 import { useTranslation } from "@plane/i18n";
 import { ModuleStatusIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { ILinkDetails, IModule, ModuleLink } from "@plane/types";
+import type { ILinkDetails, IModule, ModuleLink, TModuleStatus } from "@plane/types";
 // plane ui
 import { Loader, CustomSelect } from "@plane/ui";
 import { TextArea } from "@makeplane/propel/components/text-area";
@@ -35,6 +35,7 @@ import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CreateUpdateModuleLinkModal, ModuleAnalyticsProgress, ModuleLinksList } from "@/components/modules";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -65,6 +66,7 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
   // store hooks
   const { t } = useTranslation();
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId?.toString());
 
   const { getModuleById, updateModuleDetails, createModuleLink, updateModuleLink, deleteModuleLink } = useModule();
   const { areEstimateEnabledByProjectId, currentActiveEstimateId, estimateById } = useProjectEstimates();
@@ -73,7 +75,7 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
   const moduleDetails = getModuleById(moduleId);
   const areEstimateEnabled = projectId && areEstimateEnabledByProjectId(projectId.toString());
   const estimateType = areEstimateEnabled && currentActiveEstimateId && estimateById(currentActiveEstimateId);
-  const isEstimatePointValid = estimateType && estimateType?.type == EEstimateSystem.POINTS ? true : false;
+  const isEstimatePointValid = Boolean(estimateType && estimateType?.type === EEstimateSystem.POINTS);
 
   const { reset, control } = useForm({
     defaultValues,
@@ -165,10 +167,9 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
       ? "0 work items"
       : `${moduleDetails.completed_estimate_points}/${moduleDetails.total_estimate_points}`;
 
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const isEditingAllowed =
+    !isAdministrativeSettingsLocked &&
+    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
 
   return (
     <div className="relative">
@@ -201,7 +202,7 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
             <Controller
               control={control}
               name="status"
-              render={({ field: { value } }) => (
+              render={({ field: { value: statusValue } }) => (
                 <CustomSelect
                   customButton={
                     <span
@@ -216,9 +217,9 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
                       {(moduleStatus && t(moduleStatus?.i18n_label)) ?? t("project_modules.status.backlog")}
                     </span>
                   }
-                  value={value}
-                  onChange={(value: any) => {
-                    submitChanges({ status: value });
+                  value={statusValue}
+                  onChange={(selectedStatus: TModuleStatus) => {
+                    submitChanges({ status: selectedStatus });
                   }}
                   disabled={!isEditingAllowed || isArchived}
                 >

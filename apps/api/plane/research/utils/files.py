@@ -120,6 +120,32 @@ def detect_kind(file_name, content_type):
     return "OTHER"
 
 
+def research_chain_upload_limits(workspace):
+    """解析研究链上传限制，并套用部署级安全上限。
+
+    Args:
+        workspace: 需要读取科研设置的工作区。
+
+    Returns:
+        PDF、Markdown/TXT 与 DOC/DOCX 的有效 MB 上限。
+    """
+    from django.conf import settings as django_settings
+
+    from plane.research.utils.settings import get_workspace_research_settings
+
+    deployment_limit_mb = max(
+        int(getattr(django_settings, "RESEARCH_CHAIN_UPLOAD_MAX_BYTES", 500 * 1024 * 1024))
+        // (1024 * 1024),
+        1,
+    )
+    configured = get_workspace_research_settings(workspace)
+    return {
+        "pdf_max_mb": min(max(int(configured.get("pdf_max_mb", 0)), 0), deployment_limit_mb),
+        "markdown_max_mb": min(max(int(configured.get("markdown_max_mb", 0)), 0), deployment_limit_mb),
+        "office_max_mb": min(max(int(configured.get("office_max_mb", 0)), 0), deployment_limit_mb),
+    }
+
+
 def validate_attachment(*, file_name, content_type, size_bytes, limits, header_bytes=None):
     """Return an error code for an invalid upload, else ``None``."""
     normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()

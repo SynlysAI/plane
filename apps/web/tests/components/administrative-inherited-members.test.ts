@@ -88,3 +88,24 @@ it("removing a separate grant restores inherited participation instead of droppi
   expect(remove).toHaveBeenCalledWith("lab", "project", "extra-grant");
   expect(store.getProjectMemberDetails("inherited", "project")).toMatchObject({ id: null, role: 15 });
 });
+
+it("updates an inherited member through the user-role endpoint and refreshes the roster", async () => {
+  const update = vi
+    .spyOn(ProjectMemberService.prototype, "updateProjectMemberRoleByUser")
+    .mockResolvedValue({ ...inherited, id: "direct-grant", role: 20, original_role: 20 });
+  vi.spyOn(ProjectMemberService.prototype, "fetchProjectMembers")
+    .mockResolvedValueOnce([inherited])
+    .mockResolvedValueOnce([
+      { ...inherited, id: "direct-grant", role: 20, original_role: 20, membership_source: "DIRECT" },
+    ]);
+  const store = createStore();
+  await store.fetchProjectMembers("lab", "project");
+  await store.updateMemberRole("lab", "project", "inherited", 20);
+  expect(update).toHaveBeenCalledWith("lab", "project", "inherited", 20);
+  expect(store.getProjectMemberDetails("inherited", "project")).toMatchObject({
+    id: "direct-grant",
+    role: 20,
+    original_role: 20,
+    membership_source: "DIRECT",
+  });
+});

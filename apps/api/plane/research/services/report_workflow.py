@@ -477,10 +477,6 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
         snapshot = create_report_snapshot(report, actor)
     except ValueError as error:
         raise ReportWorkflowError("file_type_not_allowed", str(error), 422) from error
-    ReportAttachment.objects.filter(
-        report=report,
-        deleted_at__isnull=True,
-    ).update(official_version_no=snapshot.version_no)
     try:
         route = create_approval_route(
             workspace=workspace,
@@ -492,8 +488,11 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
             request_id=f"report-{report.id}-v{snapshot.version_no}",
         )
     except ApprovalRouteError as error:
-        # Escape the atomic workflow so rejected routing rolls back the snapshot/body too.
-        raise ReportWorkflowError(error.error_code, error.message, 422) from error
+        raise ReportWorkflowError(error.error_code, error.message, status.HTTP_422_UNPROCESSABLE_ENTITY) from error
+    ReportAttachment.objects.filter(
+        report=report,
+        deleted_at__isnull=True,
+    ).update(official_version_no=snapshot.version_no)
     report.status = target
     report.submitted_at = timezone.now()
     report.save(update_fields=["status", "submitted_at", "updated_at"])
@@ -524,5 +523,6 @@ def submit_report(*, workspace, actor, report_id, payload, request=None):
         },
         request=request,
     )
+    report._workflow_approval_route = route
     report._workflow_notifications = notify_report_submitted(report, actor, route=route)
     return report

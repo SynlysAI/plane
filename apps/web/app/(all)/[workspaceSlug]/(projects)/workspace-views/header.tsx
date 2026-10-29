@@ -34,6 +34,7 @@ import { DefaultWorkspaceViewQuickActions } from "@/components/workspace/views/d
 import { CreateUpdateWorkspaceViewModal } from "@/components/workspace/views/modal";
 import { WorkspaceViewQuickActions } from "@/components/workspace/views/quick-action";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useGlobalView } from "@/hooks/store/use-global-view";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -57,6 +58,7 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
   const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
   const [isSavingDefaultLayout, setIsSavingDefaultLayout] = useState(false);
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock();
 
   const issueFilters = globalViewId ? filters[globalViewId.toString()] : undefined;
 
@@ -215,9 +217,11 @@ export const GlobalIssuesHeader = observer(function GlobalIssuesHeader() {
               {isSavingDefaultLayout ? "正在保存…" : "保存为全员默认布局"}
             </Button>
           )}
-          <Button variant="primary" size="lg" onClick={() => setCreateViewModal(true)}>
-            {t("workspace_views.add_view")}
-          </Button>
+          {!isAdministrativeSettingsLocked && (
+            <Button variant="primary" size="lg" onClick={() => setCreateViewModal(true)}>
+              {t("workspace_views.add_view")}
+            </Button>
+          )}
           <div className="hidden md:block">
             {viewDetails && <WorkspaceViewQuickActions workspaceSlug={workspaceSlug?.toString()} view={viewDetails} />}
             {isDefaultView && defaultViewDetails && (

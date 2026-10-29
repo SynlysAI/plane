@@ -208,6 +208,8 @@ it("uploads, presents, and deletes persisted task attachments", async () => {
     download_url: "/api/research/workspaces/lab/instruction-attachments/asset-attachment-1/download/",
   });
   await renderDescription({ editable: true });
+  expect(capturedEditor.props.onAttachFiles).toBeTypeOf("function");
+  expect(container.textContent).not.toContain("拖拽文件或文件夹到这里，或点击选择");
 
   const input = container.querySelector('input[type="file"]') as HTMLInputElement;
   const file = new File(["pdf"], "过程说明.pdf", { type: "application/pdf" });

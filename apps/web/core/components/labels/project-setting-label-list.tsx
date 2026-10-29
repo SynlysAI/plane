@@ -22,6 +22,7 @@ import {
   ProjectSettingLabelItem,
 } from "@/components/labels";
 // hooks
+import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useLabel } from "@/hooks/store/use-label";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
@@ -41,8 +42,10 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
   // store hooks
   const { projectLabels, updateLabelPosition, projectLabelsTree, createLabel, updateLabel } = useLabel();
   const { allowPermissions } = useUserPermissions();
+  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock(projectId?.toString());
   // derived values
-  const isEditable = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
+  const isEditable =
+    !isAdministrativeSettingsLocked && allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
   const labelOperationsCallbacks: TLabelOperationsCallbacks = {
     createLabel: (data: Partial<IIssueLabel>) => createLabel(workspaceSlug?.toString(), projectId?.toString(), data),
     updateLabel: (labelId: string, data: Partial<IIssueLabel>) =>
@@ -82,7 +85,11 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
       />
       <SettingsHeading
         title={t("project_settings.labels.heading")}
-        description={t("project_settings.labels.description")}
+        description={
+          isAdministrativeSettingsLocked
+            ? "标签已由工作区管理员统一设置；成员可在工作项中选择已有标签。"
+            : t("project_settings.labels.description")
+        }
         control={
           isEditable && (
             <Button variant="primary" size="lg" onClick={newLabel}>
@@ -114,26 +121,30 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
               assetClassName="size-20"
               title={t("settings_empty_state.labels.title")}
               description={t("settings_empty_state.labels.description")}
-              actions={[
-                {
-                  label: t("settings_empty_state.labels.cta_primary"),
-                  onClick: () => {
-                    newLabel();
-                  },
-                },
-              ]}
+              actions={
+                isEditable
+                  ? [
+                      {
+                        label: t("settings_empty_state.labels.cta_primary"),
+                        onClick: () => {
+                          newLabel();
+                        },
+                      },
+                    ]
+                  : []
+              }
               align="start"
               rootClassName="py-20"
             />
           ) : (
-            projectLabelsTree?.map((label, index) => {
-              if (label.children && label.children.length) {
+            projectLabelsTree?.map((labelItem, index) => {
+              if (labelItem.children && labelItem.children.length) {
                 return (
                   <ProjectSettingLabelGroup
-                    key={label.id}
-                    label={label}
-                    labelChildren={label.children || []}
-                    handleLabelDelete={(label: IIssueLabel) => setSelectDeleteLabel(label)}
+                    key={labelItem.id}
+                    label={labelItem}
+                    labelChildren={labelItem.children || []}
+                    handleLabelDelete={(selectedLabel: IIssueLabel) => setSelectDeleteLabel(selectedLabel)}
                     isUpdating={isUpdating}
                     setIsUpdating={setIsUpdating}
                     isLastChild={index === projectLabelsTree.length - 1}
@@ -145,10 +156,10 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
               }
               return (
                 <ProjectSettingLabelItem
-                  label={label}
-                  key={label.id}
+                  label={labelItem}
+                  key={labelItem.id}
                   setIsUpdating={setIsUpdating}
-                  handleLabelDelete={(label) => setSelectDeleteLabel(label)}
+                  handleLabelDelete={(selectedLabel) => setSelectDeleteLabel(selectedLabel)}
                   isChild={false}
                   isLastChild={index === projectLabelsTree.length - 1}
                   onDrop={onDrop}

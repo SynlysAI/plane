@@ -138,6 +138,8 @@ const upload = {
 function knowledgeController(seed: Record<string, unknown> = {}) {
   return {
     uploads: [upload],
+    uploadLimits: { pdf_max_mb: 500, markdown_max_mb: 500, office_max_mb: 500 },
+    maxUploadSizeBytes: 500 * 1024 * 1024,
     state: "ready",
     knowledgeBaseId: "kb-1",
     knowledgeState: "READY",
@@ -234,6 +236,16 @@ it("opens automatically from an approval-center deep link", async () => {
   expect(container.textContent).toContain("原理可行性分析");
 });
 
+it("focuses the material-link form when supplement is clicked", async () => {
+  await renderPanel({ expanded: true });
+
+  await act(async () => button("补充")?.click());
+
+  const requirementSelect = container.querySelector<HTMLSelectElement>('select[aria-label="材料要求"]');
+  expect(requirementSelect?.value).toBe("PRINCIPLE_FEASIBILITY");
+  expect(document.activeElement).toBe(requirementSelect);
+});
+
 it("links an existing upload and parses backend missing names", async () => {
   mocks.createChainStageMaterial.mockRejectedValue({
     error_code: "research_chain_stage_material_incomplete",
@@ -278,13 +290,70 @@ it("uploads one file and immediately links it to the selected requirement", asyn
   expect(onChanged).toHaveBeenCalled();
 });
 
+it("refreshes the submitted material count after an upload is linked", async () => {
+  mocks.uploadFiles.mockResolvedValueOnce([upload]);
+  mocks.createChainStageMaterial.mockResolvedValueOnce({});
+  const initialStage = stage({});
+  const refreshedStage = stage({
+    materials: [
+      {
+        ...initialStage.materials[0],
+        submitted_count: 1,
+        complete: true,
+        items: [
+          {
+            id: "material-item-1",
+            title: upload.file_name,
+            description: "",
+            source_node: "node-1",
+            external_reference: "",
+            created_at: "2026-10-22T01:00:00Z",
+          },
+        ],
+      },
+    ],
+  });
+
+  function RefreshingHarness() {
+    const [currentStage, setCurrentStage] = React.useState(initialStage);
+    return (
+      <ResearchChainStageApprovalPanel
+        workspaceSlug="lab"
+        chainId="chain-1"
+        stage={currentStage}
+        nodes={nodes}
+        preferredNodeId="node-1"
+        defaultExpanded
+        knowledge={knowledgeController()}
+        onChanged={() => setCurrentStage(refreshedStage)}
+      />
+    );
+  }
+
+  await act(async () => root.render(<RefreshingHarness />));
+  const input = container.querySelector('input[type="file"]');
+  const file = new File(["paper"], "可行性分析.pdf", { type: "application/pdf" });
+  await act(async () => {
+    Object.defineProperty(input as HTMLInputElement, "files", { configurable: true, value: [file] });
+    input?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => await Promise.resolve());
+
+  expect(mocks.createChainStageMaterial).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION", {
+    requirement_code: "PRINCIPLE_FEASIBILITY",
+    upload_id: "upload-1",
+  });
+  expect(container.querySelector("button[aria-expanded]")?.textContent).toContain("材料 1/1");
+  expect(container.textContent).toContain("已提交 1/1");
+});
+
 it("does not register a title-only material when the upload fails", async () => {
   mocks.uploadFiles.mockResolvedValueOnce([]);
   await renderPanel({
     expanded: true,
     knowledge: knowledgeController({
       uploads: [],
-      actionError: "文件被网关拒绝，研究链资料单文件不能超过 50MB。",
+      actionError: "文件被网关拒绝，PDF 资料单文件不能超过 500MB。",
     }),
   });
 

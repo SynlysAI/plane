@@ -62,6 +62,10 @@ from plane.db.models import (
     UserRecentVisit,
 )
 from plane.utils.analytics_plot import burndown_plot
+from plane.utils.administrative_projects import (
+    ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE,
+    administrative_settings_write_blocked,
+)
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.bgtasks.webhook_task import model_activity
 from .. import BaseAPIView, BaseViewSet
@@ -296,6 +300,8 @@ class ModuleViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def create(self, request, slug, project_id):
         project = Project.objects.get(workspace__slug=slug, pk=project_id)
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         serializer = ModuleWriteSerializer(data=request.data, context={"project": project})
 
         if serializer.is_valid():
@@ -661,6 +667,10 @@ class ModuleViewSet(BaseViewSet):
                 {"error": "Module not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        if administrative_settings_write_blocked(
+            request.user, current_module.project.workspace, current_module.project
+        ):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
         if current_module.archived_at:
             return Response(
@@ -725,6 +735,8 @@ class ModuleViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN], creator=True, model=Module)
     def destroy(self, request, slug, project_id, pk):
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
+        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_module_operation_error(module.project, module)
         if required_error is not None:
             return Response({"error": required_error}, status=status.HTTP_400_BAD_REQUEST)
@@ -769,6 +781,29 @@ class ModuleLinkViewSet(BaseViewSet):
 
     model = ModuleLink
     serializer_class = ModuleLinkSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create a module link after checking the administrative settings lock."""
+        project = Project.objects.get(pk=kwargs["project_id"], workspace__slug=kwargs["slug"])
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        """Update a module link after checking the administrative settings lock."""
+        module_link = self.get_object()
+        project = module_link.project
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a module link after checking the administrative settings lock."""
+        module_link = self.get_object()
+        project = module_link.project
+        if administrative_settings_write_blocked(request.user, project.workspace, project):
+            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { FileOutline, RefreshOutline } from "@makeplane/propel/icons";
 import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 // components
 import {
@@ -90,24 +91,45 @@ export function ResearchAgentConversation({ api }: Props) {
           </div>
         </details>
         {api.session?.provider === "SCIENCE_DISCOVERY" && (
-          <div className="mb-2 flex items-center gap-3 text-11 text-secondary">
+          <div className="mb-2 flex flex-col gap-2 text-11 text-secondary">
             <AttachmentUploadZone
-              onFiles={(files) => void api.uploadFile(files[0])}
+              onFiles={(files) => void api.uploadFiles(files)}
               disabled={!api.session || api.session.status === "CLOSED"}
               uploading={api.uploadingFile}
-              variant="inline"
+              multiple
+              variant="compact"
+              className="self-start"
               title={api.uploadingFile ? t("research.agent.file_uploading") : t("research.agent.file_attach")}
-              hint="仅支持一个文件"
+              hint="支持一次选择或拖拽多个文件和文件夹"
             />
-            {api.uploadedFile && (
-              <span className="text-success-primary">
-                {t("research.agent.file_uploaded", { name: api.uploadedFile })}
-              </span>
-            )}
-            {api.uploadError && (
-              <span className="text-danger-primary" role="alert">
-                {api.uploadError}
-              </span>
+            {(api.uploadedFiles.length > 0 || api.failedUploads.length > 0) && (
+              <ul className="divide-y divide-subtle border-t border-subtle text-12">
+                {api.uploadedFiles.map((name) => (
+                  <li key={name} className="flex min-h-8 items-center gap-2 py-1">
+                    <FileOutline className="size-3.5 shrink-0 text-tertiary" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate text-success-primary">
+                      {t("file_upload.success", { fileName: name })}
+                    </span>
+                  </li>
+                ))}
+                {api.failedUploads.map((failure) => (
+                  <li key={failure.file.name} className="flex min-h-8 items-center gap-2 py-1">
+                    <FileOutline className="size-3.5 shrink-0 text-tertiary" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate" title={failure.file.name}>
+                      {failure.file.name}
+                    </span>
+                    <span className="shrink-0 text-danger-primary">{failure.message}</span>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-tertiary hover:bg-surface-2 hover:text-secondary"
+                      aria-label={t("research.chain_tasks.retry_upload")}
+                      onClick={() => void api.uploadFiles([failure.file])}
+                    >
+                      <RefreshOutline className="size-3.5" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}

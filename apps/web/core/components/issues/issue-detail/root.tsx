@@ -58,6 +58,27 @@ export type TIssueDetailRoot = {
   is_archived?: boolean;
 };
 
+/**
+ * Extract readable field messages from a work-item update API error.
+ *
+ * Args:
+ * error: Error thrown by the work-item service.
+ *
+ * Returns:
+ * Concatenated backend field messages, or an empty string for the generic fallback.
+ */
+const getWorkItemUpdateErrorMessage = (error: unknown): string => {
+  const responseData = (error as { response?: { data?: unknown } })?.response?.data ?? error;
+  if (typeof responseData !== "object" || responseData === null || Array.isArray(responseData)) {
+    return "";
+  }
+
+  return Object.values(responseData)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+};
+
 export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDetailRoot) {
   const { t } = useTranslation();
   const { workspaceSlug, projectId, issueId, is_archived = false } = props;
@@ -99,7 +120,9 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           setToast({
             title: t("common.error.label"),
             type: TOAST_TYPE.ERROR,
-            message: t("entity.update.failed", { entity: t("issue.label") }),
+            message:
+              getWorkItemUpdateErrorMessage(error) ||
+              t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
           });
         }
       },
@@ -110,14 +133,14 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           setToast({
             title: t("common.success"),
             type: TOAST_TYPE.SUCCESS,
-            message: t("entity.delete.success", { entity: t("issue.label") }),
+            message: t("entity.delete.success", { entity: t("issue.label", { count: 1 }) }),
           });
         } catch (error) {
           console.log("Error in deleting issue:", error);
           setToast({
             title: t("common.error.label"),
             type: TOAST_TYPE.ERROR,
-            message: t("entity.delete.failed", { entity: t("issue.label") }),
+            message: t("entity.delete.failed", { entity: t("issue.label", { count: 1 }) }),
           });
         }
       },

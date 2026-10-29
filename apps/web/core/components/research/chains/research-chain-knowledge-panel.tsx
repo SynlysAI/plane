@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Download, FileText, RefreshCw } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -11,8 +11,9 @@ import { getFileURL } from "@plane/utils";
 import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
 import { AttachmentPreviewLink } from "@/components/attachments/preview";
 import {
-  RESEARCH_CHAIN_UPLOAD_MAX_BYTES,
+  DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS,
   formatResearchChainFileSize,
+  researchChainUploadHintParams,
   researchChainUploadStatusKey,
   type TResearchChainKnowledgeController,
 } from "@/components/research/chains/use-research-chain-knowledge";
@@ -62,7 +63,28 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
     uploadFiles,
     refreshUpload,
     confirmUpload,
+    maxUploadSizeBytes,
+    uploadLimits,
   } = knowledge;
+  const effectiveUploadLimits = uploadLimits ?? DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS;
+  const [confirmingUploadIds, setConfirmingUploadIds] = useState<Set<string>>(new Set());
+  const [confirmedUploadIds, setConfirmedUploadIds] = useState<Set<string>>(new Set());
+
+  /** Confirm one upload reference and expose a stable result on its row. */
+  const confirmReference = async (upload: (typeof uploads)[number]) => {
+    setConfirmingUploadIds((current) => new Set(current).add(upload.id));
+    try {
+      if (await confirmUpload(upload)) {
+        setConfirmedUploadIds((current) => new Set(current).add(upload.id));
+      }
+    } finally {
+      setConfirmingUploadIds((current) => {
+        const next = new Set(current);
+        next.delete(upload.id);
+        return next;
+      });
+    }
+  };
 
   return (
     <section className="border-t border-subtle px-4 py-3" aria-label={t("research.knowledge.materials_title")}>
@@ -173,15 +195,25 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                   >
                     <RefreshCw className="size-3.5" aria-hidden="true" />
                   </button>
-                  {uploadRecord.knowledge_id && (
-                    <button
-                      type="button"
-                      onClick={() => void confirmUpload(uploadRecord)}
-                      className="px-1 py-1 text-11 text-secondary hover:text-primary"
-                    >
-                      {t("research.knowledge.confirm_reference")}
-                    </button>
-                  )}
+                  {uploadRecord.knowledge_id &&
+                    (confirmedUploadIds.has(uploadRecord.id) ? (
+                      <span className="px-1 py-1 text-11 text-secondary" role="status" aria-live="polite">
+                        {t("research.knowledge.reference_confirmed")}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={confirmingUploadIds.has(uploadRecord.id)}
+                        onClick={() => void confirmReference(uploadRecord)}
+                        className="px-1 py-1 text-11 text-secondary hover:text-primary disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {t(
+                          confirmingUploadIds.has(uploadRecord.id)
+                            ? "common.confirming"
+                            : "research.knowledge.confirm_reference"
+                        )}
+                      </button>
+                    ))}
                 </li>
               ))}
             </ul>
@@ -190,14 +222,14 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
             onFiles={(files) => void uploadFiles(files)}
             accept={KNOWLEDGE_MATERIAL_ACCEPT}
             multiple
-            maxSize={RESEARCH_CHAIN_UPLOAD_MAX_BYTES}
+            maxSize={maxUploadSizeBytes ?? Math.max(...Object.values(effectiveUploadLimits)) * 1024 * 1024}
             disabled={!canUpload}
             uploading={uploading}
             variant="compact"
             className="mt-3"
             title={t("research.knowledge.select_material")}
             uploadingTitle={t("research.knowledge.uploading")}
-            hint={t("research.knowledge.upload_hint", { size: "50MB" })}
+            hint={t("research.knowledge.upload_hint", researchChainUploadHintParams(effectiveUploadLimits))}
           />
         </>
       )}

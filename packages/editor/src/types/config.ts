@@ -7,6 +7,8 @@
 export type TExtendedFileHandler = object;
 
 export type TFileHandler = {
+  /** Hand non-image editor files to the host surface for attachment upload. */
+  attachFiles?: (files: File[]) => void | Promise<void>;
   assetsUploadStatus: Record<string, number>; // blockId => progress percentage
   cancel: () => void;
   checkIfAssetExists: (assetId: string) => Promise<boolean>;

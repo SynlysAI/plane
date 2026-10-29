@@ -94,8 +94,10 @@ STDIO 有独立的五工具白名单，校验目录及只读标记，禁止节�
 
 ## 提交与恢复
 
-1. context 选择 period_offset=-1 或 0（也可显式 period_key），返回固定周期、模板、身份、受众范围及 revision。正文分页串接全部 text 后才是完整 JSON，不可把第一页当完整正文。
-2. prepare 必须传 request_id、固定 period_key、expected_revision、action、body_markdown，可传 source_refs。返回完整规范正文、差异、有效可见性、真实副作用和不可变哈希；此时没有创建 Report/Page。
+提交前先读取 `get_weekly_report_context` 的 `approval.candidates`，并由用户选择审批人。`prepare_weekly_report_operation` 的 `submit` 必须携带候选人 UUID `reviewer_id`，可选传入 `cc_user_ids`；`save_draft` 不接受审批字段。变更审批选择必须使用新的 `request_id`，相同 `request_id` 重用不同审批选择会返回 `idempotency_conflict`。
+
+1. context 选择 period_offset=-1 或 0（也可显式 period_key），返回固定周期、模板、身份、受众范围、revision 和审批候选人/当前路由。正文分页串接全部 text 后才是完整 JSON，不可把第一页当完整正文。
+2. prepare 必须传 request_id、固定 period_key、expected_revision、action、body_markdown；可传 source_refs。submit 必须另传 reviewer_id，可选 cc_user_ids。返回完整规范正文、差异、审批选择、有效可见性、真实副作用和不可变哈希；此时没有创建 Report/Page。
 3. Agent 客户端展示提案并在用户已授权范围内 execute 同一 operation_id。不能传替换正文、owner、workspace 或新周期。
 4. 超时先 get 原 operation_id；prepare 超时用相同 request_id 与完全相同参数重试。不得悄悄换 ID 重提。
 5. COMMITTED 的 result 始终是原报告/正式版本/哈希/链接/审计与通知 ID；readback=pending 仍表示已提交，继续查询同一操作。
@@ -112,7 +114,7 @@ source_refs 不自动取得节点读取权限。继续使用原节点连接获�
 ## 实现边界与阶段 3 接入
 
 - `RESEARCH_WEEKLY_REPORT_MCP_ENABLED` 未配置时默认启用（2026-10-27 按测试服务器要求调整），无需在 `.env` 添加启用项；显式 `0` 仍可关闭。报告能力沿用当前 workspace_research_sections/nav_allowed 规则，不依赖旧 RESEARCH_MCP_ENABLED/WRITE_ENABLED 或科研链写开关。没有改动当前部署环境变量。
-- 新迁移：`0201_weekly_report_agent`，新增独立 grant/operation；未改旧报告唯一键或节点操作语义。
+- 新迁移：`0201_weekly_report_agent` 新增独立 grant/operation；`0210_merge_weekly_report_mcp` 汇合 develop 的 `0210_administrative_settings_admin_only` 与 MCP 的 `0206_merge_weekly_report_demo`；未改旧报告唯一键或节点操作语义。
 - 正文只写原 Page，旧 description_binary 清空；官方 Snapshot、审阅日志、Agent 审计、站内 Notification 和 COMMITTED/result 在一个事务提交。Notification 是现有持久站内通知机制，没有新增外部发送或普通 on_commit“绝对一次”的承诺。
 - 新接口采用 PostgreSQL 写入屏障，覆盖 Page、资源、组织/成员、模板和策略变更，包括并发插入；持有期间会阻塞相关表的其他写操作，可能影响其他工作区。带来源校验时覆盖面更大。每次锁等待上限 3 秒（不是整个操作耗时承诺），争用/死锁回滚返回 503，不能盲目创建新操作。尚未做负载与长期运行验收；需要保持关闭的环境须显式设置 `RESEARCH_WEEKLY_REPORT_MCP_ENABLED=0`。
 - revision 对组织/成员策略做保守摘要，工作区内其他策略变更也可能要求重新准备。这是首期安全边界，不能通过删掉相关版本检查来减少冲突。

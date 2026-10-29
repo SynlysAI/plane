@@ -32,6 +32,7 @@ from plane.research.services.idempotency import conflict_response, payload_hash,
 from plane.research.services.integrations import client_for
 from plane.research.utils.capabilities import NAV_RESEARCH_CHAIN
 from plane.research.utils.errors import ResearchErrorCode, research_error, research_not_found
+from plane.research.utils.files import detect_kind, extension_of, research_chain_upload_limits
 from plane.research.views.base import ResearchAPIView
 from plane.research.views.chain_foundation import (
     _chain_readonly_error,
@@ -163,6 +164,7 @@ def _knowledge_base_payload(chain, scope, workspace):
             "candidates": described["candidates"],
             "degraded_reason": described["degraded_reason"],
             "degraded": described["connection_status"] == "degraded",
+            "upload_limits": research_chain_upload_limits(workspace),
         }
     )
     return payload
@@ -299,17 +301,36 @@ class ResearchChainUploadEndpoint(ResearchAPIView):
                 status.HTTP_403_FORBIDDEN,
             )
         file_name = os.path.basename(str(uploaded.name or "document"))
-        extension = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+        extension = extension_of(file_name).lstrip(".")
         if extension not in ALLOWED_UPLOAD_EXTENSIONS:
             return research_error(
                 ResearchErrorCode.FILE_TYPE_NOT_ALLOWED,
                 "Only PDF, Markdown, text and Word documents can be uploaded.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if uploaded.size > settings.RESEARCH_CHAIN_UPLOAD_MAX_BYTES:
+        upload_limits = research_chain_upload_limits(workspace)
+        kind = detect_kind(file_name, getattr(uploaded, "content_type", ""))
+        limit_key = {
+            "PDF": "pdf_max_mb",
+            "MARKDOWN": "markdown_max_mb",
+            "OFFICE": "office_max_mb",
+        }.get(kind)
+        if limit_key is None:
+            return research_error(
+                ResearchErrorCode.FILE_TYPE_NOT_ALLOWED,
+                "Only PDF, Markdown, text and Word documents can be uploaded.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        limit_mb = upload_limits[limit_key]
+        kind_label = {
+            "PDF": "PDF",
+            "MARKDOWN": "Markdown/TXT",
+            "OFFICE": "DOC/DOCX",
+        }[kind]
+        if uploaded.size > limit_mb * 1024 * 1024:
             return research_error(
                 ResearchErrorCode.FILE_SIZE_EXCEEDED,
-                "The research file exceeds the configured chain upload limit.",
+                f"{kind_label} research files cannot exceed {limit_mb}MB.",
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
         file_hash = _stream_sha256(uploaded)

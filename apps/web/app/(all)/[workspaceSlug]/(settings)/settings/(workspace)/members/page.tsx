@@ -119,18 +119,18 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
           "opacity-60": !canPerformWorkspaceMemberActions,
         })}
       >
-        <div className="flex items-center justify-between gap-4 pb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 pb-3.5">
           <h4 className="flex items-center gap-2.5 text-h3-medium">
             {t("workspace_settings.settings.members.title")}
             {workspaceMemberIds && workspaceMemberIds.length > 0 && (
               <CountChip count={workspaceMemberIds.length} className="m-auto h-5" />
             )}
           </h4>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 py-1.5">
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-1">
+            <div className="flex min-w-0 flex-1 basis-40 items-center gap-1.5 rounded-md border border-subtle bg-surface-1 px-2.5 py-1.5">
               <SearchOutline className="h-3.5 w-3.5 text-placeholder" />
               <input
-                className="w-full max-w-[234px] border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
+                className="w-full max-w-[234px] min-w-0 border-none bg-transparent text-body-xs-regular outline-none placeholder:text-placeholder"
                 placeholder={`${t("search")}...`}
                 value={searchQuery}
                 // eslint-disable-next-line jsx-a11y/no-autofocus

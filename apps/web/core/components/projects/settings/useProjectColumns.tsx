@@ -56,6 +56,7 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
   );
   const currentProjectRole =
     getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug.toString(), projectId.toString()) ?? EUserPermissions.GUEST;
+  const isAdministrativeProject = getPartialProjectById(projectId)?.is_research_project === false;
 
   const displayFilters = getFilters(projectId);
 
@@ -96,7 +97,11 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
           handleDisplayFilterUpdate={handleDisplayFilterUpdate}
         />
       ),
-      tdRender: (rowData: RowData) => <div className="w-32">{rowData.member.display_name}</div>,
+      tdRender: (rowData: RowData) => (
+        <div className="w-32 min-w-0 truncate" title={rowData.member.display_name ?? ""}>
+          {rowData.member.display_name}
+        </div>
+      ),
     },
     {
       key: "Email",
@@ -108,7 +113,11 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
           handleDisplayFilterUpdate={handleDisplayFilterUpdate}
         />
       ),
-      tdRender: (rowData: RowData) => <div className="w-48 text-secondary">{rowData.member.email}</div>,
+      tdRender: (rowData: RowData) => (
+        <div className="w-48 min-w-0 truncate text-secondary" title={rowData.member.email ?? ""}>
+          {rowData.member.email}
+        </div>
+      ),
     },
     {
       key: "Account Type",
@@ -126,21 +135,27 @@ export const useProjectColumns = (props: TUseProjectColumnsProps) => {
           currentProjectRole={currentProjectRole}
           projectId={projectId}
           workspaceSlug={workspaceSlug}
+          isAdministrativeProject={isAdministrativeProject}
         />
       ),
     },
     {
       key: "Membership Source",
       content: t("project_settings.members.membership_source"),
-      tdRender: (rowData: RowData) => (
-        <div className="min-w-24 text-12 text-secondary">
-          {rowData.membership_source === "ORGANIZATION"
+      tdRender: (rowData: RowData) => {
+        const sourceLabel =
+          rowData.membership_source === "ORGANIZATION"
             ? t("project_settings.members.source_organization")
             : rowData.inherits_organization
               ? t("project_settings.members.source_both")
-              : t("project_settings.members.source_direct")}
-        </div>
-      ),
+              : t("project_settings.members.source_direct");
+
+        return (
+          <div className="max-w-40 text-12 break-words whitespace-normal text-secondary" title={sourceLabel}>
+            {sourceLabel}
+          </div>
+        );
+      },
     },
     {
       key: "Joining Date",
