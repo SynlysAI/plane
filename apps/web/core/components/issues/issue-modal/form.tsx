@@ -159,11 +159,9 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     currentProjectDetails?.is_research_project === false
       ? [
           ...(currentProjectDetails.is_module_required && (watch("module_ids")?.length ?? 0) === 0
-            ? ["请选择模块（财务报销科目）"]
+            ? ["请选择模块"]
             : []),
-          ...(currentProjectDetails.is_label_required && (watch("label_ids")?.length ?? 0) === 0
-            ? ["请选择标签（小组）"]
-            : []),
+          ...(currentProjectDetails.is_label_required && (watch("label_ids")?.length ?? 0) === 0 ? ["请选择标签"] : []),
         ]
       : [];
   const requiredFieldErrors = isDraft ? [] : administrativeRequiredFieldErrors;

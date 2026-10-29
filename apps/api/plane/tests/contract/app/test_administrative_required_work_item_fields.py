@@ -202,8 +202,8 @@ class TestAdministrativeRequiredWorkItemFields:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["module_ids"] == ["模块（财务报销科目）为必选项。"]
-        assert response.json()["label_ids"] == ["标签（小组）为必选项。"]
+        assert response.json()["module_ids"] == ["模块为必选项。"]
+        assert response.json()["label_ids"] == ["标签为必选项。"]
         assert not Issue.objects.filter(name="报销申请").exists()
 
     @pytest.mark.django_db
@@ -261,7 +261,7 @@ class TestAdministrativeRequiredWorkItemFields:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert response.json()["module_ids"] == ["模块（财务报销科目）为必选项。"]
+        assert response.json()["module_ids"] == ["模块为必选项。"]
         assert not Issue.objects.filter(name="必选创建").exists()
 
     @pytest.mark.django_db

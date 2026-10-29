@@ -208,8 +208,8 @@ it("blocks formal administrative work items until required module and label are 
   });
   await renderForm();
 
-  expect(container.textContent).toContain("请选择模块（财务报销科目）");
-  expect(container.textContent).toContain("请选择标签（小组）");
+  expect(container.textContent).toContain("请选择模块");
+  expect(container.textContent).toContain("请选择标签");
   expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
 
   await act(async () => {
@@ -236,7 +236,7 @@ it("allows a draft to remain incomplete while required fields are enabled", asyn
   });
   await renderForm({ isDraft: true });
 
-  expect(container.textContent).not.toContain("请选择模块（财务报销科目）");
+  expect(container.textContent).not.toContain("请选择模块");
   expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
 
   const form = container.querySelector("form");
