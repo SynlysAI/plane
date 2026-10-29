@@ -114,6 +114,7 @@ scripts/*
 !scripts/repair-merged-migrations.sh
 !scripts/rebuild-pi-lab-baseline.sh
 !scripts/sd_p0_smoke.py
+!scripts/unified-mcp-agent-acceptance.py
 !packages/i18n/scripts/
 
 # i18n auto-generated types (regenerated on every build)

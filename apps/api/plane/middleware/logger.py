@@ -134,7 +134,8 @@ class APITokenLogMiddleware:
     def process_request(self, request, response, request_body):
         # These routes have their own summary-only audit. Never persist bodies
         # or a one-time issued secret, even if an unrelated X-Api-Key was sent.
-        if "/mcp/weekly-report/" in request.path or "/weekly-report-agent/" in request.path:
+        if (request.path == "/api/mcp/" or request.path.startswith("/api/mcp/connections/")
+                or "/mcp/weekly-report/" in request.path or "/weekly-report-agent/" in request.path):
             return
         api_key_header = "X-Api-Key"
         api_key = request.headers.get(api_key_header)

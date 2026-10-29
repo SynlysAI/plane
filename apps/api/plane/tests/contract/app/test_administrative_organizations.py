@@ -299,8 +299,8 @@ def test_public_organization_grants_every_workspace_member_edit_role(env):
     )
     with (
         patch("plane.app.views.issue.base.issue_activity.delay"),
-        patch("plane.app.views.issue.base.model_activity.delay"),
-        patch("plane.app.views.issue.base.issue_description_version_task.delay"),
+        patch("plane.utils.issue_mutations.model_activity.delay"),
+        patch("plane.utils.issue_mutations.issue_description_version_task.delay"),
     ):
         issue = env["ordinary_client"].post(
             f"/api/workspaces/{slug}/projects/{public_project.id}/issues/",

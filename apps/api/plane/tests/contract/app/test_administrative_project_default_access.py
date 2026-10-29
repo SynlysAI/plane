@@ -65,8 +65,8 @@ def no_side_effects():
         patch("plane.app.views.project.base.recent_visited_task.delay"),
         patch("plane.app.views.project.base.model_activity.delay"),
         patch("plane.app.views.issue.base.issue_activity.delay"),
-        patch("plane.app.views.issue.base.model_activity.delay"),
-        patch("plane.app.views.issue.base.issue_description_version_task.delay"),
+        patch("plane.utils.issue_mutations.model_activity.delay"),
+        patch("plane.utils.issue_mutations.issue_description_version_task.delay"),
     ):
         yield
 
