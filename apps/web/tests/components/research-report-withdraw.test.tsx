@@ -7,14 +7,16 @@ import translations from "../../../../packages/i18n/src/locales/zh-CN/common.jso
 
 const mocks = vi.hoisted(() => ({
   reports: {} as Record<string, TPeriodicReport>,
+  navigate: vi.fn(),
   fetchReport: vi.fn(),
   fetchReports: vi.fn(),
   fetchReportHistory: vi.fn(),
+  deleteReport: vi.fn(),
   withdrawReport: vi.fn(),
   setToast: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
 vi.mock("@plane/i18n", () => ({
   useTranslation: () => ({
@@ -45,6 +47,13 @@ vi.mock("@plane/ui", () => ({
     isOpen ? <div role="dialog">{children}</div> : null,
 }));
 vi.mock("@plane/utils", () => ({ copyTextToClipboard: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/components/research/common/research-delete-button", () => ({
+  ResearchDeleteButton: ({ onDelete }: { onDelete: () => void }) => (
+    <button type="button" onClick={onDelete}>
+      删除
+    </button>
+  ),
+}));
 vi.mock("@/hooks/store/use-workspace", () => ({
   useWorkspace: () => ({ getWorkspaceBySlug: () => ({ id: "workspace-1" }) }),
 }));
@@ -70,6 +79,7 @@ vi.mock("@/hooks/store/use-research", () => ({
     fetchReport: mocks.fetchReport,
     fetchReports: mocks.fetchReports,
     fetchReportHistory: mocks.fetchReportHistory,
+    deleteReport: mocks.deleteReport,
     withdrawReport: mocks.withdrawReport,
   }),
 }));
@@ -142,6 +152,7 @@ beforeEach(() => {
       created_at: "2026-10-25T00:00:00Z",
       updated_at: "2026-10-26T02:00:00Z",
       can_withdraw: true,
+      can_delete: true,
       latest_official_version: 1,
       official_content: null,
       draft_content: null,
@@ -159,7 +170,17 @@ beforeEach(() => {
   });
   mocks.fetchReports.mockResolvedValue(undefined);
   mocks.fetchReportHistory.mockResolvedValue(undefined);
+  mocks.deleteReport.mockResolvedValue(undefined);
   updateReportAfterFetch = false;
+});
+
+it("删除周报后直达当前报告列表标签", async () => {
+  await renderDetail();
+
+  await act(async () => button("删除").click());
+
+  expect(mocks.deleteReport).toHaveBeenCalledWith("lab", "report-1");
+  expect(mocks.navigate).toHaveBeenCalledWith("/lab/research/chains?view=reports");
 });
 
 afterEach(async () => {

@@ -68,7 +68,7 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
   const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
   const [isLoadMoreVisible, setIsLoadMoreVisible] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const shouldUseCardScroll = density === "compact" && fixedLayout;
+  const shouldUseCardScroll = fixedLayout;
 
   /** 绑定分页哨兵，并优先使用所在工作台卡片的内部滚动容器作为观察根。
    * 滚动容器依赖 HomeSectionCard 的 data-home-card-scroll DOM 契约反查；

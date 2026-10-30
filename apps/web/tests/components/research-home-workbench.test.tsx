@@ -496,8 +496,9 @@ it("renders and switches one full-row module per waterfall tab", async () => {
   await act(async () => undefined);
 
   const tabs = container.querySelector('[data-testid="workspace-home-waterfall-tabs"]');
-  expect(tabs?.className).toContain("sticky top-[calc(var(--padding-page-y)*-1)]");
+  expect(tabs?.className).toContain("sticky top-0");
   expect(tabs?.className).toContain("z-10");
+  expect(tabs?.className).toContain("shrink-0");
   expect(tabs?.className).toContain("bg-canvas");
   expect([...(tabs?.querySelectorAll('[role="tab"]') ?? [])].map((tab) => tab.textContent)).toEqual([
     "我的待办",
@@ -507,10 +508,23 @@ it("renders and switches one full-row module per waterfall tab", async () => {
     "报告提交摘要",
   ]);
   const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  const workbench = grid.parentElement!;
+  expect(workbench.className).toContain("h-full");
+  expect(workbench.className).toContain("min-h-0");
+  expect(workbench.querySelector("header")?.className).toContain("shrink-0");
   expect(grid.getAttribute("role")).toBe("tabpanel");
-  expect(grid.className).toContain("xl:min-h-[70vh]");
+  expect(grid.className).toContain("min-h-0");
+  expect(grid.className).toContain("flex-1");
+  expect(grid.className).toContain("overflow-hidden");
+  expect(grid.className).not.toContain("70vh");
   expect(grid.className).not.toContain("xl:grid-cols-12");
-  expect(grid.querySelector("section")?.classList.contains("xl:col-span-12")).toBe(true);
+  const activeCard = grid.querySelector("section")!;
+  expect(activeCard.classList.contains("xl:col-span-12")).toBe(true);
+  expect(activeCard.className).toContain("h-full");
+  expect(activeCard.className).toContain("min-h-[320px]");
+  const activeCardBody = activeCard.querySelector("[data-home-card-scroll]");
+  expect(activeCardBody?.className).toContain("overflow-y-auto");
+  expect(activeCardBody?.getAttribute("data-home-card-scroll")).toBe("true");
   expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["我的待办"]);
   expect(mocks.getChains).not.toHaveBeenCalled();
   expect(mocks.fetchProjects).not.toHaveBeenCalled();
@@ -524,6 +538,29 @@ it("renders and switches one full-row module per waterfall tab", async () => {
   await act(async () => undefined);
   expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["科研项目概览"]);
   expect(mocks.getChains).toHaveBeenCalled();
+});
+
+it("keeps waterfall cards internally scrollable in detailed density", async () => {
+  mocks.fetchWorkspaceWidgets.mockResolvedValue([
+    { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
+    { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1000 },
+    { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+    { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+    { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 700 },
+    { key: "workbench_layout", is_enabled: true, config: { density: "detailed", mode: "waterfall" }, sort_order: 100 },
+  ]);
+  await renderHome();
+  await act(async () => undefined);
+  const tabs = container.querySelector('[data-testid="workspace-home-waterfall-tabs"]')!;
+  const activityTab = [...tabs.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.includes("最近动态"));
+  await act(async () => activityTab?.click());
+  await act(async () => undefined);
+
+  const activeCard = container.querySelector('[data-testid="workspace-home-columns"] > section')!;
+  const activeCardBody = activeCard.querySelector("[data-home-card-scroll]");
+  expect(activeCardBody?.className).toContain("overflow-y-auto");
+  expect(activeCardBody?.getAttribute("data-home-card-scroll")).toBe("true");
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenCalled();
 });
 
 it("falls back to the first available waterfall module after hiding the active one", async () => {

@@ -11,6 +11,7 @@ import { Outlet } from "react-router";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import { WorkspaceHomeLink } from "@/components/common/workspace-home-link";
 import { getProjectActivePath } from "@/components/settings/helper";
 import { SettingsMobileNav } from "@/components/settings/mobile/nav";
 // layouts
@@ -36,7 +37,14 @@ function ProjectDetailSettingsLayout({ params }: Route.ComponentProps) {
   );
 
   if (workspaceUserInfo && !canAccessProjectSettings) {
-    return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;
+    return (
+      <NotAuthorizedView
+        section="settings"
+        isProjectView
+        className="h-auto"
+        actionButton={<WorkspaceHomeLink workspaceSlug={workspaceSlug} />}
+      />
+    );
   }
 
   return (

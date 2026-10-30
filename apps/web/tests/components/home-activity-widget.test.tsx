@@ -105,13 +105,19 @@ function activityResponse(results: ReturnType<typeof activity>[], nextCursor: st
   };
 }
 
-async function renderWidget({ cardScroll = true }: { cardScroll?: boolean } = {}) {
+async function renderWidget({
+  cardScroll = true,
+  density = "compact",
+}: {
+  cardScroll?: boolean;
+  density?: "compact" | "detailed";
+} = {}) {
   await act(async () =>
     root.render(
       <SWRConfig value={{ provider: () => cache, dedupingInterval: 0, shouldRetryOnError: false }}>
         <MemoryRouter initialEntries={["/lab"]}>
           <div data-home-card-scroll={cardScroll ? "true" : undefined}>
-            <HomeActivityWidget workspaceSlug="lab" density="compact" fixedLayout={cardScroll} refreshToken={0} />
+            <HomeActivityWidget workspaceSlug="lab" density={density} fixedLayout={cardScroll} refreshToken={0} />
           </div>
         </MemoryRouter>
       </SWRConfig>
@@ -261,6 +267,17 @@ it("uses the card scroller and keeps loading while the sentinel stays visible", 
   expect(container.querySelectorAll("li")).toHaveLength(4);
   expect(container.textContent).toContain("更新了设备采购协作");
   expect(container.querySelector('[data-testid="activity-auto-load-sentinel"]')).toBeNull();
+});
+
+it("uses the card scroller for detailed fixed waterfall layouts", async () => {
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
+  );
+  await renderWidget({ density: "detailed", cardScroll: true });
+
+  const scroller = container.querySelector<HTMLElement>("[data-home-card-scroll='true']");
+  expect(scroller).not.toBeNull();
+  expect(intersectionObservers[0]?.root).toBe(scroller);
 });
 
 it("uses the browser viewport outside the fixed compact card layout", async () => {

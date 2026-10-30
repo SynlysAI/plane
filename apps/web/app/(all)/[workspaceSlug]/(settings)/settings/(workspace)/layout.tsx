@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 import { Outlet } from "react-router";
 // components
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
+import { WorkspaceHomeLink } from "@/components/common/workspace-home-link";
 import { getWorkspaceActivePath, pathnameToAccessKey } from "@/components/settings/helper";
 import { SettingsMobileNav } from "@/components/settings/mobile/nav";
 // plane imports
@@ -45,7 +46,11 @@ const WorkspaceSettingLayout = observer(function WorkspaceSettingLayout({ params
       />
       <div className="inset-y-0 flex h-full w-full flex-row">
         {workspaceUserInfo && !isAuthorized ? (
-          <NotAuthorizedView section="settings" className="h-auto" />
+          <NotAuthorizedView
+            section="settings"
+            className="h-auto"
+            actionButton={<WorkspaceHomeLink workspaceSlug={workspaceSlug} />}
+          />
         ) : (
           <div className="relative flex size-full">
             <div className="hidden h-full md:block">

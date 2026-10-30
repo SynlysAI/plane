@@ -204,14 +204,23 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     const orderIndex = enabledWidgets.findIndex((widget) => widget.key === key);
     const orderClass = ["order-1", "order-2", "order-3", "order-4", "order-5"][orderIndex] ?? "order-last";
     if (mode === "waterfall" || enabledWidgets.length === 1) {
-      return `${orderClass} ${AGGREGATE_SPAN_CLASSES[12]}`;
+      return mode === "waterfall"
+        ? `${orderClass} ${AGGREGATE_SPAN_CLASSES[12]} h-full min-h-[320px]`
+        : `${orderClass} ${AGGREGATE_SPAN_CLASSES[12]}`;
     }
     return `${orderClass} ${AGGREGATE_SPAN_CLASSES[getAggregateSpan(enabledWidgets.length, orderIndex)]}`;
   };
   const isFixedLayout = density === "compact" && enabledWidgets.length > 0;
+  // 瀑布模式是独立的应用视口：页签和标题固定，当前模块在卡片内部滚动。
+  // 聚合模式继续沿用等高网格，避免改变既有首页布局。
+  const isCardScrollable = mode === "waterfall" || isFixedLayout;
+  const workbenchClassName =
+    mode === "waterfall"
+      ? "flex h-full min-h-0 min-w-0 shrink-0 flex-col gap-5"
+      : `flex min-h-full min-w-0 flex-col gap-5 ${isFixedLayout ? "xl:min-h-full xl:flex-1" : "shrink-0"}`;
   const workbenchGridClassName =
     mode === "waterfall"
-      ? "grid min-w-0 grid-cols-1 gap-5 xl:min-h-[70vh]"
+      ? "grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-5 overflow-hidden"
       : `grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12 ${
           isFixedLayout ? `xl:min-h-0 xl:flex-1 ${getAggregateRowClass(enabledWidgets.length)}` : ""
         }`;
@@ -396,8 +405,8 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const cardLinkClassName = "text-12 text-accent-primary hover:underline";
 
   return (
-    <div className={`flex min-h-full min-w-0 flex-col gap-5 ${isFixedLayout ? "xl:min-h-full xl:flex-1" : "shrink-0"}`}>
-      <header className="flex flex-wrap items-end justify-between gap-3">
+    <div className={workbenchClassName}>
+      <header className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-22 font-semibold text-primary">{t("research.home_workbench.title")}</h1>
           <p className="mt-1 text-12 text-tertiary">
@@ -485,7 +494,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
       )}
       {!preferencesLoading && mode === "waterfall" && enabledWidgets.length > 0 && (
         <div
-          className="sticky top-[calc(var(--padding-page-y)*-1)] z-10 flex max-w-full gap-1 overflow-x-auto border-b border-subtle bg-canvas pb-2"
+          className="sticky top-0 z-10 flex max-w-full shrink-0 gap-1 overflow-x-auto border-b border-subtle bg-canvas pb-2"
           role="tablist"
           aria-label={t("research.home_workbench.mode_waterfall")}
           data-testid="workspace-home-waterfall-tabs"
@@ -534,7 +543,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("my_todos")}
               density={density}
-              fixedLayout={isFixedLayout}
+              fixedLayout={isCardScrollable}
               size="primary"
               title={t("research.home_workbench.widget_my_todos")}
               hint={t("research.home_workbench.widget_my_todos_hint")}
@@ -552,7 +561,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("research_projects")}
               density={density}
-              fixedLayout={isFixedLayout}
+              fixedLayout={isCardScrollable}
               size="primary"
               title={t("research.home_workbench.research_overview")}
               hint={t("research.home_workbench.research_hint")}
@@ -642,7 +651,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("administrative_projects")}
               density={density}
-              fixedLayout={isFixedLayout}
+              fixedLayout={isCardScrollable}
               size={mode === "waterfall" ? "primary" : "secondary"}
               title={t("research.home_workbench.administrative_overview")}
               hint={t("research.home_workbench.administrative_hint")}
@@ -726,7 +735,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("recent_activity")}
               density={density}
-              fixedLayout={isFixedLayout}
+              fixedLayout={isCardScrollable}
               size={mode === "waterfall" ? "primary" : "secondary"}
               title={t("research.home_workbench.recent_activity")}
               hint={t("research.home_workbench.widget_recent_activity_hint")}
@@ -734,7 +743,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
               <HomeActivityWidget
                 workspaceSlug={workspaceSlug}
                 density={density}
-                fixedLayout={isFixedLayout}
+                fixedLayout={isCardScrollable}
                 refreshToken={refreshToken}
               />
             </HomeSectionCard>
@@ -744,7 +753,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
             <HomeSectionCard
               className={widgetClassName("report_summary")}
               density={density}
-              fixedLayout={isFixedLayout}
+              fixedLayout={isCardScrollable}
               size={mode === "waterfall" ? "primary" : "secondary"}
               title={t("research.home_workbench.report_summary")}
               action={

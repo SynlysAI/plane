@@ -89,7 +89,7 @@ afterEach(async () => {
 
 it("renders one nearest-list back link on every standalone research detail page", async () => {
   await renderPage(<ReportDetailPage />, { workspaceSlug: "lab", reportId: "report-1" });
-  const reportBackLink = container.querySelector('a[href="/lab/research/reports"]');
+  const reportBackLink = container.querySelector('a[href="/lab/research/chains?view=reports"]');
   expect(reportBackLink?.textContent).toContain("返回报告列表");
   expect(reportBackLink?.getAttribute("aria-label")).toBe("返回上一级菜单");
 
