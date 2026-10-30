@@ -15,7 +15,7 @@ beforeEach(() => {
 });
 it("uses a human session and only session CSRF on one unified issuance/revoke", async () => {
   const service = new UnifiedMCPService();
-  expect(calls.create).toHaveBeenCalledWith({ baseURL: "https://plane.test", withCredentials: true });
+  expect(calls.create).toHaveBeenCalledWith({ baseURL: "https://plane.test", withCredentials: true, timeout: 30_000 });
   await service.options("next-options");
   expect(calls.get).toHaveBeenLastCalledWith("/api/mcp/connections/options/", { params: { cursor: "next-options" } });
   await service.connections("next-connections");
@@ -36,6 +36,15 @@ it("uses a human session and only session CSRF on one unified issuance/revoke", 
     "/api/mcp/connections/connection%2Fid/revoke/",
     {},
     { headers: { "X-CSRFToken": "human-csrf" } }
+  );
+});
+it.each(["configuration", "rotate"] as const)("通过本人会话与 CSRF 请求 %s 配置", async (action) => {
+  const service = new UnifiedMCPService();
+  await service[action]("a/b", "csrf");
+  expect(calls.post).toHaveBeenLastCalledWith(
+    `/api/mcp/connections/a%2Fb/${action}/`,
+    {},
+    { headers: { "X-CSRFToken": "csrf" } }
   );
 });
 it("retains a bounded status/code for an error without storing the whole transport response", async () => {

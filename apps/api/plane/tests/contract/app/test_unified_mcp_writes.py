@@ -82,6 +82,25 @@ def created(e, **fields):
     return db.Issue.objects.get(pk=result["object_id"]), result
 
 
+def test_permanent_connection_writes_and_rechecks_current_membership(writable, native_effects):
+    """永久行政连接可写入，但成员资格撤回后立即失去写权限。"""
+    e = writable
+    db.UnifiedMCPConnection.objects.filter(pk=e["connection"]["id"]).update(expires_at=None)
+    task, _ = created(e)
+    db.WorkspaceMember.objects.filter(workspace=e["workspace"], member=e["owner"]).update(is_active=False)
+    invoke(
+        e["client"],
+        "plane_update_task",
+        {
+            "target": reference(e, "Issue", task),
+            "changes": {"name": "不应写入"},
+        },
+        error="scope_denied",
+    )
+    task.refresh_from_db()
+    assert task.name == "Unified synthetic task"
+
+
 def test_native_create_edit_state_comment_effects_and_web_readback(writable, native_effects):
     e = writable
     task, result = created(
@@ -296,7 +315,10 @@ def test_snapshot_rw_rejected_and_research_write_follows_deployment_policy(writa
         response = e["owner_client"].post(MANAGEMENT, payload(e, future=future, domains=domains), format="json")
         expected = (409, "capability_unavailable") if not future else (404, "disabled")
         assert (response.status_code, response.data["error_code"]) == expected
-    assert rpc(e["client"], "tools/call", {"name": "plane_prepare_proposal", "arguments": {}}).json()["error"]["code"] == -32602
+    assert (
+        rpc(e["client"], "tools/call", {"name": "plane_prepare_proposal", "arguments": {}}).json()["error"]["code"]
+        == -32602
+    )
 
 
 def test_nonempty_comment_rollback_and_no_postcommit_on_failure(writable):

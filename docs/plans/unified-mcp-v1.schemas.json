@@ -44,6 +44,10 @@
       },
       "include_future_objects": {
         "type": "boolean"
+      },
+      "ttl_days": {
+        "type": ["integer", "null"],
+        "enum": [1, 7, 30, 365, null]
       }
     },
     "required": ["name", "workspaces", "include_future_objects"],

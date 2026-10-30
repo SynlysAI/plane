@@ -2,14 +2,17 @@
 
 import json
 import hashlib
+import secrets
 from uuid import UUID
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core import signing
 from django.db import transaction
+from django.db.models import Q
 from django.middleware.csrf import get_token
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
 from rest_framework.authentication import SessionAuthentication
@@ -19,7 +22,14 @@ from rest_framework.views import APIView
 from rest_framework.utils.encoders import JSONEncoder
 
 from plane.db.models import UnifiedMCPConnection, Workspace, WorkspaceMember
-from plane.mcp.authorization import UnifiedTokenAuthentication, issue_connection, workspace_access
+from plane.mcp.authorization import UnifiedTokenAuthentication, issue_connection, token_hash, workspace_access
+from plane.mcp.credentials import (
+    DEFAULT_TTL_DAYS,
+    TTL_DAYS,
+    CredentialStorageError,
+    recover_credential,
+    seal_credential,
+)
 from plane.mcp.catalog import ADMIN_SCHEMAS, SCHEMAS, tools_for
 from plane.mcp.reading import UnifiedReadService, encode
 from plane.mcp.writing import UnifiedWriteService
@@ -57,6 +67,8 @@ class UnifiedEndpointBase(APIView):
         return super().initial(request, *args, **kwargs)
 
     def handle_exception(self, exc):
+        if isinstance(exc, CredentialStorageError):
+            exc = ResearchReadError("credential_unavailable", "Credential storage is unavailable; reset or retry.", 503)
         if isinstance(exc, ResearchReadError):
             return Response({"error_code": exc.code, "message": str(exc)}, status=exc.status)
         return super().handle_exception(exc)
@@ -126,6 +138,8 @@ class UnifiedConnectionOptionsEndpoint(UnifiedEndpointBase):
                 else None,
                 "csrf_token": get_token(request._request),
                 "ttl_seconds": node_mcp_token_ttl_seconds(),
+                "ttl_days": list(TTL_DAYS),
+                "default_ttl_days": DEFAULT_TTL_DAYS,
                 "max_workspaces": 20,
                 "write_requires_future_objects": True,
             }
@@ -137,14 +151,21 @@ class UnifiedConnectionsEndpoint(UnifiedEndpointBase):
     http_method_names = ["get", "post", "options"]
 
     @staticmethod
-    def present(connection):
+    def present(connection, workspace_names=None):
+        """返回连接元数据，避免列表携带完整密钥或密文。"""
+        if workspace_names is None:
+            workspace_names = UnifiedConnectionsEndpoint.workspace_names([connection], connection.owner)
         return {
             "id": str(connection.pk),
             "name": connection.name,
             "scope": {
                 "include_future_objects": connection.scope["include_future_objects"],
                 "workspaces": [
-                    {"workspace_id": item["workspace_id"], "domains": item["domains"]}
+                    {
+                        "workspace_id": item["workspace_id"],
+                        "workspace_name": workspace_names.get(item["workspace_id"]),
+                        "domains": item["domains"],
+                    }
                     for item in connection.scope["workspaces"]
                 ],
             },
@@ -155,9 +176,61 @@ class UnifiedConnectionsEndpoint(UnifiedEndpointBase):
                 if any(entry["domains"].get(domain) == "read_write" for entry in connection.scope["workspaces"])
             ],
             "created_at": connection.created_at.isoformat(),
-            "expires_at": connection.expires_at.isoformat(),
+            "expires_at": connection.expires_at.isoformat() if connection.expires_at else None,
+            "configuration_available": bool(connection.token_encrypted),
             "revoked_at": connection.revoked_at.isoformat() if connection.revoked_at else None,
             "last_used_at": connection.last_used_at.isoformat() if connection.last_used_at else None,
+        }
+
+    @staticmethod
+    def workspace_names(connections, user):
+        """批量读取当前账号仍可访问的授权工作区名称。
+
+        Args:
+            connections: 当前页或详情中的连接记录。
+            user: 正在管理连接的登录用户。
+
+        Returns:
+            工作区 ID 字符串到当前名称的映射。
+        """
+        ids = {entry["workspace_id"] for row in connections for entry in row.scope["workspaces"]}
+        rows = filter_workspaces_for_private_access(
+            Workspace.objects.filter(
+                pk__in=ids,
+                workspace_member__member=user,
+                workspace_member__is_active=True,
+            ),
+            user,
+        )
+        return {str(row.pk): row.name for row in rows}
+
+    @staticmethod
+    @sensitive_variables()
+    def configuration(request, connection, raw):
+        """使用同一格式生成创建、回看及重置后的客户端配置。
+
+        Args:
+            request: 已通过本人会话与 CSRF 校验的请求。
+            connection: 对应的有效连接。
+            raw: 当前访问密钥。
+
+        Returns:
+            包含连接元数据和客户端配置的响应字典。
+        """
+        url = request.build_absolute_uri("/api/mcp/")
+        headers = {"Authorization": "Bearer " + raw}
+        return {
+            **UnifiedConnectionsEndpoint.present(connection),
+            "secret": raw,
+            "mcp_url": url,
+            "codex_toml": "[mcp_servers.plane]\nurl = "
+            + json.dumps(url)
+            + '\nhttp_headers = { "Authorization" = '
+            + json.dumps(headers["Authorization"])
+            + ' }\ntool_timeout_sec = 120\ndefault_tools_approval_mode = "prompt"\n',
+            "sciencediscovery_json": json.dumps(
+                {"mcpServers": {"plane": {"type": "http", "url": url, "headers": headers, "timeoutSeconds": 120}}}
+            ),
         }
 
     def get(self, request):
@@ -169,22 +242,31 @@ class UnifiedConnectionsEndpoint(UnifiedEndpointBase):
                 raise ValueError()
         except (TypeError, ValueError):
             raise ResearchReadError("invalid_arguments", "limit must be between 1 and 50.") from None
-        rows = UnifiedMCPConnection.objects.filter(owner=request.user).order_by("pk")
+        rows = UnifiedMCPConnection.objects.filter(owner=request.user).order_by("-created_at", "-pk")
         cursor = request.query_params.get("cursor")
         if cursor:
             try:
-                state = signing.loads(cursor, salt="unified-mcp.management", max_age=3600)
+                state = signing.loads(cursor, salt="unified-mcp.management.v2", max_age=3600)
                 if state["owner"] != str(request.user.pk):
                     raise ValueError()
-                rows = rows.filter(pk__gt=UUID(state["after"]))
+                created = parse_datetime(state["created_at"])
+                if created is None or timezone.is_naive(created):
+                    raise ValueError()
+                rows = rows.filter(Q(created_at__lt=created) | Q(created_at=created, pk__lt=UUID(state["after"])))
             except (signing.BadSignature, ValueError, KeyError, TypeError):
                 raise ResearchReadError("invalid_cursor", "Invalid connection list cursor.") from None
         items = list(rows[: limit + 1])
+        names = self.workspace_names(items[:limit], request.user)
         return Response(
             {
-                "results": [self.present(row) for row in items[:limit]],
+                "results": [self.present(row, names) for row in items[:limit]],
                 "next_cursor": signing.dumps(
-                    {"owner": str(request.user.pk), "after": str(items[limit - 1].pk)}, salt="unified-mcp.management"
+                    {
+                        "owner": str(request.user.pk),
+                        "after": str(items[limit - 1].pk),
+                        "created_at": items[limit - 1].created_at.isoformat(),
+                    },
+                    salt="unified-mcp.management.v2",
                 )
                 if len(items) > limit
                 else None,
@@ -195,24 +277,68 @@ class UnifiedConnectionsEndpoint(UnifiedEndpointBase):
     @sensitive_variables()
     def post(self, request):
         connection, raw = issue_connection(request.user, request.data)
-        url = request.build_absolute_uri("/api/mcp/")
-        headers = {"Authorization": "Bearer " + raw}
-        return Response(
-            {
-                **self.present(connection),
-                "secret": raw,
-                "mcp_url": url,
-                "codex_toml": "[mcp_servers.plane]\nurl = "
-                + json.dumps(url)
-                + '\nhttp_headers = { "Authorization" = '
-                + json.dumps(headers["Authorization"])
-                + ' }\ntool_timeout_sec = 120\ndefault_tools_approval_mode = "prompt"\n',
-                "sciencediscovery_json": json.dumps(
-                    {"mcpServers": {"plane": {"type": "http", "url": url, "headers": headers, "timeoutSeconds": 120}}}
-                ),
-            },
-            status=201,
+        return Response(self.configuration(request, connection, raw), status=201)
+
+
+class UnifiedConfigurationEndpoint(UnifiedEndpointBase):
+    """仅本人可通过会话和 CSRF 校验取回有效连接的配置。"""
+
+    authentication_classes = [SessionAuthentication]
+    http_method_names = ["post", "options"]
+    rotate = False
+
+    @transaction.atomic
+    @sensitive_variables()
+    def post(self, request, connection_id):
+        """在连接锁内恢复或重置密钥，并记录不含密钥的审计。
+
+        Args:
+            request: 带空对象正文的本人会话请求。
+            connection_id: 要读取或重置的连接 ID。
+
+        Returns:
+            当前完整客户端配置的响应。
+        """
+        if request.data != {}:
+            raise ResearchReadError("invalid_arguments", "Use an empty object.")
+        connection = (
+            UnifiedMCPConnection.objects.select_for_update()
+            .filter(
+                pk=connection_id,
+                owner=request.user,
+            )
+            .first()
         )
+        if connection is None:
+            raise ResearchReadError("not_found", "Connection not found.", 404)
+        if connection.revoked_at or (connection.expires_at and connection.expires_at <= timezone.now()):
+            raise ResearchReadError("connection_inactive", "Connection is expired or revoked.", 409)
+        if self.rotate:
+            raw = "pum_" + secrets.token_urlsafe(32)
+            connection.token_encrypted = seal_credential(raw)
+            connection.token_hash = token_hash(raw)
+            connection.save(update_fields=["token_encrypted", "token_hash", "updated_at"])
+        else:
+            if not connection.token_encrypted:
+                raise ResearchReadError("configuration_unavailable", "Reset the legacy credential first.", 409)
+            raw = recover_credential(connection)
+        for workspace in Workspace.objects.filter(
+            pk__in=[entry["workspace_id"] for entry in connection.scope["workspaces"]]
+        ):
+            record_audit_event(
+                workspace=workspace,
+                actor=request.user,
+                action="mcp.connection.rotate" if self.rotate else "mcp.connection.configuration",
+                resource_type="unified_mcp_connection",
+                resource_id=connection.pk,
+            )
+        return Response(UnifiedConnectionsEndpoint.configuration(request, connection, raw))
+
+
+class UnifiedRotateEndpoint(UnifiedConfigurationEndpoint):
+    """重置本人有效连接的密钥，保留原授权和期限。"""
+
+    rotate = True
 
 
 class UnifiedRevokeEndpoint(UnifiedEndpointBase):
@@ -230,7 +356,8 @@ class UnifiedRevokeEndpoint(UnifiedEndpointBase):
             raise ResearchReadError("not_found", "Connection not found.", 404)
         if connection.revoked_at is None:
             connection.revoked_at = timezone.now()
-            connection.save(update_fields=["revoked_at", "updated_at"])
+            connection.token_encrypted = ""
+            connection.save(update_fields=["revoked_at", "token_encrypted", "updated_at"])
             for workspace in Workspace.objects.filter(
                 pk__in=[entry["workspace_id"] for entry in connection.scope["workspaces"]]
             ):

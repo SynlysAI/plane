@@ -5,7 +5,6 @@ No child grants, caches, distributed locks or upstream credentials are created.
 
 import hashlib
 import secrets
-from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -18,8 +17,14 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from plane.db.models import ResearchContextGrant, UnifiedMCPConnection, User, Workspace, WorkspaceMember
 from plane.mcp.catalog import CREATE_SCHEMA, matches
+from plane.mcp.credentials import (
+    DEFAULT_TTL_DAYS,
+    expires_after,
+    seal_credential,
+    unexpired_connections,
+    valid_lifetime,
+)
 from plane.research.services.mcp_catalog import RESOURCE_KINDS, TOOL_NAMES, ResearchReadError
-from plane.research.services.token_lifetimes import node_mcp_token_ttl_seconds
 from plane.research.utils.capabilities import has_active_research_org_relation
 from plane.research.utils.audit import record_audit_event
 from plane.research.utils.org import READABLE_WORKSPACE_ROLES
@@ -37,7 +42,7 @@ def token_hash(raw):
 def active_connection(connection_id):
     return (
         UnifiedMCPConnection.objects.select_related("owner")
-        .filter(pk=connection_id, owner__is_active=True, revoked_at__isnull=True, expires_at__gt=timezone.now())
+        .filter(unexpired_connections(), pk=connection_id, owner__is_active=True, revoked_at__isnull=True)
         .first()
     )
 
@@ -58,10 +63,10 @@ class UnifiedTokenAuthentication(BaseAuthentication):
         connection = (
             UnifiedMCPConnection.objects.select_related("owner")
             .filter(
+                unexpired_connections(),
                 token_hash=token_hash(raw),
                 owner__is_active=True,
                 revoked_at__isnull=True,
-                expires_at__gt=timezone.now(),
             )
             .first()
         )
@@ -90,9 +95,9 @@ def workspace_access(user, workspace, domain):
 def active_unified_read_count(user, workspace, node_id=None, *, capability="read"):
     """Count broad scopes too, so legacy issuance cannot bypass the node limit."""
     rows = UnifiedMCPConnection.objects.filter(
+        unexpired_connections(),
         owner=user,
         revoked_at__isnull=True,
-        expires_at__gt=timezone.now(),
         scope__workspaces__contains=[{"workspace_id": str(workspace.pk), "domains": {"research": capability}}],
     )
     if node_id is not None:
@@ -175,7 +180,11 @@ def scoped_administrative_projects(connection, workspace):
 @sensitive_variables()
 @transaction.atomic
 def issue_connection(user, data):
-    if not matches(CREATE_SCHEMA, data) or any(ord(c) < 32 for c in data["name"]):
+    if (
+        not matches(CREATE_SCHEMA, data)
+        or any(ord(c) < 32 or ord(c) == 127 for c in data["name"])
+        or not valid_lifetime(data.get("ttl_days", DEFAULT_TTL_DAYS))
+    ):
         raise ResearchReadError(
             "invalid_arguments", "Choose a name, workspaces, capabilities and explicit future-object scope."
         )
@@ -284,8 +293,9 @@ def issue_connection(user, data):
         owner=user,
         name=data["name"].strip(),
         token_hash=token_hash(raw),
+        token_encrypted=seal_credential(raw),
         scope=scope,
-        expires_at=timezone.now() + timedelta(seconds=node_mcp_token_ttl_seconds()),
+        expires_at=expires_after(data.get("ttl_days", DEFAULT_TTL_DAYS)),
     )
     for entry in scope["workspaces"]:
         record_audit_event(

@@ -10,6 +10,15 @@ beforeEach(() => {
   calls.get.mockResolvedValue({ data: {} });
   calls.post.mockResolvedValue({ data: {} });
 });
+it.each(["configuration", "rotate"] as const)("通过本人会话与 CSRF 请求周报 %s 配置", async (action) => {
+  const service = new WeeklyReportMCPService();
+  await service[action]("lab", "a/b", "csrf");
+  expect(calls.post).toHaveBeenLastCalledWith(
+    `/api/research/workspaces/lab/mcp/weekly-report/connections/a%2Fb/${action}/`,
+    {},
+    { headers: { "X-CSRFToken": "csrf" } }
+  );
+});
 
 it("uses dedicated management routes, login cookies and CSRF; no machine or node identity", async () => {
   const service = new WeeklyReportMCPService();

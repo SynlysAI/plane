@@ -17,6 +17,8 @@ from plane.research.views.weekly_report_agent import (
     WeeklyReportOptionsEndpoint,
     WeeklyReportConnectionsEndpoint,
     WeeklyReportRevokeEndpoint,
+    WeeklyReportConfigurationEndpoint,
+    WeeklyReportRotateEndpoint,
 )
 from plane.research.views.mcp_management import (
     ResearchMCPCandidatesEndpoint,
@@ -285,6 +287,14 @@ from plane.research.views import (
 )
 
 urlpatterns = [
+    path(
+        "research/workspaces/<str:slug>/mcp/weekly-report/connections/<uuid:grant_id>/configuration/",
+        WeeklyReportConfigurationEndpoint.as_view(), name="weekly-report-mcp-configuration",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/weekly-report/connections/<uuid:grant_id>/rotate/",
+        WeeklyReportRotateEndpoint.as_view(), name="weekly-report-mcp-rotate",
+    ),
     path(
         "research/mcp/weekly-report/options/",
         WeeklyReportOptionsEndpoint.as_view(),

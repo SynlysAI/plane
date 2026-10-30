@@ -1,5 +1,9 @@
 import { API_BASE_URL } from "@plane/constants";
-import type { WeeklyReportAction, WeeklyReportIssued } from "@/services/weekly-report-mcp.service";
+import type {
+  WeeklyReportAction,
+  WeeklyReportConnection,
+  WeeklyReportIssued,
+} from "@/services/weekly-report-mcp.service";
 import type { MCPConfig } from "./connection-config";
 
 export const weeklyReportActionLabels: Record<WeeklyReportAction, string> = {
@@ -8,6 +12,22 @@ export const weeklyReportActionLabels: Record<WeeklyReportAction, string> = {
 };
 
 const invalid = () => new Error("连接配置无效，请核对已有连接后重新创建。");
+/** 白名单提取元数据，避免配置密钥随列表长期驻留。 */
+export function weeklyReportMetadata(value: WeeklyReportConnection): WeeklyReportConnection {
+  return {
+    id: value.id,
+    workspace: value.workspace,
+    label: value.label,
+    actions: value.actions,
+    report_type: value.report_type,
+    period_policy: value.period_policy,
+    created_at: value.created_at,
+    expires_at: value.expires_at,
+    revoked_at: value.revoked_at,
+    last_used_at: value.last_used_at,
+    configuration_available: value.configuration_available,
+  };
+}
 export function weeklyReportConfig(value: WeeklyReportIssued, workspace: string): MCPConfig {
   try {
     const base = new URL(API_BASE_URL || window.location.origin);

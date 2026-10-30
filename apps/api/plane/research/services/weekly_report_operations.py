@@ -515,7 +515,10 @@ class WeeklyReportService:
             payload={"identity": self.identity(), "period": env["period"], "proposal": proposal},
             preconditions={"state_hash": env["state_hash"], "sources": source_state},
             request_hash=request_hash,
-            expires_at=min(timezone.now() + timedelta(minutes=15), self.grant.expires_at),
+            expires_at=min(
+                timezone.now() + timedelta(minutes=15),
+                self.grant.expires_at or timezone.now() + timedelta(minutes=15),
+            ),
         )
         operation.proposal_hash = self.seal(operation)
         # Reject oversized prepared responses before creating even an operation.

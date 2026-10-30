@@ -17,7 +17,8 @@ class ReportAgentGrant(BaseModel):
     allowed_actions = models.JSONField(default=weekly_actions)
     period_policy = models.CharField(max_length=64, default="current_and_previous_week.v1")
     token_hash = models.CharField(max_length=64, unique=True)
-    expires_at = models.DateTimeField(db_index=True)
+    token_encrypted = models.TextField(blank=True, default="")
+    expires_at = models.DateTimeField(db_index=True, null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
 

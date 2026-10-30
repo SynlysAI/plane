@@ -1,11 +1,15 @@
 """Dedicated machine API plus session/CSRF-only weekly connection management."""
 
 import json
+import secrets
+from uuid import UUID
 
 from django.core import signing
 from django.db import transaction
+from django.db.models import Q
 from django.middleware.csrf import get_token
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_variables, sensitive_post_parameters
 from rest_framework.authentication import SessionAuthentication
@@ -16,6 +20,14 @@ from rest_framework.views import APIView
 from rest_framework.throttling import SimpleRateThrottle
 
 from plane.db import models as db
+from plane.mcp.credentials import (
+    DEFAULT_TTL_DAYS,
+    TTL_DAYS,
+    CredentialStorageError,
+    recover_credential,
+    seal_credential,
+)
+from plane.research.services.context_tokens import hash_context_token
 from plane.research.services.report_workflow import ReportWorkflowError
 from plane.research.services.weekly_report_catalog import VERSION, tools_for
 from plane.research.services.weekly_report_errors import WeeklyReportError
@@ -24,12 +36,12 @@ from plane.research.services.weekly_report_policy import (
     ACTIONS,
     HEADER,
     PERIOD_POLICY,
-    TTL_DAYS,
     WeeklyReportTokenAuthentication,
     check_actor,
     issue_grant,
 )
 from plane.research.utils.audit import record_audit_event
+from plane.utils.workspace_access import filter_workspaces_for_private_access
 
 
 class WeeklyReportThrottle(SimpleRateThrottle):
@@ -45,6 +57,8 @@ class WeeklyBase(APIView):
     http_method_names = ["get", "post", "options"]
 
     def handle_exception(self, exc):
+        if isinstance(exc, CredentialStorageError):
+            exc = WeeklyReportError("credential_unavailable", "Credential storage is unavailable; reset or retry.", 503)
         if isinstance(exc, ReportWorkflowError):
             exc = WeeklyReportError(
                 exc.data.get("error_code", "report_state_conflict"),
@@ -67,6 +81,7 @@ class WeeklyBase(APIView):
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
         response["Cache-Control"] = "no-store"
+        response["Referrer-Policy"] = "no-referrer"
         response["Vary"] = "Cookie, " + HEADER
         return response
 
@@ -158,17 +173,26 @@ class WeeklyManagementBase(WeeklyBase):
             context = resolve_report_context(workspace=workspace, actor=self.request.user, payload={})
             if context.report_org_unit is None:
                 raise WeeklyReportError("report_org_required", "A primary organisation assignment is required.", 403)
-            enabled, reason = True, None
+            enabled, reason, reason_code = True, None, None
         except (WeeklyReportError, ReportWorkflowError) as exc:
-            enabled, reason = False, str(exc)
+            reason_code = exc.code if isinstance(exc, WeeklyReportError) else exc.data.get("error_code")
+            reasons = {
+                "reports_disabled": "当前账号或工作区尚未开放周报连接。",
+                "report_org_required": "请先完善本人的主要组织归属。",
+                "policy_changed": "工作区周报时区设置无效，请联系管理员。",
+                "scope_denied": "当前账号没有此工作区的访问权限。",
+            }
+            enabled, reason = False, reasons.get(reason_code, "当前周报设置不满足创建条件，请联系管理员。")
         return {
             "id": str(workspace.pk),
             "slug": workspace.slug,
             "name": workspace.name,
             "enabled": enabled,
             "unavailable_reason": reason,
+            "unavailable_reason_code": reason_code,
             "actions": sorted(ACTIONS) if enabled else [],
             "ttl_days": list(TTL_DAYS),
+            "default_ttl_days": DEFAULT_TTL_DAYS,
             "period_policy": PERIOD_POLICY,
             "period_description": "仅本人本周与上周的周报，周期按工作区报告时区计算。",
         }
@@ -183,9 +207,31 @@ class WeeklyManagementBase(WeeklyBase):
             "report_type": grant.report_type,
             "period_policy": grant.period_policy,
             "created_at": grant.created_at.isoformat(),
-            "expires_at": grant.expires_at.isoformat(),
+            "expires_at": grant.expires_at.isoformat() if grant.expires_at else None,
+            "configuration_available": bool(grant.token_encrypted),
             "revoked_at": grant.revoked_at.isoformat() if grant.revoked_at else None,
             "last_used_at": grant.last_used_at.isoformat() if grant.last_used_at else None,
+        }
+
+    @staticmethod
+    @sensitive_variables()
+    def configuration(request, grant, raw):
+        """生成周报连接的完整配置响应。
+
+        Args:
+            request: 已通过本人会话与 CSRF 校验的请求。
+            grant: 本人的有效周报连接。
+            raw: 当前访问密钥。
+
+        Returns:
+            包含元数据、服务路径及专用请求头的字典。
+        """
+        return {
+            **WeeklyManagementBase.present(grant),
+            "contract_version": VERSION,
+            "mcp_path": f"/api/research/workspaces/{grant.workspace.slug}/weekly-report-agent/mcp/",
+            "headers": {HEADER: raw},
+            "csrf_token": get_token(request._request),
         }
 
 
@@ -197,13 +243,16 @@ class WeeklyReportOptionsEndpoint(WeeklyManagementBase):
         else:
             choices = [
                 self.workspace_options(workspace)
-                for workspace in db.Workspace.objects.filter(
-                    workspace_member__member=request.user,
-                    workspace_member__is_active=True,
-                    workspace_member__role__in=(15, 20),
+                for workspace in filter_workspaces_for_private_access(
+                    db.Workspace.objects.filter(
+                        workspace_member__member=request.user,
+                        workspace_member__is_active=True,
+                        workspace_member__role__in=(15, 20),
+                    )
+                    .distinct()
+                    .order_by("name", "pk"),
+                    request.user,
                 )
-                .distinct()
-                .order_by("name", "pk")
             ]
         return Response(
             {
@@ -225,17 +274,21 @@ class WeeklyReportConnectionsEndpoint(WeeklyManagementBase):
             raise WeeklyReportError("invalid_arguments", "Only a paging cursor is accepted.")
         if cursor:
             try:
-                position = signing.loads(cursor, salt="weekly-report.management.v1", max_age=3600)
+                position = signing.loads(cursor, salt="weekly-report.management.v2", max_age=3600)
                 if position["binding"] != binding:
                     raise ValueError()
-                from uuid import UUID
-
-                rows = rows.filter(pk__gt=UUID(position["id"]))
+                created = parse_datetime(position["created_at"])
+                if created is None or timezone.is_naive(created):
+                    raise ValueError()
+                rows = rows.filter(Q(created_at__lt=created) | Q(created_at=created, pk__lt=UUID(position["id"])))
             except (signing.BadSignature, ValueError, TypeError, KeyError):
                 raise WeeklyReportError("invalid_cursor", "Invalid or expired connection cursor.") from None
-        batch = list(rows.order_by("pk")[:31])
+        batch = list(rows.order_by("-created_at", "-pk")[:31])
         next_cursor = (
-            signing.dumps({"binding": binding, "id": str(batch[29].pk)}, salt="weekly-report.management.v1")
+            signing.dumps(
+                {"binding": binding, "id": str(batch[29].pk), "created_at": batch[29].created_at.isoformat()},
+                salt="weekly-report.management.v2",
+            )
             if len(batch) > 30
             else None
         )
@@ -261,17 +314,68 @@ class WeeklyReportConnectionsEndpoint(WeeklyManagementBase):
             actions=data["actions"],
             ttl_days=data["ttl_days"],
         )
-        path = f"/api/research/workspaces/{workspace.slug}/weekly-report-agent/mcp/"
-        return Response(
-            {
-                **self.present(grant),
-                "contract_version": VERSION,
-                "mcp_path": path,
-                "headers": {HEADER: raw},
-                "csrf_token": get_token(request._request),
-            },
-            status=201,
+        return Response(self.configuration(request, grant, raw), status=201)
+
+
+class WeeklyReportConfigurationEndpoint(WeeklyManagementBase):
+    """按需取回本人有效周报连接的客户端配置。"""
+
+    http_method_names = ["post", "options"]
+    rotate = False
+
+    @transaction.atomic
+    @sensitive_variables()
+    def post(self, request, slug, grant_id):
+        """在连接锁内恢复或重置密钥，避免部分更新。
+
+        Args:
+            request: 带空对象正文的本人会话请求。
+            slug: 当前工作区标识。
+            grant_id: 要读取或重置的周报连接 ID。
+
+        Returns:
+            当前完整周报客户端配置的响应。
+        """
+        workspace = self.workspace(slug)
+        if request.data != {}:
+            raise WeeklyReportError("invalid_arguments", "Use an empty object.")
+        grant = (
+            db.ReportAgentGrant.objects.select_for_update()
+            .filter(
+                pk=grant_id,
+                workspace=workspace,
+                user=request.user,
+            )
+            .first()
         )
+        if grant is None:
+            raise WeeklyReportError("not_found", "Connection not found.", 404)
+        if grant.revoked_at or (grant.expires_at and grant.expires_at <= timezone.now()):
+            raise WeeklyReportError("connection_inactive", "Connection is expired or revoked.", 409)
+        if self.rotate:
+            check_actor(workspace, request.user)
+            raw = "pwr_" + secrets.token_urlsafe(32)
+            grant.token_encrypted = seal_credential(raw)
+            grant.token_hash = hash_context_token(raw)
+            grant.save(update_fields=["token_encrypted", "token_hash", "updated_at"])
+        else:
+            if not grant.token_encrypted:
+                raise WeeklyReportError("configuration_unavailable", "Reset the legacy credential first.", 409)
+            raw = recover_credential(grant)
+        record_audit_event(
+            workspace=workspace,
+            actor=request.user,
+            action="report.mcp.grant.rotate" if self.rotate else "report.mcp.grant.configuration",
+            resource_type="report_agent_grant",
+            resource_id=grant.pk,
+        )
+        return Response(self.configuration(request, grant, raw))
+
+
+class WeeklyReportRotateEndpoint(WeeklyReportConfigurationEndpoint):
+    """重置本人周报连接的密钥，保持授权和期限。"""
+
+    rotate = True
 
 
 class WeeklyReportRevokeEndpoint(WeeklyManagementBase):
@@ -289,7 +393,8 @@ class WeeklyReportRevokeEndpoint(WeeklyManagementBase):
             raise WeeklyReportError("not_found", "Connection not found.", 404)
         if grant.revoked_at is None:
             grant.revoked_at = timezone.now()
-            grant.save(update_fields=["revoked_at", "updated_at"])
+            grant.token_encrypted = ""
+            grant.save(update_fields=["revoked_at", "token_encrypted", "updated_at"])
             record_audit_event(
                 workspace=workspace,
                 actor=request.user,

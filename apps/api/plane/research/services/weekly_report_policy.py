@@ -1,7 +1,6 @@
 """Live personal-report authorization and a conservative PostgreSQL consistency barrier."""
 
 import secrets
-from datetime import timedelta
 
 import pytz
 from django.apps import apps
@@ -12,16 +11,17 @@ from django.views.decorators.debug import sensitive_variables
 from rest_framework.authentication import BaseAuthentication
 
 from plane.db import models as db
+from plane.mcp.credentials import expires_after, seal_credential, unexpired_connections, valid_lifetime
 from plane.research.services.context_tokens import hash_context_token
 from plane.research.services.weekly_report_errors import WeeklyReportError
 from plane.research.utils.capabilities import NAV_REPORTS, has_active_research_org_relation, nav_allowed
 from plane.research.utils.org import READABLE_WORKSPACE_ROLES
 from plane.research.utils.settings import report_timezone_for, workspace_research_sections
 from plane.research.utils.audit import record_audit_event
+from plane.utils.workspace_access import user_can_access_workspace
 
 PERIOD_POLICY = "current_and_previous_week.v1"
 ACTIONS = frozenset({"save_draft", "submit"})
-TTL_DAYS = (1, 7, 30)
 HEADER = "X-Weekly-Report-Token"
 
 # Existing Page/asset/org endpoints do not share a report row lock. Until all
@@ -85,6 +85,7 @@ def check_actor(workspace, user, *, require_feature=True):
         raise WeeklyReportError("reports_disabled", "Weekly report MCP is disabled.", 403)
     if (
         not db.User.objects.filter(pk=user.pk, is_active=True).exists()
+        or not user_can_access_workspace(user, workspace_id=workspace.pk)
         or not db.WorkspaceMember.objects.filter(
             workspace=workspace, member=user, is_active=True, role__in=READABLE_WORKSPACE_ROLES
         ).exists()
@@ -117,7 +118,7 @@ def check_grant(grant, workspace, user, *, action=None, lock=False):
         raise WeeklyReportError("weekly_grant_required", "A personal weekly report credential is required.", 401)
     if current.revoked_at:
         raise WeeklyReportError("grant_revoked", "This weekly report connection was revoked.", 403)
-    if current.expires_at <= timezone.now():
+    if current.expires_at and current.expires_at <= timezone.now():
         raise WeeklyReportError("grant_expired", "This weekly report connection expired.", 403)
     check_actor(workspace, user)
     if not set(current.allowed_actions) or not set(current.allowed_actions) <= ACTIONS:
@@ -140,19 +141,18 @@ def issue_grant(*, workspace, user, label, actions, ttl_days):
     if (
         not isinstance(label, str)
         or not 1 <= len(label.strip()) <= 100
-        or any(ord(c) < 32 for c in label)
+        or any(ord(c) < 32 or ord(c) == 127 for c in label)
         or not isinstance(actions, list)
         or not actions
         or any(not isinstance(action, str) for action in actions)
         or not set(actions) <= ACTIONS
         or len(set(actions)) != len(actions)
-        or type(ttl_days) is not int
-        or ttl_days not in TTL_DAYS
+        or not valid_lifetime(ttl_days)
     ):
         raise WeeklyReportError("invalid_arguments", "Choose a name, explicit actions and an allowed lifetime.")
     if (
         db.ReportAgentGrant.objects.filter(
-            workspace=workspace, user=user, revoked_at__isnull=True, expires_at__gt=timezone.now()
+            unexpired_connections(), workspace=workspace, user=user, revoked_at__isnull=True
         ).count()
         >= 10
     ):
@@ -164,7 +164,8 @@ def issue_grant(*, workspace, user, label, actions, ttl_days):
         label=label.strip(),
         allowed_actions=sorted(actions),
         token_hash=hash_context_token(raw),
-        expires_at=timezone.now() + timedelta(days=ttl_days),
+        token_encrypted=seal_credential(raw),
+        expires_at=expires_after(ttl_days),
     )
     record_audit_event(
         workspace=workspace,
