@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => ({
     },
   },
   fetchIdentity: vi.fn(),
-  setAdministrativeSettingsAdminOnly: vi.fn(),
+  fetchSettings: vi.fn(),
+  updateSettings: vi.fn(),
 }));
 
 vi.mock("@plane/propel/button", () => ({
@@ -43,7 +44,11 @@ vi.mock("@/hooks/use-workspace-context", () => ({
   useWorkspaceContext: () => ({ context: mocks.context, error: null, retry: vi.fn() }),
 }));
 vi.mock("@/hooks/store/use-research", () => ({
-  useResearch: () => ({ fetchIdentity: mocks.fetchIdentity }),
+  useResearch: () => ({
+    fetchIdentity: mocks.fetchIdentity,
+    fetchSettings: mocks.fetchSettings,
+    updateSettings: mocks.updateSettings,
+  }),
 }));
 vi.mock("@/components/administrative/organization-settings", () => ({
   AdministrativeOrganizationSettings: () => <div data-testid="administrative-settings" />,
@@ -56,7 +61,6 @@ vi.mock("@/components/research/feedback/feedback-dialog", () => ({
 vi.mock("@/services/project-domains.service", () => ({
   ProjectDomainsService: class {
     setResearchEnabled = vi.fn();
-    setAdministrativeSettingsAdminOnly = mocks.setAdministrativeSettingsAdminOnly;
   },
   domainError: () => "保存失败",
 }));
@@ -89,7 +93,6 @@ beforeEach(() => {
     capabilities: { nav: ["org"] },
     workspace: {
       research_enabled: true,
-      administrative_settings_admin_only: false,
       purpose: "PUBLIC_RESEARCH",
     },
     user: {
@@ -102,22 +105,76 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  mocks.fetchSettings.mockResolvedValue({
+    research_mcp_write_enabled: false,
+    research_mcp_write_available: true,
+  });
+  mocks.updateSettings.mockReset();
 });
 
-it("shows and saves the administrative settings administrator lock", async () => {
-  mocks.setAdministrativeSettingsAdminOnly.mockResolvedValue(mocks.context);
+it("keeps the administrative lock outside workspace management settings", async () => {
+  await render();
+  expect(container.querySelector('input[name="administrative-settings-admin-only"]')).toBeNull();
+  expect(container.textContent).not.toContain("行政项目配置权限");
+  expect(container.textContent).toContain("科研模块");
+});
+
+it("shows and saves the research MCP write policy", async () => {
+  mocks.context.user.is_workspace_admin = true;
+  mocks.updateSettings.mockResolvedValue({
+    research_mcp_write_enabled: true,
+    research_mcp_write_available: true,
+  });
 
   await render();
-  const checkbox = container.querySelector<HTMLInputElement>('input[name="administrative-settings-admin-only"]');
+  await act(async () => undefined);
+  const checkbox = container.querySelector<HTMLInputElement>('input[name="research-mcp-write-enabled"]');
   expect(checkbox).not.toBeNull();
   expect(checkbox?.checked).toBe(false);
-  expect(container.textContent).toContain("行政项目配置仅管理员可设置");
+  expect(mocks.fetchSettings).toHaveBeenCalledWith("public");
+  expect(container.textContent).toContain("科研 MCP 写入");
 
   await act(async () => {
     checkbox?.click();
   });
 
-  expect(mocks.setAdministrativeSettingsAdminOnly).toHaveBeenCalledWith("public", true);
+  expect(mocks.updateSettings).toHaveBeenCalledWith("public", { research_mcp_write_enabled: true });
+  expect(checkbox?.checked).toBe(true);
+});
+
+it("keeps research MCP write disabled when the deployment switch is unavailable", async () => {
+  mocks.context.user.is_workspace_admin = true;
+  mocks.fetchSettings.mockResolvedValue({
+    research_mcp_write_enabled: false,
+    research_mcp_write_available: false,
+  });
+
+  await render();
+  await act(async () => undefined);
+  const checkbox = container.querySelector<HTMLInputElement>('input[name="research-mcp-write-enabled"]');
+  expect(checkbox?.disabled).toBe(true);
+  expect(container.textContent).toContain("服务器全局科研 MCP 读写开关未开启");
+
+  await act(async () => {
+    checkbox?.click();
+  });
+
+  expect(mocks.updateSettings).not.toHaveBeenCalled();
+});
+
+it("keeps the old research MCP write state when saving fails", async () => {
+  mocks.context.user.is_workspace_admin = true;
+  mocks.updateSettings.mockRejectedValue({ message: "全局科研 MCP 读写开关未开启。" });
+
+  await render();
+  await act(async () => undefined);
+  const checkbox = container.querySelector<HTMLInputElement>('input[name="research-mcp-write-enabled"]');
+  await act(async () => {
+    checkbox?.click();
+  });
+
+  expect(checkbox?.checked).toBe(false);
+  expect(container.textContent).toContain("全局科研 MCP 读写开关未开启。");
 });
 
 afterEach(async () => {

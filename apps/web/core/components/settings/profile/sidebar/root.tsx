@@ -16,10 +16,12 @@ type Props = {
   activeTab: TProfileSettingsTabs;
   className?: string;
   updateActiveTab: (tab: TProfileSettingsTabs) => void;
+  /** Workspace to return to from this workspace-independent settings surface. */
+  returnWorkspaceSlug?: string;
 };
 
 export function ProfileSettingsSidebarRoot(props: Props) {
-  const { activeTab, className, updateActiveTab } = props;
+  const { activeTab, className, updateActiveTab, returnWorkspaceSlug } = props;
 
   return (
     <ScrollArea
@@ -28,7 +30,7 @@ export function ProfileSettingsSidebarRoot(props: Props) {
       size="sm"
       rootClassName={cn("shrink-0 overflow-y-scroll border-r border-r-subtle bg-surface-2 px-3 py-4", className)}
     >
-      <ProfileSettingsSidebarHeader />
+      <ProfileSettingsSidebarHeader returnWorkspaceSlug={returnWorkspaceSlug} />
       <ProfileSettingsSidebarItemCategories activeTab={activeTab} updateActiveTab={updateActiveTab} />
     </ScrollArea>
   );

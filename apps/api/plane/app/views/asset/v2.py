@@ -266,7 +266,7 @@ class UserAssetsV2Endpoint(BaseAPIView):
         size_limit = min(size, settings.FILE_SIZE_LIMIT)
 
         #  Check if the entity type is allowed
-        if not entity_type or entity_type not in ["USER_AVATAR", "USER_COVER"]:
+        if not entity_type or entity_type not in ["USER_AVATAR", "USER_COVER", "USER_BACKGROUND"]:
             return Response(
                 {"error": "Invalid entity type.", "status": False},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -672,6 +672,7 @@ class StaticFileAssetEndpoint(BaseAPIView):
         if asset.entity_type not in [
             FileAsset.EntityTypeContext.USER_AVATAR,
             FileAsset.EntityTypeContext.USER_COVER,
+            FileAsset.EntityTypeContext.USER_BACKGROUND,
             FileAsset.EntityTypeContext.WORKSPACE_LOGO,
             FileAsset.EntityTypeContext.PROJECT_COVER,
         ]:

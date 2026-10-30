@@ -2,6 +2,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { TIssueAttachmentLimitsState } from "@/hooks/use-issue-attachment-limits";
 
 const mocks = vi.hoisted(() => ({
   limits: vi.fn(),
@@ -40,7 +41,7 @@ let container: HTMLDivElement;
 let root: Root | null = null;
 
 /** 挂载创建态附件组件。 */
-async function mount(attachments: { id: string; file: File }[] = []) {
+async function mount(attachments: { id: string; file: File }[] = [], limitsState?: TIssueAttachmentLimitsState) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -52,6 +53,7 @@ async function mount(attachments: { id: string; file: File }[] = []) {
         onValidationChange={mocks.onValidationChange}
         projectId="project-1"
         workspaceSlug="lab"
+        limitsState={limitsState}
       />
     );
   });
@@ -96,6 +98,27 @@ it("shows a selected file batch and keeps it pending until save", async () => {
   expect(container.textContent).toContain("材料一.pdf");
   expect(container.textContent).toContain("材料二.docx");
   expect(mocks.onValidationChange).toHaveBeenLastCalledWith(null);
+});
+
+it("uses limits prefetched by the create form instead of issuing another request", async () => {
+  const configured = {
+    limits: {
+      image: { max_mb: 20, max_bytes: 20 * MEGABYTE },
+      pdf: { max_mb: 100, max_bytes: 100 * MEGABYTE },
+      markdown: { max_mb: 5, max_bytes: 5 * MEGABYTE },
+      office: { max_mb: 50, max_bytes: 50 * MEGABYTE },
+    },
+    error: false,
+    isLoading: false,
+    maxFileSize: 100 * MEGABYTE,
+    getLimitError: (attachment: File) => (attachment.size > 100 * MEGABYTE ? "办公及其他附件不能超过 100 MB。" : null),
+  };
+  const oversize = file("超大材料.bin", "application/octet-stream", 101 * MEGABYTE);
+
+  await mount([{ id: "oversize", file: oversize }], configured);
+
+  expect(container.textContent).toContain("办公及其他附件不能超过 100 MB。");
+  expect(mocks.limits).not.toHaveBeenCalled();
 });
 
 it("reports an oversized attachment in the pending queue", async () => {

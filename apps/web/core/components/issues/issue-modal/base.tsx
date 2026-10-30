@@ -29,6 +29,7 @@ import { FileService } from "@/services/file.service";
 const fileService = new FileService();
 // local imports
 import { CreateIssueToastActionItems } from "../create-issue-toast-action-items";
+import { formatIssueCreateError } from "../required-fields";
 import { DraftIssueLayout } from "./draft-issue-layout";
 import { IssueFormRoot } from "./form";
 import { uploadPendingIssueAttachments, type TIssuePendingAttachment } from "./components/pending-attachments";
@@ -292,7 +293,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("error"),
-        message: error?.error ?? t(is_draft_issue ? "draft_creation_failed" : "issue_creation_failed"),
+        message: formatIssueCreateError(error, t(is_draft_issue ? "draft_creation_failed" : "issue_creation_failed")),
       });
       throw error;
     }

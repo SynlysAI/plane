@@ -199,6 +199,55 @@ it("wires inline image uploads and delete/restore to task-scoped services", asyn
   expect(mocks.restoreTaskInstructionImage).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", "asset-1");
 });
 
+it("prefetches task attachment limits before the description enters edit mode", async () => {
+  await renderDescription({ editable: false });
+
+  expect(mocks.getTaskCommentAttachmentLimits).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1");
+});
+
+it("treats pending attachment limits as loading and clears the notice after success", async () => {
+  const request = createDeferred<typeof limits>();
+  mocks.getTaskCommentAttachmentLimits.mockReturnValueOnce(request.promise);
+  mocks.uploadTaskInstructionAttachment.mockResolvedValue({
+    id: "asset-attachment-1",
+    name: "过程说明.pdf",
+    type: "application/pdf",
+    size: 128,
+    download_url: "/download/asset-attachment-1/",
+  });
+  await renderDescription({ editable: true });
+  const file = new File(["pdf"], "过程说明.pdf", { type: "application/pdf" });
+
+  await act(async () => capturedEditor.props?.onAttachFiles([file]));
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("加载中");
+  expect(mocks.uploadTaskInstructionAttachment).not.toHaveBeenCalled();
+
+  await act(async () => request.resolve(limits));
+  expect(container.textContent).not.toContain("加载中");
+  expect(container.textContent).not.toContain("无法获取当前工作区附件限制");
+
+  await act(async () => capturedEditor.props?.onAttachFiles([file]));
+  expect(mocks.uploadTaskInstructionAttachment).toHaveBeenCalledWith("lab", "chain-1", "node-1", "task-1", file);
+});
+
+it("keeps research attachment-limit failures retryable without changing the API contract", async () => {
+  const first = createDeferred<typeof limits>();
+  const second = createDeferred<typeof limits>();
+  mocks.getTaskCommentAttachmentLimits.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  await renderDescription({ editable: true });
+
+  await act(async () => first.reject(new Error("offline")));
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("无法获取当前工作区附件限制");
+
+  const retry = container.querySelector<HTMLButtonElement>('button[aria-label="刷新"]');
+  expect(retry).not.toBeNull();
+  await act(async () => retry?.click());
+  expect(mocks.getTaskCommentAttachmentLimits).toHaveBeenCalledTimes(2);
+
+  await act(async () => second.resolve(limits));
+  expect(container.textContent).not.toContain("无法获取当前工作区附件限制");
+});
+
 it("uploads, presents, and deletes persisted task attachments", async () => {
   mocks.uploadTaskInstructionAttachment.mockResolvedValue({
     id: "asset-attachment-1",

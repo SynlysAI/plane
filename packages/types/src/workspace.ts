@@ -199,6 +199,8 @@ export interface IWorkspaceProjectSearchResult {
   identifier: string;
   name: string;
   workspace__slug: string;
+  route_kind?: "RESEARCH_CHAIN" | "TEAM_RESEARCH" | "LEGACY_RESEARCH" | "ADMINISTRATIVE";
+  chain_id?: string | null;
 }
 
 export interface IWorkspaceSearchResults {

@@ -1,489 +1,178 @@
 # PiLab
 
-> 面向高校科研与新型研发机构的科研及办公管理模块
+> 面向高校科研与新型研发机构的科研及办公协同平台
 
-**PiLab** 是 [SynlysAI](https://github.com/SynlysAI) 基于开源项目 [Plane](https://github.com/makeplane/plane) 进行的二次开发仓库，目标是成为 [AI4MS](https://ai4ms.xmuzc.com/) 统一研发门户下的科研及办公管理模块。它把课题、任务、里程碑、实验协同、研究报告和日常办公协作放在同一个可追溯的工作空间中，帮助高校院系、重点实验室、新型研发机构和研发团队减少工具割裂与信息断层。
+[![版本](https://img.shields.io/badge/version-8.11.1-1f6feb.svg)](https://github.com/SynlysAI/plane)
+[![分支](https://img.shields.io/badge/branch-develop-6f42c1.svg)](https://github.com/SynlysAI/plane/tree/develop)
+[![许可证](https://img.shields.io/badge/license-AGPL--3.0-green.svg)](LICENSE.txt)
 
-| 入口                 | 链接                                 |
-| -------------------- | ------------------------------------ |
-| SynlysAI 官网        | <https://synlysai.xmuzc.com/>        |
-| AI4MS 统一门户       | <https://ai4ms.xmuzc.com/>           |
-| SynlysAI GitHub 组织 | <https://github.com/SynlysAI>        |
-| 本仓库               | <https://github.com/SynlysAI/plane>  |
-| 上游 Plane 项目      | <https://github.com/makeplane/plane> |
+PiLab 是 [SynlysAI](https://github.com/SynlysAI) 基于开源项目 [Plane](https://github.com/makeplane/plane) 二次开发的科研与办公管理平台，也是 [AI4MS](https://ai4ms.xmuzc.com/) 统一研发门户的协同管理模块。
 
-## 项目定位
+它把工作项、项目、周期、页面、审批、研究链、报告、附件和智能体连接到同一个可追溯工作空间，适用于高校院系、重点实验室、新型研发机构和研发团队。项目支持私有化部署，科研模块可以按部署级和工作区级开关逐层启用。
 
-AI4MS 已经围绕材料研发形成“统一入口、智能分析、材料研发、实验执行、知识沉淀”的产品矩阵。PiLab 在这条链路中承担管理与协同层：
+## 项目入口
 
-- **研发管理**：以工作空间、项目、模块和周期组织课题、子课题、工作包、里程碑、实验任务、采购事项和论文专利进度。
-- **办公协同**：将安全审查、设备维护、会议决议、审批待办、行政事务和跨部门协作转化为可分配、可跟踪、可复盘的工作项。
-- **知识沉淀**：以页面和评论承载研究报告、会议纪要、实验注意事项和项目决策，并保留与任务之间的关联。
-- **平台融合**：作为 AI4MS 的办公模块，与 SpecLabOS、SpecAgent、PolyAgent 和 RAGPortal 互补，而不是替代这些专业科研系统。
+| 入口            | 地址                                 |
+| --------------- | ------------------------------------ |
+| SynlysAI 官网   | <https://synlysai.xmuzc.com/>        |
+| AI4MS 统一门户  | <https://ai4ms.xmuzc.com/>           |
+| SynlysAI GitHub | <https://github.com/SynlysAI>        |
+| PiLab 仓库      | <https://github.com/SynlysAI/plane>  |
+| 上游 Plane      | <https://github.com/makeplane/plane> |
 
-办公模块选型采用 **Plane 迁移与二次开发** 路线，并参考 Huly、OpenProject、Taiga、AppFlowy 等项目在任务、知识库和团队协作上的产品形态。选择 Plane 的原因是它已经提供成熟的工作项、周期、模块、视图、页面、权限和 API 基础，适合在其上叠加科研管理场景。
+## 核心能力
+
+### Plane 协作基础
+
+- 工作区、项目、工作项、子工作项、标签、评论和附件
+- 周期（Cycles）、模块（Modules）、视图（Views）和分析
+- 页面（Pages）、富文本编辑、版本记录和实时协作
+- 工作区成员、项目角色、组织归属、通知和系统管理
+
+### 科研与办公工作台
+
+- 科研项目与行政项目双通道，以及组织和项目分类管理
+- 研究链阶段、节点任务、材料快照、审批、评审和过程记录
+- 研究报告、周期汇报、论文评审、成果附件与知识关联
+- 首页工作台、统一待办、审批中心和按角色投影的工作入口
+- 行政项目成员、配置权限、会议决议和跨部门协作
+
+### AI 与 MCP 集成
+
+- 通过 Synlora、ScienceDiscovery 和 OpenEVA 接入智能体运行时
+- 统一 MCP 连接管理、授权、读写工具和审计边界
+- 周报智能体支持草稿、正式提交、正文读取和结果回填
+- 科研上下文、知识引用、节点操作和外部系统连接支持降级策略
+
+### 私有化与安全
+
+- Docker Compose 提供 API、Worker、定时任务、PostgreSQL、Redis、RabbitMQ、MinIO 和附件预览服务
+- 支持 OIDC、工作区权限、科研角色、上下文令牌和操作审计
+- 文件上传按大小、MIME、签名和外部转换服务策略校验
+- 科研模块默认关闭，未启用时不改变 Plane 核心协作能力
+
+## 系统结构
+
+```mermaid
+flowchart LR
+    WEB[Web / Admin / Space] --> API[Django API]
+    API --> DB[(PostgreSQL)]
+    API --> CACHE[(Valkey / Redis)]
+    API --> MQ[(RabbitMQ)]
+    API --> STORE[(MinIO / S3)]
+    API --> AGENT[Synlora / ScienceDiscovery / OpenEVA]
+    API --> MCP[统一 MCP]
+    WORKER[Worker / Beat] --> MQ
+    WORKER --> DB
+```
+
+主要目录：
+
+| 目录          | 职责                                       |
+| ------------- | ------------------------------------------ |
+| `apps/web`    | 主工作台和科研界面                         |
+| `apps/admin`  | 实例管理端（God mode）                     |
+| `apps/space`  | 空间入口                                   |
+| `apps/live`   | 实时协作服务                               |
+| `apps/api`    | Django API、数据模型、权限、科研服务和 MCP |
+| `packages/*`  | 前端共享组件、类型、服务和编辑器包         |
+| `deployments` | 镜像、代理和部署配置                       |
+| `demos`       | MCP 与外部智能体示例                       |
+| `docs`        | 产品、架构、契约、运维和发布文档           |
 
 ## 当前状态
 
-| 项目             | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 当前版本         | `4.40.0`（根 / `apps/web` / `apps/api` / 全部 workspace package 同步；API pyproject 同步）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| 上游基线         | Plane `1.4.x`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 已交付           | 科研管理 P0（`2.1.0`）、阶段流程与集成 P1（`2.2.0`）、科研智能平台 Phase 0/Phase 1、研究链单 Workflow 与 Tailnet HTTPS（`4.13.1`）、Phase 1.5 优化修复（`4.14.2`）：能力投影、节点上下文入口、多课题摘要/待办分页、课题 KB 申请与 READY 门禁、成果附件、实验外部资产入口、Agent review scope、workflow 自动换行、门户多课题切换与 π-Lab 真实数据基线；`4.20.0` 纳入 1008 反馈修复、报告/项目创建对话框、全量默认浏览和办公附件支持；`4.21.0` 补齐报告正文图片、科研精细浏览、Agent 正式正文与文档归档；`4.22.0` 将反馈闭环修正为 Plane 内建模型、FileAsset/S3 与审计，增加提交限流/截图配额、成果发表日期、报告模板与 4.21 历史数据哈希复验/幂等导入；`4.22.1` 修复 HTTP/IP 部署时反馈幂等键依赖 Web Crypto 的兼容问题；`4.22.2` 补齐四角色/双组织组合筛选基线；`4.23.0` 完成“项目与课题”统一入口、详情返回、报告/成果边界和反馈管理二轮收尾；`4.23.1` 登记 Phase 1.6 三大主轴、基础设计不变量和 HTML 原型；`4.23.2` 完成 Phase 1.6 目标复核、双通道指派合同与原型交互补齐；`4.23.3` 完成 Tower 式统一待办信封、范围切换和领域状态映射设计；`4.24.0` 完成科研/行政项目独立分类导航、组织组别投影与分类管理基线；`4.25.0` 完成 Phase 1.6 双通道、节点任务、周报已读、论文评审、服务端统一待办与首页两列工作台；`4.26.0` 完成统一待办共享入口、六源独立降级、v2 契约收敛与角色化指派原型修复；`4.27.0` 完成首页 Bento 与密度切换、待办中心、审批同级待办页签、研究链单层 Peek 和编辑器未保存误报修复 |
-| 待真实数据验收   | 首个真实课题的 workflow、节点动作、成员回执、KB 上传和 Agent 会话截图；AI4MS ↔ Plane OIDC 绑定                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 规划中           | P2 扩展与治理、科研智能平台 Phase 2 专业能力填充、Phase 3 治理与开放能力                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| 科研模块默认状态 | 关闭。部署级 `RESEARCH_MODULE_ENABLED=0`，Workspace 级 `module_enabled` 默认 `false`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-
-本仓库以 Plane `1.4.x` 为基线完成第一轮私有化改造：替换为 AI4MS 品牌、移除付费套餐与云注册遥测、改用私有 OpenAI 兼容网关，并在此基础上叠加「科研管理模块」。**科研模块是纯增量实现**：开关关闭时不渲染科研导航，Workspace / Project / Work Item / Page / Cycle / Module 仍按上游 Plane 行为工作。当前代码与测试基线为 `4.40.0`；历史发布号只在对应验收和发布文档中保留。
-
-### 1008 人工测试反馈（Phase 1.5）
-
-本轮将报告与科研项目收敛为“先浏览、再创建”的研究工作台：默认显示权限范围内全部内容，创建表单在对话框中打开，报告列表筛选可通过 URL 回放；报告附件新增 DOC/DOCX、XLS/XLSX、PPT/PPTX、CSV/TSV，并按工作区配置大小限制、MIME 与文件签名校验。实现范围、验证结果和已知环境限制见 [1008 发布说明](docs/releases/research-intelligent-platform-phase-1.5-issue-1008-release-notes.md)。
-
-### Phase 1.6 科研空间重构（`4.25.0`）
-
-本轮保持 Research Chain、Project、报告、审批和既有 ACL 的权威边界，新增科研节点任务、周报正式版本已读回执、论文修改评审版本闭环和服务端只读统一待办。真实应用提供科研 / 行政项目双通道与分类树，首页收敛为“项目概览 / 待办动态”两列；科研候选人来自组织范围与显式协作者，行政指派只认有效 ProjectMember，两条来源不互用。统一待办仅投影领域状态，动作继续调用原领域 API，不旁路写入业务状态。实施口径与剩余边界见 [Phase 1.6 PRD](docs/product/research-intelligent-platform-phase-1.6-prd.md)。
-
-### Phase 1.6 修复（`4.26.0`）
-
-本轮将首页与审批中心收敛到同一个 `ResearchTodoEnvelopeList` 和 `research-todo.v2` 服务端投影，三种范围通过 `todo_scope` URL 参数回放；六类来源各自隔离异常并返回 `degraded_sources`，单源故障不再隐藏其他领域待办。当前文档与实现蓝图只保留 v2 契约，不再消费旧前端聚合；HTML 原型按角色同步科研 / 行政候选人、能力提示和禁用边界。修复依据与验收矩阵见 [Phase 1.6 修复 PRD](docs/product/research-intelligent-platform-phase-1.6-remediation-prd.md)。
-
-### Phase 1.6 体验收敛（`4.27.0`）
-
-本轮不改变统一待办契约、六源降级和科研 / 行政指派边界，只收敛日常入口。首页改为行动优先 Bento：首行是跨组件待办和科研概览，次行是行政项目、报告摘要和最近动态；紧凑 / 详细密度可切换，默认紧凑。首页“查看全部待办”复用审批中心 `/{workspace}/approvals?domain=shared_todos`，默认展示完整跨组件待办。审批中心把跨组件待办提升为与行政审批、科研审批同级的页面级页签。研究链恢复可换行的十三阶段流程地图，任务、证据、快照和过程记录共用一层 Peek。创建项目后侧栏树按项目集合刷新。周报编辑器不再把选区、焦点或 unique ID 迁移误报为未保存。现行口径见 [Phase 1.6 PRD](docs/product/research-intelligent-platform-phase-1.6-prd.md) 与 [UX 指南](docs/product/research-workspace-ux-guide.md)。
-
-### 行政组织与科研权限边界（`4.29.0`–`4.31.0`）
-
-本轮新增行政组织、组织成员和默认组织数据迁移：组织成员继承只读访问并可管理项目归属，新建组织原子创建，离职成员组织身份停用，行政分类写接口废弃。科研侧收紧组织成员权限边界，提供只读命令审计缺少有效科研组织关系的旧身份账号；入座科研管理员可全量读写科研数据与个人智能体后端，跨工作区 context 固化防护，行政人员与无座位实例管理员不因实例身份获得科研数据权限。科研项目同时保留在行政页签与研究链工作台，两处入口共用同一权威模型与 ACL，嵌入态仍执行权限校验。
-
-### ScienceDiscovery 智能体运行时与聊天式工作台（`4.30.0`–`4.32.0`）
-
-本轮按 runtime provider 扩展点接入 ScienceDiscovery：新增客户端、事件投影与消息异步化，覆盖审批、附件上传与产物下载链路。用户级后端连接成为唯一配置入口，使用密文凭证、SSRF 校验与治理开关；环境变量直连路径移除，未配置时回落 Synlora provider。科研工作台重构为单栏聊天式布局，支持用户气泡、流式正文合并、思考折叠、内联审批卡与运行详情抽屉；节点详情页补充智能体分析入口，个人智能体配置收口到用户设置页。集成路线见 [OpenEVA 智能体集成架构](docs/architecture/openeva-agent-integration-architecture.md)。
-
-### 开发环境账号与项目清理（`4.33.0`）
-
-新增 `prune_dev_accounts` 一次性清理命令：默认 dry-run 预告将删除的项目、账号与组织节点；`--yes` 需同时满足 `PLANE_DEV_PRUNE=1` 且 `WEB_URL` 非生产地址，缺一即拒绝并回滚。执行后删除全部科研 / 行政项目和多余人类账号，保留 5 个测试账号与系统 bot，组织收敛为 `π-Lab → 基础研究 → 器件`。备份与使用步骤见[开发环境重建手册](docs/operations/dev-environment-rebuild.md)。
-
-### 行政组织全员自助创建（`4.34.0`）
-
-行政组织创建权限从工作区管理员放开到全体有效工作区成员：成员可在行政项目页或创建项目对话框中新建组织，创建者自动成为组织 ADMIN。组织列表对非管理员收紧为“公共”与本人所属组织，工作区管理员仍可见全部；工作区准入、“公共”默认组织保护和项目+组织同事务校验保持不变。行政项目名称允许在同一组织内与跨组织重复，创建表单隐藏项目编号并由系统生成 `PRJ + 6 位随机码` 的唯一短编号；编号仍在列表、详情与工作项中展示。本期不引入审批或配额，工作区管理员保留对所有组织的全局治理能力。
-
-行政项目的“项目 / 归档”列表按组织分组展示：默认“公共”组织置首，其余组织按名称排序，无组织或组织不可见的项目归入“未分组”；视图与分析页签保持 Plane 原生行为。
-
-### 审查修复与运行时加固（`4.34.1`）
-
-本轮复核近期科研与行政通道：ScienceDiscovery 后端连接在部署撤回回环转发时改为 fail-closed；智能体空闲轮询恢复指数退避；行政组织删除迁移必须获得目标组织管理员同意；公共组织不再越过项目 Secret 网络边界；软删除研究链不能重新归入行政组织；显式项目编号同时检查项目表与编号台账漂移。
-
-### 当前事实与文档权威
-
-`develop` 分支是当前交付分支。文档按“实现事实优先、规划分层、历史可追溯”维护：代码与测试证据高于契约和发布说明，契约高于 PRD 计划，旧版本文档不覆盖当前实现。完整阅读顺序、状态矩阵和文档关系见 [`docs/README.md`](docs/README.md)。
-
-当前仍有两类发布门禁：真实课题创建后补录 Phase 1.5 浏览器证据，以及完成双方认证后的 AI4MS ↔ Plane OIDC 绑定；这两项完成前，不把跨仓灰度标记为完全结束。 0926 复核的 R1–R12 已在 `develop` 补齐代码和自动化，状态见 [0926 实施状态](docs/releases/research-intelligent-platform-phase-1.5-issue-0926-implementation-status.md)。组织节点验收现为 24；指定角色的人工点击仍按该计划第 7 节核对。 当前 dev 环境已启动，Tailnet HTTP 入口为 `http://100.109.35.2:3000/`；HTTPS Serve 需 Tailnet 管理员授权后启用。
-
-### 已交付：P0 科研管理（`2.1.0`）
-
-需求编号 89 条全部通过验收，详见 [P0 验收报告](docs/archive/p0/research-p0-acceptance-report.md)。
-
-| 能力域           | 说明                                                                                                                 |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 组织架构         | 组织树（`ROOT` / `INSTITUTE` / `LAB` / `GROUP` / `TEAM`）、成员科研角色、课题组主 PI、直接导师绑定                   |
-| 账号与身份       | AI4MS OIDC 登录，按 `sub` / 邮箱 / `employee_id` 映射身份，可选自动建号                                              |
-| 权限基础         | 科研 ACL 六级可见范围（`PRIVATE` → `DIRECT_ADVISOR` → `UNIT` → `ANCESTRY` → `WORKSPACE` → `CUSTOM`），提交人只可收窄 |
-| 平台配置         | 科研开关分层、报告默认可见级别、报告模板、附件与文件限制独立配置                                                     |
-| 审计基础         | 科研审计事件写入且不可修改、不可删除，管理员可只读查询                                                               |
-| 个人科研 Project | 一人一个进行中的科研 Project（可配置允许多项目），支持归档与恢复                                                     |
-| 周报 / 月报      | 周期规则、`DRAFT` / `SUBMITTED` / `NEEDS_REVISION` / `ACCEPTED` 状态机、退回原因与历史留痕                           |
-| 文件能力         | 图片、PDF 上传与 Markdown 导入，独立大小限制（默认 20 / 100 / 5 MB）                                                 |
-| 提交汇总与通知   | 按组织架构的提交情况看板，提交、退回与验收通知                                                                       |
-| 办公审批         | 任务审批、采购审批，多级审批、或签 / 会签与逐级留痕                                                                  |
-| 科研界面         | 独立科研导航，无权限用户隐藏入口；关闭开关后完全回退到原 Plane 界面                                                  |
-
-### 已交付：P1 科研阶段流程与集成（`2.2.0`）
-
-需求编号 145 条全部有实现落点与测试，详见 [P1 发布说明](docs/archive/p1/research-p1-release-notes.md) 与 [P1 开发 PRD](docs/archive/p1/research-p1-development-prd.md)。
-
-| 能力域           | 说明                                                                                                                       |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 科研阶段状态机   | 预开题 → 开题 → 中期 → 结题（毕业）四阶段，状态流转与可解释 gate，阶段材料与版本留痕                                       |
-| 多人评审         | 直接导师必评、主 PI 参与、最少评审人数与通过比例规则、否决分支、评审版本修订                                               |
-| 预开题与文献登记 | 文献登记与状态流转、纳入质量门槛（默认纳入 20 条、最多 100 条）、DOI 去重、批量导入                                        |
-| 开题与研究计划   | 10 项开题材料、实验参与要求、代码登记要求、报告模板、管理员代改留痕                                                        |
-| 中期检查         | 进展汇总（只读引用实验、代码与报告）、未完成实验说明、汇总快照                                                             |
-| 结题与成果登记   | 论文、专利、软件、数据集、奖项等成果登记，研发链条引用清单导出，结题后项目收口为只读                                       |
-| 实验条目         | 逐条登记、序号唯一、字段锁定、修改需审批、版本不可变、失败实验归档                                                         |
-| 代码仓库登记     | `GITHUB` / `GITLAB` / `GITEA` / `LOCAL_GIT` / `OTHER`，制品关联、快照上传（默认上限 500 MB）、同步降级                     |
-| 集成基础层       | 连接配置、统一引用模型、权限映射、超时与缓存、降级为链接、外部调用日志与健康检查                                           |
-| 已有系统对接     | RAGPortal / WeKnora 知识条目、SpecLabOS 运行记录与数据资产、SmartAccess 设备执行、Poly_Agent 研发项目、Spec_Agent 分析结果 |
-| 思维链 / 研发链  | 全流程时间线（文献、阶段流转、评审、报告、实验、代码、成果、外部引用）、筛选与引用清单导出                                 |
-
-### 已交付：科研智能平台 Phase 0
-
-Phase 0 是跨仓库并行开发的基础层，不向普通用户开放完整研究链。详细范围见 [科研智能平台 PRD](docs/product/research-intelligent-platform-prd.md)、[Phase 0 实施计划](docs/plans/phase-0/research-intelligent-platform-phase-0-plan.md) 与 [运维手册](docs/operations/research-intelligent-platform-phase-0-runbook.md)。
-
-| 能力域              | 说明                                                                                                                 |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 跨仓契约            | 研究链、Node、Event、Snapshot、Agent Context/Trace、AccountLink、Integration、Job 与 Agent Plugin v1 schema          |
-| 数据与 API 基础     | Chain / Node / append-only Event / Snapshot / Reflection 模型，幂等写接口、错误 envelope、Workspace 子开关与页面守卫 |
-| 短期授权            | 服务端 opaque context token 只存哈希，校验 Workspace / 课题 / 节点 / hash / 过期，撤销后立即失效                     |
-| AccountLink         | pending → 二次验证激活 → 解绑 / 撤销，支持多 subject 与邮箱冲突检查，撤销传播到 Context token                        |
-| 同源 Agent BFF      | manifest、session、run event、审批、artifact、Chain Event 回写与 run 级取消；token 不进入浏览器                      |
-| RAGPortal / Synlora | RAGPortal 上传关联课题 metadata；Synlora 校验 Plane Context scope 并注入只读 ToolContext                             |
-| 观测与回滚          | 安全拒绝、Agent、外部调用、降级、上下文读取指标，主动健康探测，CSP / iframe 禁止，迁移前滚-回滚-再前滚演练记录       |
-
-Phase 0 验证：Plane 科研套件 749 passed / 0 failed；RAGPortal 30 passed / 0 failed；Synlora backend 457 passed / 118 skipped、harness 139 passed / 7 skipped。
-
-### 已交付：科研智能平台 Phase 1（`4.9.0`）
-
-Phase 1 在 Phase 0 契约上交付内部试点可用的 UI/UX Ready 科研智能体工作台。详细需求见 [科研智能平台 PRD](docs/product/research-intelligent-platform-prd.md)，实施与验收见 [Phase 1 实施计划](docs/plans/phase-1/research-intelligent-platform-phase-1-plan.md) 和 [验收手册](docs/archive/p1/research-intelligent-platform-phase-1-verification.md)。
-
-| 能力域         | 说明                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| Plane 首页摘要 | 当前课题、当前节点、待办数量、最近快照与科研总览入口；无权限或降级时不泄露课题内容         |
-| 科研总览       | 统计周期、刷新时间、跨组件待办、课题摘要、提交汇总、管理统计与研究链深链                   |
-| 跨组件待办     | 聚合报告修订、阶段评审、办公审批、Agent 审批、RAG 上传状态与人工补录提醒，按严重级排序去重 |
-| 研究链         | 固定上下文条、课题/节点/报告成果/实验/外部引用/成员/回放七类 Tab、主链可视化与循环编号     |
-| 六段式节点详情 | 输入、AI 动作、中间产物、验证、人类决策、输出六段证据结构                                  |
-| Agent 工作台   | Context 有效期、授权资源、装配分组、结构化工具卡、审批/产物抽屉与 Trace 筛选跳转           |
-| 审批中心       | 阶段评审、报告审核、Agent 审批与办公审批统一队列；Agent 审批复用幂等 Run endpoint          |
-| UX 质量        | 1920/1440/1280/390 响应式验收、状态矩阵、恢复动作和 aria 语义；界面不展示原始 JSON         |
-
-2026-09-24 本地验证：Chain MVP 7 passed、Agent Plugin 19 passed、Phase 1 Web 相关组件 15 passed、Web typecheck 通过。
-
-### 已交付：科研工作台产品级 UI/UX 重构（`4.10.0`）
-
-呈现层重构不改变业务规则、排序与权限，只把科研界面收敛为 Plane 原生延伸。规范见 [UX 设计指南](docs/product/research-workspace-ux-guide.md)，过程 PRD 与验收收录于 [UI/UX 过程档案](docs/archive/ui-ux/research-workspace-ui-ux-archive.md)。
-
-| 能力域       | 说明                                                                                             |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| 共享壳       | `ResearchPageShell` 支持面包屑与元信息插槽；侧边栏复用 `SidebarNavItem`；标题统一主档位          |
-| 黄金页面     | 科研总览按「当前工作 → 待处理 → 最近活动」重排；Chain 详情 Object Header；审批中心统一四队列     |
-| 科研语义组件 | `ResearchStatusBadge` 状态字典、`ResearchTabLink` 路由标签、泛化 `ResearchListState` 空态        |
-| 列表与表格   | 报告 / 项目 / 文献 / 成果 / 实验 / 引用 / 设置全部迁移 propel `Table`，手写原生 table 清零       |
-| Agent 运行页 | Run Header 状态徽标、结构化工具调用、事件流收敛为紧凑时间线，保留审批 / 产物抽屉与 Trace 筛选    |
-| 设计系统约束 | 仅消费语义 token；无新增硬编码色；无渐变、发光、AI 徽章等 Anti-AI-UI 元素；深浅色主题继承 propel |
-
-### 已交付：科研工作台 4.12 产品级精修（`4.12.0`）
-
-本轮不改变 API、权限、状态流转与业务排序，只精修信息结构与可视化。PRD、Phase 0 基线与验收见 [4.12 PRD](docs/archive/ui-ux/research-workspace-ui-ux-4.12-prd.md)、[Phase 0 基线](docs/archive/ui-ux/research-workspace-ui-ux-4.12-phase-0-baseline.md) 和 [验收报告](docs/archive/ui-ux/research-workspace-ui-ux-4.12-acceptance-report.md)。
-
-| 能力域       | 说明                                                                             |
-| ------------ | -------------------------------------------------------------------------------- |
-| 固定科研流程 | 研究链常驻 13 阶段流程地图；区分真实当前节点、临时查看、等待人工、失败与未来阶段 |
-| 三核心页     | 科研总览 3 秒可识别当前课题 / 节点 / 待办 / 下一步；Agent 为 400px 稳定侧边插件  |
-| 数据 Surface | 新增科研列表、筛选、表格与详情共享语义出口，Wave B / C 页面统一扩散              |
-| 视觉验收     | 96 张浅深 × 1440/1920 截图、灰度缩略图、真实路由与键盘交互验证通过               |
-
-### 尚未交付
-
-- **P2**：课题组进度与风险看板、更多审批类型与流程配置、响应式移动网页、权限渗透与大数据量优化、审计导出、管理员与使用文档。
-- **P3（暂缓）**：AI 创新性评分、AI 辅助研究计划、论文写作辅助、人机回环、智能体调用与调用审计、课题组主 PI 记忆共享。
-
-P2 / P3 的范围与启动前置条件见 [科研管理 PRD 与路线图](docs/product/research-management-prd-roadmap.md)。
-
-## 科研模块功能地图
-
-所有入口只有在模块开关打开、且当前用户具备对应科研角色时才渲染。
-
-开启 `research_ia_v2` 后，左侧保留首页、管理、审批中心、科研项目、行政项目五个入口；科研项目与行政项目各自展开分类树。关闭开关后回退旧平铺导航。旧科研总览 `/{workspace}/research` 重定向到首页，下表旧路由继续兼容。
-
-| 入口         | 路径                                       | 说明                                                              |
-| ------------ | ------------------------------------------ | ----------------------------------------------------------------- |
-| 科研总览     | `/{workspace}/research`                    | 跨课题待办、课题摘要、提交汇总与统计                              |
-| 周报 / 月报  | `/{workspace}/research/reports`            | 报告列表、编辑、Markdown 导入、附件                               |
-| 提交汇总     | `/{workspace}/research/reports/summary`    | 按组织架构查看提交情况（管理员）                                  |
-| 科研 Project | `/{workspace}/research/projects`           | 一人一项目，可进入项目级科研工作台                                |
-| 研究链       | `/{workspace}/research/chains`             | 课题、节点、报告成果、实验、成员与回放                            |
-| 阶段流程     | `.../projects/{projectId}/stages`          | 四阶段材料、gate 结果与流转记录                                   |
-| 文献调研     | `.../projects/{projectId}/literature`      | 文献登记、纳入门槛与批量导入                                      |
-| 实验记录     | `.../projects/{projectId}/experiments`     | 实验条目、修订审批与版本历史                                      |
-| 代码登记     | `.../projects/{projectId}/code`            | 仓库、制品与快照                                                  |
-| 成果登记     | `.../projects/{projectId}/outcomes`        | 结题成果与研发链条引用                                            |
-| 时间线       | `.../projects/{projectId}/timeline`        | 思维链 / 研发链全流程时间线                                       |
-| 首页         | `/{workspace}/`                            | 行动优先工作台：待办、科研概览、行政项目、报告摘要与最近动态      |
-| 待办中心     | `/{workspace}/research/todos`              | 保留独立完整聚合列表，首页入口复用审批中心，范围使用 `todo_scope` |
-| 审批中心     | `/{workspace}/approvals`                   | 跨组件待办、行政审批、科研审批同级页面级页签                      |
-| 组织设置     | `/{workspace}/research/settings/org`       | 组织树、成员角色、课题组主 PI、导师关系                           |
-| 报告模板     | `/{workspace}/research/settings/templates` | 周报 / 月报与阶段材料模板                                         |
-| 身份映射     | `/{workspace}/research/settings/identity`  | OIDC 身份绑定与解绑记录                                           |
-| 平台配置     | `/{workspace}/research/settings/platform`  | 子开关、默认可见级别、文件限制与门槛                              |
-| 审计查询     | `/{workspace}/research/audit`              | 只读审计事件查询                                                  |
-| 集成配置     | `/{workspace}/research/integrations`       | 外部系统连接、健康状态、引用与调用日志                            |
-
-## AI4MS 集成架构
-
-AI4MS 作为统一入口连接材料研发、实验管理和科研及办公管理；Plane 通过二次开发承接科研与办公协同，并与已有专业模块保持清晰边界。**身份链路与 P1 集成基础层已经落地**，外部系统一律按“只保存引用、不复制正文与原始文件”的方式对接。
-
-| 模块      | 当前定位                                       | 与 Plane 的关系                                            | 状态                      |
-| --------- | ---------------------------------------------- | ---------------------------------------------------------- | ------------------------- |
-| AI4MS     | 统一入口、用户管理、权限治理和应用导航         | 通过 OIDC 建立统一身份链路与身份映射                       | 已实现（`2.1.0`）         |
-| SpecAgent | GPC、NMR、IR、Raman、LCMS 等谱学智能分析       | 分析结果作为外部引用回填实验、材料与成果上下文             | 已实现引用对接（`2.2.0`） |
-| PolyAgent | 高分子材料研发、计算任务、垂类算法与证据链     | 研发项目、任务与结果进入课题、阶段材料与研发链             | 已实现引用对接（`2.2.0`） |
-| RAGPortal | 知识库文档上传与检索门户                       | 知识条目按源系统 ACL 检索并引用，Plane 不自建索引与门户    | 已实现引用对接（`2.2.0`） |
-| SpecLabOS | 实验设备、工作流编排、任务运行、日志和数据资产 | 运行记录与数据资产以引用形式关联实验条目，不保存原始数据   | 已实现引用对接（`2.2.0`） |
-| PiLab     | 科研及办公管理模块                             | 承接任务、周期、模块、页面、任务审批、采购审批、报告和复盘 | 已交付 P0 / P1            |
-| 算力系统  | 平台基础支撑能力                               | 提供计算资源，并参与 `sub` / 邮箱 / 工号驱动的用户身份映射 | 随 AI4MS 身份链路对接     |
-
-### 用户身份映射与统一登录
-
-登录链路（P0 已实现，未配置 OIDC 时前端不渲染 SSO 入口，本地账号登录保持可用）：
-
-1. 用户登录 AI4MS，由 AI4MS Identity/SSO 发起统一认证。
-2. 通过 OAuth2/OIDC 将身份上下文传递给 PiLab。
-3. 根据 `sub`、邮箱或 `employee_id` 查找已有身份映射。
-4. 已绑定时直接完成登录；未绑定时按管理员策略建立映射或自动创建账号（`OIDC_AUTO_PROVISION_USERS`，默认关闭）。
-
-| 身份字段      | 目标用途       | 说明                                             |
-| ------------- | -------------- | ------------------------------------------------ |
-| `sub`         | 稳定身份标识   | OAuth2/OIDC 主体 ID，作为长期映射主键            |
-| 邮箱          | 用户识别与通知 | 作为辅助匹配条件，需处理同一邮箱多身份或变更场景 |
-| `employee_id` | 机构人事身份   | 面向高校和新型研发机构的工号、学工号或人员编号   |
-
-身份映射的绑定、解绑与自动创建都会写入审计记录。自动创建、邮箱冲突和身份合并由管理员策略控制，避免因多个来源标识不一致而误合并账号。
-
-### 外部系统引用与降级
-
-每个 Workspace 在「科研 → 集成配置」中维护一套外部系统连接，配置项包含 `base_url`、认证方式（`HMAC` / `BEARER` / `OIDC_CLIENT` / `NONE`）、超时、缓存与降级模式（降级为链接或隐藏）。安全约定：
-
-- 数据库只保存密钥的**引用名**（`credential_ref`），明文密钥仅存在于后端环境变量或密钥管理系统，接口只回显“是否已配置”。
-- 外部系统不可用时读取请求返回降级结果（`degraded` 与 `degraded_reason`），写入请求快速失败，Plane 主流程不受影响。
-- 每次调用写入调用日志，包含操作、耗时、返回码与请求 ID，便于审计与排障。
-
-### 科研过程记录与汇报
-
-科研记录划分为四类工作场景，均已具备对应的数据结构与界面：
-
-- **论文调研**：沉淀文献阅读、方法对比、实验想法和可引用证据。
-- **课题研究**：管理开题、中期、结题、Fellow 评审、毕业等课题节点材料。
-- **日常工作汇报**：承载实验记录、周报、月报和异常处理进展。
-- **关键节点汇报**：汇总开题、中期、毕业、评审等需要提交或评审的材料。
-
-这些记录不是孤立表单，而是通过 Plane 页面、工作项、评论、阶段材料、时间线和知识引用保持知识沉淀与信息同步。
-
-实验数据链路沿用“仪器日志 → 透视表 → 用户日志”的既有分工：设备侧保留原始事实，SpecLabOS 负责结构化和关联任务、样本、设备与时间，Plane 保存科研管理口径的实验条目与外部引用，自动记录与人工补充并行保留。
-
-### Mobile Web 交付策略（P2）
-
-移动端优先采用响应式手机网页，而不是首版开发原生 App：
-
-- **低成本**：复用当前 React Router/Vite Web 技术栈、路由与组件体系，不为了移动端单独维护一套客户端。
-- **快覆盖**：通过链接直接访问，免安装、免应用市场审核，适合科研和行政人员快速接入。
-- **全兼容**：同一套部署可服务 SaaS 与自托管用户，不引入额外的分发差异。
-
-## 科研与办公场景
-
-### 课题与项目全生命周期
-
-- 以工作空间对应学院、实验室、研究中心或课题组。
-- 以项目对应纵向课题、横向项目、平台建设专项或内部改进项目。
-- 以模块拆分子课题、工作包和交付专题。
-- 以周期管理开题、实验、中期检查、结题、验收和成果转化节点。
-- 以科研阶段流程承载预开题 → 开题 → 中期 → 结题的 gate、材料与评审。
-- 通过视图跟踪负责人、优先级、截止时间、状态和风险事项。
-
-### 实验与设备协同
-
-- 在 Plane 中创建实验需求、样品准备、设备预约、安全确认和结果复盘任务。
-- 实验条目逐条登记，字段修改需审批并保留不可篡改的版本历史。
-- 引用 SpecLabOS 运行记录与数据资产、SmartAccess 设备执行记录，Plane 不保存原始数据副本。
-- 通过透视表将仪器日志转换为用户可读、可检索的实验日志，并关联负责人、课题和样本上下文。
-- 为设备维护、耗材采购、异常处理和安全整改建立独立工作流。
-
-### 研究报告与知识证据
-
-- 用页面与阶段材料组织开题报告、实验方案、阶段总结、结题报告和成果转化材料。
-- 引用 RAGPortal / WeKnora 知识条目、Poly_Agent 研发结果与 Spec_Agent 分析结果，保留来源与权限口径。
-- 保留报告与任务、负责人、时间和来源证据的关联，支持复盘与审计。
-- 将重复出现的经验沉淀为实验室规范、操作手册和项目模板。
-
-### 日常办公协作
-
-- 管理会议决议、待办事项、责任人和完成时间。
-- 跟踪采购申请、合同评审、报销材料、行政审批和材料交付。
-- 建立设备维护、安全检查、实验室巡检和隐患整改任务。
-- 管理论文投稿、专利申请、成果报奖、数据归档和知识转移。
-
-## 实施路线图
-
-| 阶段               | 目标                                                                                       | 当前状态                 |
-| ------------------ | ------------------------------------------------------------------------------------------ | ------------------------ |
-| P0                 | 系统管理与项目管理：组织、身份、权限、审计、个人科研 Project、周报月报、办公审批、科研界面 | 已交付（`2.1.0`）        |
-| P1                 | 科研阶段流程与已有系统集成：阶段 gate、多人评审、文献、实验、代码、成果、时间线            | 已交付（`2.2.0`）        |
-| 智能平台 Phase 0   | 跨仓契约、Context 授权、Agent BFF、观测与回滚基线                                          | 已交付                   |
-| 智能平台 Phase 1   | UI/UX Ready 科研智能体工作台与跨仓最小闭环                                                 | 已交付（`4.9.0`）        |
-| 工作台 UI/UX 重构  | 科研界面收敛到 Plane 设计系统：共享壳、黄金页面、语义组件与表格统一                        | 已交付（`4.10.0`）       |
-| 工作台 4.12 精修   | 固定 13 阶段流程地图、三核心页层级、全 Workspace Surface 与信息可视化                      | 已交付（`4.12.0`）       |
-| Phase 1.6 空间重构 | 双项目通道、节点任务、周报已读、论文评审、统一待办与两列首页                               | 已交付（`4.26.0`）       |
-| Phase 1.6 体验收敛 | 首页 Bento 与密度、待办中心、审批同级待办、研究链 Peek 与可换行流程地图                    | 已交付（`4.27.0`）       |
-| 智能平台 Phase 2   | SpecLabOS、PolyAgent、SpecAgent 等专业能力填充                                             | 规划中                   |
-| 智能平台 Phase 3   | 治理、配额、开放与更完整智能体协作                                                         | 规划中                   |
-| P2                 | 扩展、治理与发布：高级看板、更多审批类型、响应式移动端、治理与文档                         | 规划中                   |
-| P3                 | 与 AI 结合的能力：创新性评分、辅助研究计划、论文写作辅助、智能体调用、记忆共享             | 暂缓，前置条件确认后启动 |
-
-路线图遵循“先保留 Plane 稳定基础，再叠加科研场景，最后完成跨系统证据链”的原则。每期范围与验收标准见 [科研管理 PRD 与路线图](docs/product/research-management-prd-roadmap.md)。
-
-## 快速开始与本地开发
+| 项目     | 当前值                                        |
+| -------- | --------------------------------------------- |
+| 软件版本 | `8.11.1`                                      |
+| 默认分支 | `develop`                                     |
+| 上游项目 | Plane，保留其项目管理核心模型和工作流基础     |
+| 科研模块 | 部署级 `RESEARCH_MODULE_ENABLED=0` 时默认关闭 |
+| 许可证   | [AGPL-3.0](LICENSE.txt)                       |
+
+`develop` 是持续集成和功能交付分支。科研模块已经覆盖研究链、报告、审批、统一待办、智能体和 MCP 的主要实现；首个真实课题的跨系统绑定、真实 OIDC 和部分生产数据验收仍以灰度门禁为准。当前事实、契约和验收证据以代码、测试和 [`docs/README.md`](docs/README.md) 为准。
+
+## 快速开始
 
 ### 环境要求
 
-- Docker Engine 已启动。
-- Node.js `>= 22.22.0`。
-- pnpm `11.10.0`，可通过 Corepack 启用。
-- PostgreSQL 14+ 和 Redis 6.2.7+，本地开发可由 Docker Compose 提供。
-- 建议至少 12 GB 可用内存。
+- Docker Engine 与 Docker Compose
+- Node.js `>= 22.22.0`
+- pnpm `11.10.0`（推荐通过 Corepack 启用）
+- 至少 12 GB 可用内存
 
-### 初始化并启动
+PostgreSQL、Valkey/Redis、RabbitMQ 和 MinIO 可以由本地 Compose 栈提供，不需要在宿主机单独安装。
+
+### 启动本地环境
 
 ```bash
+git clone https://github.com/SynlysAI/plane.git
+cd plane
+
+corepack enable
 ./setup.sh
-docker compose -f docker-compose-local.yml up -d
-pnpm dev
-```
 
-`pnpm dev` 中的 Web 默认先构建生产包，再通过 Vite Preview 对外提供压缩后的静态模块，并继续复用
-`/api`、`/auth` 与 `/uploads` 代理。这是局域网和 Tailnet 远程访问的推荐启动方式。需要在 Web 页面上
-获得热更新时，先停止占用 3000 端口的 Preview 进程，再单独执行：
-
-```bash
-pnpm --filter web dev:hmr
-```
-
-启动后访问：
-
-- Web 应用：<http://localhost:3000>
-- 实例管理端：<http://localhost:3001/god-mode/>
-
-### 代码更新后的重新构建与部署
-
-本地 Tailnet 访问使用的是 Web 的 Vite Preview。`3000` 端口读取
-`apps/web/build/client` 中已经生成的静态文件，因此只修改源码、重启 API 或刷新浏览器都不会自动更新页面；
-管理端也应同步重建，避免 Web 中的管理入口与 `3001` 端页面版本不一致。
-
-在 Plane 仓库根目录执行以下流程：
-
-```bash
-cd /home/fangyikai/code/_AI4MS/plane
-
-# 如果代码来自远端，先更新源码；本地已有未提交修改时不要直接执行 git pull
-git pull --ff-only
-pnpm install --frozen-lockfile
-
-# 确保 API、Worker 和基础设施仍在运行
+# API 使用 8001，MinIO 使用 9000/9091，适配前端默认代理
 docker compose -f docker-compose-local.yml -f docker-compose-local.override.yml up -d
-
-# Web 和 Admin 必须一起构建；构建时会读取各自的 apps/*/.env
-pnpm turbo run build --filter=web --filter=admin
-```
-
-然后重启前端进程。若前端由当前终端中的 `pnpm dev` 启动，回到该终端按 `Ctrl-C`，再执行：
-
-```bash
 pnpm dev
 ```
 
-如果原启动终端已经关闭，可以先释放旧的前端端口，再后台启动：
+首次启动后访问：
 
-```bash
-fuser -k 3000/tcp 3001/tcp 2>/dev/null || true
-nohup pnpm dev >/tmp/plane-dev.log 2>&1 &
-```
+| 服务       | 地址                              |
+| ---------- | --------------------------------- |
+| 主工作台   | <http://localhost:3000>           |
+| 实例管理端 | <http://localhost:3001/god-mode/> |
+| Space      | <http://localhost:3002/spaces>    |
+| Live       | <http://localhost:3100/live>      |
+| API        | <http://localhost:8001>           |
 
-确认新产物和服务已生效：
-
-```bash
-stat -c '%y %n' apps/web/build/client/index.html apps/admin/build/client/index.html
-curl -fsS -o /dev/null -w 'web=%{http_code}\n' http://127.0.0.1:3000/
-curl -fsS -o /dev/null -w 'admin=%{http_code}\n' http://127.0.0.1:3001/god-mode/
-curl -fsS http://127.0.0.1:8001/
-```
-
-Web 应返回 `200`，管理端通常返回 `200` 或重定向到 `/god-mode/`，API 应返回 `{"status": "OK"}`。
-Tailnet 访问地址为 <http://100.109.35.2:3000>；启用 Tailscale Serve 后使用
-<https://fangyikai-pc.tail1b4cb7.ts.net/>。
-
-若构建时间已经更新但浏览器仍显示旧页面，执行一次强制刷新（Windows/Linux：`Ctrl+Shift+R`，macOS：
-`Cmd+Shift+R`）。仍未更新时，在浏览器开发者工具的 Application / 存储面板中清除该站点数据并注销旧
-Service Worker，再重新打开页面。不要只重启 Docker API 容器，也不要只执行普通浏览器刷新。
+`setup.sh` 会从各目录的 `.env.example` 生成本地环境文件、生成 Django `SECRET_KEY` 并安装 pnpm 依赖。启动前请检查 `apps/api/.env`、`apps/web/.env` 和根目录 `.env` 中的地址；真实密钥和生产配置不要提交到 Git。
 
 ### 启用科研模块
 
-科研模块默认关闭，需要按“部署级开关 → Workspace 开关 → 子开关 → 外部系统连接”的顺序逐层打开。变量模板见 [`apps/api/.env.example`](apps/api/.env.example)。
+科研模块按“部署级开关 → Workspace 开关 → 子能力 → 外部连接”的顺序启用：
 
-1. 在 `apps/api/.env` 打开部署级开关，并按需配置 AI4MS OIDC：
+1. 在 `apps/api/.env` 设置 `RESEARCH_MODULE_ENABLED=1`。
+2. 以 Workspace 管理员身份打开科研模块和所需的阶段、实验、代码、集成子开关。
+3. 在科研组织设置中配置成员、角色和组织关系。
+4. 按需配置 OIDC、Synlora、MCP 或其他外部系统，并通过健康检查确认连接状态。
 
-   ```env
-   RESEARCH_MODULE_ENABLED=1
-   OIDC_ISSUER_URL=
-   OIDC_CLIENT_ID=
-   OIDC_CLIENT_SECRET=
-   OIDC_REDIRECT_URI=
-   OIDC_AUTO_PROVISION_USERS=0
-   ```
+变量模板见 [`apps/api/.env.example`](apps/api/.env.example)，跨系统契约见 [`docs/contracts`](docs/contracts)。
 
-2. 以 Workspace 管理员身份进入「科研 → 平台配置」，打开 `module_enabled`，再按需打开 `stage_enabled` / `experiment_enabled` / `code_enabled` / `integration_enabled`。
-3. 进入「科研 → 组织设置」建立组织树并分配科研角色；进入「科研 → 集成配置」逐个外部系统填写 `base_url`、认证方式与密钥引用名，并执行健康检查。
-4. 通过 `GET /api/research/health/` 确认模块状态、文件限制与 OIDC 配置是否生效。
+## 常用命令
 
-常用门槛默认值（可被 Workspace 配置覆盖）：文献纳入门槛 `RESEARCH_LITERATURE_MIN_INCLUDED=20`、评审最少人数 `RESEARCH_STAGE_MIN_REVIEWERS=3`、通过比例 `RESEARCH_STAGE_PASS_RATIO=0.5`、代码快照上限 `RESEARCH_CODE_SNAPSHOT_MAX_MB=500`。完整清单与回滚方式见 [P1 发布说明](docs/archive/p1/research-p1-release-notes.md)。
+| 命令                                    | 用途                                  |
+| --------------------------------------- | ------------------------------------- |
+| `pnpm dev`                              | 启动前端、实时服务和本地开发进程      |
+| `pnpm build`                            | 构建所有应用和共享包                  |
+| `pnpm check`                            | 运行格式、Lint 和 TypeScript 类型检查 |
+| `pnpm check:lint`                       | 运行 OxLint                           |
+| `pnpm check:types`                      | 运行 TypeScript 类型检查              |
+| `pnpm fix`                              | 自动修复格式和 Lint 问题              |
+| `pnpm --filter web test:components`     | 运行 Web 组件测试                     |
+| `cd apps/api && python run_tests.py -u` | 运行 API 单元测试                     |
+| `cd apps/api && python run_tests.py -c` | 运行 API 契约测试                     |
 
-### 常用命令
+前端源码修改后，`pnpm dev` 默认会先构建再通过 Vite Preview 提供页面；需要热更新时执行 `pnpm --filter web dev:hmr`。API、Worker 和基础设施的完整联调与生产更新流程见 [`docs/operations`](docs/operations)。
 
-| 命令               | 说明                      |
-| ------------------ | ------------------------- |
-| `pnpm dev`         | 启动所有开发服务          |
-| `pnpm build`       | 构建所有应用和包          |
-| `pnpm check`       | 运行格式、Lint 和类型检查 |
-| `pnpm check:lint`  | 运行 OxLint               |
-| `pnpm check:types` | 运行 TypeScript 类型检查  |
-| `pnpm fix`         | 自动修复格式和 Lint 问题  |
+## 文档入口
 
-### 测试
+| 文档                                                                                                     | 说明                                                          |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [`docs/README.md`](docs/README.md)                                                                       | 文档总索引、权威层级和阅读顺序                                |
+| [`docs/product/research-workspace-v3.md`](docs/product/research-workspace-v3.md)                         | 当前组织、权限、Workspace、Project、报告和 Agent Context 契约 |
+| [`docs/product/research-management-prd-roadmap.md`](docs/product/research-management-prd-roadmap.md)     | 科研管理产品目标与路线图                                      |
+| [`docs/product/research-intelligent-platform-prd.md`](docs/product/research-intelligent-platform-prd.md) | Plane 与 AI4MS 跨仓平台方案                                   |
+| [`docs/plans/unified-mcp-v1.md`](docs/plans/unified-mcp-v1.md)                                           | 统一 MCP API 与数据契约                                       |
+| [`docs/operations/production-deployment.md`](docs/operations/production-deployment.md)                   | 生产部署、更新、验证和回滚                                    |
+| [`docs/operations/mcp-unified-deployment.md`](docs/operations/mcp-unified-deployment.md)                 | 统一 MCP 部署与验收                                           |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                     | 开发环境、贡献方式和代码规范                                  |
 
-后端测试在独立 Docker 测试栈中运行：
+文档按产品、架构、契约、运维、发布和归档分层维护。发生冲突时，以当前代码、测试和 `docs/evidence/` 证据为准，历史文档只用于追溯版本背景。
 
-```bash
-# 全量
-docker compose -f docker-compose-test.yml up --build --abort-on-container-exit --exit-code-from api-tests
+## 贡献与安全
 
-# 子集
-docker compose -f docker-compose-test.yml run --rm api-tests pytest -m unit
-```
+提交功能或修复前，请先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)，并为行为变更补充相应测试。发现安全问题时，请按照 [`SECURITY.md`](SECURITY.md) 的流程私下报告，不要直接公开漏洞细节。
 
-科研用例位于 `apps/api/plane/tests/unit/research` 与 `apps/api/plane/tests/contract/app/test_research_*.py`，覆盖阶段 gate、文献门槛、实验留痕、集成降级、安全与性能回归。更多约定见 [`apps/api/tests/RUNNING_TESTS.md`](apps/api/tests/RUNNING_TESTS.md) 与 [`apps/api/plane/tests/TESTING_GUIDE.md`](apps/api/plane/tests/TESTING_GUIDE.md)。
-
-## 文档索引
-
-| 文档                                                                                             | 内容                                   |
-| ------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| [`docs/README.md`](docs/README.md)                                                               | 文档总览、维护约定与阅读顺序           |
-| [`research-management-prd-roadmap.md`](docs/product/research-management-prd-roadmap.md)          | 产品需求、生态边界与 P0–P3 分期路线图  |
-| [`research-p0-development-prd.md`](docs/archive/p0/research-p0-development-prd.md)               | P0 开发规格（含实现回写记录）          |
-| [`research-p0-development-prd-review.md`](docs/archive/p0/research-p0-development-prd-review.md) | P0 开发规格评审与实现复核结论          |
-| [`research-p0-acceptance-report.md`](docs/archive/p0/research-p0-acceptance-report.md)           | P0 验收方法与逐条验收结论              |
-| [`research-p0-release-notes.md`](docs/archive/p0/research-p0-release-notes.md)                   | P0 发布、开关与回滚说明                |
-| [`research-p1-development-prd.md`](docs/archive/p1/research-p1-development-prd.md)               | P1 开发规格（含实现回写记录）          |
-| [`research-p1-development-prd-review.md`](docs/archive/p1/research-p1-development-prd-review.md) | P1 开发规格评审与实现复核结论          |
-| [`research-p1-release-notes.md`](docs/archive/p1/research-p1-release-notes.md)                   | P1 发布、开关、环境变量与回滚说明      |
-| [`research-workspace-ux-guide.md`](docs/product/research-workspace-ux-guide.md)                  | 科研工作台 UX 设计指南（系列入口）     |
-| [`research-workspace-ui-ux-archive.md`](docs/archive/ui-ux/research-workspace-ui-ux-archive.md)  | UI/UX 两轮 PRD / 审计 / 验收过程档案   |
-| [`research-pi-lab-baseline-runbook.md`](docs/operations/research-pi-lab-baseline-runbook.md)     | π-Lab 真实名单备份、重建、验收与回滚   |
-| [`production-deployment.md`](docs/operations/production-deployment.md)                           | 当前生产环境架构、更新、验证与回滚流程 |
-| [`linting.md`](docs/operations/linting.md)                                                       | 代码风格与静态检查约定                 |
-
-## 生态与文档
-
-| 资源             | 链接                                      |
-| ---------------- | ----------------------------------------- |
-| SpecLabOS        | <https://github.com/SynlysAI/SpecLabOS>   |
-| SpecAgent        | <https://github.com/SynlysAI/Spec_Agent>  |
-| PolyAgent        | <https://github.com/SynlysAI/Poly_Agent>  |
-| RAGPortal        | <https://github.com/SynlysAI/RAGPortal>   |
-| SmartAccess      | <https://github.com/SynlysAI/SmartAccess> |
-| Plane 用户文档   | <https://docs.plane.so/>                  |
-| Plane 开发者文档 | <https://developers.plane.so/>            |
-| 贡献指南         | [`CONTRIBUTING.md`](CONTRIBUTING.md)      |
-
-## 许可证与上游致谢
-
-本仓库基于 [makeplane/plane](https://github.com/makeplane/plane) 二次开发，继续遵循 [GNU Affero General Public License v3.0](LICENSE.txt)。二次开发和对外部署应保留上游版权声明、许可证声明和来源信息，并遵守 AGPL-3.0 对应的源代码提供义务。
-
-感谢 Plane 上游团队和所有贡献者提供了成熟的开源项目管理基础。
+PiLab 基于 Plane 开源项目开发，遵循 [GNU Affero General Public License v3.0](LICENSE.txt)。

@@ -12,7 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import { MAX_FILE_ATTACHMENTS } from "@plane/constants";
 import { cn } from "@plane/utils";
 // hooks
-import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
+import { useIssueAttachmentLimits, type TIssueAttachmentLimitsState } from "@/hooks/use-issue-attachment-limits";
 
 export type TIssuePendingAttachment = {
   id: string;
@@ -26,6 +26,7 @@ type Props = {
   workspaceSlug: string;
   projectId: string;
   disabled?: boolean;
+  limitsState?: TIssueAttachmentLimitsState;
 };
 
 type TUploadPendingIssueAttachmentsArgs = {
@@ -62,10 +63,14 @@ export async function uploadPendingIssueAttachments(args: TUploadPendingIssueAtt
   return failedNames;
 }
 
-export const IssuePendingAttachments = observer(function IssuePendingAttachments(props: Props) {
-  const { attachments, onRemove, onValidationChange, workspaceSlug, projectId, disabled = false } = props;
+type ViewProps = Omit<Props, "limitsState"> & {
+  getLimitError: (file: File) => string | null;
+};
+
+/** 渲染暂存附件队列，并向上同步可保存状态。 */
+function IssuePendingAttachmentsView(props: ViewProps) {
+  const { attachments, onRemove, onValidationChange, disabled = false, getLimitError } = props;
   const { t } = useTranslation();
-  const { getLimitError } = useIssueAttachmentLimits(workspaceSlug, projectId);
 
   const getQueueError = useCallback(() => {
     if (attachments.length > MAX_FILE_ATTACHMENTS) {
@@ -119,4 +124,20 @@ export const IssuePendingAttachments = observer(function IssuePendingAttachments
       )}
     </section>
   );
+}
+
+/** 未由创建表单预取额度时，组件自行读取项目级额度。 */
+const IssuePendingAttachmentsWithLimits = observer(function IssuePendingAttachmentsWithLimits(
+  props: Omit<Props, "limitsState">
+) {
+  const { getLimitError } = useIssueAttachmentLimits(props.workspaceSlug, props.projectId);
+  return <IssuePendingAttachmentsView {...props} getLimitError={getLimitError} />;
+});
+
+export const IssuePendingAttachments = observer(function IssuePendingAttachments(props: Props) {
+  if (props.limitsState) {
+    return <IssuePendingAttachmentsView {...props} getLimitError={props.limitsState.getLimitError} />;
+  }
+  const { limitsState: _limitsState, ...fallbackProps } = props;
+  return <IssuePendingAttachmentsWithLimits {...fallbackProps} />;
 });

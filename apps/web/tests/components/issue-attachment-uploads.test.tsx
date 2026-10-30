@@ -198,8 +198,8 @@ it("uploads a dropped batch from the attachment content area without a click inp
   Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
 
   await act(async () => dropTarget!.dispatchEvent(dragEnter));
-  expect(dropTarget!.className).toContain("border-strong");
-  expect(dropTarget!.className).toContain("bg-surface-hover");
+  expect(dropTarget!.className).toContain("border-accent-strong");
+  expect(dropTarget!.className).toContain("bg-accent-primary/5");
 
   await act(async () => {
     dropTarget!.dispatchEvent(drop);

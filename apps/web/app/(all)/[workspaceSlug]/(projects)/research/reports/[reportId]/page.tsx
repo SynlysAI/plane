@@ -21,7 +21,9 @@ function WorkspaceResearchReportDetailPage() {
       descriptionKey="research.reports.detail_description"
       section="reports"
       navKey="reports"
-      breadcrumbs={<ResearchBackLink href={`/${workspaceSlug}/research/reports`}>返回报告列表</ResearchBackLink>}
+      breadcrumbs={
+        <ResearchBackLink href={`/${workspaceSlug}/research/chains?view=reports`}>返回报告列表</ResearchBackLink>
+      }
     >
       <ResearchReportDetail workspaceSlug={workspaceSlug} reportId={reportId} />
     </ResearchPageShell>

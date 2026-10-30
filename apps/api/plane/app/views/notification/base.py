@@ -26,6 +26,7 @@ from plane.db.models import (
     PeriodicReport,
     Notification,
     ResearchChainNodeTask,
+    ResearchFeedback,
     ResearchPaperReview,
     ResearchStageInstance,
     StageReviewerAssignment,
@@ -77,7 +78,6 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
     """
     linked_issue = Issue.objects.filter(
         pk=OuterRef("entity_identifier"),
-        project=OuterRef("project"),
         workspace__slug=workspace_slug,
         archived_at__isnull=True,
         project__archived_at__isnull=True,
@@ -100,6 +100,11 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
         project__archived_at__isnull=True,
     )
     valid_chain_task = ResearchChainNodeTask.objects.filter(
+        pk=OuterRef("entity_identifier"),
+        workspace__slug=workspace_slug,
+        deleted_at__isnull=True,
+    )
+    valid_feedback = ResearchFeedback.objects.filter(
         pk=OuterRef("entity_identifier"),
         workspace__slug=workspace_slug,
         deleted_at__isnull=True,
@@ -156,6 +161,7 @@ def renderable_inbox_notifications(workspace_slug, receiver_id):
         | (Q(entity_name="research_stage") & Exists(valid_stage))
         | (Q(entity_name="research_experiment") & Exists(valid_experiment))
         | (Q(entity_name="research_experiment_amendment") & Exists(valid_experiment_amendment))
+        | (Q(entity_name="research_feedback") & Exists(valid_feedback))
         | (Q(entity_name="user_mention") & Exists(valid_mentioned_user))
     )
 

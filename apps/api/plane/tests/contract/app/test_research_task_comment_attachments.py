@@ -38,11 +38,16 @@ def task_base(env, task_id):
     return _url(env, task_id)
 
 
-def configure_limits(workspace, *, image=1, office=2):
+def configure_limits(workspace, *, image=1, pdf=100, markdown=5, office=2):
     """Configure only the quota categories exercised by this module."""
     return WorkspaceResearchSetting.objects.update_or_create(
         workspace=workspace,
-        defaults={"image_max_mb": image, "office_max_mb": office},
+        defaults={
+            "image_max_mb": image,
+            "pdf_max_mb": pdf,
+            "markdown_max_mb": markdown,
+            "office_max_mb": office,
+        },
     )[0]
 
 
@@ -116,6 +121,21 @@ def test_file_presign_accepts_any_type_and_uses_workspace_quota(env):
         .status_code
         == 400
     )
+
+
+def test_attachment_limits_endpoint_returns_four_workspace_quota_categories(env):
+    task = _create(env)
+    configure_limits(env["workspace"], image=3, pdf=9, markdown=4, office=7)
+
+    response = env["student_client"].get(f"{task_base(env, task['id'])}comment-attachment-limits/")
+
+    assert response.status_code == 200, response.data
+    assert response.data == {
+        "image": {"max_mb": 3, "max_bytes": 3 * MEGABYTE},
+        "pdf": {"max_mb": 9, "max_bytes": 9 * MEGABYTE},
+        "markdown": {"max_mb": 4, "max_bytes": 4 * MEGABYTE},
+        "office": {"max_mb": 7, "max_bytes": 7 * MEGABYTE},
+    }
 
 
 def test_attachment_comment_roundtrip_edit_and_security(env):

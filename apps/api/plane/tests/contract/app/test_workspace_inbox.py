@@ -11,11 +11,14 @@ import pytest
 from rest_framework import status
 
 from plane.db.models import (
+    Issue,
     Notification,
     Page,
     PeriodicReport,
     PeriodicReportComment,
     PeriodicReportCommentThread,
+    Project,
+    ResearchFeedback,
     User,
 )
 from plane.app.services.inbox import generate_inbox_todo_reminders, todo_payload_hash
@@ -111,10 +114,113 @@ def create_research_notification(workspace, receiver, actor):
     )
 
 
+def create_work_item_notification(workspace, receiver, issue):
+    """Create one renderable work item notification for projection tests.
+
+    Args:
+        workspace: Workspace receiving the notification.
+        receiver: User who should see the notification.
+        issue: Work item whose current name should be projected.
+
+    Returns:
+        The created notification row.
+    """
+    return Notification.objects.create(
+        workspace=workspace,
+        project=issue.project,
+        receiver=receiver,
+        entity_identifier=issue.id,
+        entity_name="issue",
+        title="added assignee",
+        message={"action": "updated"},
+        sender="issue_activities",
+        triggered_by=receiver,
+        data={
+            "issue": {
+                "id": str(issue.id),
+                "name": "stale snapshot name",
+                "identifier": issue.project.identifier,
+                "sequence_id": issue.sequence_id,
+                "state_name": None,
+                "state_group": None,
+            },
+            "issue_activity": {"field": "assignees", "verb": "updated"},
+        },
+    )
+
+
+def create_feedback_notification(workspace, receiver, actor):
+    """Create one valid feedback reply notification for projection tests.
+
+    Args:
+        workspace: Workspace receiving the feedback notification.
+        receiver: User who should see the notification.
+        actor: User who wrote the reply.
+
+    Returns:
+        The created notification row.
+    """
+    feedback = ResearchFeedback.objects.create(
+        workspace=workspace,
+        username="Feedback submitter",
+        feedback_type="bug",
+        content="Weekly report upload fails",
+        created_by=receiver,
+        idempotency_key=uuid4().hex,
+        payload_hash=uuid4().hex,
+    )
+    return Notification.objects.create(
+        workspace=workspace,
+        receiver=receiver,
+        entity_identifier=feedback.id,
+        entity_name="research_feedback",
+        title="反馈有新回复",
+        message={"action": "replied"},
+        message_stripped="已复现，正在优化。",
+        sender="research:feedback",
+        triggered_by=actor,
+        data={
+            "action": "replied",
+            "feedback_id": str(feedback.id),
+            "route": f"/{workspace.slug}/feedback?feedback_id={feedback.id}",
+        },
+    )
+
+
 @pytest.mark.contract
 @pytest.mark.django_db
 class TestUnifiedWorkspaceInbox:
     """Verify notification and todo projections share one inbox contract."""
+
+    def test_feedback_notifications_enter_unified_inbox_as_system_items(
+        self, session_client, workspace, create_user, monkeypatch
+    ):
+        """平台反馈通知可展示、计数并跳转到反馈中心。"""
+        notification = create_feedback_notification(workspace, create_user, create_user)
+        monkeypatch.setattr(
+            "plane.app.services.inbox.collect_inbox_todos",
+            lambda workspace, user: ([], []),
+        )
+
+        response = session_client.get(inbox_url(workspace), {"tab": "system"})
+
+        assert response.status_code == status.HTTP_200_OK
+        item = response.json()["results"][0]
+        assert item["id"] == f"notification:{notification.id}"
+        assert item["source"] == "research_feedback"
+        assert item["category"] == "system"
+        assert item["title"] == "反馈有新回复"
+        assert item["summary"] == "已复现，正在优化。"
+        assert item["route"] == f"/{workspace.slug}/feedback?feedback_id={notification.entity_identifier}"
+        assert response.json()["unread_counts"] == {
+            "total_unread_count": 1,
+            "mention_unread_count": 0,
+            "todo_unread_count": 0,
+            "approval_unread_count": 0,
+            "review_unread_count": 0,
+            "work_item_unread_count": 0,
+            "system_unread_count": 1,
+        }
 
     def test_research_notifications_enter_legacy_notification_inbox(self, session_client, workspace, create_user):
         """Research notifications are listed and counted by notification APIs."""
@@ -157,6 +263,99 @@ class TestUnifiedWorkspaceInbox:
         assert payload["unread_counts"]["total_unread_count"] == 2
         assert payload["unread_counts"]["todo_unread_count"] == 1
         assert notification.title in {item["title"] for item in payload["results"]}
+
+    def test_work_item_notification_projects_current_name_and_preview(self, session_client, workspace, create_user):
+        """Work item inbox items use the current work item name for preview."""
+        project = Project.objects.create(
+            name="Inbox Preview Project",
+            identifier="INBOX",
+            workspace=workspace,
+            created_by=create_user,
+        )
+        issue = Issue.objects.create(
+            name="催化剂界面失活机理研究",
+            project=project,
+            workspace=workspace,
+            created_by=create_user,
+        )
+        notification = create_work_item_notification(workspace, create_user, issue)
+        research_notification = create_research_notification(workspace, create_user, create_user)
+
+        response = session_client.get(inbox_url(workspace))
+        payload = response.json()
+        items = {item["id"]: item for item in payload["results"]}
+        work_item_item = items[f"notification:{notification.id}"]
+        research_item = items[f"notification:{research_notification.id}"]
+
+        assert response.status_code == status.HTTP_200_OK
+        assert work_item_item["title"] == issue.name
+        assert work_item_item["summary"] == "added assignee"
+        assert work_item_item["preview"] == {
+            "type": "work_item",
+            "workspace_slug": workspace.slug,
+            "project_id": str(project.id),
+            "entity_id": str(issue.id),
+        }
+        assert research_item["preview"] is None
+
+    def test_notification_rejects_external_embedded_routes(
+        self, session_client, workspace, create_user, monkeypatch
+    ):
+        """Notification payload routes must fall back to internal product routes."""
+        monkeypatch.setattr(
+            "plane.app.services.inbox.collect_inbox_todos",
+            lambda workspace, user: ([], []),
+        )
+        notification = create_research_notification(workspace, create_user, create_user)
+        notification.data = {**notification.data, "route": "https://untrusted.example/report/"}
+        notification.save(update_fields=["data"])
+
+        response = session_client.get(inbox_url(workspace))
+        item = next(
+            item for item in response.json()["results"] if item["id"] == f"notification:{notification.id}"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert item["route"] == f"/{workspace.slug}/research/reports/{notification.entity_identifier}"
+
+    def test_work_item_notification_route_follows_current_project(
+        self, session_client, workspace, create_user, monkeypatch
+    ):
+        """A moved work item keeps its inbox route and preview pointed at the current project."""
+        monkeypatch.setattr(
+            "plane.app.services.inbox.collect_inbox_todos",
+            lambda workspace, user: ([], []),
+        )
+        original_project = Project.objects.create(
+            name="Inbox Original Project",
+            identifier="INBOXO",
+            workspace=workspace,
+            created_by=create_user,
+        )
+        current_project = Project.objects.create(
+            name="Inbox Current Project",
+            identifier="INBOXC",
+            workspace=workspace,
+            created_by=create_user,
+        )
+        issue = Issue.objects.create(
+            name="移动后的工作项",
+            project=original_project,
+            workspace=workspace,
+            created_by=create_user,
+        )
+        notification = create_work_item_notification(workspace, create_user, issue)
+        issue.project = current_project
+        issue.save(update_fields=["project", "updated_at"])
+
+        response = session_client.get(inbox_url(workspace))
+        item = next(
+            item for item in response.json()["results"] if item["id"] == f"notification:{notification.id}"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert item["route"] == f"/{workspace.slug}/projects/{current_project.id}/issues/{issue.id}"
+        assert item["preview"]["project_id"] == str(current_project.id)
 
     def test_unread_items_sort_before_read_items(self, session_client, workspace, create_user, monkeypatch):
         """Unread inbox items lead the list regardless of read-item timestamps."""

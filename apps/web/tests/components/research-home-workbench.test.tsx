@@ -342,6 +342,21 @@ it("renders the action-first bento home information architecture without generic
   expect(container.textContent).not.toContain("草稿");
 });
 
+it("removes the recent-activity date filter from the workbench", async () => {
+  await renderHome();
+  await act(async () => undefined);
+
+  const periodGroups = [...container.querySelectorAll('div[role="group"][aria-label="统计周期"]')].filter((group) =>
+    ["近 30 天", "近 90 天", "全部"].every((label) => group.textContent?.includes(label))
+  );
+  const activityCard = container.querySelector("section[aria-label='最近动态']");
+  expect(periodGroups).toHaveLength(0);
+  expect(activityCard?.querySelector('div[role="group"][aria-label="统计周期"]')).toBeNull();
+  expect(container.querySelector("header")?.textContent).not.toContain("近 30 天");
+  expect(container.querySelector("header")?.textContent).not.toContain("近 90 天");
+  expect(container.querySelector("header")?.textContent).not.toContain("全部");
+});
+
 it("treats the saved account density as authoritative over legacy local storage", async () => {
   window.localStorage.setItem("plane.home.workbench.density", "detailed");
   await renderHome();
@@ -496,8 +511,9 @@ it("renders and switches one full-row module per waterfall tab", async () => {
   await act(async () => undefined);
 
   const tabs = container.querySelector('[data-testid="workspace-home-waterfall-tabs"]');
-  expect(tabs?.className).toContain("sticky top-[calc(var(--padding-page-y)*-1)]");
+  expect(tabs?.className).toContain("sticky top-0");
   expect(tabs?.className).toContain("z-10");
+  expect(tabs?.className).toContain("shrink-0");
   expect(tabs?.className).toContain("bg-canvas");
   expect([...(tabs?.querySelectorAll('[role="tab"]') ?? [])].map((tab) => tab.textContent)).toEqual([
     "我的待办",
@@ -507,11 +523,25 @@ it("renders and switches one full-row module per waterfall tab", async () => {
     "报告提交摘要",
   ]);
   const grid = container.querySelector('[data-testid="workspace-home-columns"]')!;
+  const workbench = grid.parentElement!;
+  expect(workbench.className).toContain("h-full");
+  expect(workbench.className).toContain("min-h-0");
+  expect(workbench.querySelector("header")?.className).toContain("shrink-0");
   expect(grid.getAttribute("role")).toBe("tabpanel");
-  expect(grid.className).toContain("xl:min-h-[70vh]");
+  expect(grid.className).toContain("min-h-0");
+  expect(grid.className).toContain("flex-1");
+  expect(grid.className).toContain("overflow-hidden");
+  expect(grid.className).not.toContain("70vh");
   expect(grid.className).not.toContain("xl:grid-cols-12");
-  expect(grid.querySelector("section")?.classList.contains("xl:col-span-12")).toBe(true);
+  const activeCard = grid.querySelector("section")!;
+  expect(activeCard.classList.contains("xl:col-span-12")).toBe(true);
+  expect(activeCard.className).toContain("h-full");
+  expect(activeCard.className).toContain("min-h-[320px]");
+  const activeCardBody = activeCard.querySelector("[data-home-card-scroll]");
+  expect(activeCardBody?.className).toContain("overflow-y-auto");
+  expect(activeCardBody?.getAttribute("data-home-card-scroll")).toBe("true");
   expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["我的待办"]);
+  expect(container.querySelectorAll('div[role="group"][aria-label="统计周期"]')).toHaveLength(0);
   expect(mocks.getChains).not.toHaveBeenCalled();
   expect(mocks.fetchProjects).not.toHaveBeenCalled();
   expect(mocks.fetchWorkspaceActivities).not.toHaveBeenCalled();
@@ -524,6 +554,43 @@ it("renders and switches one full-row module per waterfall tab", async () => {
   await act(async () => undefined);
   expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["科研项目概览"]);
   expect(mocks.getChains).toHaveBeenCalled();
+
+  const activityTab = [...(tabs?.querySelectorAll('[role="tab"]') ?? [])].find((tab) =>
+    tab.textContent?.includes("最近动态")
+  );
+  await act(async () => activityTab?.click());
+  await act(async () => undefined);
+  const activityCard = container.querySelector("section[aria-label='最近动态']");
+  expect(activityCard?.querySelector('div[role="group"][aria-label="统计周期"]')).toBeNull();
+  await act(async () => undefined);
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenLastCalledWith("lab", {
+    days: "30",
+    pagination: "cursor",
+    per_page: 12,
+  });
+});
+
+it("keeps waterfall cards internally scrollable in detailed density", async () => {
+  mocks.fetchWorkspaceWidgets.mockResolvedValue([
+    { key: "my_todos", is_enabled: true, config: { size: "medium" }, sort_order: 1100 },
+    { key: "research_projects", is_enabled: true, config: { size: "large" }, sort_order: 1000 },
+    { key: "administrative_projects", is_enabled: true, config: { size: "small" }, sort_order: 900 },
+    { key: "recent_activity", is_enabled: true, config: { size: "small" }, sort_order: 800 },
+    { key: "report_summary", is_enabled: true, config: { size: "small" }, sort_order: 700 },
+    { key: "workbench_layout", is_enabled: true, config: { density: "detailed", mode: "waterfall" }, sort_order: 100 },
+  ]);
+  await renderHome();
+  await act(async () => undefined);
+  const tabs = container.querySelector('[data-testid="workspace-home-waterfall-tabs"]')!;
+  const activityTab = [...tabs.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.includes("最近动态"));
+  await act(async () => activityTab?.click());
+  await act(async () => undefined);
+
+  const activeCard = container.querySelector('[data-testid="workspace-home-columns"] > section')!;
+  const activeCardBody = activeCard.querySelector("[data-home-card-scroll]");
+  expect(activeCardBody?.className).toContain("overflow-y-auto");
+  expect(activeCardBody?.getAttribute("data-home-card-scroll")).toBe("true");
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenCalled();
 });
 
 it("falls back to the first available waterfall module after hiding the active one", async () => {
@@ -743,6 +810,24 @@ it("excludes archived and deleted chains from rows, task counts and deadlines", 
   expect(metrics?.textContent).toContain("2026/10/12");
 });
 
+it("keeps older research chains because the date filter belongs to recent activity", async () => {
+  const current = (await mocks.getChains())[0];
+  mocks.getChains.mockResolvedValue([
+    current,
+    {
+      ...current,
+      id: "old-chain",
+      project_name: "历史课题",
+      updated_at: "2025-01-01T08:00:00Z",
+    },
+  ]);
+  await renderHome();
+  const section = container.querySelector('a[href="/lab/research/chains"]')?.closest("section");
+
+  expect(section?.textContent).toContain("历史课题");
+  expect(section?.textContent).toContain("共 2 个课题");
+});
+
 it("uses a readable placeholder without exposing a raw owner ID", async () => {
   const active = (await mocks.getChains())[0];
   mocks.getChains.mockResolvedValue([{ ...active, owner: "raw-owner-id", owner_name: "  " }]);
@@ -816,7 +901,7 @@ it("shows the compact report submission summary and refreshes the workbench", as
   expect(mocks.fetchReportSummary).not.toHaveBeenCalled();
 });
 
-it("switches report periods without changing the global workbench period", async () => {
+it("switches report periods without introducing the recent-activity date filter", async () => {
   await renderHome();
   expect(mocks.getReportSummary).toHaveBeenCalledTimes(1);
   expect(mocks.getReportSummary).toHaveBeenCalledWith("lab", { report_type: "WEEKLY", period_offset: 0 });
@@ -852,9 +937,10 @@ it("switches report periods without changing the global workbench period", async
     ].map((link) => link.textContent)
   ).toContain("已验收17");
 
-  const allPeriod = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部");
-  await act(async () => allPeriod?.click());
   expect(mocks.getReportSummary).toHaveBeenCalledTimes(3);
+  const reportCard = container.querySelector("section[aria-label='报告提交摘要']");
+  expect(reportCard?.textContent).not.toContain("近 30 天");
+  expect(reportCard?.textContent).not.toContain("近 90 天");
 });
 
 it("loads an ISO week summary when a custom week date is selected", async () => {

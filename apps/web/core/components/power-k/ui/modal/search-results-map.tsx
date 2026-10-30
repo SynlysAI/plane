@@ -32,6 +32,17 @@ export type TPowerKSearchResultGroupDetails = {
   title: string;
 };
 
+/** Return the product entry path for a global-search project result. */
+export function getWorkspaceProjectSearchPath(project: IWorkspaceProjectSearchResult): string {
+  if (project.route_kind === "RESEARCH_CHAIN") {
+    return `/${project.workspace__slug}/research/chains/${project.chain_id || project.id}?tab=overview`;
+  }
+  if (project.route_kind === "TEAM_RESEARCH" || project.route_kind === "LEGACY_RESEARCH") {
+    return `/${project.workspace__slug}/research/projects/${project.id}/overview`;
+  }
+  return `/${project.workspace__slug}/projects/${project.id}/issues/`;
+}
+
 export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys, TPowerKSearchResultGroupDetails> = {
   cycle: {
     icon: CyclesOutline,
@@ -108,7 +119,7 @@ export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys,
   project: {
     icon: ProjectsOutline,
     itemName: (project: IWorkspaceProjectSearchResult) => project?.name,
-    path: (project: IWorkspaceProjectSearchResult) => `/${project?.workspace__slug}/projects/${project?.id}/issues/`,
+    path: (project: IWorkspaceProjectSearchResult) => getWorkspaceProjectSearchPath(project),
     title: "Projects",
   },
   workspace: {

@@ -5,6 +5,7 @@
  */
 
 import Link from "next/link";
+import { useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import {
@@ -18,6 +19,7 @@ import {
 } from "./inbox-labels";
 // hooks
 import { inboxListKey, useInboxList, useInboxUnreadCounts, useInvalidateOtherInboxLists } from "@/hooks/use-inbox";
+import { useNotificationPreview } from "@/hooks/use-notification-preview";
 // services
 import inboxService from "@/services/inbox.service";
 
@@ -31,7 +33,7 @@ function formatDateTime(value: string) {
 }
 
 export function InboxDetail({ workspaceSlug }: Props) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const selectedItemId = searchParams.get("inbox_item") ?? undefined;
   const currentTab = searchParams.get("inbox_tab") ?? "all";
   const listParams = { tab: currentTab as never, per_page: 50 };
@@ -40,6 +42,30 @@ export function InboxDetail({ workspaceSlug }: Props) {
   const { mutate: mutateCounts } = useInboxUnreadCounts(workspaceSlug);
   const invalidateOtherInboxLists = useInvalidateOtherInboxLists(workspaceSlug, currentListKey);
   const item = data?.results.find((candidate) => candidate.id === selectedItemId);
+  const { PeekOverviewComponent, setPeekWorkItem } = useNotificationPreview();
+  const workItemPreview = item?.preview?.type === "work_item" ? item.preview : undefined;
+  const previewWorkspaceSlug = workItemPreview?.workspace_slug;
+  const previewProjectId = workItemPreview?.project_id;
+  const previewEntityId = workItemPreview?.entity_id;
+
+  useEffect(() => {
+    if (!previewWorkspaceSlug || !previewProjectId || !previewEntityId) {
+      setPeekWorkItem(undefined);
+      return;
+    }
+    setPeekWorkItem({
+      workspaceSlug: previewWorkspaceSlug,
+      projectId: previewProjectId,
+      issueId: previewEntityId,
+    });
+    return () => setPeekWorkItem(undefined);
+  }, [setPeekWorkItem, previewEntityId, previewProjectId, previewWorkspaceSlug]);
+
+  const clearSelectedItem = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("inbox_item");
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
 
   if (!item) {
     return (
@@ -87,6 +113,42 @@ export function InboxDetail({ workspaceSlug }: Props) {
     ["截止时间", item.due_at ? formatDateTime(item.due_at) : undefined],
     ["更新时间", formatDateTime(item.updated_at)],
   ].filter(([, value]) => Boolean(value));
+
+  if (workItemPreview) {
+    return (
+      <section className="flex h-full min-w-0 flex-col bg-canvas">
+        <header className="flex flex-shrink-0 items-center justify-between gap-4 border-b border-subtle bg-surface-1 px-6 py-4">
+          <div className="min-w-0">
+            <p className="text-11 font-medium text-tertiary">{inboxLabel(INBOX_CATEGORY_LABELS, item.category)}</p>
+            <p className="mt-1 truncate text-13 text-secondary">{item.summary || item.title}</p>
+            <time className="mt-1 block text-11 text-tertiary" dateTime={item.updated_at}>
+              {formatDateTime(item.updated_at)}
+            </time>
+          </div>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {item.route && (
+              <Link
+                href={item.route}
+                className="rounded-md border border-subtle px-3 py-1.5 text-12 text-primary transition hover:bg-layer-1-hover"
+              >
+                打开来源
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={handleMarkUnread}
+              className="rounded-md px-3 py-1.5 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary"
+            >
+              标记未读
+            </button>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <PeekOverviewComponent embedIssue embedRemoveCurrentNotification={clearSelectedItem} />
+        </div>
+      </section>
+    );
+  }
 
   return (
     <article className="h-full overflow-y-auto bg-canvas">

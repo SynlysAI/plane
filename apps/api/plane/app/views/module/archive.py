@@ -548,7 +548,7 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
 
     def post(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
-        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+        if administrative_settings_write_blocked(request.user, module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_module_operation_error(module.project, module)
         if required_error is not None:
@@ -570,7 +570,7 @@ class ModuleArchiveUnarchiveEndpoint(BaseAPIView):
 
     def delete(self, request, slug, project_id, module_id):
         module = Module.objects.get(pk=module_id, project_id=project_id, workspace__slug=slug)
-        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+        if administrative_settings_write_blocked(request.user, module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         module.archived_at = None
         module.save()

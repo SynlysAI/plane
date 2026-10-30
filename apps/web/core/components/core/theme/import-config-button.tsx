@@ -69,12 +69,6 @@ export const CustomThemeImportConfigButton = observer(function CustomThemeImport
 
       // Apply the theme
       await handleUpdateTheme(formData);
-
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("success"),
-        message: "Theme configuration imported successfully",
-      });
     } catch (error) {
       console.error("Failed to upload config:", error);
       setToast({

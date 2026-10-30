@@ -67,6 +67,63 @@ it("renders source, action, urgency and unread presentation", async () => {
   expect(container.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-26T02:00:00Z");
 });
 
+it("renders feedback notifications with the platform source label", async () => {
+  await act(async () =>
+    root.render(
+      <InboxItemRow
+        item={inboxItem({
+          id: "notification:feedback:1",
+          kind: "notification",
+          category: "system",
+          source: "research_feedback",
+          object_id: "feedback-1",
+          entity_name: "research_feedback",
+          entity_identifier: "feedback-1",
+          title: "反馈有新回复",
+          summary: "已复现，正在优化。",
+          action: "replied",
+          route: "/lab/feedback?feedback_id=feedback-1",
+          due_at: undefined,
+          urgency: undefined,
+          status: undefined,
+        })}
+        compact={false}
+      />
+    )
+  );
+
+  expect(container.textContent).toContain("平台反馈 · 系统");
+  expect(container.textContent).toContain("反馈有新回复");
+  expect(container.textContent).toContain("已复现，正在优化。");
+});
+
+it("renders a work item name without duplicating the context label", async () => {
+  await act(async () =>
+    root.render(
+      <InboxItemRow
+        item={inboxItem({
+          id: "notification:issue:1",
+          kind: "notification",
+          category: "work_item",
+          source: "issue",
+          object_id: "11111111-1111-1111-1111-111111111111",
+          entity_name: "issue",
+          entity_identifier: "11111111-1111-1111-1111-111111111111",
+          title: "催化剂界面失活机理研究",
+          summary: "added assignee",
+          action: "updated",
+        })}
+        compact={false}
+      />
+    )
+  );
+
+  expect(container.textContent).toContain("工作项");
+  expect(container.textContent).toContain("催化剂界面失活机理研究");
+  expect(container.textContent).toContain("added assignee");
+  expect(container.textContent).not.toContain("工作项 · 工作项");
+});
+
 it("does not show an unread indicator for read items", async () => {
   await act(async () =>
     root.render(<InboxItemRow item={inboxItem({ read_at: "2026-10-26T02:30:00Z" })} compact={false} />)

@@ -100,6 +100,7 @@ class Project(BaseModel):
     is_issue_type_enabled = models.BooleanField(default=False)
     is_module_required = models.BooleanField(default=False)
     is_label_required = models.BooleanField(default=False)
+    administrative_settings_admin_only = models.BooleanField(default=False)
     guest_view_all_features = models.BooleanField(default=False)
     cover_image = models.TextField(blank=True, null=True)
     cover_image_asset = models.ForeignKey(
@@ -233,6 +234,7 @@ class ProjectMember(ProjectBaseModel):
     preferences = models.JSONField(default=get_default_preferences)
     sort_order = models.FloatField(default=65535)
     is_active = models.BooleanField(default=True)
+    inheritance_revoked = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if self._state.adding and self.member:

@@ -105,13 +105,26 @@ function activityResponse(results: ReturnType<typeof activity>[], nextCursor: st
   };
 }
 
-async function renderWidget({ cardScroll = true }: { cardScroll?: boolean } = {}) {
+async function renderWidget({
+  cardScroll = true,
+  density = "compact",
+  refreshToken = 0,
+}: {
+  cardScroll?: boolean;
+  density?: "compact" | "detailed";
+  refreshToken?: number;
+} = {}) {
   await act(async () =>
     root.render(
       <SWRConfig value={{ provider: () => cache, dedupingInterval: 0, shouldRetryOnError: false }}>
         <MemoryRouter initialEntries={["/lab"]}>
           <div data-home-card-scroll={cardScroll ? "true" : undefined}>
-            <HomeActivityWidget workspaceSlug="lab" density="compact" fixedLayout={cardScroll} refreshToken={0} />
+            <HomeActivityWidget
+              workspaceSlug="lab"
+              density={density}
+              fixedLayout={cardScroll}
+              refreshToken={refreshToken}
+            />
           </div>
         </MemoryRouter>
       </SWRConfig>
@@ -180,6 +193,11 @@ it("renders actor, object, link, timestamp and grouped real mutations", async ()
   expect(container.querySelector('a[href*="/lab/projects/project-1/issues"]')).not.toBeNull();
   expect(container.querySelector('a[href*="/lab/research/reports/report-1"]')).not.toBeNull();
   expect(container.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-22T09:56:00Z");
+  expect(
+    [...container.querySelectorAll("button")].filter((button) =>
+      ["近 30 天", "近 90 天", "全部"].includes(button.textContent ?? "")
+    )
+  ).toEqual([]);
 
   vi.useRealTimers();
 });
@@ -263,6 +281,17 @@ it("uses the card scroller and keeps loading while the sentinel stays visible", 
   expect(container.querySelector('[data-testid="activity-auto-load-sentinel"]')).toBeNull();
 });
 
+it("uses the card scroller for detailed fixed waterfall layouts", async () => {
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
+  );
+  await renderWidget({ density: "detailed", cardScroll: true });
+
+  const scroller = container.querySelector<HTMLElement>("[data-home-card-scroll='true']");
+  expect(scroller).not.toBeNull();
+  expect(intersectionObservers[0]?.root).toBe(scroller);
+});
+
 it("uses the browser viewport outside the fixed compact card layout", async () => {
   mocks.fetchWorkspaceActivities.mockResolvedValue(
     activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
@@ -325,18 +354,35 @@ it("keeps loaded events and reports an error when the next page fails", async ()
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("最近动态暂不可用");
 });
 
-it("resets the stream when the time filter changes", async () => {
-  mocks.fetchWorkspaceActivities.mockResolvedValue(activityResponse([activity("event-1", "2026-10-22T09:00:00Z")]));
+it("keeps a fixed thirty-day scope and resets the stream on workbench refresh", async () => {
+  mocks.fetchWorkspaceActivities.mockResolvedValueOnce(
+    activityResponse([activity("event-1", "2026-10-22T09:00:00Z")], "cursor-2")
+  );
   await renderWidget();
-  const ninetyDays = [...container.querySelectorAll("button")].find((button) => button.textContent === "近 90 天");
-  await act(async () => ninetyDays?.click());
-  await act(async () => undefined);
 
-  expect(mocks.fetchWorkspaceActivities).toHaveBeenLastCalledWith("lab", {
-    days: "90",
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenNthCalledWith(1, "lab", {
+    days: "30",
     pagination: "cursor",
     per_page: 12,
   });
+  mocks.fetchWorkspaceActivities.mockResolvedValue(
+    activityResponse([
+      activity("event-2", "2026-10-22T08:00:00Z", {
+        entity_name: "刷新后的动态",
+        project: { id: "project-2", name: "刷新后的项目", identifier: "NEW" },
+      }),
+    ])
+  );
+  await renderWidget({ refreshToken: 1 });
+  await act(async () => undefined);
+
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenLastCalledWith("lab", {
+    days: "30",
+    pagination: "cursor",
+    per_page: 12,
+  });
+  expect(container.textContent).toContain("刷新后的动态");
+  expect(container.textContent).not.toContain("设备采购协作");
 });
 
 it("renders natural empty and error states without using visit records", async () => {
@@ -345,8 +391,8 @@ it("renders natural empty and error states without using visit records", async (
   expect(container.textContent).toContain("暂无业务动态");
 
   mocks.fetchWorkspaceActivities.mockRejectedValue(new Error("unavailable"));
-  const ninetyDays = [...container.querySelectorAll("button")].find((button) => button.textContent === "近 90 天");
-  await act(async () => ninetyDays?.click());
+  const refresh = [...container.querySelectorAll("button")].find((button) => button.textContent === "刷新");
+  await act(async () => refresh?.click());
   await act(async () => undefined);
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("最近动态暂不可用");
 });

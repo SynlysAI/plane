@@ -84,7 +84,7 @@ it("disables administrative module configuration and explains the lock", async (
   const toggle = container.querySelector<HTMLButtonElement>('button[role="switch"]');
   expect(toggle?.disabled).toBe(true);
   expect(toggle?.getAttribute("aria-checked")).toBe("true");
-  expect(container.textContent).toContain("该项已由工作区管理员统一设置。");
+  expect(container.textContent).toContain("该项已由项目管理员统一设置。");
 
   await act(async () => toggle?.click());
   expect(mocks.updateProject).not.toHaveBeenCalled();

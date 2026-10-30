@@ -22,6 +22,8 @@ vi.mock("@/services/research/feedback.service", () => ({
   ResearchFeedbackService: class {
     list = (workspaceSlug: string, params: Record<string, string>) =>
       mocks.get(`/api/research/workspaces/${workspaceSlug}/feedback/`, { params });
+    getFeedback = (workspaceSlug: string, feedbackId: string, params: Record<string, string>) =>
+      mocks.get(`/api/research/workspaces/${workspaceSlug}/feedback/${feedbackId}/`, { params });
     create = (workspaceSlug: string, form: FormData) =>
       mocks.post(`/api/research/workspaces/${workspaceSlug}/feedback/`, form);
     updateStatus = (workspaceSlug: string, feedbackId: string, payload: unknown) =>
@@ -71,6 +73,27 @@ vi.mock("@plane/propel/button", () => ({
     </button>
   ),
 }));
+vi.mock("@plane/propel/calendar", () => ({
+  Calendar: ({ onSelect, disabled }: { onSelect: (date: Date | undefined) => void; disabled?: { after?: Date } }) => (
+    <div data-testid="period-calendar">
+      <button type="button" onClick={() => onSelect(new Date(2026, 8, 15))}>
+        选择 2026-09-15
+      </button>
+      <button type="button" onClick={() => onSelect(new Date(2027, 0, 1))}>
+        选择未来日期
+      </button>
+      <span data-testid="disabled-after">{disabled?.after?.toISOString()}</span>
+    </div>
+  ),
+}));
+
+vi.mock("@plane/propel/popover", () => {
+  return {
+    Popover: Object.assign(({ children }: { children: React.ReactNode }) => <>{children}</>, {
+      Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    }),
+  };
+});
 
 const { FeedbackDialog, createIdempotencyKey } = await import("@/components/research/feedback/feedback-dialog");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
@@ -106,6 +129,11 @@ async function pick(files: File[]) {
 
 /** 在指定元素触发带文件的原生粘贴事件，模拟用户粘贴截图。 */
 async function paste(files: File[], target?: Element) {
+  return pasteFromClipboardSources(files, files, target);
+}
+
+/** 分别构造 files 与 items 暴露的文件，模拟浏览器返回不同 File 对象的情况。 */
+async function pasteFromClipboardSources(files: File[], itemFiles: File[], target?: Element) {
   const pasteTarget = target ?? container.querySelector<HTMLTextAreaElement>('textarea[aria-label="反馈描述"]');
   if (!pasteTarget) throw new Error("粘贴目标未显示");
 
@@ -113,21 +141,11 @@ async function paste(files: File[], target?: Element) {
   Object.defineProperty(event, "clipboardData", {
     value: {
       files,
-      items: files.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })),
+      items: itemFiles.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })),
     },
   });
   await act(async () => pasteTarget.dispatchEvent(event));
   return event;
-}
-
-/** Format a local date in the same shape as the feedback preset filter. */
-function localDate(offsetDays: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(
-    2,
-    "0"
-  )}`;
 }
 
 /** 打开反馈弹窗。 */
@@ -141,6 +159,12 @@ async function open() {
 /** 直接渲染反馈管理页形态。 */
 async function renderManagementPage() {
   await act(async () => root.render(<FeedbackDialog workspaceSlug="lab" managementOnly />));
+}
+
+/** 渲染通知深链使用的反馈中心页面形态。 */
+async function renderFeedbackCenter(feedbackId?: string) {
+  await act(async () => root.render(<FeedbackDialog workspaceSlug="lab" standalone initialFeedbackId={feedbackId} />));
+  await act(async () => undefined);
 }
 
 beforeEach(() => {
@@ -191,7 +215,6 @@ it("Plane API 故障保留描述和三张截图，重试使用同一幂等键，
   await act(async () =>
     container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   );
-
   const second = mocks.post.mock.calls[1][1] as FormData;
   expect(second.get("idempotency_key")).toBe(first.get("idempotency_key"));
   expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="反馈描述"]')?.value).toBe("");
@@ -254,6 +277,45 @@ it("粘贴截图复用数量、类型与大小限制", async () => {
   expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(3);
 });
 
+it("同一粘贴图片在 files 与 items 中对象不同，仍只添加并提交一次", async () => {
+  await open();
+  await describeFeedback("Clipboard image is duplicated");
+  const directFile = new File(["PASTED"], "pasted.png", { type: "image/png", lastModified: 123456 });
+  const itemFile = new File(["PASTED"], "pasted.png", { type: "image/png", lastModified: 123456 });
+
+  const event = await pasteFromClipboardSources([directFile], [itemFile]);
+  expect(event.defaultPrevented).toBe(true);
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(1);
+
+  await act(async () =>
+    container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+  );
+  const form = mocks.post.mock.calls[0][1] as FormData;
+  expect(form.getAll("screenshots")).toEqual([directFile]);
+});
+
+it("files 为空时仍可从 items 粘贴截图", async () => {
+  await open();
+  const itemFile = new File(["ITEM"], "item.png", { type: "image/png" });
+
+  const event = await pasteFromClipboardSources([], [itemFile]);
+  expect(event.defaultPrevented).toBe(true);
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(1);
+});
+
+it("一次粘贴多张不同图片不会被误合并", async () => {
+  await open();
+  const directFiles = [0, 1].map(
+    (index) => new File([`PNG-${index}`], `${index}.png`, { type: "image/png", lastModified: 123456 })
+  );
+  const itemFiles = [0, 1].map(
+    (index) => new File([`PNG-${index}`], `${index}.png`, { type: "image/png", lastModified: 123456 })
+  );
+
+  await pasteFromClipboardSources(directFiles, itemFiles);
+  expect(container.querySelectorAll('img[alt$="预览"]')).toHaveLength(2);
+});
+
 it("切换到我的反馈后，粘贴图片不会进入提交清单", async () => {
   await open();
   await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(2)')?.click());
@@ -291,66 +353,91 @@ it("列表失败提供重试，重试成功后展示结果", async () => {
   expect(container.textContent).toContain("当前范围内没有反馈记录");
 });
 
-it("关键词与模块筛选延迟 300 毫秒后请求", async () => {
+it("关键词输入不请求，Enter 或搜索按钮确认后才请求", async () => {
   await open();
   await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(2)')?.click());
+  await act(async () => undefined);
   const callsBefore = mocks.get.mock.calls.length;
   const keyword = container.querySelector<HTMLInputElement>('input[aria-label="反馈关键词"]');
   if (!keyword) throw new Error("反馈关键词未显示");
+  expect(container.querySelector('input[aria-label="反馈模块"]')).toBeNull();
 
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(keyword, "upload");
     keyword.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
   expect(mocks.get.mock.calls.length).toBe(callsBefore);
 
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
+  await act(async () =>
+    container
+      .querySelector('form[data-keyword-filter="true"]')
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+  );
   expect(mocks.get.mock.calls.length).toBe(callsBefore + 1);
   expect(mocks.get).toHaveBeenLastCalledWith(
     "/api/research/workspaces/lab/feedback/",
-    expect.objectContaining({ params: expect.objectContaining({ q: "upload" }) })
+    expect.objectContaining({ params: expect.objectContaining({ q: "upload", page: "1" }) })
+  );
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(keyword, "weekly");
+    keyword.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "搜索")
+      ?.click()
+  );
+  expect(mocks.get.mock.calls.length).toBe(callsBefore + 2);
+  expect(mocks.get).toHaveBeenLastCalledWith(
+    "/api/research/workspaces/lab/feedback/",
+    expect.objectContaining({ params: expect.objectContaining({ q: "weekly", page: "1" }) })
   );
 });
 
-it("我的反馈日期筛选支持任意、预设与自定义区间", async () => {
-  await open();
-  await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(2)')?.click());
-  const preset = container.querySelector<HTMLSelectElement>('select[aria-label="反馈日期范围"]');
-  if (!preset) throw new Error("反馈日期范围未显示");
-  expect(container.querySelector('input[aria-label="反馈开始日期"]')).toBeNull();
+it("我的反馈日期筛选复用周报周/月日历并支持清除", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 9, 27, 15, 0, 0));
+  try {
+    await open();
+    await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(2)')?.click());
+    await act(async () => undefined);
+    expect(container.textContent).toContain("任意时间");
+    expect(container.querySelector('select[aria-label="反馈日期范围"]')).toBeNull();
 
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(preset, "7");
-    preset.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  expect(mocks.get).toHaveBeenLastCalledWith(
-    "/api/research/workspaces/lab/feedback/",
-    expect.objectContaining({
-      params: expect.objectContaining({ date_from: localDate(-6), date_to: localDate(0), page: "1" }),
-    })
-  );
+    await act(async () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.getAttribute("aria-label") === "反馈日期周期")
+        ?.click()
+    );
+    await act(async () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === "选择 2026-09-15")
+        ?.click()
+    );
 
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(preset, "custom");
-    preset.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  const start = container.querySelector<HTMLInputElement>('input[aria-label="反馈开始日期"]');
-  const end = container.querySelector<HTMLInputElement>('input[aria-label="反馈结束日期"]');
-  if (!start || !end) throw new Error("自定义日期区间未显示");
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(start, "2026-10-01");
-    start.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(end, "2026-10-08");
-    end.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  expect(mocks.get).toHaveBeenLastCalledWith(
-    "/api/research/workspaces/lab/feedback/",
-    expect.objectContaining({
-      params: expect.objectContaining({ date_from: "2026-10-01", date_to: "2026-10-08" }),
-    })
-  );
+    expect(container.textContent).toContain("2026-W38");
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      "/api/research/workspaces/lab/feedback/",
+      expect.objectContaining({
+        params: expect.objectContaining({ date_from: "2026-09-14", date_to: "2026-09-20", page: "1" }),
+      })
+    );
+
+    await act(async () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === "清除日期")
+        ?.click()
+    );
+    expect(container.textContent).toContain("任意时间");
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      "/api/research/workspaces/lab/feedback/",
+      expect.objectContaining({ params: expect.objectContaining({ date_from: "", date_to: "", page: "1" }) })
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("普通用户查询本人记录，不显示管理入口且查看四状态与截图", async () => {
@@ -406,6 +493,114 @@ it("普通用户查询本人记录，不显示管理入口且查看四状态与�
   });
   expect(container.textContent).toContain("截图暂不可用");
   expect(container.querySelector('textarea[aria-label="处置说明"]')).toBeNull();
+});
+
+it("普通提交者可在我的反馈中持续回复，并按时间混合查看动态", async () => {
+  const feedback = {
+    feedback_id: "feedback-own-reply",
+    content: "Own feedback needs more discussion",
+    feedback_type: "ux",
+    status: "in_progress",
+    username: "Student",
+    path: "/lab/research",
+    browser: "Browser",
+    module: "research",
+    created_at: "2026-10-08T00:00:00Z",
+    screenshots: [],
+    history: [
+      {
+        actor_name: "PI",
+        from_status: "open",
+        to_status: "in_progress",
+        comment: "Status changed later",
+        created_at: "2026-10-08T02:00:00Z",
+      },
+    ],
+    replies: [
+      {
+        id: "reply-old",
+        content: "Earlier reply",
+        author_name: "PI",
+        created_at: "2026-10-08T01:00:00Z",
+      },
+    ],
+  };
+  const updated = {
+    ...feedback,
+    replies: [
+      ...feedback.replies,
+      {
+        id: "reply-new",
+        content: "Still reproduces after the patch",
+        author_name: "Student",
+        created_at: "2026-10-08T03:00:00Z",
+      },
+    ],
+  };
+  mocks.get.mockResolvedValue({ count: 1, results: [feedback] });
+  mocks.post.mockResolvedValue(updated);
+
+  await open();
+  await act(async () => container.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(2)')?.click());
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Own feedback needs more discussion"))
+      ?.click()
+  );
+
+  const timeline = container.querySelector('section[aria-label="反馈讨论与处理动态"]');
+  expect(timeline?.textContent?.indexOf("Earlier reply")).toBeLessThan(
+    timeline?.textContent?.indexOf("Status changed later") ?? -1
+  );
+  const replyBox = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="反馈回复"]');
+  if (!replyBox) throw new Error("提交者回复输入未显示");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      replyBox,
+      "Still reproduces after the patch"
+    );
+    replyBox.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  mocks.get.mockResolvedValue({ count: 1, results: [updated] });
+  await act(async () =>
+    container
+      .querySelector('form[data-reply-form="true"]')
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  expect(mocks.post).toHaveBeenCalledWith("/api/research/workspaces/lab/feedback/feedback-own-reply/replies/", {
+    content: "Still reproduces after the patch",
+  });
+  expect(container.textContent).toContain("Still reproduces after the patch");
+});
+
+it("反馈中心深链先读取详情并保留选中记录", async () => {
+  const detail = {
+    feedback_id: "feedback-deep-link",
+    content: "Deep linked feedback",
+    feedback_type: "bug",
+    status: "open",
+    username: "Student",
+    path: "/lab/research",
+    browser: "Browser",
+    module: "research",
+    created_at: "2026-10-08T00:00:00Z",
+    screenshots: [],
+    history: [],
+    replies: [],
+  };
+  mocks.get.mockImplementation(async (url: string) =>
+    url.endsWith("/feedback/") ? { count: 0, results: [] } : { ...detail }
+  );
+
+  await renderFeedbackCenter("feedback-deep-link");
+
+  expect(mocks.get).toHaveBeenCalledWith("/api/research/workspaces/lab/feedback/feedback-deep-link/", {
+    params: { scope: "own" },
+  });
+  expect(container.textContent).toContain("Deep linked feedback");
+  expect(container.querySelector('[data-testid="feedback-management-split"]')).not.toBeNull();
 });
 
 it("普通成员查看工作空间反馈统计，只读且可读取他人截图与历史", async () => {
@@ -611,7 +806,9 @@ it("管理员在反馈统计页签继续提供状态处置并使用工作空间�
     commentBox.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await act(async () =>
-    container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    container
+      .querySelector('form[data-status-form="true"]')
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   );
   expect(mocks.patch).toHaveBeenCalledWith("/api/research/workspaces/lab/feedback/feedback-dialog-manage/status/", {
     status: "in_progress",
@@ -752,7 +949,9 @@ it("主 PI 进入管理视图，使用管理范围读取并更新状态", async 
     commentBox.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await act(async () =>
-    container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    container
+      .querySelector('form[data-status-form="true"]')
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   );
   expect(mocks.patch).toHaveBeenCalledWith("/api/research/workspaces/lab/feedback/feedback-manage/status/", {
     status: "in_progress",

@@ -62,7 +62,6 @@ class WorkspaceResearchSetting(BaseModel):
         blank=True,
     )
     module_enabled = models.BooleanField(default=False)
-    administrative_settings_admin_only = models.BooleanField(default=False)
     org_enabled = models.BooleanField(default=True)
     report_enabled = models.BooleanField(default=True)
     approval_enabled = models.BooleanField(default=True)

@@ -4,9 +4,10 @@
  * See the LICENSE file for details.
  */
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 // plane imports
+import { useTranslation } from "@plane/i18n";
 import { WORKSPACE_DEFAULT_SEARCH_RESULT } from "@plane/constants";
 import type { IWorkspaceSearchResults } from "@plane/types";
 import { cn } from "@plane/utils";
@@ -32,10 +33,13 @@ type Props = {
 
 export function PowerKModalSearchMenu(props: Props) {
   const { activePage, context, isWorkspaceLevel, searchTerm, updateSearchTerm, handleSearchMenuClose } = props;
+  const { t } = useTranslation();
   // states
   const [resultsCount, setResultsCount] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
+  const [hasSearchError, setHasSearchError] = useState(false);
   const [results, setResults] = useState<IWorkspaceSearchResults>(WORKSPACE_DEFAULT_SEARCH_RESULT);
+  const searchRequestVersionRef = useRef(0);
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   // navigation
   const { workspaceSlug, projectId } = useParams();
@@ -43,8 +47,10 @@ export function PowerKModalSearchMenu(props: Props) {
   const { togglePowerKModal } = usePowerK();
 
   useEffect(() => {
+    const requestVersion = ++searchRequestVersionRef.current;
     if (activePage || !workspaceSlug) return;
     setIsSearching(true);
+    setHasSearchError(false);
 
     if (debouncedSearchTerm) {
       workspaceService
@@ -55,6 +61,7 @@ export function PowerKModalSearchMenu(props: Props) {
         })
         // oxlint-disable-next-line no-shadow oxlint-disable-next-line promise/always-return
         .then((results) => {
+          if (requestVersion !== searchRequestVersionRef.current) return;
           setResults(results);
           const count = Object.keys(results.results).reduce(
             (accumulator, key) => results.results[key as keyof typeof results.results]?.length + accumulator,
@@ -63,13 +70,19 @@ export function PowerKModalSearchMenu(props: Props) {
           setResultsCount(count);
         })
         .catch(() => {
+          if (requestVersion !== searchRequestVersionRef.current) return;
           setResults(WORKSPACE_DEFAULT_SEARCH_RESULT);
           setResultsCount(0);
+          setHasSearchError(true);
         })
-        .finally(() => setIsSearching(false));
+        .finally(() => {
+          if (requestVersion !== searchRequestVersionRef.current) return;
+          setIsSearching(false);
+        });
     } else {
       setResults(WORKSPACE_DEFAULT_SEARCH_RESULT);
       setIsSearching(false);
+      setHasSearchError(false);
     }
   }, [debouncedSearchTerm, isWorkspaceLevel, projectId, workspaceSlug, activePage]);
 
@@ -89,25 +102,32 @@ export function PowerKModalSearchMenu(props: Props) {
               "animate-pulse": isSearching,
             })}
           >
-            Search results for{" "}
-            <span className="font-medium">
-              {'"'}
-              {searchTerm}
-              {'"'}
-            </span>{" "}
-            in {isWorkspaceLevel ? "workspace" : "project"}:
+            {t("power_k.search_menu.results_title", {
+              search: searchTerm,
+              scope: t(isWorkspaceLevel ? "power_k.search_menu.workspace_scope" : "power_k.search_menu.project_scope"),
+            })}
           </h5>
         </div>
       )}
 
-      {/* Show empty state only when not loading and no results */}
-      {!isSearching && resultsCount === 0 && searchTerm.trim() !== "" && debouncedSearchTerm.trim() !== "" && (
-        <PowerKModalNoSearchResultsCommand
-          context={context}
-          searchTerm={searchTerm}
-          updateSearchTerm={updateSearchTerm}
-        />
+      {hasSearchError && !isSearching && (
+        <p role="alert" className="px-4 pb-2 text-11 text-secondary">
+          {t("power_k.search_menu.search_failed")}
+        </p>
       )}
+
+      {/* Show empty state only when not loading and no results */}
+      {!hasSearchError &&
+        !isSearching &&
+        resultsCount === 0 &&
+        searchTerm.trim() !== "" &&
+        debouncedSearchTerm.trim() !== "" && (
+          <PowerKModalNoSearchResultsCommand
+            context={context}
+            searchTerm={searchTerm}
+            updateSearchTerm={updateSearchTerm}
+          />
+        )}
 
       {searchTerm.trim() !== "" && <PowerKModalSearchResults closePalette={handleClosePalette} results={results} />}
     </>

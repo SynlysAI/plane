@@ -12,8 +12,6 @@ import { useParams } from "next/navigation";
 import { DeleteOutline, EditOutline } from "@makeplane/propel/icons";
 import { CustomMenu } from "@plane/ui";
 import { truncateText } from "@plane/utils";
-// hooks
-import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useGlobalView } from "@/hooks/store/use-global-view";
 // local imports
 import { DeleteGlobalViewModal } from "./delete-view-modal";
@@ -30,7 +28,6 @@ export const GlobalViewListItem = observer(function GlobalViewListItem(props: Pr
   const { workspaceSlug } = useParams();
   // store hooks
   const { getViewDetailsById } = useGlobalView();
-  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock();
   // derived data
   const view = getViewDetailsById(viewId);
 
@@ -52,30 +49,28 @@ export const GlobalViewListItem = observer(function GlobalViewListItem(props: Pr
               </div>
               <div className="ml-2 flex flex-shrink-0">
                 <div className="flex items-center gap-4">
-                  {!isAdministrativeSettingsLocked && (
-                    <CustomMenu ellipsis>
-                      <CustomMenu.MenuItem
-                        onClick={() => {
-                          setUpdateViewModal(true);
-                        }}
-                      >
-                        <span className="flex items-center justify-start gap-2">
-                          <EditOutline width={14} height={14} />
-                          <span>Edit View</span>
-                        </span>
-                      </CustomMenu.MenuItem>
-                      <CustomMenu.MenuItem
-                        onClick={() => {
-                          setDeleteViewModal(true);
-                        }}
-                      >
-                        <span className="flex items-center justify-start gap-2">
-                          <DeleteOutline width={14} height={14} />
-                          <span>Delete View</span>
-                        </span>
-                      </CustomMenu.MenuItem>
-                    </CustomMenu>
-                  )}
+                  <CustomMenu ellipsis>
+                    <CustomMenu.MenuItem
+                      onClick={() => {
+                        setUpdateViewModal(true);
+                      }}
+                    >
+                      <span className="flex items-center justify-start gap-2">
+                        <EditOutline width={14} height={14} />
+                        <span>Edit View</span>
+                      </span>
+                    </CustomMenu.MenuItem>
+                    <CustomMenu.MenuItem
+                      onClick={() => {
+                        setDeleteViewModal(true);
+                      }}
+                    >
+                      <span className="flex items-center justify-start gap-2">
+                        <DeleteOutline width={14} height={14} />
+                        <span>Delete View</span>
+                      </span>
+                    </CustomMenu.MenuItem>
+                  </CustomMenu>
                 </div>
               </div>
             </div>

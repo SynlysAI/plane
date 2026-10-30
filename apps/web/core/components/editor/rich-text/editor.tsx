@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { forwardRef } from "react";
+import { forwardRef, useCallback, useRef } from "react";
 import { useTranslation } from "@plane/i18n";
 // plane imports
 import { RichTextEditorWithRef } from "@plane/editor";
@@ -13,6 +13,7 @@ import type { MakeOptional, TSearchEntityRequestPayload, TSearchResponse } from 
 import { cn } from "@plane/utils";
 // components
 import { EditorMentionsRoot } from "@/components/editor/embeds/mentions";
+import { splitEditorFiles } from "@/components/editor/editor-files";
 // hooks
 import { useEditorConfig, useEditorMention } from "@/hooks/editor";
 import { useMember } from "@/hooks/store/use-member";
@@ -78,18 +79,45 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     projectId,
     workspaceSlug,
   });
-  const { isAttachmentDragActive, attachmentDragHandlers } = useEditorAttachmentDrop({ onAttachFiles });
+  const localEditorRef = useRef<EditorRefApi | null>(null);
+  const setEditorRef = useCallback(
+    (instance: EditorRefApi | null) => {
+      localEditorRef.current = instance;
+      if (!ref) return;
+      if (typeof ref === "function") ref(instance);
+      else ref.current = instance;
+    },
+    [ref]
+  );
+
+  /** Keep inline images in the document and route other files to the host attachment queue. */
+  const handleFileSelection = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) {
+        void onAttachFiles?.([]);
+        return;
+      }
+      const { inlineImages, externalAttachments } = splitEditorFiles(files);
+      if (inlineImages.length > 0) localEditorRef.current?.insertImageFiles(inlineImages);
+      if (externalAttachments.length > 0 && onAttachFiles) void onAttachFiles(externalAttachments);
+    },
+    [onAttachFiles]
+  );
+  const canAcceptFiles = editable && Boolean(onAttachFiles);
+  const { isAttachmentDragActive, attachmentDragHandlers } = useEditorAttachmentDrop({
+    onFiles: canAcceptFiles ? handleFileSelection : undefined,
+  });
 
   return (
     <div
       className={cn(
         "relative rounded-sm transition-colors",
-        isAttachmentDragActive && "bg-surface-hover ring-border-strong ring-1"
+        isAttachmentDragActive && "bg-accent-primary/5 ring-1 ring-accent-strong/30"
       )}
       {...attachmentDragHandlers}
     >
       <RichTextEditorWithRef
-        ref={ref}
+        ref={setEditorRef}
         disabledExtensions={[...richTextEditorExtensions.disabled, ...(additionalDisabledExtensions ?? [])]}
         editable={editable}
         flaggedExtensions={richTextEditorExtensions.flagged}
@@ -101,7 +129,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
             workspaceId,
             workspaceSlug,
           }),
-          ...(editable && onAttachFiles ? { attachFiles: onAttachFiles } : {}),
+          ...(canAcceptFiles ? { attachFiles: handleFileSelection } : {}),
           ...fileHandlerOverrides,
         }}
         getEditorMetaData={getEditorMetaData}
@@ -120,6 +148,9 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
         {...rest}
         containerClassName={cn("relative pb-3 pl-3", containerClassName)}
       />
+      {isAttachmentDragActive && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[inherit] bg-accent-primary/5" />
+      )}
       {onAttachFiles && (
         <span role="status" className="sr-only">
           {isAttachmentDragActive ? t("attachment.upload_zone.active") : ""}

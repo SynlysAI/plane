@@ -299,7 +299,7 @@ export const ResearchReportDetail = observer(function ResearchReportDetail({ wor
                     title: t("research.feedback.report_deleted.title"),
                     message: t("research.feedback.report_deleted.message"),
                   });
-                  navigate(`/${workspaceSlug}/research/reports`);
+                  navigate(`/${workspaceSlug}/research/chains?view=reports`);
                 }}
               />
             )}

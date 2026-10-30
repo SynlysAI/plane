@@ -78,6 +78,7 @@ export const ProjectMemberListItem = observer(function ProjectMemberListItem(pro
           isOpen={removeMemberModal !== null}
           onClose={() => setRemoveMemberModal(null)}
           data={{ id: removeMemberModal.member.id, display_name: removeMemberModal.member.display_name || "" }}
+          isInheritedOnly={removeMemberModal.original_role == null}
           onSubmit={() => handleRemove(removeMemberModal.member.id)}
         />
       )}

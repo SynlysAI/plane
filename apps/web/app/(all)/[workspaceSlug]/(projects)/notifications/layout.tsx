@@ -15,7 +15,7 @@ export default function ProjectInboxIssuesLayout() {
   return (
     <div className="relative flex h-full w-full items-center overflow-hidden">
       {workspaceSlug && <InboxSidebar workspaceSlug={workspaceSlug.toString()} />}
-      <div className="h-full w-full overflow-hidden overflow-y-auto">
+      <div className="h-full w-full min-w-0 flex-1 overflow-hidden">
         <Outlet />
       </div>
     </div>

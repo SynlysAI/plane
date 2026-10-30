@@ -72,6 +72,7 @@ export type TUserProfile = {
     primary: string | undefined;
     background: string | undefined;
     darkPalette: boolean | undefined;
+    backgroundImage: string | null | undefined;
   };
   onboarding_step: TOnboardingSteps;
   is_onboarded: boolean;
@@ -110,6 +111,7 @@ export interface IUserTheme {
   primary?: string | undefined;
   background?: string | undefined;
   darkPalette?: boolean | undefined;
+  backgroundImage?: string | null | undefined;
 }
 
 export interface IUserMemberLite extends IUserLite {

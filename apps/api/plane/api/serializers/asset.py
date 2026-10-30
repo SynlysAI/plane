@@ -37,6 +37,7 @@ class UserAssetUploadSerializer(serializers.Serializer):
         choices=[
             (FileAsset.EntityTypeContext.USER_AVATAR, "User Avatar"),
             (FileAsset.EntityTypeContext.USER_COVER, "User Cover"),
+            (FileAsset.EntityTypeContext.USER_BACKGROUND, "User Background"),
         ],
         help_text="Type of user asset",
     )

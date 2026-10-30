@@ -68,7 +68,7 @@ export const ProjectSettingsFeatureControlItem = observer(function ProjectSettin
         isFeatureLocked ? (
           <>
             {description}
-            <span className="mt-1 block text-12 text-tertiary">该项已由工作区管理员统一设置。</span>
+            <span className="mt-1 block text-12 text-tertiary">该项已由项目管理员统一设置。</span>
           </>
         ) : (
           description

@@ -12,7 +12,8 @@ import type { I_THEME_OPTION } from "@plane/constants";
 import { THEME_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { setPromiseToast } from "@plane/propel/toast";
-import { applyCustomTheme } from "@plane/utils";
+import { applyCustomTheme, clearCustomTheme } from "@plane/utils";
+import type { IUserTheme } from "@plane/types";
 // components
 import { CustomThemeSelector } from "@/components/core/theme/custom-theme-selector";
 import { ThemeSwitch } from "@/components/core/theme/theme-switch";
@@ -30,7 +31,7 @@ export const ThemeSwitcher = observer(function ThemeSwitcher(props: {
   // store hooks
   const { data: userProfile, updateUserTheme } = useUserProfile();
   // theme
-  const { setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   // translation
   const { t } = useTranslation();
   // derived values
@@ -40,45 +41,51 @@ export const ThemeSwitcher = observer(function ThemeSwitcher(props: {
     return userThemeOption || null;
   }, [userProfile?.theme?.theme]);
 
+  /** 构造首次选择自定义主题时的完整可保存配置。 */
+  const buildCustomThemePayload = useCallback((): Partial<IUserTheme> => {
+    const theme = userProfile?.theme;
+    const darkPalette =
+      theme?.theme === "custom" && typeof theme.darkPalette === "boolean"
+        ? theme.darkPalette
+        : (resolvedTheme?.includes("dark") ?? false);
+
+    return {
+      theme: "custom",
+      primary: theme?.primary || "#3f76ff",
+      background: theme?.background || (darkPalette ? "#1a1a1a" : "#f7f7f5"),
+      darkPalette,
+    };
+  }, [resolvedTheme, userProfile?.theme]);
+
   const handleThemeChange = useCallback(
     async (themeOption: I_THEME_OPTION) => {
+      const payload = themeOption.value === "custom" ? buildCustomThemePayload() : { theme: themeOption.value };
+      const updatePromise = updateUserTheme(payload);
       try {
-        setTheme(themeOption.value);
-
-        // If switching to custom theme and user has saved custom colors, apply them immediately
-        if (
-          themeOption.value === "custom" &&
-          userProfile?.theme?.primary &&
-          userProfile?.theme?.background &&
-          userProfile?.theme?.darkPalette !== undefined
-        ) {
-          applyCustomTheme(
-            userProfile.theme.primary,
-            userProfile.theme.background,
-            userProfile.theme.darkPalette ? "dark" : "light"
-          );
-        }
-
-        const updatePromise = updateUserTheme({ theme: themeOption.value });
         setPromiseToast(updatePromise, {
           loading: "Updating theme...",
           success: {
             title: "Theme updated",
-            message: () => "Reloading to apply changes...",
+            message: () => "Theme updated in place.",
           },
           error: {
             title: "Error!",
             message: () => "Failed to update theme. Please try again.",
           },
         });
-        // Wait for the promise to resolve, then reload after showing toast
         await updatePromise;
-        window.location.reload();
+        setTheme(themeOption.value);
+
+        if (themeOption.value === "custom" && payload.primary && payload.background) {
+          applyCustomTheme(payload.primary, payload.background, payload.darkPalette ? "dark" : "light");
+        } else {
+          clearCustomTheme();
+        }
       } catch (error) {
         console.error("Error updating theme:", error);
       }
     },
-    [setTheme, updateUserTheme, userProfile]
+    [buildCustomThemePayload, setTheme, updateUserTheme]
   );
 
   if (!userProfile) return null;

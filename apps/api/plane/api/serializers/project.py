@@ -210,6 +210,7 @@ class ProjectUpdateSerializer(ProjectCreateSerializer):
         fields = ProjectCreateSerializer.Meta.fields + [
             "default_state",
             "estimate",
+            "administrative_settings_admin_only",
         ]
 
         read_only_fields = ProjectCreateSerializer.Meta.read_only_fields

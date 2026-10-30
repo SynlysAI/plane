@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from django.conf import settings
 from rest_framework import serializers
 
 from plane.db.models import WorkspaceResearchSetting
@@ -15,9 +16,14 @@ class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
     org_enabled = serializers.SerializerMethodField()
     report_enabled = serializers.SerializerMethodField()
     approval_enabled = serializers.SerializerMethodField()
+    research_mcp_write_available = serializers.SerializerMethodField()
 
     def get_research_ia_v2(self, obj):
         return True
+
+    def get_research_mcp_write_available(self, obj):
+        """返回部署级科研 MCP 读写开关是否已同时开启。"""
+        return bool(settings.RESEARCH_MCP_ENABLED and settings.RESEARCH_MCP_WRITE_ENABLED)
 
     get_research_chain_enabled = get_research_ia_v2
     get_org_enabled = get_research_ia_v2
@@ -38,6 +44,8 @@ class WorkspaceResearchSettingSerializer(serializers.ModelSerializer):
             "report_enabled",
             "approval_enabled",
             "research_chain_enabled",
+            "research_mcp_write_enabled",
+            "research_mcp_write_available",
             "research_agent_enabled",
             "research_agent_user_backend_enabled",
             "research_trace_enabled",

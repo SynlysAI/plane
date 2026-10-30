@@ -63,16 +63,25 @@ export function ResearchTaskDescription({
   const service = useMemo(() => new ResearchChainTaskService(), []);
   const editorRef = useRef<EditorRefApi>(null);
   const mountedRef = useRef(true);
+  const editableRef = useRef(editable);
   const entriesRef = useRef<TAttachmentDraft[]>([]);
   const loadedTaskIdRef = useRef<string | null>(null);
   const [entries, setEntries] = useState<TAttachmentDraft[]>([]);
   const [limits, setLimits] = useState<TCommentAttachmentLimits | null>(null);
+  const [limitsLoading, setLimitsLoading] = useState(true);
+  const [limitsFailed, setLimitsFailed] = useState(false);
+  const [limitsRefresh, setLimitsRefresh] = useState(0);
   const [attachmentError, setAttachmentError] = useState("");
   const [imageError, setImageError] = useState("");
   const [imageUploadCount, setImageUploadCount] = useState(0);
   const [attachmentUploadCount, setAttachmentUploadCount] = useState(0);
   const imageBase = `/api/research/workspaces/${workspaceSlug}/chains/${task.chain}/nodes/${task.node}/tasks/${task.id}/instruction-images/`;
   const showPlaceholder = !editable && isDescriptionContentEmpty(value);
+  const attachmentLimitsFailedMessage = t("research.chain_tasks.attachment_limits_failed");
+
+  useEffect(() => {
+    editableRef.current = editable;
+  }, [editable]);
 
   const updateEntries = useCallback(
     (next: TAttachmentDraft[]) => {
@@ -111,21 +120,32 @@ export function ResearchTaskDescription({
   }, [task.id, task.instruction_attachments]);
 
   useEffect(() => {
-    if (!editable) return;
     let active = true;
+    setLimits(null);
+    setLimitsLoading(true);
+    setLimitsFailed(false);
     service
       .getTaskCommentAttachmentLimits(workspaceSlug, task.chain, task.node, task.id)
       .then((payload) => {
-        if (active) setLimits(payload);
+        if (active) {
+          setLimits(payload);
+          setAttachmentError("");
+        }
         return undefined;
       })
       .catch(() => {
-        if (active) setAttachmentError(t("research.chain_tasks.attachment_limits_failed"));
+        if (active) {
+          setLimitsFailed(true);
+          if (editableRef.current) setAttachmentError(attachmentLimitsFailedMessage);
+        }
+      })
+      .finally(() => {
+        if (active) setLimitsLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [editable, service, t, task.chain, task.id, task.node, workspaceSlug]);
+  }, [attachmentLimitsFailedMessage, limitsRefresh, service, task.chain, task.id, task.node, workspaceSlug]);
 
   useEffect(() => {
     onBusyChange(imageUploadCount > 0 || attachmentUploadCount > 0);
@@ -188,6 +208,10 @@ export function ResearchTaskDescription({
         setAttachmentError(t("attachment.upload_zone.empty"));
         return;
       }
+      if (limitsLoading) {
+        setAttachmentError(t("research.common.loading"));
+        return;
+      }
       if (!limits) {
         setAttachmentError(t("research.chain_tasks.attachment_limits_failed"));
         return;
@@ -212,7 +236,7 @@ export function ResearchTaskDescription({
       updateEntries([...entriesRef.current, ...added]);
       added.forEach((entry) => void uploadAttachment(entry));
     },
-    [limits, t, updateEntries, uploadAttachment]
+    [limits, limitsLoading, t, updateEntries, uploadAttachment]
   );
 
   const removeAttachment = useCallback(
@@ -279,7 +303,7 @@ export function ResearchTaskDescription({
             <EditorFileUploadButton
               editorRef={editorRef}
               onAttachFiles={addFiles}
-              disabled={!limits || attachmentUploadCount > 0}
+              disabled={limitsLoading || !limits || attachmentUploadCount > 0}
             />
           </div>
         )}
@@ -298,8 +322,19 @@ export function ResearchTaskDescription({
       {(entries.length > 0 || attachmentError) && (
         <section aria-label={t("research.chain_tasks.attachments_title")} className="space-y-2">
           {attachmentError && (
-            <p role="alert" className="text-12 text-danger-primary">
+            <p role="alert" className="flex items-center gap-2 text-12 text-danger-primary">
               {attachmentError}
+              {limitsFailed && (
+                <button
+                  type="button"
+                  className="rounded p-1 text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary"
+                  aria-label={t("research.common.refresh")}
+                  disabled={limitsLoading}
+                  onClick={() => setLimitsRefresh((current) => current + 1)}
+                >
+                  <RefreshOutline className="size-3.5" aria-hidden />
+                </button>
+              )}
             </p>
           )}
           {entries.length ? (

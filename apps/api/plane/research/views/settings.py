@@ -27,6 +27,7 @@ from plane.research.views.base import ResearchAPIView, truthy
 
 BOOLEAN_FIELDS = (
     "allow_multiple_projects",
+    "research_mcp_write_enabled",
     "research_agent_enabled",
     "research_agent_user_backend_enabled",
     "research_trace_enabled",
@@ -55,8 +56,7 @@ def get_or_create_setting(workspace, actor=None):
         setting = WorkspaceResearchSetting.objects.create(
             workspace=workspace,
             created_by=actor,
-            # Opening this page must not flip a workspace off unnoticed: a fresh
-            # row inherits the deployment switch instead of the model default.
+            # Opening this page must not silently enable the workspace module.
             module_enabled=default_workspace_research_settings()["module_enabled"],
         )
     return setting
@@ -65,9 +65,8 @@ def get_or_create_setting(workspace, actor=None):
 class ResearchSettingsEndpoint(ResearchAPIView):
     """``GET``/``PATCH /api/research/workspaces/<slug>/settings/``
 
-    The deployment switch is the outer gate; this endpoint manages the
-    workspace level switches, upload limits and the default visibility policy
-    (P0-CFG-01 ~ P0-CFG-08).
+    This endpoint manages installed research workspace switches, upload limits
+    and the default visibility policy (P0-CFG-01 ~ P0-CFG-08).
     """
 
     nav_capability = NAV_PLATFORM
@@ -102,6 +101,15 @@ class ResearchSettingsEndpoint(ResearchAPIView):
         setting = get_or_create_setting(workspace, actor=request.user)
         if "module_enabled" in request.data:
             return Response({"message": "请在工作区设置中修改科研模块状态。"}, status=400)
+        if (
+            "research_mcp_write_enabled" in request.data
+            and truthy(request.data.get("research_mcp_write_enabled"))
+            and not (django_settings.RESEARCH_MCP_ENABLED and django_settings.RESEARCH_MCP_WRITE_ENABLED)
+        ):
+            return Response(
+                {"message": "服务器全局科研 MCP 读写开关未开启，不能开启工作区写入。"},
+                status=status.HTTP_409_CONFLICT,
+            )
         previous = WorkspaceResearchSettingSerializer(setting).data
         changed = []
 
@@ -154,7 +162,10 @@ class ResearchSettingsEndpoint(ResearchAPIView):
                     // (1024 * 1024),
                     1,
                 )
-                if field in {"image_max_mb", "pdf_max_mb", "markdown_max_mb", "office_max_mb"} and value > deployment_limit_mb:
+                if (
+                    field in {"image_max_mb", "pdf_max_mb", "markdown_max_mb", "office_max_mb"}
+                    and value > deployment_limit_mb
+                ):
                     return research_error(
                         ResearchErrorCode.FILE_SIZE_EXCEEDED,
                         f"{field} cannot exceed the deployment limit of {deployment_limit_mb}MB.",

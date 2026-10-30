@@ -50,6 +50,8 @@ export function NameColumn(props: NameProps) {
   // derived values
   const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
   const fullName = [first_name, last_name].filter(Boolean).join(" ");
+  const isCurrentUser = id === currentUser?.id;
+  const canOpenMemberActions = rowData.original_role != null ? isAdmin || isCurrentUser : isAdmin;
 
   return (
     <Disclosure>
@@ -78,7 +80,7 @@ export function NameColumn(props: NameProps) {
                 {fullName}
               </span>
             </div>
-            {rowData.original_role != null && (isAdmin || id === currentUser?.id) && (
+            {canOpenMemberActions && (
               <CustomMenu
                 ellipsis
                 buttonClassName="shrink-0 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
@@ -90,9 +92,9 @@ export function NameColumn(props: NameProps) {
                   onClick={() => setRemoveMemberModal(rowData)}
                 >
                   <CircleMinus className="size-3.5 flex-shrink-0" />
-                  {rowData.inherits_organization
-                    ? t("project_settings.members.remove_direct_access")
-                    : rowData.member?.id === currentUser?.id
+                  {rowData.original_role == null
+                    ? t("project_settings.members.revoke_organization_access")
+                    : isCurrentUser
                       ? t("leave")
                       : t("remove")}
                 </CustomMenu.MenuItem>

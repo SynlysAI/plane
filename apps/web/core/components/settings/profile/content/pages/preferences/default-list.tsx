@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 // components
 import { ThemeSwitcher } from "@/components/appearance";
+import { WorkspaceBackgroundSettings } from "./background-settings";
 
 export const ProfileSettingsDefaultPreferencesList = observer(function ProfileSettingsDefaultPreferencesList() {
   return (
@@ -18,6 +19,8 @@ export const ProfileSettingsDefaultPreferencesList = observer(function ProfileSe
           description: "select_or_customize_your_interface_color_scheme",
         }}
       />
+      <div className="h-5" />
+      <WorkspaceBackgroundSettings />
     </div>
   );
 });

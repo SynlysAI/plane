@@ -49,6 +49,7 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
     isBulkDeleteIssueModalOpen,
     toggleBulkDeleteIssueModal,
     createWorkItemAllowedProjectIds,
+    createIssueModalPrefillData,
   } = useCommandPalette();
   // derived values
   const { fetchSubIssues: fetchSubWorkItems } = useIssueDetail();
@@ -76,9 +77,12 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
   };
 
   const getCreateIssueModalData = () => {
-    if (cycleId) return { cycle_id: cycleId.toString() };
-    if (moduleId) return { module_ids: [moduleId.toString()] };
-    return undefined;
+    // URL context (cycle/module) takes precedence so the modal never escapes the current view.
+    const contextData: Partial<TIssue> = {};
+    if (cycleId) contextData.cycle_id = cycleId.toString();
+    if (moduleId) contextData.module_ids = [moduleId.toString()];
+    if (!cycleId && !moduleId && !createIssueModalPrefillData) return undefined;
+    return { ...createIssueModalPrefillData, ...contextData };
   };
 
   return (

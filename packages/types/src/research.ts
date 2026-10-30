@@ -126,6 +126,8 @@ export type TWorkspaceResearchSetting = {
   report_enabled: boolean;
   approval_enabled: boolean;
   research_chain_enabled?: boolean;
+  research_mcp_write_enabled?: boolean;
+  research_mcp_write_available?: boolean;
   research_agent_enabled?: boolean;
   research_agent_user_backend_enabled?: boolean;
   research_trace_enabled?: boolean;
@@ -1151,7 +1153,6 @@ export type TResearchIdentity = {
     slug: string;
     purpose: "GENERAL" | "PUBLIC_RESEARCH" | "PI_PRIVATE";
     research_enabled?: boolean;
-    administrative_settings_admin_only?: boolean;
     /** Timezone used to resolve report weeks, months, and submission boundaries. */
     report_timezone?: string;
   };

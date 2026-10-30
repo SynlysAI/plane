@@ -27,9 +27,11 @@ function formatRelativeTime(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(timestamp);
 }
 
-/** Resolve the concise source label for an inbox item. */
-function sourceLabel(item: TInboxItem) {
-  return inboxLabel(INBOX_SOURCE_LABELS, item.source);
+/** Resolve a concise source and category label for an inbox item. */
+function contextLabel(item: TInboxItem) {
+  const source = inboxLabel(INBOX_SOURCE_LABELS, item.source);
+  const category = inboxLabel(INBOX_CATEGORY_LABELS, item.category);
+  return source === category ? source : `${source} · ${category}`;
 }
 
 type Props = {
@@ -59,14 +61,13 @@ export function InboxItemRow({ item, compact = false, selected = false, onSelect
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-3">
-          <span className="truncate text-11 font-medium text-tertiary">
-            {sourceLabel(item)} · {inboxLabel(INBOX_CATEGORY_LABELS, item.category)}
-          </span>
+          <span className="truncate text-11 font-medium text-tertiary">{contextLabel(item)}</span>
           <time className="flex-shrink-0 text-11 text-tertiary" dateTime={item.updated_at}>
             {formatRelativeTime(item.updated_at)}
           </time>
         </span>
         <span
+          title={item.title}
           className={cn(
             "mt-1 block truncate",
             compact ? "text-12" : "text-13",
@@ -76,7 +77,9 @@ export function InboxItemRow({ item, compact = false, selected = false, onSelect
           {item.title}
         </span>
         {item.summary && !compact && (
-          <span className="mt-1 line-clamp-2 block text-12 leading-5 text-tertiary">{item.summary}</span>
+          <span className="mt-1 line-clamp-2 block text-12 leading-5 text-tertiary" title={item.summary}>
+            {item.summary}
+          </span>
         )}
         <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-11 text-tertiary">
           <span>{inboxLabel(INBOX_KIND_LABELS, item.kind)}</span>

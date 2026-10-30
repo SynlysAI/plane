@@ -1108,6 +1108,9 @@ importers:
       export-to-csv:
         specifier: 'catalog:'
         version: 1.4.0
+      file-selector:
+        specifier: 'catalog:'
+        version: 2.1.2
       isbot:
         specifier: 'catalog:'
         version: 5.2.1

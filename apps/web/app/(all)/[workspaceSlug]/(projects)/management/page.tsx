@@ -7,6 +7,7 @@ import { useWorkspaceContext } from "@/hooks/use-workspace-context";
 import { useResearch } from "@/hooks/store/use-research";
 import { AdministrativeOrganizationSettings } from "@/components/administrative/organization-settings";
 import { FeedbackDialog } from "@/components/research/feedback/feedback-dialog";
+import { WorkspaceResearchMCPWriteSetting } from "@/components/workspace/research-mcp-write-setting";
 import { ProjectDomainsService, domainError } from "@/services/project-domains.service";
 
 const service = new ProjectDomainsService();
@@ -52,6 +53,9 @@ export default observer(function WorkspaceManagementPage() {
     ...(canManageFeedback ? [{ key: "feedback", label: t("research.nav.feedback") }] : []),
   ];
   const active = tabs.some((tab) => tab.key === params.get("tab")) ? params.get("tab") : tabs[0]?.key;
+  const canConfigureResearchMcp = Boolean(
+    context.user?.is_research_admin || context.user?.is_workspace_admin || context.user?.is_system_admin
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface-1">
@@ -101,31 +105,12 @@ export default observer(function WorkspaceManagementPage() {
                 <p className="text-12 text-secondary">主 PI 私有工作区用于行政协作。</p>
               )}
             </section>
-            <section className="space-y-4 border-t border-subtle pt-7">
-              <h2 className="text-16 font-medium">行政项目配置权限</h2>
-              <p className="text-13 text-secondary">
-                开启后，模块开启及设置、视图锁定、标签开启及设定仅工作区管理员可修改；成员可继续选择已建模块、已选标签和已有视图。
-              </p>
-              <label className="flex items-center gap-2 text-13">
-                <input
-                  name="administrative-settings-admin-only"
-                  type="checkbox"
-                  checked={Boolean(context.workspace?.administrative_settings_admin_only)}
-                  disabled={saving}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    setSaving(true);
-                    setSaveError(null);
-                    void service
-                      .setAdministrativeSettingsAdminOnly(workspaceSlug, enabled)
-                      .then(() => research.fetchIdentity(workspaceSlug))
-                      .catch((cause) => setSaveError(domainError(cause)))
-                      .finally(() => setSaving(false));
-                  }}
-                />
-                行政项目配置仅管理员可设置
-              </label>
-            </section>
+            <WorkspaceResearchMCPWriteSetting
+              key={workspaceSlug}
+              workspaceSlug={workspaceSlug}
+              researchEnabled={Boolean(context.workspace?.research_enabled)}
+              canConfigure={canConfigureResearchMcp}
+            />
             {saveError && (
               <p role="alert" className="text-13 text-danger-primary">
                 {saveError}

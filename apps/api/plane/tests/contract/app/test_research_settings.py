@@ -19,11 +19,6 @@ from plane.tests.research_fixtures import (
 pytestmark = pytest.mark.contract
 
 
-@pytest.fixture(autouse=True)
-def research_module_on(settings):
-    settings.RESEARCH_MODULE_ENABLED = True
-
-
 def client_for(user):
     client = APIClient()
     client.force_authenticate(user=user)
@@ -49,11 +44,9 @@ def env(db):
 
 @pytest.mark.django_db
 class TestResearchSettingsEndpoint:
-    def test_defaults_follow_the_deployment_switch_when_no_row_exists(self, env):
-        # A workspace without a row renders research by default; reading the
-        # page provisions the row without flipping the workspace off. The page
-        # is an administrator surface since v2.5.0, so the administrator reads
-        # it and a plain member is refused.
+    def test_settings_get_provisions_a_disabled_workspace_row(self, env):
+        # Research is installed, but a workspace remains disabled until its
+        # administrator explicitly enables it through workspace context.
         assert not WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
         refused = env["member_client"].get(env["url"])
         assert refused.status_code == 403
@@ -62,7 +55,7 @@ class TestResearchSettingsEndpoint:
         response = env["admin_client"].get(env["url"])
         assert response.status_code == 200
         payload = response.json()
-        assert payload["module_enabled"] is True
+        assert payload["module_enabled"] is False
         assert payload["default_report_visibility"] == "DIRECT_ADVISOR"
         assert payload["weekly_default_visibility"] == "WORKSPACE"
         assert payload["image_max_mb"] == 20
@@ -73,29 +66,33 @@ class TestResearchSettingsEndpoint:
         assert payload["research_ia_v2"] is True
         assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
         identity = env["member_client"].get(env["identity_url"]).json()
-        assert identity["workspace_enabled"] is True
+        assert identity["workspace_enabled"] is False
         assert identity["research_ia_v2"] is True
 
-    def test_workspace_without_row_renders_research_by_default(self, env):
+    def test_workspace_without_row_defaults_to_disabled(self, env):
         assert not WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
         identity = env["member_client"].get(env["identity_url"]).json()
-        assert identity["workspace_enabled"] is True
+        assert identity["workspace_enabled"] is False
         assert identity["sections"] == {
-            "org": True,
-            "reports": True,
-            "approvals": True,
-            "stages": True,
-            "experiments": True,
-            "code": True,
-            "integrations": True,
+            "org": False,
+            "reports": False,
+            "approvals": False,
+            "stages": False,
+            "experiments": False,
+            "code": False,
+            "integrations": False,
             "research_chain": False,
         }
-        assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
+        assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 403
 
-    def test_workspace_without_row_stays_off_when_the_deployment_switch_is_off(self, env, settings):
+    def test_installation_remains_enabled_when_legacy_env_switch_is_off(self, env, settings):
         settings.RESEARCH_MODULE_ENABLED = False
         assert workspace_research_enabled(env["workspace"]) is False
-        assert env["member_client"].get(env["identity_url"]).status_code == 404
+        identity = env["member_client"].get(env["identity_url"])
+
+        assert identity.status_code == 200
+        assert identity.json()["module_enabled"] is True
+        assert identity.json()["workspace_enabled"] is False
 
     def test_workspace_member_cannot_patch_settings(self, env):
         response = env["member_client"].patch(
@@ -104,27 +101,64 @@ class TestResearchSettingsEndpoint:
         assert response.status_code == 403
         assert response.json()["error_code"] == "research_permission_denied"
 
-    def test_admin_can_toggle_research_ia_v2_without_changing_api_semantics(self, env):
-        response = env["admin_client"].patch(env["url"], {"research_ia_v2": True}, format="json")
+    def test_research_ia_v2_remains_enabled(self, env):
+        enable_research(env["workspace"])
+        response = env["admin_client"].patch(env["url"], {"research_ia_v2": False}, format="json")
 
         assert response.status_code == 200
         assert response.json()["research_ia_v2"] is True
-        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_ia_v2 is True
         assert env["member_client"].get(env["identity_url"]).json()["research_ia_v2"] is True
-        assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
 
-        rollback = env["admin_client"].patch(env["url"], {"research_ia_v2": False}, format="json")
-        assert rollback.status_code == 200
-        assert rollback.json()["research_ia_v2"] is False
+    def test_admin_can_toggle_workspace_research_mcp_write_policy(self, env, settings):
+        settings.RESEARCH_MCP_ENABLED = True
+        settings.RESEARCH_MCP_WRITE_ENABLED = True
+
+        response = env["admin_client"].get(env["url"])
+        assert response.status_code == 200
+        assert response.json()["research_mcp_write_enabled"] is False
+        assert response.json()["research_mcp_write_available"] is True
+
+        enabled = env["admin_client"].patch(env["url"], {"research_mcp_write_enabled": True}, format="json")
+        assert enabled.status_code == 200
+        assert enabled.json()["research_mcp_write_enabled"] is True
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_mcp_write_enabled is True
+        event = ResearchAuditEvent.objects.filter(action="config.update").order_by("-created_at").first()
+        assert event is not None
+        assert "research_mcp_write_enabled" in event.metadata["changed"]
+
+        disabled = env["admin_client"].patch(env["url"], {"research_mcp_write_enabled": False}, format="json")
+        assert disabled.status_code == 200
+        assert disabled.json()["research_mcp_write_enabled"] is False
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_mcp_write_enabled is False
+
+    def test_workspace_research_mcp_write_policy_requires_deployment_switches(self, env, settings):
+        settings.RESEARCH_MCP_ENABLED = True
+        settings.RESEARCH_MCP_WRITE_ENABLED = False
+
+        response = env["admin_client"].get(env["url"])
+        assert response.status_code == 200
+        assert response.json()["research_mcp_write_available"] is False
+
+        enabled = env["admin_client"].patch(env["url"], {"research_mcp_write_enabled": True}, format="json")
+        assert enabled.status_code == 409
+        assert "全局科研 MCP" in enabled.json()["message"]
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_mcp_write_enabled is False
+
+    def test_workspace_member_cannot_toggle_research_mcp_write_policy(self, env, settings):
+        settings.RESEARCH_MCP_ENABLED = True
+        settings.RESEARCH_MCP_WRITE_ENABLED = True
+
+        response = env["member_client"].patch(env["url"], {"research_mcp_write_enabled": True}, format="json")
+
+        assert response.status_code == 403
+        setting = WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).first()
+        assert setting is None or setting.research_mcp_write_enabled is False
 
     def test_admin_can_toggle_switches_and_limits(self, env):
         response = env["admin_client"].patch(
             env["url"],
             {
-                "module_enabled": True,
-                "org_enabled": True,
-                "report_enabled": False,
-                "approval_enabled": True,
+                "allow_multiple_projects": True,
                 "pdf_max_mb": 200,
                 "timezone": "Asia/Shanghai",
             },
@@ -132,8 +166,7 @@ class TestResearchSettingsEndpoint:
         )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["module_enabled"] is True
-        assert payload["report_enabled"] is False
+        assert payload["allow_multiple_projects"] is True
         assert payload["pdf_max_mb"] == 200
         assert payload["timezone"] == "Asia/Shanghai"
 
@@ -143,7 +176,7 @@ class TestResearchSettingsEndpoint:
 
     def test_research_limits_do_not_touch_the_global_upload_limit(self, env, settings):
         default_limit = settings.FILE_SIZE_LIMIT
-        env["admin_client"].patch(env["url"], {"module_enabled": True, "pdf_max_mb": 200}, format="json")
+        env["admin_client"].patch(env["url"], {"pdf_max_mb": 200}, format="json")
         assert settings.FILE_SIZE_LIMIT == default_limit
 
     def test_admin_cannot_save_research_limit_above_deployment_ceiling(self, env, settings):
@@ -197,7 +230,13 @@ class TestResearchSettingsEndpoint:
 
     def test_enabling_the_module_provisions_the_root_node(self, env):
         assert OrgUnit.objects.filter(workspace=env["workspace"]).count() == 0
-        env["admin_client"].patch(env["url"], {"module_enabled": True}, format="json")
+        response = env["admin_client"].patch(
+            f"/api/workspaces/{env['workspace'].slug}/context/",
+            {"research_enabled": True},
+            format="json",
+        )
+
+        assert response.status_code == 200, response.data
         root = OrgUnit.objects.filter(workspace=env["workspace"]).first()
         assert root is not None
         assert root.unit_type == OrgUnit.UnitType.ROOT
@@ -220,30 +259,29 @@ class TestResearchSettingsEndpoint:
 
         blocked = env["member_client"].get(org_units_url(env["workspace"]))
         assert blocked.status_code == 403
-        assert blocked.json()["error_code"] == "research_module_not_enabled"
+        assert blocked.json()["error_code"] == "research_permission_denied"
 
     def test_sub_switch_disables_only_its_section(self, env):
-        enable_research(env["workspace"], report_enabled=False)
+        enable_research(env["workspace"], experiment_enabled=False)
         identity = env["member_client"].get(env["identity_url"]).json()
         assert identity["sections"] == {
             "org": True,
-            "reports": False,
+            "reports": True,
             "approvals": True,
             "stages": True,
-            "experiments": True,
+            "experiments": False,
             "code": True,
             "integrations": True,
-            "research_chain": False,
+            "research_chain": True,
         }
-        assert env["member_client"].get(org_units_url(env["workspace"])).status_code == 200
 
-    def test_deployment_switch_wins(self, env, settings):
+    def test_legacy_env_switch_does_not_hide_installed_settings(self, env, settings):
         enable_research(env["workspace"])
         settings.RESEARCH_MODULE_ENABLED = False
         response = env["admin_client"].get(env["url"])
-        assert response.status_code == 404
-        assert response.json()["error_code"] == "research_module_disabled"
-        assert WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).exists()
+
+        assert response.status_code == 200
+        assert response.json()["module_enabled"] is True
 
     def test_settings_return_the_main_pi_display_name(self, env):
         make_instance_admin(env["admin"])

@@ -12,6 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import { Spinner } from "@plane/ui";
 // components
 import { PageHead } from "@/components/core/page-title";
+import { WorkspaceHomeLink } from "@/components/common/workspace-home-link";
 import { ResearchStatusPanel, type TResearchStatus } from "@/components/research/common/research-status-panel";
 import { ResearchManagementTabs } from "@/components/research/navigation/research-management-tabs";
 // hooks
@@ -161,7 +162,10 @@ export const ResearchPageShell = observer(function ResearchPageShell({
       <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
         {!hideHeader && (
           <div className="border-b border-subtle bg-surface-1 px-5 py-3.5">
-            {breadcrumbs && <div className="mb-1 text-12 text-tertiary">{breadcrumbs}</div>}
+            <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-12 text-tertiary">
+              {breadcrumbs}
+              <WorkspaceHomeLink workspaceSlug={workspaceSlug} />
+            </div>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="text-22 truncate font-semibold text-primary">{t(titleKey)}</h2>

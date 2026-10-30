@@ -10,6 +10,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { cn } from "@plane/utils";
 import type { TInboxTab } from "@plane/types";
 // components
+import { WorkspaceHomeLink } from "@/components/common/workspace-home-link";
 import { InboxItemRow } from "./inbox-item-row";
 // hooks
 import { inboxListKey, useInboxList, useInboxUnreadCounts, useInvalidateOtherInboxLists } from "@/hooks/use-inbox";
@@ -151,14 +152,17 @@ export function InboxSidebar({ workspaceSlug }: Props) {
               {counts?.total_unread_count ? `${counts.total_unread_count} 条未读` : "暂无未读"}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleMarkAllRead}
-            disabled={isMutating || !counts?.total_unread_count}
-            className="rounded-md px-2 py-1 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            全部已读
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <WorkspaceHomeLink workspaceSlug={workspaceSlug} />
+            <button
+              type="button"
+              onClick={handleMarkAllRead}
+              disabled={isMutating || !counts?.total_unread_count}
+              className="rounded-md px-2 py-1 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              全部已读
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-shrink-0 border-b border-subtle">

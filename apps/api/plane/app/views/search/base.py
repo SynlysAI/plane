@@ -30,7 +30,6 @@ from rest_framework.response import Response
 from plane.app.views.base import BaseAPIView
 from plane.app.permissions import WorkspaceUserPermission
 from plane.utils.administrative_projects import (
-    visible_administrative_projects,
     administrative_projects,
     administrative_projects_for_user,
     restrict_administrative_project_visibility,
@@ -46,6 +45,8 @@ from plane.db.models import (
     ProjectMember,
     ProjectPage,
     WorkspaceMember,
+    ResearchChain,
+    ResearchProjectProfile,
 )
 
 
@@ -67,23 +68,89 @@ class GlobalSearchEndpoint(BaseAPIView):
             .values("name", "id", "slug")
         )
 
-    def filter_projects(self, query, slug, _project_id, _workspace_search):
+    def visible_projects(self, slug):
+        """返回当前用户在科研与行政通道均可读取的非归档项目。
+
+        Args:
+            slug: 工作区别名。
+
+        Returns:
+            应用统一项目 ACL 后的项目查询集。
+        """
+        return restrict_administrative_project_visibility(
+            Project.objects.filter(workspace__slug=slug),
+            self.request.user,
+            slug,
+        ).filter(archived_at__isnull=True)
+
+    def visible_project_ids(self, slug):
+        """Cache visible project IDs for the lifetime of one search request.
+
+        Args:
+            slug: Workspace identifier.
+
+        Returns:
+            Project IDs resolved once for all requested search entities.
+        """
+        cached = getattr(self, "_visible_project_ids", None)
+        if cached is not None and cached[0] == slug:
+            return cached[1]
+        project_ids = list(self.visible_projects(slug).values_list("id", flat=True))
+        self._visible_project_ids = (slug, project_ids)
+        return project_ids
+
+    @staticmethod
+    def serialize_project(project):
+        """序列化项目搜索结果并补充科研路由元数据。
+
+        Args:
+            project: 可见的项目对象。
+
+        Returns:
+            包含 route_kind 与 chain_id 的项目结果字典。
+        """
+        profile = getattr(project, "research_profile", None)
+        route_kind = "ADMINISTRATIVE"
+        chain_id = None
+        if profile is not None:
+            if profile.chain_kind == ResearchProjectProfile.ChainKind.RESEARCH_CHAIN:
+                route_kind = "RESEARCH_CHAIN"
+            elif profile.research_type == ResearchProjectProfile.ResearchType.RESEARCH_PROJECT:
+                route_kind = "TEAM_RESEARCH"
+            else:
+                route_kind = "LEGACY_RESEARCH"
+
+        if route_kind == "RESEARCH_CHAIN":
+            try:
+                chain_id = str(project.research_chain.id)
+            except ResearchChain.DoesNotExist:
+                chain_id = None
+
+        return {
+            "name": project.name,
+            "id": project.id,
+            "identifier": project.identifier,
+            "workspace__slug": project.workspace.slug,
+            "route_kind": route_kind,
+            "chain_id": chain_id,
+        }
+
+    def filter_projects(self, query, slug, project_id, workspace_search):
         fields = ["name", "identifier"]
         q = Q()
         if query:
             for field in fields:
                 q |= Q(**{f"{field}__icontains": query})
-        return (
-            Project.objects.filter(
-                q,
-                Q(id__in=visible_administrative_projects(self.request.user, slug).values("id")),
-                archived_at__isnull=True,
-                workspace__slug=slug,
-            )
+        projects = (
+            Project.objects.filter(workspace__slug=slug, id__in=self.visible_project_ids(slug))
+            .filter(q)
+            .select_related("workspace", "research_profile", "research_chain")
             .order_by("-created_at")
             .distinct()
-            .values("name", "id", "identifier", "workspace__slug")
         )
+        if workspace_search == "false" and project_id:
+            projects = projects.filter(id=project_id)
+        return [self.serialize_project(project) for project in projects]
 
     def filter_issues(self, query, slug, project_id, workspace_search):
         fields = ["name", "sequence_id", "project__identifier"]
@@ -100,7 +167,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         issues = Issue.issue_objects.filter(
             q,
-            project_id__in=visible_administrative_projects(self.request.user, slug).values("id"),
+            project_id__in=self.visible_project_ids(slug),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -126,7 +193,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         cycles = Cycle.objects.filter(
             q,
-            project_id__in=visible_administrative_projects(self.request.user, slug).values("id"),
+            project_id__in=self.visible_project_ids(slug),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -149,7 +216,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         modules = Module.objects.filter(
             q,
-            project_id__in=visible_administrative_projects(self.request.user, slug).values("id"),
+            project_id__in=self.visible_project_ids(slug),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -173,7 +240,7 @@ class GlobalSearchEndpoint(BaseAPIView):
         pages = (
             Page.objects.filter(
                 q,
-                projects__id__in=visible_administrative_projects(self.request.user, slug).values("id"),
+                projects__id__in=self.visible_project_ids(slug),
                 projects__archived_at__isnull=True,
                 workspace__slug=slug,
             )
@@ -219,7 +286,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         issue_views = IssueView.objects.filter(
             q,
-            project_id__in=visible_administrative_projects(self.request.user, slug).values("id"),
+            project_id__in=self.visible_project_ids(slug),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         )
@@ -248,7 +315,7 @@ class GlobalSearchEndpoint(BaseAPIView):
 
         issues = Issue.objects.filter(
             q,
-            project_id__in=visible_administrative_projects(self.request.user, slug).values("id"),
+            project_id__in=self.visible_project_ids(slug),
             project__archived_at__isnull=True,
             workspace__slug=slug,
         ).filter(models.Q(issue_intake__status=0) | models.Q(issue_intake__status=-2))

@@ -208,7 +208,7 @@ class ModuleListCreateAPIEndpoint(BaseAPIView):
         Automatically assigns the creator as module lead and tracks activity.
         """
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
-        if administrative_settings_write_blocked(request.user, project.workspace, project):
+        if administrative_settings_write_blocked(request.user, project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         serializer = ModuleCreateSerializer(
             data=request.data,
@@ -468,7 +468,7 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
         Tracks all changes in model activity logs for audit purposes.
         """
         module = Module.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
-        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+        if administrative_settings_write_blocked(request.user, module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
         current_instance = json.dumps(ModuleSerializer(module).data, cls=DjangoJSONEncoder)
@@ -558,7 +558,7 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
         Only admins or the module creator can perform this action.
         """
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
-        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+        if administrative_settings_write_blocked(request.user, module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_module_operation_error(module.project, module)
         if required_error is not None:
@@ -1114,7 +1114,7 @@ class ModuleArchiveUnarchiveAPIEndpoint(BaseAPIView):
         Only modules with completed status can be archived.
         """
         module = Module.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
-        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+        if administrative_settings_write_blocked(request.user, module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_module_operation_error(module.project, module)
         if required_error is not None:
@@ -1153,7 +1153,7 @@ class ModuleArchiveUnarchiveAPIEndpoint(BaseAPIView):
         The module will reappear in active module lists and become fully functional.
         """
         module = Module.objects.get(pk=pk, project_id=project_id, workspace__slug=slug)
-        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+        if administrative_settings_write_blocked(request.user, module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         module.archived_at = None
         module.save()

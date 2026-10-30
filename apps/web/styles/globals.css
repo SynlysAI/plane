@@ -22,6 +22,39 @@
   --editor-colors-purple-background: #e3d8fd;
 }
 
+/* 个人工作台背景：图片铺底，内容表面保持高不透明度以确保长时阅读。 */
+.workspace-background-enabled {
+  --workspace-background-scrim: color-mix(in oklab, var(--neutral-300) 70%, transparent);
+  --workspace-surface-color: var(--neutral-white);
+  --bg-canvas: transparent;
+  --bg-surface-1: color-mix(in oklab, var(--workspace-surface-color) 96%, transparent);
+}
+
+.workspace-background-enabled[data-background-mode="dark"] {
+  --workspace-background-scrim: color-mix(in oklab, var(--neutral-black) 62%, transparent);
+  --workspace-surface-color: var(--neutral-100);
+}
+
+.workspace-background-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.workspace-background-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.workspace-background-scrim {
+  position: absolute;
+  inset: 0;
+  background-color: var(--workspace-background-scrim);
+}
+
 .shadow-custom {
   box-shadow: 2px 2px 8px 2px rgba(234, 231, 250, 0.3); /* Convert #EAE7FA4D to rgba */
 }

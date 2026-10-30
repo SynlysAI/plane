@@ -20,6 +20,7 @@ from .project.invite import (
 from .project.member import (
     ProjectMemberViewSet,
     ProjectMemberUserEndpoint,
+    ProjectMemberByUserEndpoint,
     ProjectMemberRoleByUserEndpoint,
     UserProjectRolesEndpoint,
     ProjectMemberPreferenceEndpoint,

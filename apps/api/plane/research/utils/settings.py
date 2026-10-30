@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Workspace level research configuration.
+"""Workspace-level research configuration.
 
-A workspace without a ``WorkspaceResearchSetting`` row renders the research
-module by default: the workspace switch falls back to the deployment level
-switch, so a partially rolled out installation still behaves predictably.
-The row becomes authoritative as soon as it exists, which is how an
-administrator opts a single workspace back out.
+The research application is installed with the backend. A workspace without a
+``WorkspaceResearchSetting`` row defaults to disabled; provisioning a row does
+not silently enable research. Workspace context activation remains the explicit
+workspace-level switch.
 """
 
 from plane.research.utils.config import (
@@ -110,7 +109,7 @@ def report_timezone_for(workspace, settings=None):
 
 
 def workspace_research_enabled(workspace) -> bool:
-    """The deployment switch always wins over the workspace switch."""
+    """Return whether the installed research app is enabled for a workspace."""
     if not research_module_enabled():
         return False
     config = get_workspace_research_settings(workspace)

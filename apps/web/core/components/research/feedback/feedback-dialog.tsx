@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import type { TFeedbackStatus, TResearchFeedback } from "@plane/types";
 import { Button } from "@plane/propel/button";
 import { EModalWidth, ModalCore, ListFilterField, ListFilterInput, ListFilterSelect } from "@plane/ui";
+import { Popover } from "@plane/propel/popover";
 import { useTranslation } from "@plane/i18n";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@plane/propel/table";
 import { ResearchFilterToolbar } from "@/components/research/common/research-data-surface";
@@ -10,6 +11,11 @@ import { ResearchBrowseRefresh } from "@/components/research/common/research-bro
 import { MessageSquare } from "lucide-react";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
 import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
+import {
+  ReportPeriodCalendar,
+  reportPeriodDates,
+  type TCustomReportPeriod,
+} from "@/components/research/reports/report-period-selector";
 import { ResearchFeedbackService } from "@/services/research/feedback.service";
 import { useResearch } from "@/hooks/store/use-research";
 
@@ -28,7 +34,6 @@ const FEEDBACK_TYPE_LABELS: Record<Feedback["feedback_type"], string> = {
 };
 type Feedback = TResearchFeedback;
 type Shot = { file: File; preview: string };
-type DatePreset = "any" | "7" | "30" | "custom";
 type FeedbackView = "submit" | "mine" | "statistics" | "manage";
 type FeedbackScope = "own" | "workspace" | "manage";
 
@@ -64,33 +69,92 @@ function ScreenshotLink({ url, index }: { url: string; index: number }) {
   );
 }
 
-/** 从剪贴板数据提取图片文件，兼容 files 与 items 两种浏览器暴露形式。 */
+/** 从剪贴板数据提取图片文件，优先使用 files，仅在其为空时通过 items 兜底。 */
 function getClipboardImageFiles(clipboardData: DataTransfer | null): File[] {
   if (!clipboardData) return [];
 
-  const directFiles = Array.from(clipboardData.files ?? []);
-  const itemFiles = Array.from(clipboardData.items ?? [])
-    .map((item) => (item.kind === "file" ? item.getAsFile() : null))
-    .filter((file): file is File => file !== null);
-  const candidates = [...directFiles, ...itemFiles].filter((file) => file.type.startsWith("image/"));
+  const directFiles = Array.from(clipboardData.files ?? []).filter((file) => file.type.startsWith("image/"));
+  if (directFiles.length > 0) return directFiles;
 
-  return Array.from(new Set(candidates));
+  return Array.from(clipboardData.items ?? [])
+    .map((item) => (item.kind === "file" ? item.getAsFile() : null))
+    .filter((file): file is File => file !== null && file.type.startsWith("image/"));
 }
 
-/** 全局反馈、本人记录与工作空间统计，管理者可在统计视图处置反馈。 */
+/** 用周报同款周/月日历选择反馈提交周期。 */
+function FeedbackPeriodFilter({
+  value,
+  onSelect,
+  onClear,
+}: {
+  value: TCustomReportPeriod | null;
+  onSelect: (period: TCustomReportPeriod) => void;
+  onClear: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <div className="relative flex min-w-0 items-center gap-1">
+        <button
+          type="button"
+          aria-label="反馈日期周期"
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
+          title={value ? value.periodKey : "任意时间"}
+          onClick={() => setIsOpen((current) => !current)}
+          className="h-8 min-w-0 rounded-md border border-subtle bg-surface-1 px-2 text-13 text-secondary transition-colors hover:bg-surface-2 hover:text-primary"
+        >
+          {value ? value.periodKey : "任意时间"}
+        </button>
+        {value && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="shrink-0 rounded px-1.5 py-1 text-12 text-tertiary transition-colors hover:bg-surface-2 hover:text-secondary"
+          >
+            清除日期
+          </button>
+        )}
+        {isOpen && (
+          <Popover.Panel
+            aria-label="选择反馈日期周期"
+            className="absolute top-full left-0 z-50 mt-2 w-[min(calc(100vw-2rem),19rem)] rounded-md border border-subtle bg-surface-1 p-3 shadow-raised-200"
+          >
+            <ReportPeriodCalendar
+              value={value}
+              onSelect={(period) => {
+                onSelect(period);
+                setIsOpen(false);
+              }}
+              onTypeChange={onSelect}
+            />
+          </Popover.Panel>
+        )}
+      </div>
+    </Popover>
+  );
+}
+
+/** 全局反馈、反馈中心、本人记录与工作空间统计，管理者可在统计视图处置反馈。 */
 export const FeedbackDialog = observer(function FeedbackDialog({
   workspaceSlug,
   managementOnly = false,
+  standalone = false,
+  initialFeedbackId,
 }: {
   workspaceSlug: string;
   managementOnly?: boolean;
+  standalone?: boolean;
+  initialFeedbackId?: string;
 }) {
   const { t } = useTranslation();
   const research = useResearch();
   const { identity, fetchIdentity } = research;
   const identityKnown = Boolean(identity);
-  const [open, setOpen] = useState(managementOnly);
-  const [view, setView] = useState<FeedbackView>(managementOnly ? "manage" : "submit");
+  const [open, setOpen] = useState(managementOnly || standalone);
+  const [view, setView] = useState<FeedbackView>(managementOnly ? "manage" : standalone ? "mine" : "submit");
+  const [viewResolved, setViewResolved] = useState(!standalone);
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("bug");
   const [shots, setShots] = useState<Shot[]>([]);
@@ -105,31 +169,32 @@ export const FeedbackDialog = observer(function FeedbackDialog({
   const [replyContent, setReplyContent] = useState("");
   const [replySubmitting, setReplySubmitting] = useState(false);
   const [replyError, setReplyError] = useState("");
-  const [filterDraft, setFilterDraft] = useState({
+  const [keywordDraft, setKeywordDraft] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState<TCustomReportPeriod | null>(null);
+  const [filter, setFilter] = useState({
     status: "",
     feedback_type: "",
-    module: "",
     q: "",
     date_from: "",
     date_to: "",
   });
-  const [filter, setFilter] = useState(filterDraft);
-  const [datePreset, setDatePreset] = useState<DatePreset>("any");
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [listLoading, setListLoading] = useState(false);
   const idempotency = useRef(createIdempotencyKey());
   const queryVersion = useRef(0);
+  const detailVersion = useRef(0);
   const canManage = Boolean(
     identity?.user?.is_main_pi ||
     identity?.user?.is_research_admin ||
     identity?.user?.is_workspace_admin ||
     identity?.user?.is_system_admin
   );
-  const canReply = canManage || Boolean(identity?.user?.is_feedback_operator);
-  const usesWorkspaceLayout = managementOnly || view === "statistics";
+  const isFeedbackOperator = Boolean(identity?.user?.is_feedback_operator);
   const listScope: FeedbackScope = managementOnly ? "manage" : view === "statistics" ? "workspace" : "own";
+  const canReply = listScope === "own" || canManage || isFeedbackOperator;
+  const usesWorkspaceLayout = managementOnly || standalone || view === "statistics";
   const screenshotScope: FeedbackScope = listScope;
   const managementDenied = managementOnly && identityKnown && !canManage;
   useEffect(() => {
@@ -146,8 +211,17 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     void fetchIdentity(workspaceSlug).catch(() => undefined);
   }, [fetchIdentity, open, workspaceSlug]);
   useEffect(() => {
+    if (!standalone || !identityKnown || viewResolved) return;
+    setView(canManage || isFeedbackOperator ? "statistics" : "mine");
+    setPage(1);
+    setSelected(null);
+    setViewResolved(true);
+  }, [canManage, identityKnown, isFeedbackOperator, standalone, viewResolved]);
+
+  useEffect(() => {
     if (!open || view === "submit") return;
     if (managementOnly && !canManage) return;
+    if (standalone && !viewResolved) return;
     const version = ++queryVersion.current;
     const params = { ...filter, page: String(page), ...(listScope === "own" ? {} : { scope: listScope }) };
     setListLoading(true);
@@ -157,9 +231,10 @@ export const FeedbackDialog = observer(function FeedbackDialog({
         if (version !== queryVersion.current) return undefined;
         setResults(data.results);
         setCount(data.count);
-        setSelected((current) =>
-          current ? (data.results.find((record) => record.feedback_id === current.feedback_id) ?? null) : null
-        );
+        setSelected((current) => {
+          if (initialFeedbackId && current?.feedback_id === initialFeedbackId) return current;
+          return current ? (data.results.find((record) => record.feedback_id === current.feedback_id) ?? null) : null;
+        });
         setError("");
         return undefined;
       })
@@ -173,39 +248,67 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     return () => {
       queryVersion.current += 1;
     };
-  }, [canManage, filter, listScope, managementOnly, open, page, refresh, view, workspaceSlug]);
+  }, [
+    canManage,
+    filter,
+    initialFeedbackId,
+    listScope,
+    managementOnly,
+    open,
+    page,
+    refresh,
+    standalone,
+    view,
+    viewResolved,
+    workspaceSlug,
+  ]);
+
   useEffect(() => {
-    if (!open || view === "submit") return undefined;
-    const timer = setTimeout(() => {
-      setFilter((current) =>
-        current.q === filterDraft.q && current.module === filterDraft.module
-          ? current
-          : { ...current, q: filterDraft.q, module: filterDraft.module }
-      );
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [filterDraft.module, filterDraft.q, open, view]);
+    if (!open || !standalone || !viewResolved || !initialFeedbackId || view === "submit") return;
+    const version = ++detailVersion.current;
+    service
+      .getFeedback(workspaceSlug, initialFeedbackId, { scope: listScope })
+      .then((detail) => {
+        if (version !== detailVersion.current) return undefined;
+        setSelected(detail);
+        setError("");
+        return undefined;
+      })
+      .catch(() => {
+        if (version === detailVersion.current) setError("反馈详情读取失败，请重试。");
+        return undefined;
+      });
+  }, [initialFeedbackId, listScope, open, standalone, view, viewResolved, workspaceSlug]);
   const className = "w-full rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 text-primary";
-  /** 更新立即生效的筛选条件并重置分页。 */
+  /** 更新立即生效的下拉筛选并重置分页。 */
   const updateFilter = (key: keyof typeof filter, value: string) => {
-    setFilterDraft((current) => ({ ...current, [key]: value }));
     setFilter((current) => ({ ...current, [key]: value }));
     setPage(1);
   };
-  /** 按预设生成日期区间；自定义区间仅展示输入，不隐式修改用户日期。 */
-  const applyDatePreset = (preset: DatePreset) => {
-    setDatePreset(preset);
-    const next = { date_from: "", date_to: "" };
-    if (preset === "7" || preset === "30") {
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(start.getDate() - (preset === "7" ? 6 : 29));
-      next.date_from = toLocalDateString(start);
-      next.date_to = toLocalDateString(today);
-    }
-    setFilterDraft((current) => ({ ...current, ...next }));
-    setFilter((current) => ({ ...current, ...next }));
+
+  /** 仅在用户按 Enter 或点击搜索后应用关键词。 */
+  const applyKeyword = () => {
+    setFilter((current) => (current.q === keywordDraft ? current : { ...current, q: keywordDraft }));
+    setPage(1);
+  };
+
+  /** 将周报周期转换为反馈提交时间的服务端区间。 */
+  const applyFeedbackPeriod = (period: TCustomReportPeriod) => {
+    const range = reportPeriodDates(period);
+    if (!range) return;
+    setSelectedPeriod(period);
+    setFilter((current) => ({
+      ...current,
+      date_from: toLocalDateString(range.start),
+      date_to: toLocalDateString(range.end),
+    }));
+    setPage(1);
+  };
+
+  /** 清除周期筛选并回到任意时间。 */
+  const clearFeedbackPeriod = () => {
+    setSelectedPeriod(null);
+    setFilter((current) => ({ ...current, date_from: "", date_to: "" }));
     setPage(1);
   };
   const availableTabs = managementOnly
@@ -329,55 +432,31 @@ export const FeedbackDialog = observer(function FeedbackDialog({
           <option value="other">其他</option>
         </ListFilterSelect>
       </ListFilterField>
-      {(["q", "module"] as const).map((key) => (
-        <ListFilterField
-          key={key}
-          label={key === "q" ? "关键词" : "模块"}
-          className={key === "q" ? "w-full sm:w-48" : undefined}
-        >
+      <form
+        data-keyword-filter="true"
+        className="flex w-full min-w-0 items-end gap-1 sm:w-64"
+        onSubmit={(event) => {
+          event.preventDefault();
+          applyKeyword();
+        }}
+      >
+        <ListFilterField label="关键词" className="min-w-0 flex-1">
           <ListFilterInput
-            aria-label={key === "q" ? "反馈关键词" : "反馈模块"}
-            placeholder={key === "q" ? "关键词" : "模块"}
+            aria-label="反馈关键词"
+            placeholder="输入后按 Enter 搜索"
             type="text"
-            value={filter[key]}
-            onChange={(event) => {
-              setFilterDraft((current) => ({ ...current, [key]: event.target.value }));
-            }}
+            maxLength={200}
+            value={keywordDraft}
+            onChange={(event) => setKeywordDraft(event.target.value)}
           />
         </ListFilterField>
-      ))}
+        <Button type="submit" variant="secondary" size="sm" className="shrink-0">
+          搜索
+        </Button>
+      </form>
       <ListFilterField label="日期">
-        <ListFilterSelect
-          aria-label="反馈日期范围"
-          value={datePreset}
-          onChange={(event) => applyDatePreset(event.target.value as DatePreset)}
-        >
-          <option value="any">任意</option>
-          <option value="7">近 7 天</option>
-          <option value="30">近 30 天</option>
-          <option value="custom">自定义区间</option>
-        </ListFilterSelect>
+        <FeedbackPeriodFilter value={selectedPeriod} onSelect={applyFeedbackPeriod} onClear={clearFeedbackPeriod} />
       </ListFilterField>
-      {datePreset === "custom" && (
-        <>
-          <ListFilterField label="开始日期" className="sm:w-40">
-            <ListFilterInput
-              aria-label="反馈开始日期"
-              type="date"
-              value={filter.date_from}
-              onChange={(event) => updateFilter("date_from", event.target.value)}
-            />
-          </ListFilterField>
-          <ListFilterField label="结束日期" className="sm:w-40">
-            <ListFilterInput
-              aria-label="反馈结束日期"
-              type="date"
-              value={filter.date_to}
-              onChange={(event) => updateFilter("date_to", event.target.value)}
-            />
-          </ListFilterField>
-        </>
-      )}
       <ResearchBrowseRefresh onRefresh={() => setRefresh((value) => value + 1)} disabled={listLoading} />
       {view !== "submit" && error && (
         <Button variant="secondary" size="xl" onClick={() => setRefresh((value) => value + 1)}>
@@ -389,6 +468,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
 
   const statusForm = selected ? (
     <form
+      data-status-form="true"
       className="grid gap-3 md:grid-cols-[minmax(9rem,0.25fr)_minmax(0,0.75fr)]"
       onSubmit={async (event) => {
         event.preventDefault();
@@ -444,20 +524,49 @@ export const FeedbackDialog = observer(function FeedbackDialog({
     </form>
   ) : null;
 
-  const replies = selected?.replies ?? [];
-  const replyTimeline = replies.length ? (
-    <section aria-label="反馈回复" className="border-t border-subtle pt-4">
-      <h4 className="text-12 font-semibold text-primary">回复记录</h4>
+  const activityItems = selected
+    ? [
+        ...(selected.history ?? []).map((entry) => ({
+          kind: "status" as const,
+          entry,
+          createdAt: entry.created_at,
+        })),
+        ...(selected.replies ?? []).map((reply) => ({
+          kind: "reply" as const,
+          reply,
+          createdAt: reply.created_at,
+        })),
+        // oxlint-disable-next-line unicorn/no-array-sort -- The target lib predates toSorted; this fresh literal is safe to sort.
+      ].sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
+    : [];
+  const activityTimeline = activityItems.length ? (
+    <section aria-label="反馈讨论与处理动态" className="border-t border-subtle pt-4">
+      <h4 className="text-12 font-semibold text-primary">讨论与处理动态</h4>
       <ol className="mt-3 space-y-3">
-        {replies.map((reply) => (
-          <li key={reply.id} className="border-l border-subtle pl-3 text-12">
-            <p className="text-secondary">{reply.author_name}</p>
-            <p className="mt-1 whitespace-pre-wrap text-primary">{reply.content}</p>
-            <time className="mt-1 block text-tertiary" dateTime={reply.created_at}>
-              {formatResearchDateTime(reply.created_at)}
-            </time>
-          </li>
-        ))}
+        {activityItems.map((item) =>
+          item.kind === "status" ? (
+            <li
+              key={`status-${item.entry.created_at}-${item.entry.to_status}`}
+              className="border-l border-subtle pl-3 text-12"
+            >
+              <p className="text-secondary">
+                {STATUS[item.entry.from_status] || "提交"} → {STATUS[item.entry.to_status]} · {item.entry.actor_name}
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-primary">{item.entry.comment}</p>
+              <time className="mt-1 block text-tertiary" dateTime={item.entry.created_at}>
+                {formatResearchDateTime(item.entry.created_at)}
+              </time>
+            </li>
+          ) : (
+            <li key={`reply-${item.reply.id}`} className="border-l border-subtle pl-3 text-12">
+              <p className="text-secondary">{item.reply.author_name}</p>
+              <p className="mt-1 whitespace-pre-wrap text-primary">{item.reply.content}</p>
+              <time className="mt-1 block text-tertiary" dateTime={item.reply.created_at}>
+                {formatResearchDateTime(item.reply.created_at)}
+              </time>
+            </li>
+          )
+        )}
       </ol>
     </section>
   ) : null;
@@ -568,7 +677,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
           {message}
         </p>
       )}
-      {managementOnly && !identityKnown && (
+      {(managementOnly || standalone) && !identityKnown && (
         <p role="status" className="text-13 text-secondary">
           反馈权限读取中…
         </p>
@@ -821,35 +930,14 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                             </div>
                           </section>
                         ) : null}
-                        {selected.history.length ? (
-                          <section aria-label="处理历史" className="border-t border-subtle pt-4">
-                            <h4 className="text-12 font-semibold text-primary">处理历史</h4>
-                            <ol className="mt-3 space-y-3">
-                              {selected.history.map((entry) => (
-                                <li
-                                  key={`${entry.created_at}-${entry.to_status}`}
-                                  className="border-l border-subtle pl-3 text-12"
-                                >
-                                  <p className="text-secondary">
-                                    {STATUS[entry.from_status]} → {STATUS[entry.to_status]} · {entry.actor_name}
-                                  </p>
-                                  <p className="mt-1 whitespace-pre-wrap">{entry.comment}</p>
-                                  <time className="mt-1 block text-tertiary" dateTime={entry.created_at}>
-                                    {formatResearchDateTime(entry.created_at)}
-                                  </time>
-                                </li>
-                              ))}
-                            </ol>
-                          </section>
-                        ) : null}
+                        {activityTimeline}
+                        {replyForm}
                         {usesWorkspaceLayout && canManage && (
                           <section aria-label="状态处置" className="border-t border-subtle pt-4">
                             <h4 className="text-12 font-semibold text-primary">状态处置</h4>
                             <div className="mt-3">{statusForm}</div>
                           </section>
                         )}
-                        {replyTimeline}
-                        {replyForm}
                       </article>
                     ) : (
                       <aside className="max-w-md rounded-lg bg-surface-2 px-4 py-5">
@@ -964,23 +1052,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
                       />
                     ))}
                   </div>
-                  <ol className="mt-3 space-y-2">
-                    {selected.history.map((entry) => (
-                      <li
-                        key={`${entry.created_at}-${entry.to_status}`}
-                        className="border-l border-subtle pl-3 text-12"
-                      >
-                        <p>
-                          {STATUS[entry.from_status]} → {STATUS[entry.to_status]} · {entry.actor_name}
-                        </p>
-                        <p>{entry.comment}</p>
-                        <time className="text-tertiary" dateTime={entry.created_at}>
-                          {formatResearchDateTime(entry.created_at)}
-                        </time>
-                      </li>
-                    ))}
-                  </ol>
-                  {replyTimeline}
+                  {activityTimeline}
                   {replyForm}
                   {usesWorkspaceLayout && canManage && (
                     <section aria-label="状态处置" className="mt-4 border-t border-subtle pt-4">
@@ -996,7 +1068,7 @@ export const FeedbackDialog = observer(function FeedbackDialog({
       )}
     </section>
   );
-  if (managementOnly) return body;
+  if (managementOnly || standalone) return body;
   return (
     <>
       <button

@@ -675,6 +675,7 @@ export const researchEndpoints = {
   identityMe: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/identity/me/`,
   researchTodos: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/research-todos/`,
   feedback: (slug: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/`,
+  feedbackDetail: (slug: string, feedbackId: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/`,
   feedbackReply: (slug: string, feedbackId: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/replies/`,
   feedbackStatus: (slug: string, feedbackId: string) => `${RESEARCH_API_ROOT}/${slug}/feedback/${feedbackId}/status/`,
   feedbackScreenshot: (slug: string, feedbackId: string, screenshotId: string) =>

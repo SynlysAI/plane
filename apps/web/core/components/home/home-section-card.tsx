@@ -20,7 +20,7 @@ type Props = {
   density: THomeDensity;
   /** primary 为首行主卡，secondary 为次行卡片；仅影响紧凑模式高度。 */
   size?: "primary" | "secondary";
-  /** 是否处于默认两行网格；仅该网格在紧凑模式下固定高度。 */
+  /** 是否使用固定卡片布局并让内容区内部滚动。 */
   fixedLayout?: boolean;
   className?: string;
   bodyClassName?: string;
@@ -28,16 +28,16 @@ type Props = {
 };
 
 /**
- * 首页工作台统一卡片骨架。紧凑模式由默认网格控制高度并在卡片内滚动，详细模式自然展开。
+ * 首页工作台统一卡片骨架。固定布局在卡片内滚动，非固定布局自然展开。
  *
  * Args:
  *   title: 卡片标题文本。
  *   hint: 可选的弱化副标题。
  *   action: 标题行右侧入口。
  *   footer: 卡片底部计数或链接。
- *   density: 显示密度；compact 固定卡片高度并压缩留白，detailed 自然展开。
+ *   density: 显示密度，控制留白与紧凑模式高度档位。
  *   size: 紧凑模式下的卡片高度档位。
- *   fixedLayout: 是否使用默认两行网格的紧凑固定高度。
+ *   fixedLayout: 是否固定卡片布局并让内容区内部滚动。
  *   className: 追加到卡片根元素的类名（用于网格跨度）。
  *   bodyClassName: 追加到内容区的类名。
  *   children: 卡片内容。
@@ -54,7 +54,7 @@ export function HomeSectionCard({
   bodyClassName,
   children,
 }: Props) {
-  const isScrollable = density === "compact" && fixedLayout;
+  const isScrollable = fixedLayout;
 
   return (
     <section

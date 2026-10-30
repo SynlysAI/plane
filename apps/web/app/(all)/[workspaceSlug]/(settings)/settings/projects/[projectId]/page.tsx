@@ -20,6 +20,7 @@ import type { Route } from "./+types/page";
 import { GeneralProjectSettingsHeader } from "./header";
 import { GeneralProjectSettingsControlSection } from "@/components/project/settings/control-section";
 import { AdministrativeRequiredFieldSettings } from "@/components/project/settings/administrative-required-fields";
+import { AdministrativeConfigurationPermissionSettings } from "@/components/project/settings/administrative-configuration-permission";
 
 function ProjectSettingsPage({ params }: Route.ComponentProps) {
   // router
@@ -46,6 +47,7 @@ function ProjectSettingsPage({ params }: Route.ComponentProps) {
         ) : (
           <ProjectDetailsFormLoader />
         )}
+        {isAdmin && <AdministrativeConfigurationPermissionSettings projectId={projectId} />}
         {isAdmin && <AdministrativeRequiredFieldSettings projectId={projectId} />}
         {isAdmin && <GeneralProjectSettingsControlSection projectId={projectId} />}
       </div>

@@ -383,10 +383,6 @@ class ProjectViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def create(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
-        if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
-            request.user, workspace
-        ):
-            return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = ProjectSerializer(
             data={**request.data}, context={"workspace_id": workspace.id, "request": request}
@@ -476,7 +472,7 @@ class ProjectViewSet(BaseViewSet):
 
         project = Project.objects.get(pk=pk, workspace__slug=slug)
         if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
-            request.user, workspace, project
+            request.user, project
         ):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         intake_view = request.data.get("inbox_view", project.intake_view)
