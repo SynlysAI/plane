@@ -13,7 +13,7 @@ from datetime import datetime, timezone as datetime_timezone
 
 from django.utils import timezone
 
-from plane.db.models import InboxTodoState, Notification
+from plane.db.models import InboxTodoState, Issue, Notification
 
 logger = logging.getLogger("plane.api")
 
@@ -290,7 +290,11 @@ def notification_category(notification):
     sender = notification.sender or ""
     if "mentioned" in sender.lower() or entity_name == "user_mention":
         return "mention"
-    if notification.announcement_id is not None or entity_name == "system_announcement" or sender.startswith("system:"):
+    if (
+        notification.announcement_id is not None
+        or entity_name in {"system_announcement", "research_feedback"}
+        or sender.startswith("system:")
+    ):
         return "system"
     if entity_name in APPROVAL_ENTITY_NAMES:
         return "approval"
@@ -315,20 +319,40 @@ def todo_category(todo):
     return "todo"
 
 
-def _notification_route(notification):
+def _safe_internal_route(route):
+    """Return only routes that stay inside the web application origin.
+
+    Args:
+        route: Route value embedded in notification payload data.
+
+    Returns:
+        A safe internal route, or ``None`` for external and malformed values.
+    """
+    if not isinstance(route, str):
+        return None
+    normalized = route.strip()
+    if not normalized.startswith("/") or normalized.startswith("//") or normalized.startswith("/\\"):
+        return None
+    return normalized
+
+
+def _notification_route(notification, issue=None):
     """Resolve a safe frontend route from notification payload data.
 
     Args:
         notification: Notification row.
+        issue: Current work item linked to the notification, when applicable.
 
     Returns:
         Internal route text, or ``None`` when no route is available.
     """
     data = notification.data or {}
-    embedded_route = data.get("route") or data.get("href")
+    embedded_route = _safe_internal_route(data.get("route") or data.get("href"))
     if embedded_route:
         return embedded_route
     workspace_slug = notification.workspace.slug
+    if issue is not None:
+        return f"/{workspace_slug}/projects/{issue.project_id}/issues/{issue.id}"
     if notification.entity_name == "issue" and notification.project_id and notification.entity_identifier:
         return f"/{workspace_slug}/projects/{notification.project_id}/issues/{notification.entity_identifier}"
     entity_routes = {
@@ -340,20 +364,52 @@ def _notification_route(notification):
         "research_stage": f"/{workspace_slug}/research/todos",
         "research_experiment": f"/{workspace_slug}/research/todos",
         "research_experiment_amendment": f"/{workspace_slug}/research/todos",
+        "research_feedback": f"/{workspace_slug}/feedback?feedback_id={notification.entity_identifier}",
     }
     return entity_routes.get(notification.entity_name)
 
 
-def _notification_item(notification):
+def _issue_details_for_notifications(notifications):
+    """Fetch current work items referenced by a notification page.
+
+    Args:
+        notifications: Notification rows already scoped to one receiver.
+
+    Returns:
+        A mapping of work item IDs to their current model instances.
+    """
+    issue_ids = {
+        notification.entity_identifier
+        for notification in notifications
+        if notification.entity_name == "issue" and notification.entity_identifier
+    }
+    if not issue_ids:
+        return {}
+    return Issue.objects.in_bulk(issue_ids)
+
+
+def _notification_item(notification, issue=None):
     """Project a notification row into the unified inbox contract.
 
     Args:
         notification: Notification row selected with its trigger user.
+        issue: Current work item linked to the notification, when applicable.
 
     Returns:
         One ``inbox.v1`` item dictionary.
     """
     data = notification.data or {}
+    action_summary = notification.message_stripped
+    if issue is not None:
+        action_summary = action_summary or notification.title
+    work_item_preview = None
+    if issue is not None:
+        work_item_preview = {
+            "type": "work_item",
+            "workspace_slug": notification.workspace.slug,
+            "project_id": str(issue.project_id),
+            "entity_id": str(issue.id),
+        }
     return {
         "id": f"notification:{notification.id}",
         "schema_version": INBOX_SCHEMA_VERSION,
@@ -364,11 +420,11 @@ def _notification_item(notification):
         "entity_name": notification.entity_name,
         "entity_identifier": str(notification.entity_identifier) if notification.entity_identifier else None,
         "dedupe_key": f"notification:{notification.id}",
-        "title": notification.title,
-        "summary": notification.message_stripped,
+        "title": issue.name if issue is not None else notification.title,
+        "summary": action_summary,
         "actor": _actor(notification.triggered_by),
         "action": data.get("action") or (notification.message or {}).get("action"),
-        "route": _notification_route(notification),
+        "route": _notification_route(notification, issue=issue),
         "due_at": None,
         "urgency": None,
         "status": (notification.message or {}).get("status"),
@@ -378,6 +434,7 @@ def _notification_item(notification):
         "read_at": _iso(notification.read_at),
         "archived_at": _iso(notification.archived_at),
         "snoozed_till": _iso(notification.snoozed_till),
+        "preview": work_item_preview,
     }
 
 
@@ -543,7 +600,8 @@ def project_inbox(workspace, user):
         todos, degraded_sources = [], ["RESEARCH_TODOS"]
     states = synchronize_todo_states(workspace, user, todos)
     todo_items = [_todo_item(todo, states.get((todo["source"], str(todo["object_id"])))) for todo in todos]
-    notifications = _notification_query(workspace, user).select_related("triggered_by")
+    notifications = list(_notification_query(workspace, user).select_related("triggered_by", "workspace"))
+    issue_details = _issue_details_for_notifications(notifications)
     todo_keys = {(todo["source"], str(todo["object_id"])) for todo in todos}
     notification_items = []
     superseded_notification_ids = []
@@ -562,7 +620,7 @@ def project_inbox(workspace, user):
         if category != "mention" and (duplicate_key in todo_keys or alias_key in todo_keys):
             superseded_notification_ids.append(notification.id)
             continue
-        notification_items.append(_notification_item(notification))
+        notification_items.append(_notification_item(notification, issue_details.get(notification.entity_identifier)))
 
     if superseded_notification_ids and not degraded_sources:
         now = timezone.now()

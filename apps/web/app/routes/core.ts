@@ -150,6 +150,7 @@ export const coreRoutes: RouteConfigEntry[] = [
           ":workspaceSlug/research/chains/:chainId/nodes/:nodeId/agent",
           "./(all)/[workspaceSlug]/(projects)/research/chains/[chainId]/nodes/[nodeId]/agent/page.tsx"
         ),
+        route(":workspaceSlug/feedback", "./(all)/[workspaceSlug]/(projects)/feedback/page.tsx"),
         route(":workspaceSlug/research/dashboard", "./(all)/[workspaceSlug]/(projects)/research/dashboard/page.tsx"),
         route(":workspaceSlug/research/approvals", "./(all)/[workspaceSlug]/(projects)/research/approvals/page.tsx"),
         route(":workspaceSlug/research/reviews", "./(all)/[workspaceSlug]/(projects)/research/reviews/page.tsx"),

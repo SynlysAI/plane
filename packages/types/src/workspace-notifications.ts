@@ -138,6 +138,13 @@ export type TInboxItemCategory = "mention" | "todo" | "approval" | "review" | "w
 
 export type TInboxUrgency = "OVERDUE" | "DUE_TODAY" | "DUE_SOON" | "NORMAL";
 
+export type TInboxPreview = {
+  type: "work_item";
+  workspace_slug: string;
+  project_id: string;
+  entity_id: string;
+};
+
 export type TInboxItem = {
   id: string;
   schema_version: "inbox.v1";
@@ -164,6 +171,7 @@ export type TInboxItem = {
   read_at: string | undefined;
   archived_at: string | undefined;
   snoozed_till: string | undefined;
+  preview?: TInboxPreview;
 };
 
 export type TInboxTab = "all" | "mentions" | "todos" | "approvals" | "reviews" | "system";

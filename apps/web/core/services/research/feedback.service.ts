@@ -46,6 +46,25 @@ export class ResearchFeedbackService extends APIService {
   }
 
   /**
+   * Read one feedback detail through the selected visibility scope.
+   *
+   * Args:
+   *   workspaceSlug: Workspace identifier.
+   *   feedbackId: Feedback record identifier.
+   *   params: Visibility scope used by the feedback API.
+   *
+   * Returns:
+   *   The complete feedback record.
+   */
+  async getFeedback(workspaceSlug: string, feedbackId: string, params: Pick<TResearchFeedbackFilters, "scope"> = {}) {
+    return this.get(researchEndpoints.feedbackDetail(workspaceSlug, feedbackId), { params })
+      .then((response) => response?.data?.data as TResearchFeedback)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  /**
    * Submit a feedback form with optional screenshot files.
    *
    * Args:

@@ -4,13 +4,14 @@ import hashlib
 import json
 import logging
 import uuid
+from html import escape
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 from botocore.exceptions import BotoCoreError, ClientError
 from django.db import DatabaseError, IntegrityError, transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.db.models import Prefetch
 from django.core.cache import cache
 from django.utils import timezone
@@ -18,11 +19,13 @@ from rest_framework import status
 
 from plane.db.models import (
     FileAsset,
+    Notification,
     OrgUnitMember,
     ResearchAuditEvent,
     ResearchFeedback,
     ResearchFeedbackReply,
     ResearchFeedbackScreenshot,
+    User,
 )
 from plane.research.utils.acl import active_org_units_for, managing_org_units_for
 from plane.research.utils.audit import ResearchAuditAction, ResearchResourceType, record_audit_event
@@ -385,16 +388,25 @@ def _management_queryset(user, workspace):
 def _reply_queryset(user, workspace):
     """Resolve feedback records on which the caller may create replies.
 
+    Operations accounts may reply in the workspace, managers may reply in their
+    management scope, and every submitter may continue their own feedback.
+
     Args:
         user: Authenticated Plane user.
         workspace: Workspace resolved from the URL.
 
     Returns:
-        An authorized queryset, or ``None`` when the caller cannot reply.
+        An authorized queryset. The queryset is never ``None`` because at least
+        the caller's own active feedback remains replyable.
     """
+    queryset = ResearchFeedback.objects.filter(workspace=workspace, deleted_at__isnull=True)
     if is_feedback_operator(user, workspace):
-        return _workspace_queryset(workspace)
-    return _management_queryset(user, workspace)
+        return queryset
+
+    managed = _management_queryset(user, workspace)
+    if managed is None:
+        return queryset.filter(created_by=user)
+    return queryset.filter(Q(created_by=user) | Q(pk__in=managed.values("pk")))
 
 
 def visible_feedback_queryset(user, workspace, *, scope="own"):
@@ -574,10 +586,10 @@ def _reject_submission_abuse(user, workspace, screenshots):
         raise _rate_limited()
 
     active_asset_ids = ResearchFeedbackScreenshot.objects.filter(
-            feedback__workspace=workspace,
-            feedback__created_by_id=user.id,
-            feedback__deleted_at__isnull=True,
-            deleted_at__isnull=True,
+        feedback__workspace=workspace,
+        feedback__created_by_id=user.id,
+        feedback__deleted_at__isnull=True,
+        deleted_at__isnull=True,
     ).values_list("asset_id", flat=True)
     active_size = (
         FileAsset.objects.filter(
@@ -628,8 +640,7 @@ def create_feedback(request, user, workspace):
         try:
             for item in screenshots:
                 object_name = (
-                    f"{workspace.id}/research/feedback/{feedback_id}/screenshots/"
-                    f"{uuid.uuid4().hex}-{item['safe_name']}"
+                    f"{workspace.id}/research/feedback/{feedback_id}/screenshots/{uuid.uuid4().hex}-{item['safe_name']}"
                 )
                 try:
                     uploaded = storage.upload_file(item["file"], object_name, item["content_type"])
@@ -727,6 +738,45 @@ def _pagination(params):
     except (TypeError, ValueError):
         raise _invalid("分页参数无效。") from None
     return page, page_size
+
+
+def get_feedback(request, user, workspace, feedback_id):
+    """Read one feedback record through the selected visibility scope.
+
+    Args:
+        request: DRF detail request carrying the optional ``scope`` parameter.
+        user: Authenticated caller.
+        workspace: Workspace resolved from the URL.
+        feedback_id: UUID of the requested feedback record.
+
+    Returns:
+        The complete feedback payload with screenshots, history, and replies.
+
+    Raises:
+        ResearchAPIException: When the scope or record is invalid, or access is denied.
+    """
+    scope = request.GET.get("scope", "own")
+    if scope not in {"own", "workspace", "manage"}:
+        raise _invalid("反馈范围无效。")
+    queryset = visible_feedback_queryset(user, workspace, scope=scope)
+    if queryset is None:
+        raise ResearchAPIException(
+            ResearchErrorCode.PERMISSION_DENIED,
+            "没有反馈管理权限。",
+            status.HTTP_403_FORBIDDEN,
+        )
+    feedback = queryset.filter(pk=feedback_id).first()
+    if feedback is None:
+        raise ResearchAPIException(
+            ResearchErrorCode.FEEDBACK_NOT_FOUND,
+            "反馈不存在。",
+            status.HTTP_404_NOT_FOUND,
+        )
+    return serialize_feedback(
+        feedback,
+        history=_history_entries([feedback.id]).get(str(feedback.id), []),
+        replies=_reply_entries([feedback.id]).get(str(feedback.id), []),
+    )
 
 
 def list_feedback(request, user, workspace):
@@ -871,12 +921,67 @@ def update_feedback_status(request, user, workspace, feedback_id):
     )
 
 
+def _reply_notification_rows(feedback, reply, actor, workspace):
+    """Build targeted inbox rows for one newly created feedback reply.
+
+    Args:
+        feedback: Feedback record owning the reply.
+        reply: Newly persisted reply.
+        actor: Authenticated user who created the reply.
+        workspace: Workspace resolved from the URL.
+
+    Returns:
+        Notification model instances for existing discussion participants.
+    """
+    receiver_ids = {feedback.created_by_id}
+    receiver_ids.update(
+        ResearchFeedbackReply.objects.filter(feedback=feedback, deleted_at__isnull=True)
+        .exclude(created_by__isnull=True)
+        .values_list("created_by_id", flat=True)
+    )
+    receiver_ids.update(
+        ResearchAuditEvent.objects.filter(
+            resource_type=ResearchResourceType.RESEARCH_FEEDBACK,
+            resource_id=feedback.id,
+            action=ResearchAuditAction.FEEDBACK_STATUS_UPDATE,
+        )
+        .exclude(actor__isnull=True)
+        .values_list("actor_id", flat=True)
+    )
+    receiver_ids.discard(actor.id)
+    receivers = User.objects.filter(id__in=receiver_ids, is_active=True)
+    route = f"/{workspace.slug}/feedback?feedback_id={feedback.id}"
+    summary = reply.content[:200]
+    return [
+        Notification(
+            workspace=workspace,
+            receiver=receiver,
+            data={
+                "action": "replied",
+                "feedback_id": str(feedback.id),
+                "reply_id": str(reply.id),
+                "route": route,
+            },
+            entity_identifier=feedback.id,
+            entity_name="research_feedback",
+            title="反馈有新回复",
+            message={"action": "replied", "feedback_id": str(feedback.id), "reply_id": str(reply.id)},
+            message_html=f"<p>{escape(summary)}</p>",
+            message_stripped=summary,
+            sender="research:feedback",
+            triggered_by=actor,
+            created_by=actor,
+        )
+        for receiver in receivers
+    ]
+
+
 def create_feedback_reply(request, user, workspace, feedback_id):
     """Persist an authorized reply and return the complete feedback record.
 
     Args:
         request: DRF reply request.
-        user: Authenticated operations account or feedback manager.
+        user: Feedback submitter, operations account, or feedback manager.
         workspace: Workspace resolved from the URL.
         feedback_id: UUID of the target feedback record.
 
@@ -897,6 +1002,12 @@ def create_feedback_reply(request, user, workspace, feedback_id):
     with transaction.atomic():
         feedback = queryset.select_for_update(of=("self",)).filter(pk=feedback_id).first()
         if feedback is None:
+            if ResearchFeedback.objects.filter(workspace=workspace, pk=feedback_id, deleted_at__isnull=True).exists():
+                raise ResearchAPIException(
+                    ResearchErrorCode.PERMISSION_DENIED,
+                    "没有反馈回复权限。",
+                    status.HTTP_403_FORBIDDEN,
+                )
             raise ResearchAPIException(
                 ResearchErrorCode.FEEDBACK_NOT_FOUND,
                 "反馈不存在。",
@@ -923,6 +1034,16 @@ def create_feedback_reply(request, user, workspace, feedback_id):
                 "reply_id": str(reply.id),
             },
         )
+        notifications = _reply_notification_rows(feedback, reply, user, workspace)
+        if notifications:
+            try:
+                Notification.objects.bulk_create(notifications, batch_size=100)
+            except (DatabaseError, IntegrityError) as error:
+                raise ResearchAPIException(
+                    ResearchErrorCode.FEEDBACK_STORAGE_UNAVAILABLE,
+                    "反馈回复保存失败，请稍后重试。",
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                ) from error
 
     feedback = (
         ResearchFeedback.objects.filter(workspace=workspace, pk=feedback_id)

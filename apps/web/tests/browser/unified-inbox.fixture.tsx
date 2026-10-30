@@ -42,6 +42,33 @@ function inboxItem(overrides: Partial<TInboxItem>): TInboxItem {
 }
 
 const items = [
+  inboxItem({
+    id: "notification:issue:11111111-1111-1111-1111-111111111111",
+    kind: "notification",
+    category: "work_item",
+    source: "issue",
+    object_id: "11111111-1111-1111-1111-111111111111",
+    entity_name: "issue",
+    entity_identifier: "11111111-1111-1111-1111-111111111111",
+    dedupe_key: "notification:issue:11111111-1111-1111-1111-111111111111",
+    title: "催化剂界面失活机理研究与再生策略验证——界面组分演化跟踪实验",
+    summary: "added assignee",
+    actor: { id: "researcher-1", display_name: "实验负责人", avatar_url: null },
+    action: "updated",
+    route: "/isolated-test/projects/22222222-2222-2222-2222-222222222222/issues/11111111-1111-1111-1111-111111111111",
+    due_at: undefined,
+    urgency: undefined,
+    status: undefined,
+    business_status: undefined,
+    handling_status: undefined,
+    next_action: undefined,
+    preview: {
+      type: "work_item",
+      workspace_slug: "isolated-test",
+      project_id: "22222222-2222-2222-2222-222222222222",
+      entity_id: "11111111-1111-1111-1111-111111111111",
+    },
+  }),
   inboxItem({}),
   inboxItem({
     id: "notification:mention-1",
@@ -77,12 +104,12 @@ const items = [
 ];
 
 const counts: TInboxUnreadCounts = {
-  total_unread_count: 3,
+  total_unread_count: 4,
   mention_unread_count: 1,
   todo_unread_count: 1,
   approval_unread_count: 1,
   review_unread_count: 0,
-  work_item_unread_count: 0,
+  work_item_unread_count: 1,
   system_unread_count: 0,
 };
 

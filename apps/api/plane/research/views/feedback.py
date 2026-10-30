@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from plane.research.services.feedback import (
     create_feedback_reply,
     create_feedback,
+    get_feedback,
     list_feedback,
     open_feedback_screenshot,
     update_feedback_status,
@@ -77,8 +78,36 @@ class ResearchFeedbackEndpoint(ResearchAPIView):
         return Response({"code": 0, "data": data})
 
 
+class ResearchFeedbackDetailEndpoint(ResearchAPIView):
+    """Read one feedback item with the same scope rules as the list endpoint."""
+
+    nav_capability = None
+    research_module_required = False
+    research_membership_required = False
+
+    def get(self, request, slug, feedback_id):
+        """Return screenshots, status history, and replies for one feedback item.
+
+        Args:
+            request: Authenticated request carrying the optional visibility scope.
+            slug: Workspace slug from the URL.
+            feedback_id: UUID of the requested feedback record.
+
+        Returns:
+            The complete feedback payload or a controlled error.
+        """
+        workspace, error = self.get_workspace(nav=None, require_enabled=False)
+        if error:
+            return error
+        try:
+            data = get_feedback(request, request.user, workspace, feedback_id)
+        except ResearchAPIException as exception:
+            return _error_response(exception)
+        return Response({"code": 0, "data": data})
+
+
 class ResearchFeedbackReplyEndpoint(ResearchAPIView):
-    """Create a reply on feedback visible to an operations account or manager."""
+    """Create a reply on feedback visible to its submitter, operator, or manager."""
 
     nav_capability = None
     research_module_required = False

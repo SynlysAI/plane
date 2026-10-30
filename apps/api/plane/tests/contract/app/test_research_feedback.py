@@ -17,9 +17,11 @@ from plane.db.models import (
     AdministrativeOrganization,
     AdministrativeOrganizationMember,
     FileAsset,
+    Notification,
     OrgUnitMember,
     ResearchAuditEvent,
     ResearchFeedback,
+    ResearchFeedbackReply,
     ResearchFeedbackScreenshot,
     Workspace,
     WorkspaceMember,
@@ -375,9 +377,9 @@ def test_operations_account_can_reply_without_gaining_management_permissions(env
     feedback = client_for(env["student"]).post(feedback_url(env), submission(), format="multipart").json()["data"]
     reply_url = feedback_url(env, f"{feedback['feedback_id']}/replies/")
 
-    denied = client_for(env["student"]).post(reply_url, {"content": "Cannot reply"}, format="json")
-    assert denied.status_code == 403
-    assert not ResearchFeedbackReply.objects.exists()
+    submitter_reply = client_for(env["student"]).post(reply_url, {"content": "Still happens today"}, format="json")
+    assert submitter_reply.status_code == 200, submitter_reply.json()
+    assert ResearchFeedbackReply.objects.count() == 1
 
     WorkspaceMember.objects.filter(workspace=env["workspace"], member=env["colleague"]).update(
         is_operations_account=True
@@ -398,13 +400,13 @@ def test_operations_account_can_reply_without_gaining_management_permissions(env
 
     assert invalid.status_code == 422
     assert response.status_code == 200, response.json()
-    reply = response.json()["data"]["replies"][0]
-    assert reply["content"] == "已复现，正在处理。"
+    reply = next(item for item in response.json()["data"]["replies"] if item["content"] == "已复现，正在处理。")
     assert reply["author_name"] == env["colleague"].display_name
-    assert ResearchFeedbackReply.objects.filter(feedback_id=feedback["feedback_id"]).count() == 1
+    assert reply["author_name"] == env["colleague"].display_name
+    assert ResearchFeedbackReply.objects.filter(feedback_id=feedback["feedback_id"]).count() == 2
 
     listed = operator_client.get(feedback_url(env), {"scope": "workspace"}).json()["data"]["results"][0]
-    assert listed["replies"][0]["id"] == reply["id"]
+    assert any(item["id"] == reply["id"] for item in listed["replies"])
     assert (
         client_for(env["pi"])
         .post(feedback_url(env, f"{feedback['feedback_id']}/replies/"), {"content": "PI reply"}, format="json")
@@ -416,6 +418,99 @@ def test_operations_account_can_reply_without_gaining_management_permissions(env
         is_operations_account=False
     )
     assert operator_client.post(reply_url, {"content": "Should now fail"}, format="json").status_code == 403
+
+
+@pytest.mark.django_db
+def test_feedback_submitter_can_continue_their_own_thread_only(env, storage):
+    """提交者只能持续回复自己的反馈，不能回复他人反馈。"""
+    student_client = client_for(env["student"])
+    colleague_client = client_for(env["colleague"])
+    own = student_client.post(feedback_url(env), submission(), format="multipart").json()["data"]
+    other = colleague_client.post(feedback_url(env), submission(), format="multipart").json()["data"]
+
+    own_reply = student_client.post(
+        feedback_url(env, f"{own['feedback_id']}/replies/"),
+        {"content": "补充：问题只在周报提交页出现。"},
+        format="json",
+    )
+    denied = colleague_client.post(
+        feedback_url(env, f"{own['feedback_id']}/replies/"),
+        {"content": "unrelated member reply"},
+        format="json",
+    )
+
+    assert own_reply.status_code == 200, own_reply.json()
+    assert denied.status_code == 403
+    assert ResearchFeedbackReply.objects.filter(feedback_id=own["feedback_id"]).count() == 1
+    assert ResearchFeedbackReply.objects.filter(feedback_id=other["feedback_id"]).count() == 0
+
+
+@pytest.mark.django_db
+def test_reply_notifications_target_existing_participants_only(env, storage):
+    """新回复只提醒提交者和已参与处理的人，不提醒操作者本人。"""
+    feedback = client_for(env["student"]).post(feedback_url(env), submission(), format="multipart").json()["data"]
+    feedback_id = feedback["feedback_id"]
+    reply_url = feedback_url(env, f"{feedback_id}/replies/")
+
+    manager_reply = client_for(env["pi"]).post(reply_url, {"content": "已复现，正在优化。"}, format="json")
+    student_reply = client_for(env["student"]).post(reply_url, {"content": "谢谢，今天仍会复现。"}, format="json")
+
+    assert manager_reply.status_code == 200, manager_reply.json()
+    assert student_reply.status_code == 200, student_reply.json()
+    notifications = Notification.objects.filter(
+        workspace=env["workspace"],
+        entity_name="research_feedback",
+        entity_identifier=feedback_id,
+    ).select_related("receiver")
+    assert {notification.receiver for notification in notifications} == {env["student"], env["pi"]}
+    assert notifications.filter(receiver=env["student"], triggered_by=env["pi"]).count() == 1
+    assert notifications.filter(receiver=env["pi"], triggered_by=env["student"]).count() == 1
+    notification = notifications.get(receiver=env["student"])
+    assert notification.title == "反馈有新回复"
+    assert notification.message_stripped == "已复现，正在优化。"
+    assert notification.sender == "research:feedback"
+    assert notification.data["feedback_id"] == feedback_id
+    assert notification.data["route"] == f"/{env['workspace'].slug}/feedback?feedback_id={feedback_id}"
+    assert notifications.exclude(receiver__in=[env["student"], env["pi"]]).count() == 0
+
+
+@pytest.mark.django_db
+def test_failed_notification_rolls_back_reply_and_audit(env, storage):
+    """通知写入失败时回复和审计一并回滚，避免讨论状态不一致。"""
+    feedback = client_for(env["student"]).post(feedback_url(env), submission(), format="multipart").json()["data"]
+
+    with mock.patch.object(Notification.objects, "bulk_create", side_effect=IntegrityError("notification failed")):
+        response = client_for(env["pi"]).post(
+            feedback_url(env, f"{feedback['feedback_id']}/replies/"),
+            {"content": "This reply must roll back"},
+            format="json",
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "research_feedback_storage_unavailable"
+    assert not ResearchFeedbackReply.objects.exists()
+    assert not Notification.objects.exists()
+    assert not ResearchAuditEvent.objects.filter(action="feedback.reply.create").exists()
+
+
+@pytest.mark.django_db
+def test_feedback_detail_follows_visibility_scope(env, storage):
+    """详情接口与列表使用相同的 own/workspace/manage 授权边界。"""
+    student_client = client_for(env["student"])
+    colleague_client = client_for(env["colleague"])
+    own = student_client.post(feedback_url(env), submission(), format="multipart").json()["data"]
+    other = colleague_client.post(feedback_url(env), submission(), format="multipart").json()["data"]
+    own_detail_url = feedback_url(env, f"{own['feedback_id']}/")
+
+    default_detail = student_client.get(own_detail_url)
+    assert default_detail.status_code == 200
+    assert default_detail.json()["data"]["feedback_id"] == own["feedback_id"]
+    assert colleague_client.get(own_detail_url, {"scope": "own"}).status_code == 404
+    assert colleague_client.get(own_detail_url, {"scope": "workspace"}).status_code == 200
+    assert student_client.get(feedback_url(env, f"{other['feedback_id']}/"), {"scope": "manage"}).status_code == 403
+    manager_detail = client_for(env["pi"]).get(own_detail_url, {"scope": "manage"})
+    assert manager_detail.status_code == 200
+    assert manager_detail.json()["data"]["feedback_id"] == own["feedback_id"]
 
 
 @pytest.mark.django_db
@@ -772,9 +867,11 @@ def test_soft_deleted_feedback_and_screenshots_do_not_reappear(env, storage):
 
 @pytest.mark.django_db
 def test_screenshot_stream_maps_boto_client_errors_to_storage_unavailable(env, storage):
-    feedback = client_for(env["student"]).post(
-        feedback_url(env), {**submission(), "screenshots": [image()]}, format="multipart"
-    ).json()["data"]
+    feedback = (
+        client_for(env["student"])
+        .post(feedback_url(env), {**submission(), "screenshots": [image()]}, format="multipart")
+        .json()["data"]
+    )
 
     def raise_boto_core_error(*args, **kwargs):
         raise BotoCoreError()
