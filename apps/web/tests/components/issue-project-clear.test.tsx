@@ -42,6 +42,7 @@ vi.mock("@plane/i18n", () => ({
       ({
         clear_project: "清除项目",
         discard: "放弃",
+        editor_is_not_ready_to_discard_changes: "编辑器尚未准备好放弃更改",
         error: "错误",
         project_required_to_save: "请选择项目后再保存",
         save: "保存",
@@ -51,9 +52,11 @@ vi.mock("@plane/i18n", () => ({
   }),
 }));
 vi.mock("@plane/propel/button", () => ({
-  Button: ({ loading: _loading, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) => (
-    <button {...props} />
-  ),
+  Button: ({
+    loading: _loading,
+    type = "button",
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) => <button type={type} {...props} />,
 }));
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { ERROR: "error" },
@@ -129,8 +132,16 @@ vi.mock("@/components/issues/issue-modal/components", async () => {
   const { useFormContext } = await import("react-hook-form");
   return {
     IssueDefaultProperties: () => <div>issue-properties</div>,
-    IssueDescriptionEditor: ({ editorRef }: { editorRef: { current: unknown } }) => {
-      editorRef.current = { isEditorReadyToDiscard: () => true };
+    IssueDescriptionEditor: ({
+      editorRef,
+      projectId,
+    }: {
+      editorRef: React.MutableRefObject<EditorRefApi | null>;
+      projectId: string | null;
+    }) => {
+      if (projectId) {
+        editorRef.current = { isEditorReadyToDiscard: mocks.isEditorReadyToDiscard };
+      }
       return <div>issue-editor</div>;
     },
     IssueParentTag: () => null,
@@ -139,9 +150,20 @@ vi.mock("@/components/issues/issue-modal/components", async () => {
       const projectId = watch("project_id");
 
       return (
-        <button type="button" onClick={() => setValue("project_id", "project-2", { shouldDirty: true })}>
-          {projectId ?? "请选择项目"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setValue("project_id", "project-2", { shouldDirty: true })}>
+            {projectId ?? "请选择项目"}
+          </button>
+          {projectId && (
+            <button
+              type="button"
+              aria-label="清除项目"
+              onClick={() => setValue("project_id", null, { shouldDirty: true })}
+            >
+              清除项目
+            </button>
+          )}
+        </div>
       );
     },
     IssueTitleInput: ({ issueTitleRef }: { issueTitleRef: { current: HTMLInputElement | null } }) => (
@@ -316,6 +338,48 @@ describe("new work item project clearing", () => {
     expect(discardButton!.disabled).toBe(false);
     await act(async () => discardButton!.click());
     expect(mocks.onClose).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("closes from the discard button after clearing a project even if the stale editor ref is busy", async () => {
+    mocks.isEditorReadyToDiscard.mockReturnValue(false);
+    await act(async () => root.render(<IssueFormHarness />));
+
+    const selectProject = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "请选择项目"
+    );
+    await act(async () => selectProject!.click());
+
+    const clearProject = container.querySelector<HTMLButtonElement>('button[aria-label="清除项目"]');
+    expect(clearProject).not.toBeNull();
+    await act(async () => clearProject!.click());
+
+    const discardButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "放弃"
+    );
+    await act(async () => discardButton!.click());
+
+    expect(mocks.onClose).toHaveBeenCalledExactlyOnceWith();
+    expect(mocks.setToast).not.toHaveBeenCalled();
+  });
+
+  it("keeps discard-button protection when a project is selected and the editor is busy", async () => {
+    mocks.isEditorReadyToDiscard.mockReturnValue(false);
+    await act(async () => root.render(<IssueFormHarness />));
+
+    const selectProject = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "请选择项目"
+    );
+    await act(async () => selectProject!.click());
+
+    const discardButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "放弃"
+    );
+    await act(async () => discardButton!.click());
+
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(mocks.setToast).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ message: "编辑器尚未准备好放弃更改" })
+    );
   });
 
   it("closes with Escape while the project is empty even if the editor ref is busy", async () => {

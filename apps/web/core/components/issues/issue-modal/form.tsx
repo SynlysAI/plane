@@ -50,6 +50,7 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkspaceDraftIssues } from "@/hooks/store/workspace-draft";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useProjectIssueProperties } from "@/hooks/use-project-issue-properties";
+import { useIssueAttachmentLimits } from "@/hooks/use-issue-attachment-limits";
 
 export interface IssueFormProps {
   data?: Partial<TIssue>;
@@ -187,6 +188,12 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
   const isDisabled =
     !projectId || isSubmitting || isApplyingTemplate || hasNoAssignableProjectMembers || hasRequiredFieldErrors;
+  const canQueueCreateAttachments = !data?.id && !isDraft && Boolean(onAddPendingAttachments);
+  const attachmentLimitsState = useIssueAttachmentLimits(
+    workspaceSlug?.toString(),
+    projectId ?? undefined,
+    canQueueCreateAttachments
+  );
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -484,6 +491,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                         workspaceSlug={workspaceSlug?.toString() ?? ""}
                         projectId={projectId}
                         disabled={isDisabled}
+                        limitsState={canQueueCreateAttachments ? attachmentLimitsState : undefined}
                       />
                     ) : null
                   }
@@ -537,13 +545,13 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                         variant="secondary"
                         size="lg"
                         onClick={() => {
-                          if (editorRef.current?.isEditorReadyToDiscard()) {
+                          if (!projectId || editorRef.current?.isEditorReadyToDiscard()) {
                             onClose();
                           } else {
                             setToast({
                               type: TOAST_TYPE.ERROR,
-                              title: "Error!",
-                              message: "Editor is still processing changes. Please wait before proceeding.",
+                              title: t("error"),
+                              message: t("editor_is_not_ready_to_discard_changes"),
                             });
                           }
                         }}

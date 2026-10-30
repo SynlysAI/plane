@@ -1,20 +1,28 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fromEvent } from "file-selector";
+import { isFileLike } from "./editor-files";
 
 type Props = {
-  onAttachFiles?: (files: File[]) => void | Promise<void>;
+  onFiles?: (files: File[]) => void | Promise<void>;
 };
 
-/** Track a restrained file-drag state for an editor surface. */
+/** Track and accept file drops across the complete visible editor surface. */
 export function useEditorAttachmentDrop(props: Props) {
-  const { onAttachFiles } = props;
+  const { onFiles } = props;
   const [isAttachmentDragActive, setIsAttachmentDragActive] = useState(false);
+  const onFilesRef = useRef(onFiles);
 
-  const canAcceptFiles = Boolean(onAttachFiles);
+  useEffect(() => {
+    onFilesRef.current = onFiles;
+  }, [onFiles]);
+
+  const canAcceptFiles = Boolean(onFiles);
 
   const onDragOver = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
       if (!canAcceptFiles || !Array.from(event.dataTransfer?.types ?? []).includes("Files")) return;
       event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
       setIsAttachmentDragActive(true);
     },
     [canAcceptFiles]
@@ -26,7 +34,21 @@ export function useEditorAttachmentDrop(props: Props) {
     setIsAttachmentDragActive(false);
   }, []);
 
-  const onDrop = useCallback(() => setIsAttachmentDragActive(false), []);
+  const onDrop = useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      const handledByEditor = event.defaultPrevented;
+      setIsAttachmentDragActive(false);
+      if (handledByEditor || !canAcceptFiles) return;
+      if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      void fromEvent(event)
+        .then((items) => onFilesRef.current?.(items.filter(isFileLike)))
+        .catch((error) => console.error("Error in reading dropped editor files:", error));
+    },
+    [canAcceptFiles]
+  );
 
   return {
     isAttachmentDragActive,

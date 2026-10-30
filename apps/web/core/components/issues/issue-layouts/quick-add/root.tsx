@@ -13,12 +13,20 @@ import { useForm } from "react-hook-form";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { AddOutline } from "@makeplane/propel/icons";
-import { setPromiseToast } from "@plane/propel/toast";
+import { setPromiseToast, setToast, TOAST_TYPE } from "@plane/propel/toast";
+import { EIssuesStoreType } from "@plane/types";
 import type { IProject, TIssue, EIssueLayoutTypes } from "@plane/types";
 import { cn, createIssuePayload } from "@plane/utils";
 // local imports
 import { QuickAddIssueFormRoot } from "./form";
 import { CreateIssueToastActionItems } from "../../create-issue-toast-action-items";
+import {
+  formatIssueCreateError,
+  getMissingRequiredIssueFields,
+  REQUIRED_FIELD_LABELS,
+} from "@/components/issues/required-fields";
+import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useProject } from "@/hooks/store/use-project";
 
 export type TQuickAddIssueForm = {
   ref: React.RefObject<HTMLFormElement | null>;
@@ -67,6 +75,9 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
   const { t } = useTranslation();
   // router
   const { workspaceSlug, projectId } = useParams();
+  // store hooks
+  const { getProjectById } = useProject();
+  const { toggleCreateIssueModal } = useCommandPalette();
   // states
   const [isOpen, setIsOpen] = useState(isQuickAddOpen ?? false);
   // form info
@@ -108,6 +119,25 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
       ...formData,
     });
 
+    // Administrative projects with required fields cannot be fulfilled by the title-only quick add.
+    const missingRequiredFields = getMissingRequiredIssueFields(getProjectById(projectId.toString()), payload);
+    if (missingRequiredFields.length > 0) {
+      handleIsOpen(false);
+      setToast({
+        type: TOAST_TYPE.WARNING,
+        title: "无法快速创建",
+        message: `此项目已开启必填字段（${missingRequiredFields
+          .map((field) => REQUIRED_FIELD_LABELS[field])
+          .join("、")}），已为你打开完整创建窗口，请补充后提交。`,
+      });
+      toggleCreateIssueModal(true, isEpic ? EIssuesStoreType.EPIC : EIssuesStoreType.PROJECT, undefined, {
+        // oxlint-disable-next-line unicorn/no-useless-fallback-in-spread
+        ...(prePopulatedData ?? {}),
+        ...formData,
+      });
+      return;
+    }
+
     if (quickAddCallback) {
       const quickAddPromise = quickAddCallback(projectId.toString(), { ...payload });
       setPromiseToast<any>(quickAddPromise, {
@@ -127,7 +157,7 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
         },
         error: {
           title: t("common.error.label"),
-          message: (err) => err?.message || t("common.error.message"),
+          message: (err) => formatIssueCreateError(err, t("common.error.message")),
         },
       });
 

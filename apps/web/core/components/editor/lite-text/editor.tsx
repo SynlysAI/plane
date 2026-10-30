@@ -25,15 +25,9 @@ import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
 // plane web service
 import { WorkspaceService } from "@/services/workspace.service";
+import { splitEditorFiles } from "@/components/editor/editor-files";
 import { LiteToolbar } from "./lite-toolbar";
 const workspaceService = new WorkspaceService();
-const IMAGE_FILE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
-
-/** Identify editor images by MIME type or common extension. */
-function isInlineImageFile(file: File) {
-  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return file.type.startsWith("image/") || IMAGE_FILE_EXTENSIONS.has(extension);
-}
 
 function isMutableRefObject<T>(forwardedRef: React.ForwardedRef<T>): forwardedRef is React.MutableRefObject<T | null> {
   return !!forwardedRef && typeof forwardedRef === "object" && "current" in forwardedRef;
@@ -146,7 +140,6 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   const { getEditorFileHandlers } = useEditorConfig();
   // derived values
   const isEmpty = isCommentEmpty(props.initialValue) && !hasAttachments;
-  const { isAttachmentDragActive, attachmentDragHandlers } = useEditorAttachmentDrop({ onAttachFiles });
 
   /** Keep selected images inline and route other files to the comment attachment queue. */
   const handleFileSelection = useCallback(
@@ -155,19 +148,21 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
         if (onAttachFiles) void onAttachFiles(files);
         return;
       }
-      const inlineImages = files.filter(isInlineImageFile);
-      const externalAttachments = files.filter((file) => !isInlineImageFile(file));
+      const { inlineImages, externalAttachments } = splitEditorFiles(files);
       if (inlineImages.length > 0) editorRef?.insertImageFiles(inlineImages);
       if (externalAttachments.length > 0 && onAttachFiles) void onAttachFiles(externalAttachments);
     },
     [editorRef, onAttachFiles]
   );
+  const { isAttachmentDragActive, attachmentDragHandlers } = useEditorAttachmentDrop({
+    onFiles: editable && onAttachFiles ? handleFileSelection : undefined,
+  });
 
   return (
     <div
       className={cn(
         "relative rounded-sm border border-subtle",
-        isAttachmentDragActive && "bg-surface-hover border-strong",
+        isAttachmentDragActive && "border-accent-strong bg-accent-primary/5 ring-1 ring-accent-strong/30",
         {
           "p-3": editable && !isLiteVariant,
         },
@@ -218,6 +213,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
             showPlaceholderOnEmpty={showPlaceholderOnEmpty}
             containerClassName={cn(containerClassName, "relative", {
               "p-2": !editable,
+              "min-h-[72px]": editable,
             })}
             extendedEditorProps={{}}
             editorClassName={editorClassName}
@@ -243,6 +239,10 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
           />
         )}
       </div>
+
+      {isAttachmentDragActive && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[inherit] bg-accent-primary/5" />
+      )}
 
       {editable && onAttachFiles && (
         <input

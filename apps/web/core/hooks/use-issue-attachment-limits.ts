@@ -17,14 +17,17 @@ type TReturnProps = {
   getLimitError: (file: { name: string; size: number; type?: string }) => string | null;
 };
 
+export type TIssueAttachmentLimitsState = TReturnProps;
+
 /** 读取工作项附件可复用的评论附件分类额度。
  *
  * @param workspaceSlug 工作区标识。
  * @param projectId 项目 ID。
+ * @param enabled 是否发起额度请求；创建表单可在附件入口可用前预取。
  * @returns 四类额度、加载状态、Dropzone 最大值与单文件分类校验函数。
  */
-export function useIssueAttachmentLimits(workspaceSlug?: string, projectId?: string): TReturnProps {
-  const { limits, error } = useCommentAttachmentLimits(workspaceSlug, projectId);
+export function useIssueAttachmentLimits(workspaceSlug?: string, projectId?: string, enabled = true): TReturnProps {
+  const { limits, error } = useCommentAttachmentLimits(workspaceSlug, projectId, enabled);
 
   const maxFileSize = useMemo(() => {
     if (!limits) return 0;

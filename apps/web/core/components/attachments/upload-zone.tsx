@@ -134,13 +134,13 @@ export function AttachmentUploadZone(props: Props) {
       {...getRootProps({
         className: cn(
           showPrompt
-            ? "flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-subtle bg-surface-1 text-center text-12 text-secondary transition-colors outline-none"
+            ? "relative flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-subtle bg-surface-1 text-center text-12 text-secondary transition-colors outline-none"
             : "relative flex min-w-0 flex-col rounded-sm border border-dashed border-transparent transition-colors",
           clickToSelect && "cursor-pointer",
           VARIANT_CLASSNAMES[variant],
           "hover:bg-surface-hover focus-visible:border-strong",
           className,
-          isDragActive && "!bg-surface-hover !border !border-strong text-primary",
+          isDragActive && "!border-accent-strong !bg-accent-primary/5 text-primary",
           isDragReject && "border-danger-strong text-danger-primary",
           (disabled || uploading) && "cursor-not-allowed opacity-60",
           variant === "inline" && "flex-row text-left"
@@ -155,6 +155,9 @@ export function AttachmentUploadZone(props: Props) {
             "aria-label": inputAriaLabel ?? title ?? t("attachment.upload_zone.title"),
           })}
         />
+      )}
+      {isDragActive && (
+        <span aria-hidden className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] bg-accent-primary/5" />
       )}
       {showPrompt ? (
         <span className="flex min-w-0 flex-col gap-0.5">
