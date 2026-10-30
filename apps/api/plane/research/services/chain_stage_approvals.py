@@ -14,6 +14,11 @@ from plane.research.utils.audit import (
     ResearchResourceType,
     record_audit_event,
 )
+from plane.research.utils.chain_stage_notifications import (
+    notify_chain_stage_decided,
+    notify_chain_stage_escalated,
+    notify_chain_stage_submitted,
+)
 from plane.research.utils.errors import ResearchErrorCode
 from plane.research.utils.org import active_membership_q
 
@@ -34,7 +39,10 @@ CHAIN_STAGE_CODES = (
     "TRANSFER",
 )
 
-LINKABLE_UPLOAD_STATUSES = {"PROCESSING", "SUCCESS"}
+ASSOCIABLE_UPLOAD_STATUSES = {"PENDING", "PROCESSING", "SUCCESS"}
+SATISFYING_UPLOAD_STATUSES = {"SUCCESS"}
+PROCESSING_UPLOAD_STATUSES = {"PENDING", "PROCESSING"}
+FAILED_UPLOAD_STATUSES = {"FAILED", "DEGRADED"}
 
 
 @dataclass(frozen=True)
@@ -228,8 +236,7 @@ def initialize_chain_stages(chain, actor=None):
     with transaction.atomic():
         type(chain).objects.select_for_update().get(pk=chain.pk)
         existing_stages = {
-            stage.stage_code: stage
-            for stage in ResearchChainStage.objects.filter(chain=chain, deleted_at__isnull=True)
+            stage.stage_code: stage for stage in ResearchChainStage.objects.filter(chain=chain, deleted_at__isnull=True)
         }
         missing_stages = []
         for sort_order, rule in enumerate(STAGE_RULES, start=1):
@@ -472,13 +479,13 @@ def _upload_detail(upload):
 
 
 def material_state(stage):
-    """Project requirement counts using linked, non-failed research uploads.
+    """Project one mutually exclusive readiness state for every requirement.
 
     Args:
         stage: The Research Chain stage to inspect.
 
     Returns:
-        A list of requirement projection dictionaries.
+        Requirement dictionaries with success, processing and failed counts.
     """
     prefetch_cache = getattr(stage, "_prefetched_objects_cache", {})
     if "material_requirements" in prefetch_cache:
@@ -495,15 +502,31 @@ def material_state(stage):
     result = []
     for requirement in requirements:
         items = [item for item in requirement.items.all() if item.deleted_at is None]
-        linked_items = [item for item in items if item.upload_id and item.upload.status in LINKABLE_UPLOAD_STATUSES]
+        success_count = sum(1 for item in items if item.upload_id and item.upload.status in SATISFYING_UPLOAD_STATUSES)
+        processing_count = sum(
+            1 for item in items if item.upload_id and item.upload.status in PROCESSING_UPLOAD_STATUSES
+        )
+        failed_count = sum(1 for item in items if item.upload_id and item.upload.status in FAILED_UPLOAD_STATUSES)
+        complete = success_count >= requirement.minimum_count
+        if complete:
+            submission_state = "READY"
+        elif processing_count > 0:
+            submission_state = "PROCESSING"
+        elif failed_count > 0:
+            submission_state = "FAILED"
+        else:
+            submission_state = "INCOMPLETE"
         result.append(
             {
                 "id": str(requirement.id),
                 "code": requirement.code,
                 "title": requirement.title,
                 "minimum_count": requirement.minimum_count,
-                "submitted_count": len(linked_items),
-                "complete": len(linked_items) >= requirement.minimum_count,
+                "submitted_count": success_count,
+                "complete": complete,
+                "submission_state": submission_state,
+                "processing_count": processing_count,
+                "failed_count": failed_count,
                 "items": [
                     {
                         "id": str(item.id),
@@ -524,7 +547,7 @@ def material_state(stage):
 
 def missing_material_requirements(stage):
     """Return codes for stage requirements without enough submitted items."""
-    return [item["code"] for item in material_state(stage) if not item["complete"]]
+    return [item["code"] for item in material_state(stage) if item["submission_state"] != "READY"]
 
 
 def stage_material_version(stage):
@@ -665,10 +688,10 @@ def add_stage_material(
                 "upload_id must reference an upload in this chain.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
-        if upload.status not in LINKABLE_UPLOAD_STATUSES:
+        if upload.status not in ASSOCIABLE_UPLOAD_STATUSES:
             raise ChainStageRuleError(
                 ResearchErrorCode.CHAIN_INVALID,
-                "Only processing or successful research uploads can be linked.",
+                "Only pending, processing or successful research uploads can be linked.",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         duplicate = requirement.items.filter(upload=upload, deleted_at__isnull=True).exists()
@@ -960,6 +983,8 @@ def submit_chain_stage(
             request,
         )
         locked_stage.refresh_from_db()
+        advisor = resolve_advisor(locked_stage.chain)
+        notify_chain_stage_submitted(locked_stage, advisor, actor)
         return locked_stage
 
 
@@ -977,10 +1002,14 @@ def _return_stage(stage, actor, reviewer_role, comment, request_id, request):
         {"reviewer_role": reviewer_role, "attempt": stage.attempt_count},
         request,
     )
+    profile = _chain_profile(stage.chain)
+    if profile is not None and profile.owner is not None:
+        notify_chain_stage_decided(stage, profile.owner, actor, "returned")
     return stage
 
 
 def _approve_stage(stage, actor, reviewer_role, request_id, request, escalate_to_pi=False):
+    principal = resolve_principal(stage.chain) if escalate_to_pi else None
     stage.status = "AWAITING_PI" if escalate_to_pi else "APPROVED"
     if not escalate_to_pi:
         stage.approved_at = timezone.now()
@@ -1010,6 +1039,12 @@ def _approve_stage(stage, actor, reviewer_role, request_id, request, escalate_to
     )
     if not escalate_to_pi:
         _complete_chain_if_ready(stage, actor, request_id)
+    else:
+        notify_chain_stage_escalated(stage, principal, actor)
+        return stage
+    profile = _chain_profile(stage.chain)
+    if profile is not None and profile.owner is not None:
+        notify_chain_stage_decided(stage, profile.owner, actor, "approved")
     return stage
 
 
@@ -1070,6 +1105,12 @@ def review_chain_stage(
                 ResearchErrorCode.CHAIN_STAGE_STATE_CONFLICT,
                 f"The stage status {locked_stage.status} does not allow review.",
             )
+        if escalate_to_pi is not None and not isinstance(escalate_to_pi, bool):
+            raise ChainStageRuleError(
+                ResearchErrorCode.CHAIN_STAGE_ESCALATION_CONFIRM_REQUIRED,
+                "escalate_to_pi must be a boolean.",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
         expected = (
             resolve_advisor(locked_stage.chain) if reviewer_role == "ADVISOR" else resolve_principal(locked_stage.chain)
         )
@@ -1090,6 +1131,12 @@ def review_chain_stage(
                     raise ChainStageRuleError(
                         ResearchErrorCode.CHAIN_STAGE_ESCALATION_CONFIRM_REQUIRED,
                         "The advisor must explicitly confirm whether this stage goes to the PI.",
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    )
+                if not isinstance(escalate_to_pi, bool):
+                    raise ChainStageRuleError(
+                        ResearchErrorCode.CHAIN_STAGE_ESCALATION_CONFIRM_REQUIRED,
+                        "escalate_to_pi must be a boolean.",
                         status.HTTP_422_UNPROCESSABLE_ENTITY,
                     )
                 if bool(escalate_to_pi) and not locked_stage.requires_pi:

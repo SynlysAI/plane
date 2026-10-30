@@ -16,6 +16,7 @@ from plane.db.models import (
     Project,
     ResearchChain,
     ResearchChainNode,
+    ResearchChainUpload,
     ResearchChainStageMaterialItem,
     ResearchProjectProfile,
 )
@@ -147,6 +148,8 @@ def test_initialize_chain_stages_replaces_soft_deleted_stage_without_active_dupl
 def test_add_material_rolls_back_when_audit_fails(env, monkeypatch):
     initialize_chain_stages(env["chain"], env["owner"])
     stage = env["chain"].stage_approvals.get(stage_code="PRE_EXPERIMENT")
+    node = make_node(env, "PRE_EXPERIMENT", "Audit upload node")
+    upload = make_upload(env, node, "Plan.pdf")
 
     def fail_audit(*args, **kwargs):
         raise RuntimeError("audit unavailable")
@@ -157,7 +160,7 @@ def test_add_material_rolls_back_when_audit_fails(env, monkeypatch):
             stage,
             env["owner"],
             requirement_code="PRE_EXPERIMENT_PLAN",
-            title="Plan",
+            upload=upload,
             request_id=f"material-{uuid4().hex}",
         )
 
@@ -204,14 +207,38 @@ def test_precheck_rolls_back_when_audit_fails(env, monkeypatch):
 def fill_materials(stage, prefix="Material"):
     stage.status = "IN_PROGRESS"
     stage.save(update_fields=["status", "updated_at"])
+    env = {"workspace": stage.workspace, "chain": stage.chain, "owner": stage.created_by or stage.chain.owner}
+    node = make_node(env, node_type_for_stage(stage.stage_code), f"{prefix} evidence node")
     for requirement in stage.material_requirements.all():
         for index in range(requirement.minimum_count):
+            upload = make_upload(env, node, f"{prefix}-{requirement.code}-{index + 1}.pdf")
             ResearchChainStageMaterialItem.objects.create(
                 stage=stage,
                 requirement=requirement,
-                title=f"{prefix} {requirement.code} {index + 1}",
+                title=upload.file_name,
+                source_node=node,
+                upload=upload,
                 request_id=f"material-{stage.id}-{requirement.code}-{index}",
+                created_by=env["owner"],
             )
+
+
+def make_upload(env, node, name):
+    return ResearchChainUpload.objects.create(
+        workspace=env["workspace"],
+        chain=env["chain"],
+        node=node,
+        request_id=f"upload-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        knowledge_id=f"knowledge-{uuid4().hex[:8]}",
+        knowledge_base_id="kb-stage-unit",
+        file_name=name,
+        file_type="pdf",
+        file_size=len(name),
+        file_hash=uuid4().hex,
+        status=ResearchChainUpload.Status.SUCCESS,
+        created_by=env["owner"],
+    )
 
 
 def make_node(env, node_type, title="Stage node", parent_node=None):
@@ -433,11 +460,13 @@ def test_precheck_expires_after_material_version_changes_and_blocks_stage_three(
     requirement = stage.material_requirements.first()
     original_item = requirement.items.first()
     approval_service.remove_stage_material(stage, original_item, env["owner"])
+    replacement_node = make_node(env, "TOPIC_EVALUATION", "Replacement evidence")
+    replacement_upload = make_upload(env, replacement_node, f"Replaced {requirement.code}.pdf")
     approval_service.add_stage_material(
         stage,
         env["owner"],
         requirement_code=requirement.code,
-        title=f"Replaced {requirement.code}",
+        upload=replacement_upload,
         request_id=f"material-{uuid4().hex}",
     )
     assert ResearchChainStageMaterialItem.all_objects.filter(stage=stage).count() == 5
