@@ -111,6 +111,9 @@ build/
 temp/
 scripts/*
 !scripts/deploy.sh
+!scripts/tests/
+scripts/tests/*
+!scripts/tests/test_deploy.py
 !scripts/repair-merged-migrations.sh
 !scripts/rebuild-pi-lab-baseline.sh
 !scripts/sd_p0_smoke.py

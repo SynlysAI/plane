@@ -24,6 +24,15 @@ fail() {
     exit 1
 }
 
+# 输出指定迁移容器的最后 100 行日志，再以原始失败原因结束部署。
+# 参数：失败原因、迁移容器 ID。
+fail_migration() {
+    local reason="$1" container_id="$2"
+    printf '\nLast 100 lines of migration logs (%s):\n' "$container_id" >&2
+    docker logs --tail 100 "$container_id" >&2 || true
+    fail "$reason; run: docker logs $container_id"
+}
+
 SKIP_PULL=false
 MODE="full"
 for arg in "$@"; do
@@ -185,10 +194,10 @@ if [[ "$MODE" != "web" ]]; then
     MIGRATION_TIMEOUT_SECONDS="${PLANE_MIGRATION_TIMEOUT_SECONDS:-600}"
     timeout "$MIGRATION_TIMEOUT_SECONDS" bash -c \
         'while [[ "$(docker inspect --format "{{.State.Status}}" "$1" 2>/dev/null)" == "running" ]]; do sleep 2; done' \
-        _ "$MIGRATOR_ID" || fail "migration timed out after ${MIGRATION_TIMEOUT_SECONDS} seconds"
+        _ "$MIGRATOR_ID" || fail_migration "migration timed out after ${MIGRATION_TIMEOUT_SECONDS} seconds" "$MIGRATOR_ID"
     MIGRATOR_EXIT="$(docker inspect --format '{{.State.ExitCode}}' "$MIGRATOR_ID")"
     [[ "$MIGRATOR_EXIT" == "0" ]] \
-        || fail "migration exited with code $MIGRATOR_EXIT; run: docker logs $MIGRATOR_ID"
+        || fail_migration "migration exited with code $MIGRATOR_EXIT" "$MIGRATOR_ID"
 
     log "Recreating API and workers"
     "${BACKEND_COMPOSE[@]}" up -d --build --force-recreate api worker beat-worker document-converter \
