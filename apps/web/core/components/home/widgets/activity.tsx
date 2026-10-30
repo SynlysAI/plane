@@ -6,16 +6,13 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import type { THomeActivity, THomeWorkbenchDensity } from "@plane/types";
-import { calculateTimeAgo, cn, getFileURL } from "@plane/utils";
+import { calculateTimeAgo, getFileURL } from "@plane/utils";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { WorkspaceService } from "@/services/workspace.service";
 
 const workspaceService = new WorkspaceService();
-const DAY_OPTIONS = [
-  { value: "30" as const, labelKey: "research.overview.period_30" },
-  { value: "90" as const, labelKey: "research.overview.period_90" },
-  { value: "all" as const, labelKey: "research.overview.period_all" },
-];
+/** 首页最近动态固定为轻量的近 30 天口径；更久历史由专门页面承载。 */
+const ACTIVITY_DAYS = "30" as const;
 const GROUP_WINDOW_MS = 30 * 60 * 1000;
 
 type Props = {
@@ -62,7 +59,6 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
   refreshToken,
 }: Props) {
   const { t, currentLocale } = useTranslation();
-  const [days, setDays] = useState<"30" | "90" | "all">("30");
   const [cursor, setCursor] = useState<string | null>(null);
   const [activities, setActivities] = useState<THomeActivity[]>([]);
   const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
@@ -85,11 +81,11 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
   );
 
   const { data, isLoading, error, mutate } = useSWR(
-    workspaceSlug ? ["WORKSPACE_HOME_ACTIVITY", workspaceSlug, days, cursor, refreshToken] : null,
+    workspaceSlug ? ["WORKSPACE_HOME_ACTIVITY", workspaceSlug, ACTIVITY_DAYS, cursor, refreshToken] : null,
     workspaceSlug
       ? () =>
           workspaceService.fetchWorkspaceActivities(workspaceSlug, {
-            days,
+            days: ACTIVITY_DAYS,
             pagination: "cursor",
             cursor: cursor ?? undefined,
             per_page: 12,
@@ -102,7 +98,7 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
     setCursor(null);
     setActivities([]);
     setIsLoadMoreVisible(false);
-  }, [days, workspaceSlug, refreshToken]);
+  }, [workspaceSlug, refreshToken]);
 
   useEffect(() => {
     if (!data) return;
@@ -183,27 +179,7 @@ export const HomeActivityWidget = observer(function HomeActivityWidget({
 
   return (
     <div className="flex min-w-0 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-subtle px-4 py-3">
-        <div
-          className="flex overflow-hidden rounded-md border border-subtle"
-          role="group"
-          aria-label={t("research.overview.period")}
-        >
-          {DAY_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={days === option.value}
-              className={cn(
-                "px-2.5 py-1.5 text-12 transition-colors",
-                days === option.value ? "bg-surface-1 text-primary" : "text-secondary hover:bg-surface-1"
-              )}
-              onClick={() => setDays(option.value)}
-            >
-              {t(option.labelKey)}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2 border-b border-subtle px-4 py-3">
         <button
           type="button"
           className="text-12 text-secondary transition-colors hover:text-primary"

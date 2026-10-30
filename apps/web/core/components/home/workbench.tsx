@@ -47,7 +47,6 @@ type Props = {
 };
 
 type TLoadState = "loading" | "ready" | "empty" | "forbidden" | "error";
-type TPeriod = "30" | "90" | "all";
 type TReportPresetOption = (typeof REPORT_PERIOD_PRESETS)[number];
 type TReportPeriodSelection =
   | { kind: "preset"; preset: TReportPresetOption }
@@ -94,11 +93,6 @@ const DEFAULT_REPORT_PERIOD_SELECTION: TReportPeriodSelection = {
 
 const REPORT_BUCKETS = ["not_submitted", "needs_revision", "submitted", "accepted"] as const;
 
-const PERIOD_OPTIONS = [
-  { value: "30" as const, labelKey: "research.overview.period_30" },
-  { value: "90" as const, labelKey: "research.overview.period_90" },
-  { value: "all" as const, labelKey: "research.overview.period_all" },
-];
 const WORKBENCH_MODE_OPTIONS: { value: TWorkbenchLayoutMode; labelKey: string }[] = [
   { value: "aggregate", labelKey: "research.home_workbench.mode_aggregate" },
   { value: "waterfall", labelKey: "research.home_workbench.mode_waterfall" },
@@ -130,7 +124,6 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
   const research = useResearch();
   const { context } = useWorkspaceContext();
   const { fetchProjects, fetchProjectAnalyticsCount } = useProject();
-  const [period, setPeriod] = useState<TPeriod>("30");
   const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [activeWaterfallWidgetKey, setActiveWaterfallWidgetKey] = useState<TWorkbenchWidgetKey | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -358,9 +351,7 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
     };
   }, [loadReportSummary, refreshToken, showReportWidget]);
 
-  const periodDays = period === "all" ? null : Number(period);
-  const periodStart = periodDays ? Date.now() - periodDays * 86400000 : 0;
-  const visibleChains = chains.filter((chain) => new Date(chain.updated_at).getTime() >= periodStart);
+  const visibleChains = chains;
   const activeChains = visibleChains.filter((chain) => chain.status === "ACTIVE");
   const openTaskCount = visibleChains.reduce((total, chain) => total + (chain.open_task_count ?? 0), 0);
   const nextDueAt = visibleChains
@@ -438,27 +429,6 @@ export const WorkspaceHomeWorkbench = observer(function WorkspaceHomeWorkbench({
               </button>
             ))}
           </div>
-          {showResearchWidget && (
-            <div
-              className="flex overflow-hidden rounded-md border border-subtle"
-              role="group"
-              aria-label={t("research.overview.period")}
-            >
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={period === option.value}
-                  className={`px-2.5 py-1.5 text-12 transition-colors ${
-                    period === option.value ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-2"
-                  }`}
-                  onClick={() => setPeriod(option.value)}
-                >
-                  {t(option.labelKey)}
-                </button>
-              ))}
-            </div>
-          )}
           <Button
             variant="secondary"
             size="sm"

@@ -342,6 +342,21 @@ it("renders the action-first bento home information architecture without generic
   expect(container.textContent).not.toContain("草稿");
 });
 
+it("removes the recent-activity date filter from the workbench", async () => {
+  await renderHome();
+  await act(async () => undefined);
+
+  const periodGroups = [...container.querySelectorAll('div[role="group"][aria-label="统计周期"]')].filter((group) =>
+    ["近 30 天", "近 90 天", "全部"].every((label) => group.textContent?.includes(label))
+  );
+  const activityCard = container.querySelector("section[aria-label='最近动态']");
+  expect(periodGroups).toHaveLength(0);
+  expect(activityCard?.querySelector('div[role="group"][aria-label="统计周期"]')).toBeNull();
+  expect(container.querySelector("header")?.textContent).not.toContain("近 30 天");
+  expect(container.querySelector("header")?.textContent).not.toContain("近 90 天");
+  expect(container.querySelector("header")?.textContent).not.toContain("全部");
+});
+
 it("treats the saved account density as authoritative over legacy local storage", async () => {
   window.localStorage.setItem("plane.home.workbench.density", "detailed");
   await renderHome();
@@ -526,6 +541,7 @@ it("renders and switches one full-row module per waterfall tab", async () => {
   expect(activeCardBody?.className).toContain("overflow-y-auto");
   expect(activeCardBody?.getAttribute("data-home-card-scroll")).toBe("true");
   expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["我的待办"]);
+  expect(container.querySelectorAll('div[role="group"][aria-label="统计周期"]')).toHaveLength(0);
   expect(mocks.getChains).not.toHaveBeenCalled();
   expect(mocks.fetchProjects).not.toHaveBeenCalled();
   expect(mocks.fetchWorkspaceActivities).not.toHaveBeenCalled();
@@ -538,6 +554,20 @@ it("renders and switches one full-row module per waterfall tab", async () => {
   await act(async () => undefined);
   expect([...grid.children].map((section) => section.getAttribute("aria-label"))).toEqual(["科研项目概览"]);
   expect(mocks.getChains).toHaveBeenCalled();
+
+  const activityTab = [...(tabs?.querySelectorAll('[role="tab"]') ?? [])].find((tab) =>
+    tab.textContent?.includes("最近动态")
+  );
+  await act(async () => activityTab?.click());
+  await act(async () => undefined);
+  const activityCard = container.querySelector("section[aria-label='最近动态']");
+  expect(activityCard?.querySelector('div[role="group"][aria-label="统计周期"]')).toBeNull();
+  await act(async () => undefined);
+  expect(mocks.fetchWorkspaceActivities).toHaveBeenLastCalledWith("lab", {
+    days: "30",
+    pagination: "cursor",
+    per_page: 12,
+  });
 });
 
 it("keeps waterfall cards internally scrollable in detailed density", async () => {
@@ -780,6 +810,24 @@ it("excludes archived and deleted chains from rows, task counts and deadlines", 
   expect(metrics?.textContent).toContain("2026/10/12");
 });
 
+it("keeps older research chains because the date filter belongs to recent activity", async () => {
+  const current = (await mocks.getChains())[0];
+  mocks.getChains.mockResolvedValue([
+    current,
+    {
+      ...current,
+      id: "old-chain",
+      project_name: "历史课题",
+      updated_at: "2025-01-01T08:00:00Z",
+    },
+  ]);
+  await renderHome();
+  const section = container.querySelector('a[href="/lab/research/chains"]')?.closest("section");
+
+  expect(section?.textContent).toContain("历史课题");
+  expect(section?.textContent).toContain("共 2 个课题");
+});
+
 it("uses a readable placeholder without exposing a raw owner ID", async () => {
   const active = (await mocks.getChains())[0];
   mocks.getChains.mockResolvedValue([{ ...active, owner: "raw-owner-id", owner_name: "  " }]);
@@ -853,7 +901,7 @@ it("shows the compact report submission summary and refreshes the workbench", as
   expect(mocks.fetchReportSummary).not.toHaveBeenCalled();
 });
 
-it("switches report periods without changing the global workbench period", async () => {
+it("switches report periods without introducing the recent-activity date filter", async () => {
   await renderHome();
   expect(mocks.getReportSummary).toHaveBeenCalledTimes(1);
   expect(mocks.getReportSummary).toHaveBeenCalledWith("lab", { report_type: "WEEKLY", period_offset: 0 });
@@ -889,9 +937,10 @@ it("switches report periods without changing the global workbench period", async
     ].map((link) => link.textContent)
   ).toContain("已验收17");
 
-  const allPeriod = [...container.querySelectorAll("button")].find((button) => button.textContent === "全部");
-  await act(async () => allPeriod?.click());
   expect(mocks.getReportSummary).toHaveBeenCalledTimes(3);
+  const reportCard = container.querySelector("section[aria-label='报告提交摘要']");
+  expect(reportCard?.textContent).not.toContain("近 30 天");
+  expect(reportCard?.textContent).not.toContain("近 90 天");
 });
 
 it("loads an ISO week summary when a custom week date is selected", async () => {
