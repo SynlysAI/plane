@@ -6,6 +6,7 @@
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { TResearchChainNode, TResearchChainStageApproval } from "@plane/types";
+import { researchChainStatusKey } from "@/components/research/chains/research-chain-workflow";
 // components
 import {
   buildResearchWorkflow,
@@ -70,13 +71,6 @@ function stageIndexLabel(index: number): string {
   return String(index + 1).padStart(2, "0");
 }
 
-/** 优先显示后端阶段审批状态，旧节点状态仅作兼容回退。 */
-function statusLabelKey(status: TResearchWorkflowStage["status"]): string {
-  if (["NOT_STARTED", "IN_PROGRESS", "AWAITING_ADVISOR", "AWAITING_PI", "NEEDS_REVISION", "APPROVED"].includes(status))
-    return `research.chains.workflow.stage_status.${status.toLowerCase()}`;
-  return `research.chains.node_status.${status.toLowerCase()}`;
-}
-
 /**
  * 十三阶段流程地图。换行展示序号、名称和可见状态，不使用横向滚动。
  */
@@ -100,7 +94,7 @@ export function ResearchChainWorkflowRail({
           const kind = stepKind(stage);
           const selected = selectedStageId === stage.id;
           const viewing = selected && !stage.isCurrent;
-          const statusLabel = t(statusLabelKey(stage.status));
+          const statusLabel = t(researchChainStatusKey(stage.status));
           const preparationLabel = stage.associatedNodeIds.length > 0 ? t("research.chains.workflow.preparation") : "";
           const stageTitle =
             stage.status === "NOT_STARTED"

@@ -152,7 +152,7 @@ export function ResearchChainStageApprovalQueue({ workspaceSlug, items, activeId
           applicantName={context.chain.owner_name ?? activeItem.requester?.display_name ?? null}
           defaultExpanded
           knowledge={knowledge}
-          onChanged={() => undefined}
+          onStageChanged={() => undefined}
           onDecision={async () => onHandled(activeItem.id)}
         />
       )}

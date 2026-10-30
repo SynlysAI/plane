@@ -4,25 +4,18 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useTranslation } from "@plane/i18n";
 import type { TResearchChainNode, TResearchChainStageApproval, TResearchChainStageReviewAction } from "@plane/types";
 import { Button } from "@plane/propel/button";
 
-import { AttachmentPreviewLink } from "@/components/attachments/preview";
-import { AttachmentUploadZone } from "@/components/attachments/upload-zone";
+import { ResearchChainStageMaterialRow } from "@/components/research/chains/research-chain-stage-material-row";
+import { ResearchChainStageReviewActions } from "@/components/research/chains/research-chain-stage-review-actions";
 import { ResearchChainService } from "@/services/research/chain.service";
 import { formatResearchDateTime } from "@/components/research/common/research-format";
-import { getResearchErrorDetail } from "@/components/research/common/error-messages";
-import {
-  DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS,
-  LINKABLE_UPLOAD_STATUSES,
-  formatResearchChainFileSize,
-  researchChainUploadHintParams,
-  researchChainUploadStatusKey,
-  type TResearchChainKnowledgeController,
-} from "@/components/research/chains/use-research-chain-knowledge";
+import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { type TResearchChainKnowledgeController } from "@/components/research/chains/use-research-chain-knowledge";
 
 type Props = {
   workspaceSlug: string;
@@ -34,7 +27,7 @@ type Props = {
   defaultExpanded?: boolean;
   knowledge: TResearchChainKnowledgeController;
   onCreateNode?: () => void;
-  onChanged: () => Promise<void> | void;
+  onStageChanged: () => Promise<void> | void;
   /** 审批或退回成功后通知队列层，仅由动作结果触发。 */
   onDecision?: (stage: TResearchChainStageApproval) => Promise<void> | void;
 };
@@ -139,11 +132,10 @@ export function ResearchChainStageApprovalPanel({
   defaultExpanded = false,
   knowledge,
   onCreateNode,
-  onChanged,
+  onStageChanged,
   onDecision,
 }: Props) {
   const { t, currentLocale } = useTranslation();
-  const effectiveUploadLimits = knowledge.uploadLimits ?? DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS;
   const candidateNodes = useMemo(
     () => nodes.filter((node) => nodeMatchesStage(node, nodes, stage.stage_code)),
     [nodes, stage.stage_code]
@@ -152,44 +144,45 @@ export function ResearchChainStageApprovalPanel({
     () => candidateNodes.filter((node) => SUBMITTABLE_NODE_STATUSES.has(node.status)),
     [candidateNodes]
   );
-  const firstMissingMaterial = stage.materials.find((material) => !material.complete) ?? stage.materials[0];
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [requirementCode, setRequirementCode] = useState(firstMissingMaterial?.code ?? "");
-  const [selectedUploadId, setSelectedUploadId] = useState("");
   const [nodeId, setNodeId] = useState(stage.submitted_node ?? preferredNodeId ?? submittableNodes[0]?.id ?? "");
   const [requiresPi, setRequiresPi] = useState(stage.requires_pi);
   const [escalationReason, setEscalationReason] = useState(stage.escalation_reason);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const requirementSelectRef = useRef<HTMLSelectElement>(null);
-  const missingMaterials = stage.materials.filter((material) => !material.complete);
-  const selectedRequirement = stage.materials.find((material) => material.code === requirementCode);
-  const linkableUploads = useMemo(
-    () => knowledge.uploads.filter((upload) => LINKABLE_UPLOAD_STATUSES.has(upload.status)),
-    [knowledge.uploads]
+  const missingMaterials = stage.materials.filter(
+    (material) => (material.submission_state ?? (material.complete ? "READY" : "INCOMPLETE")) !== "READY"
   );
-  const linkedUploadIds = useMemo(
-    () => new Set((selectedRequirement?.items ?? []).map((item) => item.upload).filter(Boolean) as string[]),
-    [selectedRequirement]
-  );
-  const availableUploads = useMemo(
-    () => linkableUploads.filter((upload) => !linkedUploadIds.has(upload.id)),
-    [linkableUploads, linkedUploadIds]
-  );
-  const effectiveUploadId = availableUploads.some((upload) => upload.id === selectedUploadId)
-    ? selectedUploadId
-    : (availableUploads[0]?.id ?? "");
   const selectedNodeIdIsValid = submittableNodes.some((node) => node.id === nodeId);
   const effectiveNodeId = selectedNodeIdIsValid ? nodeId : (submittableNodes[0]?.id ?? "");
   const precheck = stage.latest_precheck;
   const precheckCurrent = precheck?.is_current ?? false;
   const stageThreeRequiresCurrentPrecheck = stage.stage_code === "TOPIC_EVALUATION";
+  const finalRequiresPi = stage.pi_policy === "ALWAYS_PI" || (stage.pi_policy === "CONDITIONAL_PI" && requiresPi);
+  const piMissing = finalRequiresPi && !stage.principal_investigator.user;
+  const advisorMissing = !stage.advisor.user;
+  const approvalSnapshot =
+    stage.status === "APPROVED"
+      ? reverseReviewActions(stage.review_actions).find((action) => action.action === "APPROVE")
+      : null;
+  const snapshotRows = Array.isArray(approvalSnapshot?.material_snapshot)
+    ? approvalSnapshot.material_snapshot.filter((row) => typeof row.submitted_count === "number")
+    : [];
+  const snapshotAvailable = snapshotRows.length > 0;
+  const snapshotSubmitted = snapshotRows.reduce((total, row) => total + Number(row.submitted_count ?? 0), 0);
+  const snapshotTotal = snapshotRows.length;
+  const localizedReviewerError = (reasonCode: string | null | undefined, fallbackKey: string) =>
+    reasonCode === "research_chain_stage_reviewer_not_configured"
+      ? t("research.errors.research_chain_stage_reviewer_not_configured")
+      : t(fallbackKey);
   const materialReady =
     missingMaterials.length === 0 &&
     Boolean(effectiveNodeId) &&
-    (!stageThreeRequiresCurrentPrecheck || (Boolean(precheck) && precheckCurrent));
+    (!stageThreeRequiresCurrentPrecheck || (Boolean(precheck) && precheckCurrent)) &&
+    !piMissing &&
+    !advisorMissing;
   const latestReturned = latestReturn(stage);
   const change = materialChange(stage, latestReturned);
   const contentId = `${stage.id}-stage-approval-content`;
@@ -204,77 +197,15 @@ export function ResearchChainStageApprovalPanel({
       );
       return t("research.chains.stage_approval.missing_materials", { materials: titles.join("、") });
     }
-    return getResearchErrorDetail(actionError) ?? t("research.chains.stage_approval.action_failed");
-  };
-
-  /** 将一份已上传课题资料关联到当前材料要求。 */
-  const addMaterial = async (uploadId: string) => {
-    if (!requirementCode || !uploadId || busy) return;
-    setBusy(true);
-    setError("");
-    const nextMissing = stage.materials.find(
-      (material) => material.code !== requirementCode && !material.complete
-    )?.code;
-    try {
-      await chainService.createChainStageMaterial(workspaceSlug, chainId, stage.stage_code, {
-        requirement_code: requirementCode,
-        upload_id: uploadId,
-      });
-      setSelectedUploadId("");
-      if (nextMissing) setRequirementCode(nextMissing);
-      await onChanged();
-    } catch (actionError) {
-      setError(describeActionError(actionError));
-    } finally {
-      setBusy(false);
+    const payload = actionError as { error_code?: string; role?: string } | null | undefined;
+    if (payload?.error_code === "research_chain_stage_reviewer_not_configured") {
+      return payload.role === "ADVISOR"
+        ? t("research.chains.stage_approval.advisor_required_reason")
+        : t("research.chains.stage_approval.pi_required_reason");
     }
-  };
-
-  /** 切换到某个缺失材料的关联表单。 */
-  const supplementMaterial = (code: string) => {
-    setRequirementCode(code);
-    requirementSelectRef.current?.focus();
-  };
-
-  /** 上传一份资料并立即关联到当前材料要求。 */
-  const uploadAndLink = async (files: File[]) => {
-    if (!requirementCode || busy || !knowledge.canUpload || files.length === 0) return;
-    setBusy(true);
-    setError("");
-    try {
-      const created = await knowledge.uploadFiles(files.slice(0, 1));
-      const upload = created.find((item) => LINKABLE_UPLOAD_STATUSES.has(item.status));
-      if (!upload) return;
-      await chainService.createChainStageMaterial(workspaceSlug, chainId, stage.stage_code, {
-        requirement_code: requirementCode,
-        upload_id: upload.id,
-      });
-      setSelectedUploadId("");
-      const nextMissing = stage.materials.find(
-        (material) => material.code !== requirementCode && !material.complete
-      )?.code;
-      if (nextMissing) setRequirementCode(nextMissing);
-      await onChanged();
-    } catch (actionError) {
-      setError(describeActionError(actionError));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /** 删除一个尚未提交审核的材料条目。 */
-  const removeMaterial = async (materialId: string) => {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await chainService.deleteChainStageMaterial(workspaceSlug, chainId, stage.stage_code, materialId);
-      await onChanged();
-    } catch (actionError) {
-      setError(describeActionError(actionError));
-    } finally {
-      setBusy(false);
-    }
+    const errorKey = getResearchErrorKey(actionError);
+    if (errorKey !== "research.errors.generic") return t(errorKey);
+    return t("research.chains.stage_approval.action_failed");
   };
 
   /** 生成阶段 03 的规则材料预检。 */
@@ -284,7 +215,7 @@ export function ResearchChainStageApprovalPanel({
     setError("");
     try {
       await chainService.runChainStagePrecheck(workspaceSlug, chainId, stage.stage_code);
-      await onChanged();
+      await onStageChanged();
     } catch (actionError) {
       setError(describeActionError(actionError));
     } finally {
@@ -300,11 +231,11 @@ export function ResearchChainStageApprovalPanel({
     try {
       await chainService.submitChainStage(workspaceSlug, chainId, stage.stage_code, {
         node_id: effectiveNodeId,
-        requires_pi: requiresPi || undefined,
+        requires_pi: stage.pi_policy === "CONDITIONAL_PI" ? requiresPi : undefined,
         escalation_reason: escalationReason.trim() || undefined,
       });
       setComment("");
-      await onChanged();
+      await onStageChanged();
     } catch (actionError) {
       setError(describeActionError(actionError));
     } finally {
@@ -313,7 +244,7 @@ export function ResearchChainStageApprovalPanel({
   };
 
   /** 执行导师或主 PI 审批。 */
-  const reviewStage = async (intent: TReviewIntent, escalateToPi?: boolean) => {
+  const reviewStage = async (intent: TReviewIntent, escalateToPi: boolean) => {
     if (busy || (intent === "RETURN" && !comment.trim())) return;
     setBusy(true);
     setError("");
@@ -321,26 +252,17 @@ export function ResearchChainStageApprovalPanel({
       const updatedStage = await chainService.reviewChainStage(workspaceSlug, chainId, stage.stage_code, {
         action: intent,
         comment: comment.trim() || undefined,
-        ...(escalateToPi === undefined ? {} : { escalate_to_pi: escalateToPi }),
+        ...(intent === "APPROVE" ? { escalate_to_pi: escalateToPi } : {}),
       });
       setComment("");
       await onDecision?.(updatedStage);
-      await onChanged();
+      await onStageChanged();
     } catch (actionError) {
       setError(describeActionError(actionError));
     } finally {
       setBusy(false);
     }
   };
-
-  const approveEscalates =
-    stage.status === "AWAITING_ADVISOR" &&
-    (stage.pi_policy === "ALWAYS_PI" || (stage.pi_policy === "CONDITIONAL_PI" && stage.requires_pi));
-  const approveLabel = approveEscalates
-    ? t("research.chains.stage_approval.approve_to_pi")
-    : stage.status === "AWAITING_ADVISOR" && stage.pi_policy === "CONDITIONAL_PI"
-      ? t("research.chains.stage_approval.approve_only_advisor")
-      : t("research.chains.stage_approval.approve");
 
   return (
     <section className="border-t border-subtle" aria-label={t("research.chains.stage_approval.title")}>
@@ -356,12 +278,23 @@ export function ResearchChainStageApprovalPanel({
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-11 text-secondary">
             <span>{t(`research.chains.workflow.stage_status.${stage.status.toLowerCase()}`)}</span>
             <span aria-hidden="true">·</span>
-            <span>
-              {t("research.chains.stage_approval.summary_materials", {
-                completed: completedMaterials,
-                total: stage.materials.length,
-              })}
-            </span>
+            {stage.status === "APPROVED" ? (
+              <span>
+                {snapshotAvailable
+                  ? t("research.chains.stage_approval.approval_snapshot", {
+                      submitted: snapshotSubmitted,
+                      total: snapshotTotal,
+                    })
+                  : t("research.chains.stage_approval.approval_snapshot_missing")}
+              </span>
+            ) : (
+              <span>
+                {t("research.chains.stage_approval.summary_materials", {
+                  completed: completedMaterials,
+                  total: stage.materials.length,
+                })}
+              </span>
+            )}
             <span aria-hidden="true">·</span>
             <span>{t(actionKey(stage, submittableNodes.length > 0))}</span>
             {stage.status === "NEEDS_REVISION" && latestReturned?.comment && (
@@ -388,147 +321,31 @@ export function ResearchChainStageApprovalPanel({
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,1fr)]">
             <section className="border-b border-subtle py-3 pr-4 pl-4 lg:border-r lg:border-b">
               <h5 className="text-12 font-medium text-secondary">{t("research.chains.stage_approval.materials")}</h5>
+              {stage.status === "APPROVED" && (
+                <p className="mt-1 text-11 text-secondary">
+                  {snapshotAvailable
+                    ? t("research.chains.stage_approval.approval_snapshot", {
+                        submitted: snapshotSubmitted,
+                        total: snapshotTotal,
+                      })
+                    : t("research.chains.stage_approval.approval_snapshot_missing")}
+                </p>
+              )}
               <ul className="mt-1 divide-y divide-subtle" role="list">
                 {stage.materials.map((material) => (
-                  <li key={material.id} className="flex items-start justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-13 text-primary">{material.title}</p>
-                      <p className="mt-0.5 text-11 text-tertiary">
-                        {t("research.chains.stage_approval.material_count", {
-                          submitted: material.submitted_count,
-                          required: material.minimum_count,
-                        })}
-                        {" · "}
-                        {material.complete
-                          ? t("research.chains.stage_approval.material_satisfied")
-                          : t("research.chains.stage_approval.material_missing")}
-                      </p>
-                      {material.items.length > 0 && (
-                        <span className="mt-1 flex min-w-0 flex-col gap-1">
-                          {material.items.map((item) =>
-                            item.upload_detail?.preview_url || item.upload_detail?.download_url ? (
-                              <AttachmentPreviewLink
-                                key={item.id}
-                                name={`${item.upload_detail.file_name} · ${formatResearchChainFileSize(item.upload_detail.file_size)} · ${t(
-                                  researchChainUploadStatusKey(item.upload_detail.status)
-                                )}`}
-                                previewUrl={item.upload_detail.preview_url}
-                                downloadUrl={item.upload_detail.download_url}
-                                className="truncate text-left text-11 text-secondary hover:text-accent-primary"
-                              />
-                            ) : (
-                              <span key={item.id} className="truncate text-11 text-tertiary">
-                                {item.upload_detail
-                                  ? `${item.upload_detail.file_name} · ${t(researchChainUploadStatusKey(item.upload_detail.status))}`
-                                  : `${item.title} · ${t("research.chains.stage_approval.unlinked_file")}`}
-                              </span>
-                            )
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    <span className="flex shrink-0 items-center gap-2">
-                      {!material.complete && can(stage, "edit_materials") && (
-                        <button
-                          type="button"
-                          className="text-11 text-secondary hover:text-primary"
-                          aria-controls={`${stage.id}-stage-material-link-form`}
-                          onClick={() => supplementMaterial(material.code)}
-                        >
-                          {t("research.chains.stage_approval.supplement")}
-                        </button>
-                      )}
-                      {can(stage, "remove_material") && material.items.length > 0 && (
-                        <button
-                          type="button"
-                          className="text-11 text-tertiary hover:text-primary"
-                          disabled={busy}
-                          onClick={() => void removeMaterial(material.items[material.items.length - 1].id)}
-                        >
-                          {t("research.chains.stage_approval.remove_last")}
-                        </button>
-                      )}
-                    </span>
-                  </li>
+                  <ResearchChainStageMaterialRow
+                    key={material.id}
+                    workspaceSlug={workspaceSlug}
+                    chainId={chainId}
+                    stageCode={stage.stage_code}
+                    material={material}
+                    editable={can(stage, "edit_materials")}
+                    busy={false}
+                    knowledge={knowledge}
+                    onStageChanged={onStageChanged}
+                  />
                 ))}
               </ul>
-
-              {can(stage, "edit_materials") && (
-                <div id={`${stage.id}-stage-material-link-form`} className="mt-3 space-y-2 border-t border-subtle pt-3">
-                  {knowledge.state !== "ready" && knowledge.state !== "degraded" && (
-                    <p className="text-11 text-secondary">{t("research.chains.stage_approval.upload_unavailable")}</p>
-                  )}
-                  {knowledge.state !== "loading" && knowledge.state !== "idle" && linkableUploads.length === 0 && (
-                    <p className="text-11 text-secondary">{t("research.chains.stage_approval.upload_empty")}</p>
-                  )}
-                  {knowledge.actionError && (
-                    <p className="text-11 text-danger-primary" role="alert">
-                      {knowledge.actionError}
-                    </p>
-                  )}
-                  <div className="grid gap-2 sm:grid-cols-[minmax(150px,0.65fr)_minmax(180px,1fr)_auto]">
-                    <select
-                      ref={requirementSelectRef}
-                      value={requirementCode}
-                      onChange={(event) => setRequirementCode(event.target.value)}
-                      aria-label={t("research.chains.stage_approval.requirement")}
-                      className="focus:outline-accent-primary rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary focus:outline focus:outline-1 focus:outline-offset-1"
-                    >
-                      {stage.materials.map((material) => (
-                        <option key={material.id} value={material.code}>
-                          {material.title}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={effectiveUploadId}
-                      onChange={(event) => setSelectedUploadId(event.target.value)}
-                      aria-label={t("research.chains.stage_approval.select_upload")}
-                      disabled={availableUploads.length === 0}
-                      className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-                    >
-                      {availableUploads.length === 0 ? (
-                        <option value="">{t("research.chains.stage_approval.upload_empty")}</option>
-                      ) : (
-                        availableUploads.map((upload) => (
-                          <option key={upload.id} value={upload.id}>
-                            {upload.file_name} · {formatResearchChainFileSize(upload.file_size)} ·{" "}
-                            {t(researchChainUploadStatusKey(upload.status))}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={busy || !effectiveUploadId}
-                      onClick={() => void addMaterial(effectiveUploadId)}
-                    >
-                      {t("research.chains.stage_approval.link_material")}
-                    </Button>
-                  </div>
-                  <AttachmentUploadZone
-                    onFiles={(files) => void uploadAndLink(files)}
-                    accept={{
-                      "application/pdf": [".pdf"],
-                      "text/markdown": [".md", ".markdown"],
-                      "text/plain": [".txt"],
-                      "application/msword": [".doc"],
-                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-                    }}
-                    maxSize={
-                      knowledge.maxUploadSizeBytes ?? Math.max(...Object.values(effectiveUploadLimits)) * 1024 * 1024
-                    }
-                    disabled={!knowledge.canUpload || busy}
-                    uploading={knowledge.uploading || busy}
-                    variant="inline"
-                    title={t("research.chains.stage_approval.material_upload")}
-                    uploadingTitle={t("research.knowledge.uploading")}
-                    hint={t("research.knowledge.upload_hint", researchChainUploadHintParams(effectiveUploadLimits))}
-                  />
-                </div>
-              )}
             </section>
 
             <section className="py-3 pr-4 pl-4">
@@ -545,8 +362,16 @@ export function ResearchChainStageApprovalPanel({
               <p className="mt-1 text-11 text-secondary">
                 {t("research.chains.stage_approval.current_handler")}:{" "}
                 {stage.status === "AWAITING_PI"
-                  ? (stage.principal_investigator.user?.display_name ?? stage.principal_investigator.error ?? "-")
-                  : (stage.advisor.user?.display_name ?? stage.advisor.error ?? "-")}
+                  ? (stage.principal_investigator.user?.display_name ??
+                    localizedReviewerError(
+                      stage.principal_investigator.reason_code,
+                      "research.chains.stage_approval.pi_required_reason"
+                    ))
+                  : (stage.advisor.user?.display_name ??
+                    localizedReviewerError(
+                      stage.advisor.reason_code,
+                      "research.chains.stage_approval.advisor_required_reason"
+                    ))}
               </p>
 
               {can(stage, "review") && (
@@ -582,6 +407,30 @@ export function ResearchChainStageApprovalPanel({
                   <p className="text-11 font-medium text-secondary">
                     {t("research.chains.stage_approval.submit_check")}
                   </p>
+                  {piMissing && (
+                    <div className="rounded-md border border-subtle bg-surface-2 px-3 py-2" role="alert">
+                      <p className="text-12 font-medium text-primary">
+                        {t("research.chains.stage_approval.pi_required_title")}
+                      </p>
+                      <p className="mt-1 text-11 text-secondary">
+                        {t("research.chains.stage_approval.pi_required_reason")}
+                      </p>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-11 text-secondary">
+                        <a
+                          href={`/${workspaceSlug}/research/settings/org`}
+                          className="text-accent-primary hover:underline"
+                        >
+                          {t("research.chains.stage_approval.open_org_settings")}
+                        </a>
+                        <span>{t("research.chains.stage_approval.contact_org_admin")}</span>
+                      </p>
+                    </div>
+                  )}
+                  {!piMissing && advisorMissing && (
+                    <p className="text-11 text-secondary" role="alert">
+                      {t("research.chains.stage_approval.advisor_required_reason")}
+                    </p>
+                  )}
                   {submittableNodes.length === 0 ? (
                     <>
                       <p className="text-11 text-secondary">{t("research.chains.stage_approval.no_node")}</p>
@@ -681,6 +530,7 @@ export function ResearchChainStageApprovalPanel({
                     variant="primary"
                     size="sm"
                     disabled={busy || !materialReady || (requiresPi && !escalationReason.trim())}
+                    aria-describedby={`${stage.id}-submit-disabled-reason`}
                     onClick={() => void submitStage()}
                   >
                     {t("research.chains.stage_approval.submit")}
@@ -688,6 +538,13 @@ export function ResearchChainStageApprovalPanel({
                   {missingMaterials.length > 0 && (
                     <p className="text-11 text-tertiary">
                       {t("research.chains.stage_approval.missing_summary", { count: missingMaterials.length })}
+                    </p>
+                  )}
+                  {!materialReady && submittableNodes.length > 0 && (
+                    <p className="text-11 text-tertiary" id={`${stage.id}-submit-disabled-reason`}>
+                      {piMissing || advisorMissing
+                        ? t("research.chains.stage_approval.reviewer_not_ready")
+                        : t("research.chains.stage_approval.material_not_ready")}
                     </p>
                   )}
                 </div>
@@ -702,24 +559,15 @@ export function ResearchChainStageApprovalPanel({
                     rows={3}
                     className="w-full rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
                   />
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void reviewStage("APPROVE", approveEscalates || undefined)}
-                    >
-                      {approveLabel}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={busy || !comment.trim()}
-                      onClick={() => void reviewStage("RETURN")}
-                    >
-                      {t("research.chains.stage_approval.return")}
-                    </Button>
-                  </div>
+                  <ResearchChainStageReviewActions
+                    policy={stage.pi_policy}
+                    requiresPi={stage.requires_pi}
+                    reviewerRole={stage.current_review_step}
+                    disabled={busy}
+                    returnDisabled={!comment.trim()}
+                    onApprove={(escalateToPi) => reviewStage("APPROVE", escalateToPi)}
+                    onReturn={() => reviewStage("RETURN", false)}
+                  />
                 </div>
               )}
             </section>

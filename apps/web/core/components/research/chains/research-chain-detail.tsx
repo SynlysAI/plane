@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -126,6 +126,8 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [selected, setSelected] = useState<TResearchChainStageNodeDetail | null>(null);
   const [stageDetailLoading, setStageDetailLoading] = useState(false);
   const [stageDetailError, setStageDetailError] = useState(false);
+  const [stageRefreshing, setStageRefreshing] = useState(false);
+  const [stageRefreshError, setStageRefreshError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [forbidden, setForbidden] = useState(false);
@@ -140,6 +142,8 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const [memberRole, setMemberRole] = useState<"15" | "20">("15");
   const [memberBusy, setMemberBusy] = useState(false);
   const [memberError, setMemberError] = useState("");
+  const stageRefreshVersionRef = useRef(0);
+  const approvedCountRef = useRef<number | null>(null);
   const current = useMemo(() => pickCurrentNode(nodes), [nodes]);
   const workflow = useMemo(
     () => buildResearchWorkflow(nodes, current?.id ?? null, stageApprovalSummary?.stages ?? []),
@@ -168,9 +172,47 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   const selectedStageApproval = stageApprovalSummary?.stages.find(
     (stage) => stage.stage_code === selectedStage?.stageCode
   );
-  const knowledge = useResearchChainKnowledge(workspaceSlug, chainId, selected?.node.id ?? "");
+  const knowledgeNodeId = requestedNode?.id ?? selectedStage?.preferredNodeId ?? selected?.node.id ?? current?.id ?? "";
+
+  /** Refresh only authoritative stage/node state without resetting the workbench. */
+  const refreshStageState = useCallback(async () => {
+    if (loading) return;
+    const request = ++stageRefreshVersionRef.current;
+    setStageRefreshing(true);
+    setStageRefreshError(false);
+    try {
+      const [chainNodes, stageApprovals] = await Promise.all([
+        chainService.getChainNodes(workspaceSlug, chainId),
+        chainService.getChainStageApprovals(workspaceSlug, chainId),
+      ]);
+      if (stageRefreshVersionRef.current !== request) return;
+      setNodes(chainNodes);
+      setStageApprovalSummary(stageApprovals);
+      const approved = stageApprovals.progress.approved;
+      const shouldRefreshChain = approvedCountRef.current !== approved;
+      approvedCountRef.current = approved;
+      if (shouldRefreshChain) setChain(await chainService.getChain(workspaceSlug, chainId));
+    } catch {
+      if (stageRefreshVersionRef.current === request) setStageRefreshError(true);
+    } finally {
+      if (stageRefreshVersionRef.current === request) setStageRefreshing(false);
+    }
+  }, [chainId, loading, workspaceSlug]);
+
+  const knowledge = useResearchChainKnowledge(workspaceSlug, chainId, knowledgeNodeId, {
+    onUploadStatusChanged: (upload, previousStatus) => {
+      if (
+        (previousStatus === "PENDING" || previousStatus === "PROCESSING") &&
+        upload.status !== "PENDING" &&
+        upload.status !== "PROCESSING"
+      ) {
+        void refreshStageState();
+      }
+    },
+  });
 
   const load = useCallback(async () => {
+    stageRefreshVersionRef.current += 1;
     setLoading(true);
     setFailed(false);
     setForbidden(false);
@@ -188,6 +230,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
       setNodes(chainNodes);
       setMembers(chainMembers);
       setStageApprovalSummary(stageApprovals);
+      approvedCountRef.current = stageApprovals.progress.approved;
     } catch (error) {
       const errorCode = (error as { error_code?: string })?.error_code;
       setForbidden(errorCode === "research_permission_denied");
@@ -200,6 +243,25 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!stageApprovalSummary) return;
+    const hasPendingReview = stageApprovalSummary.stages.some(
+      (stage) => stage.status === "AWAITING_ADVISOR" || stage.status === "AWAITING_PI"
+    );
+    if (!hasPendingReview) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshStageState();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const timer = window.setInterval(refreshWhenVisible, 30_000);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(timer);
+    };
+  }, [refreshStageState, stageApprovalSummary]);
 
   useEffect(() => {
     const nodeIds = stageNodeIds ? stageNodeIds.split(",") : [];
@@ -601,6 +663,11 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
             <Button variant="secondary" size="sm" className="h-8" onClick={() => void load()}>
               {t("research.chains.refresh")}
             </Button>
+            {stageRefreshing && (
+              <span className="text-11 text-tertiary" role="status">
+                {t("research.chains.stage_refreshing")}
+              </span>
+            )}
           </div>
         </div>
       </section>
@@ -641,6 +708,15 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
           >
             {actionError}
           </p>
+        )}
+
+        {stageRefreshError && (
+          <div className="mx-5 mt-4 flex flex-wrap items-center gap-2" role="alert">
+            <p className="text-12 text-danger-primary">{t("research.chains.stage_refresh_failed")}</p>
+            <Button variant="secondary" size="sm" disabled={stageRefreshing} onClick={() => void refreshStageState()}>
+              {t("research.status.retry")}
+            </Button>
+          </div>
         )}
 
         {creatingNodeInline && (
@@ -712,7 +788,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
               setNodeTitle("");
             }}
             onOpenAgent={(nodeId) => assistant.openWithLocal(nodeId)}
-            onRefresh={() => load()}
+            onRefresh={refreshStageState}
           />
         )}
 
@@ -766,7 +842,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                           setCreatingNodeInline(true);
                           setNodeTitle("");
                         }}
-                        onChanged={() => void load()}
+                        onStageChanged={refreshStageState}
                       />
                     )}
                     {selected ? (

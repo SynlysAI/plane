@@ -15,7 +15,7 @@ const decision = (allowed: boolean) => ({ allowed, reason_code: "fixture", reaso
 
 const fixtureUpload = {
   id: "fixture-upload",
-  status: "PROCESSING" as const,
+  status: "SUCCESS" as const,
   knowledge_id: "fixture-knowledge",
   knowledge_base_id: "fixture-kb",
   file_name: "formal-experiment-plan.pdf",
@@ -52,6 +52,9 @@ function completeMaterial(id: string, code: string, title: string) {
     minimum_count: 1,
     submitted_count: 1,
     complete: true,
+    submission_state: "READY",
+    processing_count: 0,
+    failed_count: 0,
     items: [
       {
         id: `${id}-item`,
@@ -84,6 +87,9 @@ function missingMaterial(id: string, code: string, title: string) {
     minimum_count: 1,
     submitted_count: 0,
     complete: false,
+    submission_state: "INCOMPLETE",
+    processing_count: 0,
+    failed_count: 0,
     items: [],
   };
 }
@@ -291,7 +297,7 @@ function StageApprovalFixture() {
       defaultExpanded={new URLSearchParams(window.location.search).get("expanded") === "1"}
       knowledge={knowledge}
       onCreateNode={() => undefined}
-      onChanged={() => undefined}
+      onStageChanged={() => undefined}
     />
   );
 }

@@ -6,7 +6,7 @@ import type { TResearchChainUploadLimits } from "@plane/types";
 import { getResearchErrorDetail, getResearchErrorKey } from "@/components/research/common/error-messages";
 import { ResearchChainService, type TResearchChainUpload } from "@/services/research/chain.service";
 
-export const LINKABLE_UPLOAD_STATUSES = new Set(["PROCESSING", "SUCCESS"]);
+export const LINKABLE_UPLOAD_STATUSES = new Set(["PENDING", "PROCESSING", "SUCCESS"]);
 export const DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS: TResearchChainUploadLimits = {
   pdf_max_mb: 500,
   markdown_max_mb: 500,
@@ -19,6 +19,11 @@ export type TResearchChainFileLimit = {
   maxMb: number;
 };
 
+export type TProcessingMeta = {
+  since: number;
+  lastPolledAt: number;
+};
+
 type TPanelState = "idle" | "loading" | "ready" | "degraded" | "forbidden" | "error";
 const KB_READY_STATE = "READY";
 
@@ -28,6 +33,11 @@ const DEGRADED_ERROR_CODES = new Set([
   "UPSTREAM_TIMEOUT",
   "upstream_timeout",
 ]);
+const PROCESSING_UPLOAD_STATUSES = new Set(["PENDING", "PROCESSING"]);
+const TERMINAL_UPLOAD_STATUSES = new Set(["SUCCESS", "FAILED", "DEGRADED"]);
+const UPLOAD_POLL_INTERVAL_MS = 5_000;
+const UPLOAD_POLL_MAX_MS = 5 * 60_000;
+const UPLOAD_POLL_BATCH_SIZE = 5;
 
 const chainService = new ResearchChainService();
 
@@ -45,6 +55,7 @@ export type TResearchChainKnowledgeController = {
   degradedReason: string;
   actionError: string;
   uploading: boolean;
+  processingMeta: Record<string, TProcessingMeta>;
   canUpload: boolean;
   load: () => Promise<void>;
   uploadFiles: (files: File[]) => Promise<TResearchChainUpload[]>;
@@ -98,27 +109,32 @@ export function formatResearchChainFileSize(size: number | undefined): string {
 export function useResearchChainKnowledge(
   workspaceSlug: string,
   chainId: string,
-  nodeId: string
+  nodeId: string,
+  options: { onUploadStatusChanged?: (upload: TResearchChainUpload, previousStatus: string) => void } = {}
 ): TResearchChainKnowledgeController {
   const { t } = useTranslation();
   const [uploads, setUploads] = useState<TResearchChainUpload[]>([]);
   const [uploadLimits, setUploadLimits] = useState<TResearchChainUploadLimits>(DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS);
   const [knowledgeBaseId, setKnowledgeBaseId] = useState("");
   const [state, setState] = useState<TPanelState>("idle");
-  const [uploading, setUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [degradedReason, setDegradedReason] = useState("");
   const [actionError, setActionError] = useState("");
+  const [processingMeta, setProcessingMeta] = useState<Record<string, TProcessingMeta>>({});
   const [knowledgeState, setKnowledgeState] = useState(KB_READY_STATE);
   const [orgUnitName, setOrgUnitName] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("");
   const generationRef = useRef(0);
-  const canUpload = Boolean(nodeId && knowledgeBaseId) && knowledgeState === KB_READY_STATE && !uploading;
+  const statusCallbackRef = useRef(options.onUploadStatusChanged);
+  statusCallbackRef.current = options.onUploadStatusChanged;
+  const uploading = uploadingCount > 0;
+  const canUpload = Boolean(nodeId && knowledgeBaseId) && knowledgeState === KB_READY_STATE;
 
   const load = useCallback(async () => {
     const generation = ++generationRef.current;
     // A newer scope owns the controller now; an older in-flight upload must not
     // keep the new node marked as busy.
-    setUploading(false);
+    setUploadingCount(0);
     if (!nodeId) {
       setUploads([]);
       setKnowledgeBaseId("");
@@ -138,6 +154,14 @@ export function useResearchChainKnowledge(
       setConnectionStatus(payload.connectionStatus ?? "");
       setKnowledgeBaseId(payload.items[0]?.external_id ?? "");
       setUploads(uploadPayload.data);
+      setProcessingMeta(() => {
+        const now = Date.now();
+        return Object.fromEntries(
+          uploadPayload.data
+            .filter((upload) => PROCESSING_UPLOAD_STATUSES.has(upload.status))
+            .map((upload) => [upload.id, { since: now, lastPolledAt: 0 }])
+        );
+      });
       setDegradedReason(payload.degraded_reason ?? "");
       setState(payload.degraded ? "degraded" : "ready");
     } catch (error) {
@@ -154,12 +178,12 @@ export function useResearchChainKnowledge(
   /** Upload a flattened batch sequentially to preserve order and avoid concurrent RAG calls. */
   const uploadFiles = useCallback(
     async (files: File[]) => {
-      if (files.length === 0 || !nodeId || !knowledgeBaseId || uploading || knowledgeState !== KB_READY_STATE) {
+      if (files.length === 0 || !nodeId || !knowledgeBaseId || knowledgeState !== KB_READY_STATE) {
         return [];
       }
       const created: TResearchChainUpload[] = [];
       const generation = generationRef.current;
-      setUploading(true);
+      setUploadingCount((count) => count + 1);
       setDegradedReason("");
       setActionError("");
       let activeFile: File | null = null;
@@ -182,6 +206,13 @@ export function useResearchChainKnowledge(
           created.push(payload.data);
           if (generationRef.current !== generation) break;
           setUploads((current) => [payload.data, ...current.filter((item) => item.id !== payload.data.id)]);
+          if (PROCESSING_UPLOAD_STATUSES.has(payload.data.status)) {
+            const observedSince = Date.now();
+            setProcessingMeta((current) => ({
+              ...current,
+              [payload.data.id]: { since: observedSince, lastPolledAt: 0 },
+            }));
+          }
           setState(payload.degraded ? "degraded" : "ready");
         }
       } catch (error) {
@@ -208,11 +239,11 @@ export function useResearchChainKnowledge(
           setState(payload.error_code === "research_permission_denied" ? "forbidden" : "ready");
         }
       } finally {
-        if (generationRef.current === generation) setUploading(false);
+        setUploadingCount((count) => Math.max(0, count - 1));
       }
       return created;
     },
-    [chainId, knowledgeBaseId, knowledgeState, nodeId, t, uploadLimits, uploading, workspaceSlug]
+    [chainId, knowledgeBaseId, knowledgeState, nodeId, t, uploadLimits, workspaceSlug]
   );
 
   const refreshUpload = useCallback(
@@ -221,13 +252,29 @@ export function useResearchChainKnowledge(
       try {
         const payload = await chainService.getKnowledgeUpload(workspaceSlug, chainId, uploadId);
         if (generationRef.current !== generation) return;
+        const previous = uploads.find((item) => item.id === uploadId);
+        if (previous && previous.status !== payload.data.status) {
+          statusCallbackRef.current?.(payload.data, previous.status);
+        }
         setUploads((current) => current.map((item) => (item.id === uploadId ? payload.data : item)));
+        if (TERMINAL_UPLOAD_STATUSES.has(payload.data.status)) {
+          setProcessingMeta((current) => {
+            const next = { ...current };
+            delete next[uploadId];
+            return next;
+          });
+        } else if (PROCESSING_UPLOAD_STATUSES.has(payload.data.status)) {
+          setProcessingMeta((current) => ({
+            ...current,
+            [uploadId]: current[uploadId] ?? { since: Date.now(), lastPolledAt: 0 },
+          }));
+        }
         setState(payload.degraded ? "degraded" : "ready");
       } catch {
         setState("degraded");
       }
     },
-    [chainId, workspaceSlug]
+    [chainId, uploads, workspaceSlug]
   );
 
   const confirmUpload = useCallback(
@@ -250,6 +297,34 @@ export function useResearchChainKnowledge(
     [chainId, nodeId, t, workspaceSlug]
   );
 
+  /** Poll the oldest processing uploads in bounded, sequential detail requests. */
+  const pollProcessingUploads = useCallback(async () => {
+    if (typeof document === "undefined" || document.visibilityState !== "visible" || uploading) return;
+    const now = Date.now();
+    const candidates = Object.entries(processingMeta)
+      .filter(([, meta]) => now - meta.since < UPLOAD_POLL_MAX_MS)
+      .toSorted((left, right) => left[1].lastPolledAt - right[1].lastPolledAt)
+      .slice(0, UPLOAD_POLL_BATCH_SIZE)
+      .map(([uploadId]) => uploadId);
+    if (candidates.length === 0) return;
+    setProcessingMeta((current) => {
+      const next = { ...current };
+      for (const uploadId of candidates) {
+        if (next[uploadId]) next[uploadId] = { ...next[uploadId], lastPolledAt: Date.now() };
+      }
+      return next;
+    });
+    for (const uploadId of candidates) {
+      // oxlint-disable-next-line no-await-in-loop
+      await refreshUpload(uploadId);
+    }
+  }, [processingMeta, refreshUpload, uploading]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => void pollProcessingUploads(), UPLOAD_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [pollProcessingUploads]);
+
   return {
     chainId,
     nodeId,
@@ -264,6 +339,7 @@ export function useResearchChainKnowledge(
     degradedReason,
     actionError,
     uploading,
+    processingMeta,
     canUpload,
     load,
     uploadFiles,

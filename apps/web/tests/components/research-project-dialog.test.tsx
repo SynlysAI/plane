@@ -7,6 +7,7 @@ import type { TResearchProject } from "@/services/research/project.service";
 
 const mocks = vi.hoisted(() => ({
   updateResearchProject: vi.fn(),
+  getOrgUnitMembers: vi.fn(),
 }));
 
 vi.mock("mobx-react", () => ({ observer: (component: unknown) => component }));
@@ -27,6 +28,11 @@ vi.mock("@plane/ui", () => ({
     isOpen ? <div role="dialog">{children}</div> : null,
 }));
 vi.mock("@/components/research/common/error-messages", () => ({ getResearchErrorKey: () => "error" }));
+vi.mock("@/services/research/org.service", () => ({
+  ResearchOrgService: class {
+    getOrgUnitMembers = mocks.getOrgUnitMembers;
+  },
+}));
 vi.mock("@/hooks/store/use-research", () => ({
   useResearch: () => ({
     identity: {
@@ -62,6 +68,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mocks.updateResearchProject.mockReset();
+  mocks.getOrgUnitMembers.mockReset();
 });
 
 afterEach(async () => {
@@ -147,4 +154,52 @@ it("编辑失败时保留弹窗并显示错误", async () => {
   expect(mocks.updateResearchProject).toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')?.textContent).toContain("error");
   expect(onClose).not.toHaveBeenCalled();
+});
+
+it("创建时提示组织缺少唯一主 PI 但不阻断提交", async () => {
+  mocks.getOrgUnitMembers.mockResolvedValue({
+    results: [
+      {
+        id: "member-1",
+        org_unit: "unit-1",
+        user: "user-1",
+        org_role: "PI",
+        is_primary: true,
+        effective_from: "2026-01-01",
+        effective_to: null,
+      },
+    ],
+    count: 1,
+  });
+
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <ResearchProjectDialog currentUserId="user-1" isOpen onClose={vi.fn()} workspaceSlug="lab" />
+      </MemoryRouter>
+    )
+  );
+  const typeSelect = [...container.querySelectorAll("label")]
+    .find((item) => item.textContent?.includes("research.projects.fields.type"))
+    ?.querySelector("select");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(typeSelect, "PHD");
+    typeSelect?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => undefined);
+
+  expect(mocks.getOrgUnitMembers).toHaveBeenCalledWith("lab", "unit-1");
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("research.projects.pi_warning_title");
+  const nameInput = [...container.querySelectorAll("label")]
+    .find((item) => item.textContent?.includes("research.projects.fields.name"))
+    ?.querySelector("input");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(nameInput, "新科研课题");
+    nameInput?.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(
+    [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "research.projects.create"
+    )?.disabled
+  ).toBe(false);
 });

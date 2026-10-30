@@ -15,7 +15,10 @@ import {
   ResearchChainWorkbenchPeekProvider,
   useResearchChainWorkbenchPeek,
 } from "@/components/research/chains/research-chain-workbench-peek";
-import type { TResearchWorkflowStage } from "@/components/research/chains/research-chain-workflow";
+import {
+  researchChainStatusKey,
+  type TResearchWorkflowStage,
+} from "@/components/research/chains/research-chain-workflow";
 
 export type TResearchChainStageNodeDetail = {
   node: TResearchChainNode;
@@ -94,7 +97,7 @@ function ResearchChainWorkflowStageBody({
     ? t(`research.chains.node_status.${selectedNode.status.toLowerCase()}`)
     : stage.status === "NOT_STARTED"
       ? t("research.chains.workflow.not_started")
-      : t(`research.chains.node_status.${stage.status.toLowerCase()}`);
+      : t(researchChainStatusKey(stage.status));
 
   const closePeekRef = useRef(workbenchPeek?.close);
   closePeekRef.current = workbenchPeek?.close;

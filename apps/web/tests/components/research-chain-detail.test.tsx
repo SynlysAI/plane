@@ -181,6 +181,9 @@ const stageApproval = {
       minimum_count: 5,
       submitted_count: 2,
       complete: false,
+      submission_state: "INCOMPLETE",
+      processing_count: 0,
+      failed_count: 0,
       items: [
         {
           id: "item-1",
@@ -204,7 +207,7 @@ const stageApproval = {
   review_actions: [],
   latest_precheck: null,
   advisor: { user: { id: "advisor", display_name: "直接导师", email: "advisor@example.com" }, error: null },
-  principal_investigator: { user: null, error: null },
+  principal_investigator: { user: null, error: null, reason_code: null },
   current_review_step: null,
   capabilities: {
     schema_version: "research-capabilities.v1",
@@ -262,6 +265,33 @@ it("passes the task deep link to the selected node task panel", async () => {
 
   expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-node")).toBe("node-1");
   expect(container.querySelector('[data-testid="chain-task-panel"]')?.getAttribute("data-task")).toBe("task-1");
+});
+
+it("refreshes stage state on focus without reloading members or node details", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=nodes&node=node-1";
+  mocks.getChainStageApprovals.mockResolvedValueOnce({
+    ...stageApprovalSummary,
+    stages: [{ ...stageApproval, status: "AWAITING_ADVISOR" }],
+  });
+  await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
+  await act(async () => undefined);
+  const initialStageCalls = mocks.getChainStageApprovals.mock.calls.length;
+  const initialNodeDetailCalls = mocks.getChainNodeDetail.mock.calls.length;
+  const initialMemberCalls = mocks.getChainMembers.mock.calls.length;
+
+  mocks.getChainStageApprovals.mockResolvedValueOnce({
+    ...stageApprovalSummary,
+    progress: { ...stageApprovalSummary.progress, approved: 4 },
+  });
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await act(async () => undefined);
+  await act(async () => undefined);
+
+  expect(mocks.getChainStageApprovals.mock.calls.length).toBe(initialStageCalls + 1);
+  expect(mocks.getChain.mock.calls.length).toBe(2);
+  expect(mocks.getChainNodeDetail.mock.calls.length).toBe(initialNodeDetailCalls);
+  expect(mocks.getChainMembers.mock.calls.length).toBe(initialMemberCalls);
 });
 
 beforeEach(() => {
@@ -461,7 +491,16 @@ it("keeps stage submit one click away once materials are ready", async () => {
     stages: [
       {
         ...stageApproval,
-        materials: [{ ...stageApproval.materials[0], submitted_count: 5, complete: true }],
+        materials: [
+          {
+            ...stageApproval.materials[0],
+            submitted_count: 5,
+            complete: true,
+            submission_state: "READY",
+            processing_count: 0,
+            failed_count: 0,
+          },
+        ],
         capabilities: {
           schema_version: "research-capabilities.v1",
           actions: {
@@ -483,6 +522,61 @@ it("keeps stage submit one click away once materials are ready", async () => {
     node_id: "node-1",
     requires_pi: undefined,
   });
+});
+
+it("shows the latest review across all chain stages in the overview", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  const laterStage = {
+    ...stageApproval,
+    id: "stage-experiment",
+    stage_code: "EXPERIMENT",
+    review_actions: [
+      {
+        schema_version: "research-chain-stage-review-action.v1",
+        id: "review-new",
+        attempt_no: 1,
+        reviewer_role: "ADVISOR",
+        reviewer_detail: { id: "advisor", display_name: "直接导师", email: "advisor@example.com" },
+        action: "RETURN",
+        comment: "补齐 SOP",
+        escalated_to_pi: false,
+        material_snapshot: [],
+        declaration_snapshot: {},
+        created_at: "2026-10-30T10:00:00Z",
+      },
+    ],
+  };
+  mocks.query = "tab=overview";
+  mocks.getChainStageApprovals.mockResolvedValue({
+    ...stageApprovalSummary,
+    stages: [
+      {
+        ...stageApproval,
+        review_actions: [
+          {
+            schema_version: "research-chain-stage-review-action.v1",
+            id: "review-old",
+            attempt_no: 1,
+            reviewer_role: "ADVISOR",
+            reviewer_detail: { id: "advisor", display_name: "直接导师", email: "advisor@example.com" },
+            action: "APPROVE",
+            comment: "通过文献",
+            escalated_to_pi: false,
+            material_snapshot: [],
+            declaration_snapshot: {},
+            created_at: "2026-10-29T10:00:00Z",
+          },
+        ],
+      },
+      laterStage,
+    ],
+  });
+  await act(async () => root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />));
+  await act(async () => undefined);
+
+  const latestReview = [...container.querySelectorAll("dd")].find((item) => item.textContent?.includes("补齐 SOP"));
+  expect(latestReview?.textContent).toContain("实验");
+  expect(latestReview?.textContent).not.toContain("通过文献");
 });
 
 it("lets the current reviewer approve or return from the overview", async () => {
@@ -517,6 +611,7 @@ it("lets the current reviewer approve or return from the overview", async () => 
   expect(mocks.reviewChainStage).toHaveBeenCalledWith("lab", "chain-1", "LITERATURE_REVIEW", {
     action: "APPROVE",
     comment: undefined,
+    escalate_to_pi: false,
   });
 
   const returnButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "驳回");

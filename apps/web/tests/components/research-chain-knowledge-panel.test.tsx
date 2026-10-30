@@ -91,6 +91,23 @@ async function selectFile(file: File) {
   await act(async () => await Promise.resolve());
 }
 
+function useSuccessfulUpload() {
+  mocks.uploadKnowledgeFile.mockResolvedValue({
+    data: {
+      id: "upload-1",
+      status: "SUCCESS",
+      knowledge_id: "knowledge-1",
+      knowledge_base_id: "kb-1",
+      file_name: "paper.md",
+      file_type: "md",
+      file_size: 7,
+      preview_url: "/preview/upload-1/",
+      download_url: "/download/upload-1/",
+      error_code: "",
+    },
+  });
+}
+
 it("uploads a selected file to the bound group library without a library selector", async () => {
   await renderPanel();
   await act(async () => undefined);
@@ -109,7 +126,8 @@ it("uploads a selected file to the bound group library without a library selecto
     expect.objectContaining({ name: "paper.md" })
   );
   expect(container.textContent).toContain("paper.md");
-  expect(container.textContent).toContain("解析中");
+  expect(container.textContent).toContain("处理中，预计 30 秒");
+  expect(container.textContent).toContain("解析完成后才能确认引用。");
 });
 
 it("explains an upstream authentication failure in Chinese", async () => {
@@ -147,13 +165,16 @@ it("restores processing uploads for the selected node after a page reload", asyn
 
   expect(mocks.getKnowledgeUploads).toHaveBeenCalledWith("lab", "chain-1", "node-1");
   expect(container.textContent).toContain("restored.md");
-  expect(container.textContent).toContain("解析中");
-  expect(container.textContent).toContain("确认引用");
+  expect(container.textContent).toContain("处理中，预计 30 秒");
+  expect([...container.querySelectorAll("button")].find((button) => button.textContent === "确认引用")?.disabled).toBe(
+    true
+  );
   expect(container.querySelector('a[aria-label="下载资料"]')?.getAttribute("href")).toBe("/download/upload-restored/");
 });
 
 it("keeps the upload record available when reference confirmation fails", async () => {
   mocks.confirmKnowledgeReference.mockRejectedValueOnce(new Error("conflict"));
+  useSuccessfulUpload();
   await renderPanel();
   await act(async () => undefined);
   await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
@@ -169,6 +190,7 @@ it("keeps the upload record available when reference confirmation fails", async 
 });
 
 it("shows a success state after confirming a reference", async () => {
+  useSuccessfulUpload();
   await renderPanel();
   await act(async () => undefined);
   await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
@@ -189,6 +211,7 @@ it("shows confirmation progress while the reference request is pending", async (
       resolveConfirmation = resolve;
     })
   );
+  useSuccessfulUpload();
   await renderPanel();
   await act(async () => undefined);
   await selectFile(new File(["# paper"], "paper.md", { type: "text/markdown" }));
@@ -197,7 +220,6 @@ it("shows confirmation progress while the reference request is pending", async (
     [...container.querySelectorAll("button")].find((button) => button.textContent === "确认引用")?.click();
     await Promise.resolve();
   });
-
   const confirmingButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "确认中");
   expect(confirmingButton?.disabled).toBe(true);
 

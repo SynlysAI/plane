@@ -22,6 +22,24 @@ export type TResearchWorkflowStageId = (typeof RESEARCH_WORKFLOW_STAGE_DEFINITIO
 
 type TResearchWorkflowStageStatus = TResearchChainStageApproval["status"] | TResearchChainNode["status"];
 
+const STAGE_STATUS_KEYS = new Set([
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "AWAITING_ADVISOR",
+  "AWAITING_PI",
+  "NEEDS_REVISION",
+  "APPROVED",
+]);
+
+/** Resolve a stage or node status without leaking a missing i18n key. */
+export function researchChainStatusKey(status: string): string {
+  if (STAGE_STATUS_KEYS.has(status)) return `research.chains.workflow.stage_status.${status.toLowerCase()}`;
+  if (["DRAFT", "ACTIVE", "WAITING_HUMAN", "COMPLETED", "FAILED", "ARCHIVED"].includes(status)) {
+    return `research.chains.node_status.${status.toLowerCase()}`;
+  }
+  return "research.common.status_unknown";
+}
+
 export type TResearchWorkflowStage = {
   id: TResearchWorkflowStageId;
   labelKey: string;

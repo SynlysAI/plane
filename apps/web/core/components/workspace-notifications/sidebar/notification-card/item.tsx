@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { ClockOutline, InboxOutline } from "@makeplane/propel/icons";
 // plane imports
-import { Avatar } from "@makeplane/propel/components/avatar";
+import { Avatar } from "@plane/propel/avatar";
 import { Row } from "@plane/ui";
 import { cn, calculateTimeAgo, renderFormattedDate, renderFormattedTime, getFileURL } from "@plane/utils";
 // hooks
@@ -45,6 +45,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const notificationTriggeredBy = notification.triggered_by_details || undefined;
   const announcement = notification.announcement_details;
   const isAnnouncement = Boolean(announcement?.id);
+  const isResearchChainStage = notification?.entity_name === "research_chain_stage";
 
   const handleNotificationSelect = async () => {
     if (!workspaceSlug || isSnoozeStateModalOpen || customSnoozeModal) return;
@@ -79,6 +80,21 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
         setPeekIssue({ workspaceSlug, projectId, issueId });
       }
     }
+
+    if (isResearchChainStage) {
+      setCurrentSelectedNotificationId(notificationId);
+      if (notification.read_at === null) {
+        try {
+          await markNotificationAsRead(workspaceSlug);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      const href = notification?.data?.href;
+      if (typeof href === "string" && href.startsWith("/") && !href.startsWith("//")) {
+        window.location.assign(href);
+      }
+    }
   };
 
   if (
@@ -86,7 +102,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
     !notificationId ||
     !notification?.id ||
     !workspace?.id ||
-    (!isAnnouncement && (!notificationField || !projectId))
+    (!isAnnouncement && !isResearchChainStage && (!notificationField || !projectId))
   )
     return <></>;
 
@@ -112,11 +128,9 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
           ) : (
             notificationTriggeredBy && (
               <Avatar
-                alt={notificationTriggeredBy.display_name || notificationTriggeredBy?.first_name}
-                fallback={(notificationTriggeredBy.display_name ||
-                  notificationTriggeredBy?.first_name)?.[0]?.toUpperCase()}
+                name={notificationTriggeredBy.display_name || notificationTriggeredBy?.first_name}
                 src={getFileURL(notificationTriggeredBy.avatar_url)}
-                size="xl"
+                size={48}
               />
             )
           )}
@@ -125,7 +139,9 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
         <div className="-mt-2 w-full space-y-1">
           <div className="relative flex h-8 items-center gap-3">
             <div className="line-clamp-1 w-full truncate overflow-hidden text-body-xs-medium break-all whitespace-normal text-primary">
-              {isAnnouncement ? (
+              {isResearchChainStage ? (
+                notification.title
+              ) : isAnnouncement ? (
                 announcement?.title
               ) : (
                 <NotificationContent
@@ -149,9 +165,11 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
 
           <div className="relative flex items-center gap-3 text-caption-sm-regular text-secondary">
             <div className="line-clamp-1 w-full truncate overflow-hidden break-words whitespace-normal">
-              {isAnnouncement
-                ? announcement?.body
-                : `${notification?.data?.issue?.identifier}-${notification?.data?.issue?.sequence_id} ${notification?.data?.issue?.name}`}
+              {isResearchChainStage
+                ? [notification?.data?.chain_name, notification?.data?.stage_name].filter(Boolean).join(" · ")
+                : isAnnouncement
+                  ? announcement?.body
+                  : `${notification?.data?.issue?.identifier}-${notification?.data?.issue?.sequence_id} ${notification?.data?.issue?.name}`}
             </div>
             <div className="flex-shrink-0">
               {notification?.snoozed_till ? (
