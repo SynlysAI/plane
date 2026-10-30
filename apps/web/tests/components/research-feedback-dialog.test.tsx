@@ -88,10 +88,49 @@ vi.mock("@plane/propel/calendar", () => ({
 }));
 
 vi.mock("@plane/propel/popover", () => {
+  const PopoverContext = React.createContext<{ open: boolean; onOpenChange: (open: boolean) => void } | null>(null);
   return {
-    Popover: Object.assign(({ children }: { children: React.ReactNode }) => <>{children}</>, {
-      Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    }),
+    Popover: Object.assign(
+      ({
+        children,
+        open: isOpen = false,
+        onOpenChange,
+      }: {
+        children: React.ReactNode;
+        open?: boolean;
+        onOpenChange?: (open: boolean) => void;
+      }) => {
+        const value = React.useMemo(
+          () => ({ open: isOpen, onOpenChange: onOpenChange ?? Function.prototype }),
+          [isOpen, onOpenChange]
+        );
+        return (
+          <PopoverContext.Provider value={value}>
+            <>{children}</>
+          </PopoverContext.Provider>
+        );
+      },
+      {
+        Button: ({ children, onClick, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => {
+          const context = React.useContext(PopoverContext);
+          return (
+            <button
+              {...props}
+              onClick={(event) => {
+                onClick?.(event);
+                context?.onOpenChange(!context.open);
+              }}
+            >
+              {children}
+            </button>
+          );
+        },
+        Panel: ({ children }: { children: React.ReactNode }) => {
+          const context = React.useContext(PopoverContext);
+          return context?.open ? <div>{children}</div> : null;
+        },
+      }
+    ),
   };
 });
 

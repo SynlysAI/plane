@@ -95,18 +95,15 @@ function FeedbackPeriodFilter({
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <div className="relative flex min-w-0 items-center gap-1">
-        <button
+      <div className="flex min-w-0 items-center gap-1">
+        <Popover.Button
           type="button"
           aria-label="反馈日期周期"
-          aria-expanded={isOpen}
-          aria-haspopup="dialog"
           title={value ? value.periodKey : "任意时间"}
-          onClick={() => setIsOpen((current) => !current)}
           className="h-8 min-w-0 rounded-md border border-subtle bg-surface-1 px-2 text-13 text-secondary transition-colors hover:bg-surface-2 hover:text-primary"
         >
           {value ? value.periodKey : "任意时间"}
-        </button>
+        </Popover.Button>
         {value && (
           <button
             type="button"
@@ -119,7 +116,9 @@ function FeedbackPeriodFilter({
         {isOpen && (
           <Popover.Panel
             aria-label="选择反馈日期周期"
-            className="absolute top-full left-0 z-50 mt-2 w-[min(calc(100vw-2rem),19rem)] rounded-md border border-subtle bg-surface-1 p-3 shadow-raised-200"
+            align="start"
+            positionerClassName="z-50"
+            className="w-[min(calc(100vw-2rem),19rem)] rounded-md border border-subtle bg-surface-1 p-3 shadow-raised-200"
           >
             <ReportPeriodCalendar
               value={value}
