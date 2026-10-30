@@ -91,7 +91,12 @@ export const ProjectMemberList = observer(function ProjectMemberList(props: TPro
         workspaceSlug={workspaceSlug}
       />
       <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-subtle py-2">
-        <div className="shrink-0 text-14 font-semibold">{t("common.members")}</div>
+        <div className="min-w-0 shrink">
+          <div className="text-14 font-semibold">{t("common.members")}</div>
+          <p className="mt-0.5 text-11 text-tertiary">
+            {t("project_settings.members.project_organization_independence")}
+          </p>
+        </div>
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
           <div className="flex min-w-0 flex-1 basis-40 items-center justify-start gap-1.5 rounded-md border border-subtle bg-surface-1 px-2 py-1">
             <SearchOutline className="h-3.5 w-3.5" />

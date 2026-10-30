@@ -15,13 +15,12 @@ from plane.db.models import (
     WorkspaceMember,
     User,
     IssueAssignee,
-    WorkspaceResearchSetting,
 )
 from plane.db.models.project import ROLE
 from plane.utils.workspace_access import user_can_access_workspace
 
 
-ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE = "行政项目模块、标签与视图配置已由工作区管理员锁定。"
+ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE = "行政项目模块、标签与视图配置已由项目管理员锁定。"
 
 
 def research_project_ids():
@@ -76,36 +75,57 @@ def is_administrative_settings_admin(user, workspace) -> bool:
     )
 
 
-def administrative_settings_admin_only(workspace) -> bool:
-    """读取工作区的行政项目配置锁定状态。
+def is_administrative_project_settings_admin(user, project) -> bool:
+    """判断用户是否可修改指定行政项目的锁定配置。
 
     Args:
-        workspace: 工作区对象或主键。
+        user: 当前请求用户。
+        project: 项目对象。
 
     Returns:
-        锁定开启时为 True；默认或配置缺失时为 False。
+        用户是项目管理员或既有全局管理身份时为 True。
     """
-    setting = getattr(workspace, "research_setting", None)
-    if setting is None:
-        workspace_id = getattr(workspace, "id", workspace)
-        setting = WorkspaceResearchSetting.objects.filter(workspace_id=workspace_id).first()
-    return bool(getattr(setting, "administrative_settings_admin_only", False))
+    if user is None or not getattr(user, "is_authenticated", False) or project is None:
+        return False
+    workspace = project.workspace
+    if is_administrative_settings_admin(user, workspace):
+        return True
+    if ProjectMember.objects.filter(
+        project=project,
+        member=user,
+        role=ROLE.ADMIN.value,
+        is_active=True,
+        deleted_at__isnull=True,
+    ).exists():
+        return True
+    return user_can_manage_administrative_project(user, workspace.slug, project.id)
 
 
-def administrative_settings_write_blocked(user, workspace, project=None) -> bool:
+def administrative_settings_admin_only(project) -> bool:
+    """读取指定行政项目的配置锁定状态。
+
+    Args:
+        project: 项目对象。
+
+    Returns:
+        锁定开启时为 True；默认或科研项目无关时为 False。
+    """
+    return bool(getattr(project, "administrative_settings_admin_only", False))
+
+
+def administrative_settings_write_blocked(user, project) -> bool:
     """判断当前用户是否被行政项目配置锁定拦截。
 
     Args:
         user: 当前请求用户。
-        workspace: 工作区对象或主键。
-        project: 可选项目对象；传入时仅行政项目受锁限制。
+        project: 当前项目对象。
 
     Returns:
         需要拒绝本次模块、标签或视图配置写入时为 True。
     """
-    if project is not None and Project.objects.filter(pk=project.id, id__in=research_project_ids()).exists():
+    if project is None or Project.objects.filter(pk=project.id, id__in=research_project_ids()).exists():
         return False
-    return administrative_settings_admin_only(workspace) and not is_administrative_settings_admin(user, workspace)
+    return administrative_settings_admin_only(project) and not is_administrative_project_settings_admin(user, project)
 
 
 def administrative_projects(workspace_slug):
@@ -118,6 +138,26 @@ def administrative_projects(workspace_slug):
         行政项目查询集。
     """
     return Project.objects.filter(workspace__slug=workspace_slug).filter(administrative_project_filter())
+
+
+def inheritance_revoked_exists(user):
+    """构造指定用户在当前项目是否存在继承撤销记录的 Exists 条件。
+
+    Args:
+        user: 当前用户。
+
+    Returns:
+        可用于 Project 查询集的撤销记录存在条件。
+    """
+    return Exists(
+        ProjectMember.objects.filter(
+            project_id=OuterRef("pk"),
+            member=user,
+            is_active=False,
+            inheritance_revoked=True,
+            deleted_at__isnull=True,
+        )
+    )
 
 
 def administrative_projects_for_user(user, workspace_slug):
@@ -173,6 +213,7 @@ def administrative_organization_project_ids(user, workspace_slug):
             deleted_at__isnull=True,
         )
         .exclude(id__in=research_project_ids())
+        .exclude(Exists(inheritance_revoked_exists(user)))
         .values("id")
     )
 
@@ -201,6 +242,7 @@ def public_administrative_project_ids(user, workspace_slug):
             deleted_at__isnull=True,
         )
         .exclude(id__in=research_project_ids())
+        .exclude(Exists(inheritance_revoked_exists(user)))
         .values("id")
     )
 
@@ -341,11 +383,18 @@ def user_can_manage_administrative_project(user, workspace_slug, project_id):
 
 def inherited_project_members(project):
     """Return live workspace memberships inherited by a public administrative project."""
+    revoked_members = ProjectMember.objects.filter(
+        project=project,
+        member_id=OuterRef("member_id"),
+        is_active=False,
+        inheritance_revoked=True,
+        deleted_at__isnull=True,
+    )
     members = WorkspaceMember.objects.filter(
         workspace_id=project.workspace_id,
         is_active=True,
         member__is_active=True,
-    )
+    ).exclude(Exists(revoked_members))
     if (
         project.network != ProjectNetwork.PUBLIC.value
         or not project.administrative_organization_id
@@ -441,6 +490,15 @@ def active_issue_assignees():
         Q(project__network=ProjectNetwork.PUBLIC.value, project__administrative_organization__deleted_at__isnull=True)
         & ~Q(project_id__in=research_project_ids())
         & (Q(project__administrative_organization__is_default=True) | Q(Exists(organization_member)))
+        & ~Exists(
+            ProjectMember.objects.filter(
+                project_id=OuterRef("project_id"),
+                member_id=OuterRef("assignee_id"),
+                is_active=False,
+                inheritance_revoked=True,
+                deleted_at__isnull=True,
+            )
+        )
     )
     return IssueAssignee.objects.filter(
         Exists(workspace_member),

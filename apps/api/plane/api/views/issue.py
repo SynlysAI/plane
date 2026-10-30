@@ -939,7 +939,7 @@ class LabelListCreateAPIEndpoint(BaseAPIView):
         """
         try:
             project = Project.objects.get(pk=project_id, workspace__slug=slug)
-            if administrative_settings_write_blocked(request.user, project.workspace, project):
+            if administrative_settings_write_blocked(request.user, project):
                 return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
             serializer = LabelCreateUpdateSerializer(data=request.data)
             if serializer.is_valid():
@@ -1079,7 +1079,7 @@ class LabelDetailAPIEndpoint(LabelListCreateAPIEndpoint):
         Validates external ID uniqueness if provided.
         """
         label = self.get_queryset().get(pk=pk)
-        if administrative_settings_write_blocked(request.user, label.project.workspace, label.project):
+        if administrative_settings_write_blocked(request.user, label.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         serializer = LabelCreateUpdateSerializer(label, data=request.data, partial=True)
         if serializer.is_valid():
@@ -1126,7 +1126,7 @@ class LabelDetailAPIEndpoint(LabelListCreateAPIEndpoint):
         This action cannot be undone.
         """
         label = self.get_queryset().get(pk=pk)
-        if administrative_settings_write_blocked(request.user, label.project.workspace, label.project):
+        if administrative_settings_write_blocked(request.user, label.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_label_delete_error(label.project, label)
         if required_error is not None:

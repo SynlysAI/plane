@@ -249,10 +249,6 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
         """
         try:
             workspace = Workspace.objects.get(slug=slug)
-            if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
-                request.user, workspace
-            ):
-                return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
             serializer = ProjectCreateSerializer(
                 data={**request.data},
@@ -573,7 +569,7 @@ class ProjectDetailAPIEndpoint(BaseAPIView):
             workspace = Workspace.objects.get(slug=slug)
             project = Project.objects.get(pk=pk)
             if ADMINISTRATIVE_LOCK_PROJECT_FIELDS.intersection(request.data) and administrative_settings_write_blocked(
-                request.user, workspace, project
+                request.user, project
             ):
                 return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
             current_instance = json.dumps(ProjectSerializer(project).data, cls=DjangoJSONEncoder)

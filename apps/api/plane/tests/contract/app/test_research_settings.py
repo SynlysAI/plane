@@ -117,6 +117,51 @@ class TestResearchSettingsEndpoint:
         assert rollback.status_code == 200
         assert rollback.json()["research_ia_v2"] is False
 
+    def test_admin_can_toggle_workspace_research_mcp_write_policy(self, env, settings):
+        settings.RESEARCH_MCP_ENABLED = True
+        settings.RESEARCH_MCP_WRITE_ENABLED = True
+
+        response = env["admin_client"].get(env["url"])
+        assert response.status_code == 200
+        assert response.json()["research_mcp_write_enabled"] is False
+        assert response.json()["research_mcp_write_available"] is True
+
+        enabled = env["admin_client"].patch(env["url"], {"research_mcp_write_enabled": True}, format="json")
+        assert enabled.status_code == 200
+        assert enabled.json()["research_mcp_write_enabled"] is True
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_mcp_write_enabled is True
+        event = ResearchAuditEvent.objects.filter(action="config.update").order_by("-created_at").first()
+        assert event is not None
+        assert "research_mcp_write_enabled" in event.metadata["changed"]
+
+        disabled = env["admin_client"].patch(env["url"], {"research_mcp_write_enabled": False}, format="json")
+        assert disabled.status_code == 200
+        assert disabled.json()["research_mcp_write_enabled"] is False
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_mcp_write_enabled is False
+
+    def test_workspace_research_mcp_write_policy_requires_deployment_switches(self, env, settings):
+        settings.RESEARCH_MCP_ENABLED = True
+        settings.RESEARCH_MCP_WRITE_ENABLED = False
+
+        response = env["admin_client"].get(env["url"])
+        assert response.status_code == 200
+        assert response.json()["research_mcp_write_available"] is False
+
+        enabled = env["admin_client"].patch(env["url"], {"research_mcp_write_enabled": True}, format="json")
+        assert enabled.status_code == 409
+        assert "全局科研 MCP" in enabled.json()["message"]
+        assert WorkspaceResearchSetting.objects.get(workspace=env["workspace"]).research_mcp_write_enabled is False
+
+    def test_workspace_member_cannot_toggle_research_mcp_write_policy(self, env, settings):
+        settings.RESEARCH_MCP_ENABLED = True
+        settings.RESEARCH_MCP_WRITE_ENABLED = True
+
+        response = env["member_client"].patch(env["url"], {"research_mcp_write_enabled": True}, format="json")
+
+        assert response.status_code == 403
+        setting = WorkspaceResearchSetting.objects.filter(workspace=env["workspace"]).first()
+        assert setting is None or setting.research_mcp_write_enabled is False
+
     def test_admin_can_toggle_switches_and_limits(self, env):
         response = env["admin_client"].patch(
             env["url"],

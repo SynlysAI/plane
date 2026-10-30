@@ -120,6 +120,19 @@ class ProjectSerializer(BaseSerializer):
             if not is_valid:
                 raise serializers.ValidationError({"error": "html content is not valid"})
 
+        administrative_only = data.get(
+            "administrative_settings_admin_only",
+            getattr(self.instance, "administrative_settings_admin_only", False),
+        )
+        if self.instance is None and administrative_only:
+            raise serializers.ValidationError(
+                {"administrative_settings_admin_only": ["Enable the project lock after creating the project."]}
+            )
+        if self.instance is not None and administrative_only and resolve_is_research_project(self.instance):
+            raise serializers.ValidationError(
+                {"administrative_settings_admin_only": ["The project lock only applies to administrative projects."]}
+            )
+
         assignment_fields = ("project_lead", "default_assignee")
         for field in assignment_fields:
             if field not in data or data[field] is None:

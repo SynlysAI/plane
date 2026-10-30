@@ -20,7 +20,11 @@ from plane.db.models import (
 from plane.tests.research_fixtures import make_user
 from plane.utils.administrative_projects import (
     assignable_project_member_ids,
+    administrative_organization_project_ids,
+    administrative_projects_for_user,
     effective_project_member,
+    get_or_create_default_administrative_organization,
+    public_administrative_project_ids,
     project_member_roster,
 )
 
@@ -149,6 +153,180 @@ def test_project_admin_can_promote_inherited_member_only_in_administrative_proje
     )
     assert response.status_code == 200, response.data
     assert ProjectMember.objects.filter(project=env["project"], member=env["user"], role=20, is_active=True).exists()
+
+
+def test_project_admin_can_revoke_inherited_access_for_one_project(inherited, workspace):
+    """项目级撤销只屏蔽当前项目继承访问，不改变组织成员关系。"""
+    env = inherited
+    endpoint = env["base"] + f"members/by-user/{env['user'].id}/"
+    issue = Issue.objects.create(
+        workspace=workspace,
+        project=env["project"],
+        name="Existing assignment",
+        created_by=env["project"].created_by,
+    )
+    IssueAssignee.objects.create(
+        workspace=workspace,
+        project=env["project"],
+        issue=issue,
+        assignee=env["user"],
+    )
+
+    response = env["owner_client"].delete(endpoint)
+
+    assert response.status_code == 204, response.data
+    revoked = ProjectMember.objects.get(project=env["project"], member=env["user"])
+    assert revoked.is_active is False
+    assert revoked.inheritance_revoked is True
+    env["relation"].refresh_from_db()
+    assert env["relation"].is_active is True
+
+    assert project_member_roster(env["project"]) == []
+    assert env["user"].id not in assignable_project_member_ids(env["project"])
+    assert effective_project_member(env["user"], workspace.slug, env["project"].id) is None
+    assert env["project"].id not in public_administrative_project_ids(env["user"], workspace.slug)
+    assert env["project"].id not in administrative_organization_project_ids(env["user"], workspace.slug)
+    assert env["client"].get(env["base"]).status_code == 403
+    issue_response = env["owner_client"].get(env["base"] + f"issues/{issue.id}/")
+    assert issue_response.status_code == 200, issue_response.data
+    assert issue_response.data["assignee_ids"] == []
+
+    roles = env["client"].get(f"/api/users/me/workspaces/{workspace.slug}/project-roles/")
+    assert str(env["project"].id) not in roles.data
+    projects = env["client"].get(f"/api/workspaces/{workspace.slug}/projects/")
+    assert all(str(row["id"]) != str(env["project"].id) for row in projects.data)
+
+    # 重复删除保持幂等，不产生第二条记录。
+    assert env["owner_client"].delete(endpoint).status_code == 204
+    assert ProjectMember.objects.filter(project=env["project"], member=env["user"]).count() == 1
+
+
+def test_default_public_inheritance_can_be_revoked_per_project(inherited, workspace):
+    """默认公共组织的项目访问同样支持项目级撤销。"""
+    env = inherited
+    organization = get_or_create_default_administrative_organization(workspace)
+    project = Project.objects.create(
+        workspace=workspace,
+        name="Public office",
+        identifier="PUB",
+        network=ProjectNetwork.PUBLIC.value,
+        administrative_organization=organization,
+        created_by=env["project"].created_by,
+    )
+    endpoint = f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/by-user/{env['user'].id}/"
+
+    assert public_administrative_project_ids(env["user"], workspace.slug).filter(id=project.id).exists()
+    assert env["owner_client"].delete(endpoint).status_code == 204
+    assert not public_administrative_project_ids(env["user"], workspace.slug).filter(id=project.id).exists()
+    assert all(row["member"] != str(env["user"].id) for row in project_member_roster(project))
+
+
+def test_workspace_admin_is_not_blocked_by_project_inheritance_revocation(inherited, workspace):
+    """项目级撤销不能屏蔽工作区管理员的全局管理身份。"""
+    env = inherited
+    admin = make_user(first_name="Workspace", last_name="Admin")
+    WorkspaceMember.objects.create(workspace=workspace, member=admin, role=20)
+    ProjectMember.objects.create(
+        project=env["project"],
+        member=admin,
+        role=15,
+        is_active=False,
+        inheritance_revoked=True,
+    )
+
+    assert effective_project_member(admin, workspace.slug, env["project"].id).role == 20
+    assert administrative_projects_for_user(admin, workspace.slug).filter(id=env["project"].id).exists()
+
+
+def test_re_adding_revoked_member_restores_direct_and_inherited_access(inherited, workspace):
+    """撤销后的项目成员可重新添加，并清除继承阻断标记。"""
+    env = inherited
+    direct = ProjectMember.objects.create(project=env["project"], member=env["user"], role=15)
+    endpoint = env["base"] + f"members/by-user/{env['user'].id}/"
+
+    assert env["owner_client"].delete(endpoint).status_code == 204
+    direct.refresh_from_db()
+    assert direct.is_active is False
+    assert direct.inheritance_revoked is True
+    assert project_member_roster(env["project"]) == []
+
+    response = env["owner_client"].post(
+        env["base"] + "members/",
+        {"members": [{"member_id": str(env["user"].id), "role": 15}]},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    direct.refresh_from_db()
+    assert direct.is_active is True
+    assert direct.inheritance_revoked is False
+    row = project_member_roster(env["project"])[0]
+    assert row["membership_source"] == "DIRECT"
+    assert row["inherits_organization"] is True
+    assert effective_project_member(env["user"], workspace.slug, env["project"].id).role == 15
+
+
+def test_leaving_project_also_revokes_organization_inheritance(inherited, workspace):
+    """直属成员离开行政项目时同时阻断组织继承访问。"""
+    env = inherited
+    direct = ProjectMember.objects.create(project=env["project"], member=env["user"], role=15)
+
+    response = env["client"].post(env["base"] + "members/leave/")
+
+    assert response.status_code == 204, response.data
+    direct.refresh_from_db()
+    assert direct.is_active is False
+    assert direct.inheritance_revoked is True
+    assert project_member_roster(env["project"]) == []
+    assert env["client"].get(env["base"]).status_code == 403
+
+
+def test_historical_inactive_membership_without_revoke_keeps_inheritance(inherited, workspace):
+    """历史停用且未显式撤销的记录不因新字段迁移而失去继承访问。"""
+    env = inherited
+    member = ProjectMember.objects.create(project=env["project"], member=env["user"], role=15)
+    member.is_active = False
+    member.save(update_fields=["is_active"])
+
+    row = project_member_roster(env["project"])[0]
+
+    assert row["membership_source"] == "ORGANIZATION"
+    assert effective_project_member(env["user"], workspace.slug, env["project"].id).role == 15
+
+
+def test_project_inheritance_revocation_rejects_unauthorized_or_invalid_requests(inherited, workspace, create_user):
+    """按用户撤销接口保持行政项目、管理员和目标成员边界。"""
+    from plane.db.models import ResearchProjectProfile
+
+    env = inherited
+    other_admin = make_user(first_name="Other", last_name="Admin")
+    WorkspaceMember.objects.create(workspace=workspace, member=other_admin, role=20)
+    member_client = APIClient()
+    member_client.force_authenticate(user=env["user"])
+    endpoint = env["base"] + f"members/by-user/{env['user'].id}/"
+
+    assert member_client.delete(endpoint).status_code == 403
+    assert env["owner_client"].delete(env["base"] + f"members/by-user/{other_admin.id}/").status_code == 409
+
+    ResearchProjectProfile.objects.create(workspace=workspace, project=env["project"], owner=create_user)
+    assert env["owner_client"].delete(endpoint).status_code == 403
+    assert not ProjectMember.objects.filter(project=env["project"], member=env["user"]).exists()
+
+
+def test_adding_project_member_rejects_inactive_workspace_member(inherited):
+    """停用工作区成员不能进入项目成员批量添加。"""
+    env = inherited
+    WorkspaceMember.objects.filter(workspace=env["project"].workspace, member=env["user"]).update(is_active=False)
+
+    response = env["owner_client"].post(
+        env["base"] + "members/",
+        {"members": [{"member_id": str(env["user"].id), "role": 15}]},
+        format="json",
+    )
+
+    assert response.status_code == 400, response.data
+    assert response.data["error_code"] == "inactive_workspace_member"
+    assert not ProjectMember.objects.filter(project=env["project"], member=env["user"]).exists()
 
 
 def test_administrative_role_endpoint_rejects_research_projects(inherited, workspace, create_user):

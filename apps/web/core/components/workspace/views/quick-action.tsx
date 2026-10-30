@@ -14,8 +14,6 @@ import { CustomMenu } from "@plane/ui";
 import { copyUrlToClipboard, cn } from "@plane/utils";
 // helpers
 import { useViewMenuItems } from "@/components/common/quick-actions-helper";
-// hooks
-import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 // local imports
 import { DeleteGlobalViewModal } from "./delete-view-modal";
@@ -35,10 +33,8 @@ export const WorkspaceViewQuickActions = observer(function WorkspaceViewQuickAct
   const { data } = useUser();
   const { allowPermissions } = useUserPermissions();
   // auth
-  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock();
-  const isOwner = !isAdministrativeSettingsLocked && view?.owned_by === data?.id;
-  const isAdmin =
-    !isAdministrativeSettingsLocked && allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const isOwner = view?.owned_by === data?.id;
+  const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
 
   const viewLink = `${workspaceSlug}/workspace-views/${view.id}`;
   const handleCopyText = async () => {

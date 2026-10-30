@@ -27,6 +27,7 @@ from plane.research.views.base import ResearchAPIView, truthy
 
 BOOLEAN_FIELDS = (
     "allow_multiple_projects",
+    "research_mcp_write_enabled",
     "research_agent_enabled",
     "research_agent_user_backend_enabled",
     "research_trace_enabled",
@@ -102,6 +103,15 @@ class ResearchSettingsEndpoint(ResearchAPIView):
         setting = get_or_create_setting(workspace, actor=request.user)
         if "module_enabled" in request.data:
             return Response({"message": "请在工作区设置中修改科研模块状态。"}, status=400)
+        if (
+            "research_mcp_write_enabled" in request.data
+            and truthy(request.data.get("research_mcp_write_enabled"))
+            and not (django_settings.RESEARCH_MCP_ENABLED and django_settings.RESEARCH_MCP_WRITE_ENABLED)
+        ):
+            return Response(
+                {"message": "服务器全局科研 MCP 读写开关未开启，不能开启工作区写入。"},
+                status=status.HTTP_409_CONFLICT,
+            )
         previous = WorkspaceResearchSettingSerializer(setting).data
         changed = []
 

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   fetchTagGroups: vi.fn(),
   onClose: vi.fn(),
   onSuccess: vi.fn(),
+  projectMembers: new Map(),
   tagGroups: [],
   workspaceMembers: new Map(),
 }));
@@ -108,7 +109,7 @@ vi.mock("@plane/ui", async () => {
 vi.mock("@/hooks/store/use-member", () => ({
   useMember: () => ({
     project: {
-      getProjectMemberDetails: () => null,
+      getProjectMemberDetails: (memberId: string) => mocks.projectMembers.get(memberId) ?? null,
       bulkAddMembersToProject: mocks.addMembers,
     },
     workspace: {
@@ -150,6 +151,7 @@ beforeEach(() => {
   );
   mocks.fetchTagGroups.mockResolvedValue(mocks.tagGroups);
 
+  mocks.projectMembers.clear();
   mocks.workspaceMembers.clear();
   mocks.workspaceMembers.set("alice-account", {
     email: "alice@example.com",
@@ -190,6 +192,21 @@ beforeEach(() => {
       last_name: "Li",
       display_name: "Carol Li",
       email: "carol@example.com",
+      avatar_url: "",
+    },
+  });
+  mocks.workspaceMembers.set("dave-inactive-account", {
+    email: "dave@example.com",
+    role: 15,
+    is_active: false,
+    tags: [adminTag],
+    member: {
+      id: "dave-inactive-account",
+      username: "dave.inactive",
+      first_name: "Dave",
+      last_name: "Inactive",
+      display_name: "Dave Inactive",
+      email: "dave@example.com",
       avatar_url: "",
     },
   });
@@ -325,6 +342,44 @@ it("标签筛选为空时禁用批量选择", async () => {
   expect(container.querySelector<HTMLButtonElement>("[data-testid='select-filtered-members']")!.disabled).toBe(true);
 });
 
+it("停用成员不进入候选列表和候选数量", async () => {
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal isOpen onClose={mocks.onClose} workspaceSlug="workspace" projectId="project" />
+    )
+  );
+
+  expect(container.querySelector("[data-testid='select-dave-inactive-account']")).toBeNull();
+  expect(container.querySelector("[data-testid='filtered-member-count']")?.textContent).toContain("3");
+
+  // 停用成员的标签不参与可添加标签统计。
+  expect(container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-admin']")).not.toBeNull();
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-admin']")?.click());
+  expect(container.querySelector("[data-testid='filtered-member-count']")?.textContent).toContain("1");
+});
+
+it("已全部添加的标签进入只读分区", async () => {
+  const alice = mocks.workspaceMembers.get("alice-account")!;
+  mocks.projectMembers.set("alice-account", {
+    id: "project-membership-alice",
+    member: alice.member,
+    role: 15,
+    original_role: 15,
+    membership_source: "DIRECT",
+    inherits_organization: false,
+  });
+
+  await act(async () =>
+    root.render(
+      <SendProjectInvitationModal isOpen onClose={mocks.onClose} workspaceSlug="workspace" projectId="project" />
+    )
+  );
+
+  expect(container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-admin']")).toBeNull();
+  expect(container.querySelector("[data-testid='fully-added-tag-tag-admin']")?.textContent).toContain("管理员");
+  expect(container.querySelector<HTMLButtonElement>("[data-testid='member-tag-tag-teacher']")).not.toBeNull();
+});
+
 it("标签加载失败和无可选标签时保留手动添加能力", async () => {
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   mocks.fetchTagGroups.mockRejectedValueOnce(new Error("tag groups unavailable"));
@@ -442,6 +497,18 @@ it("优先按结构化错误码提示角色越界，兼容旧版纯文案错误"
     expect.objectContaining({
       type: "error",
       message: "project_settings.members.role_lower_than_workspace",
+    })
+  );
+
+  // 停用工作区成员返回结构化错误，前端不复用泛化失败文案。
+  mocks.addMembers.mockRejectedValueOnce({ error_code: "inactive_workspace_member", error: "unrelated message" });
+  await act(async () => {
+    container.querySelector("form")?.requestSubmit();
+  });
+  expect(setToast).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      type: "error",
+      message: "project_settings.members.inactive_workspace_member",
     })
   );
 });

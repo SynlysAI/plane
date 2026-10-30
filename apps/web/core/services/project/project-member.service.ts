@@ -87,6 +87,15 @@ export class ProjectMemberService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  /** 按用户 ID 移除行政项目成员，支持纯组织继承成员。 */
+  async deleteProjectMemberByUser(workspaceSlug: string, projectId: string, userId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/members/by-user/${userId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }
 
 const projectMemberService = new ProjectMemberService();

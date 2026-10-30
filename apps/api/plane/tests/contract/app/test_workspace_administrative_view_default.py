@@ -8,7 +8,6 @@ from rest_framework.test import APIClient
 from plane.db.models import (
     WorkspaceAdministrativeViewDefault,
     WorkspaceMember,
-    WorkspaceResearchSetting,
 )
 from plane.tests.research_fixtures import add_workspace_member, make_user
 
@@ -114,12 +113,8 @@ def test_non_admin_cannot_publish_default_layout(env, role):
     assert not WorkspaceAdministrativeViewDefault.objects.filter(workspace=env["workspace"]).exists()
 
 
-def test_default_layout_remains_admin_only_when_administrative_lock_is_enabled(env):
-    """行政配置锁定开启时，全员默认布局仍只由工作区管理员发布。"""
-    WorkspaceResearchSetting.objects.update_or_create(
-        workspace=env["workspace"],
-        defaults={"administrative_settings_admin_only": True},
-    )
+def test_default_layout_remains_admin_only(env):
+    """全员默认布局仍只由工作区管理员发布。"""
     member = make_user(first_name="Locked", last_name="Member")
     add_workspace_member(env["workspace"], member, role=15)
 

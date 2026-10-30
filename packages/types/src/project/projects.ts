@@ -34,6 +34,8 @@ export interface IPartialProject {
   module_view: boolean;
   is_module_required?: boolean;
   is_label_required?: boolean;
+  /** 行政项目级配置锁；开启后仅项目管理员可修改模块、标签与视图配置。 */
+  administrative_settings_admin_only?: boolean;
   page_view: boolean;
   inbox_view: boolean;
   guest_view_all_features?: boolean;

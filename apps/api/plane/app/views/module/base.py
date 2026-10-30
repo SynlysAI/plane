@@ -300,7 +300,7 @@ class ModuleViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def create(self, request, slug, project_id):
         project = Project.objects.get(workspace__slug=slug, pk=project_id)
-        if administrative_settings_write_blocked(request.user, project.workspace, project):
+        if administrative_settings_write_blocked(request.user, project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         serializer = ModuleWriteSerializer(data=request.data, context={"project": project})
 
@@ -667,9 +667,7 @@ class ModuleViewSet(BaseViewSet):
                 {"error": "Module not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if administrative_settings_write_blocked(
-            request.user, current_module.project.workspace, current_module.project
-        ):
+        if administrative_settings_write_blocked(request.user, current_module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
         if current_module.archived_at:
@@ -735,7 +733,7 @@ class ModuleViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN], creator=True, model=Module)
     def destroy(self, request, slug, project_id, pk):
         module = Module.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
-        if administrative_settings_write_blocked(request.user, module.project.workspace, module.project):
+        if administrative_settings_write_blocked(request.user, module.project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         required_error = required_module_operation_error(module.project, module)
         if required_error is not None:
@@ -785,7 +783,7 @@ class ModuleLinkViewSet(BaseViewSet):
     def create(self, request, *args, **kwargs):
         """Create a module link after checking the administrative settings lock."""
         project = Project.objects.get(pk=kwargs["project_id"], workspace__slug=kwargs["slug"])
-        if administrative_settings_write_blocked(request.user, project.workspace, project):
+        if administrative_settings_write_blocked(request.user, project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, *args, **kwargs)
 
@@ -793,7 +791,7 @@ class ModuleLinkViewSet(BaseViewSet):
         """Update a module link after checking the administrative settings lock."""
         module_link = self.get_object()
         project = module_link.project
-        if administrative_settings_write_blocked(request.user, project.workspace, project):
+        if administrative_settings_write_blocked(request.user, project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         return super().partial_update(request, *args, **kwargs)
 
@@ -801,7 +799,7 @@ class ModuleLinkViewSet(BaseViewSet):
         """Delete a module link after checking the administrative settings lock."""
         module_link = self.get_object()
         project = module_link.project
-        if administrative_settings_write_blocked(request.user, project.workspace, project):
+        if administrative_settings_write_blocked(request.user, project):
             return Response({"error": ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
 

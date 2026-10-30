@@ -13,8 +13,6 @@ import { DEFAULT_GLOBAL_VIEWS_LIST, EUserPermissions, EUserPermissionsLevel } fr
 import { AddOutline } from "@makeplane/propel/icons";
 import type { TStaticViewTypes } from "@plane/types";
 import { Header, EHeaderVariant } from "@plane/ui";
-// hooks
-import { useAdministrativeSettingsLock } from "@/hooks/use-administrative-settings-lock";
 import { useGlobalView } from "@/hooks/store/use-global-view";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
@@ -71,7 +69,6 @@ export const GlobalViewsHeader = observer(function GlobalViewsHeader() {
   // store hooks
   const { currentWorkspaceViews } = useGlobalView();
   const { allowPermissions } = useUserPermissions();
-  const isAdministrativeSettingsLocked = useAdministrativeSettingsLock();
 
   // bring the active view to the centre of the header
   useEffect(() => {
@@ -86,9 +83,10 @@ export const GlobalViewsHeader = observer(function GlobalViewsHeader() {
     }
   }, [globalViewId, currentWorkspaceViews, containerRef]);
 
-  const isAuthorizedUser =
-    !isAdministrativeSettingsLocked &&
-    allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.WORKSPACE);
+  const isAuthorizedUser = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    EUserPermissionsLevel.WORKSPACE
+  );
 
   return (
     <Header variant={EHeaderVariant.SECONDARY} className="z-[12] min-h-[44px] bg-surface-1">

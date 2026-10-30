@@ -429,8 +429,12 @@ export class BaseProjectMemberStore implements IBaseProjectMemberStore {
    */
   removeMemberFromProject = async (workspaceSlug: string, projectId: string, userId: string) => {
     const memberDetails = this.getProjectMemberDetails(userId, projectId);
-    if (!memberDetails || !memberDetails?.id) throw new Error("Member not found");
-    await this.projectMemberService.deleteProjectMember(workspaceSlug, projectId, memberDetails.id);
+    if (!memberDetails) throw new Error("Member not found");
+    if (memberDetails.id) {
+      await this.projectMemberService.deleteProjectMember(workspaceSlug, projectId, memberDetails.id);
+    } else {
+      await this.projectMemberService.deleteProjectMemberByUser(workspaceSlug, projectId, userId);
+    }
     await this.fetchProjectMembers(workspaceSlug, projectId);
   };
 

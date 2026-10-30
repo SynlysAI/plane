@@ -260,7 +260,7 @@ class ProjectJoinEndpoint(BaseAPIView):
 
                 # Check if the user was already a member of project then activate the user
                 project_member = ProjectMember.objects.filter(
-                    workspace_id=project_invite.workspace_id, member=user
+                    workspace_id=project_invite.workspace_id, project_id=project_id, member=user
                 ).first()
                 if project_member is None:
                     # Create a Project Member
@@ -271,7 +271,8 @@ class ProjectJoinEndpoint(BaseAPIView):
                     )
                 else:
                     project_member.is_active = True
-                    project_member.role = project_member.role
+                    project_member.role = project_invite.role
+                    project_member.inheritance_revoked = False
                     project_member.save()
 
                 return Response(

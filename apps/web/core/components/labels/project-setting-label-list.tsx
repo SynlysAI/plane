@@ -87,7 +87,7 @@ export const ProjectSettingsLabelList = observer(function ProjectSettingsLabelLi
         title={t("project_settings.labels.heading")}
         description={
           isAdministrativeSettingsLocked
-            ? "标签已由工作区管理员统一设置；成员可在工作项中选择已有标签。"
+            ? "标签已由项目管理员统一设置；成员可在工作项中选择已有标签。"
             : t("project_settings.labels.description")
         }
         control={

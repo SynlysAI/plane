@@ -69,19 +69,43 @@ class ProjectMemberViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        requested_member_ids = [member.get("member_id") for member in members]
+        if any(member_id is None for member_id in requested_member_ids):
+            return Response(
+                {"error": "Member ID is required", "error_code": "invalid_member"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        workspace_member_roles = {
+            str(member_id): role
+            for member_id, role in WorkspaceMember.objects.filter(
+                workspace__slug=slug,
+                member_id__in=requested_member_ids,
+                member__is_active=True,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).values_list("member_id", "role")
+        }
+        if set(workspace_member_roles) != {str(member_id) for member_id in requested_member_ids}:
+            return Response(
+                {
+                    "error": "All project members must be active workspace members",
+                    "error_code": "inactive_workspace_member",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Initialize the bulk arrays
-        bulk_project_members = []
+        updated_members = []
+        new_members = []
         bulk_issue_props = []
 
         # Create a dictionary of the member_id and their roles
-        member_roles = {member.get("member_id"): member.get("role") for member in members}
+        member_roles = {str(member.get("member_id")): member.get("role") for member in members}
 
         # check the workspace role of the new user
-        for member in member_roles:
-            workspace_member_role = WorkspaceMember.objects.get(
-                workspace__slug=slug, member=member, is_active=True
-            ).role
-            if workspace_member_role in [20] and member_roles.get(member) in [5, 15]:
+        for member_id, workspace_member_role in workspace_member_roles.items():
+            if workspace_member_role in [20] and member_roles.get(member_id) in [5, 15]:
                 return Response(
                     {
                         "error": "You cannot add a user with role lower than the workspace role",
@@ -90,7 +114,7 @@ class ProjectMemberViewSet(BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            if workspace_member_role in [5] and member_roles.get(member) in [15, 20]:
+            if workspace_member_role in [5] and member_roles.get(member_id) in [15, 20]:
                 return Response(
                     {
                         "error": "You cannot add a user with role higher than the workspace role",
@@ -99,58 +123,69 @@ class ProjectMemberViewSet(BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Update roles in the members array based on the member_roles dictionary and set is_active to True
-        for project_member in ProjectMember.objects.filter(
-            project_id=project_id,
-            member_id__in=[member.get("member_id") for member in members],
-        ):
-            project_member.role = member_roles[str(project_member.member_id)]
-            project_member.is_active = True
-            bulk_project_members.append(project_member)
-
-        # Update the roles of the existing members
-        ProjectMember.objects.bulk_update(bulk_project_members, ["is_active", "role"], batch_size=100)
-
-        # Get the minimum sort_order for each member in the workspace
-        member_sort_orders = (
-            ProjectUserProperty.objects.filter(
-                workspace__slug=slug,
-                user_id__in=[member.get("member_id") for member in members],
+        with transaction.atomic():
+            existing_members = ProjectMember.objects.select_for_update().filter(
+                project_id=project_id,
+                member_id__in=requested_member_ids,
+                deleted_at__isnull=True,
             )
-            .values("user_id")
-            .annotate(min_sort_order=Min("sort_order"))
-        )
-        # Convert to dictionary for easy lookup: {user_id: min_sort_order}
-        sort_order_map = {str(item["user_id"]): item["min_sort_order"] for item in member_sort_orders}
+            existing_member_ids = set()
 
-        # Loop through requested members
-        for member in members:
-            member_id = str(member.get("member_id"))
-            # Get the minimum sort_order for this member, or use default
-            min_sort_order = sort_order_map.get(member_id)
-            # Create a new project member
-            bulk_project_members.append(
-                ProjectMember(
-                    member_id=member.get("member_id"),
-                    role=member.get("role", 5),
-                    project_id=project_id,
-                    workspace_id=project.workspace_id,
+            # Re-enable revoked members and update requested roles.
+            for project_member in existing_members:
+                existing_member_ids.add(str(project_member.member_id))
+                project_member.role = member_roles[str(project_member.member_id)]
+                project_member.is_active = True
+                project_member.inheritance_revoked = False
+                updated_members.append(project_member)
+
+            if updated_members:
+                ProjectMember.objects.bulk_update(
+                    updated_members,
+                    ["is_active", "role", "inheritance_revoked"],
+                    batch_size=100,
                 )
-            )
-            # Create a new issue property
-            bulk_issue_props.append(
-                ProjectUserProperty(
-                    user_id=member.get("member_id"),
-                    project_id=project_id,
-                    workspace_id=project.workspace_id,
-                    sort_order=(min_sort_order - 10000 if min_sort_order is not None else 65535),
+
+            # Get the minimum sort_order for each member in the workspace
+            member_sort_orders = (
+                ProjectUserProperty.objects.filter(
+                    workspace__slug=slug,
+                    user_id__in=[member.get("member_id") for member in members],
                 )
+                .values("user_id")
+                .annotate(min_sort_order=Min("sort_order"))
             )
+            # Convert to dictionary for easy lookup: {user_id: min_sort_order}
+            sort_order_map = {str(item["user_id"]): item["min_sort_order"] for item in member_sort_orders}
 
-        # Bulk create the project members and issue properties
-        project_members = ProjectMember.objects.bulk_create(bulk_project_members, batch_size=10, ignore_conflicts=True)
+            # Loop through requested members
+            for member in members:
+                member_id = str(member.get("member_id"))
+                if member_id in existing_member_ids:
+                    continue
+                # Get the minimum sort_order for this member, or use default
+                min_sort_order = sort_order_map.get(member_id)
+                # Create a new project member
+                new_members.append(
+                    ProjectMember(
+                        member_id=member.get("member_id"),
+                        role=member.get("role", 5),
+                        project_id=project_id,
+                        workspace_id=project.workspace_id,
+                    )
+                )
+                # Create a new issue property
+                bulk_issue_props.append(
+                    ProjectUserProperty(
+                        user_id=member.get("member_id"),
+                        project_id=project_id,
+                        workspace_id=project.workspace_id,
+                        sort_order=(min_sort_order - 10000 if min_sort_order is not None else 65535),
+                    )
+                )
 
-        _ = ProjectUserProperty.objects.bulk_create(bulk_issue_props, batch_size=10, ignore_conflicts=True)
+            ProjectMember.objects.bulk_create(new_members, batch_size=10, ignore_conflicts=True)
+            ProjectUserProperty.objects.bulk_create(bulk_issue_props, batch_size=10, ignore_conflicts=True)
 
         project_members = ProjectMember.objects.filter(
             project_id=project_id,
@@ -173,7 +208,8 @@ class ProjectMemberViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], research_review_read=True)
     def list(self, request, slug, project_id):
         project = Project.objects.select_related("workspace", "administrative_organization").get(
-            pk=project_id, workspace__slug=slug,
+            pk=project_id,
+            workspace__slug=slug,
         )
         return Response(project_member_roster(project), status=status.HTTP_200_OK)
 
@@ -328,7 +364,8 @@ class ProjectMemberViewSet(BaseViewSet):
             )
 
         project_member.is_active = False
-        project_member.save()
+        project_member.inheritance_revoked = True
+        project_member.save(update_fields=["is_active", "inheritance_revoked", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
@@ -356,7 +393,8 @@ class ProjectMemberViewSet(BaseViewSet):
             )
         # Deactivate the user
         project_member.is_active = False
-        project_member.save()
+        project_member.inheritance_revoked = True
+        project_member.save(update_fields=["is_active", "inheritance_revoked", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -395,8 +433,16 @@ class ProjectMemberUserEndpoint(BaseAPIView):
         if project_member is None:
             inherited = effective_project_member(request.user, slug, project_id)
             if inherited is not None:
-                return Response({"id": None, "member": str(request.user.id), "role": inherited.role,
-                                 "original_role": None, "created_at": None, "project": str(project_id)})
+                return Response(
+                    {
+                        "id": None,
+                        "member": str(request.user.id),
+                        "role": inherited.role,
+                        "original_role": None,
+                        "created_at": None,
+                        "project": str(project_id),
+                    }
+                )
             return Response({"error": "Project access denied"}, status=403)
         inherited = effective_project_member(request.user, slug, project_id)
         serializer = ProjectMemberSerializer(project_member)
@@ -421,12 +467,7 @@ class ProjectMemberRoleByUserEndpoint(BaseAPIView):
         if requested_role not in (ROLE.MEMBER.value, ROLE.ADMIN.value):
             return Response({"role": ["Role must be 15 or 20."]}, status=status.HTTP_400_BAD_REQUEST)
 
-        project = (
-            administrative_projects(slug)
-            .select_related("workspace")
-            .filter(pk=project_id)
-            .first()
-        )
+        project = administrative_projects(slug).select_related("workspace").filter(pk=project_id).first()
         if project is None:
             return Response(
                 {"error": "Role updates by user are only available for administrative projects."},
@@ -491,9 +532,7 @@ class ProjectMemberRoleByUserEndpoint(BaseAPIView):
 
         with transaction.atomic():
             direct_member = (
-                ProjectMember.objects.select_for_update()
-                .filter(project=project, member_id=member_id)
-                .first()
+                ProjectMember.objects.select_for_update().filter(project=project, member_id=member_id).first()
             )
             inherited = target_roster_row["membership_source"] == "ORGANIZATION"
 
@@ -517,10 +556,112 @@ class ProjectMemberRoleByUserEndpoint(BaseAPIView):
             else:
                 direct_member.role = requested_role
                 direct_member.is_active = True
-                direct_member.save(update_fields=["role", "is_active", "updated_at"])
+                direct_member.inheritance_revoked = False
+                direct_member.save(update_fields=["role", "is_active", "inheritance_revoked", "updated_at"])
                 result = next(row for row in project_member_roster(project) if row["member"] == str(member_id))
 
         return Response(result, status=status.HTTP_200_OK)
+
+
+class ProjectMemberByUserEndpoint(BaseAPIView):
+    """按用户 ID 移除行政项目成员，并阻断组织继承访问。"""
+
+    def delete(self, request, slug, project_id, member_id):
+        """撤销一个成员在当前行政项目中的直属或继承访问。
+
+        Args:
+            request: API 请求对象。
+            slug: 工作区别名。
+            project_id: 行政项目 ID。
+            member_id: 目标用户 ID。
+
+        Returns:
+            成功时返回 204；项目、权限或目标状态非法时返回对应错误。
+        """
+        project = administrative_projects(slug).select_related("workspace").filter(pk=project_id).first()
+        if project is None:
+            return Response(
+                {"error": "Member removal by user is only available for administrative projects."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        requester_workspace_member = WorkspaceMember.objects.filter(
+            workspace=project.workspace,
+            member=request.user,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).first()
+        target_workspace_member = WorkspaceMember.objects.filter(
+            workspace=project.workspace,
+            member_id=member_id,
+            member__is_active=True,
+            is_active=True,
+            deleted_at__isnull=True,
+        ).first()
+        if requester_workspace_member is None or target_workspace_member is None:
+            return Response({"error": "Workspace member not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        requester_project_member = effective_project_member(request.user, slug, project_id)
+        if requester_project_member is None or requester_project_member.role < ROLE.ADMIN.value:
+            return Response(
+                {"error": "You do not have permission to remove members."}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        if target_workspace_member.member_id == request.user.id:
+            return Response(
+                {"error": "You cannot remove yourself from the project. Please use leave project."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if user_can_manage_administrative_project(target_workspace_member.member, slug, project_id):
+            return Response(
+                {"error": "This member keeps project access through a workspace management role."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        existing_member = (
+            ProjectMember.objects.filter(
+                project=project,
+                member_id=member_id,
+                deleted_at__isnull=True,
+            )
+            .only("id", "is_active", "inheritance_revoked")
+            .first()
+        )
+        if existing_member is not None and not existing_member.is_active and existing_member.inheritance_revoked:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        target_project_member = effective_project_member(target_workspace_member.member, slug, project_id)
+        if target_project_member is None:
+            return Response({"error": "Project member not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_requester_workspace_admin = requester_workspace_member.role == ROLE.ADMIN.value
+        if not is_requester_workspace_admin and target_project_member.role >= requester_project_member.role:
+            return Response(
+                {"error": "You cannot remove a user having a role equal to or higher than yours."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        with transaction.atomic():
+            direct_member = (
+                ProjectMember.objects.select_for_update()
+                .filter(project=project, member_id=member_id, deleted_at__isnull=True)
+                .first()
+            )
+            if direct_member is None:
+                ProjectMember.objects.create(
+                    project=project,
+                    workspace=project.workspace,
+                    member_id=member_id,
+                    role=target_project_member.role,
+                    is_active=False,
+                    inheritance_revoked=True,
+                )
+            else:
+                direct_member.is_active = False
+                direct_member.inheritance_revoked = True
+                direct_member.save(update_fields=["is_active", "inheritance_revoked", "updated_at"])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserProjectRolesEndpoint(BaseAPIView):

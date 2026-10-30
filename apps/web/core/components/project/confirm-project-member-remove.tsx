@@ -23,10 +23,11 @@ type Props = {
   onSubmit: () => Promise<void>;
   isOpen: boolean;
   onClose: () => void;
+  isInheritedOnly?: boolean;
 };
 
 export const ConfirmProjectMemberRemove = observer(function ConfirmProjectMemberRemove(props: Props) {
-  const { data, onSubmit, isOpen, onClose } = props;
+  const { data, onSubmit, isOpen, onClose, isInheritedOnly = false } = props;
   const { t } = useTranslation();
   // router
   const { projectId } = useParams();
@@ -73,6 +74,12 @@ export const ConfirmProjectMemberRemove = observer(function ConfirmProjectMember
                   <>
                     {t("project_settings.members.confirm_leave_description", {
                       project: currentProjectDetails?.name ?? "",
+                    })}
+                  </>
+                ) : isInheritedOnly ? (
+                  <>
+                    {t("project_settings.members.confirm_revoke_description", {
+                      name: data?.display_name ?? "",
                     })}
                   </>
                 ) : (

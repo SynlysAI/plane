@@ -67,6 +67,9 @@ const getAddMemberErrorMessage = (error: unknown, translate: (key: string) => st
   if (errorCode === "role_higher_than_workspace" || message.includes("role higher than the workspace role")) {
     return translate("project_settings.members.role_higher_than_workspace");
   }
+  if (errorCode === "inactive_workspace_member") {
+    return translate("project_settings.members.inactive_workspace_member");
+  }
   return translate("project_settings.members.add_failed");
 };
 
@@ -103,20 +106,30 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const selectedMemberIds = useWatch({ control, name: "memberIds", defaultValue: [] }) ?? [];
   // derived values
   const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
-  const uninvitedPeople = workspaceMemberIds?.filter((userId) => {
+  const activeWorkspaceMemberIds = (workspaceMemberIds ?? []).filter(
+    (userId) => getWorkspaceMemberDetails(userId)?.is_active !== false
+  );
+  const uninvitedPeople = activeWorkspaceMemberIds.filter((userId) => {
     const projectMemberDetails = getProjectMemberDetails(userId, projectId);
-    const isInvited = projectMemberDetails?.member.id && projectMemberDetails?.original_role;
-    return !isInvited;
+    return !(projectMemberDetails?.member.id && projectMemberDetails?.original_role);
   });
   const candidateTagIds = new Set(
-    (uninvitedPeople ?? []).flatMap((userId) => getWorkspaceMemberDetails(userId)?.tags?.map((tag) => tag.id) ?? [])
+    uninvitedPeople.flatMap((userId) => getWorkspaceMemberDetails(userId)?.tags?.map((tag) => tag.id) ?? [])
+  );
+  const activeMemberTagIds = new Set(
+    activeWorkspaceMemberIds.flatMap((userId) => getWorkspaceMemberDetails(userId)?.tags?.map((tag) => tag.id) ?? [])
   );
   const availableTagGroups: IWorkspaceMemberTagGroup[] = [];
   for (const group of tagGroups) {
     const tags = group.tags.filter((tag) => candidateTagIds.has(tag.id));
     if (tags.length > 0) availableTagGroups.push({ ...group, tags });
   }
-  const tagFilteredMemberIds = (uninvitedPeople ?? []).filter((userId) => {
+  const fullyAddedTagGroups: IWorkspaceMemberTagGroup[] = [];
+  for (const group of tagGroups) {
+    const tags = group.tags.filter((tag) => activeMemberTagIds.has(tag.id) && !candidateTagIds.has(tag.id));
+    if (tags.length > 0) fullyAddedTagGroups.push({ ...group, tags });
+  }
+  const tagFilteredMemberIds = uninvitedPeople.filter((userId) => {
     if (selectedTagIds.length === 0) return true;
     const memberTagIds = new Set(getWorkspaceMemberDetails(userId)?.tags?.map((tag) => tag.id) ?? []);
     return selectedTagIds.every((tagId) => memberTagIds.has(tagId));
@@ -289,7 +302,9 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
             <section className="space-y-3 rounded-md border border-subtle bg-surface-1 p-3">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <div>
-                  <h4 className="text-13 font-medium text-primary">{t("project_settings.members.filter_by_tags")}</h4>
+                  <h4 className="text-13 font-medium text-primary">
+                    {t("project_settings.members.available_tag_groups")}
+                  </h4>
                   <p className="mt-0.5 text-11 text-tertiary">{t("project_settings.members.tag_filter_hint")}</p>
                 </div>
                 <p data-testid="filtered-member-count" className="text-11 text-tertiary" aria-live="polite">
@@ -329,6 +344,35 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                             </button>
                           );
                         })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!tagFilterError && !tagFilterLoading && fullyAddedTagGroups.length > 0 && (
+                <div className="space-y-2 border-t border-subtle pt-3">
+                  <div>
+                    <p className="text-11 font-medium text-tertiary">
+                      {t("project_settings.members.fully_added_tag_groups")}
+                    </p>
+                    <p className="mt-0.5 text-11 text-placeholder">
+                      {t("project_settings.members.fully_added_tag_hint")}
+                    </p>
+                  </div>
+                  {fullyAddedTagGroups.map((group) => (
+                    <div key={group.id} className="space-y-1.5">
+                      <p className="text-11 text-tertiary">{group.name}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {group.tags.map((tag) => (
+                          <span
+                            key={tag.id}
+                            data-testid={`fully-added-tag-${tag.id}`}
+                            className="inline-flex items-center rounded-md border border-subtle bg-surface-2 px-2.5 py-1.5 text-12 text-tertiary"
+                          >
+                            {tag.name}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   ))}
