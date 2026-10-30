@@ -9,8 +9,9 @@ class UnifiedMCPConnection(BaseModel):
     owner = models.ForeignKey("db.User", on_delete=models.CASCADE, related_name="unified_mcp_connections")
     name = models.CharField(max_length=100)
     token_hash = models.CharField(max_length=64, unique=True)
+    token_encrypted = models.TextField(blank=True, default="")
     scope = models.JSONField()
-    expires_at = models.DateTimeField(db_index=True)
+    expires_at = models.DateTimeField(db_index=True, null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
 

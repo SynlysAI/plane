@@ -1,61 +1,57 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@plane/propel/button";
-import { AlertModalCore } from "@plane/ui";
-import { copyTextToClipboard } from "@plane/utils";
 import {
   WeeklyReportMCPService,
   type WeeklyReportAction,
-  type WeeklyReportIssueRequest,
   type WeeklyReportOptions,
   type WeeklyReportWorkspace,
+  type WeeklyReportProblem,
 } from "@/services/weekly-report-mcp.service";
-import { configurationFiles, type MCPConfig } from "./connection-config";
-import { downloadMCPConfiguration } from "./connection-download";
-import {
-  useWeeklyReportConnections,
-  useWeeklyReportMutations,
-  weeklyReportErrorMessage as errorMessage,
-} from "./use-weekly-report-settings";
-import { WeeklyReportConnectionsList, WeeklyReportDate } from "./weekly-report-connections";
-import { weeklyReportActionLabels as actionLabels } from "./weekly-report-config";
+import { ConnectionBrowser, CreateConnectionDialog, LifetimeSelect, MCP_INPUT } from "./connection-ui";
+import { configurationFiles } from "./connection-config";
+import { useConnectionManager } from "./use-connection-manager";
+import { weeklyReportActionLabels, weeklyReportConfig, weeklyReportMetadata } from "./weekly-report-config";
 
-const service = new WeeklyReportMCPService();
-const inputClass = "mt-1 w-full rounded border border-subtle bg-surface-1 p-2";
-const hasControlCharacters = (value: string) =>
-  [...value].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
+const SERVICE = new WeeklyReportMCPService();
+/** 将服务错误转换为不含凭据的中文消息。 */
+function errorMessage(error: unknown) {
+  return (error as WeeklyReportProblem)?.message || "请求未完成，请刷新后重试。";
+}
 
+/** 周报连接保持独立授权，与项目连接共享创建和管理体验。 */
 export function WeeklyReportMCPSettings({ workspaceSlug }: { workspaceSlug?: string }) {
   const [options, setOptions] = useState<WeeklyReportOptions>();
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
-    let active = true;
+    let live = true;
     setOptions(undefined);
     setError("");
-    void service.options().then(
+    void SERVICE.options().then(
       (value) => {
-        if (!active) return;
+        if (!live) return;
         setOptions(value);
         setSelected(value.workspaces.find((w) => w.slug === workspaceSlug)?.slug ?? value.workspaces[0]?.slug ?? "");
         return;
       },
       (failure) => {
-        if (active) setError(errorMessage(failure));
+        if (live) setError(errorMessage(failure));
       }
     );
     return () => {
-      active = false;
+      live = false;
     };
   }, [workspaceSlug, retry]);
   const workspace = options?.workspaces.find((w) => w.slug === selected);
   return (
-    <section aria-label="周报连接设置" className="space-y-5">
-      <h2 className="text-18 font-semibold">周报连接</h2>
-      <p className="text-secondary">连接 Agent 后，可整理并提交本人的周报。正文提案和提交授权在 Agent 客户端完成。</p>
+    <section aria-label="周报连接设置" className="min-w-0 space-y-5 text-13">
+      <header className="space-y-2">
+        <h1 className="text-24 font-semibold">周报连接</h1>
+      </header>
       {error ? (
         <div role="alert">
-          {error}
+          <p>{error}</p>
           <Button variant="secondary" onClick={() => setRetry((v) => v + 1)}>
             重试周报设置
           </Button>
@@ -64,15 +60,13 @@ export function WeeklyReportMCPSettings({ workspaceSlug }: { workspaceSlug?: str
         <p role="status">正在加载周报设置…</p>
       ) : (
         <>
-          <p>当前账号：{options.identity.display_name}</p>
-          {options.workspaces.length === 0 ? (
-            <p>暂无可管理周报连接的工作区。</p>
-          ) : (
-            <label className="block max-w-lg">
-              工作区
+          <p className="text-secondary">当前账号：{options.identity.display_name}</p>
+          {options.workspaces.length ? (
+            <label className="block max-w-lg space-y-2">
+              <span>工作区</span>
               <select
                 aria-label="周报工作区"
-                className={inputClass}
+                className={MCP_INPUT}
                 value={selected}
                 onChange={(event) => setSelected(event.target.value)}
               >
@@ -83,241 +77,125 @@ export function WeeklyReportMCPSettings({ workspaceSlug }: { workspaceSlug?: str
                 ))}
               </select>
             </label>
+          ) : (
+            <p>暂无可管理周报连接的工作区。</p>
           )}
           {workspace && <WorkspaceWeeklyReportSettings key={workspace.slug} workspace={workspace} />}
-          <Button variant="secondary" onClick={() => setRetry((v) => v + 1)}>
-            刷新周报能力
-          </Button>
         </>
       )}
     </section>
   );
 }
 
+/** 按工作区隔离周报记录和所有临时凭据。 */
 function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportWorkspace }) {
-  const list = useWeeklyReportConnections(workspace.slug);
-  const mutation = useWeeklyReportMutations(workspace.slug, list);
+  const slug = workspace.slug;
+  const adapter = useMemo(
+    () => ({
+      list: (cursor?: string) => SERVICE.connections(slug, cursor),
+      issue: (data: Parameters<typeof SERVICE.issue>[1], csrf: string) => SERVICE.issue(slug, data, csrf),
+      configuration: (id: string, csrf: string) => SERVICE.configuration(slug, id, csrf),
+      rotate: (id: string, csrf: string) => SERVICE.rotate(slug, id, csrf),
+      revoke: (id: string, csrf: string) => SERVICE.revoke(slug, id, csrf),
+      metadata: weeklyReportMetadata,
+      files: (value: Parameters<typeof weeklyReportConfig>[0]) => configurationFiles([weeklyReportConfig(value, slug)]),
+      error: errorMessage,
+    }),
+    [slug]
+  );
+  const manager = useConnectionManager(adapter);
+  const [actions, setActions] = useState<WeeklyReportAction[]>([]);
+  const [days, setDays] = useState<number | null>(workspace.default_ttl_days ?? 365);
+  const [creating, setCreating] = useState(false);
+  const valid =
+    workspace.enabled &&
+    actions.length > 0 &&
+    actions.every((a) => workspace.actions.includes(a)) &&
+    workspace.ttl_days.includes(days) &&
+    manager.ready &&
+    !manager.loading;
   return (
-    <div className="space-y-5">
-      <p>{workspace.period_description}</p>
-      {!workspace.enabled && (
-        <p role="status">
-          此工作区暂不可创建周报连接：{workspace.unavailable_reason || "周报连接尚未开放。"} 仍可管理已有连接。
-        </p>
-      )}
-      <WeeklyReportConnectionForm
-        workspace={workspace}
-        busy={mutation.busy}
-        issuing={mutation.issuing}
-        blocked={!list.ready || list.busy || mutation.uncertain || Boolean(mutation.result)}
-        hasResult={Boolean(mutation.result)}
-        onIssue={mutation.issue}
-      />
-      {mutation.error && <p role="alert">{mutation.error}</p>}
-      {mutation.uncertain && (
-        <Button
-          variant="secondary"
-          disabled={!list.ready || list.busy || mutation.busy}
-          onClick={mutation.confirmRecovery}
-        >
-          已核对连接，继续创建
+    <div className="min-w-0 space-y-6">
+      <section aria-label="创建周报连接" className="space-y-5">
+        <h2 className="text-16 font-semibold">创建周报连接</h2>
+        <p className="text-secondary">{workspace.period_description}</p>
+        {!workspace.enabled && (
+          <p role="status">此工作区暂不可创建周报连接：{workspace.unavailable_reason || "周报连接尚未开放。"}</p>
+        )}
+        <fieldset disabled={!workspace.enabled || manager.busy || creating} className="space-y-4">
+          <legend className="mb-3 text-14 font-medium">访问权限</legend>
+          <div className="flex flex-wrap gap-4">
+            {workspace.actions.map((action) => (
+              <label key={action} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  aria-label={weeklyReportActionLabels[action]}
+                  checked={actions.includes(action)}
+                  onChange={(event) =>
+                    setActions((before) =>
+                      event.target.checked ? [...before, action] : before.filter((a) => a !== action)
+                    )
+                  }
+                />
+                {weeklyReportActionLabels[action]}
+              </label>
+            ))}
+          </div>
+          <LifetimeSelect value={days} onChange={setDays} options={workspace.ttl_days} />
+        </fieldset>
+        {actions.includes("submit") && (
+          <p className="text-12 text-secondary">正式提交将生成周报版本，并按现有规则通知审阅人。</p>
+        )}
+        <Button disabled={!valid || manager.busy || manager.uncertain} onClick={() => setCreating(true)}>
+          创建连接
         </Button>
-      )}
-      {mutation.result && (
-        <WeeklyReportResult
-          config={mutation.result.config}
-          expires={mutation.result.expires}
-          clear={mutation.clearResult}
-          setNotice={mutation.setNotice}
-        />
-      )}
-      {mutation.notice && <p role="status">{mutation.notice}</p>}
-      <WeeklyReportConnectionsList list={list} busy={mutation.busy} onRevoke={mutation.openRevoke} />
-      <AlertModalCore
-        isOpen={Boolean(mutation.revoke)}
-        handleClose={mutation.closeRevoke}
-        handleSubmit={mutation.revokeConnection}
-        isSubmitting={mutation.busy}
-        title="确认撤销周报连接"
-        content={
+        {manager.uncertain && (
+          <Button
+            variant="secondary"
+            disabled={manager.loading || Boolean(manager.listError) || manager.busy}
+            onClick={manager.confirmRecovery}
+          >
+            已核对列表，继续创建
+          </Button>
+        )}
+      </section>
+      <CreateConnectionDialog
+        open={creating}
+        onClose={() => setCreating(false)}
+        busy={manager.busy}
+        blocked={manager.uncertain}
+        error={manager.error}
+        summary={
           <>
-            <p>
-              {mutation.revoke?.label} · {workspace.name}：撤销后此连接将无法继续访问，操作不能恢复。
-            </p>
-            {mutation.revokeError && <p role="alert">{mutation.revokeError}</p>}
+            <p>{workspace.name} · 仅本人周报</p>
+            <p>访问权限：{actions.map((a) => weeklyReportActionLabels[a]).join("、")}</p>
+            <p>有效期：{days === null ? "永不过期" : days === 365 ? "一年" : `${days} 天`}</p>
           </>
         }
+        onConfirm={async (label) => {
+          if (await manager.issue({ label, actions, ttl_days: days })) setCreating(false);
+        }}
       />
+      <ConnectionBrowser
+        title="已有周报连接"
+        {...manager}
+        selected={manager.selected}
+        name={(row) => row.label}
+        refresh={() => void manager.load()}
+        retry={() => void manager.retry()}
+        more={() => void manager.load(manager.cursor!)}
+        hide={manager.hideConfiguration}
+      >
+        {manager.selected && (
+          <div className="space-y-2 text-13">
+            <h4 className="font-medium">授权范围</h4>
+            <p>{workspace.name} · 仅本人本周与上周的周报</p>
+            <p className="text-secondary">
+              {manager.selected.actions.map((a) => weeklyReportActionLabels[a]).join("、")}
+            </p>
+          </div>
+        )}
+      </ConnectionBrowser>
     </div>
-  );
-}
-
-function validIssue(workspace: WeeklyReportWorkspace, request: WeeklyReportIssueRequest) {
-  const allowedActions = new Set(workspace.actions);
-  return Boolean(
-    workspace.enabled &&
-    request.label &&
-    request.label.length <= 100 &&
-    !hasControlCharacters(request.label) &&
-    request.actions.length &&
-    request.actions.every((action) => allowedActions.has(action)) &&
-    workspace.ttl_days.includes(request.ttl_days)
-  );
-}
-
-function WeeklyReportConnectionForm({
-  workspace,
-  busy,
-  issuing,
-  blocked,
-  hasResult,
-  onIssue,
-}: {
-  workspace: WeeklyReportWorkspace;
-  busy: boolean;
-  issuing: boolean;
-  blocked: boolean;
-  hasResult: boolean;
-  onIssue: (request: WeeklyReportIssueRequest) => Promise<void>;
-}) {
-  const [label, setLabel] = useState("个人周报助手");
-  const [actions, setActions] = useState<WeeklyReportAction[]>([]);
-  const [selectedDays, setSelectedDays] = useState<number>();
-  const days =
-    selectedDays !== undefined && workspace.ttl_days.includes(selectedDays) ? selectedDays : workspace.ttl_days[0];
-  const request = { label: label.trim(), actions, ttl_days: days ?? 0 };
-  const valid = validIssue(workspace, request) && !hasControlCharacters(label);
-  const selectedActions = new Set(actions);
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (valid && !busy && !blocked) void onIssue(request);
-  }
-  return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border border-subtle p-4">
-      <fieldset disabled={!workspace.enabled || busy || hasResult} className="space-y-4">
-        <legend className="text-16 font-semibold">创建本人周报连接</legend>
-        <label className="block max-w-lg">
-          连接名称
-          <input
-            aria-label="周报连接名称"
-            className={inputClass}
-            maxLength={100}
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-          />
-        </label>
-        <fieldset className="flex flex-wrap gap-4">
-          <legend>允许的操作（分别授权）</legend>
-          {workspace.actions.map((action) => (
-            <label key={action} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                aria-label={actionLabels[action]}
-                checked={selectedActions.has(action)}
-                onChange={(event) =>
-                  setActions((old) => (event.target.checked ? [...old, action] : old.filter((a) => a !== action)))
-                }
-              />
-              {actionLabels[action]}
-            </label>
-          ))}
-        </fieldset>
-        <label className="block max-w-lg">
-          有效期
-          <select
-            aria-label="周报连接有效期"
-            className={inputClass}
-            value={days ?? ""}
-            onChange={(event) => setSelectedDays(Number(event.target.value))}
-          >
-            {workspace.ttl_days.map((day) => (
-              <option key={day} value={day}>
-                {day} 天
-              </option>
-            ))}
-          </select>
-        </label>
-      </fieldset>
-      <p className="text-12 text-secondary">
-        正式提交会生成正式版本并按现有规则通知审阅人。此连接不包含科研节点读取权。签发未返回时离开页面，请先在已有连接中核对结果。
-      </p>
-      <Button type="submit" disabled={!valid || busy || blocked}>
-        {issuing ? "正在生成…" : "生成周报连接"}
-      </Button>
-    </form>
-  );
-}
-
-function WeeklyReportResult({
-  config,
-  expires,
-  clear,
-  setNotice,
-}: {
-  config: MCPConfig;
-  expires: string;
-  clear: () => void;
-  setNotice: (value: string) => void;
-}) {
-  const files = configurationFiles([config]);
-  const active = useRef(true);
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  async function copy(text: string) {
-    try {
-      await copyTextToClipboard(text);
-      if (active.current) setNotice("配置已复制。");
-    } catch {
-      if (active.current) setNotice("复制失败，请手动选择配置。");
-    }
-  }
-  function download(extension: "toml" | "json") {
-    try {
-      downloadMCPConfiguration(files[extension], extension);
-    } catch {
-      setNotice("导出失败，请复制配置。");
-    }
-  }
-  return (
-    <section aria-label="周报连接生成结果" className="space-y-4 rounded-xl border border-subtle p-4">
-      <h3 className="text-16 font-semibold">本次周报连接配置</h3>
-      <p>
-        到期时间：
-        <WeeklyReportDate value={expires} />
-        。密钥仅本次展示，切页、切工作区、关闭设置或清除结果后无法找回。请妥善保管复制或导出的文件。
-      </p>
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        {(["toml", "json"] as const).map((format) => (
-          <label key={format} className="block min-w-0">
-            {format === "toml" ? "Codex TOML" : "通用 MCP JSON"}
-            <textarea
-              aria-label={`周报 ${format.toUpperCase()} 配置`}
-              readOnly
-              className="font-mono mt-1 h-48 w-full rounded border border-subtle bg-surface-1 p-3"
-              value={files[format]}
-            />
-          </label>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-3">
-        {(["toml", "json"] as const).map((format) => (
-          <span key={format} className="flex gap-3">
-            <Button variant="secondary" onClick={() => void copy(files[format])}>
-              复制 {format.toUpperCase()}
-            </Button>
-            <Button variant="secondary" onClick={() => download(format)}>
-              导出 {format.toUpperCase()}
-            </Button>
-          </span>
-        ))}
-        <Button variant="secondary" onClick={clear}>
-          清除周报配置和密钥
-        </Button>
-      </div>
-    </section>
   );
 }

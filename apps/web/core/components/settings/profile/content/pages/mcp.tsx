@@ -4,14 +4,16 @@ import { MCPManagement } from "@/components/mcp/mcp-management";
 import { WeeklyReportMCPSettings } from "@/components/mcp/weekly-report-settings";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useUser } from "@/hooks/store/user";
 
 export const MCPProfileSettings = observer(function MCPProfileSettings({ inModal = false }: { inModal?: boolean }) {
   const { currentWorkspace } = useWorkspace();
+  const { data: user } = useUser();
   const workspaceSlug = currentWorkspace?.slug;
   return inModal ? (
-    <ModalMCPSettings workspaceSlug={workspaceSlug} />
+    <ModalMCPSettings key={user?.id ?? "session"} workspaceSlug={workspaceSlug} />
   ) : (
-    <MCPSettingsTabs key={workspaceSlug} workspaceSlug={workspaceSlug} />
+    <MCPSettingsTabs key={`${user?.id ?? "session"}:${workspaceSlug}`} workspaceSlug={workspaceSlug} />
   );
 });
 
@@ -30,7 +32,7 @@ function MCPSettingsTabs({ workspaceSlug, inModal = false }: { workspaceSlug?: s
   return (
     <div className="space-y-6">
       <div role="tablist" aria-label="MCP 连接类型" className="flex gap-2 border-b border-subtle">
-        {["现有连接", "周报连接"].map((label, index) => (
+        {["项目连接", "周报连接"].map((label, index) => (
           <button
             key={label}
             ref={(element) => {

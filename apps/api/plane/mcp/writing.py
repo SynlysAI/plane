@@ -9,12 +9,12 @@ import json
 from crum import impersonate
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import DatabaseError, IntegrityError, transaction
-from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from plane.app.serializers import IssueCommentSerializer, IssueCreateSerializer, IssueDetailSerializer
 from plane.db.models import Project, UnifiedMCPConnection, UnifiedMCPWriteResult
 from plane.mcp.catalog import ADMIN_SCHEMAS, validate
+from plane.mcp.credentials import unexpired_connections
 from plane.mcp.reading import VERSION, UnifiedReadService
 from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.audit import record_audit_event
@@ -61,10 +61,10 @@ class UnifiedWriteService:
                     UnifiedMCPConnection.objects.select_related("owner")
                     .select_for_update(of=("self",))
                     .filter(
+                        unexpired_connections(),
                         pk=self.connection.pk,
                         owner__is_active=True,
                         revoked_at__isnull=True,
-                        expires_at__gt=timezone.now(),
                     )
                     .first()
                 )

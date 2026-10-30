@@ -3,6 +3,8 @@
 日期：2026-10-26。契约：`plane.weekly-report.v1`。
 接口已实现；本次没有部署、推送或合并，也没有前端改动。
 
+2026-10-30 管理接口更新：支持配置回看、重置及长期授权，详见 [设置与迁移说明](../operations/mcp-connection-settings-2026-10-30.md)。以下管理字段已同步更新；机器工具契约不变。
+
 完整规范见 [v1 契约](mcp-weekly-report-contract-v1.md)，请求字段见 [schema](mcp-weekly-report-contract-v1.schemas.json)。
 [脱敏请求/响应样例](mcp-weekly-report-api-v1.examples.json) 是在独立、已迁移的临时 PostgreSQL 上通过真实 Django API 捕获的 12 组结果；账号/工作区为合成夹具，密钥、CSRF、签名 revision 已替换为 `<redacted>`，不能直接执行。
 
@@ -12,13 +14,15 @@
 响应都带 `Cache-Control: no-store`；错误是 `{error_code,message,retryable,operation_id}`，operation_id 可 null。
 路径中 slug 必须 URL 编码。
 
-| 方法 | 路径                                                                               | 请求/响应                                                                                             |
-| ---- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| GET  | `/api/research/mcp/weekly-report/options/`                                         | 本人有有效非访客席位的候选工作区及能力；返回 workspaces、identity、csrf_token、contract_version       |
-| GET  | `/api/research/workspaces/<slug>/mcp/weekly-report/options/`                       | 同形响应，workspaces 仅含所选工作区                                                                   |
-| POST | `/api/research/workspaces/<slug>/mcp/weekly-report/connections/`                   | 仅 `{label,actions,ttl_days}`；HTTP 201，连接元数据加 mcp_path、headers、csrf_token、contract_version |
-| GET  | 上述 connections 路径                                                              | 本人连接，每页 30 条；仅可传 cursor；返回 results、next_cursor、csrf_token、contract_version          |
-| POST | `/api/research/workspaces/<slug>/mcp/weekly-report/connections/<grant_id>/revoke/` | 必须为空对象 `{}`；返回 `{revoked:true,id}`，重复撤销幂等                                             |
+| 方法 | 路径                                                                                      | 请求/响应                                                                                             |
+| ---- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| GET  | `/api/research/mcp/weekly-report/options/`                                                | 本人有有效非访客席位的候选工作区及能力；返回 workspaces、identity、csrf_token、contract_version       |
+| GET  | `/api/research/workspaces/<slug>/mcp/weekly-report/options/`                              | 同形响应，workspaces 仅含所选工作区                                                                   |
+| POST | `/api/research/workspaces/<slug>/mcp/weekly-report/connections/`                          | 仅 `{label,actions,ttl_days}`；HTTP 201，连接元数据加 mcp_path、headers、csrf_token、contract_version |
+| GET  | 上述 connections 路径                                                                     | 本人连接，每页 30 条；仅可传 cursor；返回 results、next_cursor、csrf_token、contract_version          |
+| POST | `/api/research/workspaces/<slug>/mcp/weekly-report/connections/<grant_id>/revoke/`        | 必须为空对象 `{}`；返回 `{revoked:true,id}`，重复撤销幂等                                             |
+| POST | `/api/research/workspaces/<slug>/mcp/weekly-report/connections/<grant_id>/configuration/` | 空对象 `{}`；取回本人有效连接的完整客户端配置                                                         |
+| POST | `/api/research/workspaces/<slug>/mcp/weekly-report/connections/<grant_id>/rotate/`        | 空对象 `{}`；原子重置密钥，保持原身份、权限与期限                                                     |
 
 workspaces 每项字段固定为：
 
@@ -27,8 +31,10 @@ id: UUID
 slug, name: string
 enabled: boolean
 unavailable_reason: string | null
+unavailable_reason_code: string | null
 actions: ["save_draft", "submit"]，不可用时 []
-ttl_days: [1, 7, 30]
+ttl_days: [1, 7, 30, 365, null]
+default_ttl_days: 365
 period_policy: "current_and_previous_week.v1"
 period_description: "仅本人本周与上周的周报，周期按工作区报告时区计算。"
 ```
@@ -39,12 +45,12 @@ period_description: "仅本人本周与上周的周报，周期按工作区报�
 { "label": "个人周报助手", "actions": ["save_draft", "submit"], "ttl_days": 7 }
 ```
 
-label 去除两端空白后 1–100 字符，不允许控制字符；动作不得重复、不得为空；ttl_days 必须是后端选项中的整数。
+label 去除两端空白后 1–100 字符，不允许控制字符；动作不得重复、不得为空；ttl_days 必须是后端选项中的整数或 null，null 表示永不过期。
 只选 save_draft 不获得 submit；只选 submit 也不隐含 save_draft。
 同一工作区/本人最多 10 条未撤销、未过期连接，达到限制返回 grant_limit/409。
 
-连接元数据字段：id、workspace（slug）、label、actions、report_type="WEEKLY"、period_policy、created_at、expires_at、revoked_at、last_used_at。
-完整密钥仅在签发响应的 `headers["X-Weekly-Report-Token"]` 出现一次；列表和撤销不返回密钥/摘要。
+连接元数据字段：id、workspace（slug）、label、actions、report_type="WEEKLY"、period_policy、created_at、expires_at（可为 null）、revoked_at、last_used_at、configuration_available。
+完整密钥仅在创建、按需配置回看或重置响应的 `headers["X-Weekly-Report-Token"]` 返回；列表和撤销不返回密钥、摘要或密文。旧连接须确认重置后启用回看；过期或撤销后禁止回看及重置。
 列表包括过期、撤销记录；开关关闭或失去科研组织关系后，仍可由有效工作区成员登录列出/撤销自己的连接。
 列表 cursor 有效 1 小时，绑定本人和工作区；不能复用于其他账号或工作区。
 

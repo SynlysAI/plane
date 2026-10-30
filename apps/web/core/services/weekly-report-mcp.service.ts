@@ -9,7 +9,8 @@ export type WeeklyReportWorkspace = {
   enabled: boolean;
   unavailable_reason: string | null;
   actions: WeeklyReportAction[];
-  ttl_days: number[];
+  ttl_days: (number | null)[];
+  default_ttl_days?: number;
   period_policy: string;
   period_description: string;
 };
@@ -27,7 +28,8 @@ export type WeeklyReportConnection = {
   report_type: "WEEKLY";
   period_policy: string;
   created_at: string;
-  expires_at: string;
+  expires_at: string | null;
+  configuration_available: boolean;
   revoked_at: string | null;
   last_used_at: string | null;
 };
@@ -41,7 +43,7 @@ export type WeeklyReportConnections = {
   next_cursor: string | null;
   csrf_token: string;
 };
-export type WeeklyReportIssueRequest = { label: string; actions: WeeklyReportAction[]; ttl_days: number };
+export type WeeklyReportIssueRequest = { label: string; actions: WeeklyReportAction[]; ttl_days: number | null };
 export type WeeklyReportProblem = { status?: number; uncertain: boolean; message: string };
 
 // Never surface raw server/transport errors: issuance responses can contain a secret.
@@ -53,6 +55,11 @@ function problem(error: unknown): WeeklyReportProblem {
     invalid_arguments: "连接信息无效，请核对名称、权限和有效期。",
     invalid_cursor: "分页已失效，请刷新连接列表。",
     feature_disabled: "周报连接尚未开放。",
+    reports_disabled: "当前账号或工作区尚未开放周报连接。",
+    policy_changed: "工作区周报设置已变化，请刷新后重试。",
+    connection_inactive: "连接已过期或撤销，请创建新连接。",
+    configuration_unavailable: "此连接尚不支持配置回看，请确认后重置密钥。",
+    credential_unavailable: "配置无法恢复，请重试或确认后重置密钥。",
     report_org_required: "请先完善本人组织归属。",
   };
   return {
@@ -61,9 +68,11 @@ function problem(error: unknown): WeeklyReportProblem {
     message:
       status === 401
         ? "登录已失效，请重新登录。"
-        : status === 403
-          ? "当前身份或会话无权执行此操作，请刷新后重试。"
-          : messages[response?.data?.error_code ?? ""] || "服务请求失败，请刷新后重试。",
+        : messages[response?.data?.error_code ?? ""]
+          ? messages[response?.data?.error_code ?? ""]
+          : status === 403
+            ? "当前身份或会话无权执行此操作，请刷新后重试。"
+            : messages[response?.data?.error_code ?? ""] || "服务请求失败，请刷新后重试。",
   };
 }
 
@@ -92,6 +101,32 @@ export class WeeklyReportMCPService {
   async issue(workspace: string, data: WeeklyReportIssueRequest, csrf: string): Promise<WeeklyReportIssued> {
     return this.http
       .post(this.path(workspace) + "connections/", data, { headers: { "X-CSRFToken": csrf } })
+      .then((r) => r.data)
+      .catch((e) => {
+        throw problem(e);
+      });
+  }
+  /** 按需取回周报客户端配置。 */
+  async configuration(workspace: string, id: string, csrf: string): Promise<WeeklyReportIssued> {
+    return this.http
+      .post(
+        this.path(workspace) + `connections/${encodeURIComponent(id)}/configuration/`,
+        {},
+        { headers: { "X-CSRFToken": csrf } }
+      )
+      .then((r) => r.data)
+      .catch((e) => {
+        throw problem(e);
+      });
+  }
+  /** 重置周报连接密钥。 */
+  async rotate(workspace: string, id: string, csrf: string): Promise<WeeklyReportIssued> {
+    return this.http
+      .post(
+        this.path(workspace) + `connections/${encodeURIComponent(id)}/rotate/`,
+        {},
+        { headers: { "X-CSRFToken": csrf } }
+      )
       .then((r) => r.data)
       .catch((e) => {
         throw problem(e);

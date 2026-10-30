@@ -38,7 +38,7 @@ export default observer(function WorkspaceApprovalsPage() {
       ? requestedDomain
       : (domainTabs[0]?.id ?? "shared_todos");
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface-1">
+    <div className="workspace-content-inset flex h-full min-h-0 flex-col bg-surface-1">
       <h1 className="text-22 px-5 py-4 font-semibold">审批中心</h1>
       <nav aria-label="审批类型" className="flex gap-4 border-b border-subtle px-5">
         {domainTabs.map((item) => (

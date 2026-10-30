@@ -58,7 +58,7 @@ export default observer(function WorkspaceManagementPage() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface-1">
+    <div className="workspace-content-inset flex h-full min-h-0 flex-col bg-surface-1">
       <h1 className="text-22 shrink-0 px-5 py-4 font-semibold">管理</h1>
       <nav className="flex shrink-0 gap-4 border-b border-subtle px-5" aria-label="管理分类">
         {tabs.map((tab) => (

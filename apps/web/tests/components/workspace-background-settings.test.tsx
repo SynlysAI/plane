@@ -3,6 +3,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EFileAssetType } from "@plane/types";
+import { ThemeStore } from "@/store/theme.store";
 
 const mocks = vi.hoisted(() => ({
   updateUserTheme: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const state = {
+  appTheme: new ThemeStore(),
   profile: {
     id: "profile",
     theme: {
@@ -29,6 +31,8 @@ vi.mock("@plane/i18n", () => ({ useTranslation: () => ({ t: (key: string) => key
 vi.mock("@plane/propel/button", () => ({
   Button: ({ loading: _loading, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
 }));
+vi.mock("@plane/propel/tooltip", () => ({ Tooltip: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock("@/hooks/store/use-app-theme", () => ({ useAppTheme: () => state.appTheme }));
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { SUCCESS: "success", ERROR: "error" },
   setToast: mocks.setToast,
@@ -57,6 +61,7 @@ beforeEach(() => {
     theme: { theme: "dark", primary: "#3f76ff", background: "#1a1a1a", darkPalette: true, backgroundImage: null },
   };
   mocks.updateUserTheme.mockResolvedValue({});
+  state.appTheme = new ThemeStore();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -65,6 +70,124 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.useRealTimers();
+});
+
+/** 通过原生输入事件模拟范围控件，绕过 React 的值追踪器。 */
+async function changeTransparency(value: number) {
+  const input = container.querySelector<HTMLInputElement>('input[type="range"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, String(value));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+it("历史账号默认显示 15%，未设置图片时禁用控件", async () => {
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  const input = container.querySelector<HTMLInputElement>('input[type="range"]')!;
+  expect(input.value).toBe("15");
+  expect(input.disabled).toBe(true);
+});
+
+it.each([0, 100])("透明度 %i%% 支持即时预览，并在键盘空闲后只保存一次", async (value) => {
+  vi.useFakeTimers();
+  state.profile.theme.backgroundImage = "/background.jpg";
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  await changeTransparency(value);
+  expect(state.appTheme.contentBackgroundOpacityPreview).toBe((100 - value) / 100);
+  expect(mocks.updateUserTheme).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTimeAsync(299));
+  expect(mocks.updateUserTheme).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTimeAsync(1));
+  expect(mocks.updateUserTheme).toHaveBeenCalledExactlyOnceWith({ contentBackgroundOpacity: (100 - value) / 100 });
+  expect(state.appTheme.contentBackgroundOpacityPreview).toBeUndefined();
+});
+
+it("失焦提交最终值，并取消键盘延迟任务", async () => {
+  vi.useFakeTimers();
+  state.profile.theme.backgroundImage = "/background.jpg";
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  await changeTransparency(25);
+  await changeTransparency(40);
+  await act(async () => {
+    container.querySelector('input[type="range"]')!.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(300));
+  expect(mocks.updateUserTheme).toHaveBeenCalledExactlyOnceWith({ contentBackgroundOpacity: 0.6 });
+});
+
+it("指针拖动保持预览，松手后保存且不重复响应失焦", async () => {
+  vi.useFakeTimers();
+  state.profile.theme.backgroundImage = "/background.jpg";
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  const input = container.querySelector<HTMLInputElement>('input[type="range"]')!;
+  input.setPointerCapture = vi.fn();
+  await act(async () => input.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  await changeTransparency(30);
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(mocks.updateUserTheme).not.toHaveBeenCalled();
+  await act(async () => {
+    input.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+  expect(mocks.updateUserTheme).toHaveBeenCalledExactlyOnceWith({ contentBackgroundOpacity: 0.7 });
+});
+
+it("拖动中失焦会结束指针状态，后续键盘调整仍按 300 毫秒提交", async () => {
+  vi.useFakeTimers();
+  state.profile.theme.backgroundImage = "/background.jpg";
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  const input = container.querySelector<HTMLInputElement>('input[type="range"]')!;
+  input.setPointerCapture = vi.fn();
+  await act(async () => input.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  await changeTransparency(30);
+  await act(async () => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(mocks.updateUserTheme).toHaveBeenCalledTimes(1);
+  await changeTransparency(40);
+  await act(async () => vi.advanceTimersByTimeAsync(300));
+  expect(mocks.updateUserTheme).toHaveBeenCalledTimes(2);
+  expect(mocks.updateUserTheme).toHaveBeenLastCalledWith({ contentBackgroundOpacity: 0.6 });
+});
+
+it("保存期间禁用滑块，失败后恢复原值并提示", async () => {
+  state.profile.theme.backgroundImage = "/background.jpg";
+  state.profile.theme.contentBackgroundOpacity = 0.65;
+  let reject: ((error: Error) => void) | undefined;
+  mocks.updateUserTheme.mockImplementation(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      })
+  );
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  await changeTransparency(50);
+  await act(async () => {
+    container.querySelector('input[type="range"]')!.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+  expect(container.querySelector<HTMLInputElement>('input[type="range"]')!.disabled).toBe(true);
+  await act(async () => reject?.(new Error("offline")));
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  expect(container.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("35");
+  expect(state.appTheme.contentBackgroundOpacityPreview).toBeUndefined();
+  expect(mocks.setToast).toHaveBeenCalledWith(
+    expect.objectContaining({ message: "failed_to_update_workspace_background_opacity" })
+  );
+});
+
+it("重置恢复 15%，卸载时清除未提交预览和延迟任务", async () => {
+  vi.useFakeTimers();
+  state.profile.theme.backgroundImage = "/background.jpg";
+  state.profile.theme.contentBackgroundOpacity = 0.4;
+  await act(async () => root.render(<WorkspaceBackgroundSettings />));
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[aria-label="workspace_background_opacity_reset"]')!.click()
+  );
+  expect(mocks.updateUserTheme).toHaveBeenCalledExactlyOnceWith({ contentBackgroundOpacity: 0.85 });
+  await changeTransparency(50);
+  await act(async () => root.render(<div />));
+  await act(async () => vi.advanceTimersByTimeAsync(300));
+  expect(state.appTheme.contentBackgroundOpacityPreview).toBeUndefined();
+  expect(mocks.updateUserTheme).toHaveBeenCalledTimes(1);
 });
 
 /** 构造可覆盖 size 属性的测试图片文件。 */

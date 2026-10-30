@@ -73,6 +73,7 @@ export type TUserProfile = {
     background: string | undefined;
     darkPalette: boolean | undefined;
     backgroundImage: string | null | undefined;
+    contentBackgroundOpacity?: number;
   };
   onboarding_step: TOnboardingSteps;
   is_onboarded: boolean;
@@ -112,6 +113,8 @@ export interface IUserTheme {
   background?: string | undefined;
   darkPalette?: boolean | undefined;
   backgroundImage?: string | null | undefined;
+  /** 工作页面内容底色不透明度，范围 0-1，缺省为 0.85。 */
+  contentBackgroundOpacity?: number;
 }
 
 export interface IUserMemberLite extends IUserLite {

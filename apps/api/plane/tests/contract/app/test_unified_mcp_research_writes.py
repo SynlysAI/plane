@@ -76,6 +76,17 @@ def task_from(e, node=None, request_id=None):
     return db.ResearchChainNodeTask.objects.get(pk=value["result"]["object_id"]), proposal
 
 
+def test_permanent_connection_executes_proposal_and_rechecks_membership(scientific):
+    """永久科研连接可执行提案，撤回成员资格后不能提交待执行提案。"""
+    e = scientific
+    db.UnifiedMCPConnection.objects.filter(pk=e["connection"]["id"]).update(expires_at=None)
+    task, _ = task_from(e)
+    assert task.title == "Unified research task"
+    pending = prepare(e)
+    db.WorkspaceMember.objects.filter(workspace=e["workspace"], member=e["owner"]).update(is_active=False)
+    execute(e, pending, error="scope_denied")
+
+
 @pytest.mark.parametrize("action", sorted(ACTIONS))
 def test_five_native_proposal_actions_commit_once_without_child_grants_or_approval(scientific, action):
     e = scientific

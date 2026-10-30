@@ -18,8 +18,7 @@ export const MCPManagement = observer(function MCPManagement({
     <div className="space-y-6 text-13 text-primary">
       <PageHead title="MCP 配置" />
       <header className="space-y-2">
-        <h1 className="text-24 font-semibold">MCP 配置</h1>
-        <p className="text-secondary">创建一条连接，用一份配置访问授权范围内的行政项目与科研任务。</p>
+        <h1 className="text-24 font-semibold">项目连接</h1>
       </header>
       <UnifiedMCPManager key={user?.id ?? "session"} initialWorkspace={initialWorkspace} />
     </div>

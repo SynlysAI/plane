@@ -283,7 +283,7 @@ def test_management_issue_list_revoke_and_machine_workspace_isolation(env):
     root = f"/api/research/workspaces/{env['workspace'].slug}/mcp/weekly-report/"
     options = client.get(root + "options/")
     assert options.status_code == 200, options.data
-    assert options.data["workspaces"][0]["ttl_days"] == [1, 7, 30]
+    assert options.data["workspaces"][0]["ttl_days"] == [1, 7, 30, 365, None]
     issued = client.post(
         root + "connections/", {"label": "Weekly", "actions": ["submit"], "ttl_days": 1}, format="json"
     )
@@ -806,11 +806,13 @@ def test_web_submit_and_withdraw_does_not_make_old_draft_proposal_valid_again(en
     stale, _ = proposal(service, action="save_draft", body="提交撤回前的旧提案。")
     report_url = f"{env['url']}{draft['report_id']}/"
     assert (
-        env["student_client"].post(
+        env["student_client"]
+        .post(
             f"{report_url}submit/",
             {"reviewer_id": str(env["advisor"].pk), "cc_user_ids": []},
             format="json",
-        ).status_code
+        )
+        .status_code
         == 200
     )
     assert env["student_client"].post(f"{report_url}withdraw/", {}, format="json").status_code == 200

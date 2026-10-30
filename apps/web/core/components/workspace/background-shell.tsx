@@ -4,12 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { observer } from "mobx-react";
 import { useTheme } from "next-themes";
 // plane imports
 import { cn, getFileURL } from "@plane/utils";
+import { getContentBackgroundOpacity } from "@/helpers/workspace-backgrounds";
 // hooks
+import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useUserProfile } from "@/hooks/store/user";
 
 type Props = {
@@ -20,6 +22,7 @@ type Props = {
 export const WorkspaceBackgroundShell = observer(function WorkspaceBackgroundShell(props: Props) {
   const { children } = props;
   const { data: userProfile } = useUserProfile();
+  const { contentBackgroundOpacityPreview } = useAppTheme();
   const { resolvedTheme } = useTheme();
   const background = userProfile?.theme?.backgroundImage ?? null;
   const backgroundMode =
@@ -34,6 +37,15 @@ export const WorkspaceBackgroundShell = observer(function WorkspaceBackgroundShe
   return (
     <div
       data-background-mode={background ? backgroundMode : undefined}
+      style={
+        background
+          ? ({
+              "--workspace-content-opacity": getContentBackgroundOpacity(
+                contentBackgroundOpacityPreview ?? userProfile?.theme?.contentBackgroundOpacity
+              ),
+            } as CSSProperties)
+          : undefined
+      }
       className={cn(
         "relative flex h-screen w-full flex-col overflow-hidden",
         background ? "workspace-background-enabled" : "bg-canvas",

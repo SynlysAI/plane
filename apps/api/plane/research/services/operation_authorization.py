@@ -9,6 +9,7 @@ import json
 from django.utils import timezone
 
 from plane.db.models import ResearchAgentWriteGrant, ResearchContextGrant, UnifiedMCPConnection
+from plane.mcp.credentials import unexpired_connections
 from plane.research.services.chain_context import ResearchReadService
 from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.services.operation_catalog import ACTIONS, OPERATION_TOOL_NAMES
@@ -86,11 +87,11 @@ class UnifiedOperationAuthorization:
         connection = (
             rows.select_related("owner")
             .filter(
+                unexpired_connections(),
                 pk=self.connection.pk,
                 owner=user,
                 owner__is_active=True,
                 revoked_at__isnull=True,
-                expires_at__gt=timezone.now(),
             )
             .first()
         )

@@ -22,12 +22,24 @@
   --editor-colors-purple-background: #e3d8fd;
 }
 
-/* 个人工作台背景：图片铺底，内容表面保持高不透明度以确保长时阅读。 */
+/* 个人工作台背景：只有显式标记的页面底色响应透明度，交互控件保留主题色。 */
 .workspace-background-enabled {
   --workspace-background-scrim: color-mix(in oklab, var(--neutral-300) 70%, transparent);
   --workspace-surface-color: var(--neutral-white);
   --bg-canvas: transparent;
-  --bg-surface-1: color-mix(in oklab, var(--workspace-surface-color) 96%, transparent);
+}
+
+.workspace-background-enabled .workspace-content-surface {
+  background-color: color-mix(
+    in oklab,
+    var(--workspace-surface-color) calc(var(--workspace-content-opacity, 0.85) * 100%),
+    transparent
+  );
+}
+
+/* 同一内容面只铺一层底色，避免嵌套页面或首页分区再次盖住图片。 */
+.workspace-background-enabled .workspace-content-surface .workspace-content-inset {
+  background-color: transparent;
 }
 
 .workspace-background-enabled[data-background-mode="dark"] {

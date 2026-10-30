@@ -338,6 +338,7 @@ CREATE_SCHEMA = obj(
             ),
         },
         "include_future_objects": {"type": "boolean"},
+        "ttl_days": {"type": ["integer", "null"], "enum": [1, 7, 30, 365, None]},
     },
     ["name", "workspaces", "include_future_objects"],
 )

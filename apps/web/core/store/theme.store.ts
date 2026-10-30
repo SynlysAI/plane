@@ -8,6 +8,7 @@ import { action, observable, makeObservable, runInAction } from "mobx";
 
 export interface IThemeStore {
   // observables
+  contentBackgroundOpacityPreview: number | undefined;
   isAnySidebarDropdownOpen: boolean | undefined;
   sidebarCollapsed: boolean | undefined;
   sidebarPeek: boolean | undefined;
@@ -20,6 +21,7 @@ export interface IThemeStore {
   initiativesSidebarCollapsed: boolean | undefined;
   projectOverviewSidebarCollapsed: boolean | undefined;
   // actions
+  setContentBackgroundOpacityPreview: (opacity: number | undefined) => void;
   toggleAnySidebarDropdown: (open?: boolean) => void;
   toggleSidebar: (collapsed?: boolean) => void;
   toggleSidebarPeek: (peek?: boolean) => void;
@@ -35,6 +37,7 @@ export interface IThemeStore {
 
 export class ThemeStore implements IThemeStore {
   // observables
+  contentBackgroundOpacityPreview: number | undefined = undefined;
   isAnySidebarDropdownOpen: boolean | undefined = undefined;
   sidebarCollapsed: boolean | undefined = undefined;
   sidebarPeek: boolean | undefined = undefined;
@@ -50,6 +53,7 @@ export class ThemeStore implements IThemeStore {
   constructor() {
     makeObservable(this, {
       // observable
+      contentBackgroundOpacityPreview: observable.ref,
       isAnySidebarDropdownOpen: observable.ref,
       sidebarCollapsed: observable.ref,
       sidebarPeek: observable.ref,
@@ -62,6 +66,7 @@ export class ThemeStore implements IThemeStore {
       initiativesSidebarCollapsed: observable.ref,
       projectOverviewSidebarCollapsed: observable.ref,
       // action
+      setContentBackgroundOpacityPreview: action,
       toggleAnySidebarDropdown: action,
       toggleSidebar: action,
       toggleSidebarPeek: action,
@@ -75,6 +80,11 @@ export class ThemeStore implements IThemeStore {
       toggleProjectOverviewSidebar: action,
     });
   }
+
+  /** 设置临时内容底色预览；undefined 表示使用账号已保存的偏好。 */
+  setContentBackgroundOpacityPreview = (opacity: number | undefined) => {
+    this.contentBackgroundOpacityPreview = opacity;
+  };
 
   toggleAnySidebarDropdown = (open?: boolean) => {
     if (open === undefined) {

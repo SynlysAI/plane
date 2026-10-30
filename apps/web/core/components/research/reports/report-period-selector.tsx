@@ -213,6 +213,7 @@ export function ReportPeriodSelector({ customPeriod, reportTimezone, onSelect }:
       {isOpen && (
         <Popover.Panel
           align="start"
+          positionerClassName="z-50"
           className="z-50 w-[min(calc(100vw-2rem),19rem)] rounded-md border border-subtle bg-surface-1 p-3 shadow-raised-200"
         >
           <ReportPeriodCalendar value={customPeriod} reportTimezone={reportTimezone} onSelect={handleSelect} />
