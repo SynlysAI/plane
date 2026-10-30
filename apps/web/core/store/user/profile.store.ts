@@ -48,6 +48,7 @@ export class ProfileStore implements IUserProfileStore {
       primary: undefined,
       background: undefined,
       darkPalette: false,
+      backgroundImage: undefined,
     },
     onboarding_step: {
       workspace_join: false,
@@ -235,6 +236,9 @@ export class ProfileStore implements IUserProfileStore {
       });
       const userProfile = await this.userService.updateCurrentUserProfile({
         theme: this.data.theme,
+      });
+      runInAction(() => {
+        if (userProfile?.theme) this.data.theme = userProfile.theme;
       });
       return userProfile;
     } catch (error) {

@@ -5,8 +5,8 @@
  */
 
 import { Outlet } from "react-router";
-// plane imports
-import { cn } from "@plane/utils";
+// components
+import { WorkspaceBackgroundShell } from "@/components/workspace/background-shell";
 // local
 import { AppProvider } from "./provider";
 
@@ -16,11 +16,9 @@ import { AppProvider } from "./provider";
 export default function AppShellLayout() {
   return (
     <AppProvider>
-      <div className={cn("relative flex h-screen w-full flex-col overflow-hidden bg-canvas", "desktop-app-container")}>
-        <main className="relative h-full w-full overflow-hidden">
-          <Outlet />
-        </main>
-      </div>
+      <WorkspaceBackgroundShell>
+        <Outlet />
+      </WorkspaceBackgroundShell>
     </AppProvider>
   );
 }

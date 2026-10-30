@@ -1,0 +1,3 @@
+@import "../../styles/globals.css";
+@source "../../core/**/*.{ts,tsx}";
+@source "../../app/**/*.{ts,tsx}";

@@ -43,6 +43,7 @@ class FileAsset(BaseModel):
         PAGE_DESCRIPTION = "PAGE_DESCRIPTION"
         USER_COVER = "USER_COVER"
         USER_AVATAR = "USER_AVATAR"
+        USER_BACKGROUND = "USER_BACKGROUND"
         WORKSPACE_LOGO = "WORKSPACE_LOGO"
         PROJECT_COVER = "PROJECT_COVER"
         DRAFT_ISSUE_ATTACHMENT = "DRAFT_ISSUE_ATTACHMENT"
@@ -64,7 +65,12 @@ class FileAsset(BaseModel):
     issue = models.ForeignKey("db.Issue", on_delete=models.CASCADE, null=True, related_name="assets")
     comment = models.ForeignKey("db.IssueComment", on_delete=models.CASCADE, null=True, related_name="assets")
     page = models.ForeignKey("db.Page", on_delete=models.CASCADE, null=True, related_name="assets")
-    entity_type = models.CharField(max_length=255, null=True, blank=True)
+    entity_type = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        choices=EntityTypeContext.choices,
+    )
     entity_identifier = models.CharField(max_length=255, null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
@@ -95,6 +101,7 @@ class FileAsset(BaseModel):
             self.entity_type == self.EntityTypeContext.WORKSPACE_LOGO
             or self.entity_type == self.EntityTypeContext.USER_AVATAR
             or self.entity_type == self.EntityTypeContext.USER_COVER
+            or self.entity_type == self.EntityTypeContext.USER_BACKGROUND
             or self.entity_type == self.EntityTypeContext.PROJECT_COVER
         ):
             return f"/api/assets/v2/static/{self.id}/"
