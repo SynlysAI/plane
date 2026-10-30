@@ -18,7 +18,7 @@ function WorkspaceLayout() {
         <div id="full-screen-portal" className="absolute inset-0 w-full" />
         <div className="relative flex size-full overflow-hidden">
           <ProjectAppSidebar />
-          <main className="relative flex h-full w-full flex-col overflow-hidden bg-surface-1">
+          <main className="workspace-content-surface relative flex h-full w-full flex-col overflow-hidden bg-surface-1">
             <Outlet />
           </main>
         </div>

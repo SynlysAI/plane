@@ -60,7 +60,7 @@ export function HomeSectionCard({
     <section
       aria-label={title}
       className={cn(
-        "flex min-w-0 flex-col overflow-hidden rounded-xl bg-surface-2",
+        "workspace-content-inset flex min-w-0 flex-col overflow-hidden rounded-xl bg-surface-2",
         density === "compact" &&
           fixedLayout &&
           (size === "primary" ? "max-xl:h-[400px] xl:h-full xl:min-h-0" : "max-xl:h-[320px] xl:h-full xl:min-h-0"),

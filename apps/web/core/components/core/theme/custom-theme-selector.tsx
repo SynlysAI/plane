@@ -28,18 +28,18 @@ export const CustomThemeSelector = observer(function CustomThemeSelector() {
   // translation
   const { t } = useTranslation();
 
-  // Load saved theme from userProfile (fallback to defaults)
+  // 只订阅配色字段，避免保存背景偏好时清空尚未提交的配色草稿。
+  const { primary, background, darkPalette: savedDarkPalette } = userProfile?.theme ?? {};
   const savedTheme = useMemo((): IUserTheme => {
-    const theme = userProfile?.theme;
-    const darkPalette = theme?.darkPalette ?? false;
+    const darkPalette = savedDarkPalette ?? false;
 
     return {
       theme: "custom",
-      primary: theme?.primary || "#3f76ff",
-      background: theme?.background || (darkPalette ? "#1a1a1a" : "#f7f7f5"),
+      primary: primary || "#3f76ff",
+      background: background || (darkPalette ? "#1a1a1a" : "#f7f7f5"),
       darkPalette,
     };
-  }, [userProfile?.theme]);
+  }, [primary, background, savedDarkPalette]);
 
   const {
     control,
@@ -87,7 +87,7 @@ export const CustomThemeSelector = observer(function CustomThemeSelector() {
       onSubmit={(e) => {
         void handleSubmit(handleUpdateTheme)(e);
       }}
-      className="rounded-lg border border-subtle bg-layer-1 px-4 py-3"
+      className="workspace-content-inset rounded-lg border border-subtle bg-layer-1 px-4 py-3"
     >
       <div className="space-y-5">
         <ProfileSettingsHeading

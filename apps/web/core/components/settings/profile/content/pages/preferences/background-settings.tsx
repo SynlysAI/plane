@@ -19,6 +19,7 @@ import { WORKSPACE_BACKGROUND_IMAGES } from "@/helpers/workspace-backgrounds";
 import { useUserProfile } from "@/hooks/store/user";
 // services
 import { FileService } from "@/services/file.service";
+import { BackgroundOpacityControl } from "./background-opacity-control";
 
 const fileService = new FileService();
 const ACCEPTED_BACKGROUND_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
@@ -118,7 +119,10 @@ export const WorkspaceBackgroundSettings = observer(function WorkspaceBackground
   };
 
   return (
-    <section className="rounded-lg border border-subtle bg-layer-1 px-4 py-3" aria-label={t("workspace_background")}>
+    <section
+      className="workspace-content-inset rounded-lg border border-subtle bg-layer-1 px-4 py-3"
+      aria-label={t("workspace_background")}
+    >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col gap-1">
           <h4 className="text-body-sm-medium text-primary">{t("workspace_background")}</h4>
@@ -190,6 +194,7 @@ export const WorkspaceBackgroundSettings = observer(function WorkspaceBackground
           })}
         </div>
       </div>
+      <BackgroundOpacityControl disabled={!currentBackground || isSaving} />
     </section>
   );
 });

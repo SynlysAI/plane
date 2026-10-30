@@ -154,7 +154,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
 
   return (
     <IssueLayoutHOC layout={EIssueLayoutTypes.LIST}>
-      <div className={`relative size-full bg-surface-2`}>
+      <div className="workspace-content-inset relative size-full bg-surface-2">
         <List
           issuesMap={issueMap}
           displayProperties={displayProperties}

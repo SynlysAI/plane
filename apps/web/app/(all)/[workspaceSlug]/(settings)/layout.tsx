@@ -16,7 +16,7 @@ export default function SettingsLayout() {
       <div className="relative flex size-full overflow-hidden rounded-lg border border-subtle">
         <main className="relative flex size-full flex-col overflow-hidden">
           {/* Content */}
-          <ContentWrapper className="w-full bg-surface-1 md:flex">
+          <ContentWrapper className="workspace-content-surface w-full bg-surface-1 md:flex">
             <div className="size-full overflow-hidden">
               <Outlet />
             </div>

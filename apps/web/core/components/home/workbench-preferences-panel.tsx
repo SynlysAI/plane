@@ -43,7 +43,7 @@ export function WorkbenchPreferencesPanel({
   return (
     <section
       aria-label={t("research.home_workbench.customize_workbench")}
-      className="rounded-xl border border-subtle bg-surface-2 p-4"
+      className="workspace-content-inset rounded-xl border border-subtle bg-surface-2 p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

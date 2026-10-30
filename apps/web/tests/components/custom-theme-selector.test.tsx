@@ -16,6 +16,7 @@ const profile = {
     primary: "#426b67",
     background: "#1a1a1a",
     darkPalette: true,
+    contentBackgroundOpacity: undefined as number | undefined,
   },
 };
 
@@ -95,6 +96,14 @@ async function changeColor(label: string, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+
+it("背景透明度更新不会清除尚未保存的自定义配色", async () => {
+  await act(async () => root.render(<CustomThemeSelector />));
+  await changeColor("primary", "#335566");
+  profile.theme = { ...profile.theme, contentBackgroundOpacity: 0.5 };
+  await act(async () => root.render(<CustomThemeSelector />));
+  expect(container.querySelector<HTMLInputElement>('[aria-label="primary"]')?.value).toBe("#335566");
+});
 
 it("shows inline validation for an invalid hex color", async () => {
   await act(async () => root.render(<CustomThemeSelector />));

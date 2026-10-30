@@ -71,6 +71,7 @@ export class ProfileStore implements IUserProfileStore {
 
   // services
   userService: UserService;
+  private themeUpdateQueue: Promise<void> = Promise.resolve();
 
   constructor(public store: CoreRootStore) {
     makeObservable(this, {
@@ -222,37 +223,45 @@ export class ProfileStore implements IUserProfileStore {
   };
 
   /**
-   * @description updates the user theme
-   * @returns @returns {Promise<TUserProfile | undefined>}
+   * 串行合并并保存主题偏好，防止配色、图片和透明度的并发更新互相覆盖。
+   *
+   * @param data 本次需要更新的主题字段。
+   * @returns 服务端保存后的用户资料；失败时拒绝并回滚本次字段。
    */
-  updateUserTheme = async (data: Partial<IUserTheme>) => {
-    const currentProfileTheme = cloneDeep(this.data.theme);
-    try {
+  updateUserTheme = (data: Partial<IUserTheme>): Promise<TUserProfile | undefined> => {
+    const patch = cloneDeep(data);
+    const update = this.themeUpdateQueue.then(async () => {
+      const previousTheme = cloneDeep(this.data.theme);
       runInAction(() => {
-        Object.keys(data).forEach((key) => {
-          const dataKey = key as keyof IUserTheme;
-          if (this.data.theme) set(this.data.theme, dataKey, data[dataKey]);
+        this.data.theme = { ...previousTheme, ...patch };
+      });
+      try {
+        const userProfile = await this.userService.updateCurrentUserProfile({
+          theme: cloneDeep(this.data.theme),
         });
-      });
-      const userProfile = await this.userService.updateCurrentUserProfile({
-        theme: this.data.theme,
-      });
-      runInAction(() => {
-        if (userProfile?.theme) this.data.theme = userProfile.theme;
-      });
-      return userProfile;
-    } catch (error) {
-      runInAction(() => {
-        Object.keys(data).forEach((key: string) => {
-          const userKey: keyof IUserTheme = key as keyof IUserTheme;
-          if (currentProfileTheme) set(this.data.theme, userKey, currentProfileTheme[userKey]);
+        runInAction(() => {
+          if (userProfile?.theme) this.data.theme = { ...this.data.theme, ...userProfile.theme };
         });
-        this.error = {
-          status: "user-profile-theme-update-error",
-          message: "Failed to update user profile theme",
-        };
-      });
-      throw error;
-    }
+        return userProfile;
+      } catch (error) {
+        runInAction(() => {
+          Object.keys(patch).forEach((key) => {
+            const themeKey = key as keyof IUserTheme;
+            set(this.data.theme, themeKey, previousTheme[themeKey]);
+          });
+          this.error = {
+            status: "user-profile-theme-update-error",
+            message: "Failed to update user profile theme",
+          };
+        });
+        throw error;
+      }
+    });
+    // 一次保存失败不应阻断之后的偏好更新。
+    this.themeUpdateQueue = update.then(
+      () => undefined,
+      () => undefined
+    );
+    return update;
   };
 }
