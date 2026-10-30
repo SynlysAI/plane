@@ -4,9 +4,8 @@
 
 """Research platform configuration accessors.
 
-The deployment level switch (``RESEARCH_MODULE_ENABLED``) is a hard gate and
-defaults to off. Workspace level switches are layered on top of it once the
-``WorkspaceResearchSetting`` model is available.
+The research application is installed with the backend. Workspace activation is
+controlled by ``WorkspaceResearchSetting`` after installation.
 """
 
 from django.conf import settings
