@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "@plane/constants";
 import { create } from "axios";
 
-export type WeeklyReportAction = "save_draft" | "submit";
+export type WeeklyReportAction = "read_reports" | "save_draft" | "submit" | "withdraw" | "return" | "accept";
 export type WeeklyReportWorkspace = {
   id: string;
   slug: string;
@@ -34,14 +34,51 @@ export type WeeklyReportConnection = {
   last_used_at: string | null;
 };
 export type WeeklyReportIssued = WeeklyReportConnection & {
+  server_key: string;
   mcp_path: string;
+  mcp_url: string;
   headers: Record<string, string>;
+  codex_toml: string;
+  sciencediscovery_json: string;
+  api_docs_url: string;
   csrf_token: string;
 };
 export type WeeklyReportConnections = {
   results: WeeklyReportConnection[];
   next_cursor: string | null;
   csrf_token: string;
+};
+export type WeeklyReportApiDocs = {
+  contract_version: string;
+  connection: WeeklyReportConnection;
+  server: {
+    name: string;
+    version: string;
+    protocol_version: string;
+    server_key: string;
+    url: string;
+    auth_header: string;
+    docs_url: string;
+  };
+  identity: { user_id: string; display_name: string };
+  workspaces: {
+    id: string;
+    name: string;
+    slug: string;
+    authorized_actions: WeeklyReportAction[];
+    live_actions: WeeklyReportAction[];
+    live_access: boolean;
+    role_context: Record<string, unknown> | null;
+  }[];
+  tools: {
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+    annotations?: Record<string, unknown>;
+    category: string;
+    execution_mode: string;
+    required_role: string;
+  }[];
 };
 export type WeeklyReportIssueRequest = { label: string; actions: WeeklyReportAction[]; ttl_days: number | null };
 export type WeeklyReportProblem = { status?: number; uncertain: boolean; message: string };
@@ -139,6 +176,28 @@ export class WeeklyReportMCPService {
         {},
         { headers: { "X-CSRFToken": csrf } }
       )
+      .then((r) => r.data)
+      .catch((e) => {
+        throw problem(e);
+      });
+  }
+
+  /** 软删除本人周报连接，保留提案与审计。 */
+  async delete(workspace: string, id: string, csrf: string): Promise<{ deleted: boolean; id: string }> {
+    return this.http
+      .delete(this.path(workspace) + `connections/${encodeURIComponent(id)}/`, {
+        headers: { "X-CSRFToken": csrf },
+      })
+      .then((r) => r.data)
+      .catch((e) => {
+        throw problem(e);
+      });
+  }
+
+  /** 获取本人周报连接的工具 API 文档，不包含密钥。 */
+  async tools(workspace: string, id: string): Promise<WeeklyReportApiDocs> {
+    return this.http
+      .get(this.path(workspace) + `connections/${encodeURIComponent(id)}/tools/`)
       .then((r) => r.data)
       .catch((e) => {
         throw problem(e);

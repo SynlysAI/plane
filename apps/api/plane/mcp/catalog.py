@@ -128,6 +128,8 @@ ADMIN_FIELDS = {
     "description_html": {"type": "string", "minLength": 0, "maxLength": 30000},
     "priority": enum("urgent", "high", "medium", "low", "none"),
     "assignee_ids": {"type": "array", "items": UUID, "maxItems": 1, "uniqueItems": True},
+    "module_ids": {"type": "array", "items": UUID, "maxItems": 20, "uniqueItems": True},
+    "label_ids": {"type": "array", "items": UUID, "maxItems": 20, "uniqueItems": True},
     "start_date": {"type": ["string", "null"], "format": "date"},
     "target_date": {"type": ["string", "null"], "format": "date"},
 }
@@ -150,6 +152,54 @@ ADMIN_SCHEMAS = {
     ),
     "plane_get_write_result": obj(
         {"workspace_slug": text(80), "request_id": REQUEST_ID}, ["workspace_slug", "request_id"]
+    ),
+}
+PROJECT_FIELDS = {
+    "name": text(255),
+    "identifier": text(20),
+    "description_html": {"type": "string", "minLength": 0, "maxLength": 30000},
+    "project_lead_id": UUID,
+    "default_assignee_id": UUID,
+    "administrative_organization_id": UUID,
+}
+PROJECT_LIFECYCLE_SCHEMAS = {
+    "plane_create_project": obj(
+        {"workspace_slug": text(80), "request_id": REQUEST_ID, **PROJECT_FIELDS},
+        ["workspace_slug", "request_id", "name", "identifier"],
+    ),
+    "plane_update_project": obj(
+        {
+            "workspace_slug": text(80),
+            "project_id": UUID,
+            "request_id": REQUEST_ID,
+            "changes": {**obj(PROJECT_FIELDS), "minProperties": 1},
+        },
+        ["workspace_slug", "project_id", "request_id", "changes"],
+    ),
+    "plane_archive_project": obj(
+        {"workspace_slug": text(80), "project_id": UUID, "request_id": REQUEST_ID},
+        ["workspace_slug", "project_id", "request_id"],
+    ),
+    "plane_restore_project": obj(
+        {"workspace_slug": text(80), "project_id": UUID, "request_id": REQUEST_ID},
+        ["workspace_slug", "project_id", "request_id"],
+    ),
+    "plane_delete_project": obj(
+        {
+            "workspace_slug": text(80),
+            "project_id": UUID,
+            "request_id": REQUEST_ID,
+            "confirm_name": text(255),
+        },
+        ["workspace_slug", "project_id", "request_id", "confirm_name"],
+    ),
+    "plane_delete_task": obj(
+        {
+            "target": ref("administrative", "Issue"),
+            "request_id": REQUEST_ID,
+            "confirm_name": text(255),
+        },
+        ["target", "request_id", "confirm_name"],
     ),
 }
 DESCRIPTIONS = (
@@ -190,7 +240,30 @@ ADMIN_TOOLS = tuple(
     }
     for (name, schema), description in zip(ADMIN_SCHEMAS.items(), ADMIN_DESCRIPTIONS)
 )
+PROJECT_LIFECYCLE_DESCRIPTIONS = (
+    "Create one administrative project and its native default state set.",
+    "Edit only the explicitly listed administrative project fields.",
+    "Archive one administrative project after native project-role checks.",
+    "Restore one archived administrative project after native role checks.",
+    "Soft-delete one administrative project; confirmation must repeat its exact name.",
+    "Soft-delete one administrative task; confirmation must repeat its exact name.",
+)
+PROJECT_LIFECYCLE_TOOLS = tuple(
+    {
+        "name": name,
+        "description": description,
+        "inputSchema": schema,
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": name in {"plane_delete_project", "plane_delete_task"},
+            "idempotentHint": name not in {"plane_update_project", "plane_restore_project"},
+            "openWorldHint": False,
+        },
+    }
+    for (name, schema), description in zip(PROJECT_LIFECYCLE_SCHEMAS.items(), PROJECT_LIFECYCLE_DESCRIPTIONS)
+)
 SCHEMAS.update(ADMIN_SCHEMAS)
+SCHEMAS.update(PROJECT_LIFECYCLE_SCHEMAS)
 
 RESEARCH_FIELDS = {
     "title": text(500),
@@ -275,7 +348,97 @@ RESEARCH_SCHEMAS = {
         {"node": ref("research", "ResearchChainNode"), "request_id": REQUEST_ID, **PAGING}, ["node"]
     ),
 }
+RESEARCH_PROJECT_FIELDS = {
+    "name": text(255),
+    "identifier": text(20),
+    "owner_id": UUID,
+    "org_unit_id": UUID,
+    "research_type": enum("PHD", "MASTER", "POSTDOC", "RESEARCH_PROJECT"),
+    "chain_visibility": enum("PRIVATE", "MEMBERS", "ORG", "WORKSPACE"),
+    "collaborator_ids": {"type": "array", "items": UUID, "maxItems": 100, "uniqueItems": True},
+    "started_at": {"type": "string", "format": "date"},
+    "expected_end_at": {"type": ["string", "null"], "format": "date"},
+}
+RESEARCH_PROJECT_UPDATE_FIELDS = {
+    key: value for key, value in RESEARCH_PROJECT_FIELDS.items() if key not in {"identifier", "collaborator_ids"}
+}
+RESEARCH_PROJECT_LIFECYCLE_SCHEMAS = {
+    "plane_create_research_project": obj(
+        {"workspace_slug": text(80), "request_id": REQUEST_ID, **RESEARCH_PROJECT_FIELDS},
+        ["workspace_slug", "request_id", "research_type"],
+    ),
+    "plane_update_research_project": obj(
+        {
+            "workspace_slug": text(80),
+            "project_id": UUID,
+            "request_id": REQUEST_ID,
+            "changes": {**obj(RESEARCH_PROJECT_UPDATE_FIELDS), "minProperties": 1},
+        },
+        ["workspace_slug", "project_id", "request_id", "changes"],
+    ),
+    "plane_archive_research_project": obj({"workspace_slug": text(80), "project_id": UUID, "request_id": REQUEST_ID}),
+    "plane_restore_research_project": obj({"workspace_slug": text(80), "project_id": UUID, "request_id": REQUEST_ID}),
+    "plane_delete_research_project": obj(
+        {
+            "workspace_slug": text(80),
+            "project_id": UUID,
+            "request_id": REQUEST_ID,
+            "confirm_name": text(255),
+        },
+        ["workspace_slug", "project_id", "request_id", "confirm_name"],
+    ),
+    "plane_create_research_chain": obj(
+        {
+            "workspace_slug": text(80),
+            "project_id": UUID,
+            "request_id": REQUEST_ID,
+            "visibility": enum("PRIVATE", "MEMBERS", "ORG", "WORKSPACE"),
+        },
+        ["workspace_slug", "project_id", "request_id"],
+    ),
+    "plane_create_research_node": obj(
+        {
+            "workspace_slug": text(80),
+            "chain_id": UUID,
+            "request_id": REQUEST_ID,
+            "title": text(500),
+            "node_type": text(64),
+            "parent_node_id": UUID,
+            "loop_iteration": {"type": "integer", "minimum": 0, "maximum": 10000},
+            "assignee_id": UUID,
+        },
+        ["workspace_slug", "chain_id", "request_id", "title", "node_type"],
+    ),
+    "plane_update_research_node": obj(
+        {
+            "workspace_slug": text(80),
+            "node_id": UUID,
+            "request_id": REQUEST_ID,
+            "changes": obj(
+                {
+                    "title": text(500),
+                    "assignee_id": UUID,
+                    "node_type": text(64),
+                },
+                [],
+            )
+            | {"minProperties": 1},
+        },
+        ["workspace_slug", "node_id", "request_id", "changes"],
+    ),
+    "plane_transition_research_node": obj(
+        {
+            "workspace_slug": text(80),
+            "node_id": UUID,
+            "request_id": REQUEST_ID,
+            "action": enum("START", "RETRY", "REACTIVATE", "SUBMIT_REVIEW", "APPROVE", "RETURN", "FAIL", "ARCHIVE"),
+            "reason": text(8000),
+        },
+        ["workspace_slug", "node_id", "request_id", "action"],
+    ),
+}
 SCHEMAS.update(RESEARCH_SCHEMAS)
+SCHEMAS.update(RESEARCH_PROJECT_LIFECYCLE_SCHEMAS)
 SCHEMAS["plane_update_task"] = union(ADMIN_SCHEMAS["plane_update_task"], RESEARCH_SCHEMAS["plane_update_task"])
 SCHEMAS["plane_transition_task"] = union(ADMIN_SCHEMAS["plane_transition_task"], *RESEARCH_TRANSITIONS)
 RESEARCH_DESCRIPTIONS = (
@@ -300,6 +463,32 @@ RESEARCH_TOOLS = tuple(
     }
     for (name, schema), description in zip(RESEARCH_SCHEMAS.items(), RESEARCH_DESCRIPTIONS)
 )
+RESEARCH_PROJECT_DESCRIPTIONS = (
+    "Create a research project, native project membership and its research chain.",
+    "Edit a research project through the native owner, unit and visibility checks.",
+    "Archive a research project and synchronise its chain lifecycle.",
+    "Restore a research project and synchronise its chain lifecycle.",
+    "Mark a research project deleted while preserving research evidence.",
+    "Create the one-to-one research chain for an existing research-chain project.",
+    "Append one research node using the native parent/iteration validation.",
+    "Edit a research node after chain-writer and node visibility checks.",
+    "Run one native node lifecycle transition and append its immutable event.",
+)
+RESEARCH_PROJECT_TOOLS = tuple(
+    {
+        "name": name,
+        "description": description,
+        "inputSchema": schema,
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": name in {"plane_delete_research_project", "plane_transition_research_node"},
+            "idempotentHint": name
+            not in {"plane_update_research_project", "plane_restore_research_project", "plane_update_research_node"},
+            "openWorldHint": False,
+        },
+    }
+    for (name, schema), description in zip(RESEARCH_PROJECT_LIFECYCLE_SCHEMAS.items(), RESEARCH_PROJECT_DESCRIPTIONS)
+)
 
 
 def tools_for(connection):
@@ -307,9 +496,13 @@ def tools_for(connection):
         entry["domains"].get("administrative") == "read_write" for entry in connection.scope["workspaces"]
     )
     research = any(entry["domains"].get("research") == "read_write" for entry in connection.scope["workspaces"])
-    result = deepcopy(list(TOOLS + (ADMIN_TOOLS if administrative else ())))
+    result = deepcopy(
+        list(TOOLS + (ADMIN_TOOLS if administrative else ()) + (PROJECT_LIFECYCLE_TOOLS if administrative else ()))
+    )
+    if research and not administrative:
+        result.append(deepcopy(next(tool for tool in ADMIN_TOOLS if tool["name"] == "plane_get_write_result")))
     if research:
-        for item in deepcopy(RESEARCH_TOOLS):
+        for item in deepcopy(RESEARCH_TOOLS + RESEARCH_PROJECT_TOOLS):
             current = next((tool for tool in result if tool["name"] == item["name"]), None)
             if current is not None:
                 current["inputSchema"] = deepcopy(SCHEMAS[item["name"]])
@@ -415,7 +608,7 @@ def validate(name, arguments):
                 key: str(UUIDValue(item))
                 if key in {"id", "resource_id", "state_id", "assignee_id", "assignee", "task_id", "operation_id"}
                 else [str(UUIDValue(identity)) for identity in item]
-                if key == "assignee_ids"
+                if key in {"assignee_ids", "module_ids", "label_ids"}
                 else normalize(item)
                 for key, item in value.items()
             }
@@ -423,4 +616,8 @@ def validate(name, arguments):
             return [normalize(item) for item in value]
         return value
 
-    return normalize(deepcopy(arguments))
+    value = normalize(deepcopy(arguments))
+    for key in ("assignee_ids", "module_ids", "label_ids"):
+        if key in value:
+            value[key] = sorted(value[key])
+    return value

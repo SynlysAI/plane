@@ -52,11 +52,17 @@ def native_effects(monkeypatch):
     from plane.bgtasks import issue_activities_task
     from plane.bgtasks.issue_description_version_task import issue_description_version_task
     from plane.bgtasks.notification_task import notifications
-    from plane.bgtasks.webhook_task import model_activity
+    from plane.bgtasks.webhook_task import model_activity, webhook_activity
 
     # Run the unchanged native task bodies synchronously after actual DB commit.
     # This is an execution adapter, not a substitute for activities/notification rules.
-    for task in (issue_activities_task.issue_activity, notifications, model_activity, issue_description_version_task):
+    for task in (
+        issue_activities_task.issue_activity,
+        notifications,
+        model_activity,
+        issue_description_version_task,
+        webhook_activity,
+    ):
         monkeypatch.setattr(task, "delay", task.run)
     hints = {}
     monkeypatch.setattr(
@@ -150,6 +156,209 @@ def test_native_create_edit_state_comment_effects_and_web_readback(writable, nat
     activities = e["owner_client"].get(root + "history/", {"activity_type": "issue-property"})
     assert activities.status_code == 200 and "priority" in activities.content.decode()
     assert db.UnifiedMCPWriteResult.objects.count() == 2  # No receipts for ordinary edits/state changes.
+
+
+def test_project_lifecycle_and_task_deletion_use_native_roles(writable, native_effects):
+    """项目生命周期与任务删除均要求动态写权限和精确确认。"""
+    e = writable
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "request_id": "create-project-once",
+        "name": "MCP 行政项目",
+        "identifier": "MCPADM",
+    }
+    created = invoke(e["client"], "plane_create_project", args)
+    assert created["status"] == "COMMITTED" and created["readback"] == "verified", created
+    project_id = created["target"]["id"]
+    project = db.Project.objects.get(pk=project_id)
+    assert project.name == "MCP 行政项目" and project.identifier == "MCPADM"
+    assert db.State.objects.filter(project=project).count() >= 3
+    assert invoke(e["client"], "plane_create_project", args)["object_id"] == project_id
+    looked_up = invoke(
+        e["client"],
+        "plane_get_write_result",
+        {"workspace_slug": e["workspace"].slug, "request_id": args["request_id"]},
+    )
+    assert looked_up["object_id"] == project_id and looked_up["issue_id"] is None
+
+    updated = invoke(
+        e["client"],
+        "plane_update_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "update-project",
+            "changes": {"name": "MCP 行政项目更新"},
+        },
+    )
+    assert updated["readback"] == "verified"
+    project.refresh_from_db()
+    assert db.HomeActivityEvent.objects.filter(project_id=project_id, action__in=["created", "updated"]).count() == 2
+
+    favorite = db.UserFavorite.objects.create(
+        user=e["owner"],
+        entity_type="project",
+        entity_identifier=str(project_id),
+        project=project,
+        workspace=e["workspace"],
+    )
+    invoke(
+        e["client"],
+        "plane_archive_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "archive-project"},
+    )
+    project.refresh_from_db()
+    assert project.archived_at is not None
+    assert not db.UserFavorite.objects.filter(pk=favorite.pk).exists()
+    invoke(
+        e["client"],
+        "plane_restore_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "restore-project"},
+    )
+    project.refresh_from_db()
+    assert project.archived_at is None
+
+    issue = e["issues"][0]
+    recent = db.UserRecentVisit.objects.create(
+        user=e["owner"],
+        project_id=issue.project_id,
+        workspace=e["workspace"],
+        entity_identifier=issue.pk,
+        entity_name="issue",
+    )
+    invoke(
+        e["client"],
+        "plane_delete_task",
+        {
+            "target": reference(e, "Issue", issue),
+            "request_id": "delete-task",
+            "confirm_name": "wrong-name",
+        },
+        error="invalid_arguments",
+    )
+    invoke(
+        e["client"],
+        "plane_delete_task",
+        {"target": reference(e, "Issue", issue), "request_id": "delete-task", "confirm_name": issue.name},
+    )
+    assert not db.Issue.objects.filter(pk=issue.pk).exists()
+    assert not db.UserRecentVisit.objects.filter(pk=recent.pk).exists()
+    assert db.IssueActivity.objects.filter(issue_id=issue.pk, verb="deleted", field="issue").exists()
+    board = db.DeployBoard.objects.create(
+        workspace=e["workspace"],
+        project=project,
+        entity_name="project",
+        entity_identifier=project_id,
+    )
+    invoke(
+        e["client"],
+        "plane_delete_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "delete-project",
+            "confirm_name": project.name,
+        },
+    )
+    assert not db.Project.objects.filter(pk=project_id).exists()
+    assert not db.DeployBoard.objects.filter(pk=board.pk).exists()
+    assert db.HomeActivityEvent.objects.filter(project_id=project_id, action="deleted").exists()
+
+
+def test_task_deletion_matches_native_admin_or_creator_rule(writable):
+    """项目普通成员不能删除他人任务，创建者仍可删除。"""
+    e = writable
+    issue = e["issues"][0]
+    db.Issue.objects.filter(pk=issue.pk).update(created_by=e["collaborator"])
+    issue.refresh_from_db()
+    db.WorkspaceMember.objects.filter(workspace=e["workspace"], member=e["owner"]).update(role=15)
+    db.ProjectMember.objects.filter(project=issue.project, member=e["owner"]).update(role=15)
+
+    invoke(
+        e["client"],
+        "plane_delete_task",
+        {"target": reference(e, "Issue", issue), "request_id": "member-delete", "confirm_name": issue.name},
+        error="permission_denied",
+    )
+    issued_response = e["collaborator_client"].post(
+        MANAGEMENT, payload(e, domains={"administrative": "read_write"}), format="json"
+    )
+    assert issued_response.status_code == 201, issued_response.data
+    creator_client = APIClient()
+    creator_client.credentials(
+        HTTP_AUTHORIZATION="Bearer " + issued_response.json()["secret"],
+        HTTP_ACCEPT="application/json, text/event-stream",
+    )
+    deleted = invoke(
+        creator_client,
+        "plane_delete_task",
+        {"target": reference(e, "Issue", issue), "request_id": "creator-delete", "confirm_name": issue.name},
+    )
+    assert deleted["readback"] == "deleted"
+
+
+def test_required_modules_and_labels_are_selectable_through_mcp(writable):
+    """必填模块与标签通过能力发现和原生 serializer 进入 MCP 创建/更新。"""
+    e = writable
+    project = e["projects"][0]
+    project.module_view = True
+    project.is_module_required = True
+    project.is_label_required = True
+    project.save(update_fields=["module_view", "is_module_required", "is_label_required"])
+    module = db.Module.objects.create(workspace=e["workspace"], project=project, name="测试耗材", created_by=e["owner"])
+    label = db.Label.objects.create(workspace=e["workspace"], project=project, name="试剂组", created_by=e["owner"])
+
+    capabilities = invoke(
+        e["client"],
+        "plane_get_context",
+        {"target": reference(e, "Project", project), "section": "capabilities"},
+    )
+    assert capabilities["data"]["required_fields"]["create_task"] == [
+        "parent",
+        "request_id",
+        "name",
+        "module_ids",
+        "label_ids",
+    ]
+    assert {item["id"] for item in capabilities["data"]["module_options"]} >= {str(module.pk)}
+    assert {item["id"] for item in capabilities["data"]["label_options"]} >= {str(label.pk)}
+
+    invoke(e["client"], "plane_create_task", create_args(e, request_id="required-missing"), error="invalid_arguments")
+    created = invoke(
+        e["client"],
+        "plane_create_task",
+        create_args(
+            e,
+            request_id="required-relations",
+            module_ids=[str(module.pk)],
+            label_ids=[str(label.pk)],
+        ),
+    )
+    assert created["readback"] == "verified"
+    issue = db.Issue.objects.get(pk=created["object_id"])
+    assert set(created["data"]["module_ids"]) == {str(module.pk)}
+    assert set(created["data"]["label_ids"]) == {str(label.pk)}
+    assert {str(row.module_id) for row in issue.issue_module.all()} == {str(module.pk)}
+    assert {str(row.label_id) for row in issue.label_issue.all()} == {str(label.pk)}
+
+    replacement_label = db.Label.objects.create(
+        workspace=e["workspace"], project=project, name="耗材组", created_by=e["owner"]
+    )
+    updated = invoke(
+        e["client"],
+        "plane_update_task",
+        {
+            "target": reference(e, "Issue", issue),
+            "changes": {
+                "module_ids": [str(module.pk)],
+                "label_ids": [str(replacement_label.pk)],
+            },
+        },
+    )
+    assert updated["readback"] == "verified"
+    assert set(updated["data"]["module_ids"]) == {str(module.pk)}
+    assert set(updated["data"]["label_ids"]) == {str(replacement_label.pk)}
+    assert {str(row.label_id) for row in issue.label_issue.all()} == {str(replacement_label.pk)}
 
 
 @pytest.mark.parametrize("tool", ["plane_create_task", "plane_add_comment"])
@@ -477,11 +686,14 @@ def test_revoked_after_commit_returns_no_hidden_content_or_retry_signal(writable
     assert db.UnifiedMCPWriteResult.objects.count() == 1 and db.Issue.objects.count() == 3
 
 
-def test_real_sdk_administrative_write_flow_one_configuration(writable, native_effects, live_server, record_property):
+def test_real_sdk_administrative_write_flow_one_configuration(
+    writable, settings, native_effects, live_server, record_property
+):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
     e = writable
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = live_server.url
     # Management returns a real single-server config pointing to this TCP server.
     login = APIClient()
     login.force_login(e["owner"])
@@ -499,7 +711,8 @@ def test_real_sdk_administrative_write_flow_one_configuration(writable, native_e
         assert response.status_code == 201
         servers = json.loads(response.json()["sciencediscovery_json"])["mcpServers"]
         assert len(servers) == 1
-        server = servers["plane"]
+        assert next(iter(servers)) == "Synthetic unified connection"
+        server = next(iter(servers.values()))
 
         async def scenario():
             async with httpx.AsyncClient(headers=server["headers"], trust_env=False) as http:
@@ -515,7 +728,7 @@ def test_real_sdk_administrative_write_flow_one_configuration(writable, native_e
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 11
+                        assert len(names) == 17
 
                         async def call(name, args):
                             result = await session.call_tool(name, args)

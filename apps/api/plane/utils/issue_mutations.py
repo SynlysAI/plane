@@ -15,7 +15,7 @@ from plane.app.permissions.base import ROLE, project_role_allows
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.issue_description_version_task import issue_description_version_task
 from plane.bgtasks.webhook_task import model_activity
-from plane.db.models import ProjectMember, WorkspaceMember
+from plane.db.models import Issue, ProjectMember, UserRecentVisit, WorkspaceMember
 from plane.utils.host import base_host
 from plane.utils.project_domains import project_domain_allows
 from plane.utils.workspace_access import user_can_access_workspace
@@ -46,6 +46,51 @@ def issue_action_allowed(actor, project, action, issue=None):
         ):
             return False
     return True
+
+
+def issue_delete_allowed(actor, project, issue):
+    """Match the native issue-delete rule for project admins and creators."""
+    if (
+        not actor
+        or not actor.is_active
+        or not WorkspaceMember.objects.filter(workspace_id=project.workspace_id, member=actor, is_active=True).exists()
+    ):
+        return False
+    return issue.created_by_id == actor.pk or project_role_allows(
+        actor, project.workspace.slug, project.pk, [ROLE.ADMIN]
+    )
+
+
+def soft_delete_issue(issue: Issue, actor, request) -> None:
+    """Soft-delete an issue and emit the native deleted activity effect.
+
+    Args:
+        issue: Target native work item.
+        actor: Human actor who authorized deletion.
+        request: Native or MCP request used to resolve the activity origin.
+    """
+    issue_id = issue.pk
+    project_id = issue.project_id
+    issue.delete()
+    UserRecentVisit.objects.filter(
+        project_id=project_id,
+        workspace=issue.workspace,
+        entity_identifier=issue_id,
+        entity_name="issue",
+    ).delete(soft=False)
+    _commit_task(
+        issue_activity,
+        type="issue.activity.deleted",
+        requested_data=json.dumps({"issue_id": str(issue_id)}),
+        actor_id=str(actor.pk),
+        issue_id=str(issue_id),
+        project_id=str(project_id),
+        current_instance={},
+        epoch=int(timezone.now().timestamp()),
+        notification=True,
+        origin=base_host(request=request, is_app=True),
+        subscriber=False,
+    )
 
 
 def _commit_task(task, **kwargs):

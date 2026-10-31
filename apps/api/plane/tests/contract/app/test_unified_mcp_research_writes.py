@@ -87,6 +87,208 @@ def test_permanent_connection_executes_proposal_and_rechecks_membership(scientif
     execute(e, pending, error="scope_denied")
 
 
+def test_research_project_chain_and_node_lifecycle(scientific):
+    """科研项目、研究链与节点生命周期共享原生角色和状态机。"""
+    e = scientific
+    db.OrgUnitMember.objects.filter(workspace=e["workspace"], user=e["owner"]).update(is_primary=True)
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "request_id": "create-research-project",
+        "name": "MCP 科研项目",
+        "research_type": "RESEARCH_PROJECT",
+        "org_unit_id": str(e["group"].pk),
+        "chain_visibility": "WORKSPACE",
+    }
+    created = invoke(e["client"], "plane_create_research_project", args)
+    assert created["status"] == "COMMITTED", created
+    project_id = created["data"]["id"]
+    chain_id = created["data"]["research"]["chain_id"]
+    profile = db.ResearchProjectProfile.objects.get(project_id=project_id)
+    assert profile.chain_visibility == "WORKSPACE" and str(profile.org_unit_id) == str(e["group"].pk)
+    assert invoke(e["client"], "plane_create_research_project", args)["data"]["id"] == project_id
+    receipt = invoke(
+        e["client"],
+        "plane_get_write_result",
+        {"workspace_slug": e["workspace"].slug, "request_id": args["request_id"]},
+    )
+    assert receipt["object_type"] == "ResearchChain" and receipt["object_id"] == chain_id
+
+    node_args = {
+        "workspace_slug": e["workspace"].slug,
+        "chain_id": chain_id,
+        "request_id": "create-research-node",
+        "title": "文献调研",
+        "node_type": "GENERAL_RESEARCH",
+    }
+    node = invoke(e["client"], "plane_create_research_node", node_args)
+    node_id = node["target"]["id"]
+    assert db.ResearchChainEvent.objects.filter(node_id=node_id, event_type="NODE_CREATED").exists()
+    assert invoke(e["client"], "plane_create_research_node", node_args)["data"]["id"] == node_id
+    updated = invoke(
+        e["client"],
+        "plane_update_research_node",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "node_id": node_id,
+            "request_id": "update-research-node",
+            "changes": {"title": "文献调研更新"},
+        },
+    )
+    assert updated["data"]["title"] == "文献调研更新"
+    transition = invoke(
+        e["client"],
+        "plane_transition_research_node",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "node_id": node_id,
+            "request_id": "start-research-node",
+            "action": "START",
+        },
+    )
+    assert transition["data"]["status"] == "ACTIVE"
+
+    updated_project = invoke(
+        e["client"],
+        "plane_update_research_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "update-research-project",
+            "changes": {"name": "MCP 科研项目更新"},
+        },
+    )
+    assert updated_project["data"]["name"] == "MCP 科研项目更新"
+    invoke(
+        e["client"],
+        "plane_archive_research_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "archive-research"},
+    )
+    profile.refresh_from_db()
+    assert profile.workflow_status == "ARCHIVED"
+    invoke(
+        e["client"],
+        "plane_restore_research_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "restore-research"},
+    )
+    profile.refresh_from_db()
+    assert profile.workflow_status == "ACTIVE"
+    invoke(
+        e["client"],
+        "plane_delete_research_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "delete-research",
+            "confirm_name": "MCP 科研项目更新",
+        },
+    )
+    profile.refresh_from_db()
+    assert profile.workflow_status == "DELETED"
+
+
+def test_research_only_connection_can_recover_lifecycle_receipts(scientific):
+    """科研-only 写连接也能看到并使用通用创建回执工具。"""
+    e = scientific
+    _, client = issued(e, domains={"research": "read_write"})
+    names, cursor = [], None
+    while True:
+        response = rpc(client, "tools/list", {"cursor": cursor} if cursor else {}).json()["result"]
+        names.extend(tool["name"] for tool in response["tools"])
+        cursor = response.get("nextCursor")
+        if not cursor:
+            break
+    assert "plane_get_write_result" in names
+    assert "plane_create_task" not in names
+
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "chain_id": str(e["chain"].pk),
+        "request_id": "research-only-node",
+        "title": "科研专用连接节点",
+        "node_type": "GENERAL_RESEARCH",
+    }
+    created = invoke(client, "plane_create_research_node", args)
+    recovered = invoke(
+        client,
+        "plane_get_write_result",
+        {"workspace_slug": e["workspace"].slug, "request_id": args["request_id"]},
+    )
+    assert recovered["object_type"] == "ResearchChainNode"
+    assert recovered["object_id"] == created["target"]["id"]
+    assert recovered["readback"] == "verified"
+
+
+def test_research_chain_replay_conflicts_before_already_exists(scientific):
+    """同一链创建 request_id 改变参数时必须冲突，而非误报已存在。"""
+    e = scientific
+    project = db.Project.objects.create(workspace=e["workspace"], name="空链项目", identifier="EMPTY")
+    db.ResearchProjectProfile.objects.create(
+        project=project,
+        workspace=e["workspace"],
+        owner=e["owner"],
+        research_type="RESEARCH_PROJECT",
+        chain_kind="RESEARCH_CHAIN",
+        chain_visibility="PRIVATE",
+    )
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "project_id": str(project.pk),
+        "request_id": "empty-chain-once",
+    }
+    assert invoke(e["client"], "plane_create_research_chain", args)["status"] == "COMMITTED"
+    invoke(
+        e["client"],
+        "plane_create_research_chain",
+        {**args, "visibility": "PRIVATE"},
+        error="idempotency_conflict",
+    )
+
+
+def test_research_node_assignee_and_unique_constraints_use_native_rules(scientific):
+    """节点 assignee 必须可分配，重复父子迭代返回原生状态冲突。"""
+    e = scientific
+    parent = db.ResearchChainNode.objects.create(
+        chain=e["chain"],
+        node_type="GENERAL_RESEARCH",
+        title="父节点",
+        request_id=uuid4().hex,
+        payload_hash="a" * 64,
+    )
+    common = {
+        "workspace_slug": e["workspace"].slug,
+        "chain_id": str(e["chain"].pk),
+        "parent_node_id": str(parent.pk),
+        "loop_iteration": 1,
+        "node_type": "GENERAL_RESEARCH",
+        "title": "重复子节点",
+    }
+    invoke(
+        e["client"],
+        "plane_create_research_node",
+        {**common, "request_id": "invalid-assignee", "assignee_id": str(uuid4())},
+        error="permission_denied",
+    )
+    first = invoke(e["client"], "plane_create_research_node", {**common, "request_id": "unique-child-1"})
+    invoke(
+        e["client"],
+        "plane_create_research_node",
+        {**common, "request_id": "unique-child-2"},
+        error="state_conflict",
+    )
+    assert e["chain"].nodes.filter(parent_node=parent, loop_iteration=1).count() == 1
+    invoke(
+        e["client"],
+        "plane_update_research_node",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "node_id": first["target"]["id"],
+            "request_id": "invalid-node-assignee",
+            "changes": {"assignee_id": str(uuid4())},
+        },
+        error="permission_denied",
+    )
+
+
 @pytest.mark.parametrize("action", sorted(ACTIONS))
 def test_five_native_proposal_actions_commit_once_without_child_grants_or_approval(scientific, action):
     e = scientific
@@ -462,12 +664,16 @@ def test_actual_weekly_credential_and_unified_credential_cannot_cross_purpose(sc
         workspace=e["workspace"],
         user=e["owner"],
         label="Isolated weekly purpose",
-        actions=["save_draft", "submit"],
+        actions=["read_reports", "save_draft", "submit"],
         ttl_days=7,
     )
     assert grant.purpose == "weekly_report" and grant.report_type == "WEEKLY"
     weekly = APIClient()
-    weekly.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=raw, HTTP_ACCEPT="application/json, text/event-stream")
+    weekly.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+        HTTP_ACCEPT="application/json, text/event-stream",
+        HTTP_MCP_PROTOCOL_VERSION="2025-03-26",
+    )
     weekly_url = f"/api/research/workspaces/{e['workspace'].slug}/weekly-report-agent/mcp/"
     request = {
         "jsonrpc": "2.0",
@@ -605,11 +811,14 @@ def test_concurrent_execute_uses_one_native_result(scientific):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(scientific, live_server, record_property):
+def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(
+    scientific, settings, live_server, record_property
+):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
     e = scientific
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = live_server.url
     login = APIClient()
     login.force_login(e["owner"])
     with httpx.Client(
@@ -626,7 +835,8 @@ def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(scien
         assert response.status_code == 201
         configs = json.loads(response.json()["sciencediscovery_json"])["mcpServers"]
         assert len(configs) == 1
-        config = configs["plane"]
+        assert next(iter(configs)) == "Synthetic unified connection"
+        config = next(iter(configs.values()))
 
         async def scenario():
             async with httpx.AsyncClient(headers=config["headers"], trust_env=False) as http:
@@ -642,7 +852,7 @@ def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(scien
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 15
+                        assert len(names) == 30
 
                         async def call(name, args):
                             result = await session.call_tool(name, args)

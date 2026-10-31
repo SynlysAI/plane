@@ -97,6 +97,7 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
       configuration: (id: string, csrf: string) => SERVICE.configuration(slug, id, csrf),
       rotate: (id: string, csrf: string) => SERVICE.rotate(slug, id, csrf),
       revoke: (id: string, csrf: string) => SERVICE.revoke(slug, id, csrf),
+      delete: (id: string, csrf: string) => SERVICE.delete(slug, id, csrf),
       metadata: weeklyReportMetadata,
       files: (value: Parameters<typeof weeklyReportConfig>[0]) => configurationFiles([weeklyReportConfig(value, slug)]),
       error: errorMessage,
@@ -131,9 +132,18 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
                   type="checkbox"
                   aria-label={weeklyReportActionLabels[action]}
                   checked={actions.includes(action)}
+                  disabled={action === "read_reports" && actions.some((item) => item !== "read_reports")}
                   onChange={(event) =>
                     setActions((before) =>
-                      event.target.checked ? [...before, action] : before.filter((a) => a !== action)
+                      event.target.checked
+                        ? before.includes(action)
+                          ? before
+                          : action === "read_reports"
+                            ? [...before, action]
+                            : [...before, "read_reports", action]
+                        : action === "read_reports" && before.some((item) => item !== "read_reports")
+                          ? before
+                          : before.filter((item) => item !== action)
                     )
                   }
                 />
@@ -181,6 +191,7 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
         {...manager}
         selected={manager.selected}
         name={(row) => row.label}
+        docsPath={(row) => `/mcp/api-docs/weekly-report/${encodeURIComponent(slug)}/${encodeURIComponent(row.id)}`}
         refresh={() => void manager.load()}
         retry={() => void manager.retry()}
         more={() => void manager.load(manager.cursor!)}

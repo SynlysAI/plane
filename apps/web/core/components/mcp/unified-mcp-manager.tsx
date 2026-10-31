@@ -18,6 +18,7 @@ const ADAPTER = {
   configuration: SERVICE.configuration.bind(SERVICE),
   rotate: SERVICE.rotate.bind(SERVICE),
   revoke: SERVICE.revoke.bind(SERVICE),
+  delete: SERVICE.delete.bind(SERVICE),
   metadata: unifiedMetadata,
   files: unifiedConfiguration,
   error: unifiedError,
@@ -259,6 +260,7 @@ export function UnifiedMCPManager({ initialWorkspace }: { initialWorkspace?: str
         {...manager}
         selected={manager.selected}
         name={(row) => row.name}
+        docsPath={(row) => `/mcp/api-docs/project/${encodeURIComponent(row.id)}`}
         refresh={() => void manager.load()}
         retry={() => void manager.retry()}
         more={() => void manager.load(manager.cursor!)}

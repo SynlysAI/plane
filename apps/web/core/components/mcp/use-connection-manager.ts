@@ -16,6 +16,7 @@ export type ConnectionAdapter<T extends ConnectionMetadata, Issued, Input> = {
   configuration: (id: string, csrf: string) => Promise<Issued>;
   rotate: (id: string, csrf: string) => Promise<Issued>;
   revoke: (id: string, csrf: string) => Promise<unknown>;
+  delete: (id: string, csrf: string) => Promise<unknown>;
   metadata: (issued: Issued) => T;
   files: (issued: Issued) => ConfigurationFiles;
   error: (error: unknown) => string;
@@ -171,8 +172,8 @@ export function useConnectionManager<T extends ConnectionMetadata, Issued, Input
     }
   }
 
-  /** 确认后重置或撤销，成功响应前不改写列表中的连接状态。 */
-  async function mutate(action: "rotate" | "revoke", id: string) {
+  /** 确认后重置、撤销或删除，成功响应前不改写列表中的连接状态。 */
+  async function mutate(action: "rotate" | "revoke" | "delete", id: string) {
     if (writing.current || !csrf.current) return false;
     writing.current = true;
     const expected = epoch.current;
@@ -192,7 +193,7 @@ export function useConnectionManager<T extends ConnectionMetadata, Issued, Input
         } catch {
           setError("密钥已重置，配置暂时无法显示。请在详情中重新查看配置。");
         }
-      } else {
+      } else if (action === "revoke") {
         await adapter.revoke(id, csrf.current);
         if (epoch.current !== expected) return false;
         setRows((before) =>
@@ -201,11 +202,24 @@ export function useConnectionManager<T extends ConnectionMetadata, Issued, Input
           )
         );
         setNotice("连接已撤销。");
+      } else {
+        await adapter.delete(id, csrf.current);
+        if (epoch.current !== expected) return false;
+        const remaining = rows.filter((row) => row.id !== id);
+        setRows(remaining);
+        setSelectedId((current) => (current === id ? (remaining[0]?.id ?? null) : current));
+        setNotice("连接记录已删除。");
       }
       return true;
     } catch (failure) {
       if (epoch.current !== expected) return false;
       const status = (failure as { status?: number })?.status;
+      if (action === "delete" && (!status || status >= 500)) {
+        await load();
+        if (epoch.current !== expected) return false;
+        setError("删除结果尚未确认，已刷新列表；请核对后再手动重试。");
+        return false;
+      }
       if (action === "rotate" && (!status || status >= 500)) {
         await load();
         if (epoch.current !== expected) return false;

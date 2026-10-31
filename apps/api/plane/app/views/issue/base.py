@@ -47,7 +47,7 @@ from plane.app.serializers import (
 )
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.recent_visited_task import recent_visited_task
-from plane.utils.issue_mutations import save_issue
+from plane.utils.issue_mutations import save_issue, soft_delete_issue
 from plane.db.models import (
     CycleIssue,
     FileAsset,
@@ -63,7 +63,6 @@ from plane.db.models import (
     ModuleIssue,
     Project,
     ProjectMember,
-    UserRecentVisit,
 )
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
 from plane.utils.global_paginator import paginate
@@ -72,7 +71,6 @@ from plane.utils.grouper import (
     issue_on_results,
     issue_queryset_grouper,
 )
-from plane.utils.host import base_host
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
@@ -675,8 +673,12 @@ class IssueViewSet(BaseViewSet):
         )
         if serializer.is_valid():
             save_issue(
-                serializer=serializer, project=issue.project, actor=request.user, request=request,
-                previous=current_instance, skip_effects=skip_activity and is_description_update,
+                serializer=serializer,
+                project=issue.project,
+                actor=request.user,
+                request=request,
+                previous=current_instance,
+                skip_effects=skip_activity and is_description_update,
             )
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -684,27 +686,7 @@ class IssueViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN], creator=True, model=Issue)
     def destroy(self, request, slug, project_id, pk=None):
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
-
-        issue.delete()
-        # delete the issue from recent visits
-        UserRecentVisit.objects.filter(
-            project_id=project_id,
-            workspace__slug=slug,
-            entity_identifier=pk,
-            entity_name="issue",
-        ).delete(soft=False)
-        issue_activity.delay(
-            type="issue.activity.deleted",
-            requested_data=json.dumps({"issue_id": str(pk)}),
-            actor_id=str(request.user.id),
-            issue_id=str(pk),
-            project_id=str(project_id),
-            current_instance={},
-            epoch=int(timezone.now().timestamp()),
-            notification=True,
-            origin=base_host(request=request, is_app=True),
-            subscriber=False,
-        )
+        soft_delete_issue(issue, request.user, request)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

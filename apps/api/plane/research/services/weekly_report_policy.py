@@ -21,7 +21,9 @@ from plane.research.utils.audit import record_audit_event
 from plane.utils.workspace_access import user_can_access_workspace
 
 PERIOD_POLICY = "current_and_previous_week.v1"
-ACTIONS = frozenset({"save_draft", "submit"})
+OWN_ACTIONS = frozenset({"save_draft", "submit", "withdraw"})
+REVIEW_ACTIONS = frozenset({"return", "accept"})
+ACTIONS = OWN_ACTIONS | REVIEW_ACTIONS | {"read_reports"}
 HEADER = "X-Weekly-Report-Token"
 
 # Existing Page/asset/org endpoints do not share a report row lock. Until all
@@ -102,6 +104,30 @@ def check_actor(workspace, user, *, require_feature=True):
             raise WeeklyReportError("report_org_required", "An active organisation assignment is required.", 403)
 
 
+def available_actions(workspace, user):
+    """Return the role-aware actions this account may put in a weekly token.
+
+    Args:
+        workspace: Workspace owning the personal weekly reports.
+        user: Human account requesting a new connection.
+
+    Returns:
+        A sorted action list; object-level checks still run on every call.
+    """
+    check_actor(workspace, user)
+    actions = {"read_reports"}
+    from plane.research.services.report_workflow import resolve_report_context
+    from plane.research.utils.role_resolution import resolve_role_context
+
+    context = resolve_report_context(workspace=workspace, actor=user, payload={})
+    if context.report_org_unit is not None:
+        actions.update(OWN_ACTIONS)
+    roles = set(resolve_role_context(user, workspace).get("roles", []))
+    if roles & {"ADMIN", "PRINCIPAL", "MENTOR"}:
+        actions.update(REVIEW_ACTIONS)
+    return sorted(actions)
+
+
 def check_grant(grant, workspace, user, *, action=None, lock=False):
     queryset = db.ReportAgentGrant.objects
     if lock:
@@ -133,11 +159,6 @@ def check_grant(grant, workspace, user, *, action=None, lock=False):
 def issue_grant(*, workspace, user, label, actions, ttl_days):
     consistency_barrier()
     check_actor(workspace, user)
-    from plane.research.services.report_workflow import resolve_report_context
-
-    context = resolve_report_context(workspace=workspace, actor=user, payload={})
-    if context.report_org_unit is None:
-        raise WeeklyReportError("report_org_required", "A primary organisation assignment is required.", 403)
     if (
         not isinstance(label, str)
         or not 1 <= len(label.strip()) <= 100
@@ -147,9 +168,16 @@ def issue_grant(*, workspace, user, label, actions, ttl_days):
         or any(not isinstance(action, str) for action in actions)
         or not set(actions) <= ACTIONS
         or len(set(actions)) != len(actions)
+        or (set(actions) & (OWN_ACTIONS | REVIEW_ACTIONS) and "read_reports" not in actions)
         or not valid_lifetime(ttl_days)
     ):
         raise WeeklyReportError("invalid_arguments", "Choose a name, explicit actions and an allowed lifetime.")
+    if set(actions) & OWN_ACTIONS:
+        from plane.research.services.report_workflow import resolve_report_context
+
+        context = resolve_report_context(workspace=workspace, actor=user, payload={})
+        if context.report_org_unit is None:
+            raise WeeklyReportError("report_org_required", "A primary organisation assignment is required.", 403)
     if (
         db.ReportAgentGrant.objects.filter(
             unexpired_connections(), workspace=workspace, user=user, revoked_at__isnull=True

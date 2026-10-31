@@ -13,6 +13,7 @@ from django.test import RequestFactory
 from rest_framework.test import APIClient
 
 from plane.db import models as db
+from plane.mcp.client_config import client_files, public_url
 from plane.mcp.credentials import CredentialStorageError, recover_credential
 from plane.middleware.logger import APITokenLogMiddleware
 from plane.tests.contract.app.test_unified_mcp import env, machine, unified, payload, rpc
@@ -41,7 +42,7 @@ def connection_case(request, settings):
     )
     csrf = client.get(root).json()["csrf_token"]
     data = (
-        {"label": "回看测试", "actions": ["save_draft", "submit"], "ttl_days": 365}
+        {"label": "回看测试", "actions": ["read_reports", "save_draft", "submit"], "ttl_days": 365}
         if weekly
         else {
             **payload(source),
@@ -66,6 +67,8 @@ def connection_case(request, settings):
                 {"jsonrpc": "2.0", "id": 1, "method": "ping"},
                 format="json",
                 HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+                HTTP_ACCEPT="application/json, text/event-stream",
+                HTTP_MCP_PROTOCOL_VERSION="2025-03-26",
             )
         machine_client.credentials(
             HTTP_AUTHORIZATION="Bearer " + raw, HTTP_ACCEPT="application/json, text/event-stream"
@@ -115,6 +118,108 @@ def test_configuration_is_recoverable_encrypted_owner_only_and_csrf_protected(co
         anonymous.credentials(HTTP_AUTHORIZATION="Bearer " + raw, HTTP_X_WEEKLY_REPORT_TOKEN=raw)
         assert anonymous.post(c["root"] + path, {}, format="json").status_code in (401, 403)
     assert raw not in json.dumps(list(db.ResearchAuditEvent.objects.values("metadata")), default=str)
+
+
+def test_configuration_uses_public_url_and_user_supplied_server_key(connection_case, settings):
+    """客户端配置使用公共 HTTPS 基址与用户命名的 server key。"""
+    c = connection_case
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = "https://plane.example"
+    data = c["data"]
+    if c["weekly"]:
+        data = {**data, "label": "fyk report/mcp"}
+    else:
+        data = {**data, "name": "fyk report/mcp"}
+    value = c["post"](body=data).json()
+    expected_path = (
+        f"/api/research/workspaces/{c['workspace'].slug}/weekly-report-agent/mcp/" if c["weekly"] else "/api/mcp/"
+    )
+    assert value["server_key"] == "fyk report/mcp"
+    assert value["mcp_url"] == "https://plane.example" + expected_path
+    assert value["api_docs_url"] == (
+        f"https://plane.example/mcp/api-docs/weekly-report/{c['workspace'].slug}/{value['id']}"
+        if c["weekly"]
+        else f"https://plane.example/mcp/api-docs/project/{value['id']}"
+    )
+    assert '[mcp_servers."fyk report/mcp"]' in value["codex_toml"]
+    assert (
+        "[mcp_servers.fyk_mcp]"
+        in client_files("fyk_mcp", "https://plane.example/api/mcp/", {"X-Test": "x"})["codex_toml"]
+    )
+    assert json.loads(value["sciencediscovery_json"])["mcpServers"]["fyk report/mcp"]["url"] == value["mcp_url"]
+
+
+@pytest.mark.parametrize(
+    ("explicit", "web", "app", "expected"),
+    [
+        ("", "https://openeva.example", "https://app.example", "https://openeva.example/api/mcp/"),
+        ("", "", "https://app.example", "https://app.example/api/mcp/"),
+        ("", "", "", "https://forwarded.example/api/mcp/"),
+    ],
+)
+def test_public_origin_prefers_stable_configured_origins(settings, explicit, web, app, expected):
+    """代理请求 host 与公共域名不同步时仍导出稳定配置基址。"""
+    request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="https", HTTP_HOST="backend.internal")
+    request.META["HTTP_HOST"] = "forwarded.example"
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = explicit
+    settings.WEB_URL = web
+    settings.APP_URL = app
+    assert public_url(request, "/api/mcp/") == expected
+
+
+def test_delete_soft_deletes_revokes_token_and_keeps_audit(connection_case):
+    """删除立即失效并移出列表，但保留记录、密钥哈希与审计。"""
+    c = connection_case
+    value = c["post"]().json()
+    row = c["model"].objects.get(pk=value["id"])
+    token_hash = row.token_hash
+    csrf = c["client"].get(c["root"]).json()["csrf_token"]
+
+    assert c["client"].delete(c["root"] + f"{value['id']}/").status_code == 403
+    stranger = APIClient()
+    stranger.force_login(c["other"])
+    assert stranger.delete(c["root"] + f"{value['id']}/").status_code == 404
+
+    deleted = c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf)
+    assert deleted.status_code == 200, deleted.data
+    assert deleted.json() == {"deleted": True, "id": value["id"]}
+    assert not c["model"].objects.filter(pk=value["id"]).exists()
+    row = c["model"].all_objects.get(pk=value["id"])
+    assert row.revoked_at is not None and row.deleted_at is not None and not row.token_encrypted
+    assert row.token_hash == token_hash
+    assert c["ping"](c["secret"](value)).status_code in (401, 403)
+    assert c["client"].get(c["root"]).json()["results"] == []
+    audit = db.ResearchAuditEvent.objects.filter(
+        resource_id=row.pk,
+        action="report.mcp.grant.delete" if c["weekly"] else "mcp.connection.delete",
+    )
+    assert audit.exists()
+    assert c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf).status_code == 404
+
+
+def test_connection_tools_document_is_owner_only_and_secret_free(connection_case):
+    """API 文档按连接返回实时角色、工具与 schema，但绝不携带密钥。"""
+    c = connection_case
+    value = c["post"]().json()
+    raw = c["secret"](value)
+    path = value["id"] + "/tools/"
+    docs = c["client"].get(c["root"] + path)
+    assert docs.status_code == 200, docs.data
+    payload = docs.json()
+    assert payload["server"]["server_key"] == ("回看测试" if c["weekly"] else "Synthetic unified connection")
+    assert payload["server"]["auth_header"] == ("X-Weekly-Report-Token" if c["weekly"] else "Authorization")
+    assert payload["tools"] and all(tool.get("inputSchema") for tool in payload["tools"])
+    expected_categories = {"read"} if not c["weekly"] else {"read", "proposal_write"}
+    assert expected_categories <= {tool["category"] for tool in payload["tools"]}
+    assert payload["workspaces"][0]["role_context"] is not None
+    assert raw not in docs.content.decode()
+
+    stranger = APIClient()
+    stranger.force_login(c["other"])
+    assert stranger.get(c["root"] + path).status_code == 404
+    assert APIClient().get(c["root"] + path).status_code in (401, 403)
+    csrf = c["client"].get(c["root"]).json()["csrf_token"]
+    assert c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf).status_code == 200
+    assert c["client"].get(c["root"] + path).status_code == 404
 
 
 def test_rotation_preserves_scope_and_deadline_and_revokes_old_secret(connection_case):
@@ -303,7 +408,7 @@ def test_permanent_weekly_connections_count_toward_limit(report_env, settings):
         "workspace": report_env["workspace"],
         "user": report_env["student"],
         "label": "永久周报",
-        "actions": ["save_draft"],
+        "actions": ["read_reports", "save_draft"],
         "ttl_days": None,
     }
     for _ in range(10):
@@ -324,7 +429,7 @@ def test_permanent_weekly_connection_does_not_extend_proposal_lifetime(report_en
         workspace=report_env["workspace"],
         user=report_env["student"],
         label="永久周报",
-        actions=["save_draft", "submit"],
+        actions=["read_reports", "save_draft", "submit"],
         ttl_days=None,
     )
     service = WeeklyReportService(grant=grant)

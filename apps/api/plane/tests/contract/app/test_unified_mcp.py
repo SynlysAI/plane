@@ -313,8 +313,16 @@ def test_admin_has_no_fake_nodes_and_no_business_writes(unified):
     result = invoke(client, "plane_list_nodes", {"container": reference(e, "Project", e["projects"][0])})
     assert result["applicability"] == "not_applicable" and result["next_tool"]["name"] == "plane_list_tasks"
     before = db.Issue.objects.count()
-    invoke(client, "plane_create_task", {"parent": reference(e, "Project", e["projects"][0]),
-           "request_id": "readonly-create", "name": "must not be written"}, error="scope_denied")
+    invoke(
+        client,
+        "plane_create_task",
+        {
+            "parent": reference(e, "Project", e["projects"][0]),
+            "request_id": "readonly-create",
+            "name": "must not be written",
+        },
+        error="scope_denied",
+    )
     assert db.Issue.objects.count() == before
     response = e["owner_client"].post(MANAGEMENT, payload(e, domains={"research": "read_write"}), format="json")
     assert response.status_code == 404 and response.data["error_code"] == "disabled"
@@ -531,7 +539,11 @@ def test_formal_report_versions_obey_snapshot_scope_without_weekly_write_upgrade
     )
     assert db.ReportAgentGrant.objects.count() == 0
     weekly = APIClient()
-    weekly.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=value["secret"])
+    weekly.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=value["secret"],
+        HTTP_ACCEPT="application/json, text/event-stream",
+        HTTP_MCP_PROTOCOL_VERSION="2025-03-26",
+    )
     denied = weekly.post(
         f"/api/research/workspaces/{e['workspace'].slug}/weekly-report-agent/mcp/",
         {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
@@ -618,12 +630,13 @@ def test_transport_negotiation_methods_notifications_batch_and_origin(unified):
 
 @pytest.mark.django_db(transaction=True)
 def test_real_sdk_single_configuration_two_projects_two_nodes_readback_and_revocation(
-    unified, live_server, record_property
+    unified, settings, live_server, record_property
 ):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
     e = unified
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = live_server.url
     login = APIClient()
     login.force_login(e["owner"])
     cookie = login.cookies[django_settings.SESSION_COOKIE_NAME].value
@@ -637,7 +650,8 @@ def test_real_sdk_single_configuration_two_projects_two_nodes_readback_and_revoc
         value = response.json()
         config = json.loads(value["sciencediscovery_json"])["mcpServers"]
         assert len(config) == 1
-        server = config["plane"]
+        assert next(iter(config)) == "Synthetic unified connection"
+        server = next(iter(config.values()))
 
         async def scenario():
             async with httpx.AsyncClient(headers=server["headers"], trust_env=False) as http:

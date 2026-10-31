@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   configuration: vi.fn(),
   rotate: vi.fn(),
   revoke: vi.fn(),
+  delete: vi.fn(),
   copy: vi.fn(),
   download: vi.fn(),
 }));
@@ -50,6 +51,7 @@ vi.mock("@/services/unified-mcp.service", () => ({
     configuration = mocks.configuration;
     rotate = mocks.rotate;
     revoke = mocks.revoke;
+    delete = mocks.delete;
   },
 }));
 vi.mock("@/services/weekly-report-mcp.service", () => ({
@@ -60,6 +62,7 @@ vi.mock("@/services/weekly-report-mcp.service", () => ({
     configuration = mocks.configuration;
     rotate = mocks.rotate;
     revoke = mocks.revoke;
+    delete = mocks.delete;
   },
 }));
 const user = observable({ id: "user-one" });
@@ -100,17 +103,19 @@ const project = {
   },
   implemented_capabilities: ["read"],
   secret: projectSecret,
+  server_key: "我的连接",
   mcp_url: "https://plane.test/api/mcp/",
   codex_toml: "unused",
   sciencediscovery_json: JSON.stringify({
     mcpServers: {
-      plane: {
+      我的连接: {
         type: "http",
         url: "https://plane.test/api/mcp/",
         headers: { Authorization: "Bearer " + projectSecret },
       },
     },
   }),
+  api_docs_url: "https://plane.test/mcp/api-docs/project/" + ID,
 };
 const weekly = {
   ...common,
@@ -119,8 +124,13 @@ const weekly = {
   actions: ["save_draft"],
   report_type: "WEEKLY",
   period_policy: "current_and_previous_week.v1",
+  server_key: "我的连接",
   mcp_path: "/api/research/workspaces/lab/weekly-report-agent/mcp/",
+  mcp_url: "https://plane.test/api/research/workspaces/lab/weekly-report-agent/mcp/",
   headers: { "X-Weekly-Report-Token": weeklySecret },
+  codex_toml: "unused",
+  sciencediscovery_json: "unused",
+  api_docs_url: "https://plane.test/mcp/api-docs/weekly-report/lab/" + ID,
   csrf_token: "csrf",
 };
 const page = (results: any[] = [], next_cursor: string | null = null) => ({ results, next_cursor, csrf_token: "csrf" });
@@ -146,7 +156,7 @@ const weeklyOptions = {
       slug: "lab",
       name: "研究工作区",
       enabled: true,
-      actions: ["save_draft", "submit"],
+      actions: ["read_reports", "save_draft", "submit", "withdraw"],
       ttl_days: LIFETIMES,
       default_ttl_days: 365,
       period_description: "仅本人本周与上周的周报。",
@@ -257,6 +267,17 @@ describe.each(["project", "weekly"] as const)("%s 连接的公共行为", (kind)
     expect(container.querySelector('[aria-label="连接详情 我的连接"]')).toBeTruthy();
     expect(container.textContent).toContain("永不过期");
     expect(JSON.stringify(metadata())).not.toContain(secret);
+  });
+  it("确认后软删除连接并从详情列表移除", async () => {
+    mocks.connections.mockResolvedValue(page([metadata()]));
+    mocks.delete.mockResolvedValue({ deleted: true, id: ID });
+    await render(element());
+    await click("查看连接 我的连接");
+    await click("删除记录");
+    await click("确认删除");
+    expect(mocks.delete).toHaveBeenCalledWith(...(isWeekly ? ["lab", ID, "csrf"] : [ID, "csrf"]));
+    expect(container.textContent).toContain("连接记录已删除。");
+    expect(container.querySelector('[aria-label="连接详情 我的连接"]')).toBeNull();
   });
   it("拒绝空白名称和控制字符", async () => {
     await render(element());
@@ -459,6 +480,21 @@ it("项目连接使用服务端返回的默认有效期", async () => {
   await click("确认生成");
   expect(mocks.issue).toHaveBeenCalledTimes(1);
   expect(mocks.issue.mock.calls[0][0].ttl_days).toBe(30);
+});
+
+it("周报导写动作自动携带并锁定目录读取", async () => {
+  mocks.options.mockResolvedValue(weeklyOptions);
+  await render(<WeeklyReportMCPSettings workspaceSlug="lab" />);
+  await act(async () => container.querySelector<HTMLInputElement>('[aria-label="正式提交"]')!.click());
+  const read = container.querySelector<HTMLInputElement>('[aria-label="读取可见周报"]')!;
+  expect(read.checked).toBe(true);
+  expect(read.disabled).toBe(true);
+  await act(async () => read.click());
+  expect(container.querySelector<HTMLInputElement>('[aria-label="读取可见周报"]')!.checked).toBe(true);
+  await click("创建连接");
+  await inputName("我的连接");
+  await click("确认生成");
+  expect(mocks.issue.mock.calls[0][1].actions).toEqual(["read_reports", "submit"]);
 });
 
 it("周报功能关闭仍能显示和撤销已有连接", async () => {

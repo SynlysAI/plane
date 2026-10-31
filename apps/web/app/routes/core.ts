@@ -48,6 +48,11 @@ export const coreRoutes: RouteConfigEntry[] = [
   // ========================================================================
   layout("./(all)/layout.tsx", [
     route("mcp", "./(all)/mcp/page.tsx"),
+    route("mcp/api-docs/project/:connectionId", "./(all)/mcp/api-docs/project/$connectionId/page.tsx"),
+    route(
+      "mcp/api-docs/weekly-report/:workspaceSlug/:connectionId",
+      "./(all)/mcp/api-docs/weekly-report/$workspaceSlug/$connectionId/page.tsx"
+    ),
     // ======================================================================
     // WORKSPACE-SCOPED ROUTES
     // ======================================================================

@@ -1,7 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), create: vi.fn() }));
+const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn(), create: vi.fn() }));
 vi.mock("@plane/constants", () => ({ API_BASE_URL: "https://plane.test" }));
-vi.mock("axios", () => ({ create: calls.create.mockReturnValue({ get: calls.get, post: calls.post }) }));
+vi.mock("axios", () => ({
+  create: calls.create.mockReturnValue({ get: calls.get, post: calls.post, delete: calls.delete }),
+}));
 import { WeeklyReportMCPService } from "@/services/weekly-report-mcp.service";
 import { weeklyReportConfig } from "@/components/mcp/weekly-report-config";
 import type { WeeklyReportIssued } from "@/services/weekly-report-mcp.service";
@@ -9,6 +11,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   calls.get.mockResolvedValue({ data: {} });
   calls.post.mockResolvedValue({ data: {} });
+  calls.delete.mockResolvedValue({ data: {} });
 });
 it.each(["configuration", "rotate"] as const)("通过本人会话与 CSRF 请求周报 %s 配置", async (action) => {
   const service = new WeeklyReportMCPService();
@@ -42,6 +45,11 @@ it("uses dedicated management routes, login cookies and CSRF; no machine or node
     {},
     { headers: { "X-CSRFToken": "csrf2" } }
   );
+  await service.delete("a/b", "grant/id", "csrf2");
+  expect(calls.delete).toHaveBeenLastCalledWith(
+    "/api/research/workspaces/a%2Fb/mcp/weekly-report/connections/grant%2Fid/",
+    { headers: { "X-CSRFToken": "csrf2" } }
+  );
 });
 
 it.each([undefined, 503, 403, 409])(
@@ -67,18 +75,21 @@ it.each([undefined, 503, 403, 409])(
 const issued = () =>
   ({
     id: "11111111-2222-4333-8444-555555555555",
+    label: "fyk_report_mcp",
     workspace: "public",
+    server_key: "fyk_report_mcp",
     mcp_path: "/api/research/workspaces/public/weekly-report-agent/mcp/",
+    mcp_url: "https://plane.test/api/research/workspaces/public/weekly-report-agent/mcp/",
     headers: { "X-Weekly-Report-Token": `pwr_${"a".repeat(43)}`, Authorization: "must-not-copy" },
   }) as WeeklyReportIssued;
-it("copies only the dedicated weekly header into a distinct service name", () => {
+it("copies only the dedicated weekly header into the user-supplied service name", () => {
   const value = weeklyReportConfig(issued(), "public");
-  expect(value.name).toBe("plane_weekly_report_11111111222243338444555555555555");
+  expect(value.name).toBe("fyk_report_mcp");
   expect(value.headers).not.toHaveProperty("Authorization");
 });
 it.each([
   { workspace: "other" },
-  { id: "unsafe.name" },
+  { server_key: "wrong-name" },
   { headers: {} },
   { headers: { "X-Weekly-Report-Token": "SECRET" } },
   { mcp_path: "https://evil.test/api/research/workspaces/public/weekly-report-agent/mcp/" },

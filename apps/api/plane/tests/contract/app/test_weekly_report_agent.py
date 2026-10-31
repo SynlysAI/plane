@@ -1,6 +1,7 @@
 """Personal weekly report capabilities, immutable proposals and atomic recovery."""
 
 from unittest.mock import patch
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -8,9 +9,11 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db import models as db
+from plane.research.services.weekly_report_catalog import VERSION
 from plane.research.services.weekly_report_errors import WeeklyReportError
 from plane.research.services.weekly_report_operations import WeeklyReportService
 from plane.research.services.weekly_report_policy import issue_grant
+from plane.research.views.weekly_report_agent import PROTOCOL_VERSION
 from plane.tests.contract.app.test_research_reports import env as report_env, research_module_on  # noqa: F401
 
 pytestmark = [pytest.mark.contract, pytest.mark.django_db]
@@ -27,8 +30,23 @@ def connection(env, actions=None):
         workspace=env["workspace"],
         user=env["student"],
         label="Test Agent",
-        actions=actions or ["save_draft", "submit"],
+        actions=actions or ["read_reports", "save_draft", "submit"],
         ttl_days=7,
+    )
+
+
+def legacy_connection(env, actions=None):
+    """Create an old action set directly to preserve pre-v2 grant compatibility."""
+    return (
+        db.ReportAgentGrant.objects.create(
+            workspace=env["workspace"],
+            user=env["student"],
+            label="Legacy Agent",
+            allowed_actions=actions or ["save_draft", "submit"],
+            token_hash=uuid4().hex * 2,
+            expires_at=timezone.now() + timedelta(days=1),
+        ),
+        None,
     )
 
 
@@ -56,7 +74,7 @@ def proposal(
 
 
 def test_new_submit_is_immutable_idempotent_and_recovers_after_readback_outage(env):
-    grant, _ = connection(env)
+    grant, _ = legacy_connection(env)
     service = WeeklyReportService(grant=grant)
     prepared, args = proposal(service)
     assert prepared["report_id"] is None
@@ -111,6 +129,139 @@ def test_submit_proposal_requires_an_explicit_reviewer(env):
 
     assert error.value.code == "invalid_arguments"
     assert not db.ReportAgentOperation.objects.exists()
+
+
+def test_routed_reviewer_lists_reads_returns_and_accepts_reports(env):
+    """导师连接只能看到路由报告，并通过不可变提案完成退回与接受。"""
+    student_grant, _ = connection(env)
+    student = WeeklyReportService(grant=student_grant)
+    submitted, _ = proposal(student)
+    report_id = student.execute("execute_weekly_report_operation", {"operation_id": submitted["operation_id"]})[
+        "result"
+    ]["report_id"]
+    db.Page.objects.filter(pk=db.PeriodicReport.objects.get(pk=report_id).page_id).update(
+        description_html="<p>unsubmitted web edit</p>"
+    )
+
+    db.OrgUnitMember.objects.filter(workspace=env["workspace"], user=env["advisor"]).update(is_primary=True)
+    advisor_grant, _ = issue_grant(
+        workspace=env["workspace"],
+        user=env["advisor"],
+        label="导师审阅",
+        actions=["read_reports", "return", "accept"],
+        ttl_days=7,
+    )
+    reviewer = WeeklyReportService(grant=advisor_grant)
+    listing = reviewer.execute("list_weekly_reports", {"scope": "review", "limit": 20})
+    assert [item["id"] for item in listing["results"]] == [report_id]
+    detail = reviewer.execute("get_weekly_report", {"report_id": report_id})
+    assert detail["report"]["status"] == "SUBMITTED" and detail["content_page"]["complete"] is True
+    assert "unsubmitted web edit" not in detail["content_page"]["text"]
+
+    returned = reviewer.execute(
+        "prepare_weekly_report_operation",
+        {
+            "request_id": "review-return-1",
+            "action": "return",
+            "report_id": report_id,
+            "expected_revision": detail["revision"],
+            "comment": "请补充实验结果。",
+        },
+    )
+    committed = reviewer.execute("execute_weekly_report_operation", {"operation_id": returned["operation_id"]})
+    assert committed["result"]["status"] == "NEEDS_REVISION"
+    assert db.ResearchApprovalRoute.objects.filter(resource_id=report_id, status="SUPERSEDED").exists()
+    history = reviewer.execute("list_weekly_report_history", {"report_id": report_id})
+    assert "RETURN" in [item["action"] for item in history["results"]]
+
+    db.Page.objects.filter(pk=db.PeriodicReport.objects.get(pk=report_id).page_id).update(
+        description_html="<p>revision draft body</p>"
+    )
+    returned_detail = reviewer.execute("get_weekly_report", {"report_id": report_id})
+    assert returned_detail["report"]["status"] == "NEEDS_REVISION"
+    assert "revision draft body" in returned_detail["content_page"]["text"]
+
+    context = student.execute("get_weekly_report_context", {"period_key": listing["results"][0]["period_key"]})
+    again, _ = proposal(student, context=context)
+    report_id = student.execute("execute_weekly_report_operation", {"operation_id": again["operation_id"]})["result"][
+        "report_id"
+    ]
+    detail = reviewer.execute("get_weekly_report", {"report_id": report_id})
+    accepted = reviewer.execute(
+        "prepare_weekly_report_operation",
+        {
+            "request_id": "review-accept-1",
+            "action": "accept",
+            "report_id": report_id,
+            "expected_revision": detail["revision"],
+            "comment": "完成。",
+        },
+    )
+    committed = reviewer.execute("execute_weekly_report_operation", {"operation_id": accepted["operation_id"]})
+    assert committed["result"]["status"] == "ACCEPTED" and committed["readback"] == "verified"
+    assert db.ReportReviewLog.objects.filter(report_id=report_id, action="ACCEPT").exists()
+
+
+def test_legacy_write_grant_does_not_gain_report_catalog_reads(env):
+    """旧 save/submit 周报连接保留原能力，不自动获得全量目录读取。"""
+    grant, _ = legacy_connection(env)
+    service = WeeklyReportService(grant=grant)
+    assert service.execute("get_weekly_report_context", {"period_offset": -1})["contract_version"] == VERSION
+    with pytest.raises(WeeklyReportError) as error:
+        service.execute("list_weekly_reports", {"scope": "mine"})
+    assert error.value.code == "scope_denied"
+
+
+def test_review_only_connection_does_not_require_personal_report_context(env):
+    """纯审阅连接不要求审阅者本人拥有可申报的科研档案。"""
+    db.OrgUnitMember.objects.filter(workspace=env["workspace"], user=env["advisor"]).update(is_primary=False)
+    grant, _ = issue_grant(
+        workspace=env["workspace"],
+        user=env["advisor"],
+        label="纯审阅",
+        actions=["read_reports", "return", "accept"],
+        ttl_days=7,
+    )
+    assert grant.allowed_actions == ["accept", "read_reports", "return"]
+
+
+def test_new_mutating_actions_require_catalog_read(env):
+    """新写或审阅连接必须显式包含目录读取能力。"""
+    for actions in (["save_draft"], ["submit"], ["withdraw"], ["return"], ["accept"]):
+        with pytest.raises(WeeklyReportError) as failure:
+            issue_grant(
+                workspace=env["workspace"],
+                user=env["student"],
+                label="缺少读取",
+                actions=actions,
+                ttl_days=7,
+            )
+        assert failure.value.code == "invalid_arguments"
+
+
+def test_owner_can_withdraw_a_submitted_report_through_proposal(env):
+    """撤回同样使用提案、状态校验、审计与路由关闭。"""
+    grant, _ = connection(env, actions=["read_reports", "save_draft", "submit", "withdraw"])
+    service = WeeklyReportService(grant=grant)
+    submitted, _ = proposal(service)
+    report_id = service.execute("execute_weekly_report_operation", {"operation_id": submitted["operation_id"]})[
+        "result"
+    ]["report_id"]
+    detail = service.execute("get_weekly_report", {"report_id": report_id})
+    prepared = service.execute(
+        "prepare_weekly_report_operation",
+        {
+            "request_id": "owner-withdraw-1",
+            "action": "withdraw",
+            "report_id": report_id,
+            "expected_revision": detail["revision"],
+            "comment": "需要补充材料。",
+        },
+    )
+    committed = service.execute("execute_weekly_report_operation", {"operation_id": prepared["operation_id"]})
+    assert committed["result"]["status"] == "DRAFT"
+    assert db.ReportReviewLog.objects.filter(report_id=report_id, action="REOPEN").exists()
+    assert not db.ResearchApprovalRoute.objects.filter(resource_id=report_id, status="ACTIVE").exists()
 
 
 def test_save_draft_schema_rejects_approval_selection(env):
@@ -233,7 +384,7 @@ def test_live_authorization_rechecked_before_execute(env, settings, change):
 
 
 def test_draft_only_cannot_submit_or_swap_payload_and_cross_grant_is_denied(env):
-    grant, _ = connection(env, ["save_draft"])
+    grant, _ = connection(env, ["read_reports", "save_draft"])
     service = WeeklyReportService(grant=grant)
     with pytest.raises(WeeklyReportError, match="does not allow"):
         proposal(service, action="submit")
@@ -285,7 +436,9 @@ def test_management_issue_list_revoke_and_machine_workspace_isolation(env):
     assert options.status_code == 200, options.data
     assert options.data["workspaces"][0]["ttl_days"] == [1, 7, 30, 365, None]
     issued = client.post(
-        root + "connections/", {"label": "Weekly", "actions": ["submit"], "ttl_days": 1}, format="json"
+        root + "connections/",
+        {"label": "Weekly", "actions": ["read_reports", "submit"], "ttl_days": 1},
+        format="json",
     )
     assert issued.status_code == 201, issued.data
     secret = issued.data["headers"]["X-Weekly-Report-Token"]
@@ -295,7 +448,7 @@ def test_management_issue_list_revoke_and_machine_workspace_isolation(env):
     machine.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=secret)
     catalogue = machine.get(issued.data["mcp_path"].replace("mcp/", "tools/"))
     assert catalogue.status_code == 200, catalogue.data
-    assert len(catalogue.data["tools"]) == 5
+    assert len(catalogue.data["tools"]) == 8
     other = machine.get("/api/research/workspaces/wrong/weekly-report-agent/tools/")
     assert other.status_code == 403
     assert machine.post(root + "connections/", {"label": "forbidden"}, format="json").status_code in (401, 403)
@@ -431,7 +584,7 @@ def test_session_csrf_is_required_and_listing_revocation_survive_disabled_featur
     api = APIClient(enforce_csrf_checks=True)
     api.force_login(env["student"])
     root = f"/api/research/workspaces/{env['workspace'].slug}/mcp/weekly-report/"
-    payload = {"label": "CSRF", "actions": ["submit"], "ttl_days": 1}
+    payload = {"label": "CSRF", "actions": ["read_reports", "submit"], "ttl_days": 1}
     assert api.post(root + "connections/", payload, format="json").status_code == 403
     request = RequestFactory().get("/")
     csrf = get_token(request)
@@ -458,16 +611,52 @@ def test_session_csrf_is_required_and_listing_revocation_survive_disabled_featur
 def test_http_rpc_and_direct_tool_use_same_catalogue_and_error_contract(env):
     _, raw = connection(env)
     api = APIClient()
-    api.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=raw)
+    api.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+        HTTP_ACCEPT="application/json, text/event-stream",
+        HTTP_MCP_PROTOCOL_VERSION=PROTOCOL_VERSION,
+    )
     root = f"/api/research/workspaces/{env['workspace'].slug}/weekly-report-agent/"
 
     def rpc(method, params=None):
+        if method == "initialize":
+            params = {"protocolVersion": PROTOCOL_VERSION}
         return api.post(
             root + "mcp/", {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}, format="json"
         )
 
+    bad_accept = APIClient()
+    bad_accept.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+        HTTP_ACCEPT="application/json",
+        HTTP_MCP_PROTOCOL_VERSION=PROTOCOL_VERSION,
+    )
+    bad_protocol = APIClient()
+    bad_protocol.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+        HTTP_ACCEPT="application/json, text/event-stream",
+        HTTP_MCP_PROTOCOL_VERSION="2024-01-01",
+    )
+    assert (
+        bad_accept.post(root + "mcp/", {"jsonrpc": "2.0", "id": 1, "method": "ping"}, format="json").status_code == 406
+    )
+    assert (
+        bad_protocol.post(root + "mcp/", {"jsonrpc": "2.0", "id": 1, "method": "ping"}, format="json").status_code
+        == 400
+    )
     assert rpc("initialize").data["result"]["serverInfo"]["name"] == "plane-weekly-report"
     assert rpc("tools/list").data["result"]["tools"] == api.get(root + "tools/").data["tools"]
+    assert rpc("tools/list", {"cursor": "one", "unknown": True}).data["error"]["code"] == -32602
+    batch = api.post(
+        root + "mcp/",
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": PROTOCOL_VERSION}},
+            {"jsonrpc": "2.0", "id": 2, "method": "ping"},
+        ],
+        format="json",
+    )
+    assert [item["id"] for item in batch.data] == [1, 2]
+    assert api.post(root + "mcp/", {"jsonrpc": "2.0", "method": "ping"}, format="json").status_code == 202
     name = "get_weekly_report_context"
     response = rpc("tools/call", {"name": name, "arguments": {"period_offset": -1}})
     assert response.data["result"]["isError"] is False

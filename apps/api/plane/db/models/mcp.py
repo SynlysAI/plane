@@ -30,7 +30,7 @@ class UnifiedMCPWriteResult(BaseModel):
     request_hash = models.CharField(max_length=64)
     object_type = models.CharField(max_length=32)
     object_id = models.UUIDField()
-    issue_id = models.UUIDField()
+    issue_id = models.UUIDField(null=True, blank=True)
     result = models.JSONField()
 
     class Meta:
@@ -40,7 +40,16 @@ class UnifiedMCPWriteResult(BaseModel):
                 fields=["connection", "workspace", "request_id"], name="unified_mcp_write_request_uq"
             ),
             models.CheckConstraint(
-                condition=models.Q(tool__in=["plane_create_task", "plane_add_comment"]),
+                condition=models.Q(
+                    tool__in=[
+                        "plane_create_task",
+                        "plane_add_comment",
+                        "plane_create_project",
+                        "plane_create_research_project",
+                        "plane_create_research_chain",
+                        "plane_create_research_node",
+                    ]
+                ),
                 name="unified_mcp_receipt_tool_ck",
             ),
         ]
