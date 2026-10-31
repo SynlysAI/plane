@@ -18,6 +18,23 @@ function errorMessage(error: unknown) {
   return (error as WeeklyReportProblem)?.message || "请求未完成，请刷新后重试。";
 }
 
+/** 切换周报权限；勾选写入权限时自动且仅携带一次读取权限。 */
+function toggleWeeklyReportAction(
+  before: WeeklyReportAction[],
+  action: WeeklyReportAction,
+  checked: boolean
+): WeeklyReportAction[] {
+  if (!checked) {
+    if (action === "read_reports" && before.some((item) => item !== "read_reports")) return before;
+    return before.filter((item) => item !== action);
+  }
+  if (action === "read_reports") return before.includes(action) ? before : [...before, action];
+  const next = new Set(before);
+  next.add("read_reports");
+  next.add(action);
+  return Array.from(next);
+}
+
 /** 周报连接保持独立授权，与项目连接共享创建和管理体验。 */
 export function WeeklyReportMCPSettings({ workspaceSlug }: { workspaceSlug?: string }) {
   const [options, setOptions] = useState<WeeklyReportOptions>();
@@ -134,17 +151,7 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
                   checked={actions.includes(action)}
                   disabled={action === "read_reports" && actions.some((item) => item !== "read_reports")}
                   onChange={(event) =>
-                    setActions((before) =>
-                      event.target.checked
-                        ? before.includes(action)
-                          ? before
-                          : action === "read_reports"
-                            ? [...before, action]
-                            : [...before, "read_reports", action]
-                        : action === "read_reports" && before.some((item) => item !== "read_reports")
-                          ? before
-                          : before.filter((item) => item !== action)
-                    )
+                    setActions((before) => toggleWeeklyReportAction(before, action, event.target.checked))
                   }
                 />
                 {weeklyReportActionLabels[action]}

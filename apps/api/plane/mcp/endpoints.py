@@ -24,6 +24,7 @@ from rest_framework.utils.encoders import JSONEncoder
 from plane.db.models import UnifiedMCPConnection, Workspace, WorkspaceMember
 from plane.mcp.authorization import UnifiedTokenAuthentication, issue_connection, token_hash, workspace_access
 from plane.mcp.client_config import client_files, public_url, server_key
+from plane.mcp.api_documentation import document_unified_tools, full_unified_catalog
 from plane.mcp.credentials import (
     DEFAULT_TTL_DAYS,
     TTL_DAYS,
@@ -409,34 +410,9 @@ class UnifiedToolsEndpoint(UnifiedEndpointBase):
     @staticmethod
     def tool_catalog(connection):
         """为工具补充分类、执行模式和所需角色说明。"""
-        read_tools = {
-            "plane_list_workspaces",
-            "plane_list_containers",
-            "plane_list_nodes",
-            "plane_list_tasks",
-            "plane_get_context",
-            "plane_read_resource",
-            "plane_get_write_result",
-            "plane_get_research_operation",
-            "plane_list_research_operations",
-        }
-        proposal_tools = {
-            "plane_prepare_research_operation",
-            "plane_execute_research_operation",
-        }
-        result = []
-        for tool in tools_for(connection):
-            name = tool["name"]
-            category = "read" if name in read_tools else "proposal_write" if name in proposal_tools else "direct_write"
-            result.append(
-                {
-                    **tool,
-                    "category": category,
-                    "execution_mode": "proposal" if category == "proposal_write" else "direct",
-                    "required_role": "connection read scope" if category == "read" else "native object-specific role",
-                }
-            )
-        return result
+        now = timezone.now()
+        active = connection.revoked_at is None and (connection.expires_at is None or connection.expires_at > now)
+        return document_unified_tools(tools_for(connection), connection.scope, active)
 
     def get(self, request, connection_id):
         connection = (
@@ -471,6 +447,9 @@ class UnifiedToolsEndpoint(UnifiedEndpointBase):
                     "role_context": resolve_role_context(connection.owner, workspace) if domains else None,
                 }
             )
+        tools = self.tool_catalog(connection)
+        catalog = full_unified_catalog(connection.scope, active)
+        available_count = sum(tool["availability"]["enabled"] for tool in catalog)
         return Response(
             {
                 "contract_version": VERSION,
@@ -490,7 +469,14 @@ class UnifiedToolsEndpoint(UnifiedEndpointBase):
                     "display_name": connection.owner.display_name,
                 },
                 "workspaces": workspaces,
-                "tools": self.tool_catalog(connection),
+                "tools": tools,
+                "catalog_mode": "full",
+                "catalog": catalog,
+                "catalog_summary": {
+                    "total": len(catalog),
+                    "available": available_count,
+                    "unavailable": len(catalog) - available_count,
+                },
             }
         )
 

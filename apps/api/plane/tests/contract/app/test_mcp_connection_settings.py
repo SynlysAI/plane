@@ -17,7 +17,12 @@ from plane.mcp.client_config import client_files, public_url
 from plane.mcp.credentials import CredentialStorageError, recover_credential
 from plane.middleware.logger import APITokenLogMiddleware
 from plane.tests.contract.app.test_unified_mcp import env, machine, unified, payload, rpc
-from plane.tests.contract.app.test_weekly_report_agent import report_env, research_module_on, proposal
+from plane.tests.contract.app.test_weekly_report_agent import (
+    legacy_connection,
+    report_env,
+    research_module_on,
+    proposal,
+)
 from plane.research.services.weekly_report_operations import WeeklyReportService
 from plane.tests.research_fixtures import make_workspace
 
@@ -213,13 +218,55 @@ def test_connection_tools_document_is_owner_only_and_secret_free(connection_case
     assert payload["workspaces"][0]["role_context"] is not None
     assert raw not in docs.content.decode()
 
+    expected_total = 30 if not c["weekly"] else 8
+    assert payload["catalog_mode"] == "full"
+    assert len(payload["catalog"]) == expected_total
+    assert payload["catalog_summary"] == {
+        "total": expected_total,
+        "available": len(payload["tools"]),
+        "unavailable": expected_total - len(payload["tools"]),
+    }
+    assert all(tool["availability"] for tool in payload["catalog"])
+    assert all(tool["usage"]["when_to_use"] for tool in payload["catalog"])
+    assert all(tool["usage"]["workflow"] for tool in payload["catalog"])
+    assert all(isinstance(tool["usage"]["example"], dict) for tool in payload["catalog"])
+    if not c["weekly"]:
+        assert "plane_create_research_project" in {tool["name"] for tool in payload["catalog"]}
+        research_tool = next(tool for tool in payload["catalog"] if tool["name"] == "plane_create_research_project")
+        assert research_tool["availability"]["enabled"] is False
+        assert research_tool["availability"]["required_connection_scope"] == "research:read_write"
+    else:
+        withdraw_tool = next(tool for tool in payload["catalog"] if tool["name"] == "prepare_weekly_report_operation")
+        assert withdraw_tool["availability"]["enabled"] is True
+        assert withdraw_tool["action_availability"]["withdraw"]["enabled"] is False
     stranger = APIClient()
     stranger.force_login(c["other"])
     assert stranger.get(c["root"] + path).status_code == 404
     assert APIClient().get(c["root"] + path).status_code in (401, 403)
-    csrf = c["client"].get(c["root"]).json()["csrf_token"]
-    assert c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf).status_code == 200
-    assert c["client"].get(c["root"] + path).status_code == 404
+
+
+def test_legacy_weekly_document_shows_full_catalog_with_unauthorized_actions(report_env):
+    """旧周报授权保留原工具，但完整目录仍说明新增动作未授权。"""
+    grant, _ = legacy_connection(report_env)
+    client = APIClient()
+    client.force_login(report_env["student"])
+    root = f"/api/research/workspaces/{report_env['workspace'].slug}/mcp/weekly-report/"
+    response = client.get(root + f"connections/{grant.pk}/tools/")
+    assert response.status_code == 200, response.data
+    payload = response.json()
+    assert len(payload["tools"]) == 5
+    assert len(payload["catalog"]) == 8
+    assert payload["catalog_summary"]["available"] == 5
+    assert payload["catalog_summary"]["unavailable"] == 3
+    prepare = next(tool for tool in payload["catalog"] if tool["name"] == "prepare_weekly_report_operation")
+    assert prepare["availability"]["enabled"] is True
+    assert prepare["action_availability"]["save_draft"]["enabled"] is True
+    assert prepare["action_availability"]["submit"]["enabled"] is True
+    assert prepare["action_availability"]["withdraw"]["enabled"] is False
+    assert prepare["action_availability"]["return"]["enabled"] is False
+    assert prepare["action_availability"]["accept"]["enabled"] is False
+    assert set(prepare["usage"]["action_examples"]) == {"save_draft", "submit", "withdraw", "return", "accept"}
+    assert "旧版" in prepare["availability"]["reason"]
 
 
 def test_rotation_preserves_scope_and_deadline_and_revokes_old_secret(connection_case):

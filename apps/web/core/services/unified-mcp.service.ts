@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@plane/constants";
 import { create } from "axios";
+import type { McpApiTool, McpCatalogSummary } from "./mcp-api-types";
 
 export type UnifiedDomain = "administrative" | "research";
 export type UnifiedMode = "read" | "read_write";
@@ -59,15 +60,10 @@ export type UnifiedApiDocs = {
     live_access: boolean;
     role_context: Record<string, unknown> | null;
   }[];
-  tools: {
-    name: string;
-    description: string;
-    inputSchema: Record<string, unknown>;
-    annotations?: Record<string, unknown>;
-    category: string;
-    execution_mode: string;
-    required_role: string;
-  }[];
+  tools: McpApiTool[];
+  catalog_mode: "full";
+  catalog: McpApiTool[];
+  catalog_summary: McpCatalogSummary;
 };
 export type UnifiedOptions = UnifiedPage<UnifiedWorkspace> & {
   ttl_seconds: number;

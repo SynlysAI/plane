@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@plane/constants";
 import { create } from "axios";
+import type { McpApiTool, McpCatalogSummary } from "./mcp-api-types";
 
 export type WeeklyReportAction = "read_reports" | "save_draft" | "submit" | "withdraw" | "return" | "accept";
 export type WeeklyReportWorkspace = {
@@ -70,15 +71,10 @@ export type WeeklyReportApiDocs = {
     live_access: boolean;
     role_context: Record<string, unknown> | null;
   }[];
-  tools: {
-    name: string;
-    description: string;
-    inputSchema: Record<string, unknown>;
-    annotations?: Record<string, unknown>;
-    category: string;
-    execution_mode: string;
-    required_role: string;
-  }[];
+  tools: McpApiTool[];
+  catalog_mode: "full";
+  catalog: McpApiTool[];
+  catalog_summary: McpCatalogSummary;
 };
 export type WeeklyReportIssueRequest = { label: string; actions: WeeklyReportAction[]; ttl_days: number | null };
 export type WeeklyReportProblem = { status?: number; uncertain: boolean; message: string };

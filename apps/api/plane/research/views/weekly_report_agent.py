@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.throttling import SimpleRateThrottle
 
 from plane.db import models as db
+from plane.mcp.api_documentation import document_weekly_tools, full_weekly_catalog
 from plane.mcp.client_config import client_files, public_url, server_key
 from plane.mcp.credentials import (
     DEFAULT_TTL_DAYS,
@@ -215,31 +216,9 @@ class WeeklyReportConnectionToolsEndpoint(WeeklyBase):
                 role_context = resolve_role_context(request.user, workspace)
             except WeeklyReportError:
                 live_access = False
-        tools = []
-        for tool in tools_for(grant.allowed_actions):
-            category = (
-                "read"
-                if tool["name"]
-                in {
-                    "get_weekly_report_context",
-                    "list_weekly_reports",
-                    "get_weekly_report",
-                    "list_weekly_report_history",
-                }
-                else "proposal_write"
-            )
-            if tool["name"] == "execute_weekly_report_operation":
-                category = "proposal_write"
-            tools.append(
-                {
-                    **tool,
-                    "category": category,
-                    "execution_mode": "proposal" if category == "proposal_write" else "direct",
-                    "required_role": "visible own report"
-                    if tool["name"] == "get_weekly_report_context"
-                    else "native report ACL or review route",
-                }
-            )
+        tools = document_weekly_tools(tools_for(grant.allowed_actions), grant.allowed_actions, active and live_access)
+        catalog = full_weekly_catalog(grant.allowed_actions, active and live_access)
+        available_count = sum(tool["availability"]["enabled"] for tool in catalog)
         return Response(
             {
                 "contract_version": VERSION,
@@ -272,6 +251,13 @@ class WeeklyReportConnectionToolsEndpoint(WeeklyBase):
                     }
                 ],
                 "tools": tools,
+                "catalog_mode": "full",
+                "catalog": catalog,
+                "catalog_summary": {
+                    "total": len(catalog),
+                    "available": available_count,
+                    "unavailable": len(catalog) - available_count,
+                },
             }
         )
 

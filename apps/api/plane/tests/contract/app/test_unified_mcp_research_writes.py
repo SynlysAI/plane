@@ -186,6 +186,21 @@ def test_research_project_chain_and_node_lifecycle(scientific):
     assert profile.workflow_status == "DELETED"
 
 
+def test_full_project_document_catalog_marks_all_apis_available_for_both_write_domains(scientific):
+    """行政与科研双读写连接的完整 30 个 API 均应显示可用。"""
+    e = scientific
+    client = APIClient()
+    client.force_login(e["owner"])
+    response = client.get(f"/api/mcp/connections/{e['connection']['id']}/tools/")
+    assert response.status_code == 200, response.data
+    payload = response.json()
+    assert payload["catalog_mode"] == "full"
+    assert len(payload["catalog"]) == 30
+    assert all(tool["availability"]["enabled"] for tool in payload["catalog"])
+    assert payload["catalog_summary"] == {"total": 30, "available": 30, "unavailable": 0}
+    assert e["connection"]["secret"] not in response.content.decode()
+
+
 def test_research_only_connection_can_recover_lifecycle_receipts(scientific):
     """科研-only 写连接也能看到并使用通用创建回执工具。"""
     e = scientific
