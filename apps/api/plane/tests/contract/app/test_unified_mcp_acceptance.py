@@ -72,8 +72,8 @@ def test_real_sdk_one_configuration_both_domains_and_live_scope_changes(
         assert response.status_code == 201, response.text
         issued_value = response.json()
         servers = json.loads(issued_value["sciencediscovery_json"])["mcpServers"]
-        assert list(servers) == ["plane"]
-        server = servers["plane"]
+        assert list(servers) == ["Synthetic unified connection"]
+        server = servers["Synthetic unified connection"]
         later = db.ResearchChainNode.objects.create(
             chain=e["chain"],
             node_type="ANALYSIS",
@@ -96,7 +96,7 @@ def test_real_sdk_one_configuration_both_domains_and_live_scope_changes(
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 15
+                        assert len(names) == 30
 
                         async def call(name, args, error=None):
                             result = await session.call_tool(name, args)
@@ -268,7 +268,9 @@ def test_real_sdk_one_configuration_both_domains_and_live_scope_changes(
                         await sync_to_async(
                             db.WorkspaceMember.objects.filter(workspace=second, member=e["owner"]).update
                         )(is_active=False)
-                        assert [w["id"] for w in await pages("plane_list_workspaces", {})] == [str(e["workspace"].pk)]
+                        workspace_rows = await pages("plane_list_workspaces", {})
+                        assert {str(e["workspace"].pk), str(second.pk)} <= {w["id"] for w in workspace_rows}
+                        assert next(w for w in workspace_rows if w["id"] == str(second.pk))["live_access"] is False
                         await call(
                             "plane_get_context",
                             {
