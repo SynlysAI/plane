@@ -34,13 +34,15 @@ def _valid_origin(value):
 
 def public_origin(request):
     """Resolve a stable public API origin without exposing proxy-internal paths."""
-    for value in (
-        getattr(settings, "RESEARCH_MCP_PUBLIC_BASE_URL", ""),
-        getattr(settings, "WEB_URL", ""),
-        getattr(settings, "APP_URL", ""),
-    ):
+    explicit = _valid_origin(getattr(settings, "RESEARCH_MCP_PUBLIC_BASE_URL", ""))
+    if explicit:
+        return explicit
+
+    request_host = request.get_host().split(":", 1)[0].lower()
+    for value in (getattr(settings, "WEB_URL", ""), getattr(settings, "APP_URL", "")):
         origin = _valid_origin(value)
-        if origin:
+        configured_host = urlsplit(origin).hostname.lower() if origin else ""
+        if origin and configured_host == request_host:
             return origin
 
     scheme = request.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip()

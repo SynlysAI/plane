@@ -152,6 +152,86 @@ def test_native_create_edit_state_comment_effects_and_web_readback(writable, nat
     assert db.UnifiedMCPWriteResult.objects.count() == 2  # No receipts for ordinary edits/state changes.
 
 
+def test_project_lifecycle_and_task_deletion_use_native_roles(writable):
+    """项目生命周期与任务删除均要求动态写权限和精确确认。"""
+    e = writable
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "request_id": "create-project-once",
+        "name": "MCP 行政项目",
+        "identifier": "MCPADM",
+    }
+    created = invoke(e["client"], "plane_create_project", args)
+    assert created["status"] == "COMMITTED" and created["readback"] == "verified", created
+    project_id = created["target"]["id"]
+    project = db.Project.objects.get(pk=project_id)
+    assert project.name == "MCP 行政项目" and project.identifier == "MCPADM"
+    assert db.State.objects.filter(project=project).count() >= 3
+    assert invoke(e["client"], "plane_create_project", args)["object_id"] == project_id
+    looked_up = invoke(
+        e["client"],
+        "plane_get_write_result",
+        {"workspace_slug": e["workspace"].slug, "request_id": args["request_id"]},
+    )
+    assert looked_up["object_id"] == project_id and looked_up["issue_id"] is None
+
+    updated = invoke(
+        e["client"],
+        "plane_update_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "update-project",
+            "changes": {"name": "MCP 行政项目更新"},
+        },
+    )
+    assert updated["readback"] == "verified"
+    project.refresh_from_db()
+    invoke(
+        e["client"],
+        "plane_archive_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "archive-project"},
+    )
+    project.refresh_from_db()
+    assert project.archived_at is not None
+    invoke(
+        e["client"],
+        "plane_restore_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "restore-project"},
+    )
+    project.refresh_from_db()
+    assert project.archived_at is None
+
+    issue = e["issues"][0]
+    invoke(
+        e["client"],
+        "plane_delete_task",
+        {
+            "target": reference(e, "Issue", issue),
+            "request_id": "delete-task",
+            "confirm_name": "wrong-name",
+        },
+        error="invalid_arguments",
+    )
+    invoke(
+        e["client"],
+        "plane_delete_task",
+        {"target": reference(e, "Issue", issue), "request_id": "delete-task", "confirm_name": issue.name},
+    )
+    assert not db.Issue.objects.filter(pk=issue.pk).exists()
+    invoke(
+        e["client"],
+        "plane_delete_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "delete-project",
+            "confirm_name": project.name,
+        },
+    )
+    assert not db.Project.objects.filter(pk=project_id).exists()
+
+
 @pytest.mark.parametrize("tool", ["plane_create_task", "plane_add_comment"])
 def test_duplicate_replay_conflict_and_result_lookup(writable, native_effects, tool):
     e = writable
@@ -499,7 +579,8 @@ def test_real_sdk_administrative_write_flow_one_configuration(writable, native_e
         assert response.status_code == 201
         servers = json.loads(response.json()["sciencediscovery_json"])["mcpServers"]
         assert len(servers) == 1
-        server = servers["plane"]
+        assert next(iter(servers)) == "Synthetic unified connection"
+        server = next(iter(servers.values()))
 
         async def scenario():
             async with httpx.AsyncClient(headers=server["headers"], trust_env=False) as http:
@@ -515,7 +596,7 @@ def test_real_sdk_administrative_write_flow_one_configuration(writable, native_e
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 11
+                        assert len(names) == 17
 
                         async def call(name, args):
                             result = await session.call_tool(name, args)

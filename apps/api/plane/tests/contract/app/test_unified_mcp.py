@@ -637,7 +637,8 @@ def test_real_sdk_single_configuration_two_projects_two_nodes_readback_and_revoc
         value = response.json()
         config = json.loads(value["sciencediscovery_json"])["mcpServers"]
         assert len(config) == 1
-        server = config["plane"]
+        assert next(iter(config)) == "Synthetic unified connection"
+        server = next(iter(config.values()))
 
         async def scenario():
             async with httpx.AsyncClient(headers=server["headers"], trust_env=False) as http:

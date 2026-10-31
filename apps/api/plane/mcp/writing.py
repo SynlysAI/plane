@@ -5,20 +5,45 @@ Only create/comment have durable commit receipts. No proposal or approval layer.
 
 import hashlib
 import json
+import logging
 
 from crum import impersonate
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import DatabaseError, IntegrityError, transaction
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from plane.app.serializers import IssueCommentSerializer, IssueCreateSerializer, IssueDetailSerializer
-from plane.db.models import Project, UnifiedMCPConnection, UnifiedMCPWriteResult
-from plane.mcp.catalog import ADMIN_SCHEMAS, validate
+from plane.app.permissions.base import ROLE
+from plane.app.serializers import (
+    IssueCommentSerializer,
+    IssueCreateSerializer,
+    IssueDetailSerializer,
+    ProjectSerializer,
+)  # noqa: E501
+from plane.db.models import (
+    DEFAULT_STATES,
+    Project,
+    ProjectMember,
+    ResearchChain,
+    ResearchChainNode,
+    State,
+    UnifiedMCPConnection,
+    UnifiedMCPWriteResult,
+    WorkspaceMember,
+)
+from plane.mcp.catalog import ADMIN_SCHEMAS, PROJECT_LIFECYCLE_SCHEMAS, validate
+from plane.mcp.authorization import scoped_administrative_projects
 from plane.mcp.credentials import unexpired_connections
 from plane.mcp.reading import VERSION, UnifiedReadService
 from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.audit import record_audit_event
 from plane.utils.issue_mutations import issue_action_allowed, save_issue, save_issue_comment
+from plane.utils.administrative_projects import (
+    get_or_create_default_administrative_organization,
+    user_can_manage_administrative_project,
+)
+
+logger = logging.getLogger("plane.mcp")
 
 
 def digest(value):
@@ -39,6 +64,34 @@ def issue_snapshot(issue):
     }
 
 
+def project_snapshot(project):
+    return {
+        "name": project.name,
+        "identifier": project.identifier,
+        "description_hash": digest(project.description_html),
+        "archived_at": project.archived_at.isoformat() if project.archived_at else None,
+    }
+
+
+def research_snapshot(target):
+    if isinstance(target, ResearchChain):
+        return {
+            "project_id": str(target.project_id),
+            "owner_id": str(target.owner_id),
+            "status": target.status,
+            "visibility": target.visibility,
+        }
+    if isinstance(target, ResearchChainNode):
+        return {
+            "title": target.title,
+            "node_type": target.node_type,
+            "status": target.status,
+            "assignee_id": str(target.assignee_id) if target.assignee_id else None,
+            "loop_iteration": target.loop_iteration,
+        }
+    return {"id": str(target.pk)}
+
+
 class UnifiedWriteError(ResearchReadError):
     def __init__(self, code, message, status=400, details=None):
         super().__init__(code, message, status)
@@ -49,13 +102,296 @@ class UnifiedWriteService:
     def __init__(self, connection, request):
         self.connection, self.request = connection, request
 
+    def begin(self, workspace_slug):
+        """Lock and revalidate a dynamic read-write administrative connection."""
+        connection = (
+            UnifiedMCPConnection.objects.select_related("owner")
+            .select_for_update(of=("self",))
+            .filter(
+                unexpired_connections(),
+                pk=self.connection.pk,
+                owner__is_active=True,
+                revoked_at__isnull=True,
+            )
+            .first()
+        )
+        if connection is None:
+            raise ResearchReadError("scope_denied", "Connection is no longer valid.", 403)
+        self.connection = connection
+        self.reader = UnifiedReadService(connection)
+        workspace = self.reader.workspace(workspace_slug)
+        entry = next(entry for entry in connection.scope["workspaces"] if entry["workspace_id"] == str(workspace.pk))
+        if entry["domains"].get("administrative") != "read_write" or not connection.scope["include_future_objects"]:
+            raise ResearchReadError("scope_denied", "This connection cannot write administrative projects.", 403)
+        return connection, self.reader, workspace
+
+    def replay(self, workspace, args, name, request_hash):
+        """Return an existing create receipt or verify its request identity."""
+        receipt = UnifiedMCPWriteResult.all_objects.filter(
+            connection=self.connection, workspace=workspace, request_id=args["request_id"]
+        ).first()
+        if receipt is None:
+            return None
+        if receipt.deleted_at or receipt.request_hash != request_hash or receipt.tool != name:
+            raise ResearchReadError("idempotency_conflict", "request_id was used for a different write.", 409)
+        return receipt
+
+    def commit_result(self, workspace, target, name, args, request_hash, *, issue=None, result=None):
+        """Build a direct-write result and durable receipt for non-idempotent creates."""
+        committed = result or project_snapshot(target) if target else result
+        receipt = UnifiedMCPWriteResult.objects.create(
+            connection=self.connection,
+            workspace=workspace,
+            request_id=args["request_id"],
+            tool=name,
+            request_hash=request_hash,
+            issue_id=getattr(issue, "pk", None),
+            object_type=type(target).__name__ if target is not None else "Issue",
+            object_id=target.pk if target is not None else issue.pk,
+            result=committed,
+        )
+        return {
+            "schema_version": VERSION,
+            "status": "COMMITTED",
+            "execution_mode": "direct",
+            "request_id": args["request_id"],
+            "receipt_id": str(receipt.pk),
+            "target": self.reader.reference("administrative", "Project", target, workspace)
+            if target is not None
+            else self.reader.reference("administrative", "Issue", issue, workspace),
+            "data": self.reader.project_data(target, workspace) if target is not None else None,
+            "commit": committed,
+            "readback": "verified",
+        }
+
+    @transaction.atomic
+    def create_project(self, args):
+        """Create an administrative project through the native serializer."""
+        connection, reader, workspace = self.begin(args["workspace_slug"])
+        owner = connection.owner
+        if not WorkspaceMember.objects.filter(
+            workspace=workspace, member=owner, is_active=True, role__in=(ROLE.ADMIN.value, ROLE.MEMBER.value)
+        ).exists():
+            raise ResearchReadError("permission_denied", "Workspace member rights are required.", 403)
+        request_hash = digest({"tool": "plane_create_project", "workspace": str(workspace.pk), "arguments": args})
+        receipt = self.replay(workspace, args, "plane_create_project", request_hash)
+        if receipt is not None:
+            return self.present(receipt, strict=True)
+        organization = args.get("administrative_organization_id")
+        if organization is None:
+            organization = get_or_create_default_administrative_organization(workspace).pk
+        payload = {
+            key: value
+            for key, value in {
+                "name": args["name"],
+                "identifier": args["identifier"],
+                "description_html": args.get("description_html", ""),
+                "project_lead": args.get("project_lead_id"),
+                "default_assignee": args.get("default_assignee_id"),
+                "administrative_organization": str(organization),
+            }.items()
+            if value is not None
+        }
+        serializer = ProjectSerializer(
+            data=payload,
+            context={"workspace_id": workspace.pk, "request": self.request},
+        )
+        serializer.is_valid(raise_exception=True)
+        with impersonate(owner):
+            project = serializer.save()
+            ProjectMember.objects.create(project=project, member=owner, role=ROLE.ADMIN.value)
+            if project.project_lead_id and project.project_lead_id != owner.pk:
+                ProjectMember.objects.create(project=project, member_id=project.project_lead_id, role=ROLE.ADMIN.value)
+            State.objects.bulk_create(
+                [
+                    State(
+                        name=state["name"],
+                        color=state["color"],
+                        project=project,
+                        sequence=state["sequence"],
+                        workspace=workspace,
+                        group=state["group"],
+                        default=state.get("default", False),
+                        created_by=owner,
+                    )
+                    for state in DEFAULT_STATES
+                ]
+            )
+        record_audit_event(
+            workspace=workspace,
+            actor=owner,
+            action="mcp.write",
+            resource_type="unified_mcp_connection",
+            resource_id=connection.pk,
+            metadata={"tool": "plane_create_project", "project_id": str(project.pk)},
+        )
+        return self.commit_result(workspace, project, "plane_create_project", args, request_hash)
+
+    def scoped_project(self, workspace, project_id, *, archived=None):
+        rows = (
+            Project.objects.filter(workspace=workspace)
+            if archived is True
+            else scoped_administrative_projects(self.connection, workspace)
+        )
+        if archived is True:
+            rows = rows.filter(archived_at__isnull=False)
+        elif archived is False:
+            rows = rows.filter(archived_at__isnull=True)
+        project = rows.select_for_update().filter(pk=project_id).first()
+        if project is None:
+            raise ResearchReadError("not_found", "Project not found in current scope.", 404)
+        return project
+
+    @staticmethod
+    def require_project_manager(user, workspace, project):
+        allowed = (
+            WorkspaceMember.objects.filter(
+                workspace=workspace, member=user, is_active=True, role=ROLE.ADMIN.value
+            ).exists()
+            or user_can_manage_administrative_project(user, workspace.slug, project.pk)
+            or ProjectMember.objects.filter(
+                project=project, member=user, role=ROLE.ADMIN.value, is_active=True
+            ).exists()
+        )
+        if not allowed:
+            raise ResearchReadError("permission_denied", "Current project role cannot manage this project.", 403)
+
+    @transaction.atomic
+    def update_project(self, args):
+        connection, reader, workspace = self.begin(args["workspace_slug"])
+        project = self.scoped_project(workspace, args["project_id"], archived=False)
+        self.require_project_manager(connection.owner, workspace, project)
+        mapping = {
+            "project_lead_id": "project_lead",
+            "default_assignee_id": "default_assignee",
+            "administrative_organization_id": "administrative_organization",
+        }
+        payload = {mapping.get(key, key): value for key, value in args["changes"].items()}
+        serializer = ProjectSerializer(
+            project,
+            data=payload,
+            context={"workspace_id": workspace.pk, "request": self.request},
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        with impersonate(connection.owner):
+            serializer.save()
+        record_audit_event(
+            workspace=workspace,
+            actor=connection.owner,
+            action="mcp.write",
+            resource_type="unified_mcp_connection",
+            resource_id=connection.pk,
+            metadata={"tool": "plane_update_project", "project_id": str(project.pk)},
+        )
+        return {
+            "schema_version": VERSION,
+            "status": "COMMITTED",
+            "execution_mode": "direct",
+            "target": reader.reference("administrative", "Project", project, workspace),
+            "data": reader.project_data(project, workspace),
+            "readback": "verified",
+        }
+
+    @transaction.atomic
+    def archive_project(self, args, restore=False):
+        connection, reader, workspace = self.begin(args["workspace_slug"])
+        project = self.scoped_project(workspace, args["project_id"], archived=True if restore else None)
+        self.require_project_manager(connection.owner, workspace, project)
+        project.archived_at = None if restore else timezone.now()
+        project.save(update_fields=["archived_at", "updated_at"])
+        record_audit_event(
+            workspace=workspace,
+            actor=connection.owner,
+            action="mcp.write",
+            resource_type="unified_mcp_connection",
+            resource_id=connection.pk,
+            metadata={
+                "tool": "plane_restore_project" if restore else "plane_archive_project",
+                "project_id": str(project.pk),
+            },  # noqa: E501
+        )
+        return {
+            "schema_version": VERSION,
+            "status": "COMMITTED",
+            "execution_mode": "direct",
+            "target": reader.reference("administrative", "Project", project, workspace),
+            "data": reader.project_data(project, workspace),
+            "readback": "verified",
+        }
+
+    def restore_project(self, args):
+        return self.archive_project(args, restore=True)
+
+    @transaction.atomic
+    def delete_project(self, args):
+        connection, reader, workspace = self.begin(args["workspace_slug"])
+        project = self.scoped_project(workspace, args["project_id"])
+        if args["confirm_name"] != project.name:
+            raise ResearchReadError("invalid_arguments", "confirm_name does not match the project name.", 422)
+        self.require_project_manager(connection.owner, workspace, project)
+        project_id = project.pk
+        project.delete()
+        record_audit_event(
+            workspace=workspace,
+            actor=connection.owner,
+            action="mcp.write",
+            resource_type="unified_mcp_connection",
+            resource_id=connection.pk,
+            metadata={"tool": "plane_delete_project", "project_id": str(project_id)},
+        )
+        return {
+            "schema_version": VERSION,
+            "status": "COMMITTED",
+            "execution_mode": "direct",
+            "target": {
+                "domain": "administrative",
+                "object_type": "Project",
+                "workspace_slug": workspace.slug,
+                "id": str(project_id),
+            },
+            "data": None,
+            "readback": "deleted",
+        }
+
+    @transaction.atomic
+    def delete_task(self, args):
+        connection, reader, workspace = self.begin(args["target"]["workspace_slug"])
+        _, kind, issue = reader.resolve(args["target"])
+        issue = reader.issues(workspace).select_for_update(of=("self",)).filter(pk=issue.pk).first()
+        if issue is None:
+            raise ResearchReadError("not_found", "Task not found in current scope.", 404)
+        if args["confirm_name"] != issue.name:
+            raise ResearchReadError("invalid_arguments", "confirm_name does not match the task name.", 422)
+        if not issue_action_allowed(connection.owner, issue.project, "update", issue):
+            raise ResearchReadError("permission_denied", "Current native task role cannot delete this task.", 403)
+        issue.delete()
+        record_audit_event(
+            workspace=workspace,
+            actor=connection.owner,
+            action="mcp.write",
+            resource_type="unified_mcp_connection",
+            resource_id=connection.pk,
+            metadata={"tool": "plane_delete_task", "issue_id": str(issue.pk)},
+        )
+        return {
+            "schema_version": VERSION,
+            "status": "COMMITTED",
+            "execution_mode": "direct",
+            "target": reader.reference("administrative", "Issue", issue, workspace),
+            "data": None,
+            "readback": "deleted",
+        }
+
     def execute(self, name, arguments):
         args = validate(name, arguments)
-        if name not in ADMIN_SCHEMAS:
+        if name not in ADMIN_SCHEMAS and name not in PROJECT_LIFECYCLE_SCHEMAS:
             raise ResearchReadError("invalid_arguments", "Not an administrative write/result tool.")
         try:
             if name == "plane_get_write_result":
                 return self.get_result(args)
+            if name in PROJECT_LIFECYCLE_SCHEMAS:
+                return getattr(self, name.removeprefix("plane_"))(args)
             with transaction.atomic():
                 connection = (
                     UnifiedMCPConnection.objects.select_related("owner")
@@ -230,6 +566,7 @@ class UnifiedWriteService:
         except PermissionDenied:
             raise ResearchReadError("permission_denied", "Current native task permission was denied.", 403) from None
         except IntegrityError:
+            logger.exception("Native unified MCP write hit a database constraint")
             raise UnifiedWriteError(
                 "state_conflict",
                 "A native database constraint rejected this write.",
@@ -294,6 +631,64 @@ class UnifiedWriteService:
                 raise ResearchReadError("scope_denied", "Connection is no longer valid.", 403)
             self.reader = UnifiedReadService(current)
             workspace = receipt.workspace
+            if receipt.object_type == "Project":
+                reference = {
+                    "domain": "administrative",
+                    "object_type": "Project",
+                    "workspace_slug": workspace.slug,
+                    "id": str(receipt.object_id),
+                }
+                try:
+                    _, _, project = self.reader.resolve(reference)
+                except ResearchReadError:
+                    chain_id = receipt.result.get("chain_id")
+                    if not chain_id:
+                        raise
+                    _, _, chain = self.reader.resolve(
+                        {
+                            "domain": "research",
+                            "object_type": "ResearchChain",
+                            "workspace_slug": workspace.slug,
+                            "id": str(chain_id),
+                        }
+                    )
+                    result.update(
+                        object_type="ResearchChain",
+                        object_id=str(chain.pk),
+                        issue_id=None,
+                        commit=receipt.result,
+                        data=self.reader.chain_data(chain, workspace),
+                        readback="pending",
+                    )
+                    return result
+                result.update(
+                    object_type=receipt.object_type,
+                    object_id=str(receipt.object_id),
+                    issue_id=None,
+                    commit=receipt.result,
+                    data=self.reader.project_data(project, workspace),
+                    readback="verified" if project_snapshot(project) == receipt.result else "changed",
+                )
+                return result
+            if receipt.object_type in {"ResearchChain", "ResearchChainNode"}:
+                reference = {
+                    "domain": "research",
+                    "object_type": receipt.object_type,
+                    "workspace_slug": workspace.slug,
+                    "id": str(receipt.object_id),
+                }
+                _, _, target = self.reader.resolve(reference)
+                result.update(
+                    object_type=receipt.object_type,
+                    object_id=str(receipt.object_id),
+                    issue_id=None,
+                    commit=receipt.result,
+                    data=self.reader.chain_data(target, workspace)
+                    if receipt.object_type == "ResearchChain"
+                    else self.reader.node_data(target, workspace),
+                    readback="verified" if research_snapshot(target) == receipt.result else "changed",
+                )
+                return result
             reference = {
                 "domain": "administrative",
                 "object_type": "Issue",

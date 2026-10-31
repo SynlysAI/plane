@@ -20,7 +20,6 @@ from plane.db.models import (
     IssueLink,
     ProjectMember,
     Workspace,
-    WorkspaceMember,
 )
 from plane.mcp.authorization import (
     UnifiedReadAuthorization,
@@ -31,11 +30,11 @@ from plane.mcp.authorization import (
 from plane.mcp.catalog import validate
 from plane.research.services.chain_context import ResearchReadService, _instruction_text
 from plane.research.services.mcp_catalog import ResearchReadError
+from plane.research.utils.role_resolution import resolve_role_context
 from plane.research.utils.audit import record_audit_event
 from plane.utils.administrative_projects import active_issue_assignees
-from plane.utils.workspace_access import filter_workspaces_for_private_access
 
-VERSION = "plane.unified-mcp.v1"
+VERSION = "plane.unified-mcp.v2"
 SALT = "plane.unified-mcp.page.v1"
 MAX_OUTPUT = 24000
 
@@ -419,30 +418,44 @@ class UnifiedReadService:
 
     def workspaces(self):
         ids = [entry["workspace_id"] for entry in self.connection.scope["workspaces"]]
-        rows = Workspace.objects.filter(pk__in=ids).filter(
-            pk__in=WorkspaceMember.objects.filter(member=self.user, is_active=True).values("workspace_id")
-        )
-        rows = filter_workspaces_for_private_access(rows, self.user)
+        rows = Workspace.objects.filter(pk__in=ids)
         if self.args.get("query"):
             rows = rows.filter(name__icontains=self.args["query"])
+
+        def workspace_data(workspace):
+            domains = self.available_domains(workspace)
+            role_context = resolve_role_context(self.user, workspace) if domains else None
+            return {
+                **self.base(
+                    workspace,
+                    workspace,
+                    "administrative",
+                    "Workspace",
+                    workspace.name,
+                    None,
+                    f"{web_origin()}/{workspace.slug}/",
+                ),
+                "domain": None,
+                "domains": domains,
+                "live_access": bool(domains),
+                "unavailable_reason": None
+                if domains
+                else "Workspace membership, private access or module policy changed.",  # noqa: E501
+                "role_context": role_context,
+                "action_families": {
+                    "administrative": ["read"]
+                    + (["direct_write"] if domains.get("administrative") == "read_write" else []),  # noqa: E501
+                    "research": ["read"]
+                    + (["proposal_write", "lifecycle_write"] if domains.get("research") == "read_write" else []),  # noqa: E501
+                },
+            }
+
         return self.page(
             [
                 (
                     "workspace",
                     rows,
-                    lambda workspace: {
-                        **self.base(
-                            workspace,
-                            workspace,
-                            "administrative",
-                            "Workspace",
-                            workspace.name,
-                            None,
-                            f"{web_origin()}/{workspace.slug}/",
-                        ),
-                        "domain": None,
-                        "domains": self.available_domains(workspace),
-                    },
+                    workspace_data,
                 )
             ]
         )

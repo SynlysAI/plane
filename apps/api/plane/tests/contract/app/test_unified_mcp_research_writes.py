@@ -87,6 +87,105 @@ def test_permanent_connection_executes_proposal_and_rechecks_membership(scientif
     execute(e, pending, error="scope_denied")
 
 
+def test_research_project_chain_and_node_lifecycle(scientific):
+    """科研项目、研究链与节点生命周期共享原生角色和状态机。"""
+    e = scientific
+    db.OrgUnitMember.objects.filter(workspace=e["workspace"], user=e["owner"]).update(is_primary=True)
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "request_id": "create-research-project",
+        "name": "MCP 科研项目",
+        "research_type": "RESEARCH_PROJECT",
+        "org_unit_id": str(e["group"].pk),
+        "chain_visibility": "WORKSPACE",
+    }
+    created = invoke(e["client"], "plane_create_research_project", args)
+    assert created["status"] == "COMMITTED", created
+    project_id = created["data"]["id"]
+    chain_id = created["data"]["research"]["chain_id"]
+    profile = db.ResearchProjectProfile.objects.get(project_id=project_id)
+    assert profile.chain_visibility == "WORKSPACE" and str(profile.org_unit_id) == str(e["group"].pk)
+    assert invoke(e["client"], "plane_create_research_project", args)["data"]["id"] == project_id
+    receipt = invoke(
+        e["client"],
+        "plane_get_write_result",
+        {"workspace_slug": e["workspace"].slug, "request_id": args["request_id"]},
+    )
+    assert receipt["object_type"] == "ResearchChain" and receipt["object_id"] == chain_id
+
+    node_args = {
+        "workspace_slug": e["workspace"].slug,
+        "chain_id": chain_id,
+        "request_id": "create-research-node",
+        "title": "文献调研",
+        "node_type": "GENERAL_RESEARCH",
+    }
+    node = invoke(e["client"], "plane_create_research_node", node_args)
+    node_id = node["target"]["id"]
+    assert db.ResearchChainEvent.objects.filter(node_id=node_id, event_type="NODE_CREATED").exists()
+    assert invoke(e["client"], "plane_create_research_node", node_args)["data"]["id"] == node_id
+    updated = invoke(
+        e["client"],
+        "plane_update_research_node",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "node_id": node_id,
+            "request_id": "update-research-node",
+            "changes": {"title": "文献调研更新"},
+        },
+    )
+    assert updated["data"]["title"] == "文献调研更新"
+    transition = invoke(
+        e["client"],
+        "plane_transition_research_node",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "node_id": node_id,
+            "request_id": "start-research-node",
+            "action": "START",
+        },
+    )
+    assert transition["data"]["status"] == "ACTIVE"
+
+    updated_project = invoke(
+        e["client"],
+        "plane_update_research_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "update-research-project",
+            "changes": {"name": "MCP 科研项目更新"},
+        },
+    )
+    assert updated_project["data"]["name"] == "MCP 科研项目更新"
+    invoke(
+        e["client"],
+        "plane_archive_research_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "archive-research"},
+    )
+    profile.refresh_from_db()
+    assert profile.workflow_status == "ARCHIVED"
+    invoke(
+        e["client"],
+        "plane_restore_research_project",
+        {"workspace_slug": e["workspace"].slug, "project_id": project_id, "request_id": "restore-research"},
+    )
+    profile.refresh_from_db()
+    assert profile.workflow_status == "ACTIVE"
+    invoke(
+        e["client"],
+        "plane_delete_research_project",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "project_id": project_id,
+            "request_id": "delete-research",
+            "confirm_name": "MCP 科研项目更新",
+        },
+    )
+    profile.refresh_from_db()
+    assert profile.workflow_status == "DELETED"
+
+
 @pytest.mark.parametrize("action", sorted(ACTIONS))
 def test_five_native_proposal_actions_commit_once_without_child_grants_or_approval(scientific, action):
     e = scientific
@@ -626,7 +725,8 @@ def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(scien
         assert response.status_code == 201
         configs = json.loads(response.json()["sciencediscovery_json"])["mcpServers"]
         assert len(configs) == 1
-        config = configs["plane"]
+        assert next(iter(configs)) == "Synthetic unified connection"
+        config = next(iter(configs.values()))
 
         async def scenario():
             async with httpx.AsyncClient(headers=config["headers"], trust_env=False) as http:
@@ -642,7 +742,7 @@ def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(scien
                             cursor = page.nextCursor
                             if not cursor:
                                 break
-                        assert len(names) == 15
+                        assert len(names) == 30
 
                         async def call(name, args):
                             result = await session.call_tool(name, args)
