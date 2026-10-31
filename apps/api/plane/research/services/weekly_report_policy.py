@@ -168,6 +168,7 @@ def issue_grant(*, workspace, user, label, actions, ttl_days):
         or any(not isinstance(action, str) for action in actions)
         or not set(actions) <= ACTIONS
         or len(set(actions)) != len(actions)
+        or (set(actions) & (OWN_ACTIONS | REVIEW_ACTIONS) and "read_reports" not in actions)
         or not valid_lifetime(ttl_days)
     ):
         raise WeeklyReportError("invalid_arguments", "Choose a name, explicit actions and an allowed lifetime.")

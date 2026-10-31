@@ -52,6 +52,9 @@ class WeeklyReportThrottle(SimpleRateThrottle):
         return f"weekly-report-mcp:{request.user.pk}:{getattr(request.auth, 'pk', 'session')}"
 
 
+PROTOCOL_VERSION = "2025-03-26"
+
+
 @method_decorator(sensitive_post_parameters(), name="dispatch")
 class WeeklyBase(APIView):
     permission_classes = [IsAuthenticated]
@@ -112,18 +115,41 @@ class WeeklyReportToolEndpoint(WeeklyMachineBase):
 
 class WeeklyReportMCPHTTPEndpoint(WeeklyMachineBase):
     def post(self, request, slug):
+        if request.content_type != "application/json" or len(request.body) > 65536:
+            return Response(self.rpc_error(None, -32600, "Use a bounded application/json request."), status=400)
+        if not {
+            "application/json",
+            "text/event-stream",
+        } <= {item.split(";", 1)[0].strip() for item in request.headers.get("Accept", "").split(",")}:
+            return Response(self.rpc_error(None, -32600, "Accept application/json and text/event-stream."), status=406)
+        if request.headers.get("MCP-Protocol-Version", PROTOCOL_VERSION) != PROTOCOL_VERSION:
+            return Response(self.rpc_error(None, -32600, "Unsupported protocol version."), status=400)
+
         service = self.service(slug)
         message = request.data
+        if isinstance(message, list):
+            if not 1 <= len(message) <= 20:
+                return Response(self.rpc_error(None, -32600, "Use a batch of 1 to 20 messages."), status=400)
+            replies = [reply for item in message if (reply := self.rpc(service, item)) is not None]
+            return Response(replies) if replies else Response(status=202)
+        reply = self.rpc(service, message)
+        return Response(reply) if reply is not None else Response(status=202)
+
+    def rpc(self, service, message):
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
-            return self.rpc_error(None, -32600, "Invalid request", 400)
+            return self.rpc_error(None, -32600, "Invalid request")
         identity, method, params = message.get("id"), message.get("method"), message.get("params", {})
         if identity is None:
-            return Response(status=202)
+            return None
         if type(identity) not in (str, int) or not isinstance(params, dict):
             return self.rpc_error(None, -32602, "Invalid params")
+        if not isinstance(method, str):
+            return self.rpc_error(None, -32600, "Invalid request method")
         if method == "initialize":
+            if not isinstance(params.get("protocolVersion"), str):
+                return self.rpc_error(identity, -32602, "protocolVersion is required")
             result = {
-                "protocolVersion": "2025-03-26",
+                "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "plane-weekly-report", "version": "2.0.0"},
                 "instructions": "Read visible reports and fixed proposals. Review the complete body/effects in the "
@@ -134,8 +160,13 @@ class WeeklyReportMCPHTTPEndpoint(WeeklyMachineBase):
         elif method == "ping":
             result = {}
         elif method == "tools/list":
+            if set(params) - {"cursor", "_meta"}:
+                return self.rpc_error(identity, -32602, "Unknown list parameters")
+            service.authenticate()
             result = {"tools": tools_for(service.grant.allowed_actions)}
         elif method == "tools/call":
+            if set(params) - {"name", "arguments", "_meta"} or not isinstance(params.get("name"), str):
+                return self.rpc_error(identity, -32602, "Invalid tool call")
             try:
                 value = service.execute(params.get("name"), params.get("arguments", {}))
                 failed = False
@@ -148,11 +179,11 @@ class WeeklyReportMCPHTTPEndpoint(WeeklyMachineBase):
             }
         else:
             return self.rpc_error(identity, -32601, "Method not found")
-        return Response({"jsonrpc": "2.0", "id": identity, "result": result})
+        return {"jsonrpc": "2.0", "id": identity, "result": result}
 
     @staticmethod
-    def rpc_error(identity, code, message, status=200):
-        return Response({"jsonrpc": "2.0", "id": identity, "error": {"code": code, "message": message}}, status=status)
+    def rpc_error(identity, code, message):
+        return {"jsonrpc": "2.0", "id": identity, "error": {"code": code, "message": message}}
 
 
 class WeeklyReportConnectionToolsEndpoint(WeeklyBase):

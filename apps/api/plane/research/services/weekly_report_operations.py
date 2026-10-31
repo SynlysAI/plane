@@ -136,9 +136,10 @@ class WeeklyReportService:
     @staticmethod
     def report_body(report):
         """Return the body a reader is authorized to see at the current state."""
-        snapshot = None
-        if report.submitted_at is not None:
+        if report.status in {"SUBMITTED", "ACCEPTED"}:
             snapshot = report.official_snapshots.order_by("-version_no").first()
+        else:
+            snapshot = None
         source = snapshot if snapshot is not None else report.page
         return {field: getattr(source, field) for field in BODY_FIELDS}
 

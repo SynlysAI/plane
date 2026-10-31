@@ -664,12 +664,16 @@ def test_actual_weekly_credential_and_unified_credential_cannot_cross_purpose(sc
         workspace=e["workspace"],
         user=e["owner"],
         label="Isolated weekly purpose",
-        actions=["save_draft", "submit"],
+        actions=["read_reports", "save_draft", "submit"],
         ttl_days=7,
     )
     assert grant.purpose == "weekly_report" and grant.report_type == "WEEKLY"
     weekly = APIClient()
-    weekly.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=raw, HTTP_ACCEPT="application/json, text/event-stream")
+    weekly.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+        HTTP_ACCEPT="application/json, text/event-stream",
+        HTTP_MCP_PROTOCOL_VERSION="2025-03-26",
+    )
     weekly_url = f"/api/research/workspaces/{e['workspace'].slug}/weekly-report-agent/mcp/"
     request = {
         "jsonrpc": "2.0",

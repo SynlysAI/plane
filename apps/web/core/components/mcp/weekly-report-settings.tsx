@@ -132,9 +132,18 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
                   type="checkbox"
                   aria-label={weeklyReportActionLabels[action]}
                   checked={actions.includes(action)}
+                  disabled={action === "read_reports" && actions.some((item) => item !== "read_reports")}
                   onChange={(event) =>
                     setActions((before) =>
-                      event.target.checked ? [...before, action] : before.filter((a) => a !== action)
+                      event.target.checked
+                        ? before.includes(action)
+                          ? before
+                          : action === "read_reports"
+                            ? [...before, action]
+                            : [...before, "read_reports", action]
+                        : action === "read_reports" && before.some((item) => item !== "read_reports")
+                          ? before
+                          : before.filter((item) => item !== action)
                     )
                   }
                 />

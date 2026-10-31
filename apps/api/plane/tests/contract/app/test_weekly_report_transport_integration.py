@@ -41,17 +41,17 @@ def test_real_mcp_client_create_submit_recover_and_revoke(report_env, live_serve
         options = human.get(management + "options/")
         assert options.status_code == 200
         csrf = options.json()["csrf_token"]
-        payload = {"label": f"Live {transport}", "actions": ["save_draft", "submit"], "ttl_days": 1}
+        payload = {
+            "label": f"Live {transport}",
+            "actions": ["read_reports", "save_draft", "submit"],
+            "ttl_days": 1,
+        }
         denied = human.post(management + "connections/", json=payload)
         assert denied.status_code == 403
         issued = human.post(management + "connections/", json=payload, headers={"X-CSRFToken": csrf})
         assert issued.status_code == 201
         grant = issued.json()
-        root = Path(__file__).resolve().parents[6]
-        proxy = root / "demos/sciencediscovery-plane-mcp/weekly_report_mcp.py"
-        assert proxy.is_file()
-        stderr = root / ".runtime/weekly-report-phase4" / f"stdio-{uuid4().hex}.log"
-        stderr.parent.mkdir(parents=True, exist_ok=True)
+        stderr = None
 
         async def scenario(session):
             initialized = await session.initialize()
@@ -59,6 +59,9 @@ def test_real_mcp_client_create_submit_recover_and_revoke(report_env, live_serve
             catalogue = (await session.list_tools()).tools
             assert {tool.name for tool in catalogue} == {
                 "get_weekly_report_context",
+                "list_weekly_reports",
+                "get_weekly_report",
+                "list_weekly_report_history",
                 "prepare_weekly_report_operation",
                 "execute_weekly_report_operation",
                 "get_weekly_report_operation",
@@ -160,6 +163,12 @@ def test_real_mcp_client_create_submit_recover_and_revoke(report_env, live_serve
                         streams[0], streams[1], read_timeout_seconds=timedelta(seconds=30)
                     ) as session:
                         return await scenario(session)
+            root = Path(__file__).resolve().parents[5]
+            proxy = root / "demos/sciencediscovery-plane-mcp/weekly_report_mcp.py"
+            if not proxy.is_file():
+                pytest.skip("The repository demo STDIO proxy is not mounted in this test container.")
+            stderr = root / ".runtime/weekly-report-phase4" / f"stdio-{uuid4().hex}.log"
+            stderr.parent.mkdir(parents=True, exist_ok=True)
             child_env = {
                 **os.environ,
                 "PLANE_BASE_URL": live_server.url,
@@ -194,7 +203,7 @@ def test_real_mcp_client_create_submit_recover_and_revoke(report_env, live_serve
             live_server.url + grant["mcp_path"].replace("mcp/", "tools/"), headers=grant["headers"], timeout=30
         )
         assert denied.status_code == 403
-        if stderr.exists():
+        if stderr is not None and stderr.exists():
             assert grant["headers"]["X-Weekly-Report-Token"] not in stderr.read_text(encoding="utf-8")
 
 
@@ -216,7 +225,11 @@ def test_page_table_contention_returns_retryable_failure_then_recovers_same_oper
     settings.RESEARCH_WEEKLY_REPORT_MCP_ENABLED = True
     env = report_env
     grant, token = issue_grant(
-        workspace=env["workspace"], user=env["student"], label="Lock probe", actions=["submit"], ttl_days=1
+        workspace=env["workspace"],
+        user=env["student"],
+        label="Lock probe",
+        actions=["read_reports", "submit"],
+        ttl_days=1,
     )
     service = WeeklyReportService(grant=grant)
     context = service.execute("get_weekly_report_context", {"period_offset": -1})
@@ -286,7 +299,11 @@ def test_two_tcp_agents_commit_one_snapshot(report_env, live_server, settings, s
     settings.RESEARCH_WEEKLY_REPORT_MCP_ENABLED = True
     env = report_env
     grant, token = issue_grant(
-        workspace=env["workspace"], user=env["student"], label="TCP competitors", actions=["submit"], ttl_days=1
+        workspace=env["workspace"],
+        user=env["student"],
+        label="TCP competitors",
+        actions=["read_reports", "submit"],
+        ttl_days=1,
     )
     service = WeeklyReportService(grant=grant)
     context = service.execute("get_weekly_report_context", {"period_offset": -1})

@@ -539,7 +539,11 @@ def test_formal_report_versions_obey_snapshot_scope_without_weekly_write_upgrade
     )
     assert db.ReportAgentGrant.objects.count() == 0
     weekly = APIClient()
-    weekly.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=value["secret"])
+    weekly.credentials(
+        HTTP_X_WEEKLY_REPORT_TOKEN=value["secret"],
+        HTTP_ACCEPT="application/json, text/event-stream",
+        HTTP_MCP_PROTOCOL_VERSION="2025-03-26",
+    )
     denied = weekly.post(
         f"/api/research/workspaces/{e['workspace'].slug}/weekly-report-agent/mcp/",
         {"jsonrpc": "2.0", "id": 1, "method": "initialize"},

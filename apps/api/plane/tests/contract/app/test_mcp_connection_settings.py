@@ -42,7 +42,7 @@ def connection_case(request, settings):
     )
     csrf = client.get(root).json()["csrf_token"]
     data = (
-        {"label": "回看测试", "actions": ["save_draft", "submit"], "ttl_days": 365}
+        {"label": "回看测试", "actions": ["read_reports", "save_draft", "submit"], "ttl_days": 365}
         if weekly
         else {
             **payload(source),
@@ -67,6 +67,8 @@ def connection_case(request, settings):
                 {"jsonrpc": "2.0", "id": 1, "method": "ping"},
                 format="json",
                 HTTP_X_WEEKLY_REPORT_TOKEN=raw,
+                HTTP_ACCEPT="application/json, text/event-stream",
+                HTTP_MCP_PROTOCOL_VERSION="2025-03-26",
             )
         machine_client.credentials(
             HTTP_AUTHORIZATION="Bearer " + raw, HTTP_ACCEPT="application/json, text/event-stream"
@@ -406,7 +408,7 @@ def test_permanent_weekly_connections_count_toward_limit(report_env, settings):
         "workspace": report_env["workspace"],
         "user": report_env["student"],
         "label": "永久周报",
-        "actions": ["save_draft"],
+        "actions": ["read_reports", "save_draft"],
         "ttl_days": None,
     }
     for _ in range(10):
@@ -427,7 +429,7 @@ def test_permanent_weekly_connection_does_not_extend_proposal_lifetime(report_en
         workspace=report_env["workspace"],
         user=report_env["student"],
         label="永久周报",
-        actions=["save_draft", "submit"],
+        actions=["read_reports", "save_draft", "submit"],
         ttl_days=None,
     )
     service = WeeklyReportService(grant=grant)

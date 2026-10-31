@@ -156,7 +156,7 @@ const weeklyOptions = {
       slug: "lab",
       name: "研究工作区",
       enabled: true,
-      actions: ["save_draft", "submit"],
+      actions: ["read_reports", "save_draft", "submit", "withdraw"],
       ttl_days: LIFETIMES,
       default_ttl_days: 365,
       period_description: "仅本人本周与上周的周报。",
@@ -480,6 +480,21 @@ it("项目连接使用服务端返回的默认有效期", async () => {
   await click("确认生成");
   expect(mocks.issue).toHaveBeenCalledTimes(1);
   expect(mocks.issue.mock.calls[0][0].ttl_days).toBe(30);
+});
+
+it("周报导写动作自动携带并锁定目录读取", async () => {
+  mocks.options.mockResolvedValue(weeklyOptions);
+  await render(<WeeklyReportMCPSettings workspaceSlug="lab" />);
+  await act(async () => container.querySelector<HTMLInputElement>('[aria-label="正式提交"]')!.click());
+  const read = container.querySelector<HTMLInputElement>('[aria-label="读取可见周报"]')!;
+  expect(read.checked).toBe(true);
+  expect(read.disabled).toBe(true);
+  await act(async () => read.click());
+  expect(container.querySelector<HTMLInputElement>('[aria-label="读取可见周报"]')!.checked).toBe(true);
+  await click("创建连接");
+  await inputName("我的连接");
+  await click("确认生成");
+  expect(mocks.issue.mock.calls[0][1].actions).toEqual(["read_reports", "submit"]);
 });
 
 it("周报功能关闭仍能显示和撤销已有连接", async () => {
