@@ -617,11 +617,14 @@ def test_revoked_after_commit_returns_no_hidden_content_or_retry_signal(writable
     assert db.UnifiedMCPWriteResult.objects.count() == 1 and db.Issue.objects.count() == 3
 
 
-def test_real_sdk_administrative_write_flow_one_configuration(writable, native_effects, live_server, record_property):
+def test_real_sdk_administrative_write_flow_one_configuration(
+    writable, settings, native_effects, live_server, record_property
+):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
     e = writable
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = live_server.url
     # Management returns a real single-server config pointing to this TCP server.
     login = APIClient()
     login.force_login(e["owner"])

@@ -13,7 +13,7 @@ from django.test import RequestFactory
 from rest_framework.test import APIClient
 
 from plane.db import models as db
-from plane.mcp.client_config import client_files
+from plane.mcp.client_config import client_files, public_url
 from plane.mcp.credentials import CredentialStorageError, recover_credential
 from plane.middleware.logger import APITokenLogMiddleware
 from plane.tests.contract.app.test_unified_mcp import env, machine, unified, payload, rpc
@@ -144,6 +144,24 @@ def test_configuration_uses_public_url_and_user_supplied_server_key(connection_c
         in client_files("fyk_mcp", "https://plane.example/api/mcp/", {"X-Test": "x"})["codex_toml"]
     )
     assert json.loads(value["sciencediscovery_json"])["mcpServers"]["fyk report/mcp"]["url"] == value["mcp_url"]
+
+
+@pytest.mark.parametrize(
+    ("explicit", "web", "app", "expected"),
+    [
+        ("", "https://openeva.example", "https://app.example", "https://openeva.example/api/mcp/"),
+        ("", "", "https://app.example", "https://app.example/api/mcp/"),
+        ("", "", "", "https://forwarded.example/api/mcp/"),
+    ],
+)
+def test_public_origin_prefers_stable_configured_origins(settings, explicit, web, app, expected):
+    """代理请求 host 与公共域名不同步时仍导出稳定配置基址。"""
+    request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="https", HTTP_HOST="backend.internal")
+    request.META["HTTP_HOST"] = "forwarded.example"
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = explicit
+    settings.WEB_URL = web
+    settings.APP_URL = app
+    assert public_url(request, "/api/mcp/") == expected
 
 
 def test_delete_soft_deletes_revokes_token_and_keeps_audit(connection_case):

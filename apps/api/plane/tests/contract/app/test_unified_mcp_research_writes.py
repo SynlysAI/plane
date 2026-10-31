@@ -704,11 +704,14 @@ def test_concurrent_execute_uses_one_native_result(scientific):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(scientific, live_server, record_property):
+def test_real_sdk_one_config_two_research_nodes_proposals_edits_and_states(
+    scientific, settings, live_server, record_property
+):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
     e = scientific
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = live_server.url
     login = APIClient()
     login.force_login(e["owner"])
     with httpx.Client(

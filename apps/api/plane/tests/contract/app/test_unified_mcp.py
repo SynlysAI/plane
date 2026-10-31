@@ -626,12 +626,13 @@ def test_transport_negotiation_methods_notifications_batch_and_origin(unified):
 
 @pytest.mark.django_db(transaction=True)
 def test_real_sdk_single_configuration_two_projects_two_nodes_readback_and_revocation(
-    unified, live_server, record_property
+    unified, settings, live_server, record_property
 ):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
     e = unified
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = live_server.url
     login = APIClient()
     login.force_login(e["owner"])
     cookie = login.cookies[django_settings.SESSION_COOKIE_NAME].value

@@ -45,6 +45,7 @@ def test_real_sdk_one_configuration_both_domains_and_live_scope_changes(
 
     e = unified
     settings.RESEARCH_MCP_WRITE_ENABLED = True
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = live_server.url
     db.WorkspaceResearchSetting.objects.filter(workspace=e["workspace"]).update(research_mcp_write_enabled=True)
     for project in [*e["projects"], e["private_project"]]:
         db.ProjectMember.objects.get_or_create(

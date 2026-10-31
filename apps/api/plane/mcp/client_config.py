@@ -39,11 +39,9 @@ def public_origin(request):
     if explicit:
         return explicit
 
-    request_host = request.get_host().split(":", 1)[0].lower()
     for value in (getattr(settings, "WEB_URL", ""), getattr(settings, "APP_URL", "")):
         origin = _valid_origin(value)
-        configured_host = urlsplit(origin).hostname.lower() if origin else ""
-        if origin and configured_host == request_host:
+        if origin:
             return origin
 
     scheme = request.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip()
