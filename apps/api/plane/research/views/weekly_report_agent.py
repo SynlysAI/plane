@@ -186,7 +186,17 @@ class WeeklyReportConnectionToolsEndpoint(WeeklyBase):
                 live_access = False
         tools = []
         for tool in tools_for(grant.allowed_actions):
-            category = "read" if tool["name"] != "prepare_weekly_report_operation" else "proposal_write"
+            category = (
+                "read"
+                if tool["name"]
+                in {
+                    "get_weekly_report_context",
+                    "list_weekly_reports",
+                    "get_weekly_report",
+                    "list_weekly_report_history",
+                }
+                else "proposal_write"
+            )
             if tool["name"] == "execute_weekly_report_operation":
                 category = "proposal_write"
             tools.append(

@@ -313,8 +313,16 @@ def test_admin_has_no_fake_nodes_and_no_business_writes(unified):
     result = invoke(client, "plane_list_nodes", {"container": reference(e, "Project", e["projects"][0])})
     assert result["applicability"] == "not_applicable" and result["next_tool"]["name"] == "plane_list_tasks"
     before = db.Issue.objects.count()
-    invoke(client, "plane_create_task", {"parent": reference(e, "Project", e["projects"][0]),
-           "request_id": "readonly-create", "name": "must not be written"}, error="scope_denied")
+    invoke(
+        client,
+        "plane_create_task",
+        {
+            "parent": reference(e, "Project", e["projects"][0]),
+            "request_id": "readonly-create",
+            "name": "must not be written",
+        },
+        error="scope_denied",
+    )
     assert db.Issue.objects.count() == before
     response = e["owner_client"].post(MANAGEMENT, payload(e, domains={"research": "read_write"}), format="json")
     assert response.status_code == 404 and response.data["error_code"] == "disabled"
