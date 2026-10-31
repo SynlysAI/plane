@@ -303,7 +303,8 @@ export function useResearchChainKnowledge(
     const now = Date.now();
     const candidates = Object.entries(processingMeta)
       .filter(([, meta]) => now - meta.since < UPLOAD_POLL_MAX_MS)
-      .toSorted((left, right) => left[1].lastPolledAt - right[1].lastPolledAt)
+      // oxlint-disable-next-line eslint-plugin-unicorn/no-array-sort -- Object.entries copies the source before sorting.
+      .sort((left, right) => left[1].lastPolledAt - right[1].lastPolledAt)
       .slice(0, UPLOAD_POLL_BATCH_SIZE)
       .map(([uploadId]) => uploadId);
     if (candidates.length === 0) return;

@@ -127,7 +127,10 @@ export function ResearchChainOverviewCommand({
     stageApproval?.pi_policy === "ALWAYS_PI" ||
     (stageApproval?.pi_policy === "CONDITIONAL_PI" && stageApproval.requires_pi);
   const piMissing = Boolean(piRequired && stageApproval && !stageApproval.principal_investigator.user);
-  const showSubmit = canSubmitStage && materialReady;
+  const advisorMissing = Boolean(stageApproval && !stageApproval.advisor.user);
+  const conditionalStage = stageApproval?.pi_policy === "CONDITIONAL_PI";
+  const submissionReady = materialReady && !advisorMissing;
+  const showSubmit = canSubmitStage && submissionReady && !conditionalStage;
   const showReview = canReviewStage && awaitingReview;
   const openTasks = useMemo(() => tasks.filter((task) => OPEN_TASK_STATUSES.has(task.status)), [tasks]);
   const topTasks = openTasks.slice(0, 3);
@@ -305,6 +308,16 @@ export function ResearchChainOverviewCommand({
             {t("research.chains.stage_approval.pi_required_reason")}
           </p>
         )}
+        {canSubmitStage && !piMissing && advisorMissing && (
+          <p className="mt-2 text-12 text-secondary" role="alert">
+            {t("research.chains.stage_approval.advisor_required_reason")}
+          </p>
+        )}
+        {canSubmitStage && conditionalStage && (
+          <p className="mt-2 text-12 text-tertiary" role="status">
+            {t("research.chains.overview.conditional_submit_hint")}
+          </p>
+        )}
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -412,6 +425,7 @@ export function ResearchChainOverviewCommand({
                       {latestReviewPair ? (
                         <p className="text-13 leading-6 text-secondary">
                           {t("research.chains.overview.latest_review_result", {
+                            reviewer: latestReviewPair.action.reviewer_detail?.display_name ?? "-",
                             action:
                               latestReviewPair.action.action === "APPROVE"
                                 ? t("research.chains.stage_approval.approve")

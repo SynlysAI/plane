@@ -536,7 +536,7 @@ it("shows the latest review across all chain stages in the overview", async () =
         id: "review-new",
         attempt_no: 1,
         reviewer_role: "ADVISOR",
-        reviewer_detail: { id: "advisor", display_name: "直接导师", email: "advisor@example.com" },
+        reviewer_detail: { id: "pi", display_name: "李主 PI", email: "pi@example.com" },
         action: "RETURN",
         comment: "补齐 SOP",
         escalated_to_pi: false,
@@ -575,8 +575,85 @@ it("shows the latest review across all chain stages in the overview", async () =
   await act(async () => undefined);
 
   const latestReview = [...container.querySelectorAll("dd")].find((item) => item.textContent?.includes("补齐 SOP"));
+  expect(latestReview?.textContent).toContain("李主 PI");
   expect(latestReview?.textContent).toContain("实验");
   expect(latestReview?.textContent).not.toContain("通过文献");
+});
+
+it("routes conditional stage submission through the declaration panel", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  const experimentNode = { ...node, node_type: "EXPERIMENT", title: "正式实验" };
+  mocks.query = "tab=overview";
+  mocks.getChainNodes.mockResolvedValue([experimentNode]);
+  mocks.getChainStageApprovals.mockResolvedValue({
+    ...stageApprovalSummary,
+    stages: [
+      {
+        ...stageApproval,
+        id: "stage-experiment",
+        stage_code: "EXPERIMENT",
+        pi_policy: "CONDITIONAL_PI",
+        materials: [
+          {
+            ...stageApproval.materials[0],
+            submitted_count: 5,
+            complete: true,
+            submission_state: "READY",
+          },
+        ],
+        capabilities: {
+          schema_version: "research-capabilities.v1",
+          actions: {
+            submit: { allowed: true, reason_code: "", reason: "" },
+          },
+        },
+      },
+    ],
+  });
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "提交审核")).toBe(false);
+  expect(container.textContent).toContain("条件阶段需在阶段面板声明是否需要主 PI");
+  expect(mocks.submitChainStage).not.toHaveBeenCalled();
+});
+
+it("blocks overview submission before the direct advisor is configured", async () => {
+  const { ResearchChainDetail } = await import("@/components/research/chains/research-chain-detail");
+  mocks.query = "tab=overview";
+  mocks.getChainStageApprovals.mockResolvedValue({
+    ...stageApprovalSummary,
+    stages: [
+      {
+        ...stageApproval,
+        advisor: { user: null, error: "A unique direct advisor must be configured.", reason_code: null },
+        materials: [
+          {
+            ...stageApproval.materials[0],
+            submitted_count: 5,
+            complete: true,
+            submission_state: "READY",
+          },
+        ],
+        capabilities: {
+          schema_version: "research-capabilities.v1",
+          actions: {
+            submit: { allowed: true, reason_code: "", reason: "" },
+          },
+        },
+      },
+    ],
+  });
+  await act(async () => {
+    root.render(<ResearchChainDetail workspaceSlug="lab" chainId="chain-1" />);
+  });
+  await act(async () => undefined);
+
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "提交审核")).toBe(false);
+  expect(container.textContent).toContain("本阶段需要直接导师审核，请先配置唯一导师。");
+  expect(mocks.submitChainStage).not.toHaveBeenCalled();
 });
 
 it("lets the current reviewer approve or return from the overview", async () => {

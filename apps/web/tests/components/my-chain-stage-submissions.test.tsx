@@ -105,10 +105,47 @@ it("shows an owner-friendly stage list without review actions", async () => {
 
   expect(mocks.getResearchTodos).toHaveBeenCalledWith("lab", { scope: "mine", limit: 100 });
   expect(container.querySelector("a")?.getAttribute("href")).toBe("/lab/research/chains/chain-1?tab=nodes");
-  expect(container.textContent).toContain("待导师审");
+  expect([...container.querySelectorAll("th")].map((heading) => heading.textContent)).toEqual([
+    "课题",
+    "阶段",
+    "状态",
+    "当前处理人",
+    "更新时间",
+  ]);
+  expect(container.querySelector("a")?.textContent).toBe("新材料课题");
+  expect(container.textContent).toContain("开题");
+  expect(container.textContent).toContain("待导师");
   expect(container.textContent).toContain("王导师");
-  expect(container.textContent).not.toContain("通过");
+  expect(container.textContent).not.toContain("通过（不转主 PI）");
   expect(container.textContent).not.toContain("驳回");
+});
+
+it("normalizes terminal and returned owner-facing states", async () => {
+  mocks.getResearchTodos.mockResolvedValue({
+    schema_version: "research-todo.v2",
+    results: [
+      todo({
+        title: "新材料课题 · 结题",
+        business_status: "NEEDS_REVISION",
+        assignees: [],
+      }),
+      todo({
+        id: "todo-2",
+        title: "新材料课题 · 转化",
+        business_status: "APPROVED",
+        assignees: [],
+      }),
+    ],
+    count: 2,
+    total_count: 2,
+    next_cursor: null,
+    degraded_sources: [],
+  });
+  await renderList();
+
+  expect(container.textContent).toContain("已退回");
+  expect(container.textContent).toContain("已通过");
+  expect(container.textContent).toContain("已完成");
 });
 
 it("separates the empty and failed list states", async () => {

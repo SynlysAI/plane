@@ -185,6 +185,7 @@ async function renderPanel(
     nodes?: typeof nodes;
     expanded?: boolean;
     knowledge?: ReturnType<typeof knowledgeController>;
+    canManageOrgUnit?: boolean;
   } = {}
 ) {
   await act(async () => {
@@ -198,6 +199,7 @@ async function renderPanel(
         applicantName="研究负责人"
         defaultExpanded={options.expanded ?? false}
         knowledge={options.knowledge ?? knowledgeController()}
+        canManageOrgUnit={options.canManageOrgUnit ?? false}
         onCreateNode={onCreateNode}
         onStageChanged={onChanged}
       />
@@ -247,6 +249,21 @@ it("shows a visible blocker before submission when the required PI is missing", 
   expect(container.textContent).toContain("未配置唯一主 PI");
   expect(button("提交阶段审核")?.disabled).toBe(true);
   expect(container.textContent).toContain("审核人配置未完成，暂不能提交。");
+});
+
+it("hides the organization settings link from users without management permission", async () => {
+  await renderPanel({ expanded: true, canManageOrgUnit: false });
+
+  expect(container.querySelector('a[href="/lab/research/settings/org"]')).toBeNull();
+  expect(container.textContent).toContain("请联系组织管理员");
+});
+
+it("opens organization settings when the current user can manage the unit", async () => {
+  await renderPanel({ expanded: true, canManageOrgUnit: true });
+
+  expect(container.querySelector<HTMLAnchorElement>('a[href="/lab/research/settings/org"]')?.textContent).toContain(
+    "打开组织设置"
+  );
 });
 
 it("links an existing upload and parses backend missing names", async () => {

@@ -80,7 +80,11 @@ it("offers both explicit decisions when the student declared PI review", async (
 it("keeps undeclared escalation disabled", async () => {
   await renderActions("CONDITIONAL_PI", false);
   expect(button("通过（不转 PI）")?.disabled).toBe(false);
-  expect(button("通过并转主 PI")?.disabled).toBe(true);
+  const escalation = button("通过并转主 PI")!;
+  expect(escalation.disabled).toBe(true);
+  const describedBy = escalation.getAttribute("aria-describedby");
+  expect(describedBy).toBeTruthy();
+  expect(document.getElementById(describedBy!)?.textContent).toContain("学生未声明需要主 PI 审核，不能转主 PI");
 });
 
 it("shows a plain approval action for the principal reviewer", async () => {

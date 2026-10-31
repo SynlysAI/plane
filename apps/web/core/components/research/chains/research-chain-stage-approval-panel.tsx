@@ -26,6 +26,8 @@ type Props = {
   applicantName?: string | null;
   defaultExpanded?: boolean;
   knowledge: TResearchChainKnowledgeController;
+  /** Whether the current user can open research organization settings. */
+  canManageOrgUnit?: boolean;
   onCreateNode?: () => void;
   onStageChanged: () => Promise<void> | void;
   /** 审批或退回成功后通知队列层，仅由动作结果触发。 */
@@ -131,6 +133,7 @@ export function ResearchChainStageApprovalPanel({
   applicantName,
   defaultExpanded = false,
   knowledge,
+  canManageOrgUnit = false,
   onCreateNode,
   onStageChanged,
   onDecision,
@@ -416,12 +419,14 @@ export function ResearchChainStageApprovalPanel({
                         {t("research.chains.stage_approval.pi_required_reason")}
                       </p>
                       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-11 text-secondary">
-                        <a
-                          href={`/${workspaceSlug}/research/settings/org`}
-                          className="text-accent-primary hover:underline"
-                        >
-                          {t("research.chains.stage_approval.open_org_settings")}
-                        </a>
+                        {canManageOrgUnit && (
+                          <a
+                            href={`/${workspaceSlug}/research/settings/org`}
+                            className="text-accent-primary hover:underline"
+                          >
+                            {t("research.chains.stage_approval.open_org_settings")}
+                          </a>
+                        )}
                         <span>{t("research.chains.stage_approval.contact_org_admin")}</span>
                       </p>
                     </div>

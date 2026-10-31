@@ -15,12 +15,45 @@ type Props = {
 
 const todoService = new ResearchTodoService();
 
+/** Split the stable todo title into a topic and localized stage name. */
+function splitStageTitle(title: string): { topic: string; stage: string } {
+  const separatorIndex = title.lastIndexOf(" · ");
+  if (separatorIndex === -1) return { topic: title, stage: "-" };
+  return { topic: title.slice(0, separatorIndex), stage: title.slice(separatorIndex + 3) };
+}
+
 /** Read the localized status label for one owner-facing chain stage. */
 function businessStatusKey(status: string): string {
-  if (["AWAITING_ADVISOR", "AWAITING_PI", "NEEDS_REVISION", "APPROVED"].includes(status)) {
-    return `research.chains.workflow.stage_status.${status.toLowerCase()}`;
-  }
+  if (status === "AWAITING_ADVISOR") return "research.approvals.my_chain_stage_status_advisor";
+  if (status === "AWAITING_PI") return "research.approvals.my_chain_stage_status_pi";
+  if (status === "NEEDS_REVISION") return "research.approvals.my_chain_stage_status_returned";
+  if (status === "APPROVED") return "research.approvals.my_chain_stage_status_approved";
   return "research.common.status_unknown";
+}
+
+/** Read the owner-facing current-handler conclusion. */
+function currentHandlerText(
+  assignees: Array<{ display_name?: string | null }>,
+  businessStatus: string,
+  fallback: string
+): string {
+  if (businessStatus === "APPROVED") return fallback;
+  return (
+    assignees
+      .map((assignee) => assignee.display_name)
+      .filter(Boolean)
+      .join("、") || "-"
+  );
+}
+
+/** Read the stage label from a stable todo title. */
+function stageTitle(title: string): string {
+  return splitStageTitle(title).stage;
+}
+
+/** Read the topic label from a stable todo title. */
+function topicTitle(title: string): string {
+  return splitStageTitle(title).topic;
 }
 
 /** List the current owner's submitted chain stages without exposing review actions. */
@@ -74,7 +107,8 @@ export function MyChainStageSubmissions({ workspaceSlug }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("research.approvals.stage_queue_topic")}</TableHead>
+                  <TableHead>{t("research.approvals.my_chain_stage_topic")}</TableHead>
+                  <TableHead>{t("research.approvals.my_chain_stage_stage")}</TableHead>
                   <TableHead>{t("research.approvals.my_chain_stage_status")}</TableHead>
                   <TableHead>{t("research.approvals.my_chain_stage_handler")}</TableHead>
                   <TableHead>{t("research.approvals.stage_queue_updated")}</TableHead>
@@ -85,14 +119,19 @@ export function MyChainStageSubmissions({ workspaceSlug }: Props) {
                   <TableRow key={item.id}>
                     <TableCell>
                       <Link to={item.href} className="text-13 font-medium text-primary hover:text-accent-primary">
-                        {item.title}
+                        {topicTitle(item.title)}
                       </Link>
                     </TableCell>
+                    <TableCell className="text-12 text-secondary">{stageTitle(item.title)}</TableCell>
                     <TableCell className="text-12 text-secondary">
                       {t(businessStatusKey(item.business_status))}
                     </TableCell>
                     <TableCell className="text-12 text-secondary">
-                      {item.assignees.map((assignee) => assignee.display_name).join("、") || "-"}
+                      {currentHandlerText(
+                        item.assignees,
+                        item.business_status,
+                        t("research.approvals.my_chain_stage_status_done")
+                      )}
                     </TableCell>
                     <TableCell className="text-12 text-tertiary">
                       {formatResearchDateTime(item.updated_at, currentLocale)}

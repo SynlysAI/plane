@@ -308,6 +308,11 @@ export function ResearchChainStageMaterialRow({
             }
             uploadingTitle={t("research.knowledge.uploading")}
             hint={t("research.knowledge.upload_hint", researchChainUploadHintParams(effectiveLimits))}
+            inputAriaLabel={`${material.title} · ${
+              failed
+                ? t("research.chains.stage_approval.reupload_material")
+                : t("research.chains.stage_approval.material_upload")
+            }`}
           />
         </div>
       )}

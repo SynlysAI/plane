@@ -32,6 +32,7 @@ vi.mock("@/components/attachments/upload-zone", () => ({
     disabled?: boolean;
     uploading?: boolean;
     title: string;
+    inputAriaLabel?: string;
     onFiles: (files: File[]) => void;
   }) => (
     <label>
@@ -39,6 +40,7 @@ vi.mock("@/components/attachments/upload-zone", () => ({
       <input
         type="file"
         data-title={props.title}
+        aria-label={props.inputAriaLabel ?? props.title}
         data-disabled={String(Boolean(props.disabled))}
         data-uploading={String(Boolean(props.uploading))}
         onChange={(event) => props.onFiles(Array.from(event.target.files ?? []))}
@@ -136,6 +138,8 @@ it("uploads and links each requirement independently", async () => {
 
   const inputs = container.querySelectorAll<HTMLInputElement>('input[type="file"]');
   expect(inputs).toHaveLength(2);
+  expect(inputs[0]?.getAttribute("aria-label")).toBe("题目 · 上传并关联");
+  expect(inputs[1]?.getAttribute("aria-label")).toBe("研究问题 · 上传并关联");
   expect(inputs[1]?.dataset.disabled).toBe("false");
   const file = new File(["title"], "title.pdf", { type: "application/pdf" });
   mocks.uploadFiles.mockResolvedValueOnce([

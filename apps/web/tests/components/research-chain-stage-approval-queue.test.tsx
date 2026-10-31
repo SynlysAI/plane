@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TResearchChainStageApproval } from "@plane/types";
 
 const mocks = vi.hoisted(() => ({
+  canSeeOrg: false,
   getChain: vi.fn(),
   getChainNodes: vi.fn(),
   getChainStageApprovals: vi.fn(),
@@ -29,15 +30,20 @@ vi.mock("@/services/research/chain.service", () => ({
 vi.mock("@/components/research/chains/research-chain-stage-approval-panel", () => ({
   ResearchChainStageApprovalPanel: (props: {
     stage: TResearchChainStageApproval;
+    canManageOrgUnit?: boolean;
     onDecision?: (stage: TResearchChainStageApproval) => Promise<void> | void;
   }) => (
     <div>
       <span>{props.stage.id}</span>
+      <span>{props.canManageOrgUnit ? "can-manage-org" : "cannot-manage-org"}</span>
       <button type="button" onClick={() => void props.onDecision?.(props.stage)}>
         mock decision
       </button>
     </div>
   ),
+}));
+vi.mock("@/hooks/store/use-research", () => ({
+  useResearch: () => ({ canSee: (section: string) => section === "org" && mocks.canSeeOrg }),
 }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
@@ -102,10 +108,12 @@ async function renderQueue(items: QueueItem[], activeId: string) {
 }
 
 it("loads only the selected stage and reports a successful decision", async () => {
+  mocks.canSeeOrg = true;
   await renderQueue([item("stage-1", "chain-1"), item("stage-2", "chain-2")], "research:CHAIN_STAGE_APPROVAL:stage-1");
 
   expect(container.textContent).toContain("第 1 项 / 共 2 项");
   expect(container.textContent).toContain("stage-1");
+  expect(container.textContent).toContain("can-manage-org");
 
   await act(async () => {
     [...container.querySelectorAll("button")].find((button) => button.textContent === "mock decision")?.click();

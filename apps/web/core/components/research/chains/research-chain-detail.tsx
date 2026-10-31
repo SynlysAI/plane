@@ -838,6 +838,7 @@ export const ResearchChainDetail = function ResearchChainDetail({ workspaceSlug,
                         applicantName={chain?.owner_name ?? null}
                         defaultExpanded={approvalDeepLink}
                         knowledge={knowledge}
+                        canManageOrgUnit={research.canSee("org")}
                         onCreateNode={() => {
                           setCreatingNodeInline(true);
                           setNodeTitle("");

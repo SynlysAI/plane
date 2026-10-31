@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 
@@ -22,6 +24,7 @@ export function ResearchChainStageReviewActions({
   onReturn,
 }: Props) {
   const { t } = useTranslation();
+  const conditionalHelpId = useId();
   const conditionalAllowed = policy === "CONDITIONAL_PI" && requiresPi;
   const showEscalation = reviewerRole !== "PI";
 
@@ -41,7 +44,7 @@ export function ResearchChainStageReviewActions({
             size="sm"
             disabled={disabled}
             onClick={() => void onApprove(false)}
-            aria-describedby="conditional-review-help"
+            aria-describedby={conditionalHelpId}
           >
             {t("research.chains.stage_approval.approve_without_pi")}
           </Button>
@@ -58,6 +61,7 @@ export function ResearchChainStageReviewActions({
           variant="secondary"
           size="sm"
           disabled
+          aria-describedby={conditionalHelpId}
           title={t("research.chains.stage_approval.escalation_not_declared")}
         >
           {t("research.chains.stage_approval.approve_to_pi")}
@@ -67,8 +71,10 @@ export function ResearchChainStageReviewActions({
         {t("research.chains.stage_approval.return")}
       </Button>
       {policy === "CONDITIONAL_PI" && (
-        <span id="conditional-review-help" className="sr-only">
-          {t("research.chains.stage_approval.conditional_review_help")}
+        <span id={conditionalHelpId} className="sr-only">
+          {requiresPi
+            ? t("research.chains.stage_approval.conditional_review_help")
+            : t("research.chains.stage_approval.escalation_not_declared")}
         </span>
       )}
     </div>
