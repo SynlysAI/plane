@@ -97,6 +97,7 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
       configuration: (id: string, csrf: string) => SERVICE.configuration(slug, id, csrf),
       rotate: (id: string, csrf: string) => SERVICE.rotate(slug, id, csrf),
       revoke: (id: string, csrf: string) => SERVICE.revoke(slug, id, csrf),
+      delete: (id: string, csrf: string) => SERVICE.delete(slug, id, csrf),
       metadata: weeklyReportMetadata,
       files: (value: Parameters<typeof weeklyReportConfig>[0]) => configurationFiles([weeklyReportConfig(value, slug)]),
       error: errorMessage,

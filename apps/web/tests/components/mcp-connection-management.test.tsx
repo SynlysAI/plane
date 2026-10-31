@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   configuration: vi.fn(),
   rotate: vi.fn(),
   revoke: vi.fn(),
+  delete: vi.fn(),
   copy: vi.fn(),
   download: vi.fn(),
 }));
@@ -50,6 +51,7 @@ vi.mock("@/services/unified-mcp.service", () => ({
     configuration = mocks.configuration;
     rotate = mocks.rotate;
     revoke = mocks.revoke;
+    delete = mocks.delete;
   },
 }));
 vi.mock("@/services/weekly-report-mcp.service", () => ({
@@ -60,6 +62,7 @@ vi.mock("@/services/weekly-report-mcp.service", () => ({
     configuration = mocks.configuration;
     rotate = mocks.rotate;
     revoke = mocks.revoke;
+    delete = mocks.delete;
   },
 }));
 const user = observable({ id: "user-one" });
@@ -100,17 +103,19 @@ const project = {
   },
   implemented_capabilities: ["read"],
   secret: projectSecret,
+  server_key: "我的连接",
   mcp_url: "https://plane.test/api/mcp/",
   codex_toml: "unused",
   sciencediscovery_json: JSON.stringify({
     mcpServers: {
-      plane: {
+      我的连接: {
         type: "http",
         url: "https://plane.test/api/mcp/",
         headers: { Authorization: "Bearer " + projectSecret },
       },
     },
   }),
+  api_docs_url: "https://plane.test/mcp/api-docs/project/" + ID,
 };
 const weekly = {
   ...common,
@@ -119,8 +124,13 @@ const weekly = {
   actions: ["save_draft"],
   report_type: "WEEKLY",
   period_policy: "current_and_previous_week.v1",
+  server_key: "我的连接",
   mcp_path: "/api/research/workspaces/lab/weekly-report-agent/mcp/",
+  mcp_url: "https://plane.test/api/research/workspaces/lab/weekly-report-agent/mcp/",
   headers: { "X-Weekly-Report-Token": weeklySecret },
+  codex_toml: "unused",
+  sciencediscovery_json: "unused",
+  api_docs_url: "https://plane.test/mcp/api-docs/weekly-report/lab/" + ID,
   csrf_token: "csrf",
 };
 const page = (results: any[] = [], next_cursor: string | null = null) => ({ results, next_cursor, csrf_token: "csrf" });
@@ -257,6 +267,17 @@ describe.each(["project", "weekly"] as const)("%s 连接的公共行为", (kind)
     expect(container.querySelector('[aria-label="连接详情 我的连接"]')).toBeTruthy();
     expect(container.textContent).toContain("永不过期");
     expect(JSON.stringify(metadata())).not.toContain(secret);
+  });
+  it("确认后软删除连接并从详情列表移除", async () => {
+    mocks.connections.mockResolvedValue(page([metadata()]));
+    mocks.delete.mockResolvedValue({ deleted: true, id: ID });
+    await render(element());
+    await click("查看连接 我的连接");
+    await click("删除记录");
+    await click("确认删除");
+    expect(mocks.delete).toHaveBeenCalledWith(...(isWeekly ? ["lab", ID, "csrf"] : [ID, "csrf"]));
+    expect(container.textContent).toContain("连接记录已删除。");
+    expect(container.querySelector('[aria-label="连接详情 我的连接"]')).toBeNull();
   });
   it("拒绝空白名称和控制字符", async () => {
     await render(element());

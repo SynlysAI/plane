@@ -18,15 +18,17 @@ export function unifiedMetadata(value: UnifiedConnection): UnifiedConnection {
 
 export function unifiedConfiguration(value: UnifiedIssued) {
   try {
-    const servers = Object.values(JSON.parse(value.sciencediscovery_json).mcpServers ?? {}) as {
+    const key = value.server_key;
+    const servers = JSON.parse(value.sciencediscovery_json).mcpServers ?? {};
+    const server = servers[key] as {
       type?: string;
       url?: string;
       headers?: Record<string, string>;
-    }[];
-    const server = servers[0];
+    };
     const url = new URL(value.mcp_url);
     if (
-      servers.length !== 1 ||
+      key !== value.name.trim() ||
+      Object.keys(servers).length !== 1 ||
       server?.type !== "http" ||
       !server.url ||
       new URL(server.url).href !== url.href ||
@@ -41,7 +43,7 @@ export function unifiedConfiguration(value: UnifiedIssued) {
       server.headers?.Authorization !== `Bearer ${value.secret}`
     )
       throw new Error();
-    return configurationFiles([{ name: "plane", url: url.href, headers: { Authorization: `Bearer ${value.secret}` } }]);
+    return configurationFiles([{ name: key, url: url.href, headers: { Authorization: `Bearer ${value.secret}` } }]);
   } catch {
     // Parser diagnostics can include credential text. Never expose them.
     throw new Error("客户端配置格式无法识别，请重新查看或联系管理员。");

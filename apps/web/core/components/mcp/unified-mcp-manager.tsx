@@ -18,6 +18,7 @@ const ADAPTER = {
   configuration: SERVICE.configuration.bind(SERVICE),
   rotate: SERVICE.rotate.bind(SERVICE),
   revoke: SERVICE.revoke.bind(SERVICE),
+  delete: SERVICE.delete.bind(SERVICE),
   metadata: unifiedMetadata,
   files: unifiedConfiguration,
   error: unifiedError,

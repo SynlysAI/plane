@@ -23,6 +23,7 @@ from rest_framework.utils.encoders import JSONEncoder
 
 from plane.db.models import UnifiedMCPConnection, Workspace, WorkspaceMember
 from plane.mcp.authorization import UnifiedTokenAuthentication, issue_connection, token_hash, workspace_access
+from plane.mcp.client_config import client_files, public_url, server_key
 from plane.mcp.credentials import (
     DEFAULT_TTL_DAYS,
     TTL_DAYS,
@@ -217,20 +218,17 @@ class UnifiedConnectionsEndpoint(UnifiedEndpointBase):
         Returns:
             包含连接元数据和客户端配置的响应字典。
         """
-        url = request.build_absolute_uri("/api/mcp/")
+        url = public_url(request, "/api/mcp/")
         headers = {"Authorization": "Bearer " + raw}
+        key = server_key(connection.name)
+        files = client_files(key, url, headers)
         return {
             **UnifiedConnectionsEndpoint.present(connection),
             "secret": raw,
+            "server_key": key,
             "mcp_url": url,
-            "codex_toml": "[mcp_servers.plane]\nurl = "
-            + json.dumps(url)
-            + '\nhttp_headers = { "Authorization" = '
-            + json.dumps(headers["Authorization"])
-            + ' }\ntool_timeout_sec = 120\ndefault_tools_approval_mode = "prompt"\n',
-            "sciencediscovery_json": json.dumps(
-                {"mcpServers": {"plane": {"type": "http", "url": url, "headers": headers, "timeoutSeconds": 120}}}
-            ),
+            **files,
+            "api_docs_url": public_url(request, f"/mcp/api-docs/project/{connection.pk}"),
         }
 
     def get(self, request):
@@ -369,6 +367,37 @@ class UnifiedRevokeEndpoint(UnifiedEndpointBase):
                     resource_id=connection.pk,
                 )
         return Response({"revoked": True})
+
+
+class UnifiedDeleteEndpoint(UnifiedEndpointBase):
+    """本人软删除项目连接，保留审计与写回执。"""
+
+    authentication_classes = [SessionAuthentication]
+    http_method_names = ["delete", "options"]
+
+    @transaction.atomic
+    def delete(self, request, connection_id):
+        connection = (
+            UnifiedMCPConnection.objects.select_for_update().filter(pk=connection_id, owner=request.user).first()
+        )
+        if connection is None:
+            raise ResearchReadError("not_found", "Connection not found.", 404)
+        now = timezone.now()
+        connection.revoked_at = connection.revoked_at or now
+        connection.deleted_at = now
+        connection.token_encrypted = ""
+        connection.save(update_fields=["revoked_at", "deleted_at", "token_encrypted", "updated_at"])
+        for workspace in Workspace.objects.filter(
+            pk__in=[entry["workspace_id"] for entry in connection.scope["workspaces"]]
+        ):
+            record_audit_event(
+                workspace=workspace,
+                actor=request.user,
+                action="mcp.connection.delete",
+                resource_type="unified_mcp_connection",
+                resource_id=connection.pk,
+            )
+        return Response({"deleted": True, "id": str(connection.pk)})
 
 
 class UnifiedMCPEndpoint(UnifiedEndpointBase):

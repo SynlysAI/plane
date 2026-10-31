@@ -34,8 +34,13 @@ export type WeeklyReportConnection = {
   last_used_at: string | null;
 };
 export type WeeklyReportIssued = WeeklyReportConnection & {
+  server_key: string;
   mcp_path: string;
+  mcp_url: string;
   headers: Record<string, string>;
+  codex_toml: string;
+  sciencediscovery_json: string;
+  api_docs_url: string;
   csrf_token: string;
 };
 export type WeeklyReportConnections = {
@@ -139,6 +144,18 @@ export class WeeklyReportMCPService {
         {},
         { headers: { "X-CSRFToken": csrf } }
       )
+      .then((r) => r.data)
+      .catch((e) => {
+        throw problem(e);
+      });
+  }
+
+  /** 软删除本人周报连接，保留提案与审计。 */
+  async delete(workspace: string, id: string, csrf: string): Promise<{ deleted: boolean; id: string }> {
+    return this.http
+      .delete(this.path(workspace) + `connections/${encodeURIComponent(id)}/`, {
+        headers: { "X-CSRFToken": csrf },
+      })
       .then((r) => r.data)
       .catch((e) => {
         throw problem(e);

@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.throttling import SimpleRateThrottle
 
 from plane.db import models as db
+from plane.mcp.client_config import client_files, public_url, server_key
 from plane.mcp.credentials import (
     DEFAULT_TTL_DAYS,
     TTL_DAYS,
@@ -226,11 +227,20 @@ class WeeklyManagementBase(WeeklyBase):
         Returns:
             包含元数据、服务路径及专用请求头的字典。
         """
+        path = f"/api/research/workspaces/{grant.workspace.slug}/weekly-report-agent/mcp/"
+        url = public_url(request, path)
+        key = server_key(grant.label)
+        headers = {HEADER: raw}
+        files = client_files(key, url, headers)
         return {
             **WeeklyManagementBase.present(grant),
             "contract_version": VERSION,
-            "mcp_path": f"/api/research/workspaces/{grant.workspace.slug}/weekly-report-agent/mcp/",
-            "headers": {HEADER: raw},
+            "server_key": key,
+            "mcp_path": path,
+            "mcp_url": url,
+            "headers": headers,
+            **files,
+            "api_docs_url": public_url(request, f"/mcp/api-docs/weekly-report/{grant.workspace.slug}/{grant.pk}"),
             "csrf_token": get_token(request._request),
         }
 
@@ -403,3 +413,33 @@ class WeeklyReportRevokeEndpoint(WeeklyManagementBase):
                 resource_id=grant.pk,
             )
         return Response({"revoked": True, "id": str(grant.pk)})
+
+
+class WeeklyReportDeleteEndpoint(WeeklyManagementBase):
+    """本人软删除周报连接，保留提案与审计。"""
+
+    http_method_names = ["delete", "options"]
+
+    @transaction.atomic
+    def delete(self, request, slug, grant_id):
+        workspace = self.workspace(slug)
+        grant = (
+            db.ReportAgentGrant.objects.select_for_update()
+            .filter(pk=grant_id, workspace=workspace, user=request.user)
+            .first()
+        )
+        if not grant:
+            raise WeeklyReportError("not_found", "Connection not found.", 404)
+        now = timezone.now()
+        grant.revoked_at = grant.revoked_at or now
+        grant.deleted_at = now
+        grant.token_encrypted = ""
+        grant.save(update_fields=["revoked_at", "deleted_at", "token_encrypted", "updated_at"])
+        record_audit_event(
+            workspace=workspace,
+            actor=request.user,
+            action="report.mcp.grant.delete",
+            resource_type="report_agent_grant",
+            resource_id=grant.pk,
+        )
+        return Response({"deleted": True, "id": str(grant.pk)})

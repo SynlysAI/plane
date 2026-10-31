@@ -1,10 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), create: vi.fn() }));
+const calls = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn(), create: vi.fn() }));
 vi.mock("@plane/constants", () => ({ API_BASE_URL: "https://plane.test" }));
 vi.mock("axios", () => ({
   create: (options: unknown) => {
     calls.create(options);
-    return { get: calls.get, post: calls.post };
+    return { get: calls.get, post: calls.post, delete: calls.delete };
   },
 }));
 import { UnifiedMCPService } from "@/services/unified-mcp.service";
@@ -12,6 +12,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   calls.get.mockResolvedValue({ data: {} });
   calls.post.mockResolvedValue({ data: {} });
+  calls.delete.mockResolvedValue({ data: {} });
 });
 it("uses a human session and only session CSRF on one unified issuance/revoke", async () => {
   const service = new UnifiedMCPService();
@@ -37,6 +38,10 @@ it("uses a human session and only session CSRF on one unified issuance/revoke", 
     {},
     { headers: { "X-CSRFToken": "human-csrf" } }
   );
+  await service.delete("connection/id", "human-csrf");
+  expect(calls.delete).toHaveBeenLastCalledWith("/api/mcp/connections/connection%2Fid/", {
+    headers: { "X-CSRFToken": "human-csrf" },
+  });
 });
 it.each(["configuration", "rotate"] as const)("通过本人会话与 CSRF 请求 %s 配置", async (action) => {
   const service = new UnifiedMCPService();

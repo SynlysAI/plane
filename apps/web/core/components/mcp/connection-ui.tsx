@@ -323,10 +323,10 @@ export function ConnectionBrowser<T extends ConnectionMetadata>({
   error: string;
   notice: string;
   setNotice: (value: string) => void;
-  mutate: (action: "rotate" | "revoke", id: string) => Promise<boolean>;
+  mutate: (action: "rotate" | "revoke" | "delete", id: string) => Promise<boolean>;
   children: ReactNode;
 }) {
-  const [action, setAction] = useState<"rotate" | "revoke" | null>(null);
+  const [action, setAction] = useState<"rotate" | "revoke" | "delete" | null>(null);
   const expired = useExpiration(selected?.expires_at ?? null);
   const active = Boolean(selected && !selected.revoked_at && (selected.expires_at === null || expired === false));
   return (
@@ -425,6 +425,9 @@ export function ConnectionBrowser<T extends ConnectionMetadata>({
                   >
                     撤销连接
                   </Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => setAction("delete")}>
+                    删除记录
+                  </Button>
                 </div>
               </article>
             ) : (
@@ -444,15 +447,20 @@ export function ConnectionBrowser<T extends ConnectionMetadata>({
           if (action && selected && (await mutate(action, selected.id))) setAction(null);
         }}
         isSubmitting={busy}
-        title={action === "rotate" ? "确认重置密钥" : "确认撤销连接"}
-        primaryButtonText={{ default: action === "rotate" ? "确认重置" : "确认撤销", loading: "正在处理…" }}
+        title={action === "rotate" ? "确认重置密钥" : action === "delete" ? "确认删除连接记录" : "确认撤销连接"}
+        primaryButtonText={{
+          default: action === "rotate" ? "确认重置" : action === "delete" ? "确认删除" : "确认撤销",
+          loading: "正在处理…",
+        }}
         secondaryButtonText="取消"
         content={
           <>
             <span className="block">
               {action === "rotate"
                 ? "旧密钥将失效，所有使用此连接的客户端需要更新配置。授权范围和到期时间保持原值。"
-                : "撤销后，此连接将无法继续访问。操作不能恢复。"}
+                : action === "delete"
+                  ? "连接将立即失效并从列表移除。审计记录、写回执和周报提案会保留，此操作不能恢复。"
+                  : "撤销后，此连接将无法继续访问。操作不能恢复。"}
             </span>
             {error && (
               <span role="alert" className="mt-2 block">

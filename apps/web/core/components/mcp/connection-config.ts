@@ -71,7 +71,9 @@ export function configurationFiles(configs: MCPConfig[]) {
     toml: configs
       .map(
         (c) =>
-          `[mcp_servers.${c.name}]\nurl = ${JSON.stringify(c.url)}\nhttp_headers = { ${Object.entries(c.headers)
+          `[mcp_servers.${JSON.stringify(c.name)}]\nurl = ${JSON.stringify(c.url)}\nhttp_headers = { ${Object.entries(
+            c.headers
+          )
             .map(([k, v]) => `${JSON.stringify(k)} = ${JSON.stringify(v)}`)
             .join(", ")} }\ntool_timeout_sec = 120\ndefault_tools_approval_mode = "prompt"\n`
       )

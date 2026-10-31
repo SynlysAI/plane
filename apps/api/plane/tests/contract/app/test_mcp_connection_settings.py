@@ -117,6 +117,60 @@ def test_configuration_is_recoverable_encrypted_owner_only_and_csrf_protected(co
     assert raw not in json.dumps(list(db.ResearchAuditEvent.objects.values("metadata")), default=str)
 
 
+def test_configuration_uses_public_url_and_user_supplied_server_key(connection_case, settings):
+    """客户端配置使用公共 HTTPS 基址与用户命名的 server key。"""
+    c = connection_case
+    settings.RESEARCH_MCP_PUBLIC_BASE_URL = "https://plane.example"
+    data = c["data"]
+    if c["weekly"]:
+        data = {**data, "label": "fyk report/mcp"}
+    else:
+        data = {**data, "name": "fyk report/mcp"}
+    value = c["post"](body=data).json()
+    expected_path = (
+        f"/api/research/workspaces/{c['workspace'].slug}/weekly-report-agent/mcp/" if c["weekly"] else "/api/mcp/"
+    )
+    assert value["server_key"] == "fyk report/mcp"
+    assert value["mcp_url"] == "https://plane.example" + expected_path
+    assert value["api_docs_url"] == (
+        f"https://plane.example/mcp/api-docs/weekly-report/{c['workspace'].slug}/{value['id']}"
+        if c["weekly"]
+        else f"https://plane.example/mcp/api-docs/project/{value['id']}"
+    )
+    assert '[mcp_servers."fyk report/mcp"]' in value["codex_toml"]
+    assert json.loads(value["sciencediscovery_json"])["mcpServers"]["fyk report/mcp"]["url"] == value["mcp_url"]
+
+
+def test_delete_soft_deletes_revokes_token_and_keeps_audit(connection_case):
+    """删除立即失效并移出列表，但保留记录、密钥哈希与审计。"""
+    c = connection_case
+    value = c["post"]().json()
+    row = c["model"].objects.get(pk=value["id"])
+    token_hash = row.token_hash
+    csrf = c["client"].get(c["root"]).json()["csrf_token"]
+
+    assert c["client"].delete(c["root"] + f"{value['id']}/").status_code == 403
+    stranger = APIClient()
+    stranger.force_login(c["other"])
+    assert stranger.delete(c["root"] + f"{value['id']}/").status_code == 404
+
+    deleted = c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf)
+    assert deleted.status_code == 200, deleted.data
+    assert deleted.json() == {"deleted": True, "id": value["id"]}
+    assert not c["model"].objects.filter(pk=value["id"]).exists()
+    row = c["model"].all_objects.get(pk=value["id"])
+    assert row.revoked_at is not None and row.deleted_at is not None and not row.token_encrypted
+    assert row.token_hash == token_hash
+    assert c["ping"](c["secret"](value)).status_code in (401, 403)
+    assert c["client"].get(c["root"]).json()["results"] == []
+    audit = db.ResearchAuditEvent.objects.filter(
+        resource_id=row.pk,
+        action="report.mcp.grant.delete" if c["weekly"] else "mcp.connection.delete",
+    )
+    assert audit.exists()
+    assert c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf).status_code == 404
+
+
 def test_rotation_preserves_scope_and_deadline_and_revokes_old_secret(connection_case):
     """旧连接确认重置后启用回看，旧密钥无法继续调用。"""
     c = connection_case

@@ -30,9 +30,11 @@ export type UnifiedConnection = {
 };
 export type UnifiedIssued = UnifiedConnection & {
   secret: string;
+  server_key: string;
   mcp_url: string;
   codex_toml: string;
   sciencediscovery_json: string;
+  api_docs_url: string;
 };
 export type UnifiedPage<T> = { results: T[]; next_cursor: string | null; csrf_token: string };
 export type UnifiedOptions = UnifiedPage<UnifiedWorkspace> & {
@@ -98,6 +100,16 @@ export class UnifiedMCPService {
   async revoke(id: string, csrf: string): Promise<{ revoked: boolean }> {
     return this.http
       .post(`/api/mcp/connections/${encodeURIComponent(id)}/revoke/`, {}, { headers: { "X-CSRFToken": csrf } })
+      .then((response) => response.data)
+      .catch((error) => {
+        throw problem(error);
+      });
+  }
+
+  /** 软删除本人连接，保留审计与写回执。 */
+  async delete(id: string, csrf: string): Promise<{ deleted: boolean; id: string }> {
+    return this.http
+      .delete(`/api/mcp/connections/${encodeURIComponent(id)}/`, { headers: { "X-CSRFToken": csrf } })
       .then((response) => response.data)
       .catch((error) => {
         throw problem(error);

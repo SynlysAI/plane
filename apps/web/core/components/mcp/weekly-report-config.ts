@@ -31,8 +31,10 @@ export function weeklyReportMetadata(value: WeeklyReportConnection): WeeklyRepor
 export function weeklyReportConfig(value: WeeklyReportIssued, workspace: string): MCPConfig {
   try {
     const base = new URL(API_BASE_URL || window.location.origin);
-    const endpoint = new URL(value.mcp_path, base);
+    const endpoint = new URL(value.mcp_url || value.mcp_path, base);
+    const relativeEndpoint = new URL(value.mcp_path, base);
     const token = value.headers["X-Weekly-Report-Token"];
+    const name = value.server_key || value.label;
     if (
       value.workspace !== workspace ||
       !/^[a-f\d-]{36}$/i.test(value.id) ||
@@ -43,11 +45,14 @@ export function weeklyReportConfig(value: WeeklyReportIssued, workspace: string)
       endpoint.search ||
       endpoint.hash ||
       endpoint.pathname !== `/api/research/workspaces/${encodeURIComponent(workspace)}/weekly-report-agent/mcp/` ||
+      relativeEndpoint.href !== endpoint.href ||
+      (value.mcp_url && endpoint.origin !== base.origin) ||
+      name !== value.label.trim() ||
       !/^pwr_[A-Za-z0-9_-]{43}$/.test(token)
     )
       throw invalid();
     return {
-      name: `plane_weekly_report_${value.id.replaceAll("-", "")}`,
+      name,
       url: endpoint.href,
       headers: { "X-Weekly-Report-Token": token },
     };
