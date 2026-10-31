@@ -36,9 +36,9 @@ def _user_lite(user):
 def _safe_reviewer(resolver, chain):
     """Resolve a reviewer while allowing unreadable configuration in GETs."""
     try:
-        return _user_lite(resolver(chain)), None
+        return _user_lite(resolver(chain)), None, None
     except ChainStageRuleError as error:
-        return None, error.message
+        return None, error.message, error.error_code
 
 
 class ResearchChainStageMaterialItemSerializer(serializers.ModelSerializer):
@@ -212,12 +212,12 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
         return ResearchChainStagePrecheckSerializer(precheck).data if precheck else None
 
     def get_advisor(self, obj):
-        user, error = self._cached_reviewer("advisor", resolve_advisor, obj.chain)
-        return {"user": user, "error": error}
+        user, error, reason_code = self._cached_reviewer("advisor", resolve_advisor, obj.chain)
+        return {"user": user, "error": error, "reason_code": reason_code}
 
     def get_principal_investigator(self, obj):
-        user, error = self._cached_reviewer("principal", resolve_principal, obj.chain)
-        return {"user": user, "error": error}
+        user, error, reason_code = self._cached_reviewer("principal", resolve_principal, obj.chain)
+        return {"user": user, "error": error, "reason_code": reason_code}
 
     def get_current_review_step(self, obj):
         if obj.status == "AWAITING_ADVISOR":
@@ -236,19 +236,23 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
         reviewer_allowed = False
         reasons = {}
         if obj.status == "AWAITING_ADVISOR":
-            reviewer, reviewer_error = self._cached_reviewer("advisor", resolve_advisor, obj.chain)
+            reviewer, reviewer_error, reviewer_reason_code = self._cached_reviewer(
+                "advisor", resolve_advisor, obj.chain
+            )
             reviewer_allowed = reviewer is not None and str(reviewer.get("id")) == str(actor.id)
             if reviewer_error:
                 reasons["review"] = {
-                    "reason_code": ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
+                    "reason_code": reviewer_reason_code or ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
                     "reason": reviewer_error,
                 }
         elif obj.status == "AWAITING_PI":
-            reviewer, reviewer_error = self._cached_reviewer("principal", resolve_principal, obj.chain)
+            reviewer, reviewer_error, reviewer_reason_code = self._cached_reviewer(
+                "principal", resolve_principal, obj.chain
+            )
             reviewer_allowed = reviewer is not None and str(reviewer.get("id")) == str(actor.id)
             if reviewer_error:
                 reasons["review"] = {
-                    "reason_code": ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
+                    "reason_code": reviewer_reason_code or ResearchErrorCode.CHAIN_STAGE_REVIEWER_NOT_CONFIGURED,
                     "reason": reviewer_error,
                 }
         decisions = {
@@ -270,7 +274,7 @@ class ResearchChainStageSerializer(serializers.ModelSerializer):
             chain: The Research Chain shared by the serialized stages.
 
         Returns:
-            A reviewer projection and optional configuration error.
+            A reviewer projection, optional error text and stable reason code.
         """
         cache = self.context.setdefault("reviewer_cache", {})
         if key not in cache:

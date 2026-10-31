@@ -14,10 +14,14 @@ import type {
   TResearchChainStageApprovalSummary,
 } from "@plane/types";
 // components
-import { getResearchErrorDetail } from "@/components/research/common/error-messages";
+import { getResearchErrorKey } from "@/components/research/common/error-messages";
 import { formatResearchDate, formatResearchDateTime } from "@/components/research/common/research-format";
 import { ResearchStatusBadge } from "@/components/research/common/research-status-badge";
-import type { TResearchWorkflowStage } from "@/components/research/chains/research-chain-workflow";
+import {
+  researchChainStatusKey,
+  type TResearchWorkflowStage,
+} from "@/components/research/chains/research-chain-workflow";
+import { ResearchChainStageReviewActions } from "@/components/research/chains/research-chain-stage-review-actions";
 // services
 import { ResearchChainService } from "@/services/research/chain.service";
 import { ResearchChainTaskService } from "@/services/research/chain-task.service";
@@ -51,13 +55,6 @@ const chainService = new ResearchChainService();
 /** 判断后端是否允许当前用户执行某个阶段动作。 */
 function can(stage: TResearchChainStageApproval | null, action: string): boolean {
   return stage?.capabilities?.actions[action]?.allowed ?? false;
-}
-
-/** 读取阶段或节点状态的本地化键，兼容旧节点状态回退。 */
-function statusLabelKey(status: string): string {
-  if (["NOT_STARTED", "IN_PROGRESS", "AWAITING_ADVISOR", "AWAITING_PI", "NEEDS_REVISION", "APPROVED"].includes(status))
-    return `research.chains.workflow.stage_status.${status.toLowerCase()}`;
-  return `research.chains.node_status.${status.toLowerCase()}`;
 }
 
 /** 提取多行审批意见的第一行，避免摘要被长文本撑开。 */
@@ -113,7 +110,10 @@ export function ResearchChainOverviewCommand({
     stageApprovalSummary?.stages.find((stage) => stage.stage_code === currentStage?.stageCode) ?? null;
   const stageStatus = stageApproval?.status ?? currentStage?.status ?? "NOT_STARTED";
   const completedMaterials = stageApproval?.materials.filter((material) => material.complete).length ?? 0;
-  const missingMaterials = stageApproval?.materials.filter((material) => !material.complete) ?? [];
+  const missingMaterials =
+    stageApproval?.materials.filter(
+      (material) => (material.submission_state ?? (material.complete ? "READY" : "INCOMPLETE")) !== "READY"
+    ) ?? [];
   const totalMaterials = stageApproval?.materials.length ?? 0;
   const canEditMaterials = can(stageApproval, "edit_materials");
   const canSubmitStage = can(stageApproval, "submit");
@@ -123,7 +123,14 @@ export function ResearchChainOverviewCommand({
   const precheckReady =
     stageApproval?.stage_code !== "TOPIC_EVALUATION" || (stageApproval?.latest_precheck?.is_current ?? false);
   const materialReady = missingMaterials.length === 0 && nodeSubmittable && precheckReady;
-  const showSubmit = canSubmitStage && materialReady;
+  const piRequired =
+    stageApproval?.pi_policy === "ALWAYS_PI" ||
+    (stageApproval?.pi_policy === "CONDITIONAL_PI" && stageApproval.requires_pi);
+  const piMissing = Boolean(piRequired && stageApproval && !stageApproval.principal_investigator.user);
+  const advisorMissing = Boolean(stageApproval && !stageApproval.advisor.user);
+  const conditionalStage = stageApproval?.pi_policy === "CONDITIONAL_PI";
+  const submissionReady = materialReady && !advisorMissing;
+  const showSubmit = canSubmitStage && submissionReady && !conditionalStage;
   const showReview = canReviewStage && awaitingReview;
   const openTasks = useMemo(() => tasks.filter((task) => OPEN_TASK_STATUSES.has(task.status)), [tasks]);
   const topTasks = openTasks.slice(0, 3);
@@ -132,7 +139,21 @@ export function ResearchChainOverviewCommand({
     () => sortCopy(events, (left, right) => right.occurred_at.localeCompare(left.occurred_at)).slice(0, 5),
     [events]
   );
-  const latestReview = stageApproval?.review_actions?.[stageApproval.review_actions.length - 1] ?? null;
+  const latestReviewPair = useMemo(() => {
+    const candidates = (stageApprovalSummary?.stages ?? []).flatMap((stage) =>
+      (stage.review_actions ?? []).map((action) => ({ action, stage }))
+    );
+    candidates.sort((left, right) => right.action.created_at.localeCompare(left.action.created_at));
+    return candidates[0] ?? null;
+  }, [stageApprovalSummary]);
+  const localizedReviewerName = (
+    reviewer: { user?: { display_name: string } | null; error?: string | null; reason_code?: string | null },
+    fallbackKey: string
+  ) =>
+    reviewer.user?.display_name ??
+    (reviewer.reason_code === "research_chain_stage_reviewer_not_configured"
+      ? t("research.errors.research_chain_stage_reviewer_not_configured")
+      : t(fallbackKey));
   // Owner 置前并截断展示，其余成员以计数折叠。
   const summaryMembers = useMemo(
     () => sortCopy(members, (left, right) => Number(right.is_owner) - Number(left.is_owner)).slice(0, 5),
@@ -169,24 +190,24 @@ export function ResearchChainOverviewCommand({
 
   /** 提交当前阶段进入审核，并把结果交回详情页刷新。 */
   const submitStage = async () => {
-    if (!stageApproval || !currentNode || actionBusy) return;
+    if (!stageApproval || !currentNode || actionBusy || piMissing) return;
     setActionBusy(true);
     setActionError("");
     try {
       await chainService.submitChainStage(workspaceSlug, chainId, stageApproval.stage_code, {
         node_id: currentNode.id,
-        requires_pi: stageApproval.requires_pi || undefined,
+        requires_pi: stageApproval.pi_policy === "CONDITIONAL_PI" ? stageApproval.requires_pi : undefined,
       });
       await onRefresh();
     } catch (error) {
-      setActionError(getResearchErrorDetail(error) ?? t("research.chains.stage_approval.action_failed"));
+      setActionError(t(getResearchErrorKey(error)));
     } finally {
       setActionBusy(false);
     }
   };
 
   /** 执行阶段审批；驳回必须携带审批意见。 */
-  const reviewStage = async (intent: "APPROVE" | "RETURN") => {
+  const reviewStage = async (intent: "APPROVE" | "RETURN", escalateToPi: boolean) => {
     if (!stageApproval || actionBusy) return;
     if (intent === "RETURN" && !returnComment.trim()) {
       setActionError(t("research.chains.overview.review_comment_required"));
@@ -198,12 +219,13 @@ export function ResearchChainOverviewCommand({
       await chainService.reviewChainStage(workspaceSlug, chainId, stageApproval.stage_code, {
         action: intent,
         comment: intent === "RETURN" ? returnComment.trim() : undefined,
+        ...(intent === "APPROVE" ? { escalate_to_pi: escalateToPi } : {}),
       });
       setReturnOpen(false);
       setReturnComment("");
       await onRefresh();
     } catch (error) {
-      setActionError(getResearchErrorDetail(error) ?? t("research.chains.stage_approval.action_failed"));
+      setActionError(t(getResearchErrorKey(error)));
     } finally {
       setActionBusy(false);
     }
@@ -211,8 +233,8 @@ export function ResearchChainOverviewCommand({
 
   const handlerName = awaitingReview
     ? stageApproval?.status === "AWAITING_PI"
-      ? (stageApproval.principal_investigator.user?.display_name ?? stageApproval.principal_investigator.error ?? "-")
-      : (stageApproval?.advisor.user?.display_name ?? stageApproval?.advisor.error ?? "-")
+      ? localizedReviewerName(stageApproval.principal_investigator, "research.common.status_unknown")
+      : localizedReviewerName(stageApproval?.advisor ?? {}, "research.common.status_unknown")
     : (chain?.owner_name ?? "-");
   const pendingItems = [
     {
@@ -246,26 +268,28 @@ export function ResearchChainOverviewCommand({
             </Button>
           )}
           {showSubmit && (
-            <Button variant="secondary" size="base" disabled={actionBusy} onClick={() => void submitStage()}>
+            <Button
+              variant="secondary"
+              size="base"
+              disabled={actionBusy || piMissing}
+              onClick={() => void submitStage()}
+            >
               {t("research.chains.overview.submit_stage")}
             </Button>
           )}
           {showReview && (
             <>
-              <Button variant="primary" size="base" disabled={actionBusy} onClick={() => void reviewStage("APPROVE")}>
-                {t("research.chains.stage_approval.approve")}
-              </Button>
-              <Button
-                variant="secondary"
-                size="base"
+              <ResearchChainStageReviewActions
+                policy={stageApproval.pi_policy}
+                requiresPi={stageApproval.requires_pi}
+                reviewerRole={stageApproval.current_review_step}
                 disabled={actionBusy}
-                onClick={() => {
+                onApprove={(escalateToPi) => reviewStage("APPROVE", escalateToPi)}
+                onReturn={() => {
                   setReturnOpen(true);
                   setActionError("");
                 }}
-              >
-                {t("research.chains.stage_approval.return")}
-              </Button>
+              />
             </>
           )}
           {currentNode && (
@@ -277,6 +301,21 @@ export function ResearchChainOverviewCommand({
         {actionError && !returnOpen && (
           <p className="mt-2 text-12 text-danger-primary" role="alert">
             {actionError}
+          </p>
+        )}
+        {canSubmitStage && piMissing && (
+          <p className="mt-2 text-12 text-secondary" role="alert">
+            {t("research.chains.stage_approval.pi_required_reason")}
+          </p>
+        )}
+        {canSubmitStage && !piMissing && advisorMissing && (
+          <p className="mt-2 text-12 text-secondary" role="alert">
+            {t("research.chains.stage_approval.advisor_required_reason")}
+          </p>
+        )}
+        {canSubmitStage && conditionalStage && (
+          <p className="mt-2 text-12 text-tertiary" role="status">
+            {t("research.chains.overview.conditional_submit_hint")}
           </p>
         )}
       </section>
@@ -293,14 +332,14 @@ export function ResearchChainOverviewCommand({
                     </span>
                     {t(currentStage.labelKey)}
                   </h4>
-                  <span className="text-12 text-secondary">{t(statusLabelKey(stageStatus))}</span>
+                  <span className="text-12 text-secondary">{t(researchChainStatusKey(stageStatus))}</span>
                 </div>
                 <div className="border-accent-primary mt-4 border-l-2 pl-4">
                   <p className="text-11 text-tertiary">{t("research.chains.current_node")}</p>
                   <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
                     <span className="truncate text-13 font-medium text-primary">{currentNode.title}</span>
                     <ResearchStatusBadge status={currentNode.status} size="sm">
-                      {t(`research.chains.node_status.${currentNode.status.toLowerCase()}`)}
+                      {t(researchChainStatusKey(currentNode.status))}
                     </ResearchStatusBadge>
                   </div>
                 </div>
@@ -383,17 +422,21 @@ export function ResearchChainOverviewCommand({
                   <div className="grid grid-cols-[minmax(6.5rem,8.5rem)_minmax(0,1fr)] items-start gap-x-4 gap-y-1">
                     <dt className="leading-6 text-tertiary">{t("research.chains.overview.latest_review")}</dt>
                     <dd className="min-w-0">
-                      {latestReview ? (
+                      {latestReviewPair ? (
                         <p className="text-13 leading-6 text-secondary">
                           {t("research.chains.overview.latest_review_result", {
+                            reviewer: latestReviewPair.action.reviewer_detail?.display_name ?? "-",
                             action:
-                              latestReview.action === "APPROVE"
+                              latestReviewPair.action.action === "APPROVE"
                                 ? t("research.chains.stage_approval.approve")
                                 : t("research.chains.stage_approval.return"),
-                            comment: firstLine(latestReview.comment) || "-",
+                            comment: firstLine(latestReviewPair.action.comment) || "-",
                           })}
+                          <span className="ml-2 text-11 text-secondary">
+                            {t(`research.chains.workflow.stages.${latestReviewPair.stage.stage_code.toLowerCase()}`)}
+                          </span>
                           <span className="ml-2 text-11 text-tertiary">
-                            {formatResearchDateTime(latestReview.created_at, currentLocale)}
+                            {formatResearchDateTime(latestReviewPair.action.created_at, currentLocale)}
                           </span>
                         </p>
                       ) : (
@@ -543,7 +586,7 @@ export function ResearchChainOverviewCommand({
             className="w-full max-w-md rounded-lg border border-subtle bg-surface-1 p-5"
             onSubmit={(event) => {
               event.preventDefault();
-              void reviewStage("RETURN");
+              void reviewStage("RETURN", false);
             }}
           >
             <h3 className="text-16 font-semibold text-primary">{t("research.chains.stage_approval.return")}</h3>

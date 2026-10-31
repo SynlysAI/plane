@@ -28,6 +28,9 @@ export type TNotificationIssueLite = {
 };
 
 export type TNotificationData = {
+  chain_name?: string;
+  stage_name?: string;
+  href?: string;
   issue: TNotificationIssueLite | undefined;
   issue_activity: {
     id: string | undefined;

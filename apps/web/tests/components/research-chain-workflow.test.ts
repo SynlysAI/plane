@@ -1,6 +1,7 @@
 import {
   buildResearchWorkflow,
   RESEARCH_WORKFLOW_STAGE_DEFINITIONS,
+  researchChainStatusKey,
 } from "@/components/research/chains/research-chain-workflow";
 import type { TResearchChainNode, TResearchChainStageApproval } from "@plane/types";
 import { expect, it } from "vitest";
@@ -56,6 +57,12 @@ it("keeps all thirteen research stages visible for an empty chain", () => {
   );
   expect(workflow.stages.every((stage) => stage.status === "NOT_STARTED")).toBe(true);
   expect(workflow.stages.every((stage) => stage.preferredNodeId === null)).toBe(true);
+});
+
+it("maps stage and node status dictionaries without exposing i18n keys", () => {
+  expect(researchChainStatusKey("IN_PROGRESS")).toBe("research.chains.workflow.stage_status.in_progress");
+  expect(researchChainStatusKey("WAITING_HUMAN")).toBe("research.chains.node_status.waiting_human");
+  expect(researchChainStatusKey("UNKNOWN")).toBe("research.common.status_unknown");
 });
 
 it("maps selection and evaluation to independent business nodes", () => {

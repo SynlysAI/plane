@@ -44,6 +44,9 @@ vi.mock("@/components/research/approvals/approval-list", () => ({
 vi.mock("@/components/research/approvals/chain-stage-approval-inbox", () => ({
   ChainStageApprovalInbox: () => <div>chain-stage-approvals</div>,
 }));
+vi.mock("@/components/research/approvals/my-chain-stage-submissions", () => ({
+  MyChainStageSubmissions: () => <div>my-chain-stage-submissions</div>,
+}));
 vi.mock("@/components/research/reports/report-list", () => ({
   ResearchReportList: () => <div>report-list</div>,
 }));
@@ -112,8 +115,9 @@ it("renders only research queues with canonical page-level links", async () => {
   const nav = container.querySelector('nav[aria-label="审批中心"]');
   expect(Array.from(nav?.querySelectorAll("a") ?? []).map((link) => link.textContent)).toEqual([
     "科研链阶段",
-    "阶段评审",
     "报告审核",
+    "阶段评审",
+    "我的阶段",
     "办公审批",
   ]);
   expect(nav?.textContent).not.toContain("跨组件待办");
@@ -126,6 +130,14 @@ it("renders only research queues with canonical page-level links", async () => {
 
   expect(container.textContent).toContain("review-inbox");
   expect(container.textContent).not.toContain("report-list");
+});
+
+it("lets a student open my chain stage submissions without review permission", async () => {
+  await renderCenter("/lab/approvals?domain=research&tab=my_chain_stage");
+  await act(async () => undefined);
+
+  expect(container.textContent).toContain("my-chain-stage-submissions");
+  expect(container.textContent).not.toContain("chain-stage-approvals");
 });
 
 it("renders the research chain stage queue and keeps its deep link", async () => {

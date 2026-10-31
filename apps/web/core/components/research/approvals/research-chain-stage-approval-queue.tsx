@@ -11,6 +11,7 @@ import type { TResearchChain, TResearchChainNode, TResearchChainStageApproval } 
 import { ResearchChainStageApprovalPanel } from "@/components/research/chains/research-chain-stage-approval-panel";
 import { ResearchChainWorkbenchPeek } from "@/components/research/chains/research-chain-workbench-peek";
 import { useResearchChainKnowledge } from "@/components/research/chains/use-research-chain-knowledge";
+import { useResearch } from "@/hooks/store/use-research";
 import { ResearchChainService } from "@/services/research/chain.service";
 
 const chainService = new ResearchChainService();
@@ -52,6 +53,7 @@ function hrefParam(href: string, key: string) {
 /** 右侧连续处理科研链阶段审批的队列 Peek。 */
 export function ResearchChainStageApprovalQueue({ workspaceSlug, items, activeId, onHandled, onClose }: Props) {
   const { t } = useTranslation();
+  const research = useResearch();
   const activeIndex = items.findIndex((item) => item.id === activeId);
   const activeItem = activeIndex >= 0 ? items[activeIndex] : null;
   const chainId = activeItem ? chainIdFromHref(activeItem.href) : null;
@@ -152,7 +154,8 @@ export function ResearchChainStageApprovalQueue({ workspaceSlug, items, activeId
           applicantName={context.chain.owner_name ?? activeItem.requester?.display_name ?? null}
           defaultExpanded
           knowledge={knowledge}
-          onChanged={() => undefined}
+          canManageOrgUnit={research.canSee("org")}
+          onStageChanged={() => undefined}
           onDecision={async () => onHandled(activeItem.id)}
         />
       )}

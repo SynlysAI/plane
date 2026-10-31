@@ -13,6 +13,7 @@ import { ResearchTabLink } from "@/components/research/common/research-tab-link"
 // components
 import { ResearchApprovalList } from "@/components/research/approvals/approval-list";
 import { ChainStageApprovalInbox } from "@/components/research/approvals/chain-stage-approval-inbox";
+import { MyChainStageSubmissions } from "@/components/research/approvals/my-chain-stage-submissions";
 import { ResearchPageShell } from "@/components/research/common/research-page-shell";
 import { ResearchReportList } from "@/components/research/reports/report-list";
 import { ReviewInbox } from "@/components/research/reviews/review-inbox";
@@ -23,7 +24,7 @@ type Props = {
   workspaceSlug: string;
 };
 
-type ApprovalTab = "chain_stage" | "stage_review" | "report_review" | "office";
+type ApprovalTab = "chain_stage" | "my_chain_stage" | "stage_review" | "report_review" | "office";
 
 type ApprovalShell = {
   titleKey: string;
@@ -50,10 +51,18 @@ function approvalShell(tab: ApprovalTab): ApprovalShell {
       titleKey: "research.nav.approvals_v2",
       descriptionKey: "research.approvals.description",
       section: "stages",
-      navKey: "reviews",
+      navKey: "research_chain",
     };
   }
   if (tab === "chain_stage") {
+    return {
+      titleKey: "research.nav.approvals_v2",
+      descriptionKey: "research.approvals.description",
+      section: "stages",
+      navKey: "reviews",
+    };
+  }
+  if (tab === "my_chain_stage") {
     return {
       titleKey: "research.nav.approvals_v2",
       descriptionKey: "research.approvals.description",
@@ -94,14 +103,19 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
       visible: Boolean(sections?.research_chain) && research.canSee("reviews"),
     },
     {
+      id: "report_review" as const,
+      labelKey: "research.approvals.tabs.report_review",
+      visible: Boolean(sections?.reports) && research.canSee("reports"),
+    },
+    {
       id: "stage_review" as const,
       labelKey: "research.approvals.tabs.stage_review",
       visible: Boolean(sections?.stages) && research.canSee("reviews"),
     },
     {
-      id: "report_review" as const,
-      labelKey: "research.approvals.tabs.report_review",
-      visible: Boolean(sections?.reports) && research.canSee("reports"),
+      id: "my_chain_stage" as const,
+      labelKey: "research.approvals.tabs.my_chain_stage",
+      visible: Boolean(sections?.research_chain),
     },
     {
       id: "office" as const,
@@ -134,6 +148,7 @@ export const ResearchApprovalCenter = observer(function ResearchApprovalCenter({
         </nav>
         <div className="min-h-0 flex-1 overflow-hidden">
           {activeTab === "chain_stage" && <ChainStageApprovalInbox workspaceSlug={workspaceSlug} />}
+          {activeTab === "my_chain_stage" && <MyChainStageSubmissions workspaceSlug={workspaceSlug} />}
           {activeTab === "stage_review" && <ReviewInbox workspaceSlug={workspaceSlug} />}
           {activeTab === "report_review" && <ResearchReportList workspaceSlug={workspaceSlug} variant="review" />}
           {(activeTab === "office" || !activeTab) && (

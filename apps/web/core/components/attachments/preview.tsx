@@ -16,6 +16,7 @@ type PreviewState = {
 };
 type Props = {
   name: string;
+  title?: string;
   previewUrl?: string | null;
   downloadUrl: string;
   label?: string;
@@ -34,11 +35,16 @@ const ERRORS: Record<string, string> = {
 const BUTTON = "rounded px-2 py-1 text-13 hover:bg-surface-2 disabled:opacity-40";
 
 /** 文件名触发统一预览；没有预览能力时保留原下载行为。 */
-export function AttachmentPreviewLink({ name, previewUrl, downloadUrl, label, className, children }: Props) {
+export function AttachmentPreviewLink({ name, title, previewUrl, downloadUrl, label, className, children }: Props) {
   const [open, setOpen] = useState(false);
   if (!previewUrl) {
     return (
-      <a className={className} href={getFileURL(downloadUrl)} onClick={(event) => event.stopPropagation()}>
+      <a
+        className={className}
+        href={getFileURL(downloadUrl)}
+        title={title ?? name}
+        onClick={(event) => event.stopPropagation()}
+      >
         {children ?? label ?? name}
       </a>
     );
@@ -48,7 +54,7 @@ export function AttachmentPreviewLink({ name, previewUrl, downloadUrl, label, cl
       <button
         type="button"
         className={className}
-        title={name}
+        title={title ?? name}
         onClick={(event) => {
           event.stopPropagation();
           setOpen(true);

@@ -298,6 +298,8 @@ export type TResearchChainStageMaterialItem = {
   created_at: string;
 };
 
+export type TResearchChainStageMaterialSubmissionState = "INCOMPLETE" | "PROCESSING" | "FAILED" | "READY";
+
 export type TResearchChainStageMaterial = {
   id: string;
   code: string;
@@ -305,12 +307,16 @@ export type TResearchChainStageMaterial = {
   minimum_count: number;
   submitted_count: number;
   complete: boolean;
+  submission_state: TResearchChainStageMaterialSubmissionState;
+  processing_count: number;
+  failed_count: number;
   items: TResearchChainStageMaterialItem[];
 };
 
 export type TResearchChainStageReviewer = {
   user: { id: string; display_name: string; email: string } | null;
   error: string | null;
+  reason_code?: string | null;
 };
 
 export type TResearchChainStageReviewAction = {

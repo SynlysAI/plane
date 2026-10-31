@@ -15,6 +15,8 @@ type Props = {
   selectedLabel?: string;
   fullWidth?: boolean;
   menuAlign?: "left" | "right";
+  emptyActionHref?: string;
+  emptyActionLabel?: string;
   onChange: (userId: string) => void;
 };
 
@@ -64,6 +66,8 @@ export function ResearchAssigneeSelect({
   selectedLabel,
   fullWidth = false,
   menuAlign = "right",
+  emptyActionHref,
+  emptyActionLabel,
   onChange,
 }: Props) {
   const { t } = useTranslation();
@@ -182,8 +186,19 @@ export function ResearchAssigneeSelect({
               </div>
             );
           })}
-          {!visibleCandidates.length && (
-            <p className="px-2 py-2 text-11 text-tertiary">{t("research.chain_tasks.no_candidate_match")}</p>
+          {candidates.length === 0 ? (
+            <div className="space-y-1 px-2 py-2">
+              <p className="text-11 text-tertiary">{t("research.chain_tasks.no_assignee_candidates")}</p>
+              {emptyActionHref && emptyActionLabel && (
+                <a href={emptyActionHref} className="block text-11 text-accent-primary hover:underline">
+                  {emptyActionLabel}
+                </a>
+              )}
+            </div>
+          ) : (
+            visibleCandidates.length === 0 && (
+              <p className="px-2 py-2 text-11 text-tertiary">{t("research.chain_tasks.no_candidate_match")}</p>
+            )
           )}
           <p className="mt-2 px-2 text-11 text-tertiary">{t("research.chain_tasks.candidate_scope_hint")}</p>
         </div>

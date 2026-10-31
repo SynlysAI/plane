@@ -9,7 +9,8 @@ import { ResearchChainService } from "@/services/research/chain.service";
 // oxlint-disable-next-line import/no-unassigned-import -- 验收沿用应用真实样式。
 import "../../styles/globals.css";
 
-const upload = {
+const scenarioName = new URLSearchParams(window.location.search).get("scenario") ?? "success";
+const successfulUpload = {
   id: "fixture-upload",
   status: "SUCCESS" as const,
   knowledge_id: "fixture-knowledge",
@@ -21,6 +22,14 @@ const upload = {
   download_url: "/attachment-preview.sample.pdf?download=1",
   error_code: "",
 };
+const failedUpload = {
+  ...successfulUpload,
+  id: "fixture-failed-upload",
+  status: "FAILED" as const,
+  file_name: `${"超长科研材料文件名用于窄屏截断验收".repeat(9)}.pdf`,
+  error_code: "PARSE_FAILED",
+};
+const upload = scenarioName === "failed" ? failedUpload : successfulUpload;
 
 Object.assign(axios, {
   post: async (url: string) => ({

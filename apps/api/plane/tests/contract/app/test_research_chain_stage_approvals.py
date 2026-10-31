@@ -159,6 +159,16 @@ def test_stage_list_query_count_is_bounded(env):
     assert sum("org_unit_members" in sql for sql in queries) <= 2
 
 
+def test_reviewer_projection_reports_a_stable_reason_code(env):
+    OrgUnitMember.objects.filter(user=env["principal"]).delete()
+
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    stage = next(item for item in summary["stages"] if item["stage_code"] == "SUMMARY")
+    assert stage["principal_investigator"]["user"] is None
+    assert stage["principal_investigator"]["reason_code"] == "research_chain_stage_reviewer_not_configured"
+    assert stage["advisor"]["reason_code"] is None
+
+
 def test_creating_a_later_stage_node_does_not_require_earlier_approval(env):
     created = env["owner_client"].post(
         f"/api/research/workspaces/{env['workspace'].slug}/chains/{env['chain'].id}/nodes/",
@@ -265,6 +275,186 @@ def test_material_submit_and_review_flow(env):
     assert snapshot["items"][0]["upload"]["download_url"].endswith("/download/")
 
 
+def test_processing_upload_can_be_linked_but_does_not_satisfy_requirement(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="PRE_EXPERIMENT",
+        title="API processing material",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    upload = make_upload(env, node, status="PROCESSING", name="processing-plan.pdf")
+    linked = env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/materials/"),
+        {
+            "request_id": f"material-{uuid4().hex}",
+            "requirement_code": "PRE_EXPERIMENT_PLAN",
+            "upload_id": str(upload.id),
+        },
+        format="json",
+    )
+    assert linked.status_code == 201, linked.json()
+
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    material = next(stage for stage in summary["stages"] if stage["stage_code"] == "PRE_EXPERIMENT")["materials"][0]
+    assert material["submitted_count"] == 0
+    assert material["complete"] is False
+    assert material["submission_state"] == "PROCESSING"
+    assert material["processing_count"] == 1
+
+    submitted = env["owner_client"].post(
+        url(env, "PRE_EXPERIMENT/submit/"),
+        {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
+        format="json",
+    )
+    assert submitted.status_code == 422
+    assert submitted.json()["error_code"] == "research_chain_stage_material_incomplete"
+
+    upload.status = ResearchChainUpload.Status.SUCCESS
+    upload.save(update_fields=["status", "updated_at"])
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    material = next(stage for stage in summary["stages"] if stage["stage_code"] == "PRE_EXPERIMENT")["materials"][0]
+    assert material["submitted_count"] == 1
+    assert material["submission_state"] == "READY"
+
+
+def test_failed_upload_is_recoverable_and_reports_single_failed_state(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="PRE_EXPERIMENT",
+        title="API failed material",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    upload = make_upload(env, node, status="PROCESSING", name="later-failed.pdf")
+    assert (
+        env["owner_client"]
+        .post(
+            url(env, "PRE_EXPERIMENT/materials/"),
+            {
+                "request_id": f"material-{uuid4().hex}",
+                "requirement_code": "PRE_EXPERIMENT_PLAN",
+                "upload_id": str(upload.id),
+            },
+            format="json",
+        )
+        .status_code
+        == 201
+    )
+    upload.status = ResearchChainUpload.Status.FAILED
+    upload.error_code = "parse_failed"
+    upload.save(update_fields=["status", "error_code", "updated_at"])
+
+    material = next(
+        stage
+        for stage in env["owner_client"].get(url(env)).json()["data"]["stages"]
+        if stage["stage_code"] == "PRE_EXPERIMENT"
+    )["materials"][0]
+    assert material["submission_state"] == "FAILED"
+    assert material["failed_count"] == 1
+    assert material["submitted_count"] == 0
+
+
+def test_conditional_review_requires_an_explicit_boolean_payload(env):
+    from plane.db.models import ResearchChainStageMaterialItem
+
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="EXPERIMENT",
+        title="API conditional review",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = env["chain"].stage_approvals.get(stage_code="EXPERIMENT")
+    stage.status = "IN_PROGRESS"
+    stage.save(update_fields=["status", "updated_at"])
+    for requirement in stage.material_requirements.all():
+        upload = make_upload(env, node, name=f"{requirement.code}.pdf")
+        ResearchChainStageMaterialItem.objects.create(
+            stage=stage,
+            requirement=requirement,
+            title=upload.file_name,
+            source_node=node,
+            upload=upload,
+            request_id=f"material-{upload.id}",
+            created_by=env["owner"],
+        )
+    submitted = env["owner_client"].post(
+        url(env, "EXPERIMENT/submit/"),
+        {
+            "request_id": f"submit-{uuid4().hex}",
+            "node_id": str(node.id),
+            "requires_pi": False,
+        },
+        format="json",
+    )
+    assert submitted.status_code == 200, submitted.json()
+
+    missing = env["advisor_client"].post(
+        url(env, "EXPERIMENT/review/"),
+        {"request_id": f"review-{uuid4().hex}", "action": "APPROVE"},
+        format="json",
+    )
+    assert missing.status_code == 422
+    assert missing.json()["error_code"] == "research_chain_stage_escalation_confirm_required"
+
+    rejected = env["advisor_client"].post(
+        url(env, "EXPERIMENT/review/"),
+        {"request_id": f"review-{uuid4().hex}", "action": "APPROVE", "escalate_to_pi": "false"},
+        format="json",
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["error_code"] == "research_chain_stage_escalation_confirm_required"
+
+    completed = env["advisor_client"].post(
+        url(env, "EXPERIMENT/review/"),
+        {"request_id": f"review-{uuid4().hex}", "action": "APPROVE", "escalate_to_pi": False},
+        format="json",
+    )
+    assert completed.status_code == 200, completed.json()
+    assert completed.json()["data"]["status"] == "APPROVED"
+
+
+def test_always_pi_submission_blocks_before_stage_submission_without_unique_pi(env):
+    from plane.db.models import ResearchChainStageMaterialItem
+
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="SUMMARY",
+        title="API summary",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    stage = env["chain"].stage_approvals.get(stage_code="SUMMARY")
+    stage.status = "IN_PROGRESS"
+    stage.save(update_fields=["status", "updated_at"])
+    for requirement in stage.material_requirements.all():
+        upload = make_upload(env, node, name=f"{requirement.code}.pdf")
+        ResearchChainStageMaterialItem.objects.create(
+            stage=stage,
+            requirement=requirement,
+            title=upload.file_name,
+            source_node=node,
+            upload=upload,
+            request_id=f"material-{upload.id}",
+            created_by=env["owner"],
+        )
+    OrgUnitMember.objects.filter(user=env["principal"]).delete()
+
+    response = env["owner_client"].post(
+        url(env, "SUMMARY/submit/"),
+        {"request_id": f"submit-{uuid4().hex}", "node_id": str(node.id)},
+        format="json",
+    )
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "research_chain_stage_reviewer_not_configured"
+    assert response.json()["role"] == "PI"
+
+
 def test_five_original_study_uploads_complete_literature_review_requirement(env):
     """Five distinct uploads satisfy the original-studies requirement."""
     node = ResearchChainNode.objects.create(
@@ -296,6 +486,47 @@ def test_five_original_study_uploads_complete_literature_review_requirement(env)
     )
     assert original_studies["submitted_count"] == 5
     assert original_studies["complete"] is True
+
+
+def test_four_success_and_one_processing_do_not_complete_five_file_requirement(env):
+    node = ResearchChainNode.objects.create(
+        chain=env["chain"],
+        node_type="LITERATURE_REVIEW",
+        title="API mixed literature status",
+        request_id=f"node-{uuid4().hex}",
+        payload_hash=uuid4().hex,
+        created_by=env["owner"],
+    )
+    for index in range(4):
+        upload = make_upload(env, node, name=f"success-{index}.pdf")
+        response = env["owner_client"].post(
+            url(env, "LITERATURE_REVIEW/materials/"),
+            {
+                "request_id": f"material-{upload.id}",
+                "requirement_code": "DIRECT_ORIGINAL_STUDIES",
+                "upload_id": str(upload.id),
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+    processing = make_upload(env, node, status="PROCESSING", name="processing.pdf")
+    response = env["owner_client"].post(
+        url(env, "LITERATURE_REVIEW/materials/"),
+        {
+            "request_id": f"material-{processing.id}",
+            "requirement_code": "DIRECT_ORIGINAL_STUDIES",
+            "upload_id": str(processing.id),
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+
+    summary = env["owner_client"].get(url(env)).json()["data"]
+    material = next(stage for stage in summary["stages"] if stage["stage_code"] == "LITERATURE_REVIEW")["materials"][0]
+    assert material["submitted_count"] == 4
+    assert material["processing_count"] == 1
+    assert material["complete"] is False
+    assert material["submission_state"] == "PROCESSING"
 
 
 def test_stage_material_rejects_failed_upload_and_duplicate_requirement_link(env):

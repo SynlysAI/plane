@@ -81,6 +81,7 @@ type Props = {
   locale: string;
   mode: TWorkbenchPeekMode;
   workspaceSlug: string;
+  chainId: string;
   nodeId: string;
   actionBusy: string;
   onModeChange: (mode: TWorkbenchPeekMode) => void;
@@ -303,6 +304,7 @@ export function ResearchChainTaskPeek(props: Props) {
     locale,
     mode,
     workspaceSlug,
+    chainId,
     nodeId,
     actionBusy,
     onModeChange,
@@ -517,6 +519,8 @@ export function ResearchChainTaskPeek(props: Props) {
                   fullWidth
                   menuAlign="left"
                   allowClear={kind === "create" || !task?.assignee}
+                  emptyActionHref={`/${workspaceSlug}/research/chains/${chainId}?tab=members`}
+                  emptyActionLabel={t("research.chain_tasks.go_members")}
                   onChange={(userId) => {
                     if (kind === "create") onFormChange({ assignee: userId });
                     else onCommit({ assignee: userId || null });

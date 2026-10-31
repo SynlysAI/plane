@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -22,6 +24,7 @@ vi.mock("@/hooks/store/user", () => ({ useUserProfile: () => ({ data: state.prof
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: state.resolvedTheme }) }));
 const { WorkspaceBackgroundShell } = await import("@/components/workspace/background-shell");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
+const GLOBAL_STYLES = readFileSync(resolve(process.cwd(), "styles/globals.css"), "utf8");
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -75,4 +78,13 @@ it("有效值保留边界并限制到 0-1", () => {
   expect(getContentBackgroundOpacity(1)).toBe(1);
   expect(getContentBackgroundOpacity(-1)).toBe(0);
   expect(getContentBackgroundOpacity(2)).toBe(1);
+});
+
+it("壁纸遮罩强度跟随内容背景不透明度变化", () => {
+  expect(GLOBAL_STYLES).toMatch(
+    /--workspace-background-scrim:\s*color-mix\(\s*in oklab,\s*var\(--neutral-300\) calc\(var\(--workspace-content-opacity, 0\.85\) \* 70%\),\s*transparent\s*\)/
+  );
+  expect(GLOBAL_STYLES).toMatch(
+    /--workspace-background-scrim:\s*color-mix\(\s*in oklab,\s*var\(--neutral-black\) calc\(var\(--workspace-content-opacity, 0\.85\) \* 62%\),\s*transparent\s*\)/
+  );
 });

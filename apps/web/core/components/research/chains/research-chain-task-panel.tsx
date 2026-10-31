@@ -733,6 +733,7 @@ export function ResearchChainTaskPanel({ workspaceSlug, chainId, nodeId, initial
           locale={currentLocale}
           mode={peekMode}
           workspaceSlug={workspaceSlug}
+          chainId={chainId}
           nodeId={nodeId}
           actionBusy={actionBusy}
           onModeChange={setPeekMode}

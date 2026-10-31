@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Download, FileText, RefreshCw } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -58,6 +58,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
     degradedReason,
     actionError,
     uploading,
+    processingMeta,
     canUpload,
     load,
     uploadFiles,
@@ -69,6 +70,43 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
   const effectiveUploadLimits = uploadLimits ?? DEFAULT_RESEARCH_CHAIN_UPLOAD_LIMITS;
   const [confirmingUploadIds, setConfirmingUploadIds] = useState<Set<string>>(new Set());
   const [confirmedUploadIds, setConfirmedUploadIds] = useState<Set<string>>(new Set());
+  const processingUploads = uploads.filter((upload) => upload.status === "PENDING" || upload.status === "PROCESSING");
+  const [now, setNow] = useState(() => Date.now());
+  const processingSeconds = (uploadId: string) =>
+    Math.max(0, Math.round((now - (processingMeta[uploadId]?.since ?? now)) / 1000));
+  const readinessNotice = (() => {
+    if (["loading", "idle", "forbidden"].includes(state)) return null;
+    if (knowledgeState === "UNASSIGNED") return { key: "research.knowledge.unassigned", boxed: true };
+    if (knowledgeState !== KB_READY_STATE) {
+      return {
+        key: orgUnitName ? "research.knowledge.pending_group" : "research.knowledge.pending_admin",
+        params: { state: knowledgeState, team: orgUnitName },
+        boxed: true,
+      };
+    }
+    if (state === "degraded") {
+      return {
+        key: "research.knowledge.degraded",
+        params: {
+          reason: DEGRADED_REASON_LABELS[degradedReason]
+            ? t(DEGRADED_REASON_LABELS[degradedReason])
+            : t("research.knowledge.reasons.unknown"),
+        },
+        boxed: false,
+      };
+    }
+    if (!knowledgeBaseId) return { key: "research.knowledge.no_knowledge_bases", boxed: false };
+    if (connectionStatus === "not_connected") {
+      return { key: "research.knowledge.ragportal_not_connected", boxed: false };
+    }
+    return null;
+  })();
+
+  useEffect(() => {
+    if (processingUploads.length === 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [processingUploads.length]);
 
   /** Confirm one upload reference and expose a stable result on its row. */
   const confirmReference = async (upload: (typeof uploads)[number]) => {
@@ -104,41 +142,17 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
           {t("research.portal.retry")}
         </button>
       )}
-      {state === "degraded" && (
-        <p className="mt-2 text-11 text-warning-primary">
-          {t("research.knowledge.degraded", {
-            reason: DEGRADED_REASON_LABELS[degradedReason]
-              ? t(DEGRADED_REASON_LABELS[degradedReason])
-              : t("research.knowledge.reasons.unknown"),
-          })}
-        </p>
-      )}
-      {knowledgeState === "UNASSIGNED" && !["loading", "idle", "forbidden"].includes(state) && (
+      {readinessNotice && (
         <p
-          id={connectionStatus === "not_connected" ? undefined : statusId}
-          className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary"
+          id={statusId}
+          className={
+            readinessNotice.boxed
+              ? "mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary"
+              : "mt-2 text-11 text-tertiary"
+          }
           role="status"
         >
-          {t("research.knowledge.unassigned")}
-        </p>
-      )}
-      {knowledgeState !== KB_READY_STATE &&
-        knowledgeState !== "UNASSIGNED" &&
-        !["loading", "idle", "forbidden"].includes(state) && (
-          <p
-            id={connectionStatus === "not_connected" ? undefined : statusId}
-            className="mt-2 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-11 text-secondary"
-            role="status"
-          >
-            {t(orgUnitName ? "research.knowledge.pending_group" : "research.knowledge.pending_admin", {
-              state: knowledgeState,
-              team: orgUnitName,
-            })}
-          </p>
-        )}
-      {connectionStatus === "not_connected" && !["loading", "idle", "forbidden"].includes(state) && (
-        <p id={statusId} className="mt-2 text-11 text-tertiary" role="status">
-          {t("research.knowledge.ragportal_not_connected")}
+          {t(readinessNotice.key, readinessNotice.params)}
         </p>
       )}
       {actionError && (
@@ -148,15 +162,6 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
       )}
       {(state === "ready" || state === "degraded") && (
         <>
-          {!knowledgeBaseId && knowledgeState === KB_READY_STATE && (
-            <p
-              id={connectionStatus === "not_connected" ? undefined : statusId}
-              className="mt-2 text-11 text-tertiary"
-              role="status"
-            >
-              {t("research.knowledge.no_knowledge_bases")}
-            </p>
-          )}
           {uploads.length > 0 && (
             <ul className="mt-3 border-t border-subtle" role="list">
               {uploads.map((uploadRecord) => (
@@ -165,16 +170,32 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                   {uploadRecord.preview_url || uploadRecord.download_url ? (
                     <AttachmentPreviewLink
                       name={`${uploadRecord.file_name} · ${formatResearchChainFileSize(uploadRecord.file_size)}`}
+                      title={uploadRecord.file_name}
                       previewUrl={uploadRecord.preview_url}
                       downloadUrl={uploadRecord.download_url ?? ""}
-                      className="min-w-0 flex-1 text-left text-12 break-all text-primary hover:text-accent-primary"
+                      className="block w-full min-w-0 flex-1 basis-full truncate text-left text-12 text-primary hover:text-accent-primary sm:w-auto sm:basis-auto"
                     />
                   ) : (
-                    <p className="min-w-0 flex-1 text-12 break-all text-primary">
+                    <p
+                      className="w-full min-w-0 flex-1 basis-full truncate text-12 text-primary sm:w-auto sm:basis-auto"
+                      title={uploadRecord.file_name}
+                    >
                       {uploadRecord.file_name} · {formatResearchChainFileSize(uploadRecord.file_size)}
                     </p>
                   )}
-                  <span className="text-11 text-secondary">{t(researchChainUploadStatusKey(uploadRecord.status))}</span>
+                  <span className="text-11 text-secondary" role="status">
+                    {uploadRecord.status === "PENDING" || uploadRecord.status === "PROCESSING"
+                      ? processingSeconds(uploadRecord.id) >= 300
+                        ? t("research.knowledge.processing_timeout", { seconds: processingSeconds(uploadRecord.id) })
+                        : t("research.knowledge.processing_elapsed", { seconds: processingSeconds(uploadRecord.id) })
+                      : uploadRecord.status === "DEGRADED"
+                        ? t("research.knowledge.upstream_degraded")
+                        : uploadRecord.status === "FAILED"
+                          ? t("research.knowledge.parse_failed_reason", {
+                              reason: uploadRecord.error_code || t("research.common.status_unknown"),
+                            })
+                          : t(researchChainUploadStatusKey(uploadRecord.status))}
+                  </span>
                   {uploadRecord.download_url && (
                     <a
                       href={getFileURL(uploadRecord.download_url)}
@@ -195,6 +216,19 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                   >
                     <RefreshCw className="size-3.5" aria-hidden="true" />
                   </button>
+                  {(uploadRecord.status === "FAILED" || uploadRecord.status === "DEGRADED") && (
+                    <AttachmentUploadZone
+                      onFiles={(files) => void uploadFiles(files.slice(0, 1))}
+                      accept={KNOWLEDGE_MATERIAL_ACCEPT}
+                      maxSize={maxUploadSizeBytes ?? Math.max(...Object.values(effectiveUploadLimits)) * 1024 * 1024}
+                      disabled={!canUpload || uploading}
+                      uploading={uploading}
+                      variant="inline"
+                      title={t("research.knowledge.retry_upload")}
+                      uploadingTitle={t("research.knowledge.uploading")}
+                      inputAriaLabel={t("research.knowledge.retry_upload")}
+                    />
+                  )}
                   {uploadRecord.knowledge_id &&
                     (confirmedUploadIds.has(uploadRecord.id) ? (
                       <span className="px-1 py-1 text-11 text-secondary" role="status" aria-live="polite">
@@ -203,7 +237,12 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                     ) : (
                       <button
                         type="button"
-                        disabled={confirmingUploadIds.has(uploadRecord.id)}
+                        disabled={confirmingUploadIds.has(uploadRecord.id) || uploadRecord.status !== "SUCCESS"}
+                        aria-describedby={
+                          uploadRecord.status === "SUCCESS"
+                            ? undefined
+                            : `${statusId}-${uploadRecord.id}-confirm-reason`
+                        }
                         onClick={() => void confirmReference(uploadRecord)}
                         className="px-1 py-1 text-11 text-secondary hover:text-primary disabled:cursor-wait disabled:opacity-60"
                       >
@@ -214,6 +253,17 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
                         )}
                       </button>
                     ))}
+                  {uploadRecord.status !== "SUCCESS" && uploadRecord.knowledge_id && (
+                    <span id={`${statusId}-${uploadRecord.id}-confirm-reason`} className="w-full text-11 text-tertiary">
+                      {uploadRecord.status === "FAILED"
+                        ? t("research.knowledge.parse_failed_reason", {
+                            reason: uploadRecord.error_code || t("research.common.status_unknown"),
+                          })
+                        : uploadRecord.status === "DEGRADED"
+                          ? t("research.knowledge.upstream_degraded")
+                          : t("research.knowledge.waiting_for_parse")}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -223,7 +273,7 @@ export const ResearchChainKnowledgePanel = function ResearchChainKnowledgePanel(
             accept={KNOWLEDGE_MATERIAL_ACCEPT}
             multiple
             maxSize={maxUploadSizeBytes ?? Math.max(...Object.values(effectiveUploadLimits)) * 1024 * 1024}
-            disabled={!canUpload}
+            disabled={!canUpload || uploading}
             uploading={uploading}
             variant="compact"
             className="mt-3"

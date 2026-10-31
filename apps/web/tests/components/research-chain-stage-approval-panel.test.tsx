@@ -69,13 +69,16 @@ function stage(seed: Record<string, unknown>) {
         minimum_count: 1,
         submitted_count: 0,
         complete: false,
+        submission_state: "INCOMPLETE",
+        processing_count: 0,
+        failed_count: 0,
         items: [],
       },
     ],
     review_actions: [],
     latest_precheck: null,
     advisor: { user: { id: "advisor", display_name: "直接导师", email: "a@example.com" }, error: null },
-    principal_investigator: { user: null, error: null },
+    principal_investigator: { user: null, error: null, reason_code: null },
     current_review_step: null,
     capabilities: {
       schema_version: "research-capabilities.v1",
@@ -148,6 +151,7 @@ function knowledgeController(seed: Record<string, unknown> = {}) {
     degradedReason: "",
     actionError: "",
     uploading: false,
+    processingMeta: {},
     canUpload: true,
     load: vi.fn(),
     uploadFiles: mocks.uploadFiles,
@@ -181,6 +185,7 @@ async function renderPanel(
     nodes?: typeof nodes;
     expanded?: boolean;
     knowledge?: ReturnType<typeof knowledgeController>;
+    canManageOrgUnit?: boolean;
   } = {}
 ) {
   await act(async () => {
@@ -194,8 +199,9 @@ async function renderPanel(
         applicantName="研究负责人"
         defaultExpanded={options.expanded ?? false}
         knowledge={options.knowledge ?? knowledgeController()}
+        canManageOrgUnit={options.canManageOrgUnit ?? false}
         onCreateNode={onCreateNode}
-        onChanged={onChanged}
+        onStageChanged={onChanged}
       />
     );
   });
@@ -236,14 +242,28 @@ it("opens automatically from an approval-center deep link", async () => {
   expect(container.textContent).toContain("原理可行性分析");
 });
 
-it("focuses the material-link form when supplement is clicked", async () => {
+it("shows a visible blocker before submission when the required PI is missing", async () => {
   await renderPanel({ expanded: true });
 
-  await act(async () => button("补充")?.click());
+  expect(container.textContent).toContain("本阶段需要主 PI 审核");
+  expect(container.textContent).toContain("未配置唯一主 PI");
+  expect(button("提交阶段审核")?.disabled).toBe(true);
+  expect(container.textContent).toContain("审核人配置未完成，暂不能提交。");
+});
 
-  const requirementSelect = container.querySelector<HTMLSelectElement>('select[aria-label="材料要求"]');
-  expect(requirementSelect?.value).toBe("PRINCIPLE_FEASIBILITY");
-  expect(document.activeElement).toBe(requirementSelect);
+it("hides the organization settings link from users without management permission", async () => {
+  await renderPanel({ expanded: true, canManageOrgUnit: false });
+
+  expect(container.querySelector('a[href="/lab/research/settings/org"]')).toBeNull();
+  expect(container.textContent).toContain("请联系组织管理员");
+});
+
+it("opens organization settings when the current user can manage the unit", async () => {
+  await renderPanel({ expanded: true, canManageOrgUnit: true });
+
+  expect(container.querySelector<HTMLAnchorElement>('a[href="/lab/research/settings/org"]')?.textContent).toContain(
+    "打开组织设置"
+  );
 });
 
 it("links an existing upload and parses backend missing names", async () => {
@@ -255,7 +275,7 @@ it("links an existing upload and parses backend missing names", async () => {
   await renderPanel({ expanded: true });
 
   expect(button("补充")).not.toBeNull();
-  const uploadSelect = container.querySelector<HTMLSelectElement>('select[aria-label="选择课题资料"]');
+  const uploadSelect = container.querySelector<HTMLSelectElement>('select[aria-label="原理可行性分析 · 选择课题资料"]');
   expect(uploadSelect?.value).toBe("upload-1");
   await act(async () => {
     uploadSelect?.dispatchEvent(new Event("change", { bubbles: true }));
@@ -300,6 +320,9 @@ it("refreshes the submitted material count after an upload is linked", async () 
         ...initialStage.materials[0],
         submitted_count: 1,
         complete: true,
+        submission_state: "READY",
+        processing_count: 0,
+        failed_count: 0,
         items: [
           {
             id: "material-item-1",
@@ -325,7 +348,7 @@ it("refreshes the submitted material count after an upload is linked", async () 
         preferredNodeId="node-1"
         defaultExpanded
         knowledge={knowledgeController()}
-        onChanged={() => setCurrentStage(refreshedStage)}
+        onStageChanged={() => setCurrentStage(refreshedStage)}
       />
     );
   }
@@ -410,6 +433,9 @@ it("marks an outdated stage-three precheck and blocks submission", async () => {
         minimum_count: 1,
         submitted_count: 1,
         complete: true,
+        submission_state: "READY",
+        processing_count: 0,
+        failed_count: 0,
         items: [
           {
             id: "item-1",
@@ -432,7 +458,33 @@ it("marks an outdated stage-three precheck and blocks submission", async () => {
   expect(mocks.runChainStagePrecheck).toHaveBeenCalledWith("lab", "chain-1", "TOPIC_EVALUATION");
 });
 
-it("keeps only one advisor approve action when PI review was declared", async () => {
+it("sends an explicit student declaration for a conditional stage", async () => {
+  const conditional = stage({
+    stage_code: "EXPERIMENT",
+    pi_policy: "CONDITIONAL_PI",
+    materials: [
+      {
+        ...stage({}).materials[0],
+        submitted_count: 1,
+        complete: true,
+        submission_state: "READY",
+      },
+    ],
+  });
+  const experimentNodes = [{ ...nodes[0], id: "experiment-node", node_type: "EXPERIMENT", title: "正式实验" }];
+  mocks.submitChainStage.mockResolvedValue({});
+  await renderPanel({ stage: conditional, nodes: experimentNodes, expanded: true });
+
+  await act(async () => button("提交阶段审核")?.click());
+
+  expect(mocks.submitChainStage).toHaveBeenCalledWith("lab", "chain-1", "EXPERIMENT", {
+    node_id: "experiment-node",
+    requires_pi: false,
+    escalation_reason: undefined,
+  });
+});
+
+it("sends an explicit boolean when the advisor chooses conditional escalation", async () => {
   const conditional = stage({
     stage_code: "EXPERIMENT",
     status: "AWAITING_ADVISOR",
@@ -456,7 +508,7 @@ it("keeps only one advisor approve action when PI review was declared", async ()
 
   expect(container.textContent).toContain("申请人: 研究负责人");
   expect(button("通过并转主 PI")).not.toBeNull();
-  expect(button("导师通过，不转 PI")).toBeUndefined();
+  expect(button("通过（不转 PI）")).not.toBeNull();
   expect(button("驳回")?.disabled).toBe(true);
 
   const textarea = container.querySelector("textarea")!;
@@ -471,6 +523,13 @@ it("keeps only one advisor approve action when PI review was declared", async ()
     action: "APPROVE",
     comment: "同意启动",
     escalate_to_pi: true,
+  });
+
+  await act(async () => button("通过（不转 PI）")?.click());
+  expect(mocks.reviewChainStage).toHaveBeenLastCalledWith("lab", "chain-1", "EXPERIMENT", {
+    action: "APPROVE",
+    comment: undefined,
+    escalate_to_pi: false,
   });
 });
 

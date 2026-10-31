@@ -8,6 +8,11 @@ import { AssistantService } from "@/services/assistant";
 // oxlint-disable-next-line import/no-unassigned-import -- Use the application's actual layout styles.
 import "../../styles/globals.css";
 
+const params = new URLSearchParams(window.location.search);
+const theme = ["light", "dark", "light-contrast", "dark-contrast"].includes(params.get("theme") ?? "")
+  ? (params.get("theme") as "light" | "dark" | "light-contrast" | "dark-contrast")
+  : "light";
+
 // Keep the browser fixture isolated from backend services.
 AssistantService.prototype.getHistory = async () => [
   { role: "user", content: "请用表格展示这些能力" },
@@ -38,7 +43,7 @@ store.aiAssistant.setProvider("cloud");
 store.aiAssistant.open();
 
 await setLanguage("zh-CN");
-document.documentElement.dataset.theme = "light";
+document.documentElement.dataset.theme = theme;
 createRoot(document.getElementById("root")!).render(
   <StoreProvider>
     <TranslationProvider>

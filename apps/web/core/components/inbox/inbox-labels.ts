@@ -28,6 +28,7 @@ export const INBOX_SOURCE_LABELS: Record<string, string> = {
   research_chain_task: "科研任务",
   research_paper_review: "论文评审",
   research_stage_review: "阶段评审",
+  research_chain_stage: "科研链阶段",
   research_stage: "科研阶段",
   research_experiment: "实验记录",
   research_experiment_amendment: "实验修订",

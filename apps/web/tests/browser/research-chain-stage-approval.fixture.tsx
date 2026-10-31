@@ -15,7 +15,7 @@ const decision = (allowed: boolean) => ({ allowed, reason_code: "fixture", reaso
 
 const fixtureUpload = {
   id: "fixture-upload",
-  status: "PROCESSING" as const,
+  status: "SUCCESS" as const,
   knowledge_id: "fixture-knowledge",
   knowledge_base_id: "fixture-kb",
   file_name: "formal-experiment-plan.pdf",
@@ -52,6 +52,9 @@ function completeMaterial(id: string, code: string, title: string) {
     minimum_count: 1,
     submitted_count: 1,
     complete: true,
+    submission_state: "READY",
+    processing_count: 0,
+    failed_count: 0,
     items: [
       {
         id: `${id}-item`,
@@ -84,6 +87,9 @@ function missingMaterial(id: string, code: string, title: string) {
     minimum_count: 1,
     submitted_count: 0,
     complete: false,
+    submission_state: "INCOMPLETE",
+    processing_count: 0,
+    failed_count: 0,
     items: [],
   };
 }
@@ -222,6 +228,20 @@ const scenarios: Record<string, { label: string; stage: TResearchChainStageAppro
     }),
     nodes: [fixtureNode("fixture-node", "TOPIC_EVALUATION", "选题评估")],
   },
+  "pi-missing": {
+    label: "主 PI 未配置 / 权限分流",
+    stage: baseStage({
+      stage_code: "SUMMARY",
+      sort_order: 10,
+      pi_policy: "ALWAYS_PI",
+      principal_investigator: { user: null, error: "fixture", reason_code: null },
+      materials: [
+        completeMaterial("material-result", "MAIN_RESULTS", "主要结果"),
+        completeMaterial("material-sop", "SOP", "SOP"),
+      ],
+    }),
+    nodes: [fixtureNode("fixture-node", "SUMMARY", "课题总结")],
+  },
   "awaiting-advisor": {
     label: "待直接导师审核",
     stage: baseStage({
@@ -280,6 +300,7 @@ const scenario = scenarios[scenarioName] ?? scenarios.missing;
 /** 用共享资料控制器渲染阶段面板，验证上传与关联的真实数据流。 */
 function StageApprovalFixture() {
   const knowledge = useResearchChainKnowledge("fixture-workspace", "fixture-chain", "fixture-node");
+  const canManageOrgUnit = new URLSearchParams(window.location.search).get("can_manage_org") === "1";
   return (
     <ResearchChainStageApprovalPanel
       workspaceSlug="fixture-workspace"
@@ -290,8 +311,9 @@ function StageApprovalFixture() {
       applicantName="研究负责人"
       defaultExpanded={new URLSearchParams(window.location.search).get("expanded") === "1"}
       knowledge={knowledge}
+      canManageOrgUnit={canManageOrgUnit}
       onCreateNode={() => undefined}
-      onChanged={() => undefined}
+      onStageChanged={() => undefined}
     />
   );
 }

@@ -16,6 +16,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalPosition, EModalWidth, Input, ModalCore } from "@plane/ui";
 // components
 import { getResearchErrorKey } from "@/components/research/common/error-messages";
+import { ResearchOrgService } from "@/services/research/org.service";
 import type { TResearchProject } from "@/services/research/project.service";
 // hooks
 import { useResearch } from "@/hooks/store/use-research";
@@ -28,6 +29,8 @@ type Props = {
   onClose: () => void;
   onUpdated?: (project: TResearchProject) => Promise<void> | void;
 };
+
+const orgService = new ResearchOrgService();
 
 /** 打开科研项目创建/编辑弹窗，供项目列表和研究链工作台共用。 */
 export const ResearchProjectDialog = observer(function ResearchProjectDialog({
@@ -48,6 +51,7 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
   const [orgUnit, setOrgUnit] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [piConfigurationWarning, setPiConfigurationWarning] = useState(false);
   const isEditing = Boolean(project);
   const researchChainEnabled = Boolean(research.identity?.sections?.research_chain);
   const orgUnits = research.getOrgUnits(workspaceSlug);
@@ -86,6 +90,40 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
   useEffect(() => {
     if (!isEditing && !orgUnit && primaryOrgUnit) setOrgUnit(primaryOrgUnit);
   }, [isEditing, orgUnit, primaryOrgUnit]);
+
+  useEffect(() => {
+    if (!isOpen || isEditing || isTeamProject || !researchChainEnabled || !orgUnit) {
+      setPiConfigurationWarning(false);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      try {
+        const payload = await orgService.getOrgUnitMembers(workspaceSlug, orgUnit);
+        if (!active) return;
+        const today = new Date();
+        const effective = payload.results.filter((membership) => {
+          const from = membership.effective_from ? new Date(membership.effective_from) : null;
+          const to = membership.effective_to ? new Date(membership.effective_to) : null;
+          return (
+            (membership.org_role === "PI" || membership.org_role === "OWNER") &&
+            (!from || from <= today) &&
+            (!to || to >= today)
+          );
+        });
+        const primary = effective.filter((membership) => membership.is_primary);
+        const candidates = (primary.length > 0 ? primary : effective).filter(
+          (membership) => membership.user !== currentUserId
+        );
+        setPiConfigurationWarning(candidates.length !== 1);
+      } catch {
+        if (active) setPiConfigurationWarning(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [currentUserId, isEditing, isOpen, isTeamProject, orgUnit, researchChainEnabled, workspaceSlug]);
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim() || (requiresOrgUnit && !orgUnit)) return;
@@ -222,6 +260,12 @@ export const ResearchProjectDialog = observer(function ResearchProjectDialog({
               ))}
             </select>
           </label>
+          {piConfigurationWarning && (
+            <div className="rounded-md border border-subtle bg-surface-2 px-3 py-2 sm:col-span-2" role="status">
+              <p className="text-12 font-medium text-primary">{t("research.projects.pi_warning_title")}</p>
+              <p className="mt-1 text-11 text-secondary">{t("research.projects.pi_warning_body")}</p>
+            </div>
+          )}
           {canEditVisibility && (
             <label className="flex flex-col gap-1 text-12 text-secondary">
               <span>{t("research.projects.fields.chain_visibility")}</span>
