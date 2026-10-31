@@ -159,11 +159,6 @@ def check_grant(grant, workspace, user, *, action=None, lock=False):
 def issue_grant(*, workspace, user, label, actions, ttl_days):
     consistency_barrier()
     check_actor(workspace, user)
-    from plane.research.services.report_workflow import resolve_report_context
-
-    context = resolve_report_context(workspace=workspace, actor=user, payload={})
-    if context.report_org_unit is None:
-        raise WeeklyReportError("report_org_required", "A primary organisation assignment is required.", 403)
     if (
         not isinstance(label, str)
         or not 1 <= len(label.strip()) <= 100
@@ -176,6 +171,12 @@ def issue_grant(*, workspace, user, label, actions, ttl_days):
         or not valid_lifetime(ttl_days)
     ):
         raise WeeklyReportError("invalid_arguments", "Choose a name, explicit actions and an allowed lifetime.")
+    if set(actions) & OWN_ACTIONS:
+        from plane.research.services.report_workflow import resolve_report_context
+
+        context = resolve_report_context(workspace=workspace, actor=user, payload={})
+        if context.report_org_unit is None:
+            raise WeeklyReportError("report_org_required", "A primary organisation assignment is required.", 403)
     if (
         db.ReportAgentGrant.objects.filter(
             unexpired_connections(), workspace=workspace, user=user, revoked_at__isnull=True

@@ -109,10 +109,8 @@ class WeeklyReportService:
         }
 
     def authenticate_read(self, *, lock=False):
-        """Authenticate read tools while retaining compatibility with legacy write grants."""
-        actions = set(self.grant.allowed_actions)
-        action = "read_reports" if "read_reports" in actions or actions & {"return", "accept"} else None
-        self.authenticate(action, lock=lock)
+        """Authenticate catalog reads without broadening legacy write grants."""
+        self.authenticate("read_reports", lock=lock)
 
     def visible_report(self, report_id, *, lock=False):
         """Load one report through the native visibility matrix.

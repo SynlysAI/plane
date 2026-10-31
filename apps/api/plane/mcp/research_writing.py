@@ -46,6 +46,7 @@ from plane.research.services.chain_tasks import (
     cancel_task,
     chain_writer,
     complete_task,
+    review_only_actor,
     reopen_task,
     update_task,
     validate_assignable_user,
@@ -692,7 +693,13 @@ class UnifiedResearchWriteService:
         reason = args.get("reason", "")
         if action in {"FAIL", "RETURN"} and not reason:
             raise ResearchReadError("invalid_arguments", "A reason is required for FAIL and RETURN.", 422)
-        if not (chain_writer(workspace, connection.owner, node.chain) or node.assignee_id == connection.owner.pk):
+        if not (
+            chain_writer(workspace, connection.owner, node.chain)
+            or (
+                node.assignee_id == connection.owner.pk
+                and not review_only_actor(workspace, connection.owner, node.chain)
+            )
+        ):
             raise ResearchReadError("permission_denied", "Only node operators may transition this node.", 403)
         if node.chain.status != ResearchChain.Status.ACTIVE:
             raise ResearchReadError("state_conflict", "Chain is not active.", 409)

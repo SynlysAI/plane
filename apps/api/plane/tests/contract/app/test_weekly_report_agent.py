@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db import models as db
+from plane.research.services.weekly_report_catalog import VERSION
 from plane.research.services.weekly_report_errors import WeeklyReportError
 from plane.research.services.weekly_report_operations import WeeklyReportService
 from plane.research.services.weekly_report_policy import issue_grant
@@ -171,6 +172,29 @@ def test_routed_reviewer_lists_reads_returns_and_accepts_reports(env):
     committed = reviewer.execute("execute_weekly_report_operation", {"operation_id": accepted["operation_id"]})
     assert committed["result"]["status"] == "ACCEPTED" and committed["readback"] == "verified"
     assert db.ReportReviewLog.objects.filter(report_id=report_id, action="ACCEPT").exists()
+
+
+def test_legacy_write_grant_does_not_gain_report_catalog_reads(env):
+    """旧 save/submit 周报连接保留原能力，不自动获得全量目录读取。"""
+    grant, _ = connection(env)
+    service = WeeklyReportService(grant=grant)
+    assert service.execute("get_weekly_report_context", {"period_offset": -1})["contract_version"] == VERSION
+    with pytest.raises(WeeklyReportError) as error:
+        service.execute("list_weekly_reports", {"scope": "mine"})
+    assert error.value.code == "scope_denied"
+
+
+def test_review_only_connection_does_not_require_personal_report_context(env):
+    """纯审阅连接不要求审阅者本人拥有可申报的科研档案。"""
+    db.OrgUnitMember.objects.filter(workspace=env["workspace"], user=env["advisor"]).update(is_primary=False)
+    grant, _ = issue_grant(
+        workspace=env["workspace"],
+        user=env["advisor"],
+        label="纯审阅",
+        actions=["read_reports", "return", "accept"],
+        ttl_days=7,
+    )
+    assert grant.allowed_actions == ["accept", "read_reports", "return"]
 
 
 def test_owner_can_withdraw_a_submitted_report_through_proposal(env):
@@ -380,7 +404,7 @@ def test_management_issue_list_revoke_and_machine_workspace_isolation(env):
     machine.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=secret)
     catalogue = machine.get(issued.data["mcp_path"].replace("mcp/", "tools/"))
     assert catalogue.status_code == 200, catalogue.data
-    assert len(catalogue.data["tools"]) == 8
+    assert len(catalogue.data["tools"]) == 5
     other = machine.get("/api/research/workspaces/wrong/weekly-report-agent/tools/")
     assert other.status_code == 403
     assert machine.post(root + "connections/", {"label": "forbidden"}, format="json").status_code in (401, 403)

@@ -258,7 +258,10 @@ DESCRIPTIONS = {
 def tools_for(actions):
     tools = []
     mutable = bool(set(actions) & {"save_draft", "submit", "withdraw", "return", "accept"})
+    catalog_read = "read_reports" in actions
     for name, definition in SCHEMAS.items():
+        if name in {"list_weekly_reports", "get_weekly_report", "list_weekly_report_history"} and not catalog_read:
+            continue
         if (
             name
             in {
