@@ -499,6 +499,8 @@ def tools_for(connection):
     result = deepcopy(
         list(TOOLS + (ADMIN_TOOLS if administrative else ()) + (PROJECT_LIFECYCLE_TOOLS if administrative else ()))
     )
+    if research and not administrative:
+        result.append(deepcopy(next(tool for tool in ADMIN_TOOLS if tool["name"] == "plane_get_write_result")))
     if research:
         for item in deepcopy(RESEARCH_TOOLS + RESEARCH_PROJECT_TOOLS):
             current = next((tool for tool in result if tool["name"] == item["name"]), None)

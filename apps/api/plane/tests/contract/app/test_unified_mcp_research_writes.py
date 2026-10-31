@@ -186,6 +186,109 @@ def test_research_project_chain_and_node_lifecycle(scientific):
     assert profile.workflow_status == "DELETED"
 
 
+def test_research_only_connection_can_recover_lifecycle_receipts(scientific):
+    """科研-only 写连接也能看到并使用通用创建回执工具。"""
+    e = scientific
+    _, client = issued(e, domains={"research": "read_write"})
+    names, cursor = [], None
+    while True:
+        response = rpc(client, "tools/list", {"cursor": cursor} if cursor else {}).json()["result"]
+        names.extend(tool["name"] for tool in response["tools"])
+        cursor = response.get("nextCursor")
+        if not cursor:
+            break
+    assert "plane_get_write_result" in names
+    assert "plane_create_task" not in names
+
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "chain_id": str(e["chain"].pk),
+        "request_id": "research-only-node",
+        "title": "科研专用连接节点",
+        "node_type": "GENERAL_RESEARCH",
+    }
+    created = invoke(client, "plane_create_research_node", args)
+    recovered = invoke(
+        client,
+        "plane_get_write_result",
+        {"workspace_slug": e["workspace"].slug, "request_id": args["request_id"]},
+    )
+    assert recovered["object_type"] == "ResearchChainNode"
+    assert recovered["object_id"] == created["target"]["id"]
+    assert recovered["readback"] == "verified"
+
+
+def test_research_chain_replay_conflicts_before_already_exists(scientific):
+    """同一链创建 request_id 改变参数时必须冲突，而非误报已存在。"""
+    e = scientific
+    project = db.Project.objects.create(workspace=e["workspace"], name="空链项目", identifier="EMPTY")
+    db.ResearchProjectProfile.objects.create(
+        project=project,
+        workspace=e["workspace"],
+        owner=e["owner"],
+        research_type="RESEARCH_PROJECT",
+        chain_kind="RESEARCH_CHAIN",
+        chain_visibility="PRIVATE",
+    )
+    args = {
+        "workspace_slug": e["workspace"].slug,
+        "project_id": str(project.pk),
+        "request_id": "empty-chain-once",
+    }
+    assert invoke(e["client"], "plane_create_research_chain", args)["status"] == "COMMITTED"
+    invoke(
+        e["client"],
+        "plane_create_research_chain",
+        {**args, "visibility": "PRIVATE"},
+        error="idempotency_conflict",
+    )
+
+
+def test_research_node_assignee_and_unique_constraints_use_native_rules(scientific):
+    """节点 assignee 必须可分配，重复父子迭代返回原生状态冲突。"""
+    e = scientific
+    parent = db.ResearchChainNode.objects.create(
+        chain=e["chain"],
+        node_type="GENERAL_RESEARCH",
+        title="父节点",
+        request_id=uuid4().hex,
+        payload_hash="a" * 64,
+    )
+    common = {
+        "workspace_slug": e["workspace"].slug,
+        "chain_id": str(e["chain"].pk),
+        "parent_node_id": str(parent.pk),
+        "loop_iteration": 1,
+        "node_type": "GENERAL_RESEARCH",
+        "title": "重复子节点",
+    }
+    invoke(
+        e["client"],
+        "plane_create_research_node",
+        {**common, "request_id": "invalid-assignee", "assignee_id": str(uuid4())},
+        error="permission_denied",
+    )
+    first = invoke(e["client"], "plane_create_research_node", {**common, "request_id": "unique-child-1"})
+    invoke(
+        e["client"],
+        "plane_create_research_node",
+        {**common, "request_id": "unique-child-2"},
+        error="state_conflict",
+    )
+    assert e["chain"].nodes.filter(parent_node=parent, loop_iteration=1).count() == 1
+    invoke(
+        e["client"],
+        "plane_update_research_node",
+        {
+            "workspace_slug": e["workspace"].slug,
+            "node_id": first["target"]["id"],
+            "request_id": "invalid-node-assignee",
+            "changes": {"assignee_id": str(uuid4())},
+        },
+        error="permission_denied",
+    )
+
+
 @pytest.mark.parametrize("action", sorted(ACTIONS))
 def test_five_native_proposal_actions_commit_once_without_child_grants_or_approval(scientific, action):
     e = scientific

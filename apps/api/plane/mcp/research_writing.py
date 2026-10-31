@@ -4,7 +4,7 @@ import logging
 from datetime import timezone as datetime_timezone
 
 from crum import impersonate
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -43,6 +43,7 @@ from plane.research.services.chain_tasks import (
     _ensure_task_parent_writable,
     _replay_task_event,
     actor_can_cancel_task,
+    assignable_project_members,
     cancel_task,
     chain_writer,
     complete_task,
@@ -339,6 +340,11 @@ class UnifiedResearchWriteService:
             raise ResearchReadError("not_found", "Research project not found.", 404)
         return profile
 
+    @staticmethod
+    def profile_chain_id(profile):
+        """Return a project's chain ID without relying on a nullable reverse cache."""
+        return ResearchChain.objects.filter(project_id=profile.project_id).values_list("pk", flat=True).first()
+
     @transaction.atomic
     def update_research_project(self, args):
         connection, reader, workspace = self.begin(args["workspace_slug"])
@@ -403,7 +409,7 @@ class UnifiedResearchWriteService:
             resource_id=profile.pk,
             metadata={"project": str(project.pk), "source": "mcp"},
         )
-        chain_id = getattr(profile.project.research_chain, "pk", None)
+        chain_id = self.profile_chain_id(profile)
         return {
             "schema_version": VERSION,
             "status": "COMMITTED",
@@ -432,7 +438,7 @@ class UnifiedResearchWriteService:
         profile.is_active = restore
         profile.save(update_fields=["workflow_status", "is_active", "updated_at"])
         sync_chain_lifecycle(profile)
-        chain_id = getattr(profile.project.research_chain, "pk", None)
+        chain_id = self.profile_chain_id(profile)
         record_audit_event(
             workspace=workspace,
             actor=connection.owner,
@@ -467,7 +473,7 @@ class UnifiedResearchWriteService:
         if not is_research_admin(connection.owner, workspace.pk) and profile.owner_id != connection.owner.pk:
             raise ResearchReadError("permission_denied", "Only the owner or research admin may delete.", 403)
         project_id = profile.project_id
-        chain_id = getattr(profile.project.research_chain, "pk", None)
+        chain_id = self.profile_chain_id(profile)
         delete_research_project(profile, self.request)
         return {
             "schema_version": VERSION,
@@ -501,20 +507,9 @@ class UnifiedResearchWriteService:
             raise ResearchReadError("permission_denied", "Only the owner or research admin may create a chain.", 403)
         if profile.chain_kind != ResearchProjectProfile.ChainKind.RESEARCH_CHAIN:
             raise ResearchReadError("invalid_arguments", "Only research-chain projects are supported.", 422)
-        if getattr(profile.project.research_chain, "pk", None) is not None:
-            return {
-                "schema_version": VERSION,
-                "status": "COMMITTED",
-                "execution_mode": "direct",
-                "data": serialize_profile(profile),
-                "readback": "already_exists",
-            }  # noqa: E501
-        visibility = args.get("visibility", profile.chain_visibility)
-        if visibility != profile.chain_visibility:
-            raise ResearchReadError("invalid_arguments", "Visibility must match the research project.", 422)
         request_hash = digest(
             {"tool": "plane_create_research_chain", "workspace": str(workspace.pk), "arguments": args}
-        )  # noqa: E501
+        )
         receipt = self.replay(workspace, args, "plane_create_research_chain", request_hash)
         if receipt is not None:
             chain = ResearchChain.objects.get(pk=receipt.object_id)
@@ -525,7 +520,18 @@ class UnifiedResearchWriteService:
                 "receipt_id": str(receipt.pk),
                 "data": reader.chain_data(chain, workspace),
                 "readback": "verified",
+            }
+        if self.profile_chain_id(profile) is not None:
+            return {
+                "schema_version": VERSION,
+                "status": "COMMITTED",
+                "execution_mode": "direct",
+                "data": serialize_profile(profile),
+                "readback": "already_exists",
             }  # noqa: E501
+        visibility = args.get("visibility", profile.chain_visibility)
+        if visibility != profile.chain_visibility:
+            raise ResearchReadError("invalid_arguments", "Visibility must match the research project.", 422)
         chain = ResearchChain.objects.create(
             project=profile.project,
             workspace=workspace,
@@ -577,6 +583,9 @@ class UnifiedResearchWriteService:
             raise ResearchReadError("permission_denied", "Current role cannot append to this chain.", 403)
         if chain.status != ResearchChain.Status.ACTIVE:
             raise ResearchReadError("state_conflict", "Chain is not active.", 409)
+        assignee_id = args.get("assignee_id") or connection.owner.pk
+        if not assignable_project_members(workspace, chain).filter(member_id=assignee_id).exists():
+            raise ResearchReadError("permission_denied", "Assignee is not available for this research chain.", 403)
         node_type = args["node_type"]
         if NODE_TYPE_PATTERN.fullmatch(node_type) is None:
             raise ResearchReadError("invalid_arguments", "Invalid node type.", 422)
@@ -601,31 +610,40 @@ class UnifiedResearchWriteService:
                 "readback": "verified",
             }  # noqa: E501
         content_hash = digest({"arguments": args})
-        with impersonate(connection.owner):
-            node = ResearchChainNode.objects.create(
-                chain=chain,
-                node_type=node_type,
-                title=args["title"],
-                parent_node=parent,
-                loop_iteration=iteration,
-                assignee_id=args.get("assignee_id") or connection.owner.pk,
-                request_id=args["request_id"],
-                payload_hash=content_hash,
-                created_by=connection.owner,
-            )
-            event_id = digest({"request_id": args["request_id"], "kind": "NODE_CREATED"})
-            ResearchChainEvent.objects.create(
-                chain=chain,
-                node=node,
-                event_id=event_id,
-                request_id=f"node-created-{event_id[:48]}",
-                actor=connection.owner,
-                event_type="NODE_CREATED",
-                occurred_at=timezone.now(),
-                summary=f"Created node: {node.title}",
-                content_hash=digest({"request_id": args["request_id"], "kind": "NODE_CREATED"}),
-            )
-            mark_chain_stage_in_progress(node)
+        try:
+            with impersonate(connection.owner):
+                node = ResearchChainNode.objects.create(
+                    chain=chain,
+                    node_type=node_type,
+                    title=args["title"],
+                    parent_node=parent,
+                    loop_iteration=iteration,
+                    assignee_id=assignee_id,
+                    request_id=args["request_id"],
+                    payload_hash=content_hash,
+                    created_by=connection.owner,
+                )
+                event_id = digest({"request_id": args["request_id"], "kind": "NODE_CREATED"})
+                ResearchChainEvent.objects.create(
+                    chain=chain,
+                    node=node,
+                    event_id=event_id,
+                    request_id=f"node-created-{event_id[:48]}",
+                    actor=connection.owner,
+                    event_type="NODE_CREATED",
+                    occurred_at=timezone.now(),
+                    summary=f"Created node: {node.title}",
+                    content_hash=digest({"request_id": args["request_id"], "kind": "NODE_CREATED"}),
+                )
+                mark_chain_stage_in_progress(node)
+        except IntegrityError:
+            logger.exception("Unified research MCP node creation hit a native uniqueness constraint")
+            raise UnifiedWriteError(
+                "state_conflict",
+                "A native uniqueness constraint rejected this write.",
+                409,
+                {"write_outcome": "rolled_back"},
+            ) from None
         record_audit_event(
             workspace=workspace,
             actor=connection.owner,
@@ -661,7 +679,10 @@ class UnifiedResearchWriteService:
                 setattr(node, field, value)
                 fields.append(field)
         if "assignee_id" in args["changes"]:
-            node.assignee_id = args["changes"]["assignee_id"]
+            assignee_id = args["changes"]["assignee_id"]
+            if not assignable_project_members(workspace, node.chain).filter(member_id=assignee_id).exists():
+                raise ResearchReadError("permission_denied", "Assignee is not available for this research chain.", 403)
+            node.assignee_id = assignee_id
             fields.append("assignee")
         if not fields:
             raise ResearchReadError("invalid_arguments", "No node changes were supplied.", 422)
