@@ -128,6 +128,8 @@ ADMIN_FIELDS = {
     "description_html": {"type": "string", "minLength": 0, "maxLength": 30000},
     "priority": enum("urgent", "high", "medium", "low", "none"),
     "assignee_ids": {"type": "array", "items": UUID, "maxItems": 1, "uniqueItems": True},
+    "module_ids": {"type": "array", "items": UUID, "maxItems": 20, "uniqueItems": True},
+    "label_ids": {"type": "array", "items": UUID, "maxItems": 20, "uniqueItems": True},
     "start_date": {"type": ["string", "null"], "format": "date"},
     "target_date": {"type": ["string", "null"], "format": "date"},
 }
@@ -604,7 +606,7 @@ def validate(name, arguments):
                 key: str(UUIDValue(item))
                 if key in {"id", "resource_id", "state_id", "assignee_id", "assignee", "task_id", "operation_id"}
                 else [str(UUIDValue(identity)) for identity in item]
-                if key == "assignee_ids"
+                if key in {"assignee_ids", "module_ids", "label_ids"}
                 else normalize(item)
                 for key, item in value.items()
             }
@@ -612,4 +614,8 @@ def validate(name, arguments):
             return [normalize(item) for item in value]
         return value
 
-    return normalize(deepcopy(arguments))
+    value = normalize(deepcopy(arguments))
+    for key in ("assignee_ids", "module_ids", "label_ids"):
+        if key in value:
+            value[key] = sorted(value[key])
+    return value

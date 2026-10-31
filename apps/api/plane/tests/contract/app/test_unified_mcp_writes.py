@@ -232,6 +232,66 @@ def test_project_lifecycle_and_task_deletion_use_native_roles(writable):
     assert not db.Project.objects.filter(pk=project_id).exists()
 
 
+def test_required_modules_and_labels_are_selectable_through_mcp(writable):
+    """必填模块与标签通过能力发现和原生 serializer 进入 MCP 创建/更新。"""
+    e = writable
+    project = e["projects"][0]
+    project.module_view = True
+    project.is_module_required = True
+    project.is_label_required = True
+    project.save(update_fields=["module_view", "is_module_required", "is_label_required"])
+    module = db.Module.objects.create(workspace=e["workspace"], project=project, name="测试耗材", created_by=e["owner"])
+    label = db.Label.objects.create(workspace=e["workspace"], project=project, name="试剂组", created_by=e["owner"])
+
+    capabilities = invoke(
+        e["client"],
+        "plane_get_context",
+        {"target": reference(e, "Project", project), "section": "capabilities"},
+    )
+    assert capabilities["data"]["required_fields"]["create_task"] == [
+        "parent",
+        "request_id",
+        "name",
+        "module_ids",
+        "label_ids",
+    ]
+    assert {item["id"] for item in capabilities["data"]["module_options"]} >= {str(module.pk)}
+    assert {item["id"] for item in capabilities["data"]["label_options"]} >= {str(label.pk)}
+
+    invoke(e["client"], "plane_create_task", create_args(e, request_id="required-missing"), error="invalid_arguments")
+    created = invoke(
+        e["client"],
+        "plane_create_task",
+        create_args(
+            e,
+            request_id="required-relations",
+            module_ids=[str(module.pk)],
+            label_ids=[str(label.pk)],
+        ),
+    )
+    assert created["readback"] == "verified"
+    issue = db.Issue.objects.get(pk=created["object_id"])
+    assert {str(row.module_id) for row in issue.issue_module.all()} == {str(module.pk)}
+    assert {str(row.label_id) for row in issue.label_issue.all()} == {str(label.pk)}
+
+    replacement_label = db.Label.objects.create(
+        workspace=e["workspace"], project=project, name="耗材组", created_by=e["owner"]
+    )
+    updated = invoke(
+        e["client"],
+        "plane_update_task",
+        {
+            "target": reference(e, "Issue", issue),
+            "changes": {
+                "module_ids": [str(module.pk)],
+                "label_ids": [str(replacement_label.pk)],
+            },
+        },
+    )
+    assert updated["readback"] == "verified"
+    assert {str(row.label_id) for row in issue.label_issue.all()} == {str(replacement_label.pk)}
+
+
 @pytest.mark.parametrize("tool", ["plane_create_task", "plane_add_comment"])
 def test_duplicate_replay_conflict_and_result_lookup(writable, native_effects, tool):
     e = writable

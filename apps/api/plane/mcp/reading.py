@@ -253,19 +253,32 @@ class UnifiedReadService:
         return actions
 
     def administrative_capabilities(self, workspace, kind, target):
-        from plane.db.models import State, User
+        from plane.db.models import Label, Module, State, User
         from plane.mcp.catalog import ADMIN_FIELDS
         from plane.utils.administrative_projects import assignable_project_member_ids
 
         project = target if kind == "Project" else target.project
         actions = self.actions(target, workspace, "administrative", kind)
         members = User.objects.filter(pk__in=assignable_project_member_ids(project))
-        if not {"create_task", "update_task"} & set(actions):
+        relation_write_available = bool({"create_task", "update_task"} & set(actions))
+        if not relation_write_available:
             members = members.none()
+        modules = (
+            Module.objects.filter(project=project, archived_at__isnull=True, deleted_at__isnull=True)
+            if relation_write_available
+            else Module.objects.none()
+        )
+        labels = (
+            Label.objects.filter(project=project, deleted_at__isnull=True)
+            if relation_write_available
+            else Label.objects.none()
+        )
         if "query" in self.args:
             members = members.filter(
                 Q(display_name__icontains=self.args["query"]) | Q(first_name__icontains=self.args["query"])
             )
+            modules = modules.filter(name__icontains=self.args["query"])
+            labels = labels.filter(name__icontains=self.args["query"])
         states = (
             State.objects.filter(project=project, workspace=workspace)
             if "set_state" in actions
@@ -281,6 +294,16 @@ class UnifiedReadService:
                         "id": str(row.pk),
                         "display_name": row.display_name or row.first_name or str(row.pk),
                     },
+                ),
+                (
+                    "module",
+                    modules,
+                    lambda row: {"option_type": "module", "id": str(row.pk), "name": row.name, "action": "module_ids"},
+                ),
+                (
+                    "label",
+                    labels,
+                    lambda row: {"option_type": "label", "id": str(row.pk), "name": row.name, "action": "label_ids"},
                 ),
                 (
                     "state",
@@ -302,10 +325,14 @@ class UnifiedReadService:
                 "editable_fields": list(ADMIN_FIELDS) if "update_task" in actions else [],
                 "create_fields": list(ADMIN_FIELDS) if "create_task" in actions else [],
                 "assignable_users": [option for option in options["data"] if option["option_type"] == "assignee"],
+                "module_options": [option for option in options["data"] if option["option_type"] == "module"],
+                "label_options": [option for option in options["data"] if option["option_type"] == "label"],
                 "state_options": state_options,
                 "transition_options": state_options,
                 "required_fields": {
-                    "create_task": ["parent", "request_id", "name"],
+                    "create_task": ["parent", "request_id", "name"]
+                    + (["module_ids"] if project.is_module_required else [])
+                    + (["label_ids"] if project.is_label_required else []),
                     "add_comment": ["target", "request_id", "comment_html"],
                     "set_state": ["target", "action", "state_id"],
                 },
@@ -315,16 +342,21 @@ class UnifiedReadService:
         }
 
     def project_data(self, project, workspace):
-        return self.base(
-            project,
-            workspace,
-            "administrative",
-            "Project",
-            project.name,
-            self.reference("administrative", "Workspace", workspace, workspace),
-            f"{web_origin()}/{workspace.slug}/projects/{project.pk}/",
-            None,
-        )
+        return {
+            **self.base(
+                project,
+                workspace,
+                "administrative",
+                "Project",
+                project.name,
+                self.reference("administrative", "Workspace", workspace, workspace),
+                f"{web_origin()}/{workspace.slug}/projects/{project.pk}/",
+                None,
+            ),
+            "module_view": project.module_view,
+            "is_module_required": project.is_module_required,
+            "is_label_required": project.is_label_required,
+        }
 
     def chain_data(self, chain, workspace):
         reader = self.reader(workspace)

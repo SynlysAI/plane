@@ -38,6 +38,7 @@ from plane.mcp.reading import VERSION, UnifiedReadService
 from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.audit import record_audit_event
 from plane.utils.issue_mutations import issue_action_allowed, save_issue, save_issue_comment
+from plane.utils.work_item_required_fields import active_issue_label_ids, active_issue_module_ids
 from plane.utils.administrative_projects import (
     get_or_create_default_administrative_organization,
     user_can_manage_administrative_project,
@@ -59,6 +60,8 @@ def issue_snapshot(issue):
         "priority": issue.priority,
         "state_id": str(issue.state_id) if issue.state_id else None,
         "assignee_ids": sorted(str(pk) for pk in issue.assignees.values_list("pk", flat=True)),
+        "module_ids": sorted(str(pk) for pk in active_issue_module_ids(issue)),
+        "label_ids": sorted(str(pk) for pk in active_issue_label_ids(issue)),
         "start_date": issue.start_date.isoformat() if issue.start_date else None,
         "target_date": issue.target_date.isoformat() if issue.target_date else None,
     }
