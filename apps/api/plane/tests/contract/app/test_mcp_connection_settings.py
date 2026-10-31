@@ -13,6 +13,7 @@ from django.test import RequestFactory
 from rest_framework.test import APIClient
 
 from plane.db import models as db
+from plane.mcp.client_config import client_files
 from plane.mcp.credentials import CredentialStorageError, recover_credential
 from plane.middleware.logger import APITokenLogMiddleware
 from plane.tests.contract.app.test_unified_mcp import env, machine, unified, payload, rpc
@@ -138,6 +139,10 @@ def test_configuration_uses_public_url_and_user_supplied_server_key(connection_c
         else f"https://plane.example/mcp/api-docs/project/{value['id']}"
     )
     assert '[mcp_servers."fyk report/mcp"]' in value["codex_toml"]
+    assert (
+        "[mcp_servers.fyk_mcp]"
+        in client_files("fyk_mcp", "https://plane.example/api/mcp/", {"X-Test": "x"})["codex_toml"]
+    )
     assert json.loads(value["sciencediscovery_json"])["mcpServers"]["fyk report/mcp"]["url"] == value["mcp_url"]
 
 

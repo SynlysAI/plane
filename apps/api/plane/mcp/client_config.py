@@ -1,6 +1,7 @@
 """Shared generation of public MCP client configuration."""
 
 import json
+import re
 from urllib.parse import urlsplit, urlunsplit
 
 from django.conf import settings
@@ -72,8 +73,9 @@ def client_files(key, url, headers):
     """
     value = {"type": "http", "url": url, "headers": headers, "timeoutSeconds": 120}
     header_pairs = ", ".join(f"{json.dumps(name)} = {json.dumps(value)}" for name, value in headers.items())
+    key_literal = key if re.fullmatch(r"[A-Za-z0-9_-]+", key) else json.dumps(key)
     toml = (
-        f"[mcp_servers.{json.dumps(key)}]\n"
+        f"[mcp_servers.{key_literal}]\n"
         f"url = {json.dumps(url)}\n"
         f"http_headers = {{ {header_pairs} }}\n"
         "tool_timeout_sec = 120\n"
