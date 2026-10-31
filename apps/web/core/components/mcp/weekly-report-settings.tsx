@@ -182,6 +182,7 @@ function WorkspaceWeeklyReportSettings({ workspace }: { workspace: WeeklyReportW
         {...manager}
         selected={manager.selected}
         name={(row) => row.label}
+        docsPath={(row) => `/mcp/api-docs/weekly-report/${encodeURIComponent(slug)}/${encodeURIComponent(row.id)}`}
         refresh={() => void manager.load()}
         retry={() => void manager.retry()}
         more={() => void manager.load(manager.cursor!)}

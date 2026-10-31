@@ -18,6 +18,7 @@ from plane.research.views.weekly_report_agent import (
     WeeklyReportConnectionsEndpoint,
     WeeklyReportRevokeEndpoint,
     WeeklyReportDeleteEndpoint,
+    WeeklyReportConnectionToolsEndpoint,
     WeeklyReportConfigurationEndpoint,
     WeeklyReportRotateEndpoint,
 )
@@ -322,6 +323,11 @@ urlpatterns = [
         "research/workspaces/<str:slug>/mcp/weekly-report/connections/<uuid:grant_id>/",
         WeeklyReportDeleteEndpoint.as_view(),
         name="weekly-report-mcp-delete",
+    ),
+    path(
+        "research/workspaces/<str:slug>/mcp/weekly-report/connections/<uuid:grant_id>/tools/",
+        WeeklyReportConnectionToolsEndpoint.as_view(),
+        name="weekly-report-mcp-tools",
     ),
     path(
         "research/workspaces/<str:slug>/weekly-report-agent/tools/",

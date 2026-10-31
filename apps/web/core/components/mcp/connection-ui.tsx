@@ -286,6 +286,7 @@ export function ConnectionBrowser<T extends ConnectionMetadata>({
   rows,
   selected,
   name,
+  docsPath,
   select,
   loading,
   listError,
@@ -308,6 +309,7 @@ export function ConnectionBrowser<T extends ConnectionMetadata>({
   rows: T[];
   selected?: T;
   name: (row: T) => string;
+  docsPath: (row: T) => string;
   select: (id: string | null) => void;
   loading: boolean;
   listError: string;
@@ -402,6 +404,14 @@ export function ConnectionBrowser<T extends ConnectionMetadata>({
                   <h3 className="min-w-0 flex-1 text-16 font-semibold break-words">{name(selected)}</h3>
                   <ConnectionStatus row={selected} />
                 </div>
+                <a
+                  className="inline-flex text-13 font-medium text-accent-primary"
+                  href={docsPath(selected)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  查看 API 列表
+                </a>
                 {children}
                 <ConnectionDates row={selected} />
                 <ConfigurationPanel

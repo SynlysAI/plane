@@ -155,6 +155,86 @@ class WeeklyReportMCPHTTPEndpoint(WeeklyMachineBase):
         return Response({"jsonrpc": "2.0", "id": identity, "error": {"code": code, "message": message}}, status=status)
 
 
+class WeeklyReportConnectionToolsEndpoint(WeeklyBase):
+    """本人会话内的周报连接 API 文档数据，不返回密钥。"""
+
+    http_method_names = ["get", "options"]
+
+    def get(self, request, slug, grant_id):
+        workspace = db.Workspace.objects.filter(slug=slug).first()
+        if workspace is None:
+            raise WeeklyReportError("not_found", "Workspace not found.", 404)
+        check_actor(workspace, request.user, require_feature=False)
+        grant = (
+            db.ReportAgentGrant.objects.select_related("user", "workspace")
+            .filter(pk=grant_id, workspace=workspace, user=request.user)
+            .first()
+        )
+        if grant is None:
+            raise WeeklyReportError("not_found", "Connection not found.", 404)
+        active = grant.revoked_at is None and (grant.expires_at is None or grant.expires_at > timezone.now())
+        live_access = False
+        role_context = None
+        if active:
+            try:
+                check_actor(workspace, request.user)
+                live_access = True
+                from plane.research.utils.role_resolution import resolve_role_context
+
+                role_context = resolve_role_context(request.user, workspace)
+            except WeeklyReportError:
+                live_access = False
+        tools = []
+        for tool in tools_for(grant.allowed_actions):
+            category = "read" if tool["name"] != "prepare_weekly_report_operation" else "proposal_write"
+            if tool["name"] == "execute_weekly_report_operation":
+                category = "proposal_write"
+            tools.append(
+                {
+                    **tool,
+                    "category": category,
+                    "execution_mode": "proposal" if category == "proposal_write" else "direct",
+                    "required_role": "visible own report"
+                    if tool["name"] == "get_weekly_report_context"
+                    else "native report ACL or review route",
+                }
+            )
+        return Response(
+            {
+                "contract_version": VERSION,
+                "connection": WeeklyManagementBase.present(grant),
+                "server": {
+                    "name": "plane-weekly-report",
+                    "version": "2.0.0",
+                    "protocol_version": "2025-03-26",
+                    "server_key": server_key(grant.label),
+                    "url": public_url(
+                        request,
+                        f"/api/research/workspaces/{workspace.slug}/weekly-report-agent/mcp/",
+                    ),
+                    "auth_header": HEADER,
+                    "docs_url": public_url(request, f"/mcp/api-docs/weekly-report/{workspace.slug}/{grant.pk}"),
+                },
+                "identity": {
+                    "user_id": str(request.user.pk),
+                    "display_name": request.user.display_name,
+                },
+                "workspaces": [
+                    {
+                        "id": str(workspace.pk),
+                        "name": workspace.name,
+                        "slug": workspace.slug,
+                        "authorized_actions": grant.allowed_actions,
+                        "live_actions": grant.allowed_actions if live_access else [],
+                        "live_access": live_access,
+                        "role_context": role_context,
+                    }
+                ],
+                "tools": tools,
+            }
+        )
+
+
 class WeeklyManagementBase(WeeklyBase):
     authentication_classes = [SessionAuthentication]
     throttle_classes = [WeeklyReportThrottle]

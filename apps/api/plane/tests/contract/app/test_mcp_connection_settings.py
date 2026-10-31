@@ -171,6 +171,32 @@ def test_delete_soft_deletes_revokes_token_and_keeps_audit(connection_case):
     assert c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf).status_code == 404
 
 
+def test_connection_tools_document_is_owner_only_and_secret_free(connection_case):
+    """API 文档按连接返回实时角色、工具与 schema，但绝不携带密钥。"""
+    c = connection_case
+    value = c["post"]().json()
+    raw = c["secret"](value)
+    path = value["id"] + "/tools/"
+    docs = c["client"].get(c["root"] + path)
+    assert docs.status_code == 200, docs.data
+    payload = docs.json()
+    assert payload["server"]["server_key"] == ("回看测试" if c["weekly"] else "Synthetic unified connection")
+    assert payload["server"]["auth_header"] == ("X-Weekly-Report-Token" if c["weekly"] else "Authorization")
+    assert payload["tools"] and all(tool.get("inputSchema") for tool in payload["tools"])
+    expected_categories = {"read"} if not c["weekly"] else {"read", "proposal_write"}
+    assert expected_categories <= {tool["category"] for tool in payload["tools"]}
+    assert payload["workspaces"][0]["role_context"] is not None
+    assert raw not in docs.content.decode()
+
+    stranger = APIClient()
+    stranger.force_login(c["other"])
+    assert stranger.get(c["root"] + path).status_code == 404
+    assert APIClient().get(c["root"] + path).status_code in (401, 403)
+    csrf = c["client"].get(c["root"]).json()["csrf_token"]
+    assert c["client"].delete(c["root"] + f"{value['id']}/", HTTP_X_CSRFTOKEN=csrf).status_code == 200
+    assert c["client"].get(c["root"] + path).status_code == 404
+
+
 def test_rotation_preserves_scope_and_deadline_and_revokes_old_secret(connection_case):
     """旧连接确认重置后启用回看，旧密钥无法继续调用。"""
     c = connection_case

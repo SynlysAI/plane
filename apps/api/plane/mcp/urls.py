@@ -7,6 +7,7 @@ from plane.mcp.endpoints import (
     UnifiedMCPEndpoint,
     UnifiedRevokeEndpoint,
     UnifiedDeleteEndpoint,
+    UnifiedToolsEndpoint,
     UnifiedConfigurationEndpoint,
     UnifiedRotateEndpoint,
 )
@@ -23,5 +24,10 @@ urlpatterns = [
     path("mcp/connections/<uuid:connection_id>/rotate/", UnifiedRotateEndpoint.as_view(), name="unified-mcp-rotate"),
     path("mcp/connections/<uuid:connection_id>/revoke/", UnifiedRevokeEndpoint.as_view(), name="unified-mcp-revoke"),
     path("mcp/connections/<uuid:connection_id>/", UnifiedDeleteEndpoint.as_view(), name="unified-mcp-delete"),
+    path(
+        "mcp/connections/<uuid:connection_id>/tools/",
+        UnifiedToolsEndpoint.as_view(),
+        name="unified-mcp-tools",
+    ),
     path("mcp/native/<path:action>/", NativeMCPBridgeEndpoint.as_view(), name="native-mcp-bridge"),
 ]

@@ -260,6 +260,7 @@ export function UnifiedMCPManager({ initialWorkspace }: { initialWorkspace?: str
         {...manager}
         selected={manager.selected}
         name={(row) => row.name}
+        docsPath={(row) => `/mcp/api-docs/project/${encodeURIComponent(row.id)}`}
         refresh={() => void manager.load()}
         retry={() => void manager.retry()}
         more={() => void manager.load(manager.cursor!)}

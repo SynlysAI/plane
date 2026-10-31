@@ -37,6 +37,38 @@ export type UnifiedIssued = UnifiedConnection & {
   api_docs_url: string;
 };
 export type UnifiedPage<T> = { results: T[]; next_cursor: string | null; csrf_token: string };
+export type UnifiedApiDocs = {
+  contract_version: string;
+  connection: UnifiedConnection;
+  server: {
+    name: string;
+    version: string;
+    protocol_version: string;
+    server_key: string;
+    url: string;
+    auth_header: string;
+    docs_url: string;
+  };
+  identity: { user_id: string; display_name: string };
+  workspaces: {
+    id: string;
+    name: string;
+    slug: string;
+    authorized_domains: Record<string, string>;
+    live_domains: Record<string, string>;
+    live_access: boolean;
+    role_context: Record<string, unknown> | null;
+  }[];
+  tools: {
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+    annotations?: Record<string, unknown>;
+    category: string;
+    execution_mode: string;
+    required_role: string;
+  }[];
+};
 export type UnifiedOptions = UnifiedPage<UnifiedWorkspace> & {
   ttl_seconds: number;
   ttl_days: (number | null)[];
@@ -110,6 +142,16 @@ export class UnifiedMCPService {
   async delete(id: string, csrf: string): Promise<{ deleted: boolean; id: string }> {
     return this.http
       .delete(`/api/mcp/connections/${encodeURIComponent(id)}/`, { headers: { "X-CSRFToken": csrf } })
+      .then((response) => response.data)
+      .catch((error) => {
+        throw problem(error);
+      });
+  }
+
+  /** 获取本人连接的完整工具 API 文档，不包含密钥。 */
+  async tools(id: string): Promise<UnifiedApiDocs> {
+    return this.http
+      .get(`/api/mcp/connections/${encodeURIComponent(id)}/tools/`)
       .then((response) => response.data)
       .catch((error) => {
         throw problem(error);
