@@ -24,7 +24,11 @@
 
 /* 个人工作台背景：只有显式标记的页面底色响应透明度，交互控件保留主题色。 */
 .workspace-background-enabled {
-  --workspace-background-scrim: color-mix(in oklab, var(--neutral-300) 70%, transparent);
+  --workspace-background-scrim: color-mix(
+    in oklab,
+    var(--neutral-300) calc(var(--workspace-content-opacity, 0.85) * 70%),
+    transparent
+  );
   --workspace-surface-color: var(--neutral-white);
   --bg-canvas: transparent;
 }
@@ -43,7 +47,11 @@
 }
 
 .workspace-background-enabled[data-background-mode="dark"] {
-  --workspace-background-scrim: color-mix(in oklab, var(--neutral-black) 62%, transparent);
+  --workspace-background-scrim: color-mix(
+    in oklab,
+    var(--neutral-black) calc(var(--workspace-content-opacity, 0.85) * 62%),
+    transparent
+  );
   --workspace-surface-color: var(--neutral-100);
 }
 

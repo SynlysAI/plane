@@ -101,7 +101,7 @@ const ThinkingBlock = observer(function ThinkingBlock({ text }: { text: string }
         {t("aiAssistant.thinking")}
       </button>
       {open && (
-        <p className="border-accent-primary/40 mt-1.5 max-h-48 overflow-y-auto rounded-lg border-l-2 bg-surface-1 p-2.5 text-11 leading-relaxed whitespace-pre-wrap text-tertiary">
+        <p className="border-accent-primary/40 mt-1.5 max-h-48 overflow-y-auto rounded-lg border-l-2 bg-layer-1 p-2.5 text-11 leading-relaxed whitespace-pre-wrap text-tertiary">
           {text}
         </p>
       )}
@@ -163,7 +163,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
       onClose={() => assistantStore.close()}
       position={EPortalPosition.RIGHT}
       width={assistantStore.expanded ? EPortalWidth.THREE_QUARTER : EPortalWidth.QUARTER}
-      contentClassName={`bg-canvas border-l border-subtle flex h-full flex-col ${assistantStore.expanded ? "min-w-[min(24rem,100vw)]" : "min-w-[min(20rem,100vw)]"}`}
+      contentClassName={`bg-surface-1 border-l border-subtle flex h-full flex-col ${assistantStore.expanded ? "min-w-[min(24rem,100vw)]" : "min-w-[min(20rem,100vw)]"}`}
     >
       <div className="flex h-full min-h-0 flex-col">
         {/* header */}
@@ -267,7 +267,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
             <p className="text-11 text-tertiary">{t("aiAssistant.queued")}</p>
           )}
           {provider === "cloud" && cloud.streamState.phase === "interrupted" && (
-            <p className="rounded-lg bg-surface-1 px-3 py-2 text-11 text-secondary">
+            <p className="rounded-lg bg-layer-1 px-3 py-2 text-11 text-secondary">
               {t("aiAssistant.interrupt_notice")}
             </p>
           )}
@@ -330,7 +330,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
                       );
                     case "approval":
                       return (
-                        <div key={key} className="rounded-lg bg-surface-1 px-3 py-2 text-11 text-secondary">
+                        <div key={key} className="rounded-lg bg-layer-1 px-3 py-2 text-11 text-secondary">
                           {t("aiAssistant.approval_pending")}
                         </div>
                       );
@@ -338,7 +338,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
                       return (
                         <div
                           key={key}
-                          className={`rounded-lg px-3 py-2 text-11 ${item.tone === "error" ? "bg-danger-subtle/50 text-danger-primary" : "bg-surface-1 text-secondary"}`}
+                          className={`rounded-lg px-3 py-2 text-11 ${item.tone === "error" ? "bg-danger-subtle/50 text-danger-primary" : "bg-layer-1 text-secondary"}`}
                         >
                           {item.label}
                         </div>
@@ -361,7 +361,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
         </div>
 
         {provider === "local" && local.waitingApproval && (
-          <div className="mx-4 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-subtle bg-surface-2 px-3 py-2 text-12 text-secondary">
+          <div className="mx-4 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-12 text-secondary">
             <span>{t("aiAssistant.approval_pending")}</span>
             <div className="flex gap-1.5">
               <Button variant="primary" size="sm" onClick={() => void local.decide(true)}>
@@ -375,7 +375,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
         )}
 
         {/* composer */}
-        <div className="focus-within:border-accent-primary mx-4 mb-2 shrink-0 rounded-xl border border-subtle bg-surface-1 p-2.5 transition">
+        <div className="focus-within:border-accent-primary mx-4 mb-2 shrink-0 rounded-xl border border-subtle bg-layer-1 p-2.5 transition">
           <textarea
             value={input}
             rows={1}

@@ -189,6 +189,21 @@ describe("AIAssistantPanel", () => {
     expect(table?.parentElement?.classList.contains("overflow-x-auto")).toBe(true);
   });
 
+  it("uses a themed surface instead of the application canvas", () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+
+    const panel = document.querySelector('[role="document"]');
+    expect(panel?.classList.contains("bg-surface-1")).toBe(true);
+    expect(panel?.classList.contains("bg-canvas")).toBe(false);
+
+    const composer = document.querySelector("textarea")?.closest("div");
+    expect(composer?.classList.contains("bg-layer-1")).toBe(true);
+    expect(composer?.classList.contains("bg-surface-1")).toBe(false);
+  });
+
   it("renders a streamed table before and after the answer completes", async () => {
     let completeStream: (() => void) | undefined;
     mocks.streamRunEvents.mockImplementation(

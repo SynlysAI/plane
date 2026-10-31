@@ -13,7 +13,7 @@ import { ProfileSettingsModal } from "../../core/components/settings/profile/mod
 import { WorkspaceBackgroundShell } from "../../core/components/workspace/background-shell";
 import { WorkspaceHomeWorkbench } from "../../core/components/home/workbench";
 import { ProjectCardList } from "../../core/components/project/card-list";
-import { WORKSPACE_BACKGROUND_IMAGES } from "../../helpers/workspace-backgrounds";
+import { getContentBackgroundOpacity, WORKSPACE_BACKGROUND_IMAGES } from "../../helpers/workspace-backgrounds";
 import { WorkspaceService } from "../../core/services/workspace.service";
 import { ProjectDomainsService } from "../../core/services/project-domains.service";
 import { ProjectService } from "../../core/services/project/project.service";
@@ -23,6 +23,7 @@ import "./workspace-background.fixture.css";
 const params = new URLSearchParams(window.location.search);
 const backgroundMode = params.get("mode") === "light" ? "light" : "dark";
 const savedTheme = JSON.parse(localStorage.getItem("fixture-background-theme") || "null");
+const requestedOpacity = params.get("opacity");
 const pageView = params.get("view") ?? "settings";
 const fixtureProject = {
   id: "fixture-project",
@@ -54,6 +55,9 @@ action(() => {
       ...savedTheme,
     },
   };
+  if (requestedOpacity !== null) {
+    store.user.userProfile.data.theme.contentBackgroundOpacity = getContentBackgroundOpacity(Number(requestedOpacity));
+  }
   store.router.setQuery({ workspaceSlug: "lab" });
   store.projectRoot.project.projectMap[fixtureProject.id] = fixtureProject;
   store.projectRoot.project.loader = "loaded";
