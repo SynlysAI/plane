@@ -23,7 +23,6 @@ from django.db.models import (
     Value,
     When,
 )
-from django.utils import timezone
 from django.db.models.functions import Coalesce, Greatest
 
 # Third Party imports
@@ -39,7 +38,6 @@ from plane.app.serializers import (
 )
 from plane.app.views.base import BaseAPIView, BaseViewSet
 from plane.bgtasks.recent_visited_task import recent_visited_task
-from plane.bgtasks.webhook_task import model_activity, webhook_activity
 from plane.db.models import (
     UserFavorite,
     DeployBoard,
@@ -55,8 +53,11 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.db.models.intake import IntakeIssueStatus
-from plane.utils.host import base_host
-from plane.utils.home_activity import record_project_activity
+from plane.utils.project_mutations import (
+    queue_project_model_activity,
+    set_project_archived,
+    soft_delete_project,
+)
 from plane.utils.order_queryset import PROJECT_ORDER_BY_ALLOWLIST, sanitize_order_by
 from plane.utils.administrative_projects import (
     ADMINISTRATIVE_SETTINGS_LOCK_MESSAGE,
@@ -424,17 +425,7 @@ class ProjectViewSet(BaseViewSet):
                 )
 
                 project = self.get_queryset().filter(pk=serializer.data["id"]).first()
-                transaction.on_commit(
-                    lambda: model_activity.delay(
-                        model_name="project",
-                        model_id=str(project.id),
-                        requested_data=request.data,
-                        current_instance=None,
-                        actor_id=request.user.id,
-                        slug=slug,
-                        origin=base_host(request=request, is_app=True),
-                    )
-                )
+                queue_project_model_activity(project, request.user, request, request.data)
 
             serializer = ProjectListSerializer(project)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -503,15 +494,7 @@ class ProjectViewSet(BaseViewSet):
 
             project = self.get_queryset().filter(pk=serializer.data["id"]).first()
 
-            model_activity.delay(
-                model_name="project",
-                model_id=str(project.id),
-                requested_data=request.data,
-                current_instance=current_instance,
-                actor_id=request.user.id,
-                slug=slug,
-                origin=base_host(request=request, is_app=True),
-            )
+            queue_project_model_activity(project, request.user, request, request.data, current_instance)
             serializer = ProjectListSerializer(project)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -534,26 +517,7 @@ class ProjectViewSet(BaseViewSet):
             ).exists()
         ):
             project = Project.objects.get(pk=pk, workspace__slug=slug)
-            record_project_activity(project, request.user, "deleted")
-            project.delete()
-            webhook_activity.delay(
-                event="project",
-                verb="deleted",
-                field=None,
-                old_value=None,
-                new_value=None,
-                actor_id=request.user.id,
-                slug=slug,
-                current_site=base_host(request=request, is_app=True),
-                event_id=project.id,
-                old_identifier=None,
-                new_identifier=None,
-            )
-            # Delete the project members
-            DeployBoard.objects.filter(project_id=pk, workspace__slug=slug).delete()
-
-            # Delete the user favorite
-            UserFavorite.objects.filter(project_id=pk, workspace__slug=slug).delete()
+            soft_delete_project(project, request.user, request)
 
             return Response(status=status.HTTP_204_NO_CONTENT)
         else:
@@ -567,18 +531,13 @@ class ProjectArchiveUnarchiveEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def post(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
-        project.archived_at = timezone.now()
-        project.save()
-        record_project_activity(project, request.user, "archived")
-        UserFavorite.objects.filter(workspace__slug=slug, project=project_id).delete()
+        set_project_archived(project, request.user, archived=True)
         return Response({"archived_at": str(project.archived_at)}, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def delete(self, request, slug, project_id):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
-        project.archived_at = None
-        project.save()
-        record_project_activity(project, request.user, "restored")
+        set_project_archived(project, request.user, archived=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -33,6 +33,7 @@ from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.role_resolution import resolve_role_context
 from plane.research.utils.audit import record_audit_event
 from plane.utils.administrative_projects import active_issue_assignees
+from plane.utils.work_item_required_fields import active_issue_label_ids, active_issue_module_ids
 
 VERSION = "plane.unified-mcp.v2"
 SALT = "plane.unified-mcp.page.v1"
@@ -424,6 +425,8 @@ class UnifiedReadService:
             "assignee_ids": [
                 str(pk) for pk in active_issue_assignees().filter(issue=issue).values_list("assignee_id", flat=True)
             ],
+            "module_ids": sorted(str(pk) for pk in active_issue_module_ids(issue)),
+            "label_ids": sorted(str(pk) for pk in active_issue_label_ids(issue)),
             "updated_at": issue.updated_at.isoformat(),
         }
 

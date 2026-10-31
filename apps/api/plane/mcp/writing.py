@@ -10,10 +10,9 @@ import logging
 from crum import impersonate
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import DatabaseError, IntegrityError, transaction
-from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from plane.app.permissions.base import ROLE
+from plane.app.permissions.base import ROLE, project_role_allows
 from plane.app.serializers import (
     IssueCommentSerializer,
     IssueCreateSerializer,
@@ -37,7 +36,18 @@ from plane.mcp.credentials import unexpired_connections
 from plane.mcp.reading import VERSION, UnifiedReadService
 from plane.research.services.mcp_catalog import ResearchReadError
 from plane.research.utils.audit import record_audit_event
-from plane.utils.issue_mutations import issue_action_allowed, save_issue, save_issue_comment
+from plane.utils.issue_mutations import (
+    issue_action_allowed,
+    issue_delete_allowed,
+    save_issue,
+    save_issue_comment,
+    soft_delete_issue,
+)
+from plane.utils.project_mutations import (
+    queue_project_model_activity,
+    set_project_archived,
+    soft_delete_project,
+)
 from plane.utils.work_item_required_fields import active_issue_label_ids, active_issue_module_ids
 from plane.utils.administrative_projects import (
     get_or_create_default_administrative_organization,
@@ -220,6 +230,7 @@ class UnifiedWriteService:
                     for state in DEFAULT_STATES
                 ]
             )
+        queue_project_model_activity(project, owner, self.request, payload)
         record_audit_event(
             workspace=workspace,
             actor=owner,
@@ -270,6 +281,7 @@ class UnifiedWriteService:
             "administrative_organization_id": "administrative_organization",
         }
         payload = {mapping.get(key, key): value for key, value in args["changes"].items()}
+        current_instance = json.dumps(ProjectSerializer(project).data, cls=DjangoJSONEncoder)
         serializer = ProjectSerializer(
             project,
             data=payload,
@@ -279,6 +291,13 @@ class UnifiedWriteService:
         serializer.is_valid(raise_exception=True)
         with impersonate(connection.owner):
             serializer.save()
+        queue_project_model_activity(
+            project,
+            connection.owner,
+            self.request,
+            payload,
+            current_instance,
+        )
         record_audit_event(
             workspace=workspace,
             actor=connection.owner,
@@ -300,9 +319,14 @@ class UnifiedWriteService:
     def archive_project(self, args, restore=False):
         connection, reader, workspace = self.begin(args["workspace_slug"])
         project = self.scoped_project(workspace, args["project_id"], archived=True if restore else None)
-        self.require_project_manager(connection.owner, workspace, project)
-        project.archived_at = None if restore else timezone.now()
-        project.save(update_fields=["archived_at", "updated_at"])
+        if not project_role_allows(
+            connection.owner,
+            workspace.slug,
+            project.pk,
+            [ROLE.ADMIN, ROLE.MEMBER],
+        ):
+            raise ResearchReadError("permission_denied", "Current project role cannot change lifecycle.", 403)
+        set_project_archived(project, connection.owner, archived=not restore)
         record_audit_event(
             workspace=workspace,
             actor=connection.owner,
@@ -334,7 +358,7 @@ class UnifiedWriteService:
             raise ResearchReadError("invalid_arguments", "confirm_name does not match the project name.", 422)
         self.require_project_manager(connection.owner, workspace, project)
         project_id = project.pk
-        project.delete()
+        soft_delete_project(project, connection.owner, self.request)
         record_audit_event(
             workspace=workspace,
             actor=connection.owner,
@@ -366,9 +390,9 @@ class UnifiedWriteService:
             raise ResearchReadError("not_found", "Task not found in current scope.", 404)
         if args["confirm_name"] != issue.name:
             raise ResearchReadError("invalid_arguments", "confirm_name does not match the task name.", 422)
-        if not issue_action_allowed(connection.owner, issue.project, "update", issue):
+        if not issue_delete_allowed(connection.owner, issue.project, issue):
             raise ResearchReadError("permission_denied", "Current native task role cannot delete this task.", 403)
-        issue.delete()
+        soft_delete_issue(issue, connection.owner, self.request)
         record_audit_event(
             workspace=workspace,
             actor=connection.owner,
