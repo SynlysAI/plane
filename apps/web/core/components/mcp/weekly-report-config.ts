@@ -7,8 +7,12 @@ import type {
 import type { MCPConfig } from "./connection-config";
 
 export const weeklyReportActionLabels: Record<WeeklyReportAction, string> = {
+  read_reports: "读取可见周报",
   save_draft: "保存草稿",
   submit: "正式提交",
+  withdraw: "撤回提交",
+  return: "退回报告",
+  accept: "接受报告",
 };
 
 const invalid = () => new Error("连接配置无效，请核对已有连接后重新创建。");

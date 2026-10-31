@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "@plane/constants";
 import { create } from "axios";
 
-export type WeeklyReportAction = "save_draft" | "submit";
+export type WeeklyReportAction = "read_reports" | "save_draft" | "submit" | "withdraw" | "return" | "accept";
 export type WeeklyReportWorkspace = {
   id: string;
   slug: string;

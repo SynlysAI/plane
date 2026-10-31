@@ -113,6 +113,91 @@ def test_submit_proposal_requires_an_explicit_reviewer(env):
     assert not db.ReportAgentOperation.objects.exists()
 
 
+def test_routed_reviewer_lists_reads_returns_and_accepts_reports(env):
+    """导师连接只能看到路由报告，并通过不可变提案完成退回与接受。"""
+    student_grant, _ = connection(env)
+    student = WeeklyReportService(grant=student_grant)
+    submitted, _ = proposal(student)
+    report_id = student.execute("execute_weekly_report_operation", {"operation_id": submitted["operation_id"]})[
+        "result"
+    ]["report_id"]
+
+    db.OrgUnitMember.objects.filter(workspace=env["workspace"], user=env["advisor"]).update(is_primary=True)
+    advisor_grant, _ = issue_grant(
+        workspace=env["workspace"],
+        user=env["advisor"],
+        label="导师审阅",
+        actions=["read_reports", "return", "accept"],
+        ttl_days=7,
+    )
+    reviewer = WeeklyReportService(grant=advisor_grant)
+    listing = reviewer.execute("list_weekly_reports", {"scope": "review", "limit": 20})
+    assert [item["id"] for item in listing["results"]] == [report_id]
+    detail = reviewer.execute("get_weekly_report", {"report_id": report_id})
+    assert detail["report"]["status"] == "SUBMITTED" and detail["content_page"]["complete"] is True
+
+    returned = reviewer.execute(
+        "prepare_weekly_report_operation",
+        {
+            "request_id": "review-return-1",
+            "action": "return",
+            "report_id": report_id,
+            "expected_revision": detail["revision"],
+            "comment": "请补充实验结果。",
+        },
+    )
+    committed = reviewer.execute("execute_weekly_report_operation", {"operation_id": returned["operation_id"]})
+    assert committed["result"]["status"] == "NEEDS_REVISION"
+    assert db.ResearchApprovalRoute.objects.filter(resource_id=report_id, status="SUPERSEDED").exists()
+    history = reviewer.execute("list_weekly_report_history", {"report_id": report_id})
+    assert "RETURN" in [item["action"] for item in history["results"]]
+
+    context = student.execute("get_weekly_report_context", {"period_key": listing["results"][0]["period_key"]})
+    again, _ = proposal(student, context=context)
+    report_id = student.execute("execute_weekly_report_operation", {"operation_id": again["operation_id"]})["result"][
+        "report_id"
+    ]
+    detail = reviewer.execute("get_weekly_report", {"report_id": report_id})
+    accepted = reviewer.execute(
+        "prepare_weekly_report_operation",
+        {
+            "request_id": "review-accept-1",
+            "action": "accept",
+            "report_id": report_id,
+            "expected_revision": detail["revision"],
+            "comment": "完成。",
+        },
+    )
+    committed = reviewer.execute("execute_weekly_report_operation", {"operation_id": accepted["operation_id"]})
+    assert committed["result"]["status"] == "ACCEPTED" and committed["readback"] == "verified"
+    assert db.ReportReviewLog.objects.filter(report_id=report_id, action="ACCEPT").exists()
+
+
+def test_owner_can_withdraw_a_submitted_report_through_proposal(env):
+    """撤回同样使用提案、状态校验、审计与路由关闭。"""
+    grant, _ = connection(env, actions=["read_reports", "save_draft", "submit", "withdraw"])
+    service = WeeklyReportService(grant=grant)
+    submitted, _ = proposal(service)
+    report_id = service.execute("execute_weekly_report_operation", {"operation_id": submitted["operation_id"]})[
+        "result"
+    ]["report_id"]
+    detail = service.execute("get_weekly_report", {"report_id": report_id})
+    prepared = service.execute(
+        "prepare_weekly_report_operation",
+        {
+            "request_id": "owner-withdraw-1",
+            "action": "withdraw",
+            "report_id": report_id,
+            "expected_revision": detail["revision"],
+            "comment": "需要补充材料。",
+        },
+    )
+    committed = service.execute("execute_weekly_report_operation", {"operation_id": prepared["operation_id"]})
+    assert committed["result"]["status"] == "DRAFT"
+    assert db.ReportReviewLog.objects.filter(report_id=report_id, action="REOPEN").exists()
+    assert not db.ResearchApprovalRoute.objects.filter(resource_id=report_id, status="ACTIVE").exists()
+
+
 def test_save_draft_schema_rejects_approval_selection(env):
     grant, _ = connection(env)
     service = WeeklyReportService(grant=grant)
@@ -295,7 +380,7 @@ def test_management_issue_list_revoke_and_machine_workspace_isolation(env):
     machine.credentials(HTTP_X_WEEKLY_REPORT_TOKEN=secret)
     catalogue = machine.get(issued.data["mcp_path"].replace("mcp/", "tools/"))
     assert catalogue.status_code == 200, catalogue.data
-    assert len(catalogue.data["tools"]) == 5
+    assert len(catalogue.data["tools"]) == 8
     other = machine.get("/api/research/workspaces/wrong/weekly-report-agent/tools/")
     assert other.status_code == 403
     assert machine.post(root + "connections/", {"label": "forbidden"}, format="json").status_code in (401, 403)

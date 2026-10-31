@@ -21,7 +21,9 @@ from plane.research.utils.audit import record_audit_event
 from plane.utils.workspace_access import user_can_access_workspace
 
 PERIOD_POLICY = "current_and_previous_week.v1"
-ACTIONS = frozenset({"save_draft", "submit"})
+OWN_ACTIONS = frozenset({"save_draft", "submit", "withdraw"})
+REVIEW_ACTIONS = frozenset({"return", "accept"})
+ACTIONS = OWN_ACTIONS | REVIEW_ACTIONS | {"read_reports"}
 HEADER = "X-Weekly-Report-Token"
 
 # Existing Page/asset/org endpoints do not share a report row lock. Until all
@@ -100,6 +102,30 @@ def check_actor(workspace, user, *, require_feature=True):
             raise WeeklyReportError("reports_disabled", "Reports are not available for this account/workspace.", 403)
         if not has_active_research_org_relation(user, workspace):
             raise WeeklyReportError("report_org_required", "An active organisation assignment is required.", 403)
+
+
+def available_actions(workspace, user):
+    """Return the role-aware actions this account may put in a weekly token.
+
+    Args:
+        workspace: Workspace owning the personal weekly reports.
+        user: Human account requesting a new connection.
+
+    Returns:
+        A sorted action list; object-level checks still run on every call.
+    """
+    check_actor(workspace, user)
+    actions = {"read_reports"}
+    from plane.research.services.report_workflow import resolve_report_context
+    from plane.research.utils.role_resolution import resolve_role_context
+
+    context = resolve_report_context(workspace=workspace, actor=user, payload={})
+    if context.report_org_unit is not None:
+        actions.update(OWN_ACTIONS)
+    roles = set(resolve_role_context(user, workspace).get("roles", []))
+    if roles & {"ADMIN", "PRINCIPAL", "MENTOR"}:
+        actions.update(REVIEW_ACTIONS)
+    return sorted(actions)
 
 
 def check_grant(grant, workspace, user, *, action=None, lock=False):
