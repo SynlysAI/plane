@@ -7,6 +7,7 @@
 import { action, makeObservable, observable, runInAction } from "mobx";
 // lib
 import { storage } from "@/lib/local-storage";
+import type { TAssistantStatus } from "@/services/assistant";
 
 const THREAD_KEY_PREFIX = "PLANE_AI_ASSISTANT_THREAD_";
 const PREFERENCES_KEY_PREFIX = "PLANE_AGENT_DOCK_PREFERENCES_";
@@ -32,7 +33,7 @@ export interface IAIAssistantStore {
   isOpen: boolean;
   threadWorkspaceSlug: string | null;
   threadId: string | null;
-  status: { enabled: boolean; ready: boolean } | null;
+  status: TAssistantStatus | null;
   activeProvider: TAssistantProvider;
   contextNodeId: string | null;
   expanded: boolean;
@@ -45,7 +46,7 @@ export interface IAIAssistantStore {
   toggle: (value?: boolean) => void;
   openWithLocal: (nodeId: string) => void;
   hydrate: (workspaceSlug: string) => void;
-  setStatus: (status: { enabled: boolean; ready: boolean } | null) => void;
+  setStatus: (status: TAssistantStatus | null) => void;
   setThreadId: (workspaceSlug: string, threadId: string) => void;
   clearThreadId: (workspaceSlug: string) => void;
   setProvider: (provider: TAssistantProvider) => void;
@@ -60,7 +61,7 @@ export class AIAssistantStore implements IAIAssistantStore {
   isOpen: boolean = false;
   threadWorkspaceSlug: string | null = null;
   threadId: string | null = null;
-  status: { enabled: boolean; ready: boolean } | null = null;
+  status: TAssistantStatus | null = null;
   activeProvider: TAssistantProvider = "cloud";
   contextNodeId: string | null = null;
   expanded: boolean = false;
@@ -148,7 +149,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   };
 
-  setStatus = (status: { enabled: boolean; ready: boolean } | null) => {
+  setStatus = (status: TAssistantStatus | null) => {
     this.status = status;
   };
 

@@ -15,17 +15,19 @@ from plane.tests.research_fixtures import make_user, make_workspace
 pytestmark = pytest.mark.django_db
 
 
-def _configure(workspace, credential="yxkey-shared"):
+def _configure(workspace, credential="yxkey-shared", credential_mode=ExternalSystemConnection.CredentialMode.SHARED):
     connection = ExternalSystemConnection.objects.create(
         workspace=workspace,
         system=IntegrationSystem.SYNLORA,
         display_name="Synlora",
         base_url="http://synlora.internal:5050",
         auth_mode=ExternalSystemConnection.AuthMode.BEARER,
+        credential_mode=credential_mode,
         is_enabled=True,
     )
-    connection.set_credential(credential)
-    connection.save(update_fields=["credential"])
+    if credential_mode == ExternalSystemConnection.CredentialMode.SHARED:
+        connection.set_credential(credential)
+        connection.save(update_fields=["credential"])
     return connection
 
 
@@ -77,7 +79,12 @@ def test_status_reports_disabled_without_a_connection(env):
     client = _client_for(env["owner"])
     response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
     assert response.status_code == 200
-    assert response.json() == {"enabled": False, "ready": False, "credential_mode": "SHARED"}
+    assert response.json() == {
+        "enabled": False,
+        "ready": False,
+        "credential_mode": "SHARED",
+        "state": "not_configured",
+    }
 
 
 def test_unconfigured_connection_maps_to_503_on_chat(env):
@@ -109,7 +116,45 @@ def test_status_reports_ready_when_synlora_answers(env):
     assert response.status_code == 200
     assert response.json()["enabled"] is True
     assert response.json()["ready"] is True
-    assert fake_get.call_args.args[0] == "http://synlora.internal:5050/api/system/ready"
+    assert response.json()["state"] == "ready"
+    assert fake_get.call_args.args[0] == "http://synlora.internal:5050/api/health"
+    assert "headers" not in fake_get.call_args.kwargs
+
+
+def test_status_reports_personal_token_missing(env):
+    _configure(
+        env["workspace"],
+        credential_mode=ExternalSystemConnection.CredentialMode.PERSONAL,
+    )
+    response = _client_for(env["owner"]).get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": False,
+        "ready": False,
+        "credential_mode": "PERSONAL",
+        "state": "personal_credential_required",
+    }
+
+
+def test_status_reports_service_unavailable_when_synlora_health_fails(env):
+    _configure(env["workspace"])
+
+    class FakeResponse:
+        status_code = 503
+
+    client = _client_for(env["owner"])
+    with (
+        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
+        patch("plane.app.views.assistant.client.httpx.get", return_value=FakeResponse()),
+    ):
+        response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "ready": False,
+        "credential_mode": "SHARED",
+        "state": "service_unavailable",
+    }
 
 
 def test_chat_uses_v1_session_and_returns_run_identity(env):

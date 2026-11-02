@@ -169,9 +169,21 @@ class SynloraAssistantClient:
         )
 
     def health(self) -> httpx.Response:
+        """Check the public Synlora service-health endpoint without credentials."""
         return httpx.get(
-            f"{self.config.base_url}/api/system/ready",
-            headers=self._headers(),
+            f"{self.config.base_url}/api/health",
+            timeout=self._timeout(),
+        )
+
+    def verify_delegated_auth(self) -> str:
+        """Verify the platform service credential can mint a delegated user token."""
+        return self._ensure_delegated_token()
+
+    def verify_personal_token(self) -> httpx.Response:
+        """Verify a user-supplied Synlora Bearer token against the current-user API."""
+        return httpx.get(
+            f"{self.config.base_url}/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {self.config.token}"},
             timeout=self._timeout(),
         )
 

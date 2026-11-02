@@ -33,6 +33,10 @@ export type TAssistantStreamState =
   | { phase: "interrupted" }
   | { phase: "error"; canRetry: boolean };
 
+type TUseAssistantChatOptions = {
+  enabled?: boolean;
+};
+
 const ACTIVE_STATUSES = new Set(["INITIALIZING", "READY", "QUEUED", "PENDING", "STREAMING"]);
 const agentDockService = new AgentDockService();
 
@@ -42,7 +46,7 @@ const agentDockService = new AgentDockService();
  * The browser sends only the current route. Plane resolves ACL, issues the v3
  * context, and returns a display envelope; tokens and resource bodies stay server-side.
  */
-export const useAssistantChat = (workspaceSlug: string) => {
+export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUseAssistantChatOptions = {}) => {
   const { t } = useTranslation();
   const pathname = usePathname();
   const assistantStore = useAIAssistant();
@@ -154,8 +158,15 @@ export const useAssistantChat = (workspaceSlug: string) => {
   }, [pathname, workspaceSlug]);
 
   useEffect(() => {
-    if (assistantStore.isOpen) void resolveContext();
-  }, [assistantStore.isOpen, resolveContext]);
+    if (assistantStore.isOpen && enabled) void resolveContext();
+  }, [assistantStore.isOpen, enabled, resolveContext]);
+
+  useEffect(() => {
+    if (enabled) return;
+    stopPolling();
+    setContextEnvelope(null);
+    setStreamState({ phase: "idle" });
+  }, [enabled, stopPolling]);
 
   const loadHistory = useCallback(async () => {
     const sessionId = assistantStore.threadId;
@@ -177,8 +188,8 @@ export const useAssistantChat = (workspaceSlug: string) => {
   }, [applyEvents, assistantStore, pollEvents, workspaceSlug]);
 
   useEffect(() => {
-    if (assistantStore.isOpen && assistantStore.threadId && contextEnvelope) void loadHistory();
-  }, [assistantStore.isOpen, assistantStore.threadId, contextEnvelope, loadHistory]);
+    if (assistantStore.isOpen && enabled && assistantStore.threadId && contextEnvelope) void loadHistory();
+  }, [assistantStore.isOpen, assistantStore.threadId, contextEnvelope, enabled, loadHistory]);
 
   const ensureSession = useCallback(
     async (context: TAgentContextEnvelope): Promise<TAgentDockSession> => {
@@ -207,7 +218,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
   const send = useCallback(
     async (rawQuery: string) => {
       const query = rawQuery.trim();
-      if (!query || streamState.phase === "streaming" || streamState.phase === "queued") return;
+      if (!enabled || !query || streamState.phase === "streaming" || streamState.phase === "queued") return;
       const context = contextEnvelope ?? (await resolveContext());
       if (!context) return;
       setMessages((previous) => [...previous, { id: `user-${Date.now()}`, role: "user", content: query }]);
@@ -223,7 +234,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
         setStreamState({ phase: "error", canRetry: true });
       }
     },
-    [contextEnvelope, ensureSession, pollEvents, resolveContext, streamState.phase, workspaceSlug]
+    [contextEnvelope, enabled, ensureSession, pollEvents, resolveContext, streamState.phase, workspaceSlug]
   );
 
   const stop = useCallback(async () => {

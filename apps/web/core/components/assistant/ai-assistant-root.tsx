@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
 import useSWR from "swr";
@@ -14,20 +14,33 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 // components
 import { AIAssistantPanel } from "./ai-assistant-panel";
 // helpers
-import { AssistantService } from "@/services/assistant";
+import { AssistantService, type TAssistantStatus } from "@/services/assistant";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
 const assistantService = new AssistantService();
+
+/** Normalize legacy status payloads while preserving the new state contract. */
+function normalizeAssistantStatus(status: TAssistantStatus | undefined): TAssistantStatus | null {
+  if (status?.state) return status;
+  if (!status) return null;
+  const state = status.enabled
+    ? status.ready
+      ? "ready"
+      : "service_unavailable"
+    : status.credential_mode === "PERSONAL"
+      ? "personal_credential_required"
+      : "not_configured";
+  return { ...status, state };
+}
 
 type Props = {
   children: ReactNode;
 };
 
 /**
- * Workspace-wide assistant mount: floating launcher, Cmd/Ctrl+J shortcut and
- * the side panel. Hidden entirely while the workspace has no usable Synlora
- * connection (status endpoint drives availability).
+ * Workspace-wide assistant mount. The shell keeps the page outlet at a stable
+ * height; status only changes assistant availability, never page structure.
  */
 export const AIAssistantRoot = observer(function AIAssistantRoot({ children }: Props) {
   const { t } = useTranslation();
@@ -35,14 +48,33 @@ export const AIAssistantRoot = observer(function AIAssistantRoot({ children }: P
   const workspaceSlug = params?.workspaceSlug?.toString();
   const assistantStore = useAIAssistant();
 
-  const { data: status } = useSWR(
+  const {
+    data: status,
+    error,
+    mutate,
+  } = useSWR(
     workspaceSlug ? `AI_ASSISTANT_STATUS_${workspaceSlug}` : null,
-    workspaceSlug ? () => assistantService.getStatus(workspaceSlug) : null
+    workspaceSlug ? () => assistantService.getStatus(workspaceSlug) : null,
+    { shouldRetryOnError: false }
+  );
+
+  const resolvedStatus = useMemo(
+    () =>
+      normalizeAssistantStatus(status) ??
+      (error
+        ? ({
+            enabled: false,
+            ready: false,
+            credential_mode: "SHARED",
+            state: "service_unavailable",
+          } satisfies TAssistantStatus)
+        : null),
+    [error, status]
   );
 
   useEffect(() => {
-    if (status) assistantStore.setStatus({ enabled: status.enabled, ready: status.ready });
-  }, [status, assistantStore]);
+    if (resolvedStatus) assistantStore.setStatus(resolvedStatus);
+  }, [assistantStore, resolvedStatus]);
 
   useEffect(() => {
     if (workspaceSlug) assistantStore.hydrate(workspaceSlug);
@@ -60,12 +92,12 @@ export const AIAssistantRoot = observer(function AIAssistantRoot({ children }: P
     return () => document.removeEventListener("keydown", handler, true);
   }, [assistantStore]);
 
-  if (!workspaceSlug || !status?.enabled) return <>{children}</>;
+  if (!workspaceSlug) return <>{children}</>;
 
   return (
-    <div className="relative flex min-w-0 flex-1 items-stretch overflow-hidden">
-      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
-      {!assistantStore.isOpen && (
+    <div className="relative flex size-full min-h-0 min-w-0 flex-1 items-stretch overflow-hidden">
+      <div className="relative flex size-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+      {resolvedStatus && !assistantStore.isOpen && (
         <div className="fixed top-1/2 right-5 z-40 -translate-y-1/2">
           <Tooltip label={t("aiAssistant.open")} side="left">
             <button
@@ -79,7 +111,11 @@ export const AIAssistantRoot = observer(function AIAssistantRoot({ children }: P
           </Tooltip>
         </div>
       )}
-      <AIAssistantPanel workspaceSlug={workspaceSlug} />
+      <AIAssistantPanel
+        workspaceSlug={workspaceSlug}
+        statusState={resolvedStatus?.state ?? "loading"}
+        onRetryStatus={() => void mutate()}
+      />
     </div>
   );
 });

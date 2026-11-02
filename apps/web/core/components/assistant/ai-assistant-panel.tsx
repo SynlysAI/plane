@@ -6,6 +6,7 @@
 
 import { observer } from "mobx-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import Link from "next/link";
 import { useTranslation } from "@plane/i18n";
 import {
   Activity,
@@ -36,11 +37,14 @@ import remarkGfm from "remark-gfm";
 import { useAssistantChat } from "./use-assistant-chat";
 import { mergeRuntimeToolCalls } from "./lib/runtime-events";
 import { useWorkbenchChat } from "./use-workbench-chat";
+import type { TAssistantStatus } from "@/services/assistant";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
 type Props = {
   workspaceSlug: string;
+  statusState: TAssistantStatus["state"] | "loading";
+  onRetryStatus?: () => void;
 };
 
 /** Render assistant markdown with restrained Plane surface and typography tokens. */
@@ -103,10 +107,15 @@ function ToolLine({ name, status }: { name: string; status?: string }) {
   );
 }
 
-export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSlug }: Props) {
+export const AIAssistantPanel = observer(function AIAssistantPanel({
+  workspaceSlug,
+  statusState,
+  onRetryStatus,
+}: Props) {
   const { t } = useTranslation();
   const assistantStore = useAIAssistant();
-  const cloud = useAssistantChat(workspaceSlug);
+  const cloudReady = statusState === "ready";
+  const cloud = useAssistantChat(workspaceSlug, { enabled: cloudReady });
   const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
   const [input, setInput] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
@@ -156,9 +165,15 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
     else void cloud.send(trimmed);
   };
 
-  const reset = () => {
+  /** Start a clean conversation, explicitly cancelling a still-running turn first. */
+  const startNewConversation = async () => {
+    if (busy) {
+      if (provider === "local") await local.stop();
+      else await cloud.stop();
+    }
     if (provider === "local") local.reset();
     else cloud.reset();
+    assistantStore.setActiveView("conversation");
   };
 
   /** Drag a docked panel without overlaying or blocking the main workspace. */
@@ -205,6 +220,94 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
     { key: "context", label: t("aiAssistant.view_context"), Icon: FileSearch },
     { key: "runtime", label: t("aiAssistant.view_runtime"), Icon: Activity },
   ] as const;
+
+  const statusGuidance = (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="max-w-72">
+        <p className="text-14 font-medium text-primary">{t(`aiAssistant.status_${statusState}`)}</p>
+        <p className="mt-1.5 text-12 leading-relaxed text-secondary">{t(`aiAssistant.status_${statusState}_hint`)}</p>
+      </div>
+      {statusState === "personal_credential_required" && (
+        <Link
+          href="/settings/profile/agent-configuration"
+          className="rounded-md border border-subtle px-3 py-1.5 text-12 text-primary transition hover:bg-surface-2"
+        >
+          {t("aiAssistant.configure_token")}
+        </Link>
+      )}
+      {statusState === "not_configured" && (
+        <Link
+          href={`/${workspaceSlug}/research/settings/integrations`}
+          className="rounded-md border border-subtle px-3 py-1.5 text-12 text-primary transition hover:bg-surface-2"
+        >
+          {t("aiAssistant.open_workspace_settings")}
+        </Link>
+      )}
+      {statusState === "service_unavailable" && (
+        <Button variant="secondary" size="sm" onClick={onRetryStatus}>
+          <RefreshCw className="size-3" />
+          {t("aiAssistant.retry_status")}
+        </Button>
+      )}
+    </div>
+  );
+
+  const conversationComposer = (
+    <>
+      <div className="focus-within:border-accent-primary mx-4 mb-2 shrink-0 rounded-xl border border-subtle bg-layer-1 p-2.5 transition">
+        <textarea
+          value={input}
+          rows={1}
+          placeholder={t("aiAssistant.placeholder")}
+          aria-label={t("aiAssistant.placeholder")}
+          className="max-h-32 min-h-6 w-full resize-none bg-transparent text-13 text-primary outline-none placeholder:text-tertiary"
+          disabled={provider === "cloud" && !cloudReady}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              send(input);
+            }
+          }}
+        />
+        <div className="flex items-center justify-between gap-2 pt-1.5">
+          <div className="flex min-w-0 items-center gap-1">
+            {providerSelect}
+            {cloud.contextEnvelope && (
+              <span
+                className="flex min-w-0 items-center gap-1 text-10 text-tertiary"
+                title={cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
+              >
+                <Link2 className="size-3 shrink-0 text-accent-primary" />
+                <span className="truncate">{t("aiAssistant.context_linked")}</span>
+              </span>
+            )}
+          </div>
+          {busy ? (
+            <button
+              type="button"
+              onClick={() => (provider === "cloud" ? void cloud.stop() : void local.stop())}
+              aria-label={t("aiAssistant.stop")}
+              className="hover:bg-surface-2-hover flex size-7 items-center justify-center rounded-lg bg-surface-2 text-danger-primary transition"
+            >
+              <Square className="size-3" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => send(input)}
+              disabled={!input.trim() || (provider === "cloud" && !cloudReady)}
+              aria-label={t("aiAssistant.send")}
+              className="flex size-7 items-center justify-center rounded-lg bg-accent-primary text-on-color transition hover:opacity-90 disabled:opacity-40"
+            >
+              <ArrowUp className="size-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="shrink-0 pb-3 text-center text-10 text-tertiary">{t("aiAssistant.disclaimer")}</p>
+    </>
+  );
 
   const contextView = (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -343,13 +446,20 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Button
-              variant={assistantStore.dockMode === "docked" ? "secondary" : "ghost"}
+              variant={effectiveDockMode ? "secondary" : "ghost"}
               size="sm"
-              onClick={() => assistantStore.setDockMode(assistantStore.dockMode === "docked" ? "floating" : "docked")}
-              aria-label={assistantStore.dockMode === "docked" ? t("aiAssistant.unpin") : t("aiAssistant.pin")}
-              title={assistantStore.dockMode === "docked" ? t("aiAssistant.unpin") : t("aiAssistant.pin")}
+              onClick={() => {
+                if (effectiveDockMode) {
+                  assistantStore.setDockMode("floating");
+                  return;
+                }
+                assistantStore.setDockMode("docked");
+                assistantStore.toggleExpanded(false);
+              }}
+              aria-label={effectiveDockMode ? t("aiAssistant.unpin") : t("aiAssistant.pin")}
+              title={effectiveDockMode ? t("aiAssistant.unpin") : t("aiAssistant.pin")}
             >
-              {assistantStore.dockMode === "docked" ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+              {effectiveDockMode ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
             </Button>
             <Button
               variant="ghost"
@@ -363,7 +473,7 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
             <Button
               variant="ghost"
               size="sm"
-              onClick={reset}
+              onClick={() => void startNewConversation()}
               aria-label={t("aiAssistant.new_conversation")}
               title={t("aiAssistant.new_conversation")}
             >
@@ -412,7 +522,12 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
         </div>
       )}
 
-      {assistantStore.activeView === "context" ? (
+      {provider === "cloud" && !cloudReady ? (
+        <>
+          {statusGuidance}
+          {conversationComposer}
+        </>
+      ) : assistantStore.activeView === "context" ? (
         contextView
       ) : assistantStore.activeView === "runtime" ? (
         runtimeView
@@ -567,64 +682,13 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
             </div>
           )}
 
-          <div className="focus-within:border-accent-primary mx-4 mb-2 shrink-0 rounded-xl border border-subtle bg-layer-1 p-2.5 transition">
-            <textarea
-              value={input}
-              rows={1}
-              placeholder={t("aiAssistant.placeholder")}
-              aria-label={t("aiAssistant.placeholder")}
-              className="max-h-32 min-h-6 w-full resize-none bg-transparent text-13 text-primary outline-none placeholder:text-tertiary"
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  send(input);
-                }
-              }}
-            />
-            <div className="flex items-center justify-between gap-2 pt-1.5">
-              <div className="flex min-w-0 items-center gap-1">
-                {providerSelect}
-                {cloud.contextEnvelope && (
-                  <span
-                    className="flex min-w-0 items-center gap-1 text-10 text-tertiary"
-                    title={cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
-                  >
-                    <Link2 className="size-3 shrink-0 text-accent-primary" />
-                    <span className="truncate">{t("aiAssistant.context_linked")}</span>
-                  </span>
-                )}
-              </div>
-              {busy ? (
-                <button
-                  type="button"
-                  onClick={() => (provider === "cloud" ? void cloud.stop() : void local.stop())}
-                  aria-label={t("aiAssistant.stop")}
-                  className="hover:bg-surface-2-hover flex size-7 items-center justify-center rounded-lg bg-surface-2 text-danger-primary transition"
-                >
-                  <Square className="size-3" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => send(input)}
-                  disabled={!input.trim()}
-                  aria-label={t("aiAssistant.send")}
-                  className="flex size-7 items-center justify-center rounded-lg bg-accent-primary text-on-color transition hover:opacity-90 disabled:opacity-40"
-                >
-                  <ArrowUp className="size-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <p className="shrink-0 pb-3 text-center text-10 text-tertiary">{t("aiAssistant.disclaimer")}</p>
+          {conversationComposer}
         </>
       )}
     </div>
   );
 
-  if (effectiveDockMode && !assistantStore.expanded) {
+  if (assistantStore.isOpen && effectiveDockMode && !assistantStore.expanded) {
     return (
       <aside
         aria-label={t("aiAssistant.title")}
@@ -649,9 +713,12 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
     <ModalPortal
       isOpen={assistantStore.isOpen}
       onClose={() => assistantStore.close()}
+      showOverlay={false}
+      closeOnOverlayClick={false}
+      className="pointer-events-none"
       position={EPortalPosition.RIGHT}
       width={assistantStore.expanded ? EPortalWidth.FULL : EPortalWidth.QUARTER}
-      contentClassName="flex h-full min-w-[min(26.25rem,100vw)] flex-col border-l border-subtle bg-surface-1"
+      contentClassName="pointer-events-auto flex h-full min-w-[min(26.25rem,100vw)] flex-col border-l border-subtle bg-surface-1"
     >
       {panelBody}
     </ModalPortal>

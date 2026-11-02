@@ -9,7 +9,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getStatus: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getStatus: vi.fn(), mutateStatus: vi.fn() }));
 
 vi.mock("@/services/assistant", () => ({
   AssistantService: class {
@@ -19,6 +19,19 @@ vi.mock("@/services/assistant", () => ({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ workspaceSlug: "lab" }),
+}));
+
+vi.mock("swr", () => ({
+  default: (key: string, fetcher: () => unknown) => {
+    void key;
+    void fetcher;
+    return { data: mocks.getStatus(), error: undefined, mutate: mocks.mutateStatus };
+  },
+  useSWR: (key: string, fetcher: () => unknown) => {
+    void key;
+    void fetcher;
+    return { data: mocks.getStatus(), error: undefined, mutate: mocks.mutateStatus };
+  },
 }));
 
 vi.mock("@plane/i18n", async (importOriginal) => ({
@@ -36,10 +49,44 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  mocks.getStatus.mockResolvedValue({ enabled: true, ready: true });
+  mocks.getStatus.mockReturnValue({ enabled: true, ready: true, state: "ready" });
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+});
+
+it("keeps a full-height shell and shows setup entry when Synlora is not configured", { timeout: 20000 }, async () => {
+  mocks.getStatus.mockResolvedValue({
+    enabled: false,
+    ready: false,
+    credential_mode: "PERSONAL",
+    state: "personal_credential_required",
+  });
+  const { AIAssistantRoot } = await import("@/components/assistant/ai-assistant-root");
+  const { AIAssistantStore } = await import("@/store/ai-assistant");
+  const { StoreContext } = await import("@/lib/store-context");
+  const store = new AIAssistantStore();
+  store.hydrate("lab");
+
+  act(() => {
+    root.render(
+      // eslint-disable-next-line react/jsx-no-constructed-context-values -- test-only provider value
+      <StoreContext.Provider value={{ aiAssistant: store } as never}>
+        <AIAssistantRoot>
+          <main>project page</main>
+        </AIAssistantRoot>
+      </StoreContext.Provider>
+    );
+  });
+  await act(async () => undefined);
+
+  const shell = container.firstElementChild;
+  expect(shell?.classList.contains("size-full")).toBe(true);
+  expect(shell?.classList.contains("min-h-0")).toBe(true);
+  expect(shell?.firstElementChild?.classList.contains("size-full")).toBe(true);
+  expect(shell?.firstElementChild?.classList.contains("min-h-0")).toBe(true);
+  expect(container.querySelector('[aria-label="aiAssistant.open"]')).not.toBeNull();
+  expect(container.textContent).toContain("project page");
 });
 
 afterEach(async () => {
@@ -49,6 +96,7 @@ afterEach(async () => {
 });
 
 it("keeps the dock shell and page outlet alive across route content changes", { timeout: 20000 }, async () => {
+  mocks.getStatus.mockReturnValue({ enabled: true, ready: true });
   const { AIAssistantRoot } = await import("@/components/assistant/ai-assistant-root");
   const { AIAssistantStore } = await import("@/store/ai-assistant");
   const { StoreContext } = await import("@/lib/store-context");
@@ -72,6 +120,7 @@ it("keeps the dock shell and page outlet alive across route content changes", { 
 
   renderRoute("home");
   await act(async () => undefined);
+  expect(store.status?.state).toBe("ready");
   expect(container.querySelector('[data-testid="assistant-panel"]')).not.toBeNull();
   const shell = container.firstElementChild;
   renderRoute("research-chain");

@@ -86,6 +86,7 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
     handleSubmit,
     setFocus,
     register,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<TIssue>({ defaultValues });
 
@@ -106,6 +107,23 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
     } else {
       setIsOpen(isOpen);
     }
+  };
+
+  /** 外点时保留已输入标题，并转入完整创建窗口。 */
+  const handleOutsideClick = () => {
+    const formData = getValues();
+    if (!formData.name?.trim()) {
+      handleIsOpen(false);
+      return;
+    }
+
+    handleIsOpen(false);
+    toggleCreateIssueModal(true, isEpic ? EIssuesStoreType.EPIC : EIssuesStoreType.PROJECT, undefined, {
+      // oxlint-disable-next-line unicorn/no-useless-fallback-in-spread
+      ...(prePopulatedData ?? {}),
+      ...formData,
+      project_id: projectId.toString(),
+    });
   };
 
   const onSubmitHandler = async (formData: TIssue) => {
@@ -186,6 +204,7 @@ export const QuickAddIssueRoot = observer(function QuickAddIssueRoot(props: TQui
           register={register}
           onSubmit={handleSubmit(onSubmitHandler)}
           onClose={() => handleIsOpen(false)}
+          onOutsideClick={handleOutsideClick}
           isEpic={isEpic}
         />
       ) : (

@@ -83,13 +83,35 @@ class AssistantStatusEndpoint(BaseAPIView):
         config = resolve_assistant_config(workspace, user=request.user)
         enabled = bool(config.base_url and config.token and config.is_enabled)
         ready = False
-        if enabled:
+        state = "not_configured"
+        if not config.is_enabled or not config.base_url:
+            state = "not_configured"
+        elif not config.token:
+            state = (
+                "personal_credential_required"
+                if config.credential_mode == "PERSONAL"
+                else "not_configured"
+            )
+        elif not config.service_token:
+            state = "service_unavailable"
+        elif enabled:
             try:
                 client = SynloraAssistantClient(config, workspace=workspace, user=request.user)
-                ready = client.health().status_code == 200
+                state = "service_unavailable"
+                if client.health().status_code == 200:
+                    client.verify_delegated_auth()
+                    ready = True
+                    state = "ready"
             except Exception as e:
                 log_exception(e)
-        return Response({"enabled": enabled, "ready": ready, "credential_mode": config.credential_mode})
+        return Response(
+            {
+                "enabled": enabled,
+                "ready": ready,
+                "credential_mode": config.credential_mode,
+                "state": state,
+            }
+        )
 
 
 class AssistantSessionEndpoint(BaseAPIView):

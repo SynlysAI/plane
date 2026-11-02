@@ -262,6 +262,21 @@ it("places the cloud token hint below the password input using the same style as
   expect(container.textContent).not.toContain(translations.research.agent_backend.governance_off_new_sessions);
 });
 
+it("maps stable Synlora probe error codes to localized guidance", async () => {
+  service.getBackendConnection.mockResolvedValue({ connection, governance_enabled: true });
+  await renderForm();
+  await act(async () => {
+    const select = container.querySelector("select")!;
+    select.value = "SYNLORA";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  service.testBackendConnection.mockRejectedValue({ error_code: "invalid_token" });
+  await act(async () => button("测试连接").click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    translations.research.agent_backend.error_invalid_token
+  );
+});
+
 it.each(["SCIENCE_DISCOVERY", "SYNLORA"])("saves, tests and deletes the selected %s configuration", async (system) => {
   service.getBackendConnection.mockResolvedValue({
     connection: { ...connection, is_enabled: false },
