@@ -146,6 +146,13 @@ def test_unauthorized_node_hint_fails_closed(env):
     assert response.status_code == 403
 
 
+def test_invalid_node_hint_does_not_silently_downgrade_to_chain_context(env):
+    route = f"/{env['workspace'].slug}/research/chains/{env['chain'].id}/nodes/{uuid4()}/agent"
+    response = _resolve(env, route)
+    assert response.status_code == 403
+    assert response.json()["error"] == "agent_context_invalid"
+
+
 def test_context_resolve_is_idempotent_and_workspace_route_is_safe(env):
     route = f"/{env['workspace'].slug}"
     request_id = f"ctx-{uuid4().hex}"

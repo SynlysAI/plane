@@ -135,6 +135,16 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
   }, [assistantStore.isOpen, cloud]);
 
   useEffect(() => {
+    if (
+      assistantStore.activeProvider === "local" &&
+      cloud.contextEnvelope &&
+      cloud.contextEnvelope.target_type !== "RESEARCH_CHAIN_NODE"
+    ) {
+      assistantStore.setProvider("cloud");
+    }
+  }, [assistantStore, cloud.contextEnvelope]);
+
+  useEffect(() => {
     listRef.current?.scrollTo?.({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [cloud.messages.length, cloud.streamingAnswer, local.sections]);
 

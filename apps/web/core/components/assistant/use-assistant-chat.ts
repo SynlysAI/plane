@@ -52,6 +52,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
   const [contextEnvelope, setContextEnvelope] = useState<TAgentContextEnvelope | null>(null);
   const [runtimeEvents, setRuntimeEvents] = useState<TAgentDockEvent[]>([]);
   const activeRunIdRef = useRef<string | null>(null);
+  const sessionTargetKeyRef = useRef<string | null>(null);
   const latestSeqRef = useRef(0);
   const processedSeqRef = useRef<Set<number>>(new Set());
   const historyLoadedRef = useRef(false);
@@ -163,6 +164,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
     setStreamState({ phase: "loading-history" });
     try {
       const session = await agentDockService.getSession(workspaceSlug, sessionId);
+      sessionTargetKeyRef.current = session.target_key;
       activeRunIdRef.current = session.run_id;
       const history = await agentDockService.getEvents(workspaceSlug, session.run_id, 0);
       applyEvents(history.results, history.session);
@@ -180,11 +182,21 @@ export const useAssistantChat = (workspaceSlug: string) => {
 
   const ensureSession = useCallback(
     async (context: TAgentContextEnvelope): Promise<TAgentDockSession> => {
-      if (assistantStore.threadId) {
+      if (assistantStore.threadId && sessionTargetKeyRef.current === context.session_binding.target_key) {
         return agentDockService.getSession(workspaceSlug, assistantStore.threadId);
+      }
+      if (assistantStore.threadId) {
+        assistantStore.clearThreadId(workspaceSlug);
+        historyLoadedRef.current = true;
+        setMessages([]);
+        setRuntimeEvents([]);
+        processedSeqRef.current = new Set();
+        latestSeqRef.current = 0;
+        activeRunIdRef.current = null;
       }
       const created = await agentDockService.createSession(workspaceSlug, context.context_id);
       assistantStore.setThreadId(workspaceSlug, created.session_id);
+      sessionTargetKeyRef.current = created.target_key;
       activeRunIdRef.current = created.run_id;
       historyLoadedRef.current = true;
       return created;
@@ -231,6 +243,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
     stopPolling();
     historyLoadedRef.current = false;
     activeRunIdRef.current = null;
+    sessionTargetKeyRef.current = null;
     latestSeqRef.current = 0;
     processedSeqRef.current = new Set();
     setRuntimeEvents([]);
@@ -241,6 +254,12 @@ export const useAssistantChat = (workspaceSlug: string) => {
   }, [assistantStore, stopPolling, workspaceSlug]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
+
+  useEffect(() => {
+    if (assistantStore.isOpen && streamState.phase === "streaming" && activeRunIdRef.current) {
+      void pollEvents(activeRunIdRef.current, true);
+    }
+  }, [assistantStore.isOpen, pollEvents, streamState.phase]);
 
   const contextStatus = useMemo(
     () => contextEnvelope?.status ?? (streamState.phase === "loading-context" ? "loading" : "unlinked"),

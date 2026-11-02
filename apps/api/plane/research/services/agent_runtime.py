@@ -67,9 +67,15 @@ class SynloraRuntimeClient:
         """
         if self._delegated_token and time.time() < self._delegated_expires_at - 300:
             return self._delegated_token
+        if not self.config.service_token:
+            raise SynloraRuntimeError(
+                "synlora_service_token_missing",
+                "Synlora delegated service credential is not configured.",
+                503,
+            )
         if self.workspace is None or self.user is None:
             return self.config.token
-        service_token = getattr(self.config, "service_token", "") or self.config.token
+        service_token = self.config.service_token
         subject = self._delegated_subject()
         try:
             response = httpx.post(

@@ -83,6 +83,8 @@ def _target_from_route(workspace: Workspace, user, route: str) -> AgentDockTarge
     node_id = _uuid(segment_value("nodes") or "")
     chain_id = _uuid(segment_value("chains") or "")
     project_id = _uuid(segment_value("projects") or "")
+    explicit_node = segment_value("nodes") is not None
+    explicit_chain = segment_value("chains") is not None
 
     if node_id is not None:
         node = (
@@ -104,6 +106,8 @@ def _target_from_route(workspace: Workspace, user, route: str) -> AgentDockTarge
                 chain=node.chain,
                 node=node,
             )
+        if explicit_node:
+            raise AgentDockContextError("Research node is not accessible", 403)
 
     if chain_id is not None:
         chain = (
@@ -122,6 +126,8 @@ def _target_from_route(workspace: Workspace, user, route: str) -> AgentDockTarge
                 project=chain.project,
                 chain=chain,
             )
+        if explicit_chain:
+            raise AgentDockContextError("Research chain is not accessible", 403)
 
     if project_id is not None:
         profile = (
@@ -136,7 +142,6 @@ def _target_from_route(workspace: Workspace, user, route: str) -> AgentDockTarge
                 workspace=workspace,
                 project=profile.project,
             )
-
     return AgentDockTarget(type=ResearchContextGrant.TargetType.WORKSPACE, workspace=workspace)
 MAX_SELECTED_TEXT = 4000
 MAX_ATTACHMENT_IDS = 20
@@ -356,6 +361,17 @@ def resolve_agent_dock_context(
     if existing is not None:
         if existing.workspace_id != workspace.id or existing.user_id != user.id:
             raise AgentDockContextError("request_id was already used by another user", 409)
+        existing_key = (
+            f"node:{existing.chain_node_id}"
+            if existing.chain_node_id
+            else f"chain:{existing.research_chain_id}"
+            if existing.research_chain_id
+            else f"project:{existing.project_id}"
+            if existing.project_id
+            else f"workspace:{existing.workspace_id}"
+        )
+        if existing_key != target.key:
+            raise AgentDockContextError("request_id was already used for another target", 409)
         return existing, "", _envelope(existing, target, user)
 
     manifest, knowledge_ids, file_ids = _build_manifest(target, user, selected_text)
