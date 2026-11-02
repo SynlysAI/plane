@@ -37,11 +37,23 @@ export type TQuickAddIssueFormRoot = {
   register: UseFormRegister<TIssue>;
   onSubmit: () => void;
   onClose: () => void;
+  onOutsideClick: () => void;
   isEpic: boolean;
 };
 
 export const QuickAddIssueFormRoot = observer(function QuickAddIssueFormRoot(props: TQuickAddIssueFormRoot) {
-  const { isOpen, layout, projectId, hasError = false, setFocus, register, onSubmit, onClose, isEpic } = props;
+  const {
+    isOpen,
+    layout,
+    projectId,
+    hasError = false,
+    setFocus,
+    register,
+    onSubmit,
+    onClose,
+    onOutsideClick,
+    isEpic,
+  } = props;
   // store hooks
   const { getProjectById } = useProject();
   // derived values
@@ -50,7 +62,7 @@ export const QuickAddIssueFormRoot = observer(function QuickAddIssueFormRoot(pro
   const ref = useRef<HTMLFormElement>(null);
   // click detection
   useKeypress("Escape", onClose);
-  useOutsideClickDetector(ref, onClose);
+  useOutsideClickDetector(ref, onOutsideClick);
   // set focus on name input
   useEffect(() => {
     setFocus("name");

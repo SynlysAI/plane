@@ -11,6 +11,7 @@ import { cn } from "@plane/utils";
 import type { TInboxTab } from "@plane/types";
 // components
 import { WorkspaceHomeLink } from "@/components/common/workspace-home-link";
+import { SystemAnnouncementComposer } from "@/components/workspace-notifications/announcement-composer";
 import { InboxItemRow } from "./inbox-item-row";
 // hooks
 import { inboxListKey, useInboxList, useInboxUnreadCounts, useInvalidateOtherInboxLists } from "@/hooks/use-inbox";
@@ -153,15 +154,18 @@ export function InboxSidebar({ workspaceSlug }: Props) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <WorkspaceHomeLink workspaceSlug={workspaceSlug} />
-            <button
-              type="button"
-              onClick={handleMarkAllRead}
-              disabled={isMutating || !counts?.total_unread_count}
-              className="rounded-md px-2 py-1 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              全部已读
-            </button>
+            <SystemAnnouncementComposer workspaceSlug={workspaceSlug} />
+            <div className="flex items-center gap-1">
+              <WorkspaceHomeLink workspaceSlug={workspaceSlug} />
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                disabled={isMutating || !counts?.total_unread_count}
+                className="rounded-md px-2 py-1 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                全部已读
+              </button>
+            </div>
           </div>
         </div>
 

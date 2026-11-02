@@ -40,6 +40,10 @@ vi.mock("@/hooks/use-notification-preview", () => ({
   }),
 }));
 
+vi.mock("@/components/workspace-notifications/announcement-composer", () => ({
+  SystemAnnouncementComposer: () => <button type="button">发布公告入口</button>,
+}));
+
 vi.mock("@plane/propel/toast", () => ({
   TOAST_TYPE: { ERROR: "ERROR" },
   setToast: mocks.setToast,
@@ -154,6 +158,7 @@ it("marks a selected full-page item read without removing the unfinished todo", 
   await render(<InboxSidebar workspaceSlug="lab" />);
 
   expect(container.querySelector('a[href="/lab/"]')?.textContent).toContain("返回首页");
+  expect(container.textContent).toContain("发布公告入口");
   const row = [...container.querySelectorAll("button")].find((button) =>
     button.textContent?.includes("提交技术路线说明")
   );
