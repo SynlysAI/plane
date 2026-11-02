@@ -194,6 +194,9 @@ def test_context_callback_accepts_workspace_and_project_tokens(env, project_scop
     expected_project = str(env["project"].id) if project_scope else None
     assert response.json()["scope"]["project_id"] == expected_project
     assert response.json()["context"]["context_id"] == str(grant.context_id)
+    expected = agent_context_v3_for_grant(grant)
+    for field in ("target", "subject", "policy"):
+        assert response.json()["context"][field] == expected[field]
     denied = client.get(url, {"project_id": str(uuid4())})
     assert denied.status_code == 403
 

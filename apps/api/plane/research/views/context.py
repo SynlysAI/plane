@@ -429,8 +429,8 @@ def _context_payload(grant):
             "workspace_id": str(grant.workspace_id),
             "workspace_slug": grant.workspace.slug,
             "project_id": str(grant.project_id) if grant.project_id else None,
-            **({"research_chain_id": str(research_chain.id)} if research_chain else {}),
-            **({"chain_node_id": str(chain_node.id)} if chain_node else {}),
+            "research_chain_id": str(research_chain.id) if research_chain else None,
+            "chain_node_id": str(chain_node.id) if chain_node else None,
         },
         "subject": {
             "plane_user_id": str(grant.user_id),
