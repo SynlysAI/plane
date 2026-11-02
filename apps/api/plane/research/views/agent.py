@@ -27,7 +27,11 @@ from plane.db.models import (
     WorkspaceResearchSetting,
 )
 from plane.api.middleware.api_authentication import APIKeyAuthentication
-from plane.app.views.assistant.client import resolve_assistant_config, SynloraAssistantClient
+from plane.app.views.assistant.client import (
+    AssistantNotConfigured,
+    resolve_assistant_config,
+    SynloraAssistantClient,
+)
 from plane.authentication.session import BaseSessionAuthentication
 import httpx
 
@@ -1497,6 +1501,7 @@ class ResearchAgentBackendConnectionTestEndpoint(AgentPluginMixin):
         if not connection.credential_encrypted:
             return research_error(ResearchErrorCode.AGENT_SCOPE_INVALID, "The connection has no stored credential.")
         models = []
+        error_code = ""
         try:
             if system == "SYNLORA":
                 config = resolve_assistant_config(workspace, user=request.user)
@@ -1506,19 +1511,36 @@ class ResearchAgentBackendConnectionTestEndpoint(AgentPluginMixin):
                     token=decrypt_data(connection.credential_encrypted),
                 )
                 if not config.base_url:
-                    raise ScienceDiscoveryError("synlora_not_configured", "Synlora service URL is not configured.")
-                response = SynloraAssistantClient(config).health()
-                response.raise_for_status()
+                    error_code = "not_configured"
+                else:
+                    client = SynloraAssistantClient(config)
+                    health_response = client.health()
+                    token_response = client.verify_personal_token()
+                    if health_response.status_code >= 400:
+                        error_code = "service_unavailable"
+                    elif token_response.status_code in (401, 403):
+                        error_code = "invalid_token"
+                    elif token_response.status_code >= 400:
+                        error_code = "service_unavailable"
             else:
                 models = ScienceDiscoveryClient(connection=connection).list_models()
-            connection.health_status = ResearchAgentBackendConnection.HealthStatus.OK
-            connection.last_error = ""
+            if error_code:
+                connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
+                connection.last_error = error_code
+            else:
+                connection.health_status = ResearchAgentBackendConnection.HealthStatus.OK
+                connection.last_error = ""
         except ScienceDiscoveryError as exc:
             connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
             connection.last_error = exc.message[:255]
+        except AssistantNotConfigured:
+            connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
+            error_code = "not_configured"
+            connection.last_error = error_code
         except httpx.HTTPError:
             connection.health_status = ResearchAgentBackendConnection.HealthStatus.DOWN
-            connection.last_error = "Synlora connection test failed."
+            error_code = "service_unavailable"
+            connection.last_error = error_code
         finally:
             connection.last_health_at = timezone.now()
             connection.updated_by = request.user
@@ -1533,7 +1555,10 @@ class ResearchAgentBackendConnectionTestEndpoint(AgentPluginMixin):
             )
         if connection.health_status == ResearchAgentBackendConnection.HealthStatus.OK:
             return Response({"ok": True, "models": len(models or [])})
-        return Response({"ok": False, "error": connection.last_error}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(
+            {"ok": False, "error": connection.last_error, "error_code": error_code},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
 
 
 class ResearchAgentSessionArtifactListEndpoint(AgentPluginMixin):

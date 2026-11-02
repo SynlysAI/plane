@@ -169,7 +169,6 @@ def test_cloud_and_local_configs_are_saved_and_removed_independently(sd_session)
 
 
 def test_cloud_probe_uses_cloud_token_and_does_not_probe_local(sd_session, settings, monkeypatch):
-    from plane.app.views.assistant.client import SynloraAssistantClient
     from plane.research.services.sciencediscovery import ScienceDiscoveryClient
 
     settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
@@ -178,30 +177,53 @@ def test_cloud_probe_uses_cloud_token_and_does_not_probe_local(sd_session, setti
     client.post(url, {"system": "SYNLORA", "token": "cloud-probe-token"}, format="json")
     local_probe = []
     monkeypatch.setattr(ScienceDiscoveryClient, "list_models", lambda self: local_probe.append(True))
-    configs = []
+    requests = []
 
-    def health(self):
-        configs.append(self.config)
-        return httpx.Response(200, request=httpx.Request("GET", f"{self.config.base_url}/api/system/ready"))
+    def fake_get(url, **kwargs):
+        requests.append({"url": url, **kwargs})
+        return httpx.Response(200, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(SynloraAssistantClient, "health", health)
+    monkeypatch.setattr("plane.app.views.assistant.client.httpx.get", fake_get)
     response = client.post(f"{url}test/", {"system": "SYNLORA"}, format="json")
     assert response.status_code == 200
     assert response.json()["ok"] is True
-    assert configs[0].token == "cloud-probe-token"
-    assert configs[0].base_url == settings.SYNLORA_BASE_URL
+    assert [item["url"] for item in requests] == [
+        f"{settings.SYNLORA_BASE_URL}/api/health",
+        f"{settings.SYNLORA_BASE_URL}/api/v1/auth/me",
+    ]
+    assert "headers" not in requests[0]
+    assert requests[1]["headers"] == {"Authorization": "Bearer cloud-probe-token"}
     assert local_probe == []
     cloud = ResearchAgentBackendConnection.objects.get(
         workspace=sd_session.workspace, user=sd_session.user, system="SYNLORA"
     )
     assert cloud.health_status == "OK"
 
-    def unavailable(self):
-        raise httpx.ConnectError("unavailable")
+    def invalid_token(url, **kwargs):
+        if url.endswith("/api/v1/auth/me"):
+            return httpx.Response(401, request=httpx.Request("GET", url))
+        return httpx.Response(200, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(SynloraAssistantClient, "health", unavailable)
+    monkeypatch.setattr("plane.app.views.assistant.client.httpx.get", invalid_token)
     response = client.post(f"{url}test/", {"system": "SYNLORA"}, format="json")
     assert response.status_code == 502
     assert response.json()["ok"] is False
+    assert response.json()["error_code"] == "invalid_token"
     cloud.refresh_from_db()
     assert cloud.health_status == "DOWN"
+
+    def network_unavailable(*args, **kwargs):
+        raise httpx.ConnectError("unavailable")
+
+    monkeypatch.setattr("plane.app.views.assistant.client.httpx.get", network_unavailable)
+    response = client.post(f"{url}test/", {"system": "SYNLORA"}, format="json")
+    assert response.status_code == 502
+    assert response.json()["error_code"] == "service_unavailable"
+
+
+def test_synlora_integration_adapter_uses_public_health_contract():
+    """The shared integration board probes Synlora's real public health route."""
+    from plane.research.services.integrations.adapters import SynloraClientAdapter
+
+    assert SynloraClientAdapter.health_path == "/api/health"
+    assert SynloraClientAdapter.search_path == "/api/health"
