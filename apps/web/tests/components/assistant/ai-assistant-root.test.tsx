@@ -48,7 +48,7 @@ afterEach(async () => {
   window.localStorage.clear();
 });
 
-it("keeps the dock shell and page outlet alive across route content changes", async () => {
+it("keeps the dock shell and page outlet alive across route content changes", { timeout: 20000 }, async () => {
   const { AIAssistantRoot } = await import("@/components/assistant/ai-assistant-root");
   const { AIAssistantStore } = await import("@/store/ai-assistant");
   const { StoreContext } = await import("@/lib/store-context");

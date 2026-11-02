@@ -101,7 +101,8 @@ export const useAssistantChat = (workspaceSlug: string) => {
         setRuntimeEvents((previous) => {
           const merged = new Map(previous.map((item) => [item.seq, item]));
           for (const item of newRuntimeEvents) merged.set(item.seq, item);
-          return [...merged.values()].toSorted((left, right) => left.seq - right.seq);
+          // eslint-disable-next-line unicorn/no-array-sort -- ES2022 lib target lacks Array#toSorted
+          return [...merged.values()].sort((left, right) => left.seq - right.seq);
         });
       }
       if (approvalPending) {

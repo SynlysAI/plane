@@ -82,5 +82,6 @@ export function mergeRuntimeToolCalls(events: TAgentDockEvent[]): TRuntimeToolCa
     current.seq = Math.min(current.seq, event.seq);
     calls.set(id, current);
   }
-  return [...calls.values()].toSorted((left, right) => left.seq - right.seq);
+  // eslint-disable-next-line unicorn/no-array-sort -- ES2022 lib target lacks Array#toSorted
+  return [...calls.values()].sort((left, right) => left.seq - right.seq);
 }
