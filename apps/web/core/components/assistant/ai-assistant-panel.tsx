@@ -35,7 +35,6 @@ import remarkGfm from "remark-gfm";
 // components
 import { useAssistantChat } from "./use-assistant-chat";
 import { useWorkbenchChat } from "./use-workbench-chat";
-import { useAssistantPageContext } from "./use-assistant-page-context";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
@@ -106,8 +105,7 @@ function ToolLine({ name, status }: { name: string; status?: string }) {
 export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSlug }: Props) {
   const { t } = useTranslation();
   const assistantStore = useAIAssistant();
-  const pageContext = useAssistantPageContext();
-  const cloud = useAssistantChat(workspaceSlug, pageContext);
+  const cloud = useAssistantChat(workspaceSlug);
   const local = useWorkbenchChat(workspaceSlug, assistantStore.contextNodeId);
   const [input, setInput] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
@@ -205,8 +203,20 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
         </h3>
         <div className="space-y-2 px-4 py-3">
           <p className="text-11 leading-relaxed break-words text-secondary">
-            {pageContext || t("aiAssistant.context_workspace_only")}
+            {cloud.contextEnvelope
+              ? cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")
+              : t("aiAssistant.context_workspace_only")}
           </p>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-10">
+            <div>
+              <dt className="text-tertiary">Resources</dt>
+              <dd className="text-secondary">{cloud.contextEnvelope?.resources_summary.total ?? 0}</dd>
+            </div>
+            <div>
+              <dt className="text-tertiary">Tools</dt>
+              <dd className="text-secondary">{cloud.contextEnvelope?.capabilities.allowed_tools.length ?? 0}</dd>
+            </div>
+          </dl>
           <p className="text-10 text-tertiary">{t("aiAssistant.context_snapshot_pending")}</p>
         </div>
       </section>
@@ -317,6 +327,14 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
           </button>
         ))}
       </nav>
+
+      {cloud.contextEnvelope && (
+        <div className="shrink-0 border-b border-subtle bg-surface-2 px-4 py-2">
+          <p className="truncate text-10 text-secondary" title={cloud.contextEnvelope.session_binding.target_key}>
+            {cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
+          </p>
+        </div>
+      )}
 
       {assistantStore.activeView === "context" ? (
         contextView
@@ -491,8 +509,11 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
             <div className="flex items-center justify-between gap-2 pt-1.5">
               <div className="flex min-w-0 items-center gap-1">
                 {providerSelect}
-                {pageContext && (
-                  <span className="flex min-w-0 items-center gap-1 text-10 text-tertiary" title={pageContext}>
+                {cloud.contextEnvelope && (
+                  <span
+                    className="flex min-w-0 items-center gap-1 text-10 text-tertiary"
+                    title={cloud.contextEnvelope.target_hierarchy.map((item) => item.title).join(" / ")}
+                  >
                     <Link2 className="size-3 shrink-0 text-accent-primary" />
                     <span className="truncate">{t("aiAssistant.context_linked")}</span>
                   </span>

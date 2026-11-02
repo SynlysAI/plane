@@ -129,6 +129,7 @@ def issue_context_token(
         scope_source=scope_source,
         policy_version=policy_version,
         token_hash=hash_context_token(raw_token),
+        context_token_encrypted=_encrypt_token(raw_token),
         expires_at=timezone.now() + timedelta(seconds=ttl_seconds),
         request_id=request_id,
         created_by=user,
@@ -258,11 +259,19 @@ def issue_agent_dock_context_token(
         scope_source=scope_source,
         policy_version=policy_version,
         token_hash=hash_context_token(raw_token),
+        context_token_encrypted=_encrypt_token(raw_token),
         expires_at=timezone.now() + timedelta(seconds=ttl),
         request_id=request_id,
         created_by=user,
     )
     return grant, raw_token
+
+
+def _encrypt_token(raw_token: str) -> str:
+    """Encrypt an opaque token for server-side continuation calls."""
+    from plane.license.utils.encryption import encrypt_data
+
+    return encrypt_data(raw_token)
 
 
 def load_context_grant(raw_token):

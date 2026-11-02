@@ -67,6 +67,8 @@ class ResearchContextGrant(BaseModel):
     scope_source = models.CharField(max_length=64, blank=True, default="chain_owner")
     policy_version = models.CharField(max_length=64, default="research-agent-policy.v1")
     token_hash = models.CharField(max_length=64, unique=True)
+    # Server-side opaque token storage. Never serialized, logged, or returned.
+    context_token_encrypted = models.TextField(blank=True, default="")
     expires_at = models.DateTimeField(db_index=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)

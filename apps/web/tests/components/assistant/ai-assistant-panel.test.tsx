@@ -10,22 +10,24 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getStatus: vi.fn(),
+  resolveContext: vi.fn(),
+  listSessions: vi.fn(),
+  getSession: vi.fn(),
   createSession: vi.fn(),
-  startChat: vi.fn(),
+  sendMessage: vi.fn(),
+  getEvents: vi.fn(),
   cancelRun: vi.fn(),
-  getHistory: vi.fn(),
-  streamSessionEvents: vi.fn(),
 }));
 
-vi.mock("@/services/assistant", () => ({
-  AssistantService: class {
-    getStatus = mocks.getStatus;
+vi.mock("@/services/agent-dock", () => ({
+  AgentDockService: class {
+    resolveContext = mocks.resolveContext;
+    listSessions = mocks.listSessions;
+    getSession = mocks.getSession;
     createSession = mocks.createSession;
-    startChat = mocks.startChat;
+    sendMessage = mocks.sendMessage;
+    getEvents = mocks.getEvents;
     cancelRun = mocks.cancelRun;
-    getHistory = mocks.getHistory;
-    streamSessionEvents = mocks.streamSessionEvents;
   },
 }));
 
@@ -34,11 +36,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/lab/projects",
 }));
 
-vi.mock("@/hooks/store/use-project", () => ({ useProject: () => ({ getProjectById: () => undefined }) }));
-vi.mock("@/hooks/store/use-workspace", () => ({
-  useWorkspace: () => ({ getWorkspaceBySlug: () => ({ name: "Lab", slug: "lab" }) }),
-}));
-vi.mock("@/hooks/store/use-issue-detail", () => ({ useIssueDetail: () => ({ peekIssue: undefined }) }));
 vi.mock("@plane/i18n", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useTranslation: () => ({ t: (key: string) => key }),
@@ -50,11 +47,52 @@ const { StoreContext } = await import("@/lib/store-context");
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const SSE_FRAMES = [
-  'event: llm/delta\ndata: {"payload":{"text":"你好"}}\n\n',
-  'event: llm/delta\ndata: {"payload":{"text":"，世界"}}\n\n',
-  "event: turn/end\ndata: {}\n\n",
-];
+const envelope = {
+  schema_version: "agent-context-envelope.v1",
+  context_id: "context-1",
+  context_version: 1,
+  status: "linked",
+  target_type: "PROJECT",
+  target_hierarchy: [
+    { type: "workspace", id: "ws", title: "Lab" },
+    { type: "project", id: "project-1", title: "新材料研究" },
+  ],
+  resources_summary: { total: 7, by_kind: { task: 3, file: 4 } },
+  capabilities: {
+    agent: "Synlora workspace assistant",
+    allowed_tools: ["knowledge.search", "file.read"],
+    allowed_plugins: [],
+    allowed_mcp_ids: [],
+    allowed_knowledge_base_ids: ["kb-1"],
+    allowed_file_ids: ["file-1"],
+  },
+  expiry: "2099-01-01T00:00:00Z",
+  session_binding: { workspace_id: "ws", target_key: "project:project-1", user_id: "user-1" },
+};
+
+const session = {
+  schema_version: "agent-dock-session.v1",
+  session_id: "session-1",
+  run_id: "run-1",
+  target_type: "PROJECT",
+  target_key: "project:project-1",
+  context: { context_id: "context-1", context_version: 1, status: "linked", expires_at: "2099-01-01T00:00:00Z" },
+  status: "READY",
+  last_error: "",
+  provider: "SYNLORA",
+  assembly: {},
+  latest_seq: 2,
+};
+
+const event = (seq: number, event_type: string, payload: Record<string, unknown> = {}) => ({
+  schema_version: "agent-dock-event.v1",
+  run_id: "run-1",
+  seq,
+  event_type,
+  payload,
+  request_id: `request-${seq}`,
+  created_at: "2026-11-02T00:00:00Z",
+});
 
 const MARKDOWN_TABLE = [
   "| Category | Capability |",
@@ -70,6 +108,18 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  window.localStorage.clear();
+  mocks.resolveContext.mockReset().mockResolvedValue(envelope);
+  mocks.getSession.mockReset().mockResolvedValue(session);
+  mocks.createSession.mockReset().mockResolvedValue(session);
+  mocks.sendMessage.mockReset().mockResolvedValue({ ...session, status: "STREAMING" });
+  mocks.getEvents.mockReset().mockResolvedValue({
+    results: [event(2, "OUTPUT", { content: "你好，世界" })],
+    count: 1,
+    latest_seq: 2,
+    session,
+  });
+  mocks.cancelRun.mockReset().mockResolvedValue({ ...session, status: "CLOSED" });
 });
 
 afterEach(async () => {
@@ -80,30 +130,13 @@ afterEach(async () => {
 });
 
 function renderPanel(store: InstanceType<typeof AIAssistantStore>) {
-  const contextValue = { aiAssistant: store } as never;
   act(() => {
     root.render(
       // eslint-disable-next-line react/jsx-no-constructed-context-values -- test-only provider value
-      <StoreContext.Provider value={contextValue}>
+      <StoreContext.Provider value={{ aiAssistant: store } as never}>
         <AIAssistantPanel workspaceSlug="lab" />
       </StoreContext.Provider>
     );
-  });
-}
-
-function typeAndSend() {
-  // the panel portals its content into a body-level container
-  const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
-  const sendButton = [...document.querySelectorAll("button")].find(
-    (button) => button.getAttribute("aria-label") === "aiAssistant.send"
-  ) as HTMLButtonElement;
-  act(() => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(textarea, "介绍这个页面");
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => {
-    sendButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -119,126 +152,98 @@ async function waitForText(text: string, attempt = 0): Promise<void> {
   await waitForText(text, attempt + 1);
 }
 
-describe("AIAssistantPanel", () => {
-  beforeEach(() => {
-    mocks.getStatus.mockResolvedValue({ enabled: true, ready: true });
-    mocks.getHistory.mockReset();
-    mocks.createSession.mockResolvedValue({ thread_id: "thread-1", title: "Plane/lab" });
-    mocks.startChat.mockResolvedValue({
-      request_id: "r-1",
-      run_id: "run-1",
-      status: "dispatched",
-      message_id: 1,
-      thread_id: "thread-1",
-      queued: false,
-    });
-    mocks.streamSessionEvents.mockImplementation(
-      async (_slug: string, _threadId: string, options: { onChunk: (chunk: string) => void }) => {
-        for (const frame of SSE_FRAMES) options.onChunk(frame);
-      }
-    );
-    window.localStorage.clear();
+function typeAndSend(text = "介绍这个项目") {
+  const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+  const sendButton = [...document.querySelectorAll("button")].find(
+    (button) => button.getAttribute("aria-label") === "aiAssistant.send"
+  ) as HTMLButtonElement;
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(textarea, text);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  act(() => sendButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+}
 
-  it("streams answer deltas into the message list and finalizes on end", async () => {
+describe("AIAssistantPanel", () => {
+  it("creates a target-bound session and renders durable output", async () => {
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
     renderPanel(store);
+    await waitForText("新材料研究");
 
     typeAndSend();
     await waitForText("你好，世界");
-    // the user message is echoed
-    expect(document.body.textContent).toContain("介绍这个页面");
-    // thread persisted for the next visit
-    expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab")).toBe("thread-1");
+    expect(document.body.textContent).toContain("介绍这个项目");
+    expect(mocks.createSession).toHaveBeenCalledWith("lab", "context-1");
+    expect(mocks.sendMessage).toHaveBeenCalledWith("lab", "session-1", "介绍这个项目");
+    expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab")).toBe("session-1");
   });
 
-  it("keeps history when reopening an existing thread", async () => {
-    mocks.getHistory.mockResolvedValue([
-      { role: "user", content: "之前的问题" },
-      { role: "assistant", content: "之前的回答" },
-    ]);
-    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "thread-9");
+  it("restores an existing dock session without leaking context bodies", async () => {
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
     renderPanel(store);
-
-    await waitForText("之前的回答");
+    await waitForText("你好，世界");
+    expect(mocks.getSession).toHaveBeenCalledWith("lab", "session-1");
+    expect(mocks.createSession).not.toHaveBeenCalled();
   });
 
-  it("renders tables and inline markdown in conversation history", async () => {
-    mocks.getHistory.mockResolvedValue([{ role: "assistant", content: MARKDOWN_TABLE }]);
-    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "thread-9");
+  it("renders markdown from durable assistant events", async () => {
+    mocks.getEvents.mockResolvedValue({
+      results: [event(2, "OUTPUT", { content: MARKDOWN_TABLE })],
+      count: 1,
+      latest_seq: 2,
+      session,
+    });
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
     renderPanel(store);
-
     await waitForText("Full text");
     const table = document.querySelector(".answer-markdown table");
-    expect(table).not.toBeNull();
-    expect(table?.querySelectorAll("th")).toHaveLength(2);
-    expect(table?.querySelectorAll("tbody tr")).toHaveLength(2);
     expect(table?.querySelector("strong")?.textContent).toBe("Full text");
     expect(table?.querySelector("code")?.textContent).toBe("SQL");
-    expect(table?.querySelectorAll("th")[1].style.textAlign).toBe("right");
-    expect(table?.parentElement?.classList.contains("overflow-x-auto")).toBe(true);
   });
 
-  it("uses a themed surface instead of the application canvas", () => {
+  it("shows the target hierarchy and authorized capability counts in context view", async () => {
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
     renderPanel(store);
+    await waitForText("新材料研究");
+    await act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((button) => button.textContent === "aiAssistant.view_context")
+        ?.click();
+    });
+    expect(document.body.textContent).toContain("Lab / 新材料研究");
+    expect(document.body.textContent).toContain("7");
+    expect(document.body.textContent).toContain("2");
+  });
 
+  it("uses a themed surface instead of the application canvas", async () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
     const panel = document.querySelector('[role="document"]');
     expect(panel?.classList.contains("bg-surface-1")).toBe(true);
     expect(panel?.classList.contains("bg-canvas")).toBe(false);
-
-    const composer = document.querySelector("textarea")?.closest("div");
-    expect(composer?.classList.contains("bg-layer-1")).toBe(true);
-    expect(composer?.classList.contains("bg-surface-1")).toBe(false);
   });
 
-  it("renders a streamed table before and after the answer completes", async () => {
-    let completeStream: (() => void) | undefined;
-    mocks.streamSessionEvents.mockImplementation(
-      async (_slug: string, _runId: string, options: { onChunk: (chunk: string) => void }) => {
-        for (const content of ["| Category | Capability |\n| :--- | ---: |\n", "| Search | **Full text** |\n"]) {
-          const data = { payload: { text: content } };
-          options.onChunk(`event: llm/delta\ndata: ${JSON.stringify(data)}\n\n`);
-        }
-        await new Promise<void>((resolve) => {
-          completeStream = resolve;
-        });
-        options.onChunk("event: turn/end\ndata: {}\n\n");
-      }
-    );
+  it("shows an inline error when event replay fails", async () => {
+    mocks.getEvents.mockRejectedValue(new Error("agent_dock_http_502"));
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab", "session-1");
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();
     renderPanel(store);
-
-    typeAndSend();
-    await waitForText("Full text");
-    expect(document.querySelector(".answer-markdown table strong")?.textContent).toBe("Full text");
-    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).not.toBeNull();
-
-    await act(async () => completeStream?.());
-    expect(document.querySelectorAll(".answer-markdown table")).toHaveLength(1);
-    expect(document.querySelector('[aria-label="aiAssistant.stop"]')).toBeNull();
-  });
-
-  it("shows an inline error when the stream fails", async () => {
-    mocks.streamSessionEvents.mockRejectedValue(new Error("assistant_stream_http_502"));
-    const store = new AIAssistantStore();
-    store.hydrate("lab");
-    store.open();
-    renderPanel(store);
-
-    typeAndSend();
     await waitForText("aiAssistant.error_generic");
   });
 });

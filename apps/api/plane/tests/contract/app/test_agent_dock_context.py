@@ -155,3 +155,75 @@ def test_context_resolve_is_idempotent_and_workspace_route_is_safe(env):
     assert second.status_code == 201
     assert first.json()["context_id"] == second.json()["context_id"]
     assert second.json()["target_type"] == "WORKSPACE"
+
+
+def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, monkeypatch):
+    from plane.research.services import agent_dock_sessions
+
+    class FakeRuntime:
+        def __init__(self):
+            self.pulled = False
+
+        def create_session(self, *, title, research_context, context_token):
+            assert research_context["schema_version"] == "agent-context.v3"
+            assert research_context["target"]["type"] == "RESEARCH_CHAIN_NODE"
+            assert context_token
+            return "synlora-session-1"
+
+        def start_run(self, *, thread_id, content, request_id, research_context, context_token):
+            assert thread_id == "synlora-session-1"
+            assert content == "总结当前节点"
+            assert research_context["schema_version"] == "agent-context.v3"
+            assert context_token
+            return "synlora-run-1"
+
+        def pull_events(self, *, session_id, after_seq=-1):
+            if self.pulled:
+                return [], after_seq, None
+            self.pulled = True
+            return (
+                [
+                    {"sequence": 1, "event": {"type": "tool.started", "name": "knowledge.search"}},
+                    {"sequence": 2, "event": {"type": "assistant.snapshot", "content": "节点摘要"}},
+                    {"sequence": 3, "event": {"type": "run.completed", "message": {"content": ""}}},
+                ],
+                3,
+                "completed",
+            )
+
+    runtime = FakeRuntime()
+    monkeypatch.setattr(agent_dock_sessions, "resolve_synlora_runtime", lambda *args, **kwargs: runtime)
+
+    route = f"/{env['workspace'].slug}/research/chains/{env['chain'].id}/nodes/{env['node'].id}/agent"
+    context = _resolve(env, route).json()
+    session_response = env["client"].post(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/",
+        {"request_id": f"session-{uuid4().hex}", "context_id": context["context_id"]},
+        format="json",
+    )
+    assert session_response.status_code == 201, session_response.text
+    session = session_response.json()
+    assert session["target_type"] == "RESEARCH_CHAIN_NODE"
+    assert session["target_key"] == f"node:{env['node'].id}"
+    assert "token" not in str(session).lower()
+
+    message = env["client"].post(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/sessions/{session['session_id']}/messages/",
+        {"request_id": f"message-{uuid4().hex}", "content": "总结当前节点"},
+        format="json",
+    )
+    assert message.status_code == 200, message.text
+    assert message.json()["status"] == "STREAMING"
+
+    events = env["client"].get(
+        f"/api/workspaces/{env['workspace'].slug}/agent-dock/runs/{session['run_id']}/events/"
+    )
+    assert events.status_code == 200, events.text
+    body = events.json()
+    assert {item["event_type"] for item in body["results"]} >= {
+        "CONTEXT_ASSEMBLED",
+        "COMMUNICATION",
+        "TOOL_CALL",
+        "OUTPUT",
+    }
+    assert body["session"]["status"] == "READY"
