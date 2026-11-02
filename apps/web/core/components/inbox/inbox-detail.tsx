@@ -44,6 +44,7 @@ export function InboxDetail({ workspaceSlug }: Props) {
   const item = data?.results.find((candidate) => candidate.id === selectedItemId);
   const { PeekOverviewComponent, setPeekWorkItem } = useNotificationPreview();
   const workItemPreview = item?.preview?.type === "work_item" ? item.preview : undefined;
+  const announcementDetails = item?.source === "system_announcement" ? item.announcement_details : undefined;
   const previewWorkspaceSlug = workItemPreview?.workspace_slug;
   const previewProjectId = workItemPreview?.project_id;
   const previewEntityId = workItemPreview?.entity_id;
@@ -147,6 +148,37 @@ export function InboxDetail({ workspaceSlug }: Props) {
           <PeekOverviewComponent embedIssue embedRemoveCurrentNotification={clearSelectedItem} />
         </div>
       </section>
+    );
+  }
+
+  if (announcementDetails) {
+    const publisher = item.actor?.display_name;
+    const publishedAt = announcementDetails.published_at ?? announcementDetails.created_at ?? item.updated_at;
+
+    return (
+      <article className="h-full overflow-y-auto bg-canvas">
+        <header className="border-b border-subtle bg-surface-1 px-6 py-5">
+          <p className="text-11 text-tertiary">系统公告</p>
+          <h1 className="mt-1 text-20 font-semibold break-words text-primary">{announcementDetails.title}</h1>
+          <p className="mt-2 text-12 text-secondary">
+            {publisher && <span>{publisher}</span>}
+            {publisher && <span className="text-tertiary"> · </span>}
+            <time dateTime={publishedAt}>{formatDateTime(publishedAt)}</time>
+          </p>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={handleMarkUnread}
+              className="rounded-md px-3 py-1.5 text-12 text-secondary transition hover:bg-layer-1-hover hover:text-primary"
+            >
+              标记未读
+            </button>
+          </div>
+        </header>
+        <div className="px-6 py-6">
+          <p className="max-w-3xl text-14 leading-6 whitespace-pre-wrap text-primary">{announcementDetails.body}</p>
+        </div>
+      </article>
     );
   }
 

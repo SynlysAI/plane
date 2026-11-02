@@ -19,6 +19,7 @@ from plane.db.models import (
     PeriodicReportCommentThread,
     Project,
     ResearchFeedback,
+    SystemAnnouncement,
     User,
 )
 from plane.app.services.inbox import generate_inbox_todo_reminders, todo_payload_hash
@@ -220,6 +221,48 @@ class TestUnifiedWorkspaceInbox:
             "review_unread_count": 0,
             "work_item_unread_count": 0,
             "system_unread_count": 1,
+        }
+
+    def test_system_announcements_include_body_for_inbox_detail(
+        self, session_client, workspace, create_user, monkeypatch
+    ):
+        """系统公告在统一收件箱内保留完整正文和发布时间。"""
+        announcement = SystemAnnouncement.objects.create(
+            workspace=workspace,
+            title="版本更新公告",
+            body="第一行：优化成员权限。\n第二行：优化附件上传。",
+            recipient_count=1,
+            published_at=datetime(2026, 11, 2, 11, 30, tzinfo=datetime_timezone.utc),
+            created_by=create_user,
+        )
+        notification = Notification.objects.create(
+            workspace=workspace,
+            receiver=create_user,
+            announcement=announcement,
+            entity_identifier=announcement.id,
+            entity_name="system_announcement",
+            title=announcement.title,
+            sender="system:announcement",
+            triggered_by=create_user,
+        )
+        monkeypatch.setattr(
+            "plane.app.services.inbox.collect_inbox_todos",
+            lambda workspace, user: ([], []),
+        )
+
+        response = session_client.get(inbox_url(workspace), {"tab": "system"})
+        item = response.json()["results"][0]
+
+        assert response.status_code == status.HTTP_200_OK
+        assert item["id"] == f"notification:{notification.id}"
+        assert item["kind"] == "system"
+        assert item["source"] == "system_announcement"
+        assert item["announcement_details"] == {
+            "id": str(announcement.id),
+            "title": "版本更新公告",
+            "body": "第一行：优化成员权限。\n第二行：优化附件上传。",
+            "published_at": "2026-11-02T11:30:00+00:00",
+            "created_at": item["announcement_details"]["created_at"],
         }
 
     def test_research_notifications_enter_legacy_notification_inbox(self, session_client, workspace, create_user):

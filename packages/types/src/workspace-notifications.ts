@@ -148,6 +148,14 @@ export type TInboxPreview = {
   entity_id: string;
 };
 
+export type TInboxSystemAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  published_at: string | undefined;
+  created_at: string | undefined;
+};
+
 export type TInboxItem = {
   id: string;
   schema_version: "inbox.v1";
@@ -175,6 +183,7 @@ export type TInboxItem = {
   archived_at: string | undefined;
   snoozed_till: string | undefined;
   preview?: TInboxPreview;
+  announcement_details?: TInboxSystemAnnouncement | undefined;
 };
 
 export type TInboxTab = "all" | "mentions" | "todos" | "approvals" | "reviews" | "system";

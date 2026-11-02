@@ -277,6 +277,26 @@ def _actor(user):
     }
 
 
+def _announcement_details(announcement):
+    """Project the fields needed to render a system announcement in place.
+
+    Args:
+        announcement: Canonical announcement linked to a notification.
+
+    Returns:
+        A limited announcement dictionary, or ``None`` for regular notifications.
+    """
+    if announcement is None:
+        return None
+    return {
+        "id": str(announcement.id),
+        "title": announcement.title,
+        "body": announcement.body,
+        "published_at": _iso(announcement.published_at),
+        "created_at": _iso(announcement.created_at),
+    }
+
+
 def notification_category(notification):
     """Classify one notification for inbox tabs and unread counts.
 
@@ -435,6 +455,7 @@ def _notification_item(notification, issue=None):
         "archived_at": _iso(notification.archived_at),
         "snoozed_till": _iso(notification.snoozed_till),
         "preview": work_item_preview,
+        "announcement_details": _announcement_details(notification.announcement),
     }
 
 
@@ -600,7 +621,9 @@ def project_inbox(workspace, user):
         todos, degraded_sources = [], ["RESEARCH_TODOS"]
     states = synchronize_todo_states(workspace, user, todos)
     todo_items = [_todo_item(todo, states.get((todo["source"], str(todo["object_id"])))) for todo in todos]
-    notifications = list(_notification_query(workspace, user).select_related("triggered_by", "workspace"))
+    notifications = list(
+        _notification_query(workspace, user).select_related("triggered_by", "workspace", "announcement")
+    )
     issue_details = _issue_details_for_notifications(notifications)
     todo_keys = {(todo["source"], str(todo["object_id"])) for todo in todos}
     notification_items = []

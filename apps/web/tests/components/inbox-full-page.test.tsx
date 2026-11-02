@@ -241,6 +241,43 @@ it("marks an item unread from the detail pane", async () => {
   expect(mocks.updateItem).toHaveBeenCalledWith("lab", "todo:CHAIN_TASK:1", "unread");
 });
 
+it("renders the selected system announcement body in the detail pane", async () => {
+  const announcement = inboxItem({
+    id: "notification:announcement:1",
+    kind: "system",
+    category: "system",
+    source: "system_announcement",
+    object_id: "announcement-1",
+    entity_name: "system_announcement",
+    entity_identifier: "announcement-1",
+    title: "版本更新公告",
+    summary: undefined,
+    route: undefined,
+    actor: {
+      id: "user-1",
+      display_name: "方奕凯",
+      avatar_url: null,
+    },
+    announcement_details: {
+      id: "announcement-1",
+      title: "版本更新公告",
+      body: "第一行：优化成员权限。\n第二行：优化附件上传。",
+      published_at: "2026-11-02T11:30:00Z",
+      created_at: "2026-11-02T11:30:00Z",
+    },
+  });
+  mocks.fetchInbox.mockResolvedValue(page(announcement, 0));
+
+  await render(<InboxDetail workspaceSlug="lab" />, announcement.id);
+
+  expect(container.querySelector("article")?.textContent).toContain("版本更新公告");
+  expect(container.querySelector("article")?.textContent).toContain("第一行：优化成员权限。");
+  expect(container.querySelector("article")?.textContent).toContain("第二行：优化附件上传。");
+  expect(container.querySelector("article")?.textContent).toContain("方奕凯");
+  expect(container.querySelector("article")?.innerHTML).toContain("whitespace-pre-wrap");
+  expect(container.textContent).not.toContain("打开来源");
+});
+
 it("targets only list caches for the same workspace", () => {
   const currentKey = 'UNIFIED_INBOX_lab_{"tab":"todos","per_page":50}';
   expect(matchesInboxListKey("lab", currentKey, undefined)).toBe(true);

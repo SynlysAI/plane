@@ -43,6 +43,34 @@ function inboxItem(overrides: Partial<TInboxItem>): TInboxItem {
 
 const items = [
   inboxItem({
+    id: "notification:announcement:announcement-1",
+    kind: "system",
+    category: "system",
+    source: "system_announcement",
+    object_id: "announcement-1",
+    entity_name: "system_announcement",
+    entity_identifier: "announcement-1",
+    dedupe_key: "notification:announcement:announcement-1",
+    title: "【版本更新公告】OpenEva V9.2.0 Release",
+    summary: undefined,
+    actor: { id: "publisher-1", display_name: "系统管理员", avatar_url: null },
+    action: undefined,
+    route: undefined,
+    due_at: undefined,
+    urgency: undefined,
+    status: undefined,
+    business_status: undefined,
+    handling_status: undefined,
+    next_action: undefined,
+    announcement_details: {
+      id: "announcement-1",
+      title: "【版本更新公告】OpenEva V9.2.0 Release",
+      body: "1、流程与权限优化：行政项目改成由各项目自行管理成员。\n2、使用体验升级：附件上传和项目搜索体验更加顺畅。",
+      published_at: now,
+      created_at: now,
+    },
+  }),
+  inboxItem({
     id: "notification:issue:11111111-1111-1111-1111-111111111111",
     kind: "notification",
     category: "work_item",
@@ -104,13 +132,13 @@ const items = [
 ];
 
 const counts: TInboxUnreadCounts = {
-  total_unread_count: 4,
+  total_unread_count: 5,
   mention_unread_count: 1,
   todo_unread_count: 1,
   approval_unread_count: 1,
   review_unread_count: 0,
   work_item_unread_count: 1,
-  system_unread_count: 0,
+  system_unread_count: 1,
 };
 
 const page: TInboxPaginatedInfo = {
@@ -142,7 +170,11 @@ inboxService.markAllRead = async () => ({
 function UnifiedInboxFixture() {
   return (
     <SWRConfig value={{ provider: () => new Map() }}>
-      <MemoryRouter initialEntries={["/isolated-test/notifications?inbox_tab=all"]}>
+      <MemoryRouter
+        initialEntries={[
+          "/isolated-test/notifications?inbox_tab=system&inbox_item=notification%3Aannouncement%3Aannouncement-1",
+        ]}
+      >
         <Routes>
           <Route
             path="/:workspaceSlug/notifications"
