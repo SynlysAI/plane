@@ -3553,6 +3553,11 @@
     "runtime_empty": "No tool calls or approvals yet.",
     "pin": "Pin to right",
     "unpin": "Unpin",
-    "resize": "Resize"
+    "resize": "Resize",
+    "runtime_allowed_tools": "Allowed tools",
+    "runtime_arguments": "Arguments",
+    "runtime_result": "Result",
+    "runtime_duration": "Duration {count} ms",
+    "runtime_trace": "Approvals and context snapshots"
   }
 }

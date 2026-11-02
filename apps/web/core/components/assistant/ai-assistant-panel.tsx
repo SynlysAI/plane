@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslation } from "@plane/i18n";
 import {
   Activity,
@@ -34,6 +34,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 // components
 import { useAssistantChat } from "./use-assistant-chat";
+import { mergeRuntimeToolCalls } from "./lib/runtime-events";
 import { useWorkbenchChat } from "./use-workbench-chat";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
@@ -223,7 +224,16 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
     </div>
   );
 
-  const runtimeFacts =
+  const runtimeTools = useMemo(() => mergeRuntimeToolCalls(cloud.runtimeEvents), [cloud.runtimeEvents]);
+  const approvalEvents = useMemo(
+    () => cloud.runtimeEvents.filter((event) => event.event_type === "APPROVAL"),
+    [cloud.runtimeEvents]
+  );
+  const contextSnapshots = useMemo(
+    () => cloud.runtimeEvents.filter((event) => event.event_type === "CONTEXT_ASSEMBLED"),
+    [cloud.runtimeEvents]
+  );
+  const localRuntimeFacts =
     provider === "local"
       ? local.sections.flatMap((section) =>
           section.items
@@ -233,22 +243,78 @@ export const AIAssistantPanel = observer(function AIAssistantPanel({ workspaceSl
               status: item.kind === "tool" ? item.status : t("aiAssistant.view_runtime"),
             }))
         )
-      : cloud.streamState.phase === "streaming"
-        ? [{ name: cloud.streamState.status || t("aiAssistant.working"), status: t("aiAssistant.working") }]
-        : [];
+      : [];
 
   const runtimeView = (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <section className="border border-subtle bg-surface-1">
+        <h3 className="border-b border-subtle px-4 py-2.5 text-12 font-semibold text-primary">
+          {t("aiAssistant.runtime_allowed_tools")}
+        </h3>
+        <div className="flex flex-wrap gap-1.5 px-4 py-3">
+          {(cloud.contextEnvelope?.capabilities.allowed_tools ?? []).map((tool) => (
+            <span key={tool} className="rounded-md border border-subtle bg-surface-2 px-2 py-1 text-10 text-secondary">
+              {tool}
+            </span>
+          ))}
+          {!(cloud.contextEnvelope?.capabilities.allowed_tools ?? []).length && (
+            <span className="text-11 text-tertiary">{t("aiAssistant.runtime_empty")}</span>
+          )}
+        </div>
+      </section>
+
       <section className="border border-subtle bg-surface-1">
         <h3 className="border-b border-subtle px-4 py-2.5 text-12 font-semibold text-primary">
           {t("aiAssistant.runtime_events")}
         </h3>
-        {runtimeFacts.length ? (
-          runtimeFacts.map((fact) => <ToolLine key={`${fact.name}-${fact.status}`} {...fact} />)
+        {provider === "cloud" && runtimeTools.length ? (
+          runtimeTools.map((tool) => (
+            <details key={tool.id} className="border-b border-subtle last:border-b-0">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-11">
+                <span className="min-w-0 flex-1 truncate font-medium text-primary">{tool.name}</span>
+                <span className="shrink-0 text-tertiary">{tool.status}</span>
+              </summary>
+              <div className="space-y-2 bg-surface-2/60 px-4 py-3 text-10 text-secondary">
+                <div>
+                  <p className="mb-1 font-medium text-primary">{t("aiAssistant.runtime_arguments")}</p>
+                  <pre className="max-h-40 overflow-auto rounded-md border border-subtle bg-surface-1 p-2 whitespace-pre-wrap">
+                    {tool.arguments}
+                  </pre>
+                </div>
+                {tool.result && (
+                  <div>
+                    <p className="mb-1 font-medium text-primary">{t("aiAssistant.runtime_result")}</p>
+                    <p className="break-words">{tool.result}</p>
+                  </div>
+                )}
+                {tool.duration_ms !== null && <p>{t("aiAssistant.runtime_duration", { count: tool.duration_ms })}</p>}
+              </div>
+            </details>
+          ))
+        ) : provider === "local" && localRuntimeFacts.length ? (
+          localRuntimeFacts.map((fact) => <ToolLine key={`${fact.name}-${fact.status}`} {...fact} />)
         ) : (
           <p className="px-4 py-3 text-11 text-tertiary">{t("aiAssistant.runtime_empty")}</p>
         )}
       </section>
+
+      {(approvalEvents.length > 0 || contextSnapshots.length > 0) && (
+        <section className="border border-subtle bg-surface-1">
+          <h3 className="border-b border-subtle px-4 py-2.5 text-12 font-semibold text-primary">
+            {t("aiAssistant.runtime_trace")}
+          </h3>
+          {approvalEvents.map((event) => (
+            <ToolLine key={event.seq} name={t("aiAssistant.approval_pending")} status={event.event_type} />
+          ))}
+          {contextSnapshots.map((event) => (
+            <ToolLine
+              key={event.seq}
+              name={`${t("aiAssistant.current_context")} v${String(event.payload.context_version ?? 1)}`}
+              status={String(event.payload.manifest_hash ?? "").slice(0, 10)}
+            />
+          ))}
+        </section>
+      )}
     </div>
   );
 

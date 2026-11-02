@@ -50,6 +50,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
   const [streamState, setStreamState] = useState<TAssistantStreamState>({ phase: "idle" });
   const [streamingAnswer, setStreamingAnswer] = useState("");
   const [contextEnvelope, setContextEnvelope] = useState<TAgentContextEnvelope | null>(null);
+  const [runtimeEvents, setRuntimeEvents] = useState<TAgentDockEvent[]>([]);
   const activeRunIdRef = useRef<string | null>(null);
   const latestSeqRef = useRef(0);
   const processedSeqRef = useRef<Set<number>>(new Set());
@@ -77,10 +78,14 @@ export const useAssistantChat = (workspaceSlug: string) => {
   const applyEvents = useCallback(
     (events: TAgentDockEvent[], session?: TAgentDockSession) => {
       let approvalPending = false;
+      const newRuntimeEvents: TAgentDockEvent[] = [];
       for (const event of events) {
         if (processedSeqRef.current.has(event.seq)) continue;
         processedSeqRef.current.add(event.seq);
         latestSeqRef.current = Math.max(latestSeqRef.current, event.seq);
+        if (["TOOL_CALL", "APPROVAL", "CONTEXT_ASSEMBLED", "OUTPUT"].includes(event.event_type)) {
+          newRuntimeEvents.push(event);
+        }
         if (event.event_type === "OUTPUT") {
           const content = String(event.payload.content ?? "");
           if (content) appendAssistantMessage(content);
@@ -91,6 +96,13 @@ export const useAssistantChat = (workspaceSlug: string) => {
         } else if (event.event_type === "APPROVAL") {
           approvalPending = true;
         }
+      }
+      if (newRuntimeEvents.length) {
+        setRuntimeEvents((previous) => {
+          const merged = new Map(previous.map((item) => [item.seq, item]));
+          for (const item of newRuntimeEvents) merged.set(item.seq, item);
+          return [...merged.values()].toSorted((left, right) => left.seq - right.seq);
+        });
       }
       if (approvalPending) {
         stopPolling();
@@ -220,6 +232,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
     activeRunIdRef.current = null;
     latestSeqRef.current = 0;
     processedSeqRef.current = new Set();
+    setRuntimeEvents([]);
     setMessages([]);
     setStreamingAnswer("");
     setStreamState({ phase: "idle" });
@@ -239,6 +252,7 @@ export const useAssistantChat = (workspaceSlug: string) => {
     streamState,
     contextEnvelope,
     contextStatus,
+    runtimeEvents,
     send,
     stop,
     disconnect,

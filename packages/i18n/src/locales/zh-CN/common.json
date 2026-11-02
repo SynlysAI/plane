@@ -3584,6 +3584,11 @@
     "runtime_empty": "暂无工具调用或审批记录。",
     "pin": "固定到右侧",
     "unpin": "取消固定",
-    "resize": "调整宽度"
+    "resize": "调整宽度",
+    "runtime_allowed_tools": "可用工具白名单",
+    "runtime_arguments": "执行参数",
+    "runtime_result": "执行结果",
+    "runtime_duration": "耗时 {count} ms",
+    "runtime_trace": "审批与上下文快照"
   }
 }
