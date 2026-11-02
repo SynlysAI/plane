@@ -14,11 +14,30 @@ from plane.db.models.base import BaseModel
 class ResearchContextGrant(BaseModel):
     """One short-lived, revocable grant issued by the Plane Context API."""
 
+    class TargetType(models.TextChoices):
+        WORKSPACE = "WORKSPACE", "Workspace"
+        PROJECT = "PROJECT", "Research project"
+        RESEARCH_CHAIN = "RESEARCH_CHAIN", "Research chain"
+        RESEARCH_CHAIN_NODE = "RESEARCH_CHAIN_NODE", "Research chain node"
+
     context_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     connection_label = models.CharField(max_length=100, blank=True, default="")
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="research_context_grants")
     user = models.ForeignKey("db.User", on_delete=models.CASCADE, related_name="research_context_grants")
-    project = models.ForeignKey("db.Project", on_delete=models.PROTECT, related_name="research_context_grants")
+    project = models.ForeignKey(
+        "db.Project",
+        on_delete=models.PROTECT,
+        related_name="research_context_grants",
+        null=True,
+        blank=True,
+    )
+    research_chain = models.ForeignKey(
+        "db.ResearchChain",
+        on_delete=models.PROTECT,
+        related_name="context_grants",
+        null=True,
+        blank=True,
+    )
     chain_node = models.ForeignKey(
         "db.ResearchChainNode",
         on_delete=models.PROTECT,
@@ -28,11 +47,20 @@ class ResearchContextGrant(BaseModel):
     )
     visibility_scope = models.CharField(max_length=32, default="PRIVATE")
     context_hash = models.CharField(max_length=64)
+    target_type = models.CharField(
+        max_length=32,
+        choices=TargetType.choices,
+        default=TargetType.RESEARCH_CHAIN_NODE,
+        db_index=True,
+    )
+    context_version = models.PositiveIntegerField(default=1)
+    context_manifest = models.JSONField(default=dict, blank=True)
     allowed_knowledge_base_ids = models.JSONField(default=list, blank=True)
     allowed_file_ids = models.JSONField(default=list, blank=True)
     allowed_reports = models.JSONField(default=list, blank=True)
     allowed_plugins = models.JSONField(default=list, blank=True)
     allowed_tools = models.JSONField(default=list, blank=True)
+    allowed_mcp_ids = models.JSONField(default=list, blank=True)
     policy_id = models.CharField(max_length=128, blank=True, default="")
     policy_hash = models.CharField(max_length=64, blank=True, default="")
     scope_kind = models.CharField(max_length=16, default="OWNER")

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from .agent_dock import urlpatterns as agent_dock_urls
 from .analytic import urlpatterns as analytic_urls
 from .api import urlpatterns as api_urls
 from .assistant import urlpatterns as assistant_urls
@@ -28,6 +29,7 @@ from .project_domains import urlpatterns as project_domain_urls
 
 urlpatterns = [
     *project_domain_urls,
+    *agent_dock_urls,
     *analytic_urls,
     *assistant_urls,
     *asset_urls,

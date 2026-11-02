@@ -10,6 +10,8 @@
 - `taxonomy.json`：节点、事件、快照、待办和降级状态字典。
 - `research-capabilities.v1.json`：资源动作能力投影；每个动作都返回允许状态、稳定错误码和中文原因。
 - `agent-context.v2.json`：Agent 的 OWNER/REVIEW scope、工具白名单和策略版本；REVIEW 只允许检索、读取、评论与分析草稿。
+- `agent-context.v3.json`：Agent Dock 的 Workspace / Project / Research Chain / Node 目标结构、能力硬上界与 bounded manifest；v2 自动映射为 Node target。
+- `agent-context-envelope.v1.json`：浏览器展示专用脱敏信封；不包含 Context Token、密钥、文件正文，也不得作为授权凭证。
 - `examples/error-codes.v1.json`：当前实现使用的 `KB_NOT_READY`、`KB_SCOPE_CONFLICT` 和 `AGENT_SCOPE_INVALID` 等稳定错误码示例。
 
 契约对象必须携带 `schema_version`（事件对象另以 `event_id` 幂等）。跨服务写请求必须携带 `request_id`；同一 `request_id` 与相同 payload hash 重放时返回首次结果，不同 hash 返回 `IDEMPOTENCY_CONFLICT`。

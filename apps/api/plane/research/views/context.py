@@ -416,6 +416,8 @@ def _context_payload(grant):
     if grant is None:
         return None
     chain_node = grant.chain_node
+    research_chain = grant.research_chain
+    manifest = grant.context_manifest if grant.context_manifest else None
     return {
         "schema_version": AGENT_CONTEXT_V3_SCHEMA_VERSION,
         "workspace_id": str(grant.workspace_id),
@@ -423,11 +425,11 @@ def _context_payload(grant):
         "context_hash": grant.context_hash,
         "expires_at": grant.expires_at.isoformat(),
         "target": {
-            "type": "RESEARCH_CHAIN_NODE" if chain_node else "PROJECT",
+            "type": grant.target_type,
             "workspace_id": str(grant.workspace_id),
             "workspace_slug": grant.workspace.slug,
-            "project_id": str(grant.project_id),
-            **({"research_chain_id": str(chain_node.chain_id)} if chain_node else {}),
+            "project_id": str(grant.project_id) if grant.project_id else None,
+            **({"research_chain_id": str(research_chain.id)} if research_chain else {}),
             **({"chain_node_id": str(chain_node.id)} if chain_node else {}),
         },
         "subject": {
@@ -444,11 +446,12 @@ def _context_payload(grant):
             "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
             "allowed_file_ids": grant.allowed_file_ids,
             "allowed_plugins": grant.allowed_plugins,
-            "allowed_mcp_ids": [],
+            "allowed_mcp_ids": grant.allowed_mcp_ids,
             "allowed_tools": grant.allowed_tools,
         },
+        **({"manifest": {"version": manifest["version"], "hash": manifest["hash"]}} if manifest else {}),
         # v2 compatibility fields remain for existing ScienceDiscovery clients.
-        "research_project_id": str(grant.project_id),
+        "research_project_id": str(grant.project_id) if grant.project_id else None,
         "chain_node_id": str(grant.chain_node_id) if grant.chain_node_id else None,
         "visibility_scope": grant.visibility_scope,
         "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
