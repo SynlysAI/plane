@@ -102,15 +102,6 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     setUploadedFiles([]);
     setFailedUploads([]);
 
-    const closeQuietly = async (value: TResearchAgentSession | null) => {
-      if (!value || value.status === "CLOSED") return;
-      try {
-        await agentService.cancelRun(workspaceSlug, value.run_id);
-      } catch {
-        // Closing is best-effort when the browser leaves or switches scope.
-      }
-    };
-
     const start = async () => {
       try {
         const created = await agentService.createSession(workspaceSlug, chainNodeId);
@@ -129,13 +120,11 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
       }
     };
 
-    const previous = sessionRef.current;
-    if (previous) void closeQuietly(previous);
     void start();
-
+    // Route/node changes and React unmount must not cancel an upstream run.
+    // Only the explicit close/stop actions below may terminate a session/run.
     return () => {
       active = false;
-      void closeQuietly(sessionRef.current);
     };
   }, [chainNodeId, workspaceSlug]);
 

@@ -116,6 +116,25 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
+it("does not cancel an upstream run when the node or component unmounts", async () => {
+  const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
+  await act(async () => {
+    root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-1" />);
+  });
+  await act(async () => undefined);
+
+  await act(async () => {
+    root.render(<ResearchAgentPlugin workspaceSlug="lab" chainNodeId="node-2" />);
+  });
+  await act(async () => undefined);
+  await act(async () => {
+    root.unmount();
+  });
+
+  expect(mocks.createSession).toHaveBeenCalledTimes(2);
+  expect(mocks.cancelRun).not.toHaveBeenCalled();
+});
+
 it("merges cursor events, opens the runtime drawer, stops generation, and saves an SD artifact", async () => {
   const { ResearchAgentPlugin } = await import("@/components/research/agent/research-agent-plugin");
   await act(async () => {

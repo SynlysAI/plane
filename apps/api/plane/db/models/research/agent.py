@@ -37,6 +37,9 @@ class ResearchAgentSession(BaseModel):
         on_delete=models.PROTECT,
         related_name="agent_session",
     )
+    # Encrypted server-side Research Context token. It is never serialized to
+    # the browser and is only decrypted immediately before a Synlora call.
+    context_token_encrypted = models.TextField(blank=True, default="")
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.INITIALIZING)
     last_error = models.CharField(max_length=255, blank=True, default="")
     synlora_session_id = models.CharField(max_length=128, blank=True, default="")

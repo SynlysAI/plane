@@ -24,6 +24,7 @@ class AssistantNotConfigured(Exception):
 class AssistantConfig:
     base_url: str
     token: str
+    service_token: str
     agent_slug: str
     timeout_seconds: float
     stream_read_timeout_seconds: float
@@ -77,6 +78,7 @@ def resolve_assistant_config(workspace, user=None) -> AssistantConfig:
         base_url=base_url,
         token=token,
         agent_slug=settings.SYNLORA_AGENT_SLUG,
+        service_token=settings.SYNLORA_SERVICE_TOKEN,
         timeout_seconds=float(settings.SYNLORA_TIMEOUT_SECONDS),
         stream_read_timeout_seconds=float(settings.SYNLORA_STREAM_READ_TIMEOUT_SECONDS),
         credential_mode=credential_mode,
