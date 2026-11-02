@@ -349,7 +349,11 @@ def resolve_agent_dock_context(
         raise AgentDockContextError("request_id is required", 400)
     if len(selected_text) > MAX_SELECTED_TEXT:
         raise AgentDockContextError("selected_text exceeds 4000 characters", 413)
-    attachment_ids = list(attachment_ids or [])[:MAX_ATTACHMENT_IDS]
+    attachment_ids = list(attachment_ids or [])
+    if len(attachment_ids) > MAX_ATTACHMENT_IDS:
+        raise AgentDockContextError("attachment_ids supports at most 20 items", 413)
+    if any(_uuid(item) is None for item in attachment_ids):
+        raise AgentDockContextError("attachment_ids must be UUIDs", 400)
 
     target = _target_from_route(workspace, user, route)
     if target.type == ResearchContextGrant.TargetType.RESEARCH_CHAIN_NODE and target.node is None:
@@ -372,6 +376,8 @@ def resolve_agent_dock_context(
         )
         if existing_key != target.key:
             raise AgentDockContextError("request_id was already used for another target", 409)
+        if existing.revoked_at is not None or existing.expires_at <= timezone.now():
+            raise AgentDockContextError("Context expired", 403)
         return existing, "", _envelope(existing, target, user)
 
     manifest, knowledge_ids, file_ids = _build_manifest(target, user, selected_text)

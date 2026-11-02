@@ -227,6 +227,14 @@ def issue_agent_dock_context_token(
     safe_manifest["hash"] = context_policy_hash(
         {"summary": safe_manifest["summary"], "resources": safe_manifest["resources"]}
     )
+    target_filter = {"workspace": workspace, "user": user, "target_type": target_type}
+    if project is not None:
+        target_filter["project"] = project
+    if research_chain is not None:
+        target_filter["research_chain"] = research_chain
+    if chain_node is not None:
+        target_filter["chain_node"] = chain_node
+    context_version = ResearchContextGrant.objects.filter(**target_filter).count() + 1
     context_hash = agent_context_v3_hash(
         target=target,
         subject=subject,
@@ -245,7 +253,7 @@ def issue_agent_dock_context_token(
         target_type=target_type,
         visibility_scope=visibility_scope,
         context_hash=context_hash,
-        context_version=1,
+        context_version=context_version,
         context_manifest=safe_manifest,
         allowed_knowledge_base_ids=policy["allowed_knowledge_base_ids"],
         allowed_file_ids=policy["allowed_file_ids"],

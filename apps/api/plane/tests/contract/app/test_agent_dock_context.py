@@ -164,6 +164,16 @@ def test_context_resolve_is_idempotent_and_workspace_route_is_safe(env):
     assert second.json()["target_type"] == "WORKSPACE"
 
 
+def test_context_version_advances_and_invalid_attachments_fail_closed(env):
+    route = f"/{env['workspace'].slug}"
+    first = _resolve(env, route)
+    second = _resolve(env, route)
+    assert first.json()["context_version"] == 1
+    assert second.json()["context_version"] == 2
+    invalid = _resolve(env, route, attachment_ids=["not-an-uuid"])
+    assert invalid.status_code == 400
+
+
 def test_agent_dock_session_is_target_bound_and_projects_durable_events(env, monkeypatch):
     from plane.research.services import agent_dock_sessions
 
