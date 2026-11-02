@@ -238,7 +238,15 @@ export class ResearchAgentService extends APIService {
   /** 测试已保存的连接。 */
   async testBackendConnection(workspaceSlug: string, system = "SCIENCE_DISCOVERY") {
     return this.post(researchEndpoints.agentBackendConnectionTest(workspaceSlug), { system })
-      .then((res) => res?.data as { ok: boolean; models?: number; error?: string })
+      .then(
+        (res) =>
+          res?.data as {
+            ok: boolean;
+            models?: number;
+            error?: string;
+            error_code?: "service_unavailable" | "invalid_token" | "not_configured";
+          }
+      )
       .catch((err) => {
         throw err?.response?.data ?? err;
       });

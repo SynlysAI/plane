@@ -17,6 +17,11 @@ type TBackendConnection = {
   last_error: string;
 };
 
+type TTestFailure = {
+  message?: string;
+  error_code?: "service_unavailable" | "invalid_token" | "not_configured";
+};
+
 /** 学生自助接入本地 ScienceDiscovery 实例的设置面板（§5）。 */
 export function AgentBackendSettings({
   workspaceSlug,
@@ -44,6 +49,15 @@ export function AgentBackendSettings({
   useEffect(() => {
     translateRef.current = t;
   }, [t]);
+
+  /** Translate stable Synlora probe error codes without echoing upstream details. */
+  const testFailureMessage = useCallback(
+    (failure: TTestFailure, genericKey = "research.agent_backend.test_failed_generic") => {
+      if (failure.error_code) return t(`research.agent_backend.error_${failure.error_code}`);
+      return failure.message ?? t(genericKey);
+    },
+    [t]
+  );
 
   /** 仅在工作区变化时重建，避免翻译函数引用变化触发重复加载。 */
   const load = useCallback(async () => {
@@ -121,16 +135,17 @@ export function AgentBackendSettings({
           ? system === "SYNLORA"
             ? t("research.agent_backend.cloud_test_ok")
             : t("research.agent_backend.test_ok", { count: String(result.models ?? 0) })
-          : t("research.agent_backend.test_failed", { error: result.error ?? "" })
+          : result.error_code
+            ? t(`research.agent_backend.error_${result.error_code}`)
+            : t("research.agent_backend.test_failed", { error: result.error ?? "" })
       );
       await load();
     } catch (failure) {
-      if (sequence === workspaceSequence.current)
-        setError((failure as { message?: string })?.message ?? t("research.agent_backend.test_failed_generic"));
+      if (sequence === workspaceSequence.current) setError(testFailureMessage(failure as TTestFailure));
     } finally {
       if (sequence === workspaceSequence.current) setBusy(false);
     }
-  }, [load, system, t, workspaceSlug]);
+  }, [load, system, t, testFailureMessage, workspaceSlug]);
 
   const remove = useCallback(async () => {
     const sequence = workspaceSequence.current;

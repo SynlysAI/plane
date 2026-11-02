@@ -59,8 +59,9 @@ Plane 工作区 AI 助手与科研链智能体统一由 Synlora v1 Sessions 驱�
 
 ## 故障排查
 
-- **助手入口不出现**：检查 Plane 集成连接启用状态与 `SYNLORA_BASE_URL`。
-- **status ready=false**：确认 Plane 可访问 Synlora `/api/system/ready`，且 `SYNLORA_SERVICE_TOKEN` 与 Synlora `PLANE_SERVICE_TOKEN` 一致。
+- **助手入口不可用引导**：入口始终可在工作区挂载；打开后按 status 引导配置。`not_configured` 检查 Plane 集成连接启用状态与 `SYNLORA_BASE_URL`；`personal_credential_required` 检查当前用户的 Synlora 个人 Token。
+- **status state=service_unavailable / ready=false**：确认 Plane 可访问 Synlora 公开健康端点 `GET /api/health`，且 `SYNLORA_SERVICE_TOKEN` 与 Synlora `PLANE_SERVICE_TOKEN` 一致并能完成 delegated-token 交换。
+- **个人连接测试失败**：个人测试会先访问 `/api/health`，再用保存的 Bearer Token 请求 `GET /api/v1/auth/me`。`invalid_token` 表示 Token 无效或过期；`service_unavailable` 表示服务或健康检查不可达；`not_configured` 表示服务地址缺失。
 - **会话创建 403/502**：查看 delegated-token 交换、Context Token 过期与 Synlora session 权限。
 - **消息 401**：Context Token 过期或撤权；重新 resolve context 并创建新会话。
 - **事件缺口**：调用 `GET /agent-dock/runs/<run_id>/events/?after_seq=<latest_seq>`；Synlora durable events 会补齐，瞬态 delta 不落盘。

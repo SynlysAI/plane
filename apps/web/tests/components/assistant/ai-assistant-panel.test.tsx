@@ -36,6 +36,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/lab/projects",
 }));
 
+vi.mock("next/link", () => ({
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+}));
+
 vi.mock("@plane/i18n", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useTranslation: () => ({ t: (key: string) => key }),
@@ -103,11 +107,13 @@ const MARKDOWN_TABLE = [
 
 let container: HTMLDivElement;
 let root: Root;
+let originalMatchMedia: typeof window.matchMedia | undefined;
 
 beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  originalMatchMedia = window.matchMedia;
   window.localStorage.clear();
   mocks.resolveContext.mockReset().mockResolvedValue(envelope);
   mocks.getSession.mockReset().mockResolvedValue(session);
@@ -127,14 +133,22 @@ afterEach(async () => {
   container.remove();
   document.querySelectorAll("[id^='plane-portal'], .fixed.inset-0").forEach((node) => node.remove());
   vi.clearAllMocks();
+  if (originalMatchMedia === undefined) delete (window as { matchMedia?: typeof window.matchMedia }).matchMedia;
+  else window.matchMedia = originalMatchMedia;
 });
 
+/** Render a ready cloud panel by default, matching the production root's resolved status. */
 function renderPanel(store: InstanceType<typeof AIAssistantStore>) {
+  if (!store.status) store.setStatus({ enabled: true, ready: true, state: "ready" });
   act(() => {
     root.render(
       // eslint-disable-next-line react/jsx-no-constructed-context-values -- test-only provider value
       <StoreContext.Provider value={{ aiAssistant: store } as never}>
-        <AIAssistantPanel workspaceSlug="lab" />
+        <AIAssistantPanel
+          workspaceSlug="lab"
+          statusState={store.status?.state ?? "loading"}
+          onRetryStatus={() => undefined}
+        />
       </StoreContext.Provider>
     );
   });
@@ -179,6 +193,86 @@ describe("AIAssistantPanel", () => {
     expect(mocks.createSession).toHaveBeenCalledWith("lab", "context-1");
     expect(mocks.sendMessage).toHaveBeenCalledWith("lab", "session-1", "介绍这个项目");
     expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab")).toBe("session-1");
+  });
+
+  it("shows setup guidance and disables cloud input before a personal token is saved", async () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    store.setStatus({
+      enabled: false,
+      ready: false,
+      credential_mode: "PERSONAL",
+      state: "personal_credential_required",
+    });
+    renderPanel(store);
+    await waitForText("aiAssistant.status_personal_credential_required");
+
+    const setupLink = document.querySelector('a[href="/settings/profile/agent-configuration"]') as HTMLAnchorElement;
+    expect(setupLink).not.toBeNull();
+    expect((document.querySelector("textarea") as HTMLTextAreaElement).disabled).toBe(true);
+    expect(mocks.resolveContext).not.toHaveBeenCalled();
+  });
+
+  it("renders floating mode as a non-modal panel that does not capture page events", async () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    const portal = document.querySelector('[role="dialog"]') as HTMLElement;
+    const panel = document.querySelector('[role="document"]') as HTMLElement;
+    expect(portal.classList.contains("pointer-events-none")).toBe(true);
+    expect(portal.querySelector(".bg-black\\/50")).toBeNull();
+    expect(panel.classList.contains("pointer-events-auto")).toBe(true);
+  });
+
+  it("fills the available height in docked mode and closes while pinned", async () => {
+    const mediaQuery = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    window.matchMedia = vi.fn(() => mediaQuery as unknown as MediaQueryList);
+
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    store.setDockMode("docked");
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    const dockedPanel = document.querySelector('[data-agent-dock-mode="docked"]') as HTMLElement;
+    expect(dockedPanel.classList.contains("h-full")).toBe(true);
+    await act(async () => {
+      document
+        .querySelector('[aria-label="aiAssistant.close"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(document.querySelector('[data-agent-dock-mode="docked"]')).toBeNull();
+    expect(store.isOpen).toBe(false);
+  });
+
+  it("cancels a busy run before starting a new conversation", async () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.open();
+    renderPanel(store);
+    await waitForText("新材料研究");
+
+    typeAndSend();
+    await waitForText("介绍这个项目");
+    store.setActiveView("runtime");
+    await act(async () => {
+      document
+        .querySelector('[aria-label="aiAssistant.new_conversation"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mocks.cancelRun).toHaveBeenCalledWith("lab", "run-1");
+    expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab")).toBeNull();
+    expect(store.activeView).toBe("conversation");
   });
 
   it("restores an existing dock session without leaking context bodies", async () => {
