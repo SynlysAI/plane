@@ -10,6 +10,9 @@ endpoints, which inject the workspace connection credential server-side.
 
 from dataclasses import dataclass
 
+import time
+from typing import Any
+
 import httpx
 from django.conf import settings
 
@@ -91,19 +94,19 @@ def resolve_assistant_client(workspace, user=None) -> "SynloraAssistantClient":
     config = resolve_assistant_config(workspace, user=user)
     if not config.base_url or not config.token or not config.is_enabled:
         raise AssistantNotConfigured
-    return SynloraAssistantClient(config)
+    return SynloraAssistantClient(config, workspace=workspace, user=user)
 
 
 class SynloraAssistantClient:
-    """Minimal sync client over the Synlora Run API used by the assistant BFF."""
+    """Sync client over Synlora v1 Sessions for the Plane assistant BFF."""
 
-    def __init__(self, config: AssistantConfig):
+    def __init__(self, config: AssistantConfig, workspace=None, user=None):
         self.config = config
-        self._headers = {"Authorization": f"Bearer {config.token}"}
+        self.workspace = workspace
+        self.user = user
+        self._delegated_token: str | None = None
+        self._delegated_expires_at = 0.0
 
-    # ------------------------------------------------------------------
-    # transport helpers
-    # ------------------------------------------------------------------
     def _timeout(self, stream: bool = False) -> httpx.Timeout:
         read = self.config.stream_read_timeout_seconds if stream else self.config.timeout_seconds
         return httpx.Timeout(
@@ -113,65 +116,115 @@ class SynloraAssistantClient:
             pool=self.config.timeout_seconds,
         )
 
-    def _request(self, method: str, path: str, *, json=None, params=None) -> httpx.Response:
+    def _delegated_subject(self) -> str:
+        """Build a stable subject isolated by Plane workspace and user."""
+        if self.workspace is None or self.user is None:
+            return ""
+        return f"plane-ws-{self.workspace.id}-user-{self.user.id}"
+
+    def _ensure_delegated_token(self) -> str:
+        """Exchange the server-side service credential for a short user token."""
+        if self._delegated_token and time.time() < self._delegated_expires_at - 300:
+            return self._delegated_token
+        if not self.config.service_token:
+            # v1 Sessions requires a Plane service credential for delegated user
+            # identity. A browser-facing yxkey is not a valid substitute.
+            raise AssistantNotConfigured
+        if self.workspace is None or self.user is None:
+            return self.config.token
+        service_token = self.config.service_token
+        response = httpx.post(
+            f"{self.config.base_url}/api/v1/research/delegated-token",
+            headers={"Authorization": f"Bearer {service_token}"},
+            json={
+                "schema_version": "plane-delegated-auth.v1",
+                "account_link_id": f"plane-{self.workspace.id}-{self.user.id}",
+                "workspace_id": str(self.workspace.id),
+                "plane_user_id": str(self.user.id),
+                "external_subject": self._delegated_subject(),
+            },
+            timeout=self._timeout(),
+        )
+        if response.status_code >= 400:
+            raise AssistantNotConfigured
+        payload = response.json()
+        token = str(payload.get("token") or "")
+        if not token:
+            raise AssistantNotConfigured
+        self._delegated_token = token
+        self._delegated_expires_at = time.time() + int(payload.get("expires_in") or 3600)
+        return token
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._ensure_delegated_token()}"}
+
+    def _request(self, method: str, path: str, *, json_body=None, params=None) -> httpx.Response:
         return httpx.request(
             method,
             f"{self.config.base_url}{path}",
-            headers=self._headers,
-            json=json,
+            headers=self._headers(),
+            json=json_body,
             params=params,
             timeout=self._timeout(),
         )
 
-    # ------------------------------------------------------------------
-    # Synlora Run API surface
-    # ------------------------------------------------------------------
     def health(self) -> httpx.Response:
         return httpx.get(
             f"{self.config.base_url}/api/system/ready",
-            headers=self._headers,
+            headers=self._headers(),
             timeout=self._timeout(),
         )
 
     def create_thread(self, title: str) -> httpx.Response:
-        return self._request(
-            "POST",
-            "/api/chat/thread",
-            json={"agent_id": self.config.agent_slug, "title": title},
-        )
+        """Create a v1 session; no agent slug is accepted from the browser."""
+        return self._request("POST", "/api/v1/sessions", json_body={"title": title})
 
     def start_run(self, *, query: str, thread_id: str, request_id: str) -> httpx.Response:
+        """Start a durable background run and return its JSON response."""
         return self._request(
             "POST",
-            "/api/agent/runs",
-            json={
-                "query": query,
-                "agent_slug": self.config.agent_slug,
-                "thread_id": thread_id,
-                "queue_policy": "enqueue",
-                "meta": {"request_id": request_id},
-            },
+            f"/api/v1/sessions/{thread_id}/runs",
+            json_body={"text": query, "meta": {"request_id": request_id}},
         )
 
-    def stream_run_events(self, run_id: str, last_event_id: str | None = None):
-        """Context manager yielding raw SSE byte chunks from a run stream."""
-        headers = dict(self._headers)
-        headers["Accept"] = "text/event-stream"
-        if last_event_id:
-            headers["Last-Event-ID"] = last_event_id
+    def get_history(self, thread_id: str, after_seq: int = -1) -> httpx.Response:
+        """Read durable session events for replay."""
+        return self._request(
+            "GET",
+            f"/api/v1/sessions/{thread_id}/events",
+            params={"after_seq": after_seq},
+        )
+
+    def stream_session_events(self, thread_id: str):
+        """Context manager yielding live SSE bytes from a Synlora session."""
+        headers = {**self._headers(), "Accept": "text/event-stream"}
         return httpx.stream(
             "GET",
-            f"{self.config.base_url}/api/agent/runs/{run_id}/events",
-            params={"verbose": "false"},
+            f"{self.config.base_url}/api/v1/sessions/{thread_id}/events",
             headers=headers,
             timeout=self._timeout(stream=True),
         )
 
-    def get_result(self, run_id: str) -> httpx.Response:
-        return self._request("GET", f"/api/agent/runs/{run_id}/result")
-
     def cancel_run(self, run_id: str) -> httpx.Response:
-        return self._request("POST", f"/api/agent/runs/{run_id}/cancel")
+        return self._request("POST", f"/api/v1/runs/{run_id}/cancel")
 
-    def get_history(self, thread_id: str) -> httpx.Response:
-        return self._request("GET", f"/api/chat/thread/{thread_id}/history")
+    def answer_run(self, run_id: str, text: str) -> httpx.Response:
+        """Resolve a pending approval or ask-user interaction."""
+        return self._request("POST", f"/api/v1/runs/{run_id}/answer", json_body={"text": text})
+
+
+def assistant_history_messages(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project durable Synlora events to the assistant's history message shape."""
+    messages = []
+    for event in events:
+        event_type = str(event.get("type") or "")
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        if event_type == "user/message" and payload.get("text"):
+            messages.append(
+                {"id": str(event.get("seq")), "role": "user", "content": str(payload["text"])}
+            )
+        elif event_type == "assistant/message" and payload.get("content"):
+            messages.append(
+                {"id": str(event.get("seq")), "role": "assistant", "content": str(payload["content"])}
+            )
+    return messages

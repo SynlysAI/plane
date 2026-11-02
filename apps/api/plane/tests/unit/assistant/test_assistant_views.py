@@ -32,6 +32,7 @@ def _configure(workspace, credential="yxkey-shared"):
 @pytest.fixture
 def env(db, settings):
     settings.SYNLORA_AGENT_SLUG = "agent-test"
+    settings.SYNLORA_SERVICE_TOKEN = "service-token"
     owner = make_user(first_name="Owner")
     workspace = make_workspace(owner)
     return {
@@ -46,6 +47,16 @@ def _client_for(user):
     client = APIClient()
     client.force_authenticate(user=user)
     return client
+
+
+class FakeDelegatedResponse:
+    """Minimal delegated-token exchange response."""
+
+    status_code = 200
+
+    @staticmethod
+    def json():
+        return {"token": "short-lived-user-token", "expires_in": 3600}
 
 
 def test_anonymous_requests_are_rejected(env):
@@ -90,7 +101,10 @@ def test_status_reports_ready_when_synlora_answers(env):
             return {"status": "ready"}
 
     client = _client_for(env["owner"])
-    with patch("plane.app.views.assistant.client.httpx.get", return_value=FakeResponse()) as fake_get:
+    with (
+        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
+        patch("plane.app.views.assistant.client.httpx.get", return_value=FakeResponse()) as fake_get,
+    ):
         response = client.get(f"/api/workspaces/{env['workspace'].slug}/assistant/status/")
     assert response.status_code == 200
     assert response.json()["enabled"] is True
@@ -98,7 +112,7 @@ def test_status_reports_ready_when_synlora_answers(env):
     assert fake_get.call_args.args[0] == "http://synlora.internal:5050/api/system/ready"
 
 
-def test_chat_pins_the_agent_slug_and_returns_run_identity(env):
+def test_chat_uses_v1_session_and_returns_run_identity(env):
     _configure(env["workspace"])
     captured = {}
 
@@ -107,12 +121,8 @@ def test_chat_pins_the_agent_slug_and_returns_run_identity(env):
 
         def json(self):
             return {
-                "request_id": captured["json"]["meta"]["request_id"],
-                "status": "dispatched",
+                "session_id": "thread-1",
                 "run_id": "run-1",
-                "message_id": 7,
-                "thread_id": captured["json"]["thread_id"],
-                "stream_url": "/api/agent/runs/run-1/events",
             }
 
     def fake_request(method, url, *, headers=None, json=None, params=None, timeout=None):
@@ -120,7 +130,10 @@ def test_chat_pins_the_agent_slug_and_returns_run_identity(env):
         return FakeRunResponse()
 
     client = _client_for(env["owner"])
-    with patch("plane.app.views.assistant.client.httpx.request", side_effect=fake_request):
+    with (
+        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
+        patch("plane.app.views.assistant.client.httpx.request", side_effect=fake_request),
+    ):
         response = client.post(
             f"/api/workspaces/{env['workspace'].slug}/assistant/chat/",
             {"query": "summarize this page", "thread_id": "thread-1"},
@@ -130,14 +143,24 @@ def test_chat_pins_the_agent_slug_and_returns_run_identity(env):
     body = response.json()
     assert body["run_id"] == "run-1"
     assert body["queued"] is False
-    assert captured["url"] == "http://synlora.internal:5050/api/agent/runs"
-    assert captured["json"]["agent_slug"] == "agent-test"
+    assert captured["url"] == "http://synlora.internal:5050/api/v1/sessions/thread-1/runs"
+    assert captured["json"]["text"] == "summarize this page"
 
 
 def test_events_stream_passes_bytes_through_with_sse_headers(env):
     _configure(env["workspace"])
-    frames = [b'event: messages\ndata: {"a":1}\n\n', b"event: end\ndata: {}\n\n"]
+    frames = [
+        'event: llm/delta\ndata: {"payload":{"text":"你好"}}\n\n'.encode(),
+        b"event: turn/end\ndata: {}\n\n",
+    ]
     captured = {}
+
+    class FakeHistoryResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return []
 
     class FakeStream:
         def __enter__(self):
@@ -154,22 +177,28 @@ def test_events_stream_passes_bytes_through_with_sse_headers(env):
         return FakeStream()
 
     client = _client_for(env["owner"])
-    with patch("plane.app.views.assistant.client.httpx.stream", side_effect=fake_stream):
+    with (
+        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
+        patch(
+            "plane.app.views.assistant.client.httpx.request",
+            return_value=FakeHistoryResponse(),
+        ),
+        patch("plane.app.views.assistant.client.httpx.stream", side_effect=fake_stream),
+    ):
         response = client.get(
-            f"/api/workspaces/{env['workspace'].slug}/assistant/runs/00000000-0000-0000-0000-000000000001/events/",
-            headers={"Last-Event-ID": "1789-0", "Accept": "text/event-stream"},
+            f"/api/workspaces/{env['workspace'].slug}/assistant/sessions/thread-9/events/",
+            headers={"Last-Event-ID": "7", "Accept": "text/event-stream"},
         )
+        streamed = b"".join(response.streaming_content)
     assert response.status_code == 200
     assert response["Content-Type"] == "text/event-stream"
     assert response["Cache-Control"] == "no-cache"
     assert response["X-Accel-Buffering"] == "no"
     # pre-set Content-Encoding keeps GZipMiddleware away from the stream
     assert response["Content-Encoding"] == "identity"
-    assert b"".join(response.streaming_content) == b"".join(frames)
-    assert captured["url"] == "http://synlora.internal:5050/api/agent/runs/00000000-0000-0000-0000-000000000001/events"
-    assert captured["params"] == {"verbose": "false"}
-    assert captured["headers"]["Last-Event-ID"] == "1789-0"
-    assert captured["headers"]["Authorization"] == "Bearer yxkey-shared"
+    assert streamed == b"".join(frames)
+    assert captured["url"] == "http://synlora.internal:5050/api/v1/sessions/thread-9/events"
+    assert captured["headers"]["Authorization"] == "Bearer short-lived-user-token"
 
 
 def test_events_stream_synthesizes_an_error_frame_when_upstream_fails(env):
@@ -179,9 +208,12 @@ def test_events_stream_synthesizes_an_error_frame_when_upstream_fails(env):
         raise ConnectionError("synlora down")
 
     client = _client_for(env["owner"])
-    with patch("plane.app.views.assistant.client.httpx.stream", side_effect=failing_stream):
+    with (
+        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
+        patch("plane.app.views.assistant.client.httpx.stream", side_effect=failing_stream),
+    ):
         response = client.get(
-            f"/api/workspaces/{env['workspace'].slug}/assistant/runs/00000000-0000-0000-0000-000000000002/events/"
+            f"/api/workspaces/{env['workspace'].slug}/assistant/sessions/thread-10/events/"
         )
     assert response.status_code == 200
     body = b"".join(response.streaming_content)
@@ -196,10 +228,16 @@ def test_cancel_and_history_proxy_upstream(env):
         status_code = 200
 
         def json(self):
-            return {"ok": True}
+            return [
+                {"seq": 1, "type": "user/message", "payload": {"text": "之前的问题"}},
+                {"seq": 2, "type": "assistant/message", "payload": {"content": "之前的回答"}},
+            ]
 
     client = _client_for(env["owner"])
-    with patch("plane.app.views.assistant.client.httpx.request", return_value=FakeResponse()) as fake_request:
+    with (
+        patch("plane.app.views.assistant.client.httpx.post", return_value=FakeDelegatedResponse()),
+        patch("plane.app.views.assistant.client.httpx.request", return_value=FakeResponse()) as fake_request,
+    ):
         cancelled = client.post(
             f"/api/workspaces/{env['workspace'].slug}/assistant/runs/00000000-0000-0000-0000-000000000003/cancel/"
         )
@@ -209,6 +247,10 @@ def test_cancel_and_history_proxy_upstream(env):
     assert cancelled.status_code == 200
     assert cancelled.json() == {"cancelled": True}
     assert history.status_code == 200
+    assert history.json() == [
+        {"id": "1", "role": "user", "content": "之前的问题"},
+        {"id": "2", "role": "assistant", "content": "之前的回答"},
+    ]
     called_urls = [call.args[1] for call in fake_request.call_args_list]
-    assert any(url.endswith("/api/agent/runs/00000000-0000-0000-0000-000000000003/cancel") for url in called_urls)
-    assert any(url.endswith("/api/chat/thread/thread-9/history") for url in called_urls)
+    assert any(url.endswith("/api/v1/runs/00000000-0000-0000-0000-000000000003/cancel") for url in called_urls)
+    assert any(url.endswith("/api/v1/sessions/thread-9/events") for url in called_urls)

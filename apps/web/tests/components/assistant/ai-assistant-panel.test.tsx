@@ -14,9 +14,8 @@ const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
   startChat: vi.fn(),
   cancelRun: vi.fn(),
-  getRunResult: vi.fn(),
   getHistory: vi.fn(),
-  streamRunEvents: vi.fn(),
+  streamSessionEvents: vi.fn(),
 }));
 
 vi.mock("@/services/assistant", () => ({
@@ -25,9 +24,8 @@ vi.mock("@/services/assistant", () => ({
     createSession = mocks.createSession;
     startChat = mocks.startChat;
     cancelRun = mocks.cancelRun;
-    getRunResult = mocks.getRunResult;
     getHistory = mocks.getHistory;
-    streamRunEvents = mocks.streamRunEvents;
+    streamSessionEvents = mocks.streamSessionEvents;
   },
 }));
 
@@ -53,9 +51,9 @@ const { StoreContext } = await import("@/lib/store-context");
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const SSE_FRAMES = [
-  'event: messages\ndata: {"payload":{"items":[{"stream_event":{"type":"message_delta","content":"你好"}}]}}\n\n',
-  'event: messages\ndata: {"payload":{"items":[{"stream_event":{"type":"message_delta","content":"，世界"}}]}}\n\n',
-  'event: end\ndata: {"payload":{"status":"completed"}}\n\n',
+  'event: llm/delta\ndata: {"payload":{"text":"你好"}}\n\n',
+  'event: llm/delta\ndata: {"payload":{"text":"，世界"}}\n\n',
+  "event: turn/end\ndata: {}\n\n",
 ];
 
 const MARKDOWN_TABLE = [
@@ -134,8 +132,8 @@ describe("AIAssistantPanel", () => {
       thread_id: "thread-1",
       queued: false,
     });
-    mocks.streamRunEvents.mockImplementation(
-      async (_slug: string, _runId: string, options: { onChunk: (c: string) => void }) => {
+    mocks.streamSessionEvents.mockImplementation(
+      async (_slug: string, _threadId: string, options: { onChunk: (chunk: string) => void }) => {
         for (const frame of SSE_FRAMES) options.onChunk(frame);
       }
     );
@@ -206,16 +204,16 @@ describe("AIAssistantPanel", () => {
 
   it("renders a streamed table before and after the answer completes", async () => {
     let completeStream: (() => void) | undefined;
-    mocks.streamRunEvents.mockImplementation(
+    mocks.streamSessionEvents.mockImplementation(
       async (_slug: string, _runId: string, options: { onChunk: (chunk: string) => void }) => {
         for (const content of ["| Category | Capability |\n| :--- | ---: |\n", "| Search | **Full text** |\n"]) {
-          const data = { payload: { items: [{ stream_event: { type: "message_delta", content } }] } };
-          options.onChunk(`event: messages\ndata: ${JSON.stringify(data)}\n\n`);
+          const data = { payload: { text: content } };
+          options.onChunk(`event: llm/delta\ndata: ${JSON.stringify(data)}\n\n`);
         }
         await new Promise<void>((resolve) => {
           completeStream = resolve;
         });
-        options.onChunk('event: end\ndata: {"payload":{"status":"completed"}}\n\n');
+        options.onChunk("event: turn/end\ndata: {}\n\n");
       }
     );
     const store = new AIAssistantStore();
@@ -234,7 +232,7 @@ describe("AIAssistantPanel", () => {
   });
 
   it("shows an inline error when the stream fails", async () => {
-    mocks.streamRunEvents.mockRejectedValue(new Error("assistant_stream_http_502"));
+    mocks.streamSessionEvents.mockRejectedValue(new Error("assistant_stream_http_502"));
     const store = new AIAssistantStore();
     store.hydrate("lab");
     store.open();

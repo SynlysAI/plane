@@ -11,6 +11,7 @@ from plane.app.views.assistant import (
     AssistantRunEventsEndpoint,
     AssistantRunResultEndpoint,
     AssistantSessionEndpoint,
+    AssistantSessionEventsEndpoint,
     AssistantStatusEndpoint,
 )
 
@@ -34,6 +35,11 @@ urlpatterns = [
         "workspaces/<str:slug>/assistant/runs/<uuid:run_id>/events/",
         AssistantRunEventsEndpoint.as_view(),
         name="assistant-run-events",
+    ),
+    path(
+        "workspaces/<str:slug>/assistant/sessions/<str:thread_id>/events/",
+        AssistantSessionEventsEndpoint.as_view(),
+        name="assistant-session-events",
     ),
     path(
         "workspaces/<str:slug>/assistant/runs/<uuid:run_id>/result/",

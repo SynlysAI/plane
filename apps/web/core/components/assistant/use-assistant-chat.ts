@@ -106,12 +106,12 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
   }, []);
 
   const consumeStream = useCallback(
-    async (runId: string, allowReconnect: boolean): Promise<void> => {
+    async (threadId: string, allowReconnect: boolean): Promise<void> => {
       const controller = new AbortController();
       abortRef.current = controller;
       parserRef.current = createSSEParser(applyFrame);
       try {
-        await assistantService.streamRunEvents(workspaceSlug, runId, {
+        await assistantService.streamSessionEvents(workspaceSlug, threadId, {
           lastEventId: lastEventIdRef.current,
           signal: controller.signal,
           onChunk: (chunk) => parserRef.current?.(chunk),
@@ -121,24 +121,13 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
         // one automatic reconnect with Last-Event-ID; Synlora replays the
         // run's events from the cursor, so no content is lost
         if (allowReconnect && !endRef.current) {
-          await consumeStream(runId, false);
+          await consumeStream(threadId, false);
           return;
         }
         throw error;
       }
     },
     [applyFrame, workspaceSlug]
-  );
-
-  const pollQueuedRun = useCallback(
-    async (runId: string, attempt = 0): Promise<void> => {
-      if (attempt >= 150) throw new Error("assistant_queue_timeout");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const result = await assistantService.getRunResult(workspaceSlug, runId);
-      if (result.status !== "queued" && result.status !== "pending" && result.status !== "dispatched") return;
-      await pollQueuedRun(runId, attempt + 1);
-    },
-    [workspaceSlug]
   );
 
   const appendAssistantMessage = useCallback((content: string) => {
@@ -173,9 +162,8 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
         const chat = await assistantService.startChat(workspaceSlug, { query: fullQuery, thread_id: threadId });
         if (!chat.run_id) throw new Error("assistant_no_run");
         activeRunIdRef.current = chat.run_id;
-        if (chat.queued) await pollQueuedRun(chat.run_id);
         setStreamState({ phase: "streaming", status: null });
-        await consumeStream(chat.run_id, true);
+        await consumeStream(threadId, true);
       } catch {
         appendAssistantMessage(answerRef.current);
         setStreamingAnswer("");
@@ -190,17 +178,7 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
       else if (interruptRef.current) setStreamState({ phase: "interrupted" });
       else setStreamState({ phase: "idle" });
     },
-    [
-      appendAssistantMessage,
-      consumeStream,
-      ensureThread,
-      messages,
-      pageContext,
-      pollQueuedRun,
-      streamState.phase,
-      t,
-      workspaceSlug,
-    ]
+    [appendAssistantMessage, consumeStream, ensureThread, messages, pageContext, streamState.phase, t, workspaceSlug]
   );
 
   const stop = useCallback(async () => {

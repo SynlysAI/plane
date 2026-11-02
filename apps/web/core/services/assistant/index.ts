@@ -128,4 +128,39 @@ export class AssistantService extends APIService {
     const tail = decoder.decode();
     if (tail) options.onChunk(tail);
   }
+
+  /**
+   * Consume the durable replay + live SSE stream for one Synlora v1 session.
+   * The thread id is a non-secret session reference and never carries credentials.
+   */
+  async streamSessionEvents(
+    workspaceSlug: string,
+    threadId: string,
+    options: { lastEventId?: string | null; signal?: AbortSignal; onChunk: (chunk: string) => void }
+  ): Promise<void> {
+    const headers: Record<string, string> = { Accept: "text/event-stream" };
+    if (options.lastEventId) headers["Last-Event-ID"] = options.lastEventId;
+    const response = await fetch(
+      `${API_BASE_URL}/api/workspaces/${workspaceSlug}/assistant/sessions/${encodeURIComponent(threadId)}/events/`,
+      {
+        method: "GET",
+        credentials: "include",
+        headers,
+        signal: options.signal,
+      }
+    );
+    if (!response.ok || !response.body) throw new Error(`assistant_stream_http_${response.status}`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const pump = async (): Promise<void> => {
+      const { done, value } = await reader.read();
+      if (done) return;
+      const text = decoder.decode(value, { stream: true });
+      if (text) options.onChunk(text);
+      await pump();
+    };
+    await pump();
+    const tail = decoder.decode();
+    if (tail) options.onChunk(tail);
+  }
 }

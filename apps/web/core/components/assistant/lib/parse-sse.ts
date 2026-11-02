@@ -71,90 +71,55 @@ export type TAssistantStreamEvent =
   | { type: "end"; status: string }
   | { type: "error"; retryable: boolean };
 
-type TSynloraStreamEvent = {
+type TSynloraEvent = {
   type?: string;
-  content?: string;
-  reasoning_content?: string;
-};
-
-type TSynloraFrameData = {
   payload?: {
-    items?: Array<{ stream_event?: TSynloraStreamEvent }>;
-    chunk?: { stream_event?: TSynloraStreamEvent };
-    status?: string;
-    reason?: string;
-    retryable?: boolean;
+    text?: string;
+    content?: string;
     name?: string;
+    ok?: boolean;
+    kind?: string;
+    reason?: string;
+    code?: string;
+    message?: string;
   };
 };
 
-const CUSTOM_STATUS_LABELS: Record<string, string> = {
-  "yuxi.init": "started",
-  "yuxi.agent_state": "working",
-};
-
-/** Map one Synlora SSE frame onto zero or more UI stream events. */
+/** Map one durable/live Synlora v1 SSE frame onto zero or more UI events. */
 export const reduceSynloraFrame = (frame: TSSEFrame): TAssistantStreamEvent[] => {
-  if (frame.event === "end") {
-    let status = "completed";
-    try {
-      const payload = (JSON.parse(frame.data) as TSynloraFrameData)?.payload;
-      if (payload?.status) status = payload.status;
-    } catch {
-      /* keep the default terminal status */
-    }
-    return [{ type: "end", status }];
+  let parsed: TSynloraEvent | undefined;
+  try {
+    parsed = JSON.parse(frame.data) as TSynloraEvent;
+  } catch {
+    parsed = undefined;
   }
-  if (frame.event === "error") {
-    let retryable = true;
-    try {
-      const payload = (JSON.parse(frame.data) as TSynloraFrameData)?.payload;
-      if (payload && typeof payload.retryable === "boolean") retryable = payload.retryable;
-    } catch {
-      /* default to retryable */
-    }
-    return [{ type: "error", retryable }];
+  const payload = parsed?.payload ?? {};
+  const eventName = frame.event;
+
+  if (eventName === "llm/delta") {
+    return payload.text ? [{ type: "answer_delta", content: payload.text }] : [];
   }
-  if (frame.event === "interrupt") {
-    let reason = "interrupted";
-    try {
-      const payload = (JSON.parse(frame.data) as TSynloraFrameData)?.payload;
-      if (payload?.reason) reason = payload.reason;
-    } catch {
-      /* keep the default reason */
-    }
-    return [{ type: "interrupt", reason }];
+  if (eventName === "assistant/message") {
+    return payload.content ? [{ type: "answer_delta", content: payload.content }] : [];
   }
-  if (frame.event === "messages") {
-    let parsed: TSynloraFrameData | undefined;
-    try {
-      parsed = JSON.parse(frame.data) as TSynloraFrameData;
-    } catch {
-      return [];
-    }
-    const chunks = [...(parsed?.payload?.items ?? [])];
-    if (parsed?.payload?.chunk) chunks.push(parsed.payload.chunk);
-    const events: TAssistantStreamEvent[] = [];
-    for (const item of chunks) {
-      const streamEvent = item.stream_event;
-      if (!streamEvent) continue;
-      if (streamEvent.type === "message_delta") {
-        if (streamEvent.content) events.push({ type: "answer_delta", content: streamEvent.content });
-        if (streamEvent.reasoning_content)
-          events.push({ type: "reasoning_delta", content: streamEvent.reasoning_content });
-      }
-    }
-    return events;
+  if (eventName === "tool/call") {
+    return [{ type: "status", label: `${payload.name ?? "tool"}:running` }];
   }
-  if (frame.event === "custom") {
-    let name = "";
-    try {
-      name = (JSON.parse(frame.data) as TSynloraFrameData)?.payload?.name ?? "";
-    } catch {
-      return [];
-    }
-    const label = CUSTOM_STATUS_LABELS[name];
-    return label ? [{ type: "status", label }] : [];
+  if (eventName === "tool/result") {
+    const state = payload.ok === false ? "failed" : "completed";
+    return [{ type: "status", label: `${payload.name ?? "tool"}:${state}` }];
+  }
+  if (eventName === "ask/user") {
+    return [{ type: "status", label: payload.kind === "approval" ? "approval_pending" : "waiting_for_user" }];
+  }
+  if (eventName === "turn/end") {
+    return [{ type: "end", status: "completed" }];
+  }
+  if (eventName === "turn/aborted") {
+    return [{ type: "interrupt", reason: payload.reason ?? "interrupted" }];
+  }
+  if (eventName === "error") {
+    return [{ type: "error", retryable: !["unauthorized", "forbidden"].includes(payload.code ?? "") }];
   }
   return [];
 };

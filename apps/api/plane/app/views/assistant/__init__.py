@@ -9,6 +9,7 @@ from .views import (
     AssistantRunEventsEndpoint,
     AssistantRunResultEndpoint,
     AssistantSessionEndpoint,
+    AssistantSessionEventsEndpoint,
     AssistantStatusEndpoint,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "AssistantRunEventsEndpoint",
     "AssistantRunResultEndpoint",
     "AssistantSessionEndpoint",
+    "AssistantSessionEventsEndpoint",
     "AssistantStatusEndpoint",
 ]
