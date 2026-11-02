@@ -9,8 +9,23 @@ import { action, makeObservable, observable, runInAction } from "mobx";
 import { storage } from "@/lib/local-storage";
 
 const THREAD_KEY_PREFIX = "PLANE_AI_ASSISTANT_THREAD_";
+const PREFERENCES_KEY_PREFIX = "PLANE_AGENT_DOCK_PREFERENCES_";
+export const AGENT_DOCK_MIN_WIDTH = 320;
+export const AGENT_DOCK_MAX_WIDTH = 560;
+export const AGENT_DOCK_DEFAULT_WIDTH = 420;
 
 export type TAssistantProvider = "cloud" | "local";
+export type TAgentDockMode = "floating" | "docked";
+export type TAgentDockView = "conversation" | "context" | "runtime";
+
+type TAgentDockPreferences = {
+  dockMode: TAgentDockMode;
+  width: number;
+  expanded: boolean;
+  isOpen: boolean;
+  activeView: TAgentDockView;
+  activeSessionId: string | null;
+};
 
 export interface IAIAssistantStore {
   // observables
@@ -21,6 +36,9 @@ export interface IAIAssistantStore {
   activeProvider: TAssistantProvider;
   contextNodeId: string | null;
   expanded: boolean;
+  dockMode: TAgentDockMode;
+  width: number;
+  activeView: TAgentDockView;
   // actions
   open: () => void;
   close: () => void;
@@ -33,6 +51,9 @@ export interface IAIAssistantStore {
   setProvider: (provider: TAssistantProvider) => void;
   setContextNodeId: (nodeId: string | null) => void;
   toggleExpanded: (value?: boolean) => void;
+  setDockMode: (mode: TAgentDockMode) => void;
+  setWidth: (width: number) => void;
+  setActiveView: (view: TAgentDockView) => void;
 }
 
 export class AIAssistantStore implements IAIAssistantStore {
@@ -43,6 +64,9 @@ export class AIAssistantStore implements IAIAssistantStore {
   activeProvider: TAssistantProvider = "cloud";
   contextNodeId: string | null = null;
   expanded: boolean = false;
+  dockMode: TAgentDockMode = "floating";
+  width: number = AGENT_DOCK_DEFAULT_WIDTH;
+  activeView: TAgentDockView = "conversation";
 
   constructor() {
     makeObservable(this, {
@@ -53,6 +77,9 @@ export class AIAssistantStore implements IAIAssistantStore {
       activeProvider: observable.ref,
       contextNodeId: observable.ref,
       expanded: observable.ref,
+      dockMode: observable.ref,
+      width: observable.ref,
+      activeView: observable.ref,
       open: action,
       close: action,
       toggle: action,
@@ -64,31 +91,61 @@ export class AIAssistantStore implements IAIAssistantStore {
       setProvider: action,
       setContextNodeId: action,
       toggleExpanded: action,
+      setDockMode: action,
+      setWidth: action,
+      setActiveView: action,
     });
   }
 
   open = () => {
     this.isOpen = true;
+    this.persistCurrentPreferences();
   };
 
   close = () => {
     this.isOpen = false;
+    this.persistCurrentPreferences();
   };
 
   toggle = (value?: boolean) => {
     this.isOpen = value ?? !this.isOpen;
+    this.persistCurrentPreferences();
   };
 
   openWithLocal = (nodeId: string) => {
     this.contextNodeId = nodeId;
     this.activeProvider = "local";
+    this.activeView = "conversation";
     this.isOpen = true;
+    this.persistCurrentPreferences();
   };
 
   hydrate = (workspaceSlug: string) => {
     if (this.threadWorkspaceSlug === workspaceSlug) return;
     this.threadWorkspaceSlug = workspaceSlug;
+    this.activeProvider = "cloud";
+    this.contextNodeId = null;
     this.threadId = storage.get(`${THREAD_KEY_PREFIX}${workspaceSlug}`) ?? null;
+    const raw = storage.get(`${PREFERENCES_KEY_PREFIX}${workspaceSlug}`);
+    try {
+      const parsed = typeof raw === "string" ? (JSON.parse(raw) as Partial<TAgentDockPreferences>) : raw;
+      this.dockMode = parsed?.dockMode === "docked" ? "docked" : "floating";
+      this.expanded = Boolean(parsed?.expanded);
+      this.isOpen = Boolean(parsed?.isOpen);
+      this.activeView = ["conversation", "context", "runtime"].includes(String(parsed?.activeView))
+        ? (parsed?.activeView as TAgentDockView)
+        : "conversation";
+      const storedWidth = Number(parsed?.width);
+      this.width = Number.isFinite(storedWidth)
+        ? Math.min(AGENT_DOCK_MAX_WIDTH, Math.max(AGENT_DOCK_MIN_WIDTH, storedWidth))
+        : AGENT_DOCK_DEFAULT_WIDTH;
+    } catch {
+      this.dockMode = "floating";
+      this.expanded = false;
+      this.isOpen = false;
+      this.activeView = "conversation";
+      this.width = AGENT_DOCK_DEFAULT_WIDTH;
+    }
   };
 
   setStatus = (status: { enabled: boolean; ready: boolean } | null) => {
@@ -101,6 +158,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.threadId = threadId;
     });
     storage.set(`${THREAD_KEY_PREFIX}${workspaceSlug}`, threadId);
+    this.persistPreferences(workspaceSlug, { activeSessionId: threadId });
   };
 
   setProvider = (provider: TAssistantProvider) => {
@@ -114,6 +172,25 @@ export class AIAssistantStore implements IAIAssistantStore {
 
   toggleExpanded = (value?: boolean) => {
     this.expanded = value ?? !this.expanded;
+    this.persistCurrentPreferences();
+  };
+
+  setDockMode = (mode: TAgentDockMode) => {
+    this.dockMode = mode;
+    if (mode === "docked") this.expanded = false;
+    this.persistCurrentPreferences();
+  };
+
+  setWidth = (width: number) => {
+    const nextWidth = Number(width);
+    if (!Number.isFinite(nextWidth)) return;
+    this.width = Math.min(AGENT_DOCK_MAX_WIDTH, Math.max(AGENT_DOCK_MIN_WIDTH, nextWidth));
+    this.persistCurrentPreferences();
+  };
+
+  setActiveView = (view: TAgentDockView) => {
+    this.activeView = view;
+    this.persistCurrentPreferences();
   };
 
   clearThreadId = (workspaceSlug: string) => {
@@ -122,5 +199,23 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.threadId = null;
     });
     storage.remove(`${THREAD_KEY_PREFIX}${workspaceSlug}`);
+    this.persistPreferences(workspaceSlug, { activeSessionId: null });
   };
+
+  private persistCurrentPreferences() {
+    if (this.threadWorkspaceSlug) this.persistPreferences(this.threadWorkspaceSlug);
+  }
+
+  private persistPreferences(workspaceSlug: string, overrides: Partial<TAgentDockPreferences> = {}) {
+    const preferences: TAgentDockPreferences = {
+      dockMode: this.dockMode,
+      width: this.width,
+      expanded: this.expanded,
+      isOpen: this.isOpen,
+      activeView: this.activeView,
+      activeSessionId: this.threadWorkspaceSlug === workspaceSlug ? this.threadId : null,
+      ...overrides,
+    };
+    storage.set(`${PREFERENCES_KEY_PREFIX}${workspaceSlug}`, JSON.stringify(preferences));
+  }
 }

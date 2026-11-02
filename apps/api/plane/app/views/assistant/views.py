@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Workspace AI-assistant BFF: proxies the Synlora Run API with SSE pass-through.
+"""Workspace AI-assistant BFF over Synlora v1 Sessions.
 
 The browser never talks to Synlora directly — the workspace session
-authenticates, and the connection credential stays server-side. The run
-events endpoint streams Synlora's SSE frames through byte-for-byte so the
-frontend sees tokens as they arrive.
+authenticates, and delegated credentials stay server-side. Durable events are
+replayed before the live session SSE stream is forwarded.
 """
 
+import json
 from uuid import uuid4
 
 import httpx
@@ -28,6 +28,7 @@ from .client import (
     SynloraAssistantClient,
     resolve_assistant_client,
     resolve_assistant_config,
+    assistant_history_messages,
 )
 
 UPSTREAM_UNAVAILABLE = "synlora_unavailable"
@@ -84,7 +85,8 @@ class AssistantStatusEndpoint(BaseAPIView):
         ready = False
         if enabled:
             try:
-                ready = SynloraAssistantClient(config).health().status_code == 200
+                client = SynloraAssistantClient(config, workspace=workspace, user=request.user)
+                ready = client.health().status_code == 200
             except Exception as e:
                 log_exception(e)
         return Response({"enabled": enabled, "ready": ready, "credential_mode": config.credential_mode})
@@ -114,7 +116,7 @@ class AssistantSessionEndpoint(BaseAPIView):
 
 
 class AssistantChatEndpoint(BaseAPIView):
-    """``POST /api/workspaces/<slug>/assistant/chat/`` — submit a run for a query."""
+    """``POST /api/workspaces/<slug>/assistant/chat/`` — submit a background run."""
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def post(self, request, slug):
@@ -141,69 +143,129 @@ class AssistantChatEndpoint(BaseAPIView):
         data = response.json()
         return Response(
             {
-                "request_id": data.get("request_id", request_id),
+                "request_id": request_id,
                 "run_id": data.get("run_id"),
-                "status": data.get("status"),
-                "message_id": data.get("message_id"),
-                "thread_id": data.get("thread_id", thread_id),
-                "queued": data.get("stream_url") is None or data.get("status") == "queued",
+                "status": "dispatched",
+                "message_id": None,
+                "thread_id": data.get("session_id", thread_id),
+                "queued": False,
             },
             status=status.HTTP_200_OK,
         )
 
 
-class AssistantRunEventsEndpoint(BaseAPIView):
-    """``GET /api/workspaces/<slug>/assistant/runs/<run_id>/events/`` — SSE pass-through."""
+def _parse_last_event_id(raw_value: str | None) -> int:
+    """Parse the browser SSE cursor, tolerating pre-v1 composite ids."""
+    if not raw_value:
+        return -1
+    try:
+        return int(str(raw_value).rsplit("-", 1)[-1])
+    except ValueError:
+        return -1
+
+
+def _stream_session_events(client: SynloraAssistantClient, thread_id: str, last_event_id: str | None):
+    """Replay durable events first, then forward the already-open live stream.
+
+    The live stream is opened before history is fetched so no event can fall in
+    a subscription gap. Closing this response only closes SSE; the Synlora run
+    continues in its background executor.
+    """
+    after_seq = _parse_last_event_id(last_event_id)
+    upstream = None
+    try:
+        upstream = client.stream_session_events(thread_id).__enter__()
+        history = client.get_history(thread_id, after_seq=after_seq)
+        if history.status_code < 400:
+            events = history.json() if isinstance(history.json(), list) else []
+            for event in events:
+                yield (
+                    f'event: {event.get("type", "message")}\n'.encode()
+                    + b'data: ' + json.dumps(event, ensure_ascii=False).encode() + b'\n'
+                    + f'id: {event.get("seq", 0)}\n\n'.encode()
+                )
+        for chunk in upstream.iter_bytes():
+            yield chunk
+    except Exception as e:
+        log_exception(e)
+        yield (
+            b'event: error\n'
+            + b'data: {"error": "' + UPSTREAM_UNAVAILABLE.encode() + b'", "retryable": true}\n\n'
+        )
+    finally:
+        if upstream is not None:
+            upstream.__exit__(None, None, None)
+
+
+class AssistantSessionEventsEndpoint(BaseAPIView):
+    """``GET /api/workspaces/<slug>/assistant/sessions/<thread_id>/events/``."""
 
     content_negotiation_class = IgnoreAcceptNegotiation
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
-    def get(self, request, slug, run_id):
+    def get(self, request, slug, thread_id):
         client, error = _client(request, slug)
         if error:
             return error
-        last_event_id = request.headers.get("Last-Event-ID")
-
-        def stream():
-            try:
-                with client.stream_run_events(run_id, last_event_id) as upstream:
-                    for chunk in upstream.iter_bytes():
-                        yield chunk
-            except Exception as e:
-                # The 200 header block is already committed, so surface the
-                # failure as a synthesized SSE error frame for the client.
-                log_exception(e)
-                yield (
-                    b'event: error\n'
-                    b'data: {"error": "' + UPSTREAM_UNAVAILABLE.encode() + b'", "retryable": true}\n\n'
-                )
-
-        response = StreamingHttpResponse(stream(), content_type="text/event-stream")
+        response = StreamingHttpResponse(
+            _stream_session_events(client, thread_id, request.headers.get("Last-Event-ID")),
+            content_type="text/event-stream",
+        )
         response["Cache-Control"] = "no-cache"
         response["X-Accel-Buffering"] = "no"
-        # A pre-set Content-Encoding makes GZipMiddleware skip this response.
         response["Content-Encoding"] = "identity"
         return response
 
 
+class AssistantRunEventsEndpoint(AssistantSessionEventsEndpoint):
+    """Legacy run-event route; callers must supply the v1 session id."""
+
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def get(self, request, slug, run_id):
+        thread_id = str(request.query_params.get("thread_id") or "").strip()
+        if not thread_id:
+            return Response({"error": "thread_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        return super().get(request, slug, thread_id)
+
+
 class AssistantRunResultEndpoint(BaseAPIView):
-    """``GET /api/workspaces/<slug>/assistant/runs/<run_id>/result/``."""
+    """``GET .../runs/<run_id>/result/?thread_id=`` — derive state from events."""
 
     @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def get(self, request, slug, run_id):
         client, error = _client(request, slug)
         if error:
             return error
+        thread_id = str(request.query_params.get("thread_id") or "").strip()
+        if not thread_id:
+            return Response({"error": "thread_id is required"}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            response = client.get_result(run_id)
+            history = client.get_history(thread_id)
         except Exception as e:
             log_exception(e)
             return _upstream_error_response(e)
-        if response.status_code == 404:
+        if history.status_code == 404:
             return Response({"error": "run_not_found"}, status=status.HTTP_404_NOT_FOUND)
-        if response.status_code >= 400:
+        if history.status_code >= 400:
             return Response({"error": UPSTREAM_ERROR}, status=status.HTTP_502_BAD_GATEWAY)
-        return Response(response.json(), status=status.HTTP_200_OK)
+        events = history.json() if isinstance(history.json(), list) else []
+        in_run = False
+        status_value = "running"
+        output = ""
+        for event in events:
+            event_type = str(event.get("type") or "")
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            if event_type == "turn/start" and str(payload.get("run_id") or "") == str(run_id):
+                in_run = True
+            elif in_run and event_type == "assistant/message":
+                output = str(payload.get("content") or output)
+            elif in_run and event_type == "turn/end":
+                status_value = "completed"
+            elif in_run and event_type == "turn/aborted":
+                status_value = "cancelled"
+            elif in_run and event_type == "error":
+                status_value = "failed"
+        return Response({"status": status_value, "output": output}, status=status.HTTP_200_OK)
 
 
 class AssistantRunCancelEndpoint(BaseAPIView):
@@ -246,4 +308,5 @@ class AssistantHistoryEndpoint(BaseAPIView):
             return Response({"error": "thread_not_found"}, status=status.HTTP_404_NOT_FOUND)
         if response.status_code >= 400:
             return Response({"error": UPSTREAM_ERROR}, status=status.HTTP_502_BAD_GATEWAY)
-        return Response(response.json(), status=status.HTTP_200_OK)
+        events = response.json() if isinstance(response.json(), list) else []
+        return Response(assistant_history_messages(events), status=status.HTTP_200_OK)

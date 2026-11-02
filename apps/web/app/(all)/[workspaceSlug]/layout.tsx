@@ -31,9 +31,10 @@ export default function WorkspaceLayout(props: Route.ComponentProps) {
             <PasswordResetGate />
             <GlobalModals workspaceSlug={workspaceSlug} />
             <Suspense fallback={null}>
-              <AIAssistantRoot />
+              <AIAssistantRoot>
+                <Outlet />
+              </AIAssistantRoot>
             </Suspense>
-            <Outlet />
           </WorkspaceContentWrapper>
         </AppRailVisibilityProvider>
       </WorkspaceAuthWrapper>

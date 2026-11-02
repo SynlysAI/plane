@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
 import useSWR from "swr";
@@ -20,12 +20,16 @@ import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
 const assistantService = new AssistantService();
 
+type Props = {
+  children: ReactNode;
+};
+
 /**
  * Workspace-wide assistant mount: floating launcher, Cmd/Ctrl+J shortcut and
  * the side panel. Hidden entirely while the workspace has no usable Synlora
  * connection (status endpoint drives availability).
  */
-export const AIAssistantRoot = observer(function AIAssistantRoot() {
+export const AIAssistantRoot = observer(function AIAssistantRoot({ children }: Props) {
   const { t } = useTranslation();
   const params = useParams();
   const workspaceSlug = params?.workspaceSlug?.toString();
@@ -56,10 +60,11 @@ export const AIAssistantRoot = observer(function AIAssistantRoot() {
     return () => document.removeEventListener("keydown", handler, true);
   }, [assistantStore]);
 
-  if (!workspaceSlug || !status?.enabled) return null;
+  if (!workspaceSlug || !status?.enabled) return <>{children}</>;
 
   return (
-    <>
+    <div className="relative flex min-w-0 flex-1 items-stretch overflow-hidden">
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
       {!assistantStore.isOpen && (
         <div className="fixed top-1/2 right-5 z-40 -translate-y-1/2">
           <Tooltip label={t("aiAssistant.open")} side="left">
@@ -75,6 +80,6 @@ export const AIAssistantRoot = observer(function AIAssistantRoot() {
         </div>
       )}
       <AIAssistantPanel workspaceSlug={workspaceSlug} />
-    </>
+    </div>
   );
 });

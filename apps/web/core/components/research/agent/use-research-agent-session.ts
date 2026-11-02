@@ -102,15 +102,6 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
     setUploadedFiles([]);
     setFailedUploads([]);
 
-    const closeQuietly = async (value: TResearchAgentSession | null) => {
-      if (!value || value.status === "CLOSED") return;
-      try {
-        await agentService.cancelRun(workspaceSlug, value.run_id);
-      } catch {
-        // Closing is best-effort when the browser leaves or switches scope.
-      }
-    };
-
     const start = async () => {
       try {
         const created = await agentService.createSession(workspaceSlug, chainNodeId);
@@ -129,13 +120,11 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
       }
     };
 
-    const previous = sessionRef.current;
-    if (previous) void closeQuietly(previous);
     void start();
-
+    // Route/node changes and React unmount must not cancel an upstream run.
+    // Only the explicit close/stop actions below may terminate a session/run.
     return () => {
       active = false;
-      void closeQuietly(sessionRef.current);
     };
   }, [chainNodeId, workspaceSlug]);
 
@@ -339,7 +328,9 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
       content?: { hash?: string };
     };
     setArtifactType(SD_ARTIFACT_TYPE_MAP[String(artifact.kind ?? "")] ?? "ANALYSIS_SUMMARY");
-    setArtifactDraft(String(artifact.description || artifact.name || "").slice(0, 2000));
+    const refs = (event.payload.refs ?? []) as Array<{ id?: string; kind?: string }>;
+    const synloraSummary = String(event.payload.summary ?? "").slice(0, 2000);
+    setArtifactDraft(String(artifact.description || artifact.name || synloraSummary).slice(0, 2000));
     setArtifactConfirmed(false);
     setArtifactDrawerOpen(true);
     pendingArtifactSourceRef.current = version.id
@@ -353,6 +344,17 @@ export function useResearchAgentSession(workspaceSlug: string, chainNodeId: stri
           content_hash: version.content?.hash ?? "",
         }
       : null;
+    if (!version.id && refs.length > 0) {
+      pendingArtifactSourceRef.current = {
+        provider: "SYNLORA",
+        session_id: sessionRef.current?.session_id ?? "",
+        run_id: event.run_id,
+        event_seq: event.seq,
+        artifact_name: artifact.name ?? "Synlora artifact",
+        artifact_kind: artifact.kind ?? "other",
+        file_id: refs[0]?.id ?? "",
+      };
+    }
   }, []);
 
   /** 通过 BFF 代理下载 SD 产物内容（Plane 不存字节，§8 第二层）。 */

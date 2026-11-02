@@ -4,14 +4,17 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
-// plane
 import { setToast, TOAST_TYPE } from "@plane/propel/toast";
-// components
-import { createSSEParser, reduceSynloraFrame, type TSSEFrame } from "./lib/parse-sse";
 // services
-import { AssistantService } from "@/services/assistant";
+import {
+  AgentDockService,
+  type TAgentContextEnvelope,
+  type TAgentDockEvent,
+  type TAgentDockSession,
+} from "@/services/agent-dock";
 // store
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 
@@ -24,209 +27,255 @@ export type TAssistantMessage = {
 export type TAssistantStreamState =
   | { phase: "idle" }
   | { phase: "loading-history" }
+  | { phase: "loading-context" }
   | { phase: "queued" }
   | { phase: "streaming"; status: string | null }
   | { phase: "interrupted" }
   | { phase: "error"; canRetry: boolean };
 
-const assistantService = new AssistantService();
+const ACTIVE_STATUSES = new Set(["INITIALIZING", "READY", "QUEUED", "PENDING", "STREAMING"]);
+const agentDockService = new AgentDockService();
 
 /**
- * One continuing conversation per workspace. Messages are view-local; only
- * the thread id persists (store + localStorage). The stream lifecycle is a
- * linear state machine: queued → streaming → idle/interrupted/error.
+ * Own the target-bound cloud Agent conversation and its visible context.
+ *
+ * The browser sends only the current route. Plane resolves ACL, issues the v3
+ * context, and returns a display envelope; tokens and resource bodies stay server-side.
  */
-export const useAssistantChat = (workspaceSlug: string, pageContext: string) => {
+export const useAssistantChat = (workspaceSlug: string) => {
   const { t } = useTranslation();
+  const pathname = usePathname();
   const assistantStore = useAIAssistant();
   const [messages, setMessages] = useState<TAssistantMessage[]>([]);
   const [streamState, setStreamState] = useState<TAssistantStreamState>({ phase: "idle" });
   const [streamingAnswer, setStreamingAnswer] = useState("");
-
-  const abortRef = useRef<AbortController | null>(null);
+  const [contextEnvelope, setContextEnvelope] = useState<TAgentContextEnvelope | null>(null);
+  const [runtimeEvents, setRuntimeEvents] = useState<TAgentDockEvent[]>([]);
   const activeRunIdRef = useRef<string | null>(null);
-  const endRef = useRef(false);
-  const errorRef = useRef(false);
-  const interruptRef = useRef(false);
-  const lastEventIdRef = useRef<string | null>(null);
-  const answerRef = useRef("");
-  const parserRef = useRef<((chunk: string) => void) | null>(null);
+  const sessionTargetKeyRef = useRef<string | null>(null);
+  const latestSeqRef = useRef(0);
+  const processedSeqRef = useRef<Set<number>>(new Set());
   const historyLoadedRef = useRef(false);
-
-  const ensureThread = useCallback(async (): Promise<string> => {
-    if (assistantStore.threadId) return assistantStore.threadId;
-    const session = await assistantService.createSession(workspaceSlug, `Plane/${workspaceSlug}`);
-    assistantStore.setThreadId(workspaceSlug, session.thread_id);
-    return session.thread_id;
-  }, [assistantStore, workspaceSlug]);
-
-  // NOTE: deps exclude threadId on purpose — reloading history whenever a
-  // send creates a new thread would wipe the in-flight user message (the
-  // "panel flashes back to the empty state" bug). History loads on open only.
-  const loadHistory = useCallback(async () => {
-    if (historyLoadedRef.current || !assistantStore.threadId) return;
-    historyLoadedRef.current = true;
-    setStreamState({ phase: "loading-history" });
-    try {
-      const history = await assistantService.getHistory(workspaceSlug, assistantStore.threadId);
-      const mapped = history
-        .filter((message) => message.content)
-        .map((message, index) => ({
-          id: message.id ?? `history-${index}`,
-          role: message.role === "user" ? ("user" as const) : ("assistant" as const),
-          content: message.content ?? "",
-        }));
-      setMessages(mapped);
-    } catch {
-      // a stale thread id just starts a fresh conversation on next send
-      historyLoadedRef.current = false;
-    } finally {
-      setStreamState({ phase: "idle" });
-    }
-  }, [assistantStore, workspaceSlug]);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const translateRef = useRef(t);
 
   useEffect(() => {
-    if (assistantStore.isOpen) void loadHistory();
-  }, [assistantStore.isOpen, loadHistory]);
+    translateRef.current = t;
+  }, [t]);
 
-  const applyFrame = useCallback((frame: TSSEFrame) => {
-    if (frame.id) lastEventIdRef.current = frame.id;
-    for (const event of reduceSynloraFrame(frame)) {
-      if (event.type === "answer_delta") {
-        // the ref is the source of truth for post-stream reads; the state
-        // drives rendering
-        answerRef.current += event.content;
-        setStreamingAnswer(answerRef.current);
-      } else if (event.type === "status")
-        setStreamState((state) => (state.phase === "streaming" ? { ...state, status: event.label } : state));
-      else if (event.type === "end") endRef.current = true;
-      else if (event.type === "interrupt") interruptRef.current = true;
-      else if (event.type === "error") errorRef.current = true;
-    }
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = null;
   }, []);
-
-  const consumeStream = useCallback(
-    async (runId: string, allowReconnect: boolean): Promise<void> => {
-      const controller = new AbortController();
-      abortRef.current = controller;
-      parserRef.current = createSSEParser(applyFrame);
-      try {
-        await assistantService.streamRunEvents(workspaceSlug, runId, {
-          lastEventId: lastEventIdRef.current,
-          signal: controller.signal,
-          onChunk: (chunk) => parserRef.current?.(chunk),
-        });
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        // one automatic reconnect with Last-Event-ID; Synlora replays the
-        // run's events from the cursor, so no content is lost
-        if (allowReconnect && !endRef.current) {
-          await consumeStream(runId, false);
-          return;
-        }
-        throw error;
-      }
-    },
-    [applyFrame, workspaceSlug]
-  );
-
-  const pollQueuedRun = useCallback(
-    async (runId: string, attempt = 0): Promise<void> => {
-      if (attempt >= 150) throw new Error("assistant_queue_timeout");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const result = await assistantService.getRunResult(workspaceSlug, runId);
-      if (result.status !== "queued" && result.status !== "pending" && result.status !== "dispatched") return;
-      await pollQueuedRun(runId, attempt + 1);
-    },
-    [workspaceSlug]
-  );
 
   const appendAssistantMessage = useCallback((content: string) => {
     if (!content) return;
-    setMessages((previous) => [...previous, { id: `assistant-${Date.now()}`, role: "assistant", content }]);
+    setMessages((previous) => {
+      if (previous.at(-1)?.role === "assistant" && previous.at(-1)?.content === content) return previous;
+      return [...previous, { id: `assistant-${Date.now()}`, role: "assistant", content }];
+    });
   }, []);
+
+  const applyEvents = useCallback(
+    (events: TAgentDockEvent[], session?: TAgentDockSession) => {
+      let approvalPending = false;
+      const newRuntimeEvents: TAgentDockEvent[] = [];
+      for (const event of events) {
+        if (processedSeqRef.current.has(event.seq)) continue;
+        processedSeqRef.current.add(event.seq);
+        latestSeqRef.current = Math.max(latestSeqRef.current, event.seq);
+        if (["TOOL_CALL", "APPROVAL", "CONTEXT_ASSEMBLED", "OUTPUT"].includes(event.event_type)) {
+          newRuntimeEvents.push(event);
+        }
+        if (event.event_type === "OUTPUT") {
+          const content = String(event.payload.content ?? "");
+          if (content) appendAssistantMessage(content);
+        } else if (event.event_type === "TOOL_CALL") {
+          const name = String(event.payload.name ?? event.payload.tool_call_id ?? "tool");
+          const status = String(event.payload.status ?? "RUNNING").toLowerCase();
+          setStreamState((state) => (state.phase === "streaming" ? { ...state, status: `${name}:${status}` } : state));
+        } else if (event.event_type === "APPROVAL") {
+          approvalPending = true;
+        }
+      }
+      if (newRuntimeEvents.length) {
+        setRuntimeEvents((previous) => {
+          const merged = new Map(previous.map((item) => [item.seq, item]));
+          for (const item of newRuntimeEvents) merged.set(item.seq, item);
+          // eslint-disable-next-line unicorn/no-array-sort -- ES2022 lib target lacks Array#toSorted
+          return [...merged.values()].sort((left, right) => left.seq - right.seq);
+        });
+      }
+      if (approvalPending) {
+        stopPolling();
+        setStreamState({ phase: "interrupted" });
+      } else if (session && !ACTIVE_STATUSES.has(session.status)) {
+        stopPolling();
+        setStreamState(
+          session.status === "DEGRADED" || session.status === "ERROR"
+            ? { phase: "error", canRetry: true }
+            : { phase: "idle" }
+        );
+      }
+    },
+    [appendAssistantMessage, stopPolling]
+  );
+
+  const pollEvents = useCallback(
+    async (runId: string, immediate = false) => {
+      if (!immediate && pollTimerRef.current) return;
+      try {
+        const result = await agentDockService.getEvents(workspaceSlug, runId, latestSeqRef.current);
+        applyEvents(result.results, result.session);
+        if (ACTIVE_STATUSES.has(result.session.status)) {
+          pollTimerRef.current = setTimeout(() => void pollEvents(runId), 1200);
+        }
+      } catch {
+        stopPolling();
+        setStreamState({ phase: "error", canRetry: true });
+      }
+    },
+    [applyEvents, stopPolling, workspaceSlug]
+  );
+
+  const resolveContext = useCallback(async () => {
+    setStreamState({ phase: "loading-context" });
+    try {
+      const envelope = await agentDockService.resolveContext(workspaceSlug, pathname ?? `/${workspaceSlug}`);
+      setContextEnvelope(envelope);
+      setStreamState({ phase: "idle" });
+      return envelope;
+    } catch {
+      setContextEnvelope(null);
+      setStreamState({ phase: "error", canRetry: false });
+      setToast({ type: TOAST_TYPE.ERROR, title: translateRef.current("aiAssistant.error_unavailable") });
+      return null;
+    }
+  }, [pathname, workspaceSlug]);
+
+  useEffect(() => {
+    if (assistantStore.isOpen) void resolveContext();
+  }, [assistantStore.isOpen, resolveContext]);
+
+  const loadHistory = useCallback(async () => {
+    const sessionId = assistantStore.threadId;
+    if (!sessionId || historyLoadedRef.current) return;
+    historyLoadedRef.current = true;
+    setStreamState({ phase: "loading-history" });
+    try {
+      const session = await agentDockService.getSession(workspaceSlug, sessionId);
+      sessionTargetKeyRef.current = session.target_key;
+      activeRunIdRef.current = session.run_id;
+      const history = await agentDockService.getEvents(workspaceSlug, session.run_id, 0);
+      applyEvents(history.results, history.session);
+      if (ACTIVE_STATUSES.has(history.session.status)) void pollEvents(session.run_id, true);
+      else setStreamState({ phase: "idle" });
+    } catch {
+      assistantStore.clearThreadId(workspaceSlug);
+      setStreamState({ phase: "error", canRetry: true });
+    }
+  }, [applyEvents, assistantStore, pollEvents, workspaceSlug]);
+
+  useEffect(() => {
+    if (assistantStore.isOpen && assistantStore.threadId && contextEnvelope) void loadHistory();
+  }, [assistantStore.isOpen, assistantStore.threadId, contextEnvelope, loadHistory]);
+
+  const ensureSession = useCallback(
+    async (context: TAgentContextEnvelope): Promise<TAgentDockSession> => {
+      if (assistantStore.threadId && sessionTargetKeyRef.current === context.session_binding.target_key) {
+        return agentDockService.getSession(workspaceSlug, assistantStore.threadId);
+      }
+      if (assistantStore.threadId) {
+        assistantStore.clearThreadId(workspaceSlug);
+        historyLoadedRef.current = true;
+        setMessages([]);
+        setRuntimeEvents([]);
+        processedSeqRef.current = new Set();
+        latestSeqRef.current = 0;
+        activeRunIdRef.current = null;
+      }
+      const created = await agentDockService.createSession(workspaceSlug, context.context_id);
+      assistantStore.setThreadId(workspaceSlug, created.session_id);
+      sessionTargetKeyRef.current = created.target_key;
+      activeRunIdRef.current = created.run_id;
+      historyLoadedRef.current = true;
+      return created;
+    },
+    [assistantStore, workspaceSlug]
+  );
 
   const send = useCallback(
     async (rawQuery: string) => {
       const query = rawQuery.trim();
       if (!query || streamState.phase === "streaming" || streamState.phase === "queued") return;
-      const previousMessages = messages;
-      setMessages([...previousMessages, { id: `user-${Date.now()}`, role: "user", content: query }]);
+      const context = contextEnvelope ?? (await resolveContext());
+      if (!context) return;
+      setMessages((previous) => [...previous, { id: `user-${Date.now()}`, role: "user", content: query }]);
       setStreamingAnswer("");
-      answerRef.current = "";
       setStreamState({ phase: "queued" });
-      endRef.current = false;
-      errorRef.current = false;
-      interruptRef.current = false;
-      lastEventIdRef.current = null;
-
-      let threadId: string;
       try {
-        threadId = await ensureThread();
-      } catch {
-        setStreamState({ phase: "error", canRetry: false });
-        setToast({ type: TOAST_TYPE.ERROR, title: t("aiAssistant.error_unavailable") });
-        return;
-      }
-      const fullQuery = pageContext ? `${pageContext}\n\n${query}` : query;
-      try {
-        const chat = await assistantService.startChat(workspaceSlug, { query: fullQuery, thread_id: threadId });
-        if (!chat.run_id) throw new Error("assistant_no_run");
-        activeRunIdRef.current = chat.run_id;
-        if (chat.queued) await pollQueuedRun(chat.run_id);
+        const session = await ensureSession(context);
+        const updated = await agentDockService.sendMessage(workspaceSlug, session.session_id, query);
+        activeRunIdRef.current = updated.run_id;
         setStreamState({ phase: "streaming", status: null });
-        await consumeStream(chat.run_id, true);
+        await pollEvents(updated.run_id, true);
       } catch {
-        appendAssistantMessage(answerRef.current);
-        setStreamingAnswer("");
-        answerRef.current = "";
         setStreamState({ phase: "error", canRetry: true });
-        return;
       }
-      appendAssistantMessage(answerRef.current);
-      setStreamingAnswer("");
-      answerRef.current = "";
-      if (errorRef.current) setStreamState({ phase: "error", canRetry: true });
-      else if (interruptRef.current) setStreamState({ phase: "interrupted" });
-      else setStreamState({ phase: "idle" });
     },
-    [
-      appendAssistantMessage,
-      consumeStream,
-      ensureThread,
-      messages,
-      pageContext,
-      pollQueuedRun,
-      streamState.phase,
-      t,
-      workspaceSlug,
-    ]
+    [contextEnvelope, ensureSession, pollEvents, resolveContext, streamState.phase, workspaceSlug]
   );
 
   const stop = useCallback(async () => {
-    abortRef.current?.abort();
+    stopPolling();
     const runId = activeRunIdRef.current;
-    if (runId) {
-      // an explicit stop cancels the upstream run; closing the panel does not
-      void assistantService.cancelRun(workspaceSlug, runId).catch(() => undefined);
-    }
-  }, [workspaceSlug]);
+    if (!runId) return;
+    await agentDockService.cancelRun(workspaceSlug, runId).catch(() => undefined);
+    setStreamState({ phase: "idle" });
+  }, [stopPolling, workspaceSlug]);
+
+  /** Close only the browser subscription. The upstream run continues. */
+  const disconnect = useCallback(() => {
+    stopPolling();
+  }, [stopPolling]);
 
   const reset = useCallback(() => {
-    abortRef.current?.abort();
+    stopPolling();
     historyLoadedRef.current = false;
+    activeRunIdRef.current = null;
+    sessionTargetKeyRef.current = null;
+    latestSeqRef.current = 0;
+    processedSeqRef.current = new Set();
+    setRuntimeEvents([]);
     setMessages([]);
     setStreamingAnswer("");
     setStreamState({ phase: "idle" });
     assistantStore.clearThreadId(workspaceSlug);
-  }, [assistantStore, workspaceSlug]);
+  }, [assistantStore, stopPolling, workspaceSlug]);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  useEffect(() => {
+    if (assistantStore.isOpen && streamState.phase === "streaming" && activeRunIdRef.current) {
+      void pollEvents(activeRunIdRef.current, true);
+    }
+  }, [assistantStore.isOpen, pollEvents, streamState.phase]);
+
+  const contextStatus = useMemo(
+    () => contextEnvelope?.status ?? (streamState.phase === "loading-context" ? "loading" : "unlinked"),
+    [contextEnvelope?.status, streamState.phase]
+  );
 
   return {
     messages,
     streamingAnswer,
     streamState,
+    contextEnvelope,
+    contextStatus,
+    runtimeEvents,
     send,
     stop,
+    disconnect,
     reset,
   };
 };

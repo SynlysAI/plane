@@ -110,23 +110,33 @@ def synlora_orchestration(env, monkeypatch):
         def __init__(self):
             self.pulled = False
 
-        def create_session(self, *, title):
+        def create_session(self, *, title, research_context=None, context_token=None):
+            assert research_context["schema_version"] == "agent-context.v3"
+            assert context_token
             return "synlora-thread-1"
 
-        def start_run(self, *, thread_id, content, request_id):
+        def start_run(
+            self,
+            *,
+            thread_id,
+            content,
+            request_id,
+            research_context=None,
+            context_token=None,
+        ):
             return "synlora-run-1"
 
-        def pull_events(self, *, run_id, last_event_id=None, sequence_base=0):
+        def pull_events(self, *, session_id, after_seq=-1):
             if self.pulled:
-                return [], last_event_id, None
+                return [], after_seq, None
             self.pulled = True
             return (
                 [
-                    {"sequence": sequence_base + 1, "event": {"type": "assistant.delta", "delta": "分析完成"}},
-                    {"sequence": sequence_base + 2, "event": {"type": "tool.started", "name": "knowledge.search"}},
-                    {"sequence": sequence_base + 3, "event": {"type": "run.completed", "message": {"content": ""}}},
+                    {"sequence": after_seq + 1, "event": {"type": "assistant.delta", "delta": "分析完成"}},
+                    {"sequence": after_seq + 2, "event": {"type": "tool.started", "name": "knowledge.search"}},
+                    {"sequence": after_seq + 3, "event": {"type": "run.completed", "message": {"content": ""}}},
                 ],
-                "cursor-1",
+                after_seq + 3,
                 "completed",
             )
 
@@ -136,7 +146,7 @@ def synlora_orchestration(env, monkeypatch):
         def close_session(self, *, thread_id):
             return None
 
-        def resume(self, *, run_id, approved, request_id):
+        def answer(self, *, run_id, approved):
             return None
 
     monkeypatch.setattr(agent_view, "resolve_synlora_runtime", lambda workspace, **_kwargs: FakeSynloraRuntime())
@@ -641,7 +651,7 @@ def test_agent_events_are_isolated_between_old_and_new_sessions(env):
 
 def test_unconfigured_synlora_runtime_blocks_session(env, monkeypatch):
     """Without an enabled workspace Synlora connection the session fails closed."""
-    monkeypatch.setattr(agent_view, "resolve_synlora_runtime", lambda workspace: None)
+    monkeypatch.setattr(agent_view, "resolve_synlora_runtime", lambda workspace, **_kwargs: None)
     created = env["client"].post(
         agent_url(env, "sessions/"),
         {"request_id": f"session-{uuid4().hex}", "chain_node_id": str(env["node"].id)},

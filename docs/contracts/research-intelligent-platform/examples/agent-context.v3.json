@@ -1,0 +1,44 @@
+{
+  "schema_version": "agent-context.v3",
+  "context_id": "018f4a1e-8c1c-7b31-9a53-2f62c4b1a001",
+  "context_hash": "sha256-example",
+  "expires_at": "2026-11-02T12:30:00Z",
+  "target": {
+    "type": "RESEARCH_CHAIN_NODE",
+    "workspace_id": "workspace-01",
+    "workspace_slug": "pi-lab",
+    "project_id": "project-01",
+    "research_chain_id": "chain-01",
+    "chain_node_id": "node-01"
+  },
+  "subject": {
+    "plane_user_id": "user-01",
+    "delegated_subject": "plane-ws-workspace-01-user-user-01",
+    "scope_kind": "OWNER",
+    "scope_source": "chain_operator"
+  },
+  "policy": {
+    "policy_id": "agent-dock:node:node-01",
+    "policy_hash": "sha256-policy",
+    "policy_version": "agent-dock-policy.v1",
+    "visibility_scope": "UNIT",
+    "allowed_tools": ["get_research_node_context", "read_research_resource"],
+    "allowed_plugins": [],
+    "allowed_mcp_ids": [],
+    "allowed_knowledge_base_ids": ["kb-01"],
+    "allowed_file_ids": ["file-01"]
+  },
+  "manifest": {
+    "version": 1,
+    "hash": "sha256-manifest",
+    "summary": "Workspace: Pi Lab\nResearch project:新材料研究\nResearch chain:完整测试\nCurrent node:文献调研",
+    "resources": [
+      {
+        "kind": "task",
+        "id": "task-01",
+        "title": "整理近五年文献",
+        "status": "ASSIGNED"
+      }
+    ]
+  }
+}

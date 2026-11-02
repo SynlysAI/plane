@@ -47,6 +47,8 @@ from plane.research.views.projects import visible_profile_queryset
 
 SCHEMA_VERSION = "2026-09-18"
 AGENT_CONTEXT_SCHEMA_VERSION = "agent-context.v2"
+AGENT_CONTEXT_V3_SCHEMA_VERSION = "agent-context.v3"
+DELEGATED_SUBJECT_PREFIX = "plane-ws"
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 100
 FORMAL_MATERIAL_STATUSES = frozenset(
@@ -413,14 +415,45 @@ def _context_payload(grant):
     """Return token scope metadata without returning the bearer token."""
     if grant is None:
         return None
+    chain_node = grant.chain_node
+    research_chain = grant.research_chain
+    manifest = grant.context_manifest if grant.context_manifest else None
     return {
+        "schema_version": AGENT_CONTEXT_V3_SCHEMA_VERSION,
         "workspace_id": str(grant.workspace_id),
-        "research_project_id": str(grant.project_id),
-        "chain_node_id": str(grant.chain_node_id) if grant.chain_node_id else None,
         "context_id": str(grant.context_id),
         "context_hash": grant.context_hash,
-        "visibility_scope": grant.visibility_scope,
         "expires_at": grant.expires_at.isoformat(),
+        "target": {
+            "type": grant.target_type,
+            "workspace_id": str(grant.workspace_id),
+            "workspace_slug": grant.workspace.slug,
+            "project_id": str(grant.project_id) if grant.project_id else None,
+            **({"research_chain_id": str(research_chain.id)} if research_chain else {}),
+            **({"chain_node_id": str(chain_node.id)} if chain_node else {}),
+        },
+        "subject": {
+            "plane_user_id": str(grant.user_id),
+            "delegated_subject": f"{DELEGATED_SUBJECT_PREFIX}-{grant.workspace_id}-user-{grant.user_id}",
+            "scope_kind": grant.scope_kind,
+            "scope_source": grant.scope_source,
+        },
+        "policy": {
+            "policy_id": grant.policy_id,
+            "policy_hash": grant.policy_hash,
+            "policy_version": grant.policy_version,
+            "visibility_scope": grant.visibility_scope,
+            "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
+            "allowed_file_ids": grant.allowed_file_ids,
+            "allowed_plugins": grant.allowed_plugins,
+            "allowed_mcp_ids": grant.allowed_mcp_ids,
+            "allowed_tools": grant.allowed_tools,
+        },
+        **({"manifest": {"version": manifest["version"], "hash": manifest["hash"]}} if manifest else {}),
+        # v2 compatibility fields remain for existing ScienceDiscovery clients.
+        "research_project_id": str(grant.project_id) if grant.project_id else None,
+        "chain_node_id": str(grant.chain_node_id) if grant.chain_node_id else None,
+        "visibility_scope": grant.visibility_scope,
         "allowed_knowledge_base_ids": grant.allowed_knowledge_base_ids,
         "allowed_file_ids": grant.allowed_file_ids,
         "allowed_plugins": grant.allowed_plugins,

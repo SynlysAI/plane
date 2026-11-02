@@ -71,6 +71,7 @@ def test_personal_mode_requires_own_enabled_cloud_credential(settings):
 
 def test_shared_credential_and_env_base_url_fallback(db, settings):
     settings.SYNLORA_BASE_URL = "http://fallback:5050/"
+    settings.SYNLORA_SERVICE_TOKEN = ""
     owner = make_user()
     workspace = make_workspace(owner)
     connection = ExternalSystemConnection.objects.create(
@@ -87,7 +88,7 @@ def test_shared_credential_and_env_base_url_fallback(db, settings):
     client = resolve_assistant_client(workspace)
     assert client.config.base_url == "http://fallback:5050"
     assert client.config.token == "yxkey-shared"
-    assert client._headers == {"Authorization": "Bearer yxkey-shared"}
+    assert client.config.service_token == ""
 
 
 def test_disabled_or_missing_connection_is_not_configured(db, settings):
@@ -103,9 +104,9 @@ def test_disabled_or_missing_connection_is_not_configured(db, settings):
         resolve_assistant_client(workspace)
 
 
-def test_start_run_always_pins_the_server_side_agent_slug(db, settings):
+def test_start_run_uses_v1_session_and_request_id(db, settings):
     settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
-    settings.SYNLORA_AGENT_SLUG = "plane-assistant"
+    settings.SYNLORA_SERVICE_TOKEN = "service-token"
     owner = make_user()
     workspace = make_workspace(owner)
     _connection(workspace, credential="yxkey-shared")
@@ -129,8 +130,38 @@ def test_start_run_always_pins_the_server_side_agent_slug(db, settings):
 
     assert response.status_code == 200
     assert captured["method"] == "POST"
-    assert captured["url"] == "http://synlora.internal:5050/api/agent/runs"
-    assert captured["json"]["agent_slug"] == "plane-assistant"
-    assert captured["json"]["queue_policy"] == "enqueue"
+    assert captured["url"] == "http://synlora.internal:5050/api/v1/sessions/t-1/runs"
+    assert captured["json"]["text"] == "q"
+    assert "agent_slug" not in captured["json"]
     assert captured["json"]["meta"] == {"request_id": "r-1"}
     assert captured["headers"]["Authorization"] == "Bearer yxkey-shared"
+
+
+def test_delegated_token_is_exchanged_server_side(db, settings):
+    settings.SYNLORA_BASE_URL = "http://synlora.internal:5050"
+    settings.SYNLORA_SERVICE_TOKEN = "service-token"
+    owner = make_user()
+    workspace = make_workspace(owner)
+    _connection(workspace, credential="yxkey-shared")
+    client = resolve_assistant_client(workspace, user=owner)
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"token": "short-lived-user-token", "expires_in": 3600}
+
+    def fake_post(url, *, headers=None, json=None, timeout=None):
+        captured.update({"url": url, "headers": headers, "json": json})
+        return FakeResponse()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("plane.app.views.assistant.client.httpx.post", fake_post)
+        headers = client._headers()
+
+    assert headers == {"Authorization": "Bearer short-lived-user-token"}
+    assert captured["url"].endswith("/api/v1/research/delegated-token")
+    assert captured["headers"]["Authorization"] == "Bearer service-token"
+    assert captured["json"]["external_subject"] == f"plane-ws-{workspace.id}-user-{owner.id}"
+    assert "short-lived-user-token" not in captured["json"]

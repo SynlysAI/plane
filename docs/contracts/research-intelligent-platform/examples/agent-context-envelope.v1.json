@@ -1,0 +1,52 @@
+{
+  "schema_version": "agent-context-envelope.v1",
+  "context_id": "018f4a1e-8c1c-7b31-9a53-2f62c4b1a001",
+  "context_version": 1,
+  "status": "linked",
+  "target_type": "RESEARCH_CHAIN_NODE",
+  "target_hierarchy": [
+    {
+      "type": "workspace",
+      "id": "workspace-01",
+      "title": "Pi Lab"
+    },
+    {
+      "type": "project",
+      "id": "project-01",
+      "title": "新材料研究"
+    },
+    {
+      "type": "research_chain",
+      "id": "chain-01",
+      "title": "科研链完整测试"
+    },
+    {
+      "type": "research_chain_node",
+      "id": "node-01",
+      "title": "文献调研"
+    }
+  ],
+  "resources_summary": {
+    "total": 8,
+    "by_kind": {
+      "task": 3,
+      "file": 2,
+      "stage_material": 2,
+      "event": 1
+    }
+  },
+  "capabilities": {
+    "agent": "科研文献助手",
+    "allowed_tools": ["get_research_node_context", "read_research_resource"],
+    "allowed_plugins": [],
+    "allowed_mcp_ids": [],
+    "allowed_knowledge_base_ids": ["kb-01"],
+    "allowed_file_ids": ["file-01"]
+  },
+  "expiry": "2026-11-02T12:30:00Z",
+  "session_binding": {
+    "workspace_id": "workspace-01",
+    "target_key": "node:node-01",
+    "user_id": "user-01"
+  }
+}

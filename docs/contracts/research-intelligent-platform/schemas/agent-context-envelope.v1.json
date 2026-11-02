@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4ms.local/contracts/research-intelligent-platform/agent-context-envelope.v1.json",
+  "title": "Agent context envelope v1",
+  "description": "Display-only browser projection. This envelope is never an authorization credential.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "context_id",
+    "context_version",
+    "status",
+    "target_type",
+    "target_hierarchy",
+    "resources_summary",
+    "capabilities",
+    "expiry",
+    "session_binding"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agent-context-envelope.v1"
+    },
+    "context_id": {
+      "type": "string"
+    },
+    "context_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "enum": ["unlinked", "loading", "linked", "refreshed", "expired", "failed", "forbidden"]
+    },
+    "target_type": {
+      "enum": ["WORKSPACE", "PROJECT", "RESEARCH_CHAIN", "RESEARCH_CHAIN_NODE"]
+    },
+    "target_hierarchy": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["type", "id", "title"]
+      }
+    },
+    "resources_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "by_kind"],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_kind": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "expiry": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "session_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id", "target_key", "user_id"],
+      "properties": {
+        "workspace_id": {
+          "type": "string"
+        },
+        "target_key": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

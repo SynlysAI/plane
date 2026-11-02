@@ -47,6 +47,7 @@ from plane.research.services.report_context import ResearchReportContextError
 from plane.research.services.agent_runtime import (
     SynloraRuntimeError,
     resolve_synlora_runtime,
+    synlora_research_context,
 )
 from plane.research.services.chain_projection import project_science_discovery_events
 from plane.research.services.sciencediscovery import ScienceDiscoveryClient, ScienceDiscoveryError
@@ -130,11 +131,17 @@ def create_synlora_runtime_session(
         assembly=assembly,
         request_id=f"agent:{request_id}",
     )
-    thread_id = runtime.create_session(title=node.title or "Research agent")
+    context = synlora_research_context(workspace, user, node, grant)
+    thread_id = runtime.create_session(
+        title=node.title or "Research agent",
+        research_context=context,
+        context_token=_token,
+    )
     return {
         "grant": grant,
         "synlora_session_id": thread_id,
-        "delegated_subject": "",
+        "delegated_subject": context["subject"]["delegated_subject"],
+        "context_token_encrypted": encrypt_data(_token),
         "assembly": assembly.__dict__,
         "sd_project_id": "",
         "sd_session_id": "",
@@ -474,6 +481,7 @@ class ResearchAgentSessionCreateEndpoint(AgentPluginMixin):
                 sd_project_id=orchestrated.get("sd_project_id", ""),
                 sd_session_id=orchestrated.get("sd_session_id", ""),
                 delegated_subject=orchestrated.get("delegated_subject", ""),
+                context_token_encrypted=orchestrated.get("context_token_encrypted", ""),
                 assembly=orchestrated["assembly"],
                 request_id=request_id,
                 payload_hash=payload_hash(request.data),
@@ -730,10 +738,26 @@ class ResearchAgentMessageEndpoint(AgentPluginMixin):
         # Synlora 异步分支：提交 run 拿号即返回，增量事件由 getEvents 轮询拉取并投影。
         try:
             runtime = _synlora_runtime_for_session(workspace, session)
+            research_context = synlora_research_context(
+                workspace, session.user, session.chain_node, session.context_grant
+            )
+            context_token = (
+                decrypt_data(session.context_token_encrypted)
+                if session.context_token_encrypted
+                else ""
+            )
+            if not context_token:
+                raise SynloraRuntimeError(
+                    "synlora_context_token_missing",
+                    "Scoped Synlora context token is unavailable; create a new session.",
+                    401,
+                )
             synlora_run_id = runtime.start_run(
                 thread_id=session.synlora_session_id,
                 content=inject_report_content(content, report_contents),
                 request_id=request_id,
+                research_context=research_context,
+                context_token=context_token,
             )
             session.synlora_run_id = synlora_run_id
             session.status = ResearchAgentSession.Status.STREAMING
@@ -972,26 +996,21 @@ class ResearchAgentRunEventEndpoint(AgentPluginMixin):
             and session.synlora_run_id
             and session.status == ResearchAgentSession.Status.STREAMING
         ):
-            # Synlora 分支：按游标有界拉取 SSE，翻译成 SD 事件词汇后共用同一投影器。
+            # Synlora 分支：按 durable session event 游标回放，共用既有投影器。
             try:
                 runtime = _synlora_runtime_for_session(workspace, session)
-                last_event = session.run_events.order_by("-seq").values_list("payload", flat=True).first()
-                cursor = (last_event or {}).get("remote_event_id")
-                sequence_base = max(
+                remote_after = max(
                     [
                         int((e or {}).get("remote_seq") or 0)
                         for e in session.run_events.values_list("payload", flat=True)
                     ]
                     or [0]
                 )
-                events_batch, cursor_after, terminal = runtime.pull_events(
-                    run_id=session.synlora_run_id,
-                    last_event_id=cursor,
-                    sequence_base=sequence_base,
+                events_batch, _cursor_after, terminal = runtime.pull_events(
+                    session_id=session.synlora_session_id,
+                    after_seq=remote_after,
                 )
                 if events_batch:
-                    for entry in events_batch:
-                        entry["event"]["remote_event_id"] = cursor_after
                     project_science_discovery_events(session, events_batch, source_system="SYNLORA")
                     session.refresh_from_db()
                 if terminal == "interrupted":
@@ -1277,13 +1296,12 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             except ScienceDiscoveryError as exc:
                 return Response({"error_code": exc.code, "message": exc.message}, status=exc.status_code)
         elif session.provider == ResearchAgentSession.Provider.SYNLORA and session.synlora_run_id:
-            # Synlora 审批桥接：interrupt 的 run 通过 resume 决策继续执行。
+            # Synlora 审批桥接：answer 复用既有 ask_user 等待回路，不新建 run。
             try:
                 runtime = _synlora_runtime_for_session(workspace, session)
-                runtime.resume(
+                runtime.answer(
                     run_id=session.synlora_run_id,
                     approved=decision in ("APPROVED", "APPROVED_ALWAYS"),
-                    request_id=request_id,
                 )
             except (SynloraRuntimeError, httpx.HTTPError) as exc:
                 code = getattr(exc, "code", "synlora_resume_failed")
@@ -1295,9 +1313,8 @@ class ResearchAgentApprovalEndpoint(AgentPluginMixin):
             {"decision": decision, "tool_call_id": tool_call_id, "reason": reason},
             request_id,
         )
-        if session.provider in (
-            ResearchAgentSession.Provider.SCIENCE_DISCOVERY,
-            ResearchAgentSession.Provider.SYNLORA,
+        if session.provider == ResearchAgentSession.Provider.SCIENCE_DISCOVERY or (
+            session.provider == ResearchAgentSession.Provider.SYNLORA and decision != "REJECTED"
         ):
             # 异步 run 在审批后继续执行：回到 STREAMING，终态由轮询收敛（§6.1）。
             session.status = ResearchAgentSession.Status.STREAMING

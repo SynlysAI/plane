@@ -1,0 +1,139 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
+import { API_BASE_URL } from "@plane/constants";
+import { APIService } from "@/services/api.service";
+
+export type TAgentContextEnvelope = {
+  schema_version: "agent-context-envelope.v1";
+  context_id: string;
+  context_version: number;
+  status: "unlinked" | "loading" | "linked" | "refreshed" | "expired" | "failed" | "forbidden";
+  target_type: "WORKSPACE" | "PROJECT" | "RESEARCH_CHAIN" | "RESEARCH_CHAIN_NODE";
+  target_hierarchy: Array<{ type: string; id: string; title: string }>;
+  resources_summary: { total: number; by_kind: Record<string, number> };
+  capabilities: {
+    agent: string;
+    allowed_tools: string[];
+    allowed_plugins: string[];
+    allowed_mcp_ids: string[];
+    allowed_knowledge_base_ids: string[];
+    allowed_file_ids: string[];
+  };
+  expiry: string;
+  session_binding: { workspace_id: string; target_key: string; user_id: string };
+};
+
+export type TAgentDockSession = {
+  schema_version: "agent-dock-session.v1";
+  session_id: string;
+  run_id: string;
+  target_type: TAgentContextEnvelope["target_type"];
+  target_key: string;
+  context: { context_id: string; context_version: number; status: string; expires_at: string };
+  status: string;
+  last_error: string;
+  provider: string;
+  assembly: Record<string, unknown>;
+  latest_seq: number;
+};
+
+export type TAgentDockEvent = {
+  schema_version: string;
+  run_id: string;
+  seq: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+  request_id: string;
+  created_at: string;
+};
+
+function requestId(prefix: string) {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export class AgentDockService extends APIService {
+  constructor() {
+    super(API_BASE_URL);
+  }
+
+  /** Resolve current route context on the server; the browser never supplies privileges. */
+  async resolveContext(workspaceSlug: string, route: string, selectedText = "") {
+    return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/context/resolve/`, {
+      request_id: requestId("context"),
+      route,
+      selected_text: selectedText.slice(0, 4000),
+    })
+      .then((response) => response?.data as TAgentContextEnvelope)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async listSessions(workspaceSlug: string) {
+    return this.get(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/`)
+      .then((response) => response?.data as { results: TAgentDockSession[]; count: number })
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async getSession(workspaceSlug: string, sessionId: string) {
+    return this.get(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/${sessionId}/`)
+      .then((response) => response?.data as TAgentDockSession)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async createSession(workspaceSlug: string, contextId: string) {
+    return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/`, {
+      request_id: requestId("session"),
+      context_id: contextId,
+    })
+      .then((response) => response?.data as TAgentDockSession)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async sendMessage(workspaceSlug: string, sessionId: string, content: string) {
+    return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/sessions/${sessionId}/messages/`, {
+      request_id: requestId("message"),
+      content,
+    })
+      .then((response) => response?.data as TAgentDockSession)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async getEvents(workspaceSlug: string, runId: string, afterSeq = 0) {
+    return this.get(`/api/workspaces/${workspaceSlug}/agent-dock/runs/${runId}/events/`, {
+      params: { after_seq: afterSeq },
+    })
+      .then(
+        (response) =>
+          response?.data as {
+            results: TAgentDockEvent[];
+            count: number;
+            latest_seq: number;
+            session: TAgentDockSession;
+          }
+      )
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  async cancelRun(workspaceSlug: string, runId: string) {
+    return this.post(`/api/workspaces/${workspaceSlug}/agent-dock/runs/${runId}/cancel/`)
+      .then((response) => response?.data as TAgentDockSession)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+}

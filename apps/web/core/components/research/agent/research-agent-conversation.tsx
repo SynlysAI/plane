@@ -218,13 +218,19 @@ function MessageItem({ item, api }: { item: TAgentMessageItem; api: TResearchAge
     case "artifact": {
       const artifact = (item.event.payload.artifact ?? {}) as { name?: string; kind?: string };
       const version = (item.event.payload.version ?? {}) as { id?: string };
+      const refs = (item.event.payload.refs ?? []) as Array<{ id?: string }>;
+      const summary = agentPayloadText(item.event.payload, ["summary", "description"]);
+      const canSave =
+        (api.session?.provider === "SCIENCE_DISCOVERY" && Boolean(version.id)) ||
+        (api.session?.provider === "SYNLORA" && refs.length > 0);
       return (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-subtle px-3 py-2">
           <div className="min-w-0">
             <p className="truncate text-12 font-medium text-primary">🗂 {artifact.name ?? "artifact"}</p>
             <p className="text-11 text-tertiary">{artifact.kind ?? ""}</p>
+            {summary && <p className="mt-1 max-w-120 text-11 break-words text-secondary">{summary}</p>}
           </div>
-          {api.session?.provider === "SCIENCE_DISCOVERY" && version.id && (
+          {canSave && (
             <div className="flex shrink-0 gap-3 text-11 text-accent-primary">
               <button type="button" onClick={() => void api.downloadArtifact(item.event)} className="hover:underline">
                 {t("research.agent.artifact_download")}

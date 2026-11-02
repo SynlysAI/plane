@@ -29,17 +29,63 @@ Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
 let container: HTMLDivElement;
 let root: Root;
 const uploadFiles = vi.fn();
+const prepareArtifactSave = vi.fn();
 
 beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  prepareArtifactSave.mockClear();
 });
 
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.clearAllMocks();
+});
+
+it("allows a Synlora file artifact to enter the human-confirmed save flow", async () => {
+  const api = {
+    events: [
+      {
+        schema_version: "agent-plugin.v1",
+        run_id: "run-1",
+        seq: 3,
+        event_type: "INTERMEDIATE_ARTIFACT",
+        payload: {
+          summary: "Synlora 生成的分析摘要",
+          refs: [{ kind: "file", id: "file-1" }],
+        },
+        request_id: "request-3",
+        created_at: "2026-11-02T00:00:00Z",
+      },
+    ],
+    userEcho: {},
+    state: "ready",
+    session: {
+      session_id: "session-1",
+      run_id: "run-1",
+      status: "READY",
+      provider: "SYNLORA",
+    },
+    message: "",
+    setMessage: vi.fn(),
+    sending: false,
+    uploadingFile: false,
+    uploadError: "",
+    uploadedFiles: [],
+    failedUploads: [],
+    reportError: "",
+    uploadFiles,
+    prepareArtifactSave,
+  } as unknown as TResearchAgentSessionApi;
+
+  await act(async () => root.render(<ResearchAgentConversation api={api} />));
+  expect(container.textContent).toContain("Synlora 生成的分析摘要");
+  const save = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("保存到研究链"));
+  expect(save).toBeTruthy();
+  await act(async () => save?.click());
+  expect(prepareArtifactSave).toHaveBeenCalledTimes(1);
 });
 
 it("sends every selected ScienceDiscovery session file in one batch", async () => {
