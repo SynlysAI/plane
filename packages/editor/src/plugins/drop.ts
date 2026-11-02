@@ -19,6 +19,22 @@ type Props = {
   fileHandler: TFileHandler;
 };
 
+type TEditorFileEvent = "insert" | "drop" | "paste";
+
+/** Extract files from a clipboard, including image bitmaps exposed only as items. */
+function getClipboardFiles(clipboardData: DataTransfer | null): File[] {
+  if (!clipboardData) return [];
+
+  const files = Array.from(clipboardData.files ?? []);
+  if (files.length > 0) return files;
+
+  return Array.from(clipboardData.items ?? []).flatMap((item) => {
+    if (item.kind !== "file") return [];
+    const file = item.getAsFile();
+    return file ? [file] : [];
+  });
+}
+
 export const DropHandlerPlugin = (props: Props): Plugin => {
   const { disabledExtensions, editor, fileHandler } = props;
 
@@ -26,20 +42,16 @@ export const DropHandlerPlugin = (props: Props): Plugin => {
     key: new PluginKey("drop-handler-plugin"),
     props: {
       handlePaste: (view, event) => {
-        if (
-          editor.isEditable &&
-          event.clipboardData &&
-          event.clipboardData.files &&
-          event.clipboardData.files.length > 0
-        ) {
+        const files = getClipboardFiles(event.clipboardData);
+        if (editor.isEditable && files.length > 0) {
           event.preventDefault();
-          const files = Array.from(event.clipboardData.files);
           void dispatchEditorFiles({
             disabledExtensions,
             editor,
             files,
             initialPos: view.state.selection.from,
             attachFiles: fileHandler.attachFiles,
+            event: "paste",
           });
           return true;
         }
@@ -105,7 +117,7 @@ type TDispatchEditorFilesArgs = {
   files: File[];
   initialPos: number;
   attachFiles?: (files: File[]) => void | Promise<void>;
-  event?: "insert" | "drop";
+  event?: TEditorFileEvent;
 };
 
 /** Keep images inline and hand all other files to the host attachment surface. */
@@ -130,7 +142,7 @@ type InsertFilesSafelyArgs = {
   disabledExtensions?: TExtensions[];
   flaggedExtensions?: TExtensions[];
   editor: Editor;
-  event: "insert" | "drop";
+  event: TEditorFileEvent;
   files: File[];
   initialPos: number;
   type?: Extract<TEditorCommands, "attachment" | "image">;

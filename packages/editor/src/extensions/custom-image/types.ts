@@ -48,12 +48,16 @@ export type TCustomImageAttributes = {
   [ECustomImageAttributeNames.STATUS]: ECustomImageStatus;
 };
 
-export type UploadEntity = ({ event: "insert" } | { event: "drop"; file: File }) & { hasOpenedFileInputOnce?: boolean };
+export type TEditorFileEvent = "insert" | "drop" | "paste";
+
+export type UploadEntity = ({ event: "insert" } | { event: "drop" | "paste"; file: File }) & {
+  hasOpenedFileInputOnce?: boolean;
+};
 
 export type InsertImageComponentProps = {
   file?: File;
   pos?: number;
-  event: "insert" | "drop";
+  event: TEditorFileEvent;
 };
 
 export type CustomImageExtensionOptions = {

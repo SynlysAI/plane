@@ -7,7 +7,7 @@
 import { mergeAttributes } from "@tiptap/core";
 import { Image as BaseImageExtension } from "@tiptap/extension-image";
 // constants
-import { CORE_EXTENSIONS } from "@/constants/extension";
+import { CORE_EXTENSIONS } from "../../constants/extension";
 // local imports
 import { ECustomImageAttributeNames } from "./types";
 import type {

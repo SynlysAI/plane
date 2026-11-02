@@ -139,7 +139,7 @@ export function CustomImageUploader(props: CustomImageUploaderProps) {
     // the meta data of the image component
     const meta = imageComponentImageFileMap?.get(imageEntityId ?? "");
     if (meta) {
-      if (meta.event === "drop" && "file" in meta) {
+      if ((meta.event === "drop" || meta.event === "paste") && "file" in meta) {
         hasTriedUploadingOnMountRef.current = true;
         uploadFile(meta.file);
       } else if (meta.event === "insert" && fileInputRef.current && !hasTriggeredFilePickerRef.current) {
@@ -208,6 +208,13 @@ export function CustomImageUploader(props: CustomImageUploaderProps) {
     [hasDuplicationFailed, editor.isEditable, updateAttributes]
   );
 
+  /** Open the host file picker when the uploader is in an interactive state. */
+  const openFilePicker = useCallback(() => {
+    if (!failedToLoadImage && editor.isEditable && !hasDuplicationFailed) {
+      fileInputRef.current?.click();
+    }
+  }, [editor.isEditable, failedToLoadImage, hasDuplicationFailed]);
+
   return (
     <div
       className={cn(
@@ -229,14 +236,17 @@ export function CustomImageUploader(props: CustomImageUploaderProps) {
       onDragOver={onDragEnter}
       onDragLeave={onDragLeave}
       contentEditable={false}
-      onClick={() => {
-        if (!failedToLoadImage && editor.isEditable && !hasDuplicationFailed) {
-          fileInputRef.current?.click();
-        }
-      }}
     >
-      <ImageOutline className="size-4" />
-      <div className="flex-1 text-14 font-medium">{getDisplayMessage()}</div>
+      <button
+        type="button"
+        onClick={openFilePicker}
+        disabled={!editor.isEditable || failedToLoadImage || hasDuplicationFailed}
+        aria-label={getDisplayMessage()}
+        className="flex min-w-0 flex-1 items-center gap-2 self-stretch text-left outline-none"
+      >
+        <ImageOutline className="size-4 shrink-0" />
+        <div className="min-w-0 flex-1 text-14 font-medium">{getDisplayMessage()}</div>
+      </button>
       {hasDuplicationFailed && editor.isEditable && (
         <button
           type="button"

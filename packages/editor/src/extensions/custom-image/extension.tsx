@@ -7,12 +7,12 @@
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { v4 as uuidv4 } from "uuid";
 // constants
-import { ACCEPTED_IMAGE_MIME_TYPES } from "@/constants/config";
+import { ACCEPTED_IMAGE_MIME_TYPES } from "../../constants/config";
 // helpers
-import { isFileValid } from "@/helpers/file";
-import { insertEmptyParagraphAtNodeBoundaries } from "@/helpers/insert-empty-paragraph-at-node-boundary";
+import { isFileValid } from "../../helpers/file";
+import { insertEmptyParagraphAtNodeBoundaries } from "../../helpers/insert-empty-paragraph-at-node-boundary";
 // types
-import type { TFileHandler } from "@/types";
+import type { TFileHandler } from "../../types";
 // local imports
 import type { CustomImageNodeViewProps } from "./components/node-view";
 import { CustomImageNodeView } from "./components/node-view";
@@ -26,8 +26,8 @@ type Props = {
   isEditable: boolean;
 };
 
-export function CustomImageExtension(props: Props) {
-  const { fileHandler, isEditable } = props;
+export function CustomImageExtension(extensionProps: Props) {
+  const { fileHandler, isEditable } = extensionProps;
   // derived values
   const { getAssetSrc, getAssetDownloadSrc, restore: restoreImageFn } = fileHandler;
 
@@ -65,14 +65,14 @@ export function CustomImageExtension(props: Props) {
     addCommands() {
       return {
         insertImageComponent:
-          (props) =>
+          (insertProps) =>
           ({ commands }) => {
-            // Early return if there's an invalid file being dropped
+            // Early return if an invalid file is being inserted directly.
             if (
-              props?.file &&
+              insertProps?.file &&
               !isFileValid({
                 acceptedMimeTypes: ACCEPTED_IMAGE_MIME_TYPES,
-                file: props.file,
+                file: insertProps.file,
                 maxFileSize: this.storage.maxFileSize,
                 onError: (_error, message) => alert(message),
               })
@@ -80,21 +80,20 @@ export function CustomImageExtension(props: Props) {
               return false;
             }
 
-            // generate a unique id for the image to keep track of dropped
-            // files' file data
+            // Generate a unique ID to track files delivered by drag or paste.
             const fileId = uuidv4();
 
             const imageComponentImageFileMap = getImageComponentImageFileMap(this.editor);
 
             if (imageComponentImageFileMap) {
-              if (props?.event === "drop" && props.file) {
+              if ((insertProps?.event === "drop" || insertProps?.event === "paste") && insertProps.file) {
                 imageComponentImageFileMap.set(fileId, {
-                  file: props.file,
-                  event: props.event,
+                  file: insertProps.file,
+                  event: insertProps.event,
                 });
-              } else if (props.event === "insert") {
+              } else if (insertProps.event === "insert") {
                 imageComponentImageFileMap.set(fileId, {
-                  event: props.event,
+                  event: insertProps.event,
                   hasOpenedFileInputOnce: false,
                 });
               }
@@ -105,8 +104,8 @@ export function CustomImageExtension(props: Props) {
               [ECustomImageAttributeNames.STATUS]: ECustomImageStatus.PENDING,
             };
 
-            if (props.pos) {
-              return commands.insertContentAt(props.pos, {
+            if (insertProps.pos) {
+              return commands.insertContentAt(insertProps.pos, {
                 type: this.name,
                 attrs: attributes,
               });
@@ -126,8 +125,8 @@ export function CustomImageExtension(props: Props) {
       };
     },
     addNodeView() {
-      return ReactNodeViewRenderer((props) => (
-        <CustomImageNodeView {...props} node={props.node as CustomImageNodeViewProps["node"]} />
+      return ReactNodeViewRenderer((nodeViewProps) => (
+        <CustomImageNodeView {...nodeViewProps} node={nodeViewProps.node as CustomImageNodeViewProps["node"]} />
       ));
     },
   });
