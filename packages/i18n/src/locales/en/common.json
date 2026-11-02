@@ -3543,6 +3543,16 @@
     "local_unavailable": "The local agent is available on research chain node pages — open a node and click 智能体分析.",
     "disclaimer": "AI-generated content, for reference only.",
     "approve": "Approve",
-    "reject": "Reject"
+    "reject": "Reject",
+    "view_conversation": "Conversation",
+    "view_context": "Context",
+    "view_runtime": "Runtime",
+    "current_context": "Current work context",
+    "context_snapshot_pending": "Unified context snapshots arrive in the next increment; only page-location metadata is shown now.",
+    "runtime_events": "Runtime events",
+    "runtime_empty": "No tool calls or approvals yet.",
+    "pin": "Pin to right",
+    "unpin": "Unpin",
+    "resize": "Resize"
   }
 }

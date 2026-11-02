@@ -190,6 +190,11 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
     }
   }, [workspaceSlug]);
 
+  /** Close only the browser SSE subscription; the upstream run continues. */
+  const disconnect = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   const reset = useCallback(() => {
     abortRef.current?.abort();
     historyLoadedRef.current = false;
@@ -205,6 +210,7 @@ export const useAssistantChat = (workspaceSlug: string, pageContext: string) => 
     streamState,
     send,
     stop,
+    disconnect,
     reset,
   };
 };

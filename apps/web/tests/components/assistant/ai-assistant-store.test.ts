@@ -51,4 +51,37 @@ describe("AIAssistantStore", () => {
     expect(store.threadId).toBeNull();
     expect(window.localStorage.getItem("PLANE_AI_ASSISTANT_THREAD_lab-a")).toBeNull();
   });
+
+  it("persists bounded dock preferences per workspace", () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab-a");
+    store.setDockMode("docked");
+    store.open();
+    store.setWidth(700);
+    store.setActiveView("runtime");
+
+    expect(store.width).toBe(560);
+    const restored = new AIAssistantStore();
+    restored.hydrate("lab-a");
+    expect(restored.dockMode).toBe("docked");
+    expect(restored.isOpen).toBe(true);
+    expect(restored.width).toBe(560);
+    expect(restored.activeView).toBe("runtime");
+
+    window.localStorage.setItem("PLANE_AI_ASSISTANT_THREAD_lab-b", "thread-b");
+    restored.hydrate("lab-b");
+    expect(restored.dockMode).toBe("floating");
+    expect(restored.activeView).toBe("conversation");
+    expect(restored.threadId).toBe("thread-b");
+  });
+
+  it("does not store context bodies or credentials in dock preferences", () => {
+    const store = new AIAssistantStore();
+    store.hydrate("lab");
+    store.setDockMode("docked");
+    store.setContextNodeId("node-with-secret-material");
+    const raw = window.localStorage.getItem("PLANE_AGENT_DOCK_PREFERENCES_lab") ?? "";
+    expect(raw).not.toContain("node-with-secret-material");
+    expect(raw).not.toContain("token");
+  });
 });
