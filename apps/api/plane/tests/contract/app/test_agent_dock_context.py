@@ -16,7 +16,7 @@ from plane.db.models import (
     ResearchChainNode,
     ResearchProjectProfile,
 )
-from plane.research.services.agent_dock import agent_context_v3_for_grant
+from plane.research.services.agent_dock import agent_context_v3_for_grant, resolve_agent_dock_context
 from plane.tests.research_fixtures import (
     enable_research,
     make_org_member,
@@ -162,6 +162,40 @@ def test_context_resolve_is_idempotent_and_workspace_route_is_safe(env):
     assert second.status_code == 201
     assert first.json()["context_id"] == second.json()["context_id"]
     assert second.json()["target_type"] == "WORKSPACE"
+
+
+@pytest.mark.parametrize("project_scope", [False, True])
+def test_context_callback_accepts_workspace_and_project_tokens(env, project_scope):
+    """验证真实上下文令牌回调，并保持项目范围约束。
+
+    Args:
+        env: 已建立科研组织权限的工作区与项目测试数据。
+        project_scope: 是否使用绑定到具体项目的上下文令牌。
+    """
+    route = f"/{env['workspace'].slug}"
+    if project_scope:
+        route += f"/research/chains/{env['chain'].id}"
+    grant, token, _envelope = resolve_agent_dock_context(
+        workspace=env["workspace"],
+        user=env["owner"],
+        route=route,
+        request_id=f"callback-{uuid4().hex}",
+    )
+    client = APIClient()
+    client.credentials(
+        HTTP_X_RESEARCH_CONTEXT_TOKEN=token,
+        HTTP_X_RESEARCH_CONTEXT_HASH=grant.context_hash,
+    )
+    url = f"/api/research/workspaces/{env['workspace'].slug}/context/"
+
+    response = client.get(url)
+
+    assert response.status_code == 200, response.text
+    expected_project = str(env["project"].id) if project_scope else None
+    assert response.json()["scope"]["project_id"] == expected_project
+    assert response.json()["context"]["context_id"] == str(grant.context_id)
+    denied = client.get(url, {"project_id": str(uuid4())})
+    assert denied.status_code == 403
 
 
 def test_context_version_advances_and_invalid_attachments_fail_closed(env):

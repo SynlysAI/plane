@@ -514,7 +514,7 @@ class ResearchContextEndpoint(ContextAuthenticationMixin, ResearchAPIView):
             return context_grant
 
         project_id = request.GET.get("project_id")
-        if context_grant and not project_id:
+        if context_grant and context_grant.project_id is not None and not project_id:
             project_id = str(context_grant.project_id)
         if project_id:
             try:
