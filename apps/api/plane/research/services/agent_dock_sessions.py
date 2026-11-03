@@ -6,12 +6,14 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from plane.db.models import (
+    ResearchChain,
+    ResearchChainNode,
     ResearchAgentRunEvent,
     ResearchAgentSession,
     ResearchChainEvent,
@@ -20,6 +22,12 @@ from plane.db.models import (
 )
 from plane.license.utils.encryption import decrypt_data
 from plane.research.services.agent_dock import agent_context_v3_for_grant, context_status
+from plane.research.services.agent_dock_mcp import (
+    issue_agent_dock_mcp_connection,
+    resolve_agent_dock_mcp_credentials,
+    revoke_agent_dock_mcp_connection,
+)
+from plane.research.services.agent_page_context import build_page_context
 from plane.research.services.agent_runtime import (
     SynloraRuntimeClient,
     SynloraRuntimeError,
@@ -55,7 +63,7 @@ def _target_title(grant: ResearchContextGrant) -> str:
         return f"Research chain {grant.research_chain_id}"[:120]
     if grant.project is not None:
         return grant.project.name[:120]
-    return grant.workspace.name[:120]
+    return f"Plane · {grant.workspace.name}"[:120]
 
 
 def _assembly(grant: ResearchContextGrant) -> dict:
@@ -70,7 +78,39 @@ def _assembly(grant: ResearchContextGrant) -> dict:
         "policy_id": grant.policy_id,
         "scope_kind": grant.scope_kind,
         "scope_source": grant.scope_source,
+        "tool_source": "plane-unified-mcp",
     }
+
+
+def _plane_mcp_metadata(grant: ResearchContextGrant, credential) -> dict:
+    """Build the token-free MCP descriptor consumed by one Synlora run."""
+    return {
+        "schema_version": "plane-mcp-runtime.v1",
+        "url": credential.url,
+        "connection_id": str(credential.connection.id),
+        "allowed_tools": list(grant.allowed_tools or []),
+    }
+
+
+def _sync_page_focus_on_session(session: ResearchAgentSession, page_context: dict) -> None:
+    """Keep audit targeting current while preserving workspace-stable history."""
+    focus = page_context.get("focus") or {}
+    focus_type = str(focus.get("type") or "").upper()
+    focus_id = str(focus.get("id") or "")
+    node = None
+    chain = None
+    if focus_type in {"RESEARCH_NODE", "RESEARCH_TASK"}:
+        node = ResearchChainNode.objects.select_related("chain", "chain__project").filter(
+            pk=focus_id, chain__workspace_id=session.workspace_id, deleted_at__isnull=True
+        ).first()
+        chain = node.chain if node else None
+    elif focus_type == "RESEARCH_CHAIN":
+        chain = ResearchChain.objects.select_related("project").filter(
+            pk=focus_id, workspace_id=session.workspace_id, deleted_at__isnull=True
+        ).exclude(status="DELETED").first()
+    session.research_chain = chain
+    session.chain_node = node
+    session.project = chain.project if chain is not None else None
 
 
 def serialize_agent_dock_session(session: ResearchAgentSession) -> dict:
@@ -177,12 +217,22 @@ def create_agent_dock_session(
     if not context_token:
         raise AgentDockSessionError("Context token is unavailable; resolve context again", 403, "agent_context_expired")
     try:
+        credential = issue_agent_dock_mcp_connection(workspace=workspace, user=user)
+    except Exception as exc:
+        raise AgentDockSessionError(
+            "Plane unified MCP is unavailable", 503, "agent_mcp_unavailable"
+        ) from exc
+    plane_mcp = _plane_mcp_metadata(grant, credential)
+    try:
         synlora_session_id = runtime.create_session(
             title=_target_title(grant),
             research_context=agent_context_v3_for_grant(grant),
             context_token=context_token,
+            plane_mcp=plane_mcp,
+            mcp_token=credential.token,
         )
     except SynloraRuntimeError as exc:
+        revoke_agent_dock_mcp_connection(credential.connection)
         raise AgentDockSessionError(exc.message, exc.status_code, exc.code) from exc
 
     try:
@@ -194,6 +244,7 @@ def create_agent_dock_session(
             research_chain=grant.research_chain,
             chain_node=grant.chain_node,
             context_grant=grant,
+            unified_mcp_connection=credential.connection,
             status=ResearchAgentSession.Status.READY,
             provider=ResearchAgentSession.Provider.SYNLORA,
             synlora_session_id=synlora_session_id,
@@ -223,6 +274,7 @@ def create_agent_dock_session(
             ) from exc
         try:
             runtime.close_session(thread_id=synlora_session_id)
+            revoke_agent_dock_mcp_connection(credential.connection)
         except Exception:
             # The losing concurrent request only created a redundant upstream
             # session; failing to clean it must not hide the authoritative local one.
@@ -238,6 +290,75 @@ def create_agent_dock_session(
     return session
 
 
+def refresh_agent_dock_session_context(
+    *,
+    workspace: Workspace,
+    user,
+    session: ResearchAgentSession,
+    context_id: str,
+):
+    """Atomically move one workspace-stable session to a fresh context grant.
+
+    Args:
+        workspace: Current workspace.
+        user: Current Plane user.
+        session: Existing Agent Dock session.
+        context_id: Newly resolved context id.
+
+    Returns:
+        The updated session.
+
+    Raises:
+        AgentDockSessionError: The grant is missing, expired, owned by another user,
+            already bound to another session, or the existing session is not workspace-stable.
+    """
+    try:
+        context_uuid = UUID(str(context_id))
+    except (TypeError, ValueError) as exc:
+        raise AgentDockSessionError("Context not found", 404, "agent_context_not_found") from exc
+    grant = (
+        ResearchContextGrant.objects.select_related("workspace", "user")
+        .filter(
+            context_id=context_uuid,
+            workspace=workspace,
+            user=user,
+            deleted_at__isnull=True,
+        )
+        .first()
+    )
+    if grant is None:
+        raise AgentDockSessionError("Context not found", 404, "agent_context_not_found")
+    if grant.revoked_at is not None or grant.expires_at <= timezone.now():
+        raise AgentDockSessionError("Context expired", 403, "agent_context_expired")
+    if getattr(grant, "agent_session_id", None) is not None and grant.agent_session_id != session.pk:
+        raise AgentDockSessionError("Context already bound", 409, "agent_session_conflict")
+    if session.target_type != ResearchAgentSession.TargetType.WORKSPACE:
+        raise AgentDockSessionError("Session is not workspace-stable", 409, "agent_context_target_changed")
+
+    with transaction.atomic():
+        locked = ResearchAgentSession.objects.select_for_update().get(pk=session.pk)
+        locked.context_grant = grant
+        locked.context_token_encrypted = grant.context_token_encrypted
+        locked.assembly = _assembly(grant)
+        locked.updated_by = user
+        locked.save(update_fields=[
+            "context_grant", "context_token_encrypted", "assembly", "updated_by", "updated_at"
+        ])
+        _append_event(
+            locked,
+            "CONTEXT_ASSEMBLED",
+            {
+                "target_type": grant.target_type,
+                "context_version": grant.context_version,
+                "manifest_hash": (grant.context_manifest or {}).get("hash", ""),
+                "refreshed": True,
+            },
+            f"context-refresh:{grant.context_id}",
+        )
+    locked.refresh_from_db()
+    return locked
+
+
 def start_agent_dock_message(
     *,
     workspace: Workspace,
@@ -245,6 +366,9 @@ def start_agent_dock_message(
     session: ResearchAgentSession,
     content: str,
     request_id: str,
+    route: str = "",
+    focus_ref: dict | None = None,
+    selected_text: str = "",
     runtime: SynloraRuntimeClient | None = None,
 ):
     """Start one background turn with a fresh server-side context snapshot."""
@@ -294,12 +418,39 @@ def start_agent_dock_message(
     if not context_token:
         raise AgentDockSessionError("Context token is unavailable; create a new session", 403, "agent_context_expired")
     try:
+        credential = resolve_agent_dock_mcp_credentials(
+            workspace=workspace,
+            user=user,
+            connection=session.unified_mcp_connection,
+        )
+    except Exception as exc:
+        raise AgentDockSessionError(
+            "Plane unified MCP is unavailable", 503, "agent_mcp_unavailable"
+        ) from exc
+    session.unified_mcp_connection = credential.connection
+    previous_page = (grant.context_manifest or {}).get("page_context") or {}
+    effective_route = route or str(previous_page.get("route") or "")
+    effective_focus = focus_ref or (previous_page.get("focus") if isinstance(previous_page.get("focus"), dict) else None)
+    page_context = build_page_context(
+        workspace=workspace,
+        user=user,
+        route=effective_route,
+        focus_ref=effective_focus,
+        selected_text=selected_text,
+    )
+    plane_mcp = _plane_mcp_metadata(grant, credential)
+    _sync_page_focus_on_session(session, page_context)
+    try:
         synlora_run_id = runtime.start_run(
             thread_id=session.synlora_session_id,
             content=content,
             request_id=request_id,
             research_context=agent_context_v3_for_grant(grant),
             context_token=context_token,
+            plane_mcp=plane_mcp,
+            mcp_token=credential.token,
+            page_context=page_context,
+            external_run_id=str(session.run_id),
         )
     except SynloraRuntimeError as exc:
         session.status = ResearchAgentSession.Status.DEGRADED
@@ -310,7 +461,10 @@ def start_agent_dock_message(
     session.status = ResearchAgentSession.Status.STREAMING
     session.last_error = ""
     session.updated_by = user
-    session.save(update_fields=["synlora_run_id", "status", "last_error", "updated_by", "updated_at"])
+    session.save(update_fields=[
+        "unified_mcp_connection", "synlora_run_id", "status", "last_error",
+        "updated_by", "updated_at", "research_chain", "chain_node", "project",
+    ])
     content_hash = payload_hash({"content": content})
     _append_event(
         session,
@@ -325,6 +479,10 @@ def start_agent_dock_message(
             "target_type": grant.target_type,
             "context_version": grant.context_version,
             "manifest_hash": (grant.context_manifest or {}).get("hash", ""),
+            "page_context_hash": page_context.get("hash", ""),
+            "page_kind": page_context.get("page_kind", ""),
+            "route": page_context.get("route", ""),
+            "mcp_connection_id": str(credential.connection.id),
         },
         f"context:{request_id}",
     )

@@ -16,17 +16,13 @@ from django.utils import timezone
 from plane.db.models import (
     Project,
     ResearchChain,
-    ResearchChainEvent,
     ResearchChainNode,
-    ResearchChainNodeTask,
-    ResearchChainStageMaterialItem,
     ResearchContextGrant,
-    ResearchChainUpload,
     Workspace,
 )
+from plane.mcp.catalog import SCHEMAS as UNIFIED_MCP_SCHEMAS
+from plane.research.services.agent_page_context import build_page_context
 from plane.research.services.context_tokens import issue_agent_dock_context_token
-from plane.research.services.mcp_catalog import TOOL_NAMES
-from plane.research.views.chain_foundation import _chain_writer
 from plane.research.views.projects import can_read_project_research_metadata, visible_profile_queryset
 
 
@@ -152,145 +148,6 @@ MAX_SELECTED_TEXT = 4000
 MAX_ATTACHMENT_IDS = 20
 
 
-def _resource(kind: str, resource_id, title: str, status: str = "", updated_at=None, version=None):
-    """Build one safe display-only resource reference."""
-    return {
-        "kind": kind,
-        "id": str(resource_id) if resource_id else None,
-        "title": str(title or "")[:300],
-        "status": str(status or ""),
-        "updated_at": updated_at.isoformat() if hasattr(updated_at, "isoformat") else None,
-        **({"version": int(version)} if version is not None else {}),
-    }
-
-
-def _node_resources(node: ResearchChainNode):
-    """Collect bounded task/material/upload/event references for one node."""
-    tasks = (
-        ResearchChainNodeTask.objects.filter(node=node, deleted_at__isnull=True)
-        .order_by("-created_at")
-        .values("id", "title", "status", "updated_at")[:20]
-    )
-    materials = (
-        ResearchChainStageMaterialItem.objects.filter(
-            source_node=node,
-            deleted_at__isnull=True,
-        )
-        .select_related("requirement", "upload")
-        .order_by("-updated_at")[:20]
-    )
-    uploads = ResearchChainUpload.objects.filter(node=node, deleted_at__isnull=True).order_by("-created_at")[:20]
-    events = (
-        ResearchChainEvent.objects.filter(node=node)
-        .order_by("-occurred_at")
-        .values("id", "event_type", "summary", "occurred_at")[:10]
-    )
-    resources = [
-        _resource("task", item["id"], item["title"], item["status"], item["updated_at"])
-        for item in tasks
-    ]
-    resources.extend(
-        _resource(
-            "stage_material",
-            item.id,
-            item.title,
-            item.upload.status if item.upload else "",
-            item.updated_at,
-        )
-        for item in materials
-    )
-    resources.extend(
-        _resource("file", upload.id, upload.file_name, upload.status, upload.updated_at)
-        for upload in uploads
-    )
-    resources.extend(
-        _resource("event", item["id"], item["summary"] or item["event_type"], updated_at=item["occurred_at"])
-        for item in events
-    )
-    return resources[:100], uploads
-
-
-def _build_manifest(target: AgentDockTarget, user, selected_text: str = ""):
-    """Build a bounded summary and reference list; file bodies never enter it."""
-    lines: list[str] = []
-    resources: list[dict] = []
-    allowed_knowledge_base_ids: list[str] = []
-    allowed_file_ids: list[str] = []
-
-    if target.type == ResearchContextGrant.TargetType.WORKSPACE:
-        lines.extend([f"Workspace: {target.workspace.name} ({target.workspace.slug})"])
-    elif target.type == ResearchContextGrant.TargetType.PROJECT and target.project is not None:
-        profile = getattr(target.project, "research_profile", None)
-        lines.extend(
-            [
-                f"Workspace: {target.workspace.name}",
-                f"Research project: {target.project.name}",
-                f"Research status: {getattr(profile, 'workflow_status', '')}",
-            ]
-        )
-    elif target.chain is not None:
-        profile = getattr(target.chain.project, "research_profile", None)
-        stages = target.chain.stage_approvals.filter(deleted_at__isnull=True).order_by("sort_order")
-        active_stage = next((stage for stage in stages if stage.status not in ("APPROVED",)), None)
-        node_count = target.chain.nodes.filter(deleted_at__isnull=True).count()
-        lines.extend(
-            [
-                f"Workspace: {target.workspace.name}",
-                f"Research project: {target.chain.project.name}",
-                f"Research chain: {target.chain.id} ({target.chain.status})",
-                f"Chain visibility: {getattr(profile, 'chain_visibility', '')}",
-                f"Nodes visible in scope: {node_count}",
-                f"Current or next stage: {active_stage.stage_code if active_stage else 'not started'}",
-            ]
-        )
-        resources = [
-            _resource("stage", stage.id, stage.get_stage_code_display(), stage.status, stage.updated_at)
-            for stage in stages[:13]
-        ]
-
-    if target.node is not None:
-        node_resources, uploads = _node_resources(target.node)
-        resources = node_resources
-        allowed_file_ids = [str(upload.id) for upload in uploads]
-        allowed_knowledge_base_ids = sorted(
-            {
-                str(upload.knowledge_base_id)
-                for upload in uploads
-                if upload.knowledge_base_id
-            }
-        )
-        stage = (
-            target.chain.stage_approvals.filter(deleted_at__isnull=True, submitted_node=target.node)
-            .order_by("-sort_order")
-            .first()
-        ) if target.chain is not None else None
-        assignee = target.node.assignee
-        lines.extend(
-            [
-                f"Current node: {target.node.title} ({target.node.node_type}, {target.node.status})",
-                f"Node assignee: {getattr(assignee, 'display_name', None) or getattr(assignee, 'email', 'unassigned')}",
-                f"Associated stage: {stage.stage_code if stage else 'not submitted'}",
-            ]
-        )
-
-    if selected_text:
-        lines.extend(["", "User-selected text is attached for this turn only."])
-
-    return {
-        "summary": "\n".join(lines)[:12000],
-        "resources": resources[:100],
-    }, allowed_knowledge_base_ids, allowed_file_ids
-
-
-def _scope_for_target(workspace, user, target: AgentDockTarget):
-    """Classify write capability without broadening read-only sessions."""
-    if target.chain is not None:
-        if _chain_writer(workspace, user, target.chain):
-            return "OWNER", "chain_operator"
-        return "REVIEW", "chain_reader"
-    return "OWNER", "workspace_member"
-
-
 def _envelope(grant: ResearchContextGrant, target: AgentDockTarget, user) -> dict:
     """Build the browser-safe context envelope; it is never an auth credential."""
     manifest = grant.context_manifest or {}
@@ -308,7 +165,7 @@ def _envelope(grant: ResearchContextGrant, target: AgentDockTarget, user) -> dic
         kind = str(resource.get("kind") or "other")
         resource_kinds[kind] = resource_kinds.get(kind, 0) + 1
     return {
-        "schema_version": "agent-context-envelope.v1",
+        "schema_version": "agent-context-envelope.v2",
         "context_id": str(grant.context_id),
         "context_version": grant.context_version,
         "status": "linked",
@@ -334,8 +191,10 @@ def _envelope(grant: ResearchContextGrant, target: AgentDockTarget, user) -> dic
             ],
         },
         "manifest_hash": str(manifest.get("hash") or ""),
+        "page_context": manifest.get("page_context") or {},
         "capabilities": {
             "agent": "Synlora workspace assistant",
+            "tool_source": "plane-unified-mcp",
             "allowed_tools": grant.allowed_tools,
             "allowed_plugins": grant.allowed_plugins,
             "allowed_mcp_ids": grant.allowed_mcp_ids,
@@ -345,7 +204,7 @@ def _envelope(grant: ResearchContextGrant, target: AgentDockTarget, user) -> dic
         "expiry": grant.expires_at.isoformat(),
         "session_binding": {
             "workspace_id": str(grant.workspace_id),
-            "target_key": target.key,
+            "target_key": f"workspace:{target.workspace.id}",
             "user_id": str(grant.user_id),
         },
     }
@@ -358,6 +217,7 @@ def resolve_agent_dock_context(
     route: str,
     request_id: str,
     selected_text: str = "",
+    focus_ref: dict | None = None,
     attachment_ids: list[str] | None = None,
 ):
     """Resolve a route, enforce ACL, and issue a bounded v3 Context grant.
@@ -386,48 +246,48 @@ def resolve_agent_dock_context(
     if existing is not None:
         if existing.workspace_id != workspace.id or existing.user_id != user.id:
             raise AgentDockContextError("request_id was already used by another user", 409)
-        existing_key = (
-            f"node:{existing.chain_node_id}"
-            if existing.chain_node_id
-            else f"chain:{existing.research_chain_id}"
-            if existing.research_chain_id
-            else f"project:{existing.project_id}"
-            if existing.project_id
-            else f"workspace:{existing.workspace_id}"
-        )
-        if existing_key != target.key:
-            raise AgentDockContextError("request_id was already used for another target", 409)
+        # Agent Dock threads are workspace-stable. A route only changes the page
+        # seed, so moving between project/chain/node pages never forks history.
         if existing.revoked_at is not None or existing.expires_at <= timezone.now():
             raise AgentDockContextError("Context expired", 403)
         return existing, "", _envelope(existing, target, user)
 
-    manifest, knowledge_ids, file_ids = _build_manifest(target, user, selected_text)
-    allowed_tools = (
-        sorted(TOOL_NAMES)
-        if target.type == ResearchContextGrant.TargetType.RESEARCH_CHAIN_NODE
-        and bool(getattr(settings, "RESEARCH_MCP_ENABLED", False))
-        else []
+    page_context = build_page_context(
+        workspace=workspace,
+        user=user,
+        route=route,
+        focus_ref=focus_ref,
+        selected_text=selected_text,
     )
-    scope_kind, scope_source = _scope_for_target(workspace, user, target)
+    manifest = {
+        "summary": page_context["summary"],
+        "resources": page_context["resources"],
+        "page_context": page_context,
+    }
+    knowledge_ids: list[str] = []
+    file_ids: list[str] = []
+    allowed_tools = sorted(UNIFIED_MCP_SCHEMAS)
+    scope_kind, scope_source = "OWNER", "workspace_member"
     issuer = _context_issuer()
     grant, token = issue_agent_dock_context_token(
         workspace=workspace,
         user=user,
-        target_type=target.type,
+        target_type=ResearchContextGrant.TargetType.WORKSPACE,
         request_id=request_id,
-        project=target.project,
-        research_chain=target.chain,
-        chain_node=target.node,
-        visibility_scope=getattr(getattr(target.project, "research_profile", None), "chain_visibility", "WORKSPACE"),
+        project=None,
+        research_chain=None,
+        chain_node=None,
+        visibility_scope="WORKSPACE",
         allowed_tools=allowed_tools,
         allowed_knowledge_base_ids=knowledge_ids,
         allowed_file_ids=file_ids,
         manifest=manifest,
-        policy_id=f"agent-dock:{target.key}",
+        policy_id=f"agent-dock:workspace:{workspace.id}",
         scope_kind=scope_kind,
         scope_source=scope_source,
         policy_version="agent-dock-policy.v1",
         issuer=issuer,
+        ttl_seconds=3600,
     )
     return grant, token, _envelope(grant, target, user)
 

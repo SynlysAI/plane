@@ -16,6 +16,13 @@ export type TRuntimeToolCall = {
   seq: number;
 };
 
+export type TRuntimeRun = {
+  runId: string;
+  events: TAgentDockEvent[];
+  startedAt?: string;
+  endedAt?: string;
+};
+
 const SENSITIVE_MARKERS = ["password", "token", "secret", "api_key", "authorization", "cookie"];
 
 /** Recursively redact credential-like fields and bound the preview size. */
@@ -88,4 +95,19 @@ export function mergeRuntimeToolCalls(events: TAgentDockEvent[]): TRuntimeToolCa
   }
   // eslint-disable-next-line unicorn/no-array-sort -- ES2022 lib target lacks Array#toSorted
   return [...calls.values()].sort((left, right) => left.seq - right.seq);
+}
+
+/** Group a durable event stream into immutable per-turn runs. */
+export function groupRuntimeEventsByRun(events: TAgentDockEvent[]): TRuntimeRun[] {
+  const groups = new Map<string, TAgentDockEvent[]>();
+  for (const event of events) {
+    const key = event.run_id || "unknown";
+    groups.set(key, [...(groups.get(key) ?? []), event]);
+  }
+  return [...groups.entries()].map(([runId, runEvents]) => ({
+    runId,
+    events: runEvents,
+    startedAt: runEvents[0]?.created_at,
+    endedAt: runEvents.at(-1)?.created_at,
+  }));
 }

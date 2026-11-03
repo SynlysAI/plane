@@ -229,8 +229,15 @@ def issue_agent_dock_context_token(
         "summary": str((manifest or {}).get("summary") or "")[:12000],
         "resources": list((manifest or {}).get("resources") or [])[:100],
     }
+    page_context = (manifest or {}).get("page_context")
+    if isinstance(page_context, dict):
+        safe_manifest["page_context"] = page_context
     safe_manifest["hash"] = context_policy_hash(
-        {"summary": safe_manifest["summary"], "resources": safe_manifest["resources"]}
+        {
+            "summary": safe_manifest["summary"],
+            "resources": safe_manifest["resources"],
+            **({"page_context": safe_manifest["page_context"]} if "page_context" in safe_manifest else {}),
+        }
     )
     target_filter = {"workspace": workspace, "user": user, "target_type": target_type}
     if project is not None:

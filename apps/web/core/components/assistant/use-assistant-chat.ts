@@ -12,6 +12,7 @@ import {
   type TAgentContextEnvelope,
   type TAgentDockEvent,
   type TAgentDockSession,
+  type TAgentFocusRef,
 } from "@/services/agent-dock";
 import { useAIAssistant } from "@/hooks/store/use-ai-assistant";
 import { createSSEParser } from "./lib/parse-sse";
@@ -40,7 +41,10 @@ export type TAssistantStreamState = {
   canRetry?: boolean;
 };
 
-type TUseAssistantChatOptions = { enabled?: boolean };
+type TUseAssistantChatOptions = {
+  enabled?: boolean;
+  focusRef?: TAgentFocusRef | null;
+};
 
 const ACTIVE_PHASES = new Set<TAssistantPhase>([
   "connecting",
@@ -110,7 +114,10 @@ function runtimeEvent(event: TAgentDockEvent): TAgentDockEvent | null {
  * 管理绑定到当前 Plane 目标的 Synlora 会话，并以 SSE 驱动逐轮状态。
  * 每轮独立 generation 和 run id，关闭面板只中止浏览器订阅。
  */
-export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUseAssistantChatOptions = {}) => {
+export const useAssistantChat = (
+  workspaceSlug: string,
+  { enabled = true, focusRef: pageFocusRef = null }: TUseAssistantChatOptions = {}
+) => {
   const { t } = useTranslation();
   const pathname = usePathname();
   const assistantStore = useAIAssistant();
@@ -118,6 +125,7 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
   const [streamState, setStreamState] = useState<TAssistantStreamState>({ phase: "idle" });
   const [streamingAnswer, setStreamingAnswer] = useState("");
   const [contextEnvelope, setContextEnvelope] = useState<TAgentContextEnvelope | null>(null);
+  const [selectedText, setSelectedText] = useState("");
   const [runtimeEvents, setRuntimeEvents] = useState<TAgentDockEvent[]>([]);
   const activeRunIdRef = useRef<string | null>(null);
   const streamingAnswerRef = useRef("");
@@ -137,6 +145,21 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
   useEffect(() => {
     translateRef.current = t;
   }, [t]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const update = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setSelectedText(String(globalThis.getSelection()?.toString() ?? "").slice(0, 4000));
+      }, 300);
+    };
+    document.addEventListener("selectionchange", update);
+    return () => {
+      document.removeEventListener("selectionchange", update);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   const disconnectStream = useCallback(() => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -329,24 +352,32 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
     })();
   };
 
-  const resolveContext = useCallback(async () => {
-    setStreamState({ phase: "connecting" });
-    try {
-      const envelope = await agentDockService.resolveContext(workspaceSlug, pathname ?? `/${workspaceSlug}`);
-      setContextEnvelope(envelope);
-      setStreamState({ phase: "idle" });
-      return envelope;
-    } catch {
-      setContextEnvelope(null);
-      setStreamState({ phase: "failed", error: "context_unavailable", canRetry: false });
-      setToast({ type: TOAST_TYPE.ERROR, title: translateRef.current("aiAssistant.error_unavailable") });
-      return null;
-    }
-  }, [pathname, workspaceSlug]);
+  const resolveContext = useCallback(
+    async (nextFocusRef?: TAgentFocusRef) => {
+      setStreamState({ phase: "connecting" });
+      try {
+        const envelope = await agentDockService.resolveContext(
+          workspaceSlug,
+          pathname ?? `/${workspaceSlug}`,
+          selectedText,
+          nextFocusRef
+        );
+        setContextEnvelope(envelope);
+        setStreamState({ phase: "idle" });
+        return envelope;
+      } catch {
+        setContextEnvelope(null);
+        setStreamState({ phase: "failed", error: "context_unavailable", canRetry: false });
+        setToast({ type: TOAST_TYPE.ERROR, title: translateRef.current("aiAssistant.error_unavailable") });
+        return null;
+      }
+    },
+    [pathname, selectedText, workspaceSlug]
+  );
 
   useEffect(() => {
-    if (assistantStore.isOpen && enabled) void resolveContext();
-  }, [assistantStore.isOpen, enabled, resolveContext]);
+    if (assistantStore.isOpen && enabled) void resolveContext(pageFocusRef ?? undefined);
+  }, [assistantStore.isOpen, enabled, pageFocusRef, resolveContext]);
 
   const loadHistory = useCallback(async () => {
     const sessionId = assistantStore.threadId;
@@ -366,9 +397,8 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
         setStreamState({ phase: "idle" });
         return;
       }
-      const boundContext = await agentDockService.getContext(workspaceSlug, session.context.context_id);
-      if (generationRef.current !== historyGeneration || pendingSendRef.current) return;
-      setContextEnvelope(boundContext);
+      // Keep the route-fresh envelope: replacing it with the session's original
+      // context would erase the just-resolved page snapshot on every navigation.
       const runStartCursor = Number(
         session.run_start_cursor ?? (session.assembly as { run_start_cursor?: number }).run_start_cursor ?? -1
       );
@@ -477,11 +507,15 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
       if (assistantStore.threadId) {
         try {
           const existing = await agentDockService.getSession(workspaceSlug, assistantStore.threadId);
-          if (existing.target_key === context.session_binding.target_key && existing.context.status !== "expired") {
+          if (existing.target_key === context.session_binding.target_key) {
             sessionTargetKeyRef.current = existing.target_key;
-            const boundContext = await agentDockService.getContext(workspaceSlug, existing.context.context_id);
-            if (boundContext.status === "linked") setContextEnvelope(boundContext);
-            return existing;
+            if (existing.context.status !== "expired") return existing;
+            const refreshed = await agentDockService.refreshSessionContext(
+              workspaceSlug,
+              existing.session_id,
+              context.context_id
+            );
+            return refreshed;
           }
         } catch {
           // A stale local session id should be replaced with a fresh grant-bound session.
@@ -503,7 +537,7 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
   );
 
   const send = useCallback(
-    async (rawQuery: string) => {
+    async (rawQuery: string, messageFocusRef?: TAgentFocusRef) => {
       const query = rawQuery.trim();
       if (!enabled || !query || ACTIVE_PHASES.has(streamState.phase) || pendingSendRef.current) return;
       generationRef.current += 1;
@@ -517,7 +551,7 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
       setStreamState({ phase: "connecting" });
       try {
         let context = contextEnvelope;
-        if (!context || !isContextFresh(context)) context = await resolveContext();
+        if (!context || !isContextFresh(context)) context = await resolveContext(messageFocusRef);
         if (generationRef.current !== generation) return;
         if (!context) return;
         setStreamState({ phase: "connecting" });
@@ -527,7 +561,11 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
           ...previous,
           { id: `user-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`, role: "user", content: query },
         ]);
-        const updated = await agentDockService.sendMessage(workspaceSlug, session.session_id, query);
+        const updated = await agentDockService.sendMessage(workspaceSlug, session.session_id, query, {
+          route: pathname ?? `/${workspaceSlug}`,
+          messageFocusRef,
+          selectedText,
+        });
         if (generationRef.current !== generation) {
           await agentDockService.cancelRun(workspaceSlug, updated.run_id).catch(() => undefined);
           return;
@@ -557,7 +595,17 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
         }
       }
     },
-    [contextEnvelope, disconnectStream, enabled, ensureSession, resolveContext, streamState.phase, workspaceSlug]
+    [
+      contextEnvelope,
+      disconnectStream,
+      enabled,
+      ensureSession,
+      pathname,
+      resolveContext,
+      selectedText,
+      streamState.phase,
+      workspaceSlug,
+    ]
   );
 
   const stop = useCallback(async () => {
@@ -581,6 +629,23 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
       activeRunIdRef.current = null;
     }
   }, [disconnectStream, workspaceSlug]);
+
+  const answerApproval = useCallback(
+    async (approved: boolean) => {
+      const runId = activeRunIdRef.current;
+      if (!runId) return;
+      try {
+        await agentDockService.answerRun(workspaceSlug, runId, approved);
+      } catch {
+        setStreamState((previous) =>
+          previous.phase === "waiting_approval"
+            ? { ...previous, error: "approval_answer_failed", canRetry: true }
+            : previous
+        );
+      }
+    },
+    [workspaceSlug]
+  );
 
   /** Close only the browser subscription; the Synlora run continues. */
   const disconnect = useCallback(() => {
@@ -635,6 +700,7 @@ export const useAssistantChat = (workspaceSlug: string, { enabled = true }: TUse
     latestEventAt: runtimeEvents.at(-1)?.created_at ?? null,
     send,
     stop,
+    answerApproval,
     disconnect,
     reset,
   };

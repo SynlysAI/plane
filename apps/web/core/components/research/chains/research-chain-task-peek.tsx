@@ -407,6 +407,7 @@ export function ResearchChainTaskPeek(props: Props) {
       onClose={onClose}
       size="wide"
       mode={mode}
+      focusRef={kind === "task" && task ? { type: "RESEARCH_TASK", id: String(task.id) } : null}
       header={
         <TaskPeekHeader
           mode={mode}

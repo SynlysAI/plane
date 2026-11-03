@@ -57,6 +57,9 @@ class AgentDockContextResolveEndpoint(BaseAPIView):
         route = str(request.data.get("route") or "")
         request_id = request_id_from(request)
         selected_text = str(request.data.get("selected_text") or "")
+        focus_ref = request.data.get("focus_ref")
+        focus_ref = focus_ref if isinstance(focus_ref, dict) else None
+        selected_text = str(request.data.get("selected_text") or "")
         raw_attachments = request.data.get("attachment_ids") or []
         attachment_ids = [str(item) for item in raw_attachments] if isinstance(raw_attachments, list) else []
         try:
@@ -66,6 +69,7 @@ class AgentDockContextResolveEndpoint(BaseAPIView):
                 route=route,
                 request_id=request_id,
                 selected_text=selected_text,
+                focus_ref=focus_ref,
                 attachment_ids=attachment_ids,
             )
         except AgentDockContextError as exc:
@@ -253,6 +257,36 @@ class AgentDockSessionDetailEndpoint(BaseAPIView):
         return Response(serialize_agent_dock_session(session))
 
 
+class AgentDockSessionContextRefreshEndpoint(BaseAPIView):
+    """``POST /api/workspaces/<slug>/agent-dock/sessions/<session_id>/context/refresh/``."""
+
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def post(self, request, slug, session_id):
+        from plane.research.services.agent_dock_sessions import (
+            AgentDockSessionError,
+            refresh_agent_dock_session_context,
+            serialize_agent_dock_session,
+        )
+
+        workspace = _workspace_or_none(slug)
+        if workspace is None:
+            return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
+        session = _session_or_none(workspace, request.user, session_id)
+        if session is None:
+            return Response({"error": "agent_session_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        context_id = str(request.data.get("context_id") or "")
+        try:
+            updated = refresh_agent_dock_session_context(
+                workspace=workspace,
+                user=request.user,
+                session=session,
+                context_id=context_id,
+            )
+        except AgentDockSessionError as exc:
+            return Response({"error": exc.code, "message": exc.message}, status=exc.status_code)
+        return Response(serialize_agent_dock_session(updated))
+
+
 class AgentDockSessionMessageEndpoint(BaseAPIView):
     """``POST /api/workspaces/<slug>/agent-dock/sessions/<session_id>/messages/``."""
 
@@ -270,6 +304,9 @@ class AgentDockSessionMessageEndpoint(BaseAPIView):
         session = _session_or_none(workspace, request.user, session_id)
         if session is None:
             return Response({"error": "agent_session_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        focus_ref = request.data.get("focus_ref")
+        focus_ref = focus_ref if isinstance(focus_ref, dict) else None
+        selected_text = str(request.data.get("selected_text") or "")
         try:
             updated = start_agent_dock_message(
                 workspace=workspace,
@@ -277,6 +314,9 @@ class AgentDockSessionMessageEndpoint(BaseAPIView):
                 session=session,
                 content=str(request.data.get("content") or ""),
                 request_id=request_id_from(request),
+                route=str(request.data.get("route") or ""),
+                focus_ref=focus_ref,
+                selected_text=selected_text,
             )
         except AgentDockSessionError as exc:
             return Response({"error": exc.code, "message": exc.message}, status=exc.status_code)
@@ -560,4 +600,33 @@ class AgentDockRunCancelEndpoint(BaseAPIView):
                     status=exc.status_code,
                 )
             session = sync_agent_dock_events(workspace=workspace, session=session, runtime=runtime)
+        return Response(serialize_agent_dock_session(session))
+
+
+class AgentDockRunAnswerEndpoint(BaseAPIView):
+    """``POST /api/workspaces/<slug>/agent-dock/runs/<run_id>/answer/``."""
+
+    @allow_permission(allowed_roles=[ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def post(self, request, slug, run_id):
+        from plane.research.services.agent_runtime import SynloraRuntimeError, resolve_synlora_runtime
+        from plane.research.services.agent_dock_sessions import serialize_agent_dock_session
+
+        workspace = _workspace_or_none(slug)
+        if workspace is None:
+            return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
+        session = _session_for_run_or_none(workspace, request.user, run_id)
+        if session is None:
+            return Response({"error": "agent_run_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        approved = request.data.get("approved") is True
+        runtime = resolve_synlora_runtime(workspace, user=session.user)
+        if session.synlora_run_id and runtime is None:
+            return Response({"error": "synlora_unavailable"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if runtime is not None and session.synlora_run_id:
+            try:
+                runtime.answer(run_id=session.synlora_run_id, approved=approved)
+            except SynloraRuntimeError as exc:
+                return Response(
+                    {"error": exc.code, "message": exc.message},
+                    status=exc.status_code,
+                )
         return Response(serialize_agent_dock_session(session))

@@ -87,6 +87,7 @@ class SynloraRuntimeClient:
                     "workspace_id": str(self.workspace.id),
                     "plane_user_id": str(self.user.id),
                     "external_subject": subject,
+                    "subject_username": str(getattr(self.user, "username", "") or ""),
                 },
                 timeout=self.config.timeout_seconds,
             )
@@ -115,21 +116,35 @@ class SynloraRuntimeClient:
             headers["X-Research-Context-Token"] = context_token
         return headers
 
+    @staticmethod
+    def _runtime_headers(context_token: str | None, mcp_token: str | None) -> dict[str, str]:
+        """Build scoped runtime headers without copying delegated credentials."""
+        headers: dict[str, str] = {}
+        if context_token:
+            headers["X-Research-Context-Token"] = context_token
+        if mcp_token:
+            headers["X-Plane-MCP-Token"] = mcp_token
+        return headers
+
     def create_session(
         self,
         *,
         title: str,
         research_context: dict[str, Any] | None = None,
         context_token: str | None = None,
+        plane_mcp: dict[str, Any] | None = None,
+        mcp_token: str | None = None,
     ) -> str:
         """Create a Synlora v1 session and bind optional Plane research context."""
         body: dict[str, Any] = {"title": title}
         if research_context is not None:
             body["research_context"] = research_context
+        if plane_mcp is not None:
+            body["plane_mcp"] = plane_mcp
         try:
             response = httpx.post(
                 f"{self.config.base_url}/api/v1/sessions",
-                headers=self._headers(context_token),
+                headers={**self._headers(), **self._runtime_headers(context_token, mcp_token)},
                 json=body,
                 timeout=self.config.timeout_seconds,
             )
@@ -156,13 +171,23 @@ class SynloraRuntimeClient:
         request_id: str,
         research_context: dict[str, Any] | None = None,
         context_token: str | None = None,
+        plane_mcp: dict[str, Any] | None = None,
+        mcp_token: str | None = None,
+        page_context: dict[str, Any] | None = None,
+        external_run_id: str = "",
     ) -> str:
         """Start a background Synlora run and return its stable run id."""
         try:
             response = httpx.post(
                 f"{self.config.base_url}/api/v1/sessions/{thread_id}/runs",
-                headers=self._headers(context_token),
-                json={"text": content, **({"research_context": research_context} if research_context else {})},
+                headers={**self._headers(), **self._runtime_headers(context_token, mcp_token)},
+                json={
+                    "text": content,
+                    **({"research_context": research_context} if research_context else {}),
+                    **({"plane_mcp": plane_mcp} if plane_mcp else {}),
+                    **({"page_context": page_context} if page_context else {}),
+                    **({"external_run_id": external_run_id} if external_run_id else {}),
+                },
                 timeout=self.config.timeout_seconds,
             )
         except httpx.HTTPError as exc:
