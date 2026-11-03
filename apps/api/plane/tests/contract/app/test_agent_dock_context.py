@@ -447,7 +447,13 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
             {
                 "seq": 6,
                 "type": "ask/user",
-                "payload": {"kind": "approval", "tool_call_id": "call-risk", "tool": "file.write", "query": "请求审批"},
+                "payload": {
+                    "kind": "approval",
+                    "tool_call_id": "call-risk",
+                    "tool": "file.write",
+                    "query": "请求审批",
+                    "args_preview": "{\"file_id\":\"file-2\"}",
+                },
             },
             {
                 "seq": 7,
@@ -512,6 +518,8 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
     assert "event: output.delta" in wire
     assert "event: approval.required" in wire
     assert "event: approval.resolved" in wire
+    assert "file.write" in wire
+    assert "file-2" in wire
     assert "event: run.completed" in wire
     assert "暂存" in wire
     assert '"resource_id": "file-1"' in wire
@@ -542,6 +550,8 @@ def test_agent_dock_sse_replays_and_deduplicates_synlora_events(env, monkeypatch
         session=session_record, payload__source_system="SYNLORA"
     )
     assert {item.payload["remote_seq"] for item in stored} == {1, 3, 4, 5, 6, 7, 8, 9}
+    assert stored.get(payload__remote_seq=6).payload["tool"] == "file.write"
+    assert "file-2" in str(stored.get(payload__remote_seq=6).payload["args_preview"])
     assert stored.filter(payload__remote_seq=4).count() == 1
     assert ResearchChainEvent.objects.filter(
         node=env["node"], source_system="SYNLORA"

@@ -495,6 +495,8 @@ def project_synlora_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]
             shaped_payload.update(
                 {
                     "requires_approval": True,
+                    "tool": str(payload.get("tool") or "tool"),
+                    "args_preview": _safe_json_preview(str(payload.get("args_preview") or "")),
                     "request": {
                         "id": str(payload.get("tool_call_id") or seq),
                         "summary": str(payload.get("query") or "Synlora approval required."),
@@ -627,7 +629,15 @@ def project_synlora_stream_event(
             "summary": str(payload.get("query") or "Synlora is waiting for input."),
             "tool_call_id": str(payload.get("tool_call_id") or ""),
         }
-        if payload.get("kind") != "approval":
+        if payload.get("kind") == "approval":
+            shaped_payload.update(
+                {
+                    "tool": str(payload.get("tool") or "tool"),
+                    "args_preview": _safe_json_preview(str(payload.get("args_preview") or "")),
+                    "query": str(payload.get("query") or ""),
+                }
+            )
+        else:
             shaped_payload = {"phase": "waiting_user"}
     elif remote_type == "error":
         shaped_payload = {"error": str(payload.get("message") or payload.get("code") or "Synlora run failed.")}
